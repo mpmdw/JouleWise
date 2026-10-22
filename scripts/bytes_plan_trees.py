@@ -42,6 +42,15 @@ def estimate_minutes(model_id):
     return round((seconds + 57.6 + 5.0) * 50 * 1.2 / 60, 3)
 
 
+# Registration section 13: one library, three stage entry points. Version stays
+# null (allowed in a draft) until the twin agrees at Addendum 8's bar; it then
+# becomes the SHA-256 of joulewise/bytes_analysis.py at that pin.
+ESTIMATORS = [{"name": name, "library": "joulewise.bytes_analysis", "function": function, "version": None}
+              for name, function in (("bytes_phase_cells", "reduce_models"),
+                                     ("bytes_frozen_predictions", "frozen_predictions"),
+                                     ("bytes_held_out_evaluation", "evaluate"))]
+
+
 def registration(number, pass_number):
     pack_id = f"bytes-s{number}-p{pass_number}"
     path = Path("configs/campaigns") / pack_id
@@ -49,7 +58,8 @@ def registration(number, pass_number):
     value.update(pack_id=pack_id, title=f"BYTES sub-pack s{number}, pass {pass_number}",
                  question="Does decode energy follow format-derived bytes per token, resident size, or decode time?",
                  status="draft", kind="new", session_shape="fixed", plan_tree_ref=(path / "plan_tree.json").as_posix(),
-                 target_sessions=1, minimum_sessions=1, estimators=[], flag_catalog="configs/b6/flag_catalog_b6.json",
+                 target_sessions=1, minimum_sessions=1, estimators=deepcopy(ESTIMATORS),
+                 flag_catalog="configs/b6/flag_catalog_b6.json",
                  stopping={"count": 1, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
     value["modules"] = [{"module_id": "bytes-" + model_id, "kind": "floor", "phase": "decode",
@@ -62,12 +72,13 @@ def registration(number, pass_number):
     catalog = load_catalog(ROOT / value["flag_catalog"])
     value["flag_effects"] = {code: catalog.entry(code)["effect"] for code in sorted(catalog.codes)}
     value["draft_notes"] = [
-        "Ruling: docs/design/bytes_pack_design.md R1-R6 and Addendum 5 at 6b2007220; not registered or armable.",
+        "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
         "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
+        "Lead blinding ruling 2026-10-20 (registration section 11): held-out configuration rows stay out of the analysis export, blinded in a withheld store, until the stage-1 prediction hash is recorded; rows visible before that carry no clock stamps.",
         "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
         "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
         "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
-        "R8 analysis, independent twin, estimator registration, cold gate and smoke fingerprints remain before first t0.",
+        "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
         "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
         "Model sources include HF cache snapshot directories; C4 identity pins must hash through their symlinks. model.context_window is unused by the runtime; tokenizer and chat-template pins remain C4.",
         "Qwen3-8B-8bit revision is pending; group_size=64 is assumed and unverified against the eventual checkpoint.",
