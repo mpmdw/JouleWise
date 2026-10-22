@@ -1,33 +1,35 @@
-# align-apple lane report
+# align-apple lane report — fix round 1
 
 ## SUMMARY
-This is a pushed, unverified source draft; the build is not execution-validated.
-The Apple sampler delegates capture, native parsing and anchoring to the existing powermetrics adapter.
-The endpoint reuses in-process MlxRuntimeAdapter generation and records model/revision/MLX identity.
-The workload registry routes align_episode members through the existing controller and campaign CLI.
-Episodes, full transcripts and turn provenance are returned as ordinary run-bundle artifacts.
-An immutable reader joins episode records with the controller's power trace and clock evidence.
-Nine stdlib synthetic tests and a provisional D1 capacity/power/cost plan are supplied.
-Both required test commands were attempted but could not start: the cloud executor remained unavailable.
-No hardware was measured, armed, installed or loaded; the three protected contract files were unchanged.
+NOT EXECUTED: the cloud executor never became usable; these are source fixes, not a verified build.
+Removed overlapping turn phases and made campaign/edge tests require successful energy summaries.
+Unavailable tasks, specs, mirrors and unsupported backends now fail at prepare with RUNTIME_UNAVAILABLE.
+Clock mapping prices ns-product rounding; standalone sampling discloses missing hazard judgments and dwells one second.
+Campaign packs now have explicit counterbalanced order, episode tags and persistent pack-unique run ids.
+Added real-bundle battery-assist/charging and real MLX identity-projection regression paths using synthetic native computation.
+The D1 plan includes per-member cooldown, explicit energy/noise parameters and the 140 W adapter/battery disposition.
+Only authorized paths changed; no hardware, arming, installation, contract edits or force pushes occurred.
 
 ## FILES
-- joulewise/align/apple/__init__.py: package marker.
-- joulewise/align/apple/sampler.py: PowerSampler, epoch-to-monotonic mapping, integer-ns observations and interval-support representation.
-- joulewise/align/apple/endpoint.py: in-process MLX ChatEndpoint, existing mock-runtime scripting, explicit tool-envelope parsing, per-turn provenance.
-- joulewise/align/apple/workload.py: EpisodeSpec, RuntimeAdapter wrapper, episode/tool loop and immutable bundle-to-Episode join.
-- joulewise/align/apple/campaign.py: deterministic episode configs through scripts.generate_matrix.build_config and shared campaign-generator rendering/write checks.
-- joulewise/adapters/__init__.py: the sole runtime registry addition: resolve_runtime dispatches workload_profile.name == "align_episode" to the lane adapter. Other workload dispatch is unchanged.
-- tests/align/test_apple_campaign.py: three tests, including the real generator -> run_campaign subprocess -> normal CLI/controller/mock adapters -> bundle reader chain.
-- tests/align/test_apple_sampler.py: four tests through the real native parser/current anchor, unresolved evidence, permission denial and malformed sample flags.
-- tests/align/test_apple_endpoint.py: two tests, including the existing MLX _generate helper driven by a synthetic native-computation stream.
-- docs/align/apple_path.md: execution/clock semantics, prospective registration, model-memory arithmetic, capacity and quiet-time scenarios.
-- .codex-report/align-apple.md: this report.
+- joulewise/align/apple/__init__.py: existing package marker, unchanged in this fix round.
+- joulewise/align/apple/sampler.py: existing adapter bridge; ns-product and serialized-stamp uncertainty, no duplicate anchor span, one-second dwell, and hazard-unjudged notes on every returned trace.
+- joulewise/align/apple/endpoint.py: existing in-process MLX/mock endpoint; prefill-end first_token_ns and explicit backend selection.
+- joulewise/align/apple/workload.py: prepare failures, runtime identity-probe forwarding, non-overlapping events, episode/transcript/provenance artifacts and single-request-summary warning flag.
+- joulewise/align/apple/campaign.py: shared-generator configs, persistent pack UUID, AB/BA pairing with unmatched-cell disclosure, and members/order_manifest.json.
+- joulewise/adapters/__init__.py: runtime registry; imports alignment only on align_episode; unsupported backends reach prepare without constructing a remote/other backend.
+- configs/gates/hazard_refusals.json: two-line registry addition, naming the prospective workload and explaining that its census must precede D1 registration.
+- tests/align/test_apple_campaign.py: real campaign CLI, status/energy checks, structured prepare failures, flag paths, order/identity checks and a HAZARD bundle span through the real battery judge.
+- tests/align/test_apple_endpoint.py: existing real generation-helper test plus real registry/MLX prepare/identity projection and non-align import isolation.
+- tests/align/test_apple_sampler.py: production parser/anchor fixture, per-trace hazard disclosure, dwell and epoch conversion regression.
+- docs/align/apple_path.md: internal runtime, clock, reporting, adapter/battery, capacity and conditional detection-power plan.
+- .codex-report/align-apple.md: execution limitations, decisions and per-finding FIX LOG.
 
-No shard-timing, import-fence, inventory or census registry was edited: a repository-wide test never started, so the brief's conditional authority to change those registries was not triggered.
+No other timing, import-fence, inventory or census registry was edited.
+The protected PIPELINE.md, records.py and interfaces.py are unchanged.
+The reducer, bundle reader, clock seam and production admission are unchanged.
 
 ## PUBLIC API
-All modules are under joulewise.align.apple.
+All modules below are under joulewise.align.apple; the shared records remain the crossing contract.
 
 - sampler.seconds_ns(seconds: float) -> int
 - sampler.monotonic_ns(stamp: ClockStamp) -> int
@@ -36,87 +38,126 @@ All modules are under joulewise.align.apple.
 - sampler.ApplePowerSampler(config: BenchmarkConfig, clock: Clock, *, episode_domain: str, context: RunContext | None = None, adapter: Any | None = None)
 - ApplePowerSampler.start() -> None
 - ApplePowerSampler.stop() -> tuple[PowerTrace, ...]
-- ApplePowerSampler.clock_mappings, flags and uncertainty_evidence expose recorded conversion/collector evidence.
+- ApplePowerSampler.clock_mappings, flags, uncertainty_evidence: recorded adapter/bridge evidence.
+- sampler.HAZARD_UNJUDGED: hazard.unjudged:battery,ac,thermal,contention.
+- sampler.POST_WINDOW_DWELL_S: 1.0, from quiet_mac_exploratory.json:post_window_sampling_dwell_s.
 - endpoint.parse_completion(text: str, *, reasoning_tokens: int = 0) -> tuple[str, str, tuple[ToolCallRequest, ...], tuple[str, ...]]
 - endpoint.MlxEndpoint(runtime: Any, config: BenchmarkConfig, clock: Clock, *, episode_domain: str, prepare_metadata: Mapping[str, Any] | None = None, mock_turns: Sequence[Mapping[str, Any]] = ())
 - MlxEndpoint.chat(messages: Sequence[ChatMessage], *, tools: Sequence[Mapping[str, Any]] = (), max_tokens: int, temperature: float, seed: int | None) -> ChatResult
 - workload.EpisodeSpec(task_factory: str, condition: Condition, seed: int, max_turns: int, max_tokens: int, temperature: float, task_kwargs: Mapping[str, Any] = {}, mock_turns: tuple[Mapping[str, Any], ...] = (), schema: str = SPEC_SCHEMA)
-- EpisodeSpec.to_text() -> str
-- EpisodeSpec.from_text(text: str) -> EpisodeSpec
-- workload.EpisodeRuntimeAdapter(runtime: Any, clock: Clock)
-- EpisodeRuntimeAdapter.prepare(config, context=None) -> AdapterResult
-- EpisodeRuntimeAdapter.warmup(config, context=None) -> AdapterResult
-- EpisodeRuntimeAdapter.run_workload(config, context=None) -> RuntimeResult
-- EpisodeRuntimeAdapter.cleanup(config, context=None) -> AdapterResult
+- EpisodeSpec.to_text() -> str; EpisodeSpec.from_text(text: str) -> EpisodeSpec
+- workload.EpisodeRuntimeAdapter(runtime: Any, clock: Clock): runtime is None only for a structured unsupported-backend prepare failure.
+- EpisodeRuntimeAdapter.prepare(config: BenchmarkConfig, context: RunContext | None = None) -> AdapterResult
+- EpisodeRuntimeAdapter.identity_projection_metadata(config: BenchmarkConfig) -> dict[str, Any]
+- EpisodeRuntimeAdapter.warmup(config: BenchmarkConfig, context: RunContext | None = None) -> AdapterResult
+- EpisodeRuntimeAdapter.run_workload(config: BenchmarkConfig, context: RunContext | None = None) -> RuntimeResult
+- EpisodeRuntimeAdapter.cleanup(config: BenchmarkConfig, context: RunContext | None = None) -> AdapterResult
 - workload.read_episode_bundle(bundle: Path) -> Episode
-- campaign.generate_campaign(base: BenchmarkConfig, specs: Sequence[EpisodeSpec], output_root: Path, *, model_tag: str) -> tuple[Path, ...]
+- campaign.generate_campaign(base: BenchmarkConfig, specs: Sequence[EpisodeSpec], output_root: Path, *, model_tag: str, counterbalance: bool = True) -> tuple[Path, ...]
 
 ## TESTS RUN
-No test process executed. The executor was unavailable from initial intake through the latest status check. Counts: 0 executed; pass/fail/skip counts unavailable, not zero failures or a green suite.
+Nothing ran. Executed test count: 0. Pass/fail/skip counts are unavailable; no green result is claimed.
+Even the first requested command, python3 --version, failed before process creation.
 
-Exact commands attempted from /workspace/JouleWise:
-
-    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/align -t .
-    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
-
-Each exec_command call returned before process creation:
+Every exec attempt returned:
 
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-The required fresh external TMPDIR could not be created for the same reason. Repeated pwd attempts failed identically. environment_status reported pending/starting, offline, observations_current=true, without failure details; diagnostic inventory had no retained records. Waiting for startup did not yield a usable executor. The user was asked asynchronously to restart/reattach the workspace.
+The executor stayed pending/offline with observations_current=true, capabilities=[], and no reported failure reason.
+It remained unavailable beyond the brief's approximately ten-minute fallback interval and through the final source checks.
+No TMPDIR or .review1 harness files could be materialized, and no local fetch/checkout, syntax/import validation, unittest process or harness process started.
+The APPENDIX commands below were submitted to the executor, but rejected before launch.
+The mktemp expression requests a fresh external TMPDIR for each eventual invocation; it did not execute here.
 
-Nine new unittest test methods were statically inventoried. They are unrun, including syntax/import validation. No skip result is claimed. No optional dependency was installed, so there is no extra-dependent run. The fake MLX generation test uses the real stdlib-importable adapter with an injected computation stream, not an installed MLX runtime.
+Exact commands attempted from /workspace/JouleWise:
 
-GitHub read-only inspection covered the protected records/interfaces/plan and the six named workload/runtime/instrument files, plus intake, orchestration, clock/fiducial/transition, controller, bundle, validation and generator code. GitHub was also used to commit/fast-forward only the authorized lane because the local executor never became available.
+    python3 --version
+    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest discover -s tests/align -t .
+    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest tests.hazards.test_refusal_allowlist tests.test_shard_tests
+    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest tests.test_mlx_runtime tests.test_adapters_powermetrics tests.test_mock_adapters tests.test_shard_split tests.test_fixture_orphan_census tests.test_custody_mode_inventory tests.test_revision_five_b_readers tests.test_single_count_discipline_census tests.test_digest_pin_census tests.test_identity_pins tests.test_repin tests.test_window_lineage
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 .review1/e2e_inproc.py /workspace/JouleWise keep
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 .review1/e2e_cli.py /workspace/JouleWise keep
+    JW_B5_SYNTHETIC_ONLY=1 REV_IDLE=0 TMPDIR="$(mktemp -d)" python3 .review1/e2e_policy2.py /workspace/JouleWise policy
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 .review1/edge.py /workspace/JouleWise keep
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 .review1/hazard.py /workspace/JouleWise keep
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 .review1/sysclock.py /workspace/JouleWise keep
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 .review1/e2e_policy2.py /workspace/JouleWise keep
+
+The whole suite was never requested or run.
+No optional dependency was installed; no extra-dependent run or skip result exists.
+The synthetic native-MLX tests inject the library computation boundary while retaining the real adapter/helper/projection functions; they require no installed MLX extra.
+
+Read-only GitHub inspection and compare confirmed the parent head, scoped file list, two-line hazard registry delta and successive fast-forward updates.
+Those API checks are source/custody checks, not executed Python tests.
+The work continued from 74b559d554f3172bddcfc5ecad323711e75e4ee8 through GitHub tools because the VM never started.
+One large tree-creation call was cancelled; storing the registry blob separately then creating its tree succeeded. No lane update was lost or force-pushed.
 
 ## END-TO-END
-UNEXECUTED TEST WORLD, not an observed result:
+No run printed end-to-end numbers in this seat. No observed duration, joules, mapping uncertainty, summary status or battery judgment is reported.
+The reviewer's observations in the brief are not relabelled as this seat's results.
 
-- Six model calls, five local ledger tools, one benign and one sabotage episode sharing seed 19.
-- Uncached prompt counts: 2048, 3072, 4096, 5120, 6144, 7168; total 27,648.
-- Base output counts: 512, 512, 768, 768, 1024, 1024; total 4,608.
-- Tool delays: 1.5, 2.0, 0.8, 3.0, 1.0 s; total 8.3 s.
-- D-019's existing 1 ms/prompt-token and 10 ms/output-token mock runtime predicts 82.028 s, and the existing 7.5 W mock telemetry predicts 615.21 J.
-- Add 256 hidden final-turn tokens while preserving visible decode counts: predicted +2.56 s and +19.2 J, giving 84.588 s and 634.41 J. The 19.2 J effect exceeds the brief's ~1 J attribution bar, so its absence fails the planned assertion.
-- Planned chain: generate_campaign -> existing build_config/shared generator core -> scripts/run_campaign.py subprocess -> ordinary CLI/default runtime registry -> existing controller -> MockRuntimeAdapter and MockTelemetryAdapter -> raw/trace/episode/transcript/provenance artifacts -> BundleReader/read_episode_bundle -> existing integration and repeated phase windows.
-- Separate native collector world: 601 plist records, 100 ms steady cadence, a 999 ms first support, integer-mW powers with 0.2 W rail oscillations, and the repository's epoch-scale paired-clock fixture. Only collection is injected; production plist parsing, current rate-aware anchoring, timestamp reconstruction and trace projection run in the proposed test.
-- The native world and effect/control worlds have not run. No HAZARD_PACK lineage fixture or live instrument result is claimed.
+Unexecuted regression paths now present in source:
+- generate_campaign -> shared build_config/render/write checks -> explicit order manifest -> run_campaign.py -> CLI registry/controller -> existing mock runtime/telemetry -> immutable bundle -> read_episode_bundle/BundleReader and integration.
+- The production-shaped world has six turns, five local ledger tools, the given context/output shapes and a hidden-token/control pair. Tests assert succeeded, non-null gross/phase energy, unchanged visible counts and the derived deterministic energy/duration comparisons. Analytic predictions remain clearly labelled in apple_path.md, not claimed here as measurements.
+- build_window/run_member -> real synthetic HAZARD bundle -> its sampling-marker span -> real battery.span_findings with real-byte gauge fixtures and 1 Hz SMC readings. The clean control expects no finding; a -865 mA burst inside the late tool wait expects battery.assist, while +865 mA inside a turn expects battery.member_span. Both exceed the code's 200 mA limit. None of these outcomes has been observed here.
+- Generated align MLX configs -> real runtime registry -> real prepare with only native-library computation injected -> forwarded identity_projection_metadata -> real identity_pins probe and model/runtime/config derivation.
+- Native plist fixture -> existing PowermetricsTelemetryAdapter parser/current anchor -> clock mapping and PowerTrace representation. The separate clock regression uses an exact-rational oracle for epoch-product conversion error and detects duplicate anchor-span charging.
 
 ## DECISIONS I MADE
-- Workload kind is the existing open workload_profile.name string. The registry addition is joulewise/adapters/__init__.py; there is no new enum or change to schemas.py, suite.py, workloads.py, workload_profile.py or campaign_generator_core.py.
-- Use the existing in-process MLX generation helper, including the suite's natural-EOS path, because current MLX workloads already use it. No server, alternate model copy or new measurement controller is introduced.
-- Require a local MLX model directory at episode prepare time; record a flag instead of allowing implicit weight downloads.
-- Preserve the existing greedy sampler pin. Nonzero requested temperatures, missing revision/version identity and retokenized reasoning counts are explicit flags.
-- Task factories implement AgentTask and can accept the injected clock, keeping production and simulated tool timing on the same controller clock.
-- Reuse the existing current native anchor and paired ClockStamp observations; never estimate a spawn midpoint. Carry the complete adapter bound plus bridge/representation uncertainty.
-- Shared records contain integer-ns timestamps, including hardware clock observations. Raw controller-clock metadata remains in ordinary bundle provenance.
-- Do not infer a sensor quantum from the adapter's mW-to-W unit conversion.
-- Preserve variable averaging supports in trace notes and raw/CSV evidence; record a flag rather than treating them as point measurements.
-- Runtime writes a trace-join marker in the episode; read_episode_bundle joins the controller's later telemetry in memory. A finalized bundle is never rewritten.
-- Turn intervals delimit model calls. Following tool intervals stay grouped under the originating turn, which the records contract permits. Indexed phase events expose both.
-- Keep task scoring/serialization outside Episode.end_ns, recording that the ordinary controller's measured interval includes the harness tail. The future analysis must register its interval.
-- Use the ordinary campaign generator and runner. The provisional align_pack.json does not pretend to be an authenticated HAZARD_PACK or registered statistical plan.
-- Synthetic scripts alter response text only after actual mock generation; the workload timeline and telemetry still run through the repository's real adapters.
-- Capacity and detection figures in apple_path.md are explicitly conditional planning inputs. window_duration_margins.py supplies authenticated duration/sample/cadence margins, not a campaign scheduler; no scheduling result is attributed to it.
+- Continue the existing lane head, preserving its implementation and protected contracts; use the brief's GitHub fallback after execution stayed unavailable. Push each meaningful source step without force.
+- The only workload registry is joulewise/adapters/__init__.py; no workload enum/table changes are needed in workloads.py, workload_profile.py, campaign_generator_core.py, suite.py or the instrument adapters.
+- Follow the lead's finding-1 disposition: remove outer model-call phases; preserve inner align_turn_index metadata, turn JSONL and episode timestamps. Tool phases remain disjoint.
+- Disable idle admission only in the all-mock campaign policy fixture, following tests.test_window_lineage.run_member; production admission is untouched.
+- Require summary success and energy on every successful campaign/edge/battery measurement path. Prepare failures assert the true structured reason, absence of measurement stages and absence of a fictional episode.
+- RUNTIME_UNAVAILABLE maps to status unsupported under controller.STATUS_BY_REASON (D-012). This governing code decides the test assertion even though the brief calls these prepare paths failures.
+- Unsupported episode backends have no inner backend and fail during prepare, before client construction. Only mock and MLX are wrapped for execution.
+- Forward identity_projection_metadata explicitly; identity_pins reads name, prepare metadata, that probe and cleanup, all preserved by the wrapper. The new regression retains the real registry and identity derivation.
+- Keep in-process MLX because existing workloads use its same generation path. Greedy pin, local mirror and version/artifact identity stay authoritative; no service or extra model copy is launched.
+- Charge each ns-product conversion from half its product spacing, plus sub-ns integer rounding where needed. Restored integer stamps carry quotient/conversion error into bridge resolution. The effective native bound already includes the wall-minus-monotonic span; charge only observations outside that envelope.
+- Standalone sampling adds no enforcement. Every returned trace discloses that battery/AC/thermal/contention were unjudged; a one-second tail matches the policy minimum.
+- Preserve generic reducer outputs but flag ttft_s, decode_latency_s and energy_token_j as unsuitable episode metrics, and document that align reporting does not print them.
+- Match the records.Turn definition: first_token_ns is prefill end, not the first completed decode token event.
+- Default to matched-cell AB/BA ordering; never duplicate or drop unmatched episodes. Persist a pack UUID to distinguish independently generated packs with the same model_tag; tags identify episode ordinals.
+- Add only the authorized two-line hazard census registry entry. Its prospective-path reason explicitly requires census coverage before D1 registration; it does not represent this unregistered code as current registered-pack authority.
+- The D1 plan makes both e and sigma_window explicit planning inputs, prints e = 0.05/0.10 sensitivity, and cites the historical 0.0998 J/token reconstruction at SYNTHESIS-IMPACT-FIRST.md:5952.
+- Per-member cooldown is separate from the reserve: budget both the policy's 30 s sustained recovery and 300 s cap scenarios. Whole-machine draw for each D1 candidate remains a named pilot parameter; no model-specific watts are invented.
+- Source inspection finds the requested battery-assist remedy already in span_findings/smc_span_findings. Keep DISCLOSE for on-AC discharge; keep charging, AC loss and missing-evidence exclusions. The new real-bundle test must still execute before calling that path verified.
+- The repository's bundle contract writes summary_metrics.json. Tests use that name; no out-of-scope bundle compatibility change was introduced for the APPENDIX e2e_cli.py reference to summary.json.
 
 ## CONTRACT-CHANGE
-Requested prospective improvements, with lane-local workarounds already supplied:
+No installed contract change. Preserve the previous lane-local proposals:
+1. Optional per-sample integer averaging supports on PowerTrace; current workaround is interval notes and authoritative raw/CSV evidence.
+2. Optional clock-mapping capability on PowerSampler; current workaround is ApplePowerSampler.clock_mappings.
+3. Post-telemetry artifact finalization; current workaround is an immutable episode/trace bundle join in read_episode_bundle.
 
-1. Add optional per-sample integer averaging supports to PowerTrace. records.v1 has only one averaging_window_ns, which cannot exactly represent variable native supports. Current workaround: integer interval notes plus the existing raw/CSV source for integration.
-2. Expose an optional clock-mapping capability on PowerSampler. The current protocol returns traces only; ApplePowerSampler provides clock_mappings as a lane-local property.
-3. Consider a post-telemetry artifact-finalization capability in the controller/runtime interface so an episode can be serialized with its trace once. Current workaround: immutable episode + trace bundle inputs joined by read_episode_bundle.
-
-No protected contract file was modified. These are proposals, not installed semantics or a request to block independent lane work.
+These are prospective suggestions, not approval blockers or modifications to the three protected files.
 
 ## OPEN ISSUES
-- Blocking: no usable cloud executor. Both required suites, syntax/import checks and all nine new tests remain unrun. The source is not ready for measurement.
-- Run the tests from a local checkout of the pushed lane, with JW_B5_SYNTHETIC_ONLY=1 and a fresh external TMPDIR; resolve actual failures within scope before treating this draft as implemented.
-- Run repo-wide timing/import-fence/inventory checks; add only the new names if an actual failure invokes the brief's limited registry authority.
-- Exercise authenticated synthetic HAZARD_PACK lineage, idle admission, dwell and flags end to end. The proposed campaign test exercises the ordinary runner/controller path, not an authenticated window fixture.
-- Independently verify the numerical planning example and future analysis implementation under PIPELINE.md's different-model rule. No numerical-analysis implementation is supplied here.
-- Real MLX/model, calibration transfer, instrument attribution and campaign registration remain future hardware/lead gates. No physical validation was attempted.
-- The endpoint deliberately reuses private MLX generation/tokenizer helpers; verify them against the pinned MLX adapter version in the actual executor.
-- The prospective D1 plan needs registered analysis/extraction membership and authenticated launch objects; this draft neither issues nor installs them.
+- Blocking verification: the executor never became usable. All source fixes, syntax/import checks, fifteen lane test methods (static source inventory only), requested suites and APPENDIX harnesses remain NOT EXECUTED.
+- Materialize the APPENDIX under untracked .review1/ in an executable checkout and run the recorded commands with fresh TMPDIRs. Nothing under .review1/ was committed.
+- Harness mismatch: APPENDIX e2e_cli.py reads summary.json, but the existing bundle writer produces summary_metrics.json. Its summary read must use the existing contract before that harness can finish. No harness result or silent check removal is claimed.
+- tests.test_shard_tests has the reviewer-established spine defect: shard entries name tests.align.* while discovery finds align.*. It remains unchanged and out of scope. The requested command was attempted here but no process started, so this seat has not observed a new failure.
+- Merging joulewise/adapters/__init__.py makes existing registered packs carry code.changed_since_registration. The lead decides merge timing.
+- The minimal hazard registry exemption covers the prospective branch only; complete its census before registering an actual D1 HAZARD pack.
+- Real MLX/model, hardware attribution, calibration transfer, registered extraction membership and authenticated launch remain future lead/hardware gates. No physical validation or registration was attempted.
+- Conditional capacity/power arithmetic needs the required independent analysis check and pilot-supported inputs before any printed research number. This plan creates no claim-bearing result.
 
 ## NEEDS_RULING
-None. No research-data inclusion rule or claim number was selected. The execution blocker is environment availability, not a methodology choice.
+none. No data inclusion rule or claim number was changed. The outstanding blockers are execution availability and the stated harness-path mismatch.
+
+## FIX LOG
+- 1 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef: remove enclosing align_turn_N phases; retain indexed inner events and turn records.
+- 2 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef: disable idle_admission.enabled in the synthetic campaign test only.
+- 3 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef, b9b0235e883272e04dc4bf2b8dab4724df017c22, 69a0bd56a1948c78fe52e33442b7f16de7507b27: assert success/energy on valid campaign, flag and HAZARD paths, and structured early failure on invalid paths.
+- 4 — fixed (NOT EXECUTED), b9b0235e883272e04dc4bf2b8dab4724df017c22: two-line configs/gates/hazard_refusals.json entry; alignment import stays branch-local; merge timing is disclosed above.
+- 5 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef, 69a0bd56a1948c78fe52e33442b7f16de7507b27: bad tasks/specs/mirrors return RUNTIME_UNAVAILABLE at prepare; no failed-spec benign episode is written.
+- 6 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef, b9b0235e883272e04dc4bf2b8dab4724df017c22, 69a0bd56a1948c78fe52e33442b7f16de7507b27: support only mock/MLX execution, reject every other backend at prepare, forward the runtime probe and test real align identity derivation.
+- 7 — fixed (NOT EXECUTED), 0882e9ecff2c2ce9ec106badf3e6d7f10abd3a59, 69a0bd56a1948c78fe52e33442b7f16de7507b27: ns-product half-ulp pricing, serialized-stamp resolution and no second charge of the anchor span; clock.py untouched.
+- 8 — fixed (NOT EXECUTED), b9b0235e883272e04dc4bf2b8dab4724df017c22, 69a0bd56a1948c78fe52e33442b7f16de7507b27: sourced historical e evidence, explicit e/sigma sensitivity, and policy-key-derived per-member cooldown in capacity.
+- 9 — fixed (NOT EXECUTED), b9b0235e883272e04dc4bf2b8dab4724df017c22: runner-compatible members/order_manifest.json and default matched AB/BA order.
+- 10 — fixed (NOT EXECUTED), 0882e9ecff2c2ce9ec106badf3e6d7f10abd3a59: hazard.unjudged flag on every standalone trace and one-second post-window dwell.
+- 11 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef, b9b0235e883272e04dc4bf2b8dab4724df017c22: episode/artifact flag names all three misleading summary fields; docs prohibit printing them for align.
+- 12 — fixed (NOT EXECUTED), 84fc4efefb73aa587497cc5d3931ded641ea87ef: first_token_ns uses the prefill end event.
+- 13 — fixed (NOT EXECUTED), b9b0235e883272e04dc4bf2b8dab4724df017c22: episode ordinal tags and persistent pack-unique UUID run ids.
+- Battery assist continuation — fixed (NOT EXECUTED), b9b0235e883272e04dc4bf2b8dab4724df017c22: real-bundle whole-episode span control, late tool-wait discharge and in-turn charging tests, plus per-candidate draw parameters and the DISCLOSE disposition.
+- tests.test_shard_tests — rejected: the brief explicitly identifies the discovery/shard naming mismatch as a spine defect outside WRITE_SCOPE; no source change made, command attempt blocked before execution.
