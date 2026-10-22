@@ -64,6 +64,31 @@ class RouterHookTests(unittest.TestCase):
                 self.assertTrue(all(math.isfinite(value) for value in episode_stats(log).values()))
                 self.assertFalse(recorder.flags)
 
+    def test_uncached_generate_records_repeated_work_flag(self):
+        torch = self.torch
+        prompt = self._prompt("Read tool.")
+        # Fixture size follows E/k + 2, guaranteeing recurrent selections and
+        # at least two full-prefix forwards in the uncached generation path.
+        new_tokens = self.model.config.num_experts // self.model.config.num_experts_per_tok + 2
+        with torch.inference_mode(), RouterRecorder(self.model) as recorder:
+            self.model.generate(prompt, attention_mask=torch.ones_like(prompt),
+                                max_new_tokens=new_tokens, do_sample=False, use_cache=False,
+                                eos_token_id=None, pad_token_id=0)
+            self.assertIn("uncached_reforward", recorder.flags)
+            # Preserve actual processed work: sum(P + j), j=0..N-1.
+            expected = new_tokens * prompt.shape[1] + new_tokens * (new_tokens - 1) // 2
+            self.assertEqual(len(recorder.log.experts), expected)
+
+    def test_cached_multitoken_tool_prefill_is_unflagged(self):
+        torch = self.torch
+        prompt = self._prompt("Read tool.")
+        tool = self._prompt("Tool result.")
+        with torch.inference_mode(), RouterRecorder(self.model) as recorder:
+            first = self.model(prompt, use_cache=True)
+            self.model(tool, past_key_values=first.past_key_values, use_cache=True)
+            self.assertEqual(recorder.log.phase, ("prefill",) * (prompt.shape[1] + tool.shape[1]))
+            self.assertFalse(recorder.flags)
+
     def test_routes_match_hf_logits_and_hooks_do_not_change_output(self):
         torch = self.torch
         prompt = self._prompt("Read the next file.")
