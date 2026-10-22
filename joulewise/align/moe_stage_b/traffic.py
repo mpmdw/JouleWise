@@ -38,6 +38,7 @@ class OffloadConfig:
     bandwidth_source: str
     energy_source: str
     prefill_mode: str = "bypass"  # "bypass" (no cache update) | "serial"
+    prefill_batch_tokens: int = 1  # Explicit backend microbatch size; never inferred.
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ class TokenTraffic:
     selected: int
     resident_hits: int
     cache_hits: int
+    batch_reuse: int
     misses: int
     bytes_moved: int
     energy_j: float
@@ -120,7 +122,7 @@ def expert_size_from_config(
     return ExpertSize(size)
 
 
-def episode_token_windows(episode: Episode) -> TimingResult:
+def episode_token_windows(episode: Episode, *, prefill_batch_tokens: int = 1) -> TimingResult:
     """Uniform within-phase timing adapter, never a claim of observed token times.
 
     RouterLog cannot store token times or turn boundaries. Counts and phase order
@@ -129,6 +131,10 @@ def episode_token_windows(episode: Episode) -> TimingResult:
     """
     router = episode.router_log
     flags = ["uniform_within_phase_token_timing"]
+    if not isinstance(prefill_batch_tokens, int) or prefill_batch_tokens <= 0:
+        return TimingResult((), ("invalid_prefill_batch_size",))
+    if prefill_batch_tokens > 1:
+        flags.append("prefill_batch_timing_assumption")
     if router is None:
         return TimingResult((), ("missing_router_log",))
     expected = tuple(phase for turn in episode.turns
@@ -144,13 +150,16 @@ def episode_token_windows(episode: Episode) -> TimingResult:
             flags.append("missing_first_token_time")
             # No basis for separating prefill and decode: keep the missing data explicit.
             return TimingResult((), tuple(dict.fromkeys(flags)))
-        for start, end, count in ((turn.start_ns, boundary, turn.prefill_tokens),
-                                  (boundary, turn.end_ns, turn.decode_tokens)):
+        for start, end, count, batch_size in (
+                (turn.start_ns, boundary, turn.prefill_tokens, prefill_batch_tokens),
+                (boundary, turn.end_ns, turn.decode_tokens, 1)):
             if count and end <= start:
                 return TimingResult((), tuple(dict.fromkeys(flags + ["zero_phase_duration"])))
             for j in range(count):
-                windows.append(TokenWindow(len(windows), start + (end-start)*j//count,
-                                           start + (end-start)*(j+1)//count))
+                left = (j//batch_size)*batch_size
+                right = min(count, left+batch_size)
+                windows.append(TokenWindow(len(windows), start + (end-start)*left//count,
+                                           start + (end-start)*right//count))
         if any(call.start_ns < turn.end_ns and call.end_ns > boundary
                for call in turn.tool_calls):
             flags.append("tool_overlaps_decode_window")
@@ -222,7 +231,11 @@ def model_traffic(
         flags.append("invalid_cache_policy")
     if config.prefill_mode not in ("serial", "bypass"):
         flags.append("invalid_prefill_mode")
-    if not isinstance(config.cache_capacity_bytes, int) or config.cache_capacity_bytes < 0:
+    if (not isinstance(config.prefill_batch_tokens, int)
+            or isinstance(config.prefill_batch_tokens, bool) or config.prefill_batch_tokens <= 0):
+        flags.append("invalid_prefill_batch_size")
+    if (not isinstance(config.cache_capacity_bytes, int)
+            or isinstance(config.cache_capacity_bytes, bool) or config.cache_capacity_bytes < 0):
         flags.append("invalid_cache_capacity")
     if not math.isfinite(config.bandwidth_bytes_s) or config.bandwidth_bytes_s <= 0:
         flags.append("invalid_bandwidth")
@@ -252,14 +265,34 @@ def model_traffic(
         flags.append("prefill_batch_boundaries_unavailable")
         flags.append("prefill_cache_bypassed" if config.prefill_mode == "bypass"
                      else "serial_prefill_assumption")
+        if config.prefill_mode == "bypass" and config.prefill_batch_tokens > 1:
+            flags.append("prefill_batch_union_profile_assumption")
+        if config.prefill_mode == "bypass":
+            flags.append("prefill_readonly_cache_reuse_unmodelled")
     if windows is None:
         flags.append("transfer_only_time_axis")
     cache = _Cache(config)
     tokens: list[TokenTraffic] = []
     pulses: list[TransferPulse] = []
-    available_ns = 0
+    available_ns = windows[0].start_ns if windows else 0
+    prefill_offset = 0
+    prefill_seen: set[ExpertKey] = set()
+    batch_start = batch_end = 0
     for i, (phase, row) in enumerate(zip(router.phase, router.experts)):
-        selected = resident_hits = hits = misses = moved = 0
+        if phase == "prefill" and config.prefill_mode == "bypass":
+            if prefill_offset % config.prefill_batch_tokens == 0:
+                prefill_seen.clear()
+                batch_start = i
+                batch_end = i
+                while (batch_end+1 < len(router.phase)
+                       and batch_end-i+1 < config.prefill_batch_tokens
+                       and router.phase[batch_end+1] == "prefill"):
+                    batch_end += 1
+            prefill_offset += 1
+        else:
+            prefill_offset = 0
+            batch_start = batch_end = i
+        selected = resident_hits = hits = batch_reuse = misses = moved = 0
         for layer, ids in zip(router.layers, row):
             unique_ids = tuple(dict.fromkeys(ids))
             if len(unique_ids) != len(ids):
@@ -268,7 +301,10 @@ def model_traffic(
             keys = [(layer, e) for e in unique_ids if (layer, e) not in config.resident]
             resident_hits += len(unique_ids)-len(keys)
             if phase == "prefill" and config.prefill_mode == "bypass":
-                n_hit, n_miss, bypass = 0, len(keys), False
+                fresh = [key for key in keys if key not in prefill_seen]
+                batch_reuse += len(keys)-len(fresh)
+                prefill_seen.update(keys)
+                n_hit, n_miss, bypass = 0, len(fresh), False
             else:
                 n_hit, n_miss, bypass = cache.request(keys)
             if bypass:
@@ -278,15 +314,15 @@ def model_traffic(
             moved += n_miss * config.expert_bytes[layer]
         energy = moved * config.joules_per_byte
         duration_s = moved / config.bandwidth_bytes_s
-        tokens.append(TokenTraffic(i, phase, selected, resident_hits, hits, misses,
-                                   moved, energy, duration_s))
+        tokens.append(TokenTraffic(i, phase, selected, resident_hits, hits, batch_reuse,
+                                   misses, moved, energy, duration_s))
         if moved:
-            start = max(available_ns, windows[i].start_ns if windows is not None else 0)
+            start = max(available_ns, windows[batch_start].start_ns if windows is not None else 0)
             # Round upward to integer ns so the profile never exceeds configured bandwidth.
             end = start + math.ceil(duration_s * NS_PER_SECOND)
             pulses.append(TransferPulse(i, start, end, moved, energy))
             available_ns = end
-            if windows is not None and end > windows[i].end_ns:
+            if windows is not None and end > windows[batch_end].end_ns:
                 flags.append("transfer_exceeds_token_window")
     return TrafficResult(tuple(tokens), tuple(pulses), tuple(dict.fromkeys(flags)))
 
