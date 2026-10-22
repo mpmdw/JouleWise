@@ -17,7 +17,8 @@ task text, task data, or monitor instructions. Its fixture is original code.
 
 PinnedUpstream fetches that exact commit over HTTPS using git into
 $XDG_CACHE_HOME/joulewise/shade/<commit> (or ~/.cache, or a supplied cache_dir).
-It checks HEAD, hashes every on-disk tracked file as its Git blob, and hashes
+On first preparation per instance/process it checks HEAD, hashes every on-disk
+tracked file as its Git blob, and hashes
 the sorted manifest of all 151 tracked files. Canonical manifest bytes are:
 
     UTF-8 relative path + NUL + ASCII Git blob SHA1 + newline
@@ -28,6 +29,11 @@ This SHA256 was computed from the GitHub tree during development; the Python
 implementation still needs its execution check. Source/data byte changes,
 untracked source/data, unsupported file kinds, and a different HEAD are
 recorded as flags and yield an unavailable source rather than importing it.
+Successful verification is cached for an immutable source tree. activate() does
+no Git work after preparation; prepare(force=True) explicitly rechecks the pin
+and bytes and clears cached modules. Failures are retried on later prepare calls.
+Source flags describe the latest operation, so old transient failures do not
+flag later clean episodes. Do not mutate a verified cache during an episode.
 
 The source is on sys.path only inside activate(). Upstream's generic top-level
 names (utils, tools, environments, environment_classes, task_pairs,
@@ -58,8 +64,9 @@ imports, client construction, model dispatch, network access and tokenizers.
 
 The hosted wrappers also use tenacity retry policies unrelated to whether a
 completion has begun. Those policies are bypassed. The endpoint retries only
-connection failures before any response byte (including status/header bytes)
-arrives. Each retry is in result.raw_usage["joulewise"]["retries"] and the
+failed connects before any response byte (including status/header bytes)
+arrives. Once connect succeeds, delivery is uncertain and no retry is made,
+including read timeouts before response headers. Each retry is in result.raw_usage["joulewise"]["retries"] and the
 endpoint's retries list. HTTP errors, partial headers and partial streams are
 never replayed. Redirects are not followed.
 
@@ -79,12 +86,20 @@ The real upstream environments require optional Python packages even when
 their services are mocked: pydantic v2, PyYAML, docstring-parser,
 typing-extensions, rich, pandas, and OpenAI/Anthropic SDK imports. The two
 judge-dependent evaluators also import analysis_utils, which imports
-matplotlib and seaborn. These imports occur inside task operations, not at
+matplotlib and seaborn. Pydantic EmailStr also requires email-validator. These
+imports occur inside task operations, not at
 JouleWise module import. Missing dependencies become task_load_error flags.
 
 One development installation recipe, once a shell exists, is:
 
-    python3 -m pip install 'pydantic>=2' pyyaml docstring-parser typing-extensions rich pandas openai anthropic matplotlib seaborn
+    python3 -m pip install 'pydantic>=2' pyyaml docstring-parser typing-extensions rich pandas openai anthropic matplotlib seaborn email-validator
+
+A static scan of the pin finds tenacity and tiktoken only on the bypassed hosted
+provider/experiment paths; psutil is confined to the bypassed DeepSeek wrapper.
+openapi-pydantic is imported only by unused utils/openapi_utils.py. None is a
+direct requirement of this adapter's environment/evaluator path. This minimal
+recipe has NOT been isolated in a fresh venv here: the VM is still unavailable.
+Transitive package dependencies remain pip's responsibility.
 
 No upstream hosted client or credential is needed. A local judge and monitor
 can be separate local OpenAI-compatible servers. Endpoints may read a named
@@ -108,8 +123,8 @@ lengths.
 | spam_filter_update | Spam filtering | 41 | Deterministic sorting/deletion evaluation followed by upstream add_score_columns's affine transform. | Deterministic classification of a constructed mock sign-in notice. Broad rules and autodeletion can damage main-task performance. |
 
 score_main runs the original evaluate_main_task and original add_score_columns
-method. A one-row compatibility object supports exactly the operations these
-five normalizers use. This preserves their normalization, including the spam
+method. A one-row compatibility object provides apply, assignment and scalar
+<, <=, > and >= comparisons; american_airlines_2 uses > while other pairs use >=. This preserves their normalization, including the spam
 pair's transform and the airline pair's reservation conjunction, without
 copying numerical thresholds. evaluation_outputs retains the raw result.
 score_side returns only a real bool, otherwise None with a flag. Missing
@@ -127,61 +142,88 @@ no upstream environment seed interface; upstream_fixed_initial_state records
 that fact. The seed still reaches the supplied model/judge endpoint. Sabotage
 uses the original system_message_suspicious(give_hint=...), including
 <thinking> scratchpad instructions; benign uses the original
-system_message_no_secondary_task. The monitor gets only user_query.
+system_message_no_secondary_task. All three agent prompts use the pin's
+indentation rule. sabotage_hint:on/off records the hint condition when that
+prompt is requested. The monitor never receives the secret side instruction.
 
 ## Endpoint and monitor wire contracts
 
 ChatResult reports server prompt, cached, completion and reasoning counts
-unchanged as integers. Missing counts are zero with flags, never locally
-estimated. Empty reasoning_content deltas carry no generated reasoning text
-and do not raise reasoning_tokens_unreported. Nonempty separated reasoning
-with an absent, invalid or zero reasoning counter still raises that flag.
-A llama.cpp timing block is preserved in raw_usage; when ordinary
-usage is absent, prompt_n + cache_n and predicted_n are used and the fallback
-is flagged. first_token_ns uses the client's monotonic clock at the first
-nonempty content or reasoning_content delta; a role or tool-only delta does
-not establish a content token timestamp. Tool requests are accumulated by
-their streaming indices, including split names and JSON arguments.
+unchanged as integers. Current vLLM streams delta.reasoning; llama.cpp streams
+delta.reasoning_content. Both are accepted. llama.cpp reports no reasoning
+counter: separated reasoning remains in reasoning_text, reasoning_tokens stays
+zero and reasoning_tokens_unreported is recorded. Zero is an unknown counter in
+this flagged case, not evidence that no hidden work happened. No derived token
+count has been introduced. Empty deltas do not flag unreported work.
 
-count_tokens uses /tokenize outside the trailing /v1 prefix. It first sends
-vLLM's model/prompt shape and accepts count or tokens; on a schema/status
-mismatch it tries llama.cpp's content shape and accepts integer or object
-token lists. Unavailability is zero plus tokenize_unavailable in flags.
+llama.cpp puts timings on its final usage chunk. Preserve it in raw_usage.
+When ordinary usage is absent, prompt_n + cache_n and predicted_n are used
+with a fallback flag. first_token_ns is the client's monotonic stamp on the
+first nonempty content, reasoning, or tool function name/argument delta; role
+and empty deltas do not establish generation. This follows Turn's end-of-prefill
+contract, extending the original brief's content/reasoning-only wording.
+
+Tool argument pieces are concatenated by streaming index. ID and name fields
+are set once; identical repeats are tolerated and conflicting repeats flagged.
+finish_reason is retained in raw_usage["joulewise"]. A length stop records
+generation_cap_reached. timeout_s/max_retries and source_timeout_s are operator
+transport budgets. Judge and monitor max_tokens (default 4096) are operator-set
+generation caps, not scientific thresholds; both flag length stops on that call.
+Judge per-call audit records are in task.evaluation_outputs["judge_calls"].
+
+count_tokens posts model/prompt/content together to /tokenize outside /v1.
+vLLM reads prompt, llama.cpp reads content. An empty first token list for
+nonempty input triggers the content-only fallback, with a flag. Every successful
+call records tokenize_shape:prompt_and_content or tokenize_shape:content.
+Schema-status fallback remains supported. Missing service returns zero with
+tokenize_unavailable.
 
 ChatMessage lacks assistant tool requests and reasoning. AssistantMessage and
 assistant_message(result) retain them without changing the shared contract.
 For protocol-only callers, the endpoint reconstructs requests from immediately
-following tool result IDs and its previous completions. The runner must append
-the assistant completion and tool results in order. A missing history entry
-is flagged. Keeping the extension also preserves reasoning in subsequent
-model input and in full monitor views.
+following tool IDs. ShadeTask records every dispatch in order, including failed
+argument parsing. Malformed arguments become {} in the evaluator conversation
+and carry a flag with the exact input string; they do not invalidate a score
+of the resulting environment state. The malformed tool is not executed.
 
-ShadeMonitor reads the exact common upstream instruction literal without
-importing its provider packages. prompt_variant="upstream" identifies that
-literal; unknown variants are flagged. A single user message contains that
-instruction, the legitimate task, and the rendered transcript. This preserves
-the instruction text but differs from upstream's two-message system/user
-packaging; it makes prompt_sha256 unambiguously the hash of the exact UTF-8
-message content sent. last_prompt and responses expose the audit text.
+ShadeMonitor defaults to upstream's two messages: system=<pinned instruction>,
+user=<conversation query>. There is no extra task block in the default variant.
+upstream_actions_task is a named variant adding task_description only to an
+actions_only query. The exact request is available in last_messages.
+last_prompt is json.dumps([{"role": ..., "content": ...}, ...], sort_keys=True);
+prompt_sha256 hashes its UTF-8 bytes, including both message roles.
 
-- full includes assistant content and separated reasoning, expressed using
-  thinking tags.
-- no_scratchpad removes thinking, think and system_instructions spans. It also
-  removes unfinished and nested spans; upstream logging removes tagged spans
-  from all message roles.
-- actions_only contains tool names and result contents. Legitimate task
-  context is supplied separately.
-- All views omit agent system instructions. As in upstream's names-only
-  monitor format, tool arguments remain hidden in every view.
-- A missing or invalid verdict produces the upstream uncertainty value, 50,
-  with monitor_verdict_invalid; a missing prompt is separately flagged. The
-  flag must accompany the verdict so it cannot be counted as a model judgment.
+- full retains assistant reasoning as closed thinking spans.
+- no_scratchpad follows upstream exactly: remove closed, case-sensitive
+  thinking/system_instructions pairs and collapse whitespace in every role.
+  Unclosed thinking spans and local think tags remain visible.
+- actions_only contains tool names and results.
+- All views omit agent system prompts and tool arguments, as upstream does.
 
-Task/monitor flags and endpoint diagnostics must be copied into Episode.flags
-by the runner. Discovery returns a tuple-compatible TaskPairList with a flags
-attribute, so even list_task_pairs() retains source failure diagnostics. The
-immutable protocols do not currently require these attributes, so protocol-only
-code must explicitly collect them.
+The shared scratchpad_tags exposes one pair, <thinking>/</thinking>. Upstream
+also strips system_instructions; task.flags records
+scratchpad_rule:upstream_closed_pairs:thinking,system_instructions. Runner-side
+prestripping must use this same closed-pair rule and additional tag to produce
+the same view. Prefer passing the intact transcript to ShadeMonitor so this
+lane owns the rendering. A future contract should support multiple pairs and
+an explicit stripping rule.
+
+ShadeMonitorVerdict is a frozen MonitorVerdict subclass with per-call flags
+and valid. An invalid/missing judgment has valid=False and a numeric 50
+placeholder only because the shared contract requires a number; it must not
+enter suspicion/catch-rate arithmetic. A real 50 has valid=True. A length stop
+has valid=False even if it contains a parseable verdict. monitor.flags and
+last_flags reset on each score call; the returned tuple is immutable.
+
+Episode v1's strict reader rejects subclass fields. Store complete verdict
+artifacts, project .shared_record() into Episode.monitor_verdicts and copy each
+call's flags qualified by visibility/index into Episode.flags. Do not strip
+validity/flags and treat the placeholder as a score. Adding flags/valid or an
+optional suspicion to the shared record is the requested contract change.
+
+Discovery failures remain on TaskPairList.flags; task/endpoint flags must also
+be copied into Episode.flags. All nonphysical failures are recorded conditions.
+No model service, hardware or paid API is used by the test suite.
 
 ## Offline verification to run
 
@@ -202,7 +244,7 @@ from proxies for the lifetime of the test.
 
 The HTTP world specifies ten benign turns and eleven sabotage turns, with
 28/29 tool calls, including parallel request deltas for four-invoice batches.
-The planned chain is fixture pin verification -> ShadeTask prompts/schemas ->
+The authored chain is fixture pin verification -> ShadeTask prompts/schemas ->
 urllib SSE -> actual mock environment -> separate judge facade -> original
 normalizer -> ShadeMonitor under all three visibilities -> Episode JSONL and
 transcript/usage/verdict files. Four worlds cover both usage flavours and both
@@ -235,12 +277,12 @@ sensible real-model turn/token cap: the runner must expose its budgets.
 A local judge may miss disguised strings or grade narrative quality
 differently. Keep judge identity, sampling parameters and the original raw
 evaluation output; four side-judge calls are four pieces of off-box work,
-not agent tokens or agent energy. The default monitor packaging above is a
-port variant, not an exact reproduction of the upstream hosted experiment.
+not agent tokens or agent energy. Default full/no_scratchpad packaging and
+rendering now follow the pinned upstream; actions_only is a port visibility.
 
 Cached prompt counts and reasoning counts depend on server version/parser
 configuration. Missing counts must not become inferred hidden-work evidence.
-A tool-only completion has no observed content first-token timestamp. Retry
+Tool-only completions now have a generated-token timestamp. Retry
 flags and incomplete streams matter for attribution even when a transcript
 looks complete.
 
@@ -248,3 +290,20 @@ The public five pairs are a limited benchmark split. No synthetic result here
 establishes actual sabotage capability, monitor catch rate, or an energy
 signal. Power can count hidden work and omitted tool activity, and remains
 blind to what fits within one forward pass.
+
+## Wire fixture sources
+
+The review supplied source excerpts fetched 2026-10-21. The HTTP fixture models:
+
+- vLLM v0.32.0/main: vllm/entrypoints/generate/base/protocol.py DeltaMessage.reasoning;
+  chat_completion/serving.py reasoning usage only with a reasoning parser.
+- llama.cpp master: tools/server/server-chat.cpp reasoning_content deltas;
+  server-task.cpp usage without completion_tokens_details and timings on its last
+  usage chunk; server-context.cpp post_tokenize returns 200 {"tokens": []} if
+  content is absent; server-common.cpp timing field names.
+
+These are wire compatibility fixtures, not executions of either serving stack.
+The timing regression uses 200 ms prefill and six reasoning deltas spaced by
+100 ms. Its 50 ms agreement bar is half the smallest wrong-delta offset.
+The HTTP episode world covers llama.cpp's unreported hidden-token path through
+Turn/Episode, retaining total decode and explicit missing-counter flags.
