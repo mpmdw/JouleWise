@@ -279,6 +279,41 @@ class EndpointTests(unittest.TestCase):
                                      result.raw_usage["joulewise"]["flags"], flagged)
                     self.assertEqual("reasoning_tokens_unreported" in client.flags, flagged)
 
+    def test_derived_reasoning_count_is_opt_in_and_never_a_server_counter(self) -> None:
+        pieces = ["Check invoice 1. ", "Check invoice 2. ", "Reconcile totals."]
+        thought = "".join(pieces)
+        def tokenize(body):
+            self.assertEqual(body["content"], thought)
+            self.assertIs(body["add_special_tokens"], False)
+            self.assertIs(body["add_special"], False)
+            # This synthetic tokenizer counts joined text, as a real /tokenize
+            # call does; the exact integer is not a server completion counter.
+            return {"json": {"tokens": list(range(len(thought) // 4))}}
+        packet = stream_packets(flavour="llamacpp", reasoning=thought)
+        with HTTPWorld([packet]) as world:
+            default = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5))
+            self.assertEqual(len(world.requests), 1)
+            self.assertNotIn("derived_reasoning_tokens", default.raw_usage["joulewise"])
+        with HTTPWorld([packet, {"respond": tokenize}]) as world:
+            client = OpenAICompatEndpoint(world.url, "local", timeout_s=5,
+                                          derive_reasoning_tokens=True)
+            result = self.chat(client)
+            diagnostic = result.raw_usage["joulewise"]["derived_reasoning_tokens"]
+            self.assertEqual(diagnostic["count"], len(thought) // 4)
+            self.assertEqual(diagnostic["source"], "server:/tokenize")
+            self.assertEqual(result.reasoning_tokens, 0)
+            self.assertEqual(result.completion_tokens, 512)
+            self.assertIn("reasoning_tokens_unreported", result.raw_usage["joulewise"]["flags"])
+            self.assertIn("reasoning_tokens_derived_from_tokenize", client.flags)
+            self.assertEqual([r["path"] for r in world.requests],
+                             ["/v1/chat/completions", "/tokenize"])
+        with HTTPWorld([packet, {"status": 503, "json": {"error": "unavailable"}}]) as world:
+            result = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5,
+                                                     derive_reasoning_tokens=True))
+            self.assertIsNone(result.raw_usage["joulewise"]["derived_reasoning_tokens"]["count"])
+            self.assertEqual(result.reasoning_tokens, 0)
+            self.assertIn("reasoning_tokenize_unavailable", result.raw_usage["joulewise"]["flags"])
+
     def test_tokenize_both_shapes(self) -> None:
         worlds = [
             ([{"json": {"count": 120, "tokens": list(range(120))}}], 1),

@@ -137,11 +137,15 @@ class OpenAICompatEndpoint:
     timeout_s and max_retries are operator-set transport budgets, not analysis
     thresholds. Retries apply only to failed connects with zero bytes read.
     No HTTP status, partial header or partial completion is ever retried.
+    derive_reasoning_tokens opts into one extra server /tokenize request per
+    reasoning turn lacking a reported count. It is off by default because the
+    request adds measured work; its result is a labelled raw_usage diagnostic,
+    never reasoning_tokens or Turn.hidden_tokens.
     """
 
     def __init__(self, base_url: str, model: str, *, api_key_env: str | None = None,
                  timeout_s: float = 120.0, extra_body: Mapping[str, Any] | None = None,
-                 max_retries: int = 1) -> None:
+                 max_retries: int = 1, derive_reasoning_tokens: bool = False) -> None:
         parsed = urllib.parse.urlsplit(base_url)
         self._valid_url = (parsed.scheme in {"http", "https"} and bool(parsed.netloc)
                            and parsed.username is None and parsed.password is None
@@ -150,6 +154,7 @@ class OpenAICompatEndpoint:
         self.model, self.api_key_env = model, api_key_env
         self.timeout_s, self.max_retries = timeout_s, max(0, max_retries)
         self.extra_body = dict(extra_body or {})
+        self.derive_reasoning_tokens = derive_reasoning_tokens
         self.identity = f"openai_compat:{model}@{self.base_url or 'invalid_url'}"
         self.flags: list[str] = []
         self.retries: list[dict[str, Any]] = []
@@ -361,8 +366,22 @@ class OpenAICompatEndpoint:
             request = ToolCallRequest(call["id"], call["name"], call["arguments"])
             requests.append(request)
             self._requests[request.call_id] = request
+        derived = None
+        if self.derive_reasoning_tokens and any(reasoning) and not hidden:
+            before_flags, before_retries = len(self.flags), len(self.retries)
+            count = self.count_tokens("".join(reasoning))
+            token_flags = self.flags[before_flags:]
+            flags.extend(token_flags)
+            success = any(flag.startswith("tokenize_shape:") for flag in token_flags)
+            flags.append("reasoning_tokens_derived_from_tokenize" if success
+                         else "reasoning_tokenize_unavailable")
+            derived = {"count": count if success else None,
+                       "source": "server:/tokenize", "special_tokens": False,
+                       "flags": list(token_flags), "retries": self.retries[before_retries:]}
         usage["joulewise"] = {"flags": list(dict.fromkeys(flags)), "retries": retries,
                               "finish_reason": finish_reason}
+        if derived is not None:
+            usage["joulewise"]["derived_reasoning_tokens"] = derived
         self.flags.extend(usage["joulewise"]["flags"])
         return ChatResult("".join(content), "".join(reasoning), tuple(requests), prompt, cached,
                           completion, hidden, start, first, time.monotonic_ns(), usage)

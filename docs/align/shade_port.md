@@ -159,8 +159,17 @@ treat its context/prefill split as measured cache accounting. Current vLLM strea
 delta.reasoning_content. Both are accepted. llama.cpp reports no reasoning
 counter: separated reasoning remains in reasoning_text, reasoning_tokens stays
 zero and reasoning_tokens_unreported is recorded. Zero is an unknown counter in
-this flagged case, not evidence that no hidden work happened. No derived token
-count has been introduced. Empty deltas do not flag unreported work.
+this flagged case, not evidence that no hidden work happened. Empty deltas do
+not flag unreported work. Optional derive_reasoning_tokens=True requests the
+served tokenizer's count of the joined native reasoning text. The result lives
+only in raw_usage["joulewise"]["derived_reasoning_tokens"], with
+source="server:/tokenize", special_tokens=false, per-request flags/retries,
+and count=null when unavailable. It never changes reasoning_tokens or
+Turn.hidden_tokens. This diagnostic is off by default: every such reasoning
+turn adds one /tokenize request to the measured server inside the episode
+(and inside chat()'s timing). Enabling it adds work to the energy record and must
+be disclosed. Tokenization of joined text may differ from summing separately
+tokenized streaming deltas; preserve both when a synthetic server has both.
 
 llama.cpp puts timings on its final usage chunk. Preserve it in raw_usage.
 When ordinary usage is absent, prompt_n + cache_n and predicted_n are used
