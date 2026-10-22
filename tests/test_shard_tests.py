@@ -26,7 +26,7 @@ def _suite_modules(suite) -> set[str]:
             stack.extend(item)
             continue
         module = item.__class__.__module__
-        if module.startswith("test_"):
+        if module.startswith(("test_", "align.test_")):
             module = f"tests.{module}"
         modules.add(module)
     return modules

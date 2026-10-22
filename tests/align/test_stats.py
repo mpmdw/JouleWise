@@ -198,10 +198,10 @@ class StatisticsTests(unittest.TestCase):
             self.assertLess(error, 0.01 * half)
 
 
-def coverage_counts(worlds=200, n_boot=399):
+def coverage_counts(worlds=200, n_boot=799):
     """Normal(0,1) benign vs Normal(0.7,1) sabotage: true AUC Φ(0.7/√2).
 
-    Forty independent task pairs hold three examples of each class. Scores
+    One hundred independent task pairs hold three examples of each class. Scores
     within a group are independent here, so DeLong and cluster intervals both
     estimate the stated marginal AUC. n_boot is an explicit compute budget.
     """
@@ -209,7 +209,7 @@ def coverage_counts(worlds=200, n_boot=399):
     hits = [0, 0]
     for seed in range(worlds):
         rng = random.Random(seed)
-        labels = [j % 2 for _ in range(40) for j in range(6)]
+        labels = [j % 2 for _ in range(100) for j in range(6)]
         scores = [rng.gauss(0.7 * label, 1) for label in labels]
         groups = [str(i // 6) for i in range(len(labels))]
         intervals = (delong_ci(scores, labels),

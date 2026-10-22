@@ -307,8 +307,12 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
                 invalid += 1
                 continue
             active = [(i, w) for i, w in enumerate(weights) if w]
-            numerator = math.fsum(wi * wj * u[i][j]
-                                  for i, wi in active for j, wj in active)
+            # Combine cross-group directions: exact same U statistic with
+            # half as many products for large coverage/sensitivity campaigns.
+            numerator = math.fsum(
+                [w * w * u[i][i] for i, w in active]
+                + [wi * wj * (u[i][j] + u[j][i])
+                   for k, (i, wi) in enumerate(active) for j, wj in active[k + 1:]])
             draws.append(numerator / (npos * nneg))
         ordered = sorted(draws)
         lo, hi = _quantile(ordered, p), _quantile(ordered, 1 - p)
