@@ -1,11 +1,13 @@
 ## PROGRESS
 
-- Slice 4: replay CLI and three new synthetic tests implemented; full C5 module passes 17 tests (7.238 s, exit 0). Changed scripts/bytes_gates.py, tests/test_bytes_gates.py and this report only this slice so far.
-- Done from earlier slices: raw allocated-byte rates, exact rational per-pack P; native q/headroom encoding; real DriverLane/planner/disk-hazard synthetic boundary proof at P-1 and P. Current head 9b7d58527; clean intake.
-- Replay reads B6 custody/hazards/arm.json on the session device, compression-summary free_bytes_before, runs-root compression sizes; H desk.json disk plus augmented raw receipts. WAIT and committed fixed bytes come from the supplied H C5 output. Every missing input remains a flagged row, never a refusal. No real session trees accessed.
-- Done: per-pack q/headroom table added, encoder reconstruction exact for all twelve. Focused bytes-packs (9), B6 catalog (4), flags catalog (6), H disk/receipt (7), plan-inputs (6), wrapper (6), C5 (17) tests green. Sealed-inventory diffs empty; diff check clean.
-- Next: remaining importer checks (test_lane_adapters, test_cold_pass_fixes, test_s3_cold_fixes, test_round2_review_fixes, test_capture_screen_reachability, test_loop_round_desk, test_desk_resume_finalize, test_b6_loop, test_b6_machine_test, hazards test_clock/test_arm); split long classes across slices. Final report audit. Consider extending real-writer equality proof to all twelve real H terms; current all-twelve proof uses the real encoder, and real writer/hazard uses a production-shaped synthetic pack.
-- Open: director-run 9+1 replay/table and CI; BY-H2 native raw_allocated_bytes producer. No Git writes attempted. Director destination lane/2026-10-22-bytes-c5-gates.
+- Slice 5: director replay table imported from replay.json: 0 refusals / 10 available (nine block-6 + H), r2-alpha unavailable; largest pass refuses 0. No real session trees read.
+- P PER SUB-PACK now has readable integer terms and per-model allowances; exact fractions stay in director C5.json. R6 carries real P values. Current df available 44,779,048 KiB (~42.7 GiB), above 10 GiB stop gate, below every P.
+- Done earlier: exact raw allocated-byte rates; P and native q/headroom; synthetic real DriverLane/planner/disk hazard P-1/P proof; 17 C5 tests including replay.
+- Passed this slice: alpha/beta/gamma production regression all 6 subtests (167.493 s), confirming /tmp aliasing only; machine_test 29; lane_adapters 21; round2_review_fixes 8; s3_cold_fixes 6; ColdPassTests 9; ScreenInputsTests 2. hazards clock: 33 pass, one environmental kern.bootsessionuuid probe failure. Exact commands in TESTS RUN.
+- Full cold_pass_fixes timed out at 100 s; FullRoundTests still owed separately. capture_screen_reachability timed out at 75 s (recorded below); ChainReachabilityTests still owed separately. b6_loop separately passed 55 tests (23.277 s).
+- Currently running: desk_resume_finalize session 97218; capture_screen_reachability.PolicyReadTests + CaptureDispositionTests session 64707. Earlier batches 85156 and 49000 are finished; they stopped on their first timed-out module and did not run later modules. loop_round_desk remains entirely unrun.
+- Next: collect running results; run any remaining importer modules/classes split small; extend real writer equality to all twelve real-H terms; final report audit (including clause-map site lines and any NOT PINNED gaps). No new implementation edits in slice 5.
+- Open: hazards arm environmental process-group census failures (25 tests, 17 assertions fail; sysmond/pgrep unavailable), clock bootsessionuuid failure; BY-H2 native raw_allocated_bytes producer; known H native-export integration expectation; hazards import-graph GO/NULL failure; CI/director final review. No Git writes attempted.
 
 ## SUMMARY
 
@@ -14,10 +16,10 @@ C5 now replaces the 150 GiB reserve with H-DISK-RULING exact rational P.
 Rates derive from one raw bundle's allocated byte receipts, without altering retained_bytes.
 All twelve pass packs print both bases, per-model counts and allowances, WAIT, fixed, c and P.
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
-All 14 bytes_gates tests pass; H rates agree with disk_h at the required 1e-6 relative bar.
+All 17 bytes_gates tests pass; H rates agree with disk_h at the required 1e-6 relative bar.
 Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
 Only authorized source/test/report files changed; no hardware operation or Git write ran.
-Replay preserves missing inputs as flags and prints refusal totals; real 9+1 replay and CI remain director-owned.
+Director real replay: 0 refusals of 10 available sessions, 1 unavailable row; largest pass also refuses 0. CI remains director-owned.
 
 ## GATES FIX
 
@@ -35,1096 +37,45 @@ Slice 2 real-H command (extracted data files only in TMPDIR):
 
 Exit 2 from stopped completeness gates; empty stderr; no ConversionSyntax. Rates use exact fractions of raw allocated bytes over measured decimal seconds. Agreement bar is 1e-6 relative per director ruling 1: stream 1805538.5168827055 vs disk_h 1805538.5168827053 B/s (relative difference 2.220446049250313e-16), wall 1285759.0452694688 vs 1285759.0452694688 B/s (relative difference 0). Optional --disk-evidence discloses BY-0 c_implied_alloc alongside c=2, hashes the additional source, and changes no P or refusal. With no evidence file, measured_c=null explicitly leaves the measurement unavailable.
 
-```json
-{
-  "bytes-s1-p1": {
-    "T_stream_max_s": 96.39069404196925,
-    "disk_derivation": {
-      "B_bytes": 21883930645,
-      "allowances_by_model": {
-        "qwen3-1p7b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 10891394915588033884894765753299
-          },
-          "stream_allowance_s": {
-            "denominator": 8163178181648254000000000000000,
-            "numerator": 783145273507629421873856021669061
-          }
-        },
-        "qwen3-4b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 20407945454120635000000000000,
-            "numerator": 2830923851452033592289994193241
-          },
-          "stream_allowance_s": {
-            "denominator": 408158909082412700000000000000,
-            "numerator": 40649626600132261505455935703143
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 71034160574,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 21883930645,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 1306108509063720640000000000000,
-        "numerator": 15830616605462560281372141940369533
-      },
-      "wall_basis_bytes": 21697490999,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 55102232650623631667288407384551
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-1p7b": {
-        "T_stream_max_s": 92.84918262495194,
-        "bytes_per_member": 324861952,
-        "est_minutes": 111.18417640400074,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 129.12722992897034,
-        "request_mean_s": 2.9647043704986573,
-        "runs_measured": 5
-      },
-      "qwen3-4b": {
-        "T_stream_max_s": 96.39069404196925,
-        "bytes_per_member": 328941568,
-        "est_minutes": 115.5972910083914,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 134.25253896713258,
-        "request_mean_s": 5.9694184303283695,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 42023792640,
-    "required_free_bytes": 71034160574
-  },
-  "bytes-s1-p2": {
-    "T_stream_max_s": 96.39069404196925,
-    "disk_derivation": {
-      "B_bytes": 21883930645,
-      "allowances_by_model": {
-        "qwen3-1p7b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 10891394915588033884894765753299
-          },
-          "stream_allowance_s": {
-            "denominator": 8163178181648254000000000000000,
-            "numerator": 783145273507629421873856021669061
-          }
-        },
-        "qwen3-4b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 20407945454120635000000000000,
-            "numerator": 2830923851452033592289994193241
-          },
-          "stream_allowance_s": {
-            "denominator": 408158909082412700000000000000,
-            "numerator": 40649626600132261505455935703143
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 71034160574,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 21883930645,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 1306108509063720640000000000000,
-        "numerator": 15830616605462560281372141940369533
-      },
-      "wall_basis_bytes": 21697490999,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 55102232650623631667288407384551
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-1p7b": {
-        "T_stream_max_s": 92.84918262495194,
-        "bytes_per_member": 324861952,
-        "est_minutes": 111.18417640400074,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 129.12722992897034,
-        "request_mean_s": 2.9647043704986573,
-        "runs_measured": 5
-      },
-      "qwen3-4b": {
-        "T_stream_max_s": 96.39069404196925,
-        "bytes_per_member": 328941568,
-        "est_minutes": 115.5972910083914,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 134.25253896713258,
-        "request_mean_s": 5.9694184303283695,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 42023792640,
-    "required_free_bytes": 71034160574
-  },
-  "bytes-s2-p1": {
-    "T_stream_max_s": 102.24723962508142,
-    "disk_derivation": {
-      "B_bytes": 22967763886,
-      "allowances_by_model": {
-        "qwen3-30b-a3b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 2400934759308310000000000000,
-            "numerator": 349955922340690594900650014553
-          },
-          "stream_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 8200756288643801927698276077861
-          }
-        },
-        "qwen3-8b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 5101986363530158750000000000,
-            "numerator": 745597533139678689481931054499
-          },
-          "stream_allowance_s": {
-            "denominator": 816317818164825400000000000000,
-            "numerator": 86264603879409717683237745499413
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 73201827056,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 22841465166,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 261221701812744128000000000000,
-        "numerator": 3304657500529636404465196911351201
-      },
-      "wall_basis_bytes": 22967763886,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 58328175787467973675844917065597
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-30b-a3b": {
-        "T_stream_max_s": 97.23176879191305,
-        "bytes_per_member": 329908224,
-        "est_minutes": 121.46516441284938,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 141.0673777580261,
-        "request_mean_s": 6.771204948425293,
-        "runs_measured": 5
-      },
-      "qwen3-8b": {
-        "T_stream_max_s": 102.24723962508142,
-        "bytes_per_member": 334405632,
-        "est_minutes": 121.78223016387842,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 141.43561201095582,
-        "request_mean_s": 9.802446508407593,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 42549309440,
-    "required_free_bytes": 73201827056
-  },
-  "bytes-s2-p2": {
-    "T_stream_max_s": 102.24723962508142,
-    "disk_derivation": {
-      "B_bytes": 22967763886,
-      "allowances_by_model": {
-        "qwen3-30b-a3b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 2400934759308310000000000000,
-            "numerator": 349955922340690594900650014553
-          },
-          "stream_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 8200756288643801927698276077861
-          }
-        },
-        "qwen3-8b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 5101986363530158750000000000,
-            "numerator": 745597533139678689481931054499
-          },
-          "stream_allowance_s": {
-            "denominator": 816317818164825400000000000000,
-            "numerator": 86264603879409717683237745499413
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 73201827056,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 22841465166,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 261221701812744128000000000000,
-        "numerator": 3304657500529636404465196911351201
-      },
-      "wall_basis_bytes": 22967763886,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 58328175787467973675844917065597
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-30b-a3b": {
-        "T_stream_max_s": 97.23176879191305,
-        "bytes_per_member": 329908224,
-        "est_minutes": 121.46516441284938,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 141.0673777580261,
-        "request_mean_s": 6.771204948425293,
-        "runs_measured": 5
-      },
-      "qwen3-8b": {
-        "T_stream_max_s": 102.24723962508142,
-        "bytes_per_member": 334405632,
-        "est_minutes": 121.78223016387842,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 141.43561201095582,
-        "request_mean_s": 9.802446508407593,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 42549309440,
-    "required_free_bytes": 73201827056
-  },
-  "bytes-s3-p1": {
-    "T_stream_max_s": 112.22990612499416,
-    "disk_derivation": {
-      "B_bytes": 24709054674,
-      "allowances_by_model": {
-        "qwen3-14b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 40815890908241270000000000000,
-            "numerator": 6474217913479255592038768844679
-          },
-          "stream_allowance_s": {
-            "denominator": 408158909082412700000000000000,
-            "numerator": 47330398691245516925420598873141
-          }
-        },
-        "qwen3-next-80b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 40815890908241270000000000000,
-            "numerator": 6545344197423385472008594783023
-          },
-          "stream_allowance_s": {
-            "denominator": 163263563632965080000000000000,
-            "numerator": 16914145208797081356146249228721
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 76684408632,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 24053464961,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 10448868072509765120000000000,
-        "numerator": 139200288283987826528273116525641
-      },
-      "wall_basis_bytes": 24709054674,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 62750300451441859415368376842833
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-14b": {
-        "T_stream_max_s": 112.22990612499416,
-        "bytes_per_member": 345513984,
-        "est_minutes": 132.1833598265691,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 153.5152901172638,
-        "request_mean_s": 17.414829206466674,
-        "runs_measured": 5
-      },
-      "qwen3-next-80b": {
-        "T_stream_max_s": 100.21633237495553,
-        "bytes_per_member": 333053952,
-        "est_minutes": 133.63553695581578,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 155.20182156562805,
-        "request_mean_s": 9.04508671760559,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 43262013440,
-    "required_free_bytes": 76684408632
-  },
-  "bytes-s3-p2": {
-    "T_stream_max_s": 112.22990612499416,
-    "disk_derivation": {
-      "B_bytes": 24709054674,
-      "allowances_by_model": {
-        "qwen3-14b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 40815890908241270000000000000,
-            "numerator": 6474217913479255592038768844679
-          },
-          "stream_allowance_s": {
-            "denominator": 408158909082412700000000000000,
-            "numerator": 47330398691245516925420598873141
-          }
-        },
-        "qwen3-next-80b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 40815890908241270000000000000,
-            "numerator": 6545344197423385472008594783023
-          },
-          "stream_allowance_s": {
-            "denominator": 163263563632965080000000000000,
-            "numerator": 16914145208797081356146249228721
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 76684408632,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 24053464961,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 10448868072509765120000000000,
-        "numerator": 139200288283987826528273116525641
-      },
-      "wall_basis_bytes": 24709054674,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 62750300451441859415368376842833
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-14b": {
-        "T_stream_max_s": 112.22990612499416,
-        "bytes_per_member": 345513984,
-        "est_minutes": 132.1833598265691,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 153.5152901172638,
-        "request_mean_s": 17.414829206466674,
-        "runs_measured": 5
-      },
-      "qwen3-next-80b": {
-        "T_stream_max_s": 100.21633237495553,
-        "bytes_per_member": 333053952,
-        "est_minutes": 133.63553695581578,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 155.20182156562805,
-        "request_mean_s": 9.04508671760559,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 43262013440,
-    "required_free_bytes": 76684408632
-  },
-  "bytes-s4-p1": {
-    "T_stream_max_s": 142.9448628750397,
-    "disk_derivation": {
-      "B_bytes": 27547300445,
-      "allowances_by_model": {
-        "qwen3-32b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 16263008657228787896484291177243
-          },
-          "stream_allowance_s": {
-            "denominator": 163263563632965080000000000000,
-            "numerator": 24115037219132903847314523041463
-          }
-        },
-        "qwen3-8b-8bit": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 12501684878568190919754877589643
-          },
-          "stream_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 9024890800101023766671030234691
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 82360900174,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 27547300445,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 261221701812744128000000000000,
-        "numerator": 3985488337822868723554195491770433
-      },
-      "wall_basis_bytes": 26855538139,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 68201439079425252791657259865797
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-32b": {
-        "T_stream_max_s": 142.9448628750397,
-        "bytes_per_member": 377110528,
-        "est_minutes": 166.01998526535766,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 192.81251616477968,
-        "request_mean_s": 39.618006801605226,
-        "runs_measured": 5
-      },
-      "qwen3-8b-8bit": {
-        "T_stream_max_s": 107.0052588749677,
-        "bytes_per_member": 340156416,
-        "est_minutes": 127.62272855394922,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 148.21865797042847,
-        "request_mean_s": 14.76427903175354,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 45196963840,
-    "required_free_bytes": 82360900174
-  },
-  "bytes-s4-p2": {
-    "T_stream_max_s": 142.9448628750397,
-    "disk_derivation": {
-      "B_bytes": 27547300445,
-      "allowances_by_model": {
-        "qwen3-32b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 16263008657228787896484291177243
-          },
-          "stream_allowance_s": {
-            "denominator": 163263563632965080000000000000,
-            "numerator": 24115037219132903847314523041463
-          }
-        },
-        "qwen3-8b-8bit": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 12501684878568190919754877589643
-          },
-          "stream_allowance_s": {
-            "denominator": 81631781816482540000000000000,
-            "numerator": 9024890800101023766671030234691
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 82360900174,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 27547300445,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 261221701812744128000000000000,
-        "numerator": 3985488337822868723554195491770433
-      },
-      "wall_basis_bytes": 26855538139,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 68201439079425252791657259865797
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen3-32b": {
-        "T_stream_max_s": 142.9448628750397,
-        "bytes_per_member": 377110528,
-        "est_minutes": 166.01998526535766,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 192.81251616477968,
-        "request_mean_s": 39.618006801605226,
-        "runs_measured": 5
-      },
-      "qwen3-8b-8bit": {
-        "T_stream_max_s": 107.0052588749677,
-        "bytes_per_member": 340156416,
-        "est_minutes": 127.62272855394922,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 148.21865797042847,
-        "request_mean_s": 14.76427903175354,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 45196963840,
-    "required_free_bytes": 82360900174
-  },
-  "bytes-s5-p1": {
-    "T_stream_max_s": 201.49829895899165,
-    "disk_derivation": {
-      "B_bytes": 22901363715,
-      "allowances_by_model": {
-        "llama-70b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 130610850906372064000000000000,
-            "numerator": 35551270022896312928786107333377
-          },
-          "stream_allowance_s": {
-            "denominator": 261221701812744128000000000000,
-            "numerator": 54020413412194470005471826214809
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 73069026714,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 22901363715,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 261221701812744128000000000000,
-        "numerator": 3313323502885796113375260121643283
-      },
-      "wall_basis_bytes": 21700998244,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 2612217018127441280000000000,
-        "numerator": 44088911629161349056129245198997
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "llama-70b": {
-        "T_stream_max_s": 201.49829895899165,
-        "bytes_per_member": 439197696,
-        "est_minutes": 226.8269301273516,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 263.43256844580173,
-        "request_mean_s": 82.55686520040035,
-        "runs_measured": 16
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 31293501440,
-    "required_free_bytes": 73069026714
-  },
-  "bytes-s5-p2": {
-    "T_stream_max_s": 201.49829895899165,
-    "disk_derivation": {
-      "B_bytes": 22901363715,
-      "allowances_by_model": {
-        "llama-70b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 130610850906372064000000000000,
-            "numerator": 35551270022896312928786107333377
-          },
-          "stream_allowance_s": {
-            "denominator": 261221701812744128000000000000,
-            "numerator": 54020413412194470005471826214809
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 73069026714,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 22901363715,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 261221701812744128000000000000,
-        "numerator": 3313323502885796113375260121643283
-      },
-      "wall_basis_bytes": 21700998244,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 2612217018127441280000000000,
-        "numerator": 44088911629161349056129245198997
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "llama-70b": {
-        "T_stream_max_s": 201.49829895899165,
-        "bytes_per_member": 439197696,
-        "est_minutes": 226.8269301273516,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 263.43256844580173,
-        "request_mean_s": 82.55686520040035,
-        "runs_measured": 16
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 31293501440,
-    "required_free_bytes": 73069026714
-  },
-  "bytes-s6-p1": {
-    "T_stream_max_s": 111.03078095801175,
-    "disk_derivation": {
-      "B_bytes": 16382541368,
-      "allowances_by_model": {
-        "qwen35-122b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 40815890908241270000000000000,
-            "numerator": 7733127455975572891344203626737
-          },
-          "stream_allowance_s": {
-            "denominator": 816317818164825400000000000000,
-            "numerator": 93614757959574015959440446217137
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 60031382020,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 14585071383,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 10448868072509765120000000000,
-        "numerator": 84405558385170274738108638015081
-      },
-      "wall_basis_bytes": 16382541368,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 41604561831733586724555736838973
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen35-122b": {
-        "T_stream_max_s": 111.03078095801175,
-        "bytes_per_member": 343875584,
-        "est_minutes": 157.8863706409618,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 183.3662877559662,
-        "request_mean_s": 15.692169046401977,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 26527395840,
-    "required_free_bytes": 60031382020
-  },
-  "bytes-s6-p2": {
-    "T_stream_max_s": 111.03078095801175,
-    "disk_derivation": {
-      "B_bytes": 16382541368,
-      "allowances_by_model": {
-        "qwen35-122b": {
-          "count": 50,
-          "member_allowance_s": {
-            "denominator": 40815890908241270000000000000,
-            "numerator": 7733127455975572891344203626737
-          },
-          "stream_allowance_s": {
-            "denominator": 816317818164825400000000000000,
-            "numerator": 93614757959574015959440446217137
-          }
-        },
-        "reference": {
-          "count": 25,
-          "member_allowance_s": {
-            "denominator": 3265271272659301600000000000,
-            "numerator": 426882080313251806367156893281
-          },
-          "stream_allowance_s": {
-            "denominator": 6530542545318603200000000000000,
-            "numerator": 612302832276072613101668810902833
-          }
-        }
-      },
-      "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
-      "extra_wait_raw_bytes": 12999877322,
-      "fixed_retained_bytes": 1266544640,
-      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
-      "measured_c": 0.8020750916018277,
-      "peak_copies": 2,
-      "required_free_bytes": 60031382020,
-      "session_wait_budget_s": 7200,
-      "stream_basis_bytes": 14585071383,
-      "stream_rate_bytes_per_s": {
-        "denominator": 890824130839901,
-        "numerator": 1608417280000000000000
-      },
-      "stream_seconds": {
-        "denominator": 10448868072509765120000000000,
-        "numerator": 84405558385170274738108638015081
-      },
-      "wall_basis_bytes": 16382541368,
-      "wall_rate_bytes_per_s": {
-        "denominator": 12509476685523987,
-        "numerator": 16084172800000000000000
-      },
-      "wall_seconds": {
-        "denominator": 3265271272659301600000000000,
-        "numerator": 41604561831733586724555736838973
-      }
-    },
-    "est_minutes": null,
-    "measured_margin": 0.03325233382759357,
-    "measured_margin_complete": false,
-    "modules": {
-      "qwen35-122b": {
-        "T_stream_max_s": 111.03078095801175,
-        "bytes_per_member": 343875584,
-        "est_minutes": 157.8863706409618,
-        "measured_margin": 0.03325233382759357,
-        "measured_margin_complete": false,
-        "member_wall_mean_s": 183.3662877559662,
-        "request_mean_s": 15.692169046401977,
-        "runs_measured": 5
-      }
-    },
-    "non_claim": true,
-    "programmed_span_s": null,
-    "projected_footprint_bytes": 26527395840,
-    "required_free_bytes": 60031382020
-  }
-}
-```
+All twelve exact fraction records, rates, allowances and source hashes remain in `/Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json`; the bulky JSON dump is omitted here. All byte cells below are integers. Both p variants have identical terms. c=2 is operative; measured c=0.8020750916018277 is disclosure only.
 
+| pack | members n | stream basis B_s | wall basis B_w | B (winner) | WAIT | fixed | c | measured c | P | q | headroom | encoded requirement == P |
+|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|
+| bytes-s1-p1 | 125 | 21,883,930,645 | 21,697,490,999 | 21,883,930,645 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 71,034,160,574 | 116,714,296 | 27,266,299,574 | yes |
+| bytes-s1-p2 | 125 | 21,883,930,645 | 21,697,490,999 | 21,883,930,645 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 71,034,160,574 | 116,714,296 | 27,266,299,574 | yes |
+| bytes-s2-p1 | 125 | 22,841,465,166 | 22,967,763,886 | 22,967,763,886 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,201,827,056 | 122,494,740 | 27,266,299,556 | yes |
+| bytes-s2-p2 | 125 | 22,841,465,166 | 22,967,763,886 | 22,967,763,886 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,201,827,056 | 122,494,740 | 27,266,299,556 | yes |
+| bytes-s3-p1 | 125 | 24,053,464,961 | 24,709,054,674 | 24,709,054,674 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 76,684,408,632 | 131,781,624 | 27,266,299,632 | yes |
+| bytes-s3-p2 | 125 | 24,053,464,961 | 24,709,054,674 | 24,709,054,674 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 76,684,408,632 | 131,781,624 | 27,266,299,632 | yes |
+| bytes-s4-p1 | 125 | 27,547,300,445 | 26,855,538,139 | 27,547,300,445 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 82,360,900,174 | 146,918,935 | 27,266,299,549 | yes |
+| bytes-s4-p2 | 125 | 27,547,300,445 | 26,855,538,139 | 27,547,300,445 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 82,360,900,174 | 146,918,935 | 27,266,299,549 | yes |
+| bytes-s5-p1 | 75 | 22,901,363,715 | 21,700,998,244 | 22,901,363,715 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,069,026,714 | 203,567,677 | 27,266,299,389 | yes |
+| bytes-s5-p2 | 75 | 22,901,363,715 | 21,700,998,244 | 22,901,363,715 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,069,026,714 | 203,567,677 | 27,266,299,389 | yes |
+| bytes-s6-p1 | 75 | 14,585,071,383 | 16,382,541,368 | 16,382,541,368 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 60,031,382,020 | 145,622,589 | 27,266,299,495 | yes |
+| bytes-s6-p2 | 75 | 14,585,071,383 | 16,382,541,368 | 16,382,541,368 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 60,031,382,020 | 145,622,589 | 27,266,299,495 | yes |
 
-Slice 4 encoding disclosure from the printed H terms, through the actual plan_inputs encoder and real stage_plan member counts (no spare retries). Integer reconstruction is exact; real-writer/hazard evidence is the synthetic E2E test below.
+Per-model allowances below are seconds, displayed to nine decimals for readability; arithmetic uses the exact fractions in C5.json. The count applies to each p variant. Global r_s=1805538.5168827055 B/s and r_w=1285759.0452694688 B/s apply to every pack.
 
-| pack | n | q bytes/member | headroom bytes | 3nq+headroom = P bytes |
-|---|---:|---:|---:|---:|
-| bytes-s1-p1 | 125 | 116714296 | 27266299574 | 71034160574 |
-| bytes-s1-p2 | 125 | 116714296 | 27266299574 | 71034160574 |
-| bytes-s2-p1 | 125 | 122494740 | 27266299556 | 73201827056 |
-| bytes-s2-p2 | 125 | 122494740 | 27266299556 | 73201827056 |
-| bytes-s3-p1 | 125 | 131781624 | 27266299632 | 76684408632 |
-| bytes-s3-p2 | 125 | 131781624 | 27266299632 | 76684408632 |
-| bytes-s4-p1 | 125 | 146918935 | 27266299549 | 82360900174 |
-| bytes-s4-p2 | 125 | 146918935 | 27266299549 | 82360900174 |
-| bytes-s5-p1 | 75 | 203567677 | 27266299389 | 73069026714 |
-| bytes-s5-p2 | 75 | 203567677 | 27266299389 | 73069026714 |
-| bytes-s6-p1 | 75 | 145622589 | 27266299495 | 60031382020 |
-| bytes-s6-p2 | 75 | 145622589 | 27266299495 | 60031382020 |
+| pack family | model | count | stream allowance s | member-wall allowance s |
+|---|---|---:|---:|---:|
+| bytes-s1-p1/p2 | qwen3-1p7b | 50 | 95.936319909 | 133.421011685 |
+| bytes-s1-p1/p2 | qwen3-4b | 50 | 99.592648098 | 138.716749210 |
+| bytes-s1-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
+| bytes-s2-p1/p2 | qwen3-30b-a3b | 50 | 100.460336724 | 145.758197295 |
+| bytes-s2-p1/p2 | qwen3-8b | 50 | 105.675267598 | 146.138676197 |
+| bytes-s2-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
+| bytes-s3-p1/p2 | qwen3-14b | 50 | 115.960714413 | 158.620031792 |
+| bytes-s3-p1/p2 | qwen3-next-80b | 50 | 103.600245103 | 160.362644347 |
+| bytes-s3-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
+| bytes-s4-p1/p2 | qwen3-32b | 50 | 147.706179398 | 199.223982318 |
+| bytes-s4-p1/p2 | qwen3-8b-8bit | 50 | 110.556092239 | 153.147274265 |
+| bytes-s4-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
+| bytes-s5-p1/p2 | llama-70b | 50 | 206.799102208 | 272.192316153 |
+| bytes-s5-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
+| bytes-s6-p1/p2 | qwen35-122b | 50 | 114.679302444 | 189.463644769 |
+| bytes-s6-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
+
+The all-twelve encoded requirement column uses actual plan_inputs.encode_disk_budget with real stage_plan counts, checked in slice 4. Real plan.write_window_plan and disk-hazard equality are exercised by the production-shaped synthetic E2E test below; extending that real-writer proof to every real-H term remains a useful final check.
 
 ## PACK ENCODING
 
@@ -1140,7 +91,7 @@ Implemented as `scripts/bytes_gates.py replay --c5 <C5.json> --measurements <MEA
 
 Inputs: B6 free-at-arm is the minimum valid target on the session st_dev (ignoring measurement/target errors and foreign devices), free-at-desk is compression-summary.free_bytes_before, and B is summed compression.jsonl compress/runs size. These logical compressed-file sizes are a lower bound on one raw copy (implied c an upper bound), as BY-0 documents. H uses desk.json disk free values and the sum of timed augmented raw_allocated_bytes; never-ran null receipts enter no sum. WAIT and fixed are the committed terms already disclosed in C5 disk:kit, reused without adding margins. Each row discloses the byte basis, B, WAIT, fixed, c=2, P, both free readings, D, measured c, refusal, largest pass P and its refusal. Missing/malformed inputs remain flagged rows, never dropped or refused.
 
-Synthetic tests exercise nine B6 plus one H with zero refusals, exact P and P-1 boundaries, foreign-device/error filtering, runs-only/event filtering, missing inputs and the executable CLI. All 17 C5 tests pass. This is synthetic evidence only. Real refusal count is pending director replay.
+Synthetic tests exercise nine B6 plus one H with zero refusals, exact P and P-1 boundaries, foreign-device/error filtering, runs-only/event filtering, missing inputs and the executable CLI. All 17 C5 tests pass. Synthetic evidence is separate from the director real replay recorded below.
 
 Exact director command (do not execute in this worker; C5_JSON is the output generated from augmented H receipts; REPLAY_JSON is the director-chosen output):
 
@@ -1149,6 +100,28 @@ Exact director command (do not execute in this worker; C5_JSON is the output gen
 ```
 
 The ending alpha/beta/gamma globs exclude -smoke-0 directories. Director owns real replay and committed table; worker accessed no prohibited session tree.
+
+Director real replay at d49f11fb3: source `/Users/edr/night-archive/forward-20261021/BY-C5/replay/replay.json` (byte counts only). L = compression runs-root logical-size sum (one-copy lower bound); A = H timed raw_allocated_bytes sum (allocated). Displayed measured c is rounded to nine decimals; JSON preserves full precision. Largest-pass P is 82,360,900,174 bytes (bytes-s4-p1) for every row.
+
+| session | B basis | B bytes | WAIT | fixed | c | P | free at arm | free at desk start | D | measured c | refused | largest-pass P refused |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| r1-alpha | L | 20,055,016,087 | 12,999,877,322 | 1,266,544,640 | 2 | 67,376,331,458 | 174,331,416,576 | 162,829,508,608 | 11,501,907,968 | 0.573517763 | no | no |
+| r2-alpha | L | unavailable | 12,999,877,322 | 1,266,544,640 | 2 | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
+| r3-alpha | L | 20,047,779,056 | 12,999,877,322 | 1,266,544,640 | 2 | 67,361,857,396 | 151,146,446,848 | 140,108,296,192 | 11,038,150,656 | 0.550592194 | no | no |
+| r4-alpha | L | 20,108,842,246 | 12,999,877,322 | 1,266,544,640 | 2 | 67,483,983,776 | 133,102,612,480 | 113,618,456,576 | 19,484,155,904 | 0.968934744 | no | no |
+| r1-beta | L | 20,447,426,571 | 12,999,877,322 | 1,266,544,640 | 2 | 68,161,152,426 | 169,934,139,392 | 158,655,823,872 | 11,278,315,520 | 0.551576282 | no | no |
+| r2-beta | L | 20,546,600,800 | 12,999,877,322 | 1,266,544,640 | 2 | 68,359,500,884 | 162,810,486,784 | 152,628,854,784 | 10,181,632,000 | 0.495538513 | no | no |
+| r3-beta | L | 20,493,154,726 | 12,999,877,322 | 1,266,544,640 | 2 | 68,252,608,736 | 147,161,776,128 | 124,931,256,320 | 22,230,519,808 | 1.084777825 | no | no |
+| r1-gamma | L | 17,299,704,879 | 12,999,877,322 | 1,266,544,640 | 2 | 61,865,709,042 | 166,263,980,032 | 156,454,031,360 | 9,809,948,672 | 0.567058730 | no | no |
+| r2-gamma | L | 17,391,012,615 | 12,999,877,322 | 1,266,544,640 | 2 | 62,048,324,514 | 159,616,585,728 | 150,028,029,952 | 9,588,555,776 | 0.551351206 | no | no |
+| r3-gamma | L | 17,307,433,044 | 12,999,877,322 | 1,266,544,640 | 2 | 61,881,165,372 | 154,232,840,192 | 144,652,926,976 | 9,579,913,216 | 0.553514388 | no | no |
+| h-20261021T185555Z | A | 16,749,187,072 | 12,999,877,322 | 1,266,544,640 | 2 | 60,764,673,428 | 108,612,526,080 | 95,109,353,472 | 13,503,172,608 | 0.806198686 | no | no |
+
+Refusal count: 0 of 10 available sessions (9 block-6 + H); 1 unavailable (r2-alpha, inputs absent).
+
+Director C5 command: `/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py --runs <data-branch runs.csv> --measurements /Users/edr/night-archive/forward-20261021/BY-C5/MEASUREMENTS.raw.json --disk-evidence <data-branch disk_h.json> --out /Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json` — exit 2 (stopped-session completeness), empty stderr.
+
+Director replay command is the exact template above with C5_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json and REPLAY_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay/replay.json — exit 1 for the unavailable r2-alpha row. All ten available rows pass; largest-pass refusal count is also 0. Worker read these replay outputs only, never the real session trees.
 
 ## END-TO-END
 
@@ -1167,6 +140,38 @@ subprocess.run(["git", "diff", "--name-only", "HEAD", "--", *paths], check=True)
 Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
+
+Slice 5: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_arm` — exit 1, 25 tests, 72.295 s, 17 failure assertions (including five subtests), no skips. Environmental process-group census: `instrument REFUSE: the capture's process group was not proven gone: census_exit_3: sysmon request failed with error: sysmond service not found; pgrep: Cannot get process list`. Later dwell/final/census expectations consequently stop early at instrument. Failures: battery-current-during-dwell, agent-during-dwell, charging-during-dwell, clock-step, contending-daemon, frequency-word-change, clean-census-at-go, smc-cross-check, network-time-output, quiet-float-go, record-only-collectors, unmeasured-arm-only (battery/thermal/disk/clock/contention subtests), no-smc-fallback. No hazard code was changed; this is the process-group environmental lane named in the brief and is not chased. This also offers a likely explanation for the earlier GO/NULL import-graph failure, but that exact earlier run did not print its reasons.
+
+
+Slice 5: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_b6_loop` — exit 0, 55 tests, 23.277 s, no skips.
+
+
+Slice 5: tests.b6.test_capture_screen_reachability bounded run timed out after 75 s; split by class next slice. No result claimed.
+
+
+Slice 5 production regression rerun: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_each_production_pack_uses_b6_screen_and_no_spares` — exit 0, 1 test / all 6 subtests pass, 167.493 s, no skips. Alpha/beta/gamma each pass for pending and registered states, including their unchanged budget checks and courier reader checks. This confirms the slice-3 failures were environmental macOS /tmp -> /private/tmp aliasing.
+
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_s3_cold_fixes` — exit 0, 6 tests, 0.276 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_cold_pass_fixes` — bounded subprocess timeout at 100 s; no result claimed. Follow-up class below passes; FullRoundTests must run separately next slice.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_cold_pass_fixes.ColdPassTests` — exit 0, 9 tests, 1.007 s, no skips.
+- Round-two module was also repeated inadvertently while dispatching the remaining checks: exit 0, 8 tests, 0.057 s. Its earlier passing result already sufficed.
+
+
+Slice 5: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_b6_plan_render.ScreenInputsTests` — exit 0, 2 tests, 0.002 s, no skips.
+
+
+Slice 5: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_b6_machine_test` — exit 0, 29 tests, 18.182 s, no skips.
+
+Slice 5 sealed-inventory commands in SEALED INVENTORY repeated: both exit 0, empty stdout; `git diff --check` exit 0.
+
+
+Slice 5 initial checks (each module has its own fresh TMPDIR):
+
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_lane_adapters` — exit 0, 21 tests, 1.704 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_round2_review_fixes` — exit 0, 8 tests, 0.634 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_clock` — exit 1, 34 tests, 0.596 s, 1 failure, no skips. LiveReadOnlyTests.test_real_anchor_frequency_and_boot_read_without_privileges fails with `OSError: kern.bootsessionuuid probe failed: exit 1`; other 33 tests pass. Environmental host probe failure in unchanged hazard code; not chased.
+
 
 Slice 4 commands (all from repository root):
 
@@ -1210,7 +215,9 @@ Exit 0; 11 tests in 1.132 seconds; OK, no skips or environmental failures. This 
 
 ## R6 DRAFT
 
-For each BYTES pass session the sole disk refusal is measured session-volume free bytes, statvfs f_bavail multiplied by f_frsize with purgeable bytes excluded, below P. P = 2(B + WAIT) + fixed. B is the larger of ceil(r_s times the sum of model count times that model’s stream allowance) and ceil(r_w times the sum of model count times that model’s member-wall allowance). Rates are maxima over timed H members of one raw bundle tree’s inode-deduplicated POSIX st_blocks times 512 divided by stream seconds or member-wall seconds respectively. Each model uses its own measured allowances including the measured request max/min margin; the stream allowance includes mean request time plus maximum stream-minus-request time. Each full basis rounds up once in exact rational arithmetic. WAIT=ceil(r_s times 7200 seconds), fixed is the committed fixed-artifact allocation, and two copies count raw plus the partitioned rsync backups; the harvest APFS clone adds no copy. No reserve or further margin is added. All terms, P, free bytes and the measured whole-window implied copy count are disclosed; missing inputs are flags. The native three-target budget encodes P exactly with q=floor(2B/(3n)) and headroom=(2B-3nq)+2WAIT+fixed, where n is the writer’s actual members-plus-spares count; disk.budget_encoded_from_p names that encoding. BY-SLOTS fills the pack-specific values from the C5 output printed above, whose provisional stopped-session status remains disclosed.
+For each BYTES pass session the sole disk refusal is measured session-volume free bytes, statvfs f_bavail multiplied by f_frsize with purgeable bytes excluded, below P. P = 2(B + WAIT) + fixed. B is the larger of ceil(r_s times the sum of model count times that model’s stream allowance) and ceil(r_w times the sum of model count times that model’s member-wall allowance). Rates are maxima over timed H members of one raw bundle tree’s inode-deduplicated POSIX st_blocks times 512 divided by stream seconds or member-wall seconds respectively. Each model uses its own measured allowances including the measured request max/min margin; the stream allowance includes mean request time plus maximum stream-minus-request time. Each full basis rounds up once in exact rational arithmetic. WAIT=ceil(r_s times 7200 seconds), fixed is the committed fixed-artifact allocation, and two copies count raw plus the partitioned rsync backups; the harvest APFS clone adds no copy. No reserve or further margin is added. All terms, P, free bytes and the measured whole-window implied copy count are disclosed; missing inputs are flags. The native three-target budget encodes P exactly with q=floor(2B/(3n)) and headroom=(2B-3nq)+2WAIT+fixed, where n is the writer’s actual members-plus-spares count; disk.budget_encoded_from_p names that encoding. H gives r_s=1,805,538.5168827055 B/s, r_w=1,285,759.0452694688 B/s, WAIT=12,999,877,322 B, and fixed=1,266,544,640 B. With c=2, P for each p1/p2 session is s1=71,034,160,574 B; s2=73,201,827,056 B; s3=76,684,408,632 B; s4=82,360,900,174 B; s5=73,069,026,714 B; s6=60,031,382,020 B. Each B, winning basis, allowance, q and headroom is in the tables above. BY-SLOTS fills these pack-specific values; the stopped-session sizing remains PROVISIONAL.
+
+Lead disk-state fact: the director observed about 67 GiB (~72 GB) free at 07:5x UTC, at which s3/s4 would physically refuse while s1/s2/s5 were within a few GB. This slice re-ran `df -k /Users/edr`: `/dev/disk3s5 971350180 902869204 44779048 96% ... /System/Volumes/Data`. Available=44,779,048 KiB=45,853,745,152 B (~42.7 GiB), above the 10 GiB stop gate but below all six P values, so every sub-pack would physically refuse at this reading. These are correct free<P refusals, not a defect; free space is time-dependent.
 
 ## CI
 
@@ -1228,15 +235,34 @@ Director ruling 1: per-run raw_allocated_bytes is the only disk-rate byte source
 
 Applied director precedence: H ruling and committed disk_terms win over the paraphrase; B is the maximum of two summed bases, each rounded once using exact rational arithmetic. c=2; measured c is disclosure. WAIT uses stream rate for registered 7200 seconds; fixed comes unchanged from disk.fixed_retained_bytes. Local route overrides cloud setup, commits and PR operations.
 
+## Clause map
+
+The production/test map below records the governing numerical clauses. Counterfactuals identify one-site changes the named assertions detect; they have not been executed in this worker and remain for executing review.
+
+| clause | production site | biting assertion | counterfactual |
+|---|---|---|---|
+| H-DISK-RULING.md:16, free below P only | joulewise/hazards/disk.py, existing judge (unchanged); plan_inputs.py:164 native encoding | tests/b6/test_b6_plan_render.py:196 test_bytes_pack_p_through_real_planner_and_disk_hazard | Add one byte to encoded headroom: exact P must pass assertion fails. |
+| H-DISK-RULING.md:18, P=c(B+WAIT)+fixed, c=2 | scripts/bytes_gates.py:103 | tests/test_bytes_gates.py:298 test_disk_terms_round_whole_bases_once_and_ignore_retained_copies | Change outer factor 2 to 3: expected 4811 fails. |
+| H-DISK-RULING.md:19, maximum of summed bases | scripts/bytes_gates.py:92 | tests/test_bytes_gates.py:298 crossed B assertion | Sum per-model maxima: crossed B becomes 18 instead of 10. |
+| H-DISK-RULING.md:22, registered 7200-second WAIT | scripts/bytes_gates.py:95 | tests/test_bytes_gates.py:298 expected P=4811 | Change WAIT constant to 7201: ceil term changes and P fails. |
+| H-DISK-RULING.md:23, committed fixed | scripts/bytes_gates.py:103 | tests/test_bytes_gates.py:298 expected P=4811 | Omit fixed_bytes: expected P fails by 7 bytes. |
+| H-DISK-RULING.md:27, no reserve | scripts/bytes_gates.py:103 | tests/test_bytes_gates.py:298 expected P=4811 | Add any reserve to the computed P: expected integer P assertion fails. |
+| H-DISK-RULING.md:39, measured c disclosure | scripts/bytes_gates.py:101 | tests/test_bytes_gates.py:277 test_measured_copy_factor_is_disclosure_only | Use measured_c instead of 2: unchanged-P assertion fails. |
+| Director ruling 1, raw-only byte source | scripts/bytes_gates.py calculate disk rates | tests/test_bytes_gates.py:298 retained_bytes multiplied by 3, derivation unchanged | Derive rates from retained_bytes: invariance assertion fails. |
+| Director ruling 1, missing raw flag and unavailable | scripts/bytes_gates.py calculate disk missing-rate path | tests/test_bytes_gates.py:288 test_disk_missing_raw_bytes_is_unavailable_and_flagged | Return fail rather than unavailable: disk status set assertion fails. |
+| Addendum 1, native budget exactly P and named flag | joulewise/b6/plan_inputs.py:164; driver_lane.py:91 | tests/b6/test_b6_plan_render.py:196 real writer requirement and metadata flag | Increment q or omit metadata disk_budget: exact required_bytes or metadata assertion fails. |
+| Addendum 1, alpha/beta/gamma unchanged | joulewise/b6/plan_inputs.py:124 BYTES-only branch | tests/b6/test_plan_inputs.py:43 test_replication_budgets_keep_existing_path | Apply encoding unconditionally: disk_budget absence assertion fails. |
+| Brief rule 8, missing replay row retained as flag | scripts/bytes_gates.py:383 replay_disk | tests/test_bytes_gates.py:138 test_missing_inputs_are_listed_never_refused | Drop missing row: unavailable/session-count assertion fails. |
+
 ## OPEN ISSUES
 
 BY-H2 must add raw_allocated_bytes to scripts/bytes_h_session.py measurements(): POSIX st_blocks*512 of that run's raw bundle tree only (one copy, runs-parent/<stage dir>/<run_id>, inode-deduplicated); null for members that never ran. retained_bytes keeps raw plus archive allocations and must not be halved.
 
-The existing production reader regression has the /private/tmp versus /tmp courier-path environmental failure described in TESTS RUN.
+The production reader path-alias regression is resolved: all six subtests pass under /private/tmp. No production fix was necessary.
 
 The native producer lacks raw_allocated_bytes, so tests.test_bytes_h_session.test_fully_observed_native_export_extracts_and_clears_c5 currently expects pass where the new contract requires unavailable. BY-H2 producer support must restore that integration; its file and test are outside this write scope.
 
-Remaining: importer regressions and final report audit. Planner/hazard synthetic boundary proof, replay program/tests and R6 draft are done. Real 9+1 replay and CI remain director-owned. Local branch by-c5; HEAD 9b7d58527; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5: byte-only disk replay over B6 and H receipts with missing-input flags.
+Remaining: importer regressions and final report audit. Planner/hazard synthetic boundary proof, replay program/tests and R6 draft are done. Real replay is recorded above; CI remains director-owned. Local branch by-c5; intake HEAD d49f11fb3; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5 slice 5: real replay tables, readable P terms, R6 numbers and importer regression evidence.
 
 ## NEEDS_RULING
 
