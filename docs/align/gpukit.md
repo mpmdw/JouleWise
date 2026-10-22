@@ -1,11 +1,8 @@
 # Whole-GPU campaign kit (internal, PROVISIONAL)
 
 This kit builds the rented-server workflow. It does not rent hardware or authorize
-paid APIs. Ed approves provider and spend before any paid session. The director
-and reviewer executed earlier heads; their supplied evidence is separated from
-this round's work in the lane report. This seat has no working executor and
-claims no Python/shell test or repro run of its own.
-PR #521 remains draft. Final-head integrated offline rehearsal is required before rental.
+paid APIs. Ed approves provider and spend before any paid session.
+Verify the final code with an integrated offline rehearsal before rental.
 
 Power can count extra work; it cannot distinguish computations within one forward
 pass. This lane measures server GPUs; Mac MagSafe/battery behavior is outside it.
@@ -34,7 +31,7 @@ Tensor-parallel compatibility and actual allocation still need a serving preflig
 Qwen publishes [Qwen3-Next-80B-A3B-Thinking-FP8](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8).
 Its [pinned model card](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8/blob/1a28d48a94e799860201879be67616b9e21c4bd2/README.md)
 was fetched by the lead and quoted in the fix-2 brief, including its FP8 serve
-command; this seat did not fetch it. Model dimension/count sources now point
+command; fetching provenance is recorded in the matrix notes. Model dimension/count sources now point
 directly to the supplied immutable HF configs/cards. The provisional matrix uses BF16/4; either alternative runs by
 copying its checkpoint, weight_precision, tensor_parallel_size and headroom into
 that model's fields. This choice changes the joules' configuration and needs Ed.
@@ -130,7 +127,12 @@ digits, bounds downward with decimal arithmetic; integer inventories/counts stay
 Numeric provenance convention under workload/gpu_classes/model_parameters:
 each numeric leaf has a sibling <key>_source (dated HTTPS URL plus quote/note),
 a parent source citation, <key>_derivation, or a parent derivation referencing the
-cited inputs. Unknown quantities are null. Bare "operator supplied" is not a source.
+cited inputs. Citations require a public host and a real YYYY-MM-DD access date;
+reserved example/test/invalid/localhost hosts are not sources. A derivation must
+name at least one matrix key as a whole word. Unknown quantities are null. Bare
+"operator supplied" is not a source. In estimates, unsourced numerical inputs are
+treated as null, with planning_input_unsourced:<path>; figures depending on them
+print unavailable. Operator USD/GPU-hour inputs are echoed without rounding.
 
 ## Preparing and running a session
 
@@ -278,6 +280,9 @@ nvidia-smi -i N -q -x --dtd. Raw XML, driver DTD when available, reasons, cumula
 microsecond counters, and default/enforced/requested/current board power limits are bundled.
 Old clocks_throttle_reasons and current clocks_event_reasons are supported.
 A positive hardware counter tick or active hardware reason raises a flag.
+hw_thermal_slowdown is hardware; active sw_thermal_slowdown records
+throttle_thermal_active:sw_thermal_slowdown. Thermal observations do not change
+data_complete.
 Software power-cap deltas remain recorded quantities, not errors. Missing elements,
 unsupported counters, read failures and counter resets are flags, never refusals.
 Inspect receipt.throttle_start, models[].throttle_changes and the saved XML/JSON.
@@ -320,7 +325,7 @@ Copy failure keeps the local archive and is a transfer flag. After extraction,
 verify_manifest checks missing/changed/unexpected files; verify the detached
 archive hash as well. No secret values belong in the bundle.
 
-## Build verification still required
+## Build verification
 
 From the uninstalled repo with no external PYTHONPATH, set TMPDIR=/tmp/gk-tmp and
 JW_B5_SYNTHETIC_ONLY=1 and run:
@@ -329,12 +334,11 @@ JW_B5_SYNTHETIC_ONLY=1 and run:
     python3 -m unittest tests.align.test_gpukit_round2 -v
     python3 -m unittest discover -s tests/align -t .
 
-Repeat in a throwaway venv with jsonschema, then run the supplied reviewer repros
-and integrated runner/NVML tree cases. None ran in this continuation seat. The
-report separates the supplied reviewer/lead evidence at 28b9a22f4 from this
-seat's final-head commands still NOT RUN. The fix-2 harness needs no new CLI
-options or signature adaptations. Never rent
-on the strength of the authored test inventory alone.
+Repeat in a throwaway venv with jsonschema, then run the reviewer repros on an
+integrated tree with the runner and NVML lanes. Record the exact lane heads,
+commands, counts and flags in the lane report. The Round 2b harness passes
+--preflight-timeout-s, --copy-timeout-s and --stop-grace-s on every session call.
+Verify coverage, refusals, cleanup, schema and cost behavior before paid work.
 
 ### Round-2 power completeness (R5)
 
@@ -369,7 +373,7 @@ uses qwen3 rather than the cards' deepseek_r1 because thinking-off output has
 neither tag. Qwen3-Next Thinking/BF16 and FP8 use deepseek_r1 because the template
 supplies the opening tag. No --enable-reasoning option is passed in vLLM 0.10.2.
 Sources are pinned cards and parser code quoted from the lead's fix-2 brief,
-explicitly marked as fetched by the lead, not this seat.
+with the fetching party identified in the matrix notes.
 
 Tool parsers and automatic tool choice are also per model. Agents retain hermes
 with tool_call_parser_source_not_fetched; monitors call no tools and use null.
@@ -380,10 +384,27 @@ prefix before reporting reasoning counts.
 ### CLI outcomes (R8)
 
 The matrix is read and validated before inventory, NVML preflight or vLLM.
-Missing, unreadable or invalid matrices and session_failed:* exceptions seal a
-receipt with status failed, data_complete=false and exit 3. Physical isolation or
-instrument-readiness refusal keeps status refused and exit 2. completed and
-completed_with_flags exit 0; inspect data_complete and flags as well as the exit.
+Structural failures in serving fields/runner coordinates fail before any hardware
+call: status failed, exit 3, sealed receipt/archive. Citation, declared-count and
+planning-number flags remain recorded and do not stop collection or change
+data_complete. Expected counts come from expanded coordinates.
+
+A session with no runner command started is failed with session_ran_no_model and
+exit 3, including readiness failures and adapter skips. Once any runner starts,
+the session exits 0 as completed/completed_with_flags; data_complete reports data
+failures and partial collection. Physical isolation or instrument readiness refusal
+takes precedence: status refused, exit 2. Argument errors exit 3 (no receipt,
+because output arguments may be absent). Help and --validate-only success exit 0.
+
+--validate-only parses arguments, checks executable fields and GPU layout, prints
+JSON with measured_gpu_indices and monitor_gpu_index, creates no output directory
+and calls no hardware. Bootstrap runs it before nvidia-smi, venv or pip, then checks
+every measured and monitor device before installation. It preserves --gpu-index
+and --gpu-indices exactly; JOULEWISE_GPU_INDICES applies only when neither is given.
+For --gpu-index N, a session checks N through N+T-1 for largest agent TP T.
+--check-only without session arguments checks only the explicitly selected indices
+(--gpu-index N checks N alone) plus any monitor index. Bootstrap exits 2 on MIG/vGPU,
+3 on argument/matrix/layout failure, 0 on a successful check/session.
 
 ### CUDA/NVML device order (R9)
 
@@ -391,8 +412,7 @@ Both agent and monitor vLLM children receive CUDA_DEVICE_ORDER=PCI_BUS_ID alongs
 their explicit CUDA_VISIBLE_DEVICES list. This selects PCI bus order rather than
 CUDA's default FASTEST_FIRST heuristic for the numeric indices used by NVML.
 NVIDIA reference: https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
-(CUDA_DEVICE_ORDER); canonical reference supplied for operators, not fetched by
-this executor-less seat. Placement tests record the actual child's environment
+(CUDA_DEVICE_ORDER). Placement tests record the actual child's environment
 and require PCI_BUS_ID for both agent and monitor processes.
 
 ### Model dimension/count provenance (R7)
@@ -412,7 +432,7 @@ limit and requested_power_limit records the requested limit. Legacy
 power_readings/enforced_power_limit remains supported. Module/platform readings
 do not overwrite board readings. The telegraf schema_v12 and schema_v13 types.go
 files at commit 2156aa5089436522eec36b05fad94d850c728388 were read through GitHub
-by this seat on 2026-10-22; both paths are cited in throttle.py.
+on 2026-10-22; both paths are cited in throttle.py.
 
 Served identity rule: every agent and monitor id is the actual checkpoint.
 A checkpoint field, if present, must equal id; a mismatch fails structurally

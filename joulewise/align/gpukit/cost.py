@@ -42,6 +42,7 @@ class Estimate:
     calibration_basis: dict[str, Any] = field(default_factory=dict)
     layouts: tuple[dict[str, Any], ...] = ()
     layout_alternatives: tuple[dict[str, Any], ...] = ()
+    monitor_usd_per_gpu_hour: float | None = None
 
 
 def work_counts(matrix: Mapping[str, Any]) -> dict[str, tuple[int, int]]:
@@ -195,7 +196,8 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
         return flag.startswith(("matrix_", "gpu_class_"))
     if any(blocks_cost(f) for f in flags):
         return Estimate(gpu_class, matrix.get("episode_count", 0), 0, 0,
-                        None, None, None, None, None, price, None, tuple(sorted(set(flags))))
+                        None, None, None, None, None, price, None, tuple(sorted(set(flags))),
+                        monitor_usd_per_gpu_hour=monitor_usd_per_gpu_hour)
     gpu, work = matrix["gpu_classes"][gpu_class], matrix["workload"]
     counts = work_counts(matrix)
     layouts = tuple(memory_fit(matrix, gpu_class, m) for m in matrix["models"])
@@ -297,14 +299,14 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
                     lh * price if lh is not None and price is not None else None,
                     seconds, hours, price, hours * price if hours is not None and price is not None else None,
                     tuple(sorted(set(flags))), len(counts), monitor_hours, monitor_total,
-                    generation_seconds, basis, layouts, alternatives)
+                    generation_seconds, basis, layouts, alternatives, monitor_usd_per_gpu_hour)
 
 
 def printable(result: Estimate) -> dict[str, Any]:
-    """All display numbers have at most two significant digits; counts stay exact."""
+    """Derived figures use two significant digits; input prices/counts stay exact."""
     output = asdict(result)
     for key in ("lower_bound_wall_seconds", "lower_bound_gpu_hours", "lower_bound_total_usd",
-                "wall_seconds", "gpu_hours", "total_usd", "usd_per_gpu_hour",
+                "wall_seconds", "gpu_hours", "total_usd",
                 "monitor_gpu_hours", "monitor_total_usd", "generation_wall_seconds"):
         output[key] = display_number(output[key], lower_bound=key.startswith("lower_bound_"))
     def rounded(value: Any) -> Any:
@@ -318,7 +320,7 @@ def printable(result: Estimate) -> dict[str, Any]:
     output["layout_alternatives"] = rounded(output["layout_alternatives"])
     output["lower_bound_status"] = "available" if result.lower_bound_wall_seconds is not None else "unavailable"
     output["plan_status"] = "available" if result.wall_seconds is not None else "unavailable"
-    output["rounding"] = "Two significant digits; lower bounds downward; integer counts/bytes exact."
+    output["rounding"] = "Derived figures: two significant digits; lower bounds downward; input prices and integer counts/bytes exact."
     return output
 
 

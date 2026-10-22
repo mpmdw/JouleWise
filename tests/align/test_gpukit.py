@@ -52,6 +52,16 @@ def planning_fixture(matrix):
 
 class MatrixTests(unittest.TestCase):
 
+    def test_operator_prices_are_echoed_without_rounding(self):
+        matrix = planning_fixture(json.loads((CONFIG / "shade.json").read_text()))
+        result = printable(estimate(matrix, "H100-SXM-80GB", usd_per_gpu_hour=2.49,
+                                    monitor_placement="gpu", monitor_usd_per_gpu_hour=3.79))
+        # These are operator input identities, not agreement bars on derived values.
+        self.assertEqual(result["usd_per_gpu_hour"], 2.49)
+        self.assertEqual(result["monitor_usd_per_gpu_hour"], 3.79)
+
+
+
     def test_public_citation_and_derivation_rules(self):
         from joulewise.align.gpukit.matrix import _citation, numeric_provenance
         citation = {"url": "https://github.com/mpmdw/JouleWise", "accessed": "2026-10-22",
