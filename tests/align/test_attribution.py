@@ -122,6 +122,23 @@ class AttributionChecks(unittest.TestCase):
         self.close(cut.joules, 150 * 0.025, half_width=cut.half_width_j)
         self.assertEqual(cut.method, "window_average_W;duty.uncovered_fraction=1.0")
 
+    def test_window_mean_does_not_bound_work_allocation_inside_window(self):
+        period = NS // 10  # Whole 100 ms powermetrics reporting window.
+        edge = 37 * NS // 1000  # Explicit 37 ms fixture edge, off the grid.
+        sensor = trace(times=(0, period, 2 * period), values=(0.0, 63.0, 100.0),
+                       nominal_interval_ns=period, averaging_window_ns=period,
+                       resolution=0.001)  # Integer mW reporting quantum.
+        estimate = trace_energy(sensor, edge, period, mapping=mapping(uncertainty=0))
+        # True power jumps from 0 to 100 W at 37 ms: the [0,100] ms
+        # window reports 100 * 63/100 = 63 W, but its final 63 ms used 6.3 J.
+        exact = 100 * ((period - edge) / NS)
+        self.close(estimate.joules, 63 * 0.063, half_width=estimate.half_width_j)
+        # Raw means interpolate from 0 to 63 W. On [37,100] ms the
+        # line's integral is (23.31 + 63)/2 * .063 = 2.718765 J.
+        self.close(estimate.half_width_j, 2.718765 / 2 + 0.001 * 0.063)
+        self.assertGreater(abs(exact - estimate.joules), estimate.half_width_j)
+        self.assertIn("window.edge_allocation_unresolved", estimate.flags)
+
     def test_single_window_covers_time_before_its_timestamp(self):
         estimate = trace_energy(trace(times=(NS,), values=(60.0,), averaging_window_ns=NS),
                                 0, NS, mapping=mapping())
@@ -324,7 +341,7 @@ class AttributionChecks(unittest.TestCase):
                           t_ns=tuple(t - NS for t in record.power_traces[0].t_ns)),),
                           clock_mappings=(replace(bad.clock_mappings[0], offset_ns=NS),))
         malformed = attribute_episode(shifted, source="mock", channel="package")
-        self.assertIn("clock.mapping_missing", malformed.flags)
+        self.assertNotIn("clock.mapping_missing", malformed.flags)
         self.assertIn("clock.episode_domain_mismatch", malformed.flags)
         self.close(malformed.total.joules, result.total.joules,
                    half_width=min(malformed.total.half_width_j, result.total.half_width_j))

@@ -392,14 +392,16 @@ def attribute_episode(
             if len(mappings) > 1:
                 flags.append("clock.mapping_ambiguous")
         else:
-            flags.append("clock.mapping_missing")
             loose = [m for m in episode.clock_mappings if m.trace_domain == trace.clock_domain]
             if loose:
                 mapping = loose[0]
                 flags.append("clock.episode_domain_mismatch")
                 if len(loose) > 1:
                     flags.append("clock.mapping_ambiguous")
+            else:
+                flags.append("clock.mapping_missing")
     reconstruction = _Trace(trace, mapping)
+
     def estimate(start: int, end: int) -> EnergyEstimate:
         energy = reconstruction.energy(start, end, idle_watts)
         if not traces:
