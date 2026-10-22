@@ -389,7 +389,7 @@ In order: every slot of §18 filled; the whole test suite run on the laptop befo
 
 ## Appendix A. Excluding codes of block 6's flag catalog
 
-From `configs/b6/flag_catalog_b6.json` (SHA-256 `4cd222c4fd7cc43e1e2625f9afae6f6cc742b40876241fb5cc5864d8ee7eaa4f`; it was `b5bce6c64bbc1d079ecf6fed02bf4c214b76a8f7d279d44eea5984e4a389a42b` at the integration head `d924e7acf`, before the three disclose-only BYTES codes; the excluding codes below are unchanged), as copied into each pack registration's `flag_effects`. Every other code (203) is disclosed only.
+From `configs/b6/flag_catalog_b6.json` (SHA-256 `33e1c6110d98474465109062cfcdff480679ba8b2c9854fc754fa26fa07bccb6`; it was `b5bce6c64bbc1d079ecf6fed02bf4c214b76a8f7d279d44eea5984e4a389a42b` at the integration head `d924e7acf`, before the three disclose-only BYTES codes; the excluding codes below are unchanged), as copied into each pack registration's `flag_effects`. Every other code (203) is disclosed only.
 
 **Exclude the session (`EXCLUDE_WINDOW`, 19):** `calibration.bracket_incomplete`, `calibration.capture_battery_pair_failed`, `calibration.capture_battery_span`, `calibration.capture_battery_unmeasured`, `calibration.operative_bound_above_stop`, `cell.below_minimum`, `clock.step_overlap_calibration`, `code.number_bearing_unreviewed`, `model.files_differ_from_registered`, `model.stack_differs_from_registered`, `neg8.survivor_screen_failed`, `neg8.survivor_screen_undefined`, `precheck.certain_exclusion`, `records.source_changed_during_harvest`, `roster.no_science_bundles`, `structure.chain_crashed`, `structure.missing_stage_bundles`, `structure.no_capture_records`, `structure.no_roster`.
 

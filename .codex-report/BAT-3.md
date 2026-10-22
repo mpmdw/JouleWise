@@ -2,13 +2,14 @@
 
 ## PROGRESS
 
-- **Done:** exact BY-INT base preserved; full BAT-2 ruling and packet read; ordered SMC retention and B0AV fixture checkpoint pushed; ruled integration, bounds, marker, disclosures, registration placements and tests written and pushed.
-- **Current implementation checkpoint:** `bba4b2695c2af6334f085932a973db55db9913de`. Draft CI PR [#544](https://github.com/mpmdw/JouleWise/pull/544), from `ci/2026-10-22-bytes-battery-term` against main.
-- **Next:** run the real catalog and BYTES generators, update the registration catalog SHA, execute the worked/fault/CLI tests, exact baseline comparison and required modules, repair actual failures, update this report and push both authorized branches.
-- **Open blocker:** the required `/opt/homebrew/bin/python3.13` does not exist. Seat setup cannot create its link because /opt is unwritable and sudo is unavailable. The intended target is `/usr/bin/python3.13`, Python 3.13.5. Asked the user whether that exact installed target may be used; no answer has arrived. Python execution awaits that answer or provisioning of the required path.
-- **Generated outputs pending:** only the catalog builder source has the new code so far. The actual catalog and embedded BYTES maps are not regenerated. Do not treat this checkpoint as a completed BAT-3 build.
-- **Preserved scratch:** exact base worktree `/tmp/bat3-base`; packet export `/tmp/bat3-packet/bat-council-20261022`.
-- The startup outage was resolved during this turn; shell access and Git fetch/checkout now work. No startup-infrastructure approval is still needed.
+- **Done:** resumed from accepted checkpoint 71414e1e5; the director approved /usr/bin/python3.13 (3.13.5). No root/sudo is available; missing /opt fixture paths will be listed as environmental.
+- **Done:** catalog generated with --write and verified with --check; SHA-256 33e1c6110d98474465109062cfcdff480679ba8b2c9854fc754fa26fa07bccb6, 263 codes, 203 DISCLOSE, 41 EXCLUDE_MEMBER, 19 EXCLUDE_WINDOW. Registration SHA/counts filled.
+- **Done:** all 39 plan-generator outputs reproduce byte for byte. Only twelve BYTES registration.json files changed; twelve plan trees are identical. No alpha/beta/gamma or other pack changed.
+- **Running:** all eight required modules, each with a fresh TMPDIR and JW_B5_SYNTHETIC_ONLY=1. Initial timing-wrapper attempt did not start tests (/usr/bin/time absent); rerun uses the approved interpreter directly.
+- **Next:** fix in-scope failures, execute exact no-assist comparison, record actual fault/CLI evidence and named twin differences, finalize report, push both authorized branches and update PR #544.
+- **Open:** director's real-H re-reduction is on the Mac; no science ruling is pending.
+
+The sections below still contain checkpoint-era pending text and will be replaced with completed evidence before final push.
 
 ## SUMMARY
 
