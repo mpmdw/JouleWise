@@ -102,7 +102,7 @@ def disk_bytes(root, *, excluded=(), seen=None):
     return total
 
 
-def measurement_view(source, session):
+def measurement_view(source, session, *, remainder=False, soak_70b='full'):
     """Disposable launch attachment over the measurement checkout.
 
     Mirrors the sparse measurement setup used for B6's one-off non-claim
@@ -137,6 +137,29 @@ def measurement_view(source, session):
         if p.name != 'plan_tree.json':
             (pack / p.name).symlink_to(p, target_is_directory=p.is_dir())
     tree = read(source / KIT / 'plan_tree.json')
+    if remainder:
+        tree['stage_graph'] = [s for s in tree['stage_graph']
+                               if not s['stage_id'].startswith(PACK_ID + '-check-')]
+        selected_stages = {s['stage_id'] for s in tree['stage_graph']}
+        tree['science'] = [r for r in tree['science'] if r['stage_id'] in selected_stages
+            and not (soak_70b == 'r12' and r['stage_id'] == PACK_ID + '-soak-llama-70b'
+                     and r['run_id'] != PACK_ID + '-soak-llama-70b-r12')]
+        for index, stage in enumerate(tree['stage_graph']):
+            stage.update(ordinal=index + 1,
+                predecessor=tree['stage_graph'][index-1]['stage_id'] if index else None,
+                successor=tree['stage_graph'][index+1]['stage_id']
+                    if index+1 < len(tree['stage_graph']) else None)
+            if soak_70b == 'r12' and stage['stage_id'] == PACK_ID + '-soak-llama-70b':
+                stage['expected_count'] = 1
+        collection = read(source / KIT / 'collection_plan.json')
+        selected_runs = {r['run_id'] for r in tree['science']}
+        collection['members'] = [r for r in collection['members'] if r['run_id'] in selected_runs]
+        collection.update(remainder=True, soak_70b=soak_70b)
+        # Break the disposable view's link before publishing subset bytes.
+        (pack / 'collection_plan.json').unlink()
+        write(pack / 'collection_plan.json', collection)
+        digest = locator(pack / 'collection_plan.json')['sha256']
+        tree['plan'].update(actual_sha256=digest, declared_sha256=digest)
     template = read(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json')
     launch = template['arm_attachments']['launch']
     for row in launch.get('bindings', []):
@@ -162,6 +185,10 @@ def measurement_view(source, session):
             raise ValueError(dispatch.error)
         manifest_path = source / dispatch.config_dir / 'order_manifest.json'
         manifest = read(manifest_path)
+        if remainder and soak_70b == 'r12' and stage['stage_id'] == PACK_ID + '-soak-llama-70b':
+            manifest['executed_order'] = [r for r in manifest['executed_order']
+                                         if r['run_id'] == PACK_ID + '-soak-llama-70b-r12']
+            manifest['planned_n_bundles'] = len(manifest['executed_order'])
         if len(manifest['executed_order']) != stage['expected_count']:
             raise ValueError('collection count differs from dispatched manifest: ' + stage['stage_id'])
         directory = pack / 'members' / stage['stage_id']
@@ -268,6 +295,25 @@ def important_capacity(root, *, run=subprocess.run):
     result = run(['/usr/bin/osascript', '-l', 'JavaScript', '-e', script],
                  capture_output=True, text=True, check=False, timeout=30)
     return int(result.stdout.strip()) if result.returncode == 0 else None
+
+
+def remainder_disk_sizing(measurement, tree):
+    """Apply the registered P formula to the actual staged config inventory.
+
+    Only roster counts change. The committed rational rates, per-model
+    allowances, fixed allocation, WAIT and c remain the H-DISK-RULING inputs.
+    Span sizing from H's journals is a separate derivation.
+    """
+    from configs.campaigns.bytes_mac_check.registration import derive_sizing
+
+    reg = Path(measurement) / KIT / 'registration'
+    sized = read(reg / 'sizing_b5.json')['packs'][PACK_ID]
+    sized['counts_by_model'] = {u['identity_unit_id']: len(u['config_inventory'])
+        for u in tree['arm_attachments']['identity_pin_projection']['identity_units']}
+    sized['models'] = {k: v for k, v in sized['models'].items() if k in sized['counts_by_model']}
+    sized['member_count'] = sum(sized['counts_by_model'].values())
+    derive_sizing.apply_disk_ruling(sized, read(reg / 'sizing_evidence.json'))
+    return sized
 
 
 def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
@@ -668,7 +714,8 @@ def measurements(state, export_csv):
             if fit is not None:
                 rate_observations.append({'run_id': rid, 'samples': len(selected), **fit})
         result['runs'][rid] = {'request_s': request, 'member_wall_s': wall, 'stream_s': stream,
-            'retained_bytes': retained, 'thermal_level': level, 'outside_cpu_s': cpu, 'census_quanta': k}
+            'retained_bytes': retained, 'thermal_level': level, 'outside_cpu_s': cpu, 'census_quanta': k,
+            'flag_codes': [code for code in row.get('flag_codes', '').split(';') if code]}
         if wall is not None:
             per_stage[row['stage_id']].append((begin['wall_s'], end['wall_s']))
     frequencies = [v['frequency']['raw_word'] / FREQUENCY_SCALE for r in clocks
@@ -730,6 +777,8 @@ def measurements(state, export_csv):
     for section in ('runs', 'regimes'):
         for key, value in result[section].items():
             for field, observed in value.items():
+                if section == 'runs' and field == 'flag_codes':
+                    continue  # Native disclosures are text, not numeric observations.
                 if observed is not None and not numeric_receipt(observed):
                     value[field] = observed = None
                 if observed is None:
@@ -753,6 +802,7 @@ def measurements(state, export_csv):
         'rate_standard_error_ppm': 'single-fit noise model: independent uniform +/- WINDOW_SKEW_MAX_NS anchor error; SE = (WINDOW_SKEW_MAX_NS/sqrt(3))/sqrt(Sxx)*1e6, Sxx=sum((RAW_ns-mean_RAW_ns)^2). At 1 s monitor cadence Sxx~n*span_ns^2/12: about 0.27 ppm for a 150 s member with n~150 and the admitted 250000 ns skew limit. Actual admitted timestamps/count used; not empirical uncertainty or a multiplicity correction for worst-of-members selection; registered gate unchanged',
         'frequency_word_ppm': 'worst signed observed kernel raw_word / hazards.clock.FREQUENCY_SCALE',
         'retained_bytes': 'POSIX st_blocks*512 for raw and archive bundle trees, inode-deduplicated; disk usage at desk snapshot',
+        'flag_codes': 'native per-member export flag_codes split on semicolons, including battery.assist; no inferred flags',
         'fixed_retained_bytes': 'remaining allocated session bytes, excluding per-run bundle subtrees and backup-claim/backup-bound',
         'backup_retained_bytes': 'POSIX st_blocks*512 for backup-claim and backup-bound trees, inode-deduplicated against raw/archive/fixed bytes at desk snapshot',
         'pre_arm_free_bytes': 'minimum observed native arm disk target free_bytes; null when no arm receipt exists; prepare snapshot is not substituted',

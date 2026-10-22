@@ -168,6 +168,58 @@ class DiskRulingTests(unittest.TestCase):
 
 
 class RealKitStagingTests(unittest.TestCase):
+    def test_remainder_view_preserves_order_member_bytes_and_reference_roles(self):
+        from joulewise.b5 import chain, harvest
+        original = h.read(ROOT / h.KIT / 'plan_tree.json')
+        expected = [s['stage_id'] for s in original['stage_graph']
+                    if not s['stage_id'].startswith(h.PACK_ID + '-check-')]
+        source_bytes = {p: p.read_bytes() for p in (ROOT / h.KIT).rglob('*') if p.is_file()}
+        for mode, count in [('full', 73), ('r12', 62)]:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                view, pack = h.measurement_view(ROOT, Path(temporary), remainder=True, soak_70b=mode)
+                tree = h.read(pack / 'plan_tree.json')
+                stages = chain.stage_plan(tree)
+                self.assertEqual([s.stage_id for s in stages], expected)
+                self.assertEqual(len(stages), 18)
+                self.assertEqual(sum(s.expected_count for s in stages if s.kind == 'campaign_collection'), count)
+                roster = harvest.build_roster(pack, view)
+                self.assertEqual(len(roster['members']), count)
+                self.assertEqual(roster['duplicate_listings'], {})
+                sized = h.remainder_disk_sizing(ROOT, tree)
+                counts = {'llama-70b': 16 if mode == 'full' else 5,
+                          'qwen35-122b': 16, 'qwen3-next-80b': 4, 'neg8_reference': 37}
+                self.assertEqual(sized['counts_by_model'], counts)
+                self.assertEqual(sized['member_count'], count)
+                # Independent exact-rational H-DISK-RULING arithmetic from
+                # committed allowances/rates; equality is integer-byte identity.
+                original_disk = h.read(REG / 'sizing_b5.json')['packs'][h.PACK_ID]['disk_derivation']
+                seconds = {basis: sum(n * Fraction(**original_disk['allowances_by_model'][model][field])
+                    for model, n in counts.items()) for basis, field in
+                    [('stream', 'stream_allowance_s'), ('wall', 'member_allowance_s')]}
+                bases = {basis: math.ceil(Fraction(**original_disk[rate]) * seconds[basis])
+                    for basis, rate in [('stream', 'max_observed_bundle_bytes_per_stream_s'),
+                                        ('wall', 'max_observed_bundle_bytes_per_wall_s')]}
+                wait = math.ceil(Fraction(**original_disk['max_observed_bundle_bytes_per_stream_s']) * 7200)
+                disk = sized['disk_derivation']
+                for basis in ('stream', 'wall'):
+                    self.assertEqual(Fraction(**disk[basis + '_seconds']), seconds[basis])
+                    self.assertEqual(disk[basis + '_basis_bytes'], bases[basis])
+                self.assertEqual(disk['extra_wait_raw_bytes'], wait)
+                self.assertEqual(sized['estimated_footprint_bytes'],
+                                 2 * (max(bases.values()) + wait) + 4_046_531_103)
+                self.assertEqual({m['external_input_id'] for m in tree['external_inputs']['manifests']},
+                                 {'neg8_bound', 'start_reference', 'midpoint_reference', 'end_reference'})
+                source_science = {r['run_id']: r for r in original['science']}
+                for row in tree['science']:
+                    self.assertEqual((view / row['config_path']).read_bytes(),
+                                     (ROOT / source_science[row['run_id']]['config_path']).read_bytes())
+                soak = next(s for s in tree['stage_graph'] if s['stage_id'] == h.PACK_ID + '-soak-llama-70b')
+                manifest = h.read(view / soak['input']['path'])
+                self.assertEqual(len(manifest['executed_order']), 12 if mode == 'full' else 1)
+                if mode == 'r12':
+                    self.assertEqual(manifest['executed_order'][0]['run_id'], h.PACK_ID + '-soak-llama-70b-r12')
+        self.assertEqual({p: p.read_bytes() for p in source_bytes}, source_bytes)
+
     def test_staged_real_kit_publishes_lineage_and_authenticates_every_dispatched_config(self):
         from joulewise import arm_readiness, window_lineage
         from joulewise.analysis_engine.inputs import validate_identity_pin_projection
@@ -600,6 +652,14 @@ class SessionTests(unittest.TestCase):
         spans = {}
         with exported.csv_path.open(newline='') as stream:
             native_rows = list(csv.DictReader(stream))
+        # Controlled native CSV disclosure boundary: preserve battery and
+        # unrelated flags, including members with no disclosures.
+        native_rows[0]['flag_codes'] = 'battery.assist;records.synthetic_disclosure'
+        native_rows[1]['flag_codes'] = ''
+        with exported.csv_path.open('w', newline='') as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(native_rows[0]))
+            writer.writeheader()
+            writer.writerows(native_rows)
         spacing = math.ceil(max(r['member_wall_s'] for r in supplied['runs'].values())) + 1
         for index, row in enumerate(native_rows):
             rid = row['run_id']; receipt = supplied['runs'][rid]
@@ -654,6 +714,9 @@ class SessionTests(unittest.TestCase):
         for backup in backup_dirs:
             backup.mkdir()
         measured = h.measurements(state, exported.csv_path)
+        self.assertEqual(measured['runs'][native_rows[0]['run_id']]['flag_codes'],
+                         ['battery.assist', 'records.synthetic_disclosure'])
+        self.assertEqual(measured['runs'][native_rows[1]['run_id']]['flag_codes'], [])
         self.assertEqual(measured['disk']['backup_retained_bytes'], sum(h.disk_bytes(p) for p in backup_dirs))
         for index, backup in enumerate(backup_dirs):
             source = self.session / 'archive/sources/claim-runs' / native_rows[index]['run_id']
@@ -731,6 +794,8 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(len(exported), 123)
         self.assertTrue(all(r['non_claim'] == 'True' and r['pack_id'] == h.PACK_ID for r in exported))
         self.assertEqual(measured['session_id'], exported[0]['session_id'])
+        self.assertEqual({rid: row['flag_codes'] for rid, row in measured['runs'].items()},
+                         {row['run_id']: [c for c in row['flag_codes'].split(';') if c] for row in exported})
         self.assertGreater(sum(r['retained_bytes'] for r in measured['runs'].values()), 0)
 
 

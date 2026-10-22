@@ -1,4 +1,41 @@
-# BY-H2 — incomplete cloud checkpoint (2026-10-22)
+# BY-H2 — local implementation checkpoint (2026-10-22)
+
+## PROGRESS
+- DONE (local slice 1): read checkpoint, M0/stop-card/queue/orchestration and bridge return rules; verified clean descendant baseline ac7b56d2b on by-h2 and 66 GiB available. No active stop card. User's scoped BY-H2 task governs this delegated implementation; no lead-owned queue/state files changed.
+- DONE: preserve native per-member flag_codes (including battery.assist) in MEASUREMENTS.json; skip textual disclosures in numeric validation. Tests exercise populated and empty disclosures and compare every native export row through the real desk chain.
+- DONE: optional measurement_view(remainder=True, soak_70b='full'|'r12') selects 18 stages, removes all checks, keeps midpoint, rebuilds chain links/science/collection plan, and uses byte-identical existing member configs. Both modes pass real chain.stage_plan and harvest.build_roster (73/62 members). Full generator unchanged.
+- DONE: remainder_disk_sizing derives counts from the staged identity inventory and reuses registration.derive_sizing.apply_disk_ruling unchanged. Independent rational arithmetic verifies both bases, seconds, WAIT and P: full P=63,878,576,237 bytes; r12 P=56,122,258,559 bytes. Not yet wired into prepare.
+- NEXT: implement prepare CLI/wiring, measured journal span derivation and subset sizing receipt/native disk budget; then production-shaped synthetic end-to-end prepare tests for both modes, with independent arithmetic and ledger hashes.
+- OPEN: complete PROBE and arm packet; final required gates; director-owned real fresh-checkout dry prepare, executing review, CI and PR. No install/arm/measurement performed. Local commits only; no push under local route.
+- OPEN environment: import-graph module's synthetic arm test returns NULL because sandbox process-group census is unavailable (sysmond/pgrep). Five other tests passed. Do not chase or bypass this Mac environmental failure.
+- COMMIT BLOCKED: both `git add scripts/bytes_h_session.py tests/test_bytes_h_session.py .codex-report/BY-H2.md` and `git -C /Users/edr/code/JouleWise-by-h2 commit -m 'BY-H2: select remainder view and retain native member flags'` exited 128: unable to create .git/index.lock, Operation not permitted. The environment exposes .git read-only; no bypass attempted. Authorized source/report edits remain uncommitted for the next slice/director to retain and commit. HEAD remains ac7b56d2bec27663e6f7ea6d3f681c6bdea4edf9.
+
+## LOCAL SLICE 1 VERIFICATION
+Every test invocation below ran from the repository with its own fresh TMPDIR, prefixed exactly `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B`.
+
+- `-m unittest tests.test_bytes_h_session.SessionTests.test_fully_observed_native_export_extracts_and_clears_c5 tests.test_bytes_h_session.SessionTests.test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates`: exit 0, 2 tests, 95.810 s, OK. The first injects native CSV flag disclosures at the input boundary; the second uses real harvest/acceptance/export/gates children and compares all per-run flag lists.
+- `-m unittest tests.test_bytes_h_session.RegistrationInputTests tests.test_bytes_h_session.DiskRulingTests tests.test_bytes_h_session.MeasurementViewLedgerTests tests.test_bytes_h_session.ReceiptMathTests tests.test_bytes_h_session.RealKitStagingTests`: exit 0, 14 tests, OK (before the added remainder test).
+- `-m unittest tests.test_bytes_h_session.RealKitStagingTests`: exit 0, 2 tests, OK (including both remainder modes, source kit byte identity, reference roles, existing r12 config and unchanged full path).
+- The same RealKitStagingTests command after adding subset disk sizing first failed in both modes with KeyError for removed model qwen3-14b. Fixed by restricting sized.models to the actual staged inventory before calling the unchanged disk-rule function. Rerun: exit 0, 2 tests, 0.695 s, OK, including all independent P assertions.
+- `-m unittest tests.test_bytes_gates`: exit 0, 7 tests, OK.
+- `-m unittest tests.hazards.test_refusal_allowlist`: exit 0, 23 tests, OK (skipped=1). No new raise site or import was added.
+- `-m unittest tests.hazards.test_import_graph`: exit 1, 6 tests, one failure: test_a_complete_arm_and_monitor_run_load_no_retired_module expected GO, got NULL. Diagnostic synthetic Rig.run returned `instrument REFUSE: the capture's process group was not proven gone: census_exit_3: sysmon request failed with error: sysmond service not found` and `pgrep: Cannot get process list`. This is the brief's environmental process-group lane; no production arm was attempted.
+- `-m unittest tests.test_bytes_mac_kit`: exit 0, 4 tests, OK.
+- `scripts/bytes_mac_kit.py --check`: exit 0, `verified non-claim Mac kit`.
+- Full `-m unittest tests.test_bytes_h_session`: exit 0, 33 tests, 121.691 s, OK. This process loaded before the final disk-helper assertions were added; the subsequent focused RealKitStagingTests run covers those additions.
+- `git diff --check`: exit 0 after remainder and disk-helper changes.
+
+## LOCAL DECISIONS AND INSPECTION
+- Keep reference-midpoint for the existing NEG-8 (3,1,3) protocol: acceptance._stage_roles assigns midpoint_reference; harvest._neg8_disclose emits neg8.midpoint_lost for its absence. Preserve this role rather than knowingly create an incomplete reference protocol.
+- Selection belongs only in the disposable view; generator and all committed full-kit bytes stay unchanged. The subset collection_plan hash is rebound to the existing tree plan descriptor and reservation argv. r12 preserves original run identity/rep/index; no new config is authored.
+- Battery monitor remains the driver's production_seams.monitor_argv -> hazard_monitor.build_config path. DEFAULT_CADENCE has battery_smc_s=1.0; harvest retains withheld/battery-assist.json and export serializes member flags. Desk now retains those codes without synthesizing any.
+- Expected assistance from H's observations: 70B large-workload members (16 full / 5 r12) and 122B large-workload members (16 either mode); reference members are not assigned expected flags. Battery energy estimation remains separate scope.
+- Subset disk arithmetic (all bytes exact): full stream basis 16,623,321,204; wall basis 16,089,335,406; B=16,623,321,204; WAIT=13,292,701,363; fixed=4,046,531,103; c=2; P=63,878,576,237. r12 stream basis 12,745,162,365; wall basis 12,695,357,835; B=12,745,162,365; same WAIT/fixed/c; P=56,122,258,559. Per-model rational products are retained by disk_derivation.allowances_by_model and stream_seconds/wall_seconds. Counts full: 16/16/4/37 for llama-70b/qwen35-122b/qwen3-next-80b/neg8_reference; r12: 5/16/4/37. The helper still carries the full-kit span/window fields until the next slice's measured-span derivation replaces them; do not expose it as completed session sizing yet.
+- Slice ended after all launched test/diagnostic commands completed; no local measurement or background process was started. Tests used native fake/synthetic hardware seams. Final diff contains only the three authorized paths listed in the local commit attempt.
+
+The original cloud checkpoint below is historical planning context. Its claims of no implementation/tests refer only to that cloud attempt; local results above supersede them.
+
+## HISTORICAL CLOUD CHECKPOINT
 
 ## SUMMARY
 - INCOMPLETE: no implementation or executable validation has been performed.
