@@ -260,10 +260,10 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 
 | Module | Tests | Failures | Errors | Skips | Exit | Wall seconds | Where it ran | Log SHA-256 |
 |---|---|---|---|---|---|---|---|---|
-| tests.b5_analysis.test_dry_run | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
 | tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
-| tests.b5_analysis.test_chain_fixture | — | — | — | — | — | — | cloud: pending | — |
-| tests.b5_analysis.test_joined_probes | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
+| tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.871 | Codex Cloud | `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
@@ -287,3 +287,19 @@ Completed cloud logs and test failures:
 - `tests.test_r4_acceptance_oracle` at `54da41a5e38d7045f120f946b083c6532613a595`: 10 tests, 0 failures, 0 errors, 0 skips, exit 0, 3.323 s. Log `/workspace/l9-1/checks-3/logs/tests_test_r4_acceptance_oracle.log`, SHA-256 `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71`.
 - `tests.b5_analysis.test_mint_kept_units` at `38ff2a7fe5c20b5fcfb92268d05aa4e5288cfce5`: 87 tests, 0 failures, 0 errors, 1 skips, exit 0, 492.383 s. Log `/workspace/l9-1/mint-1/logs/tests_b5_analysis_test_mint_kept_units.log`, SHA-256 `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892`.
   - skip_names: ['tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_s10_sealed_floor_packs_bootstrap_their_producer_contracts', 'chain extraction reports not built (ChainTests C4 with JW_B5_S10_CHAIN_CACHE)']
+- `tests.b5_analysis.test_chain_fixture` at `54da41a5e38d7045f120f946b083c6532613a595`: 32 tests, 0 failures, 0 errors, 0 skips, exit 0, 17779.392 s. Log `/workspace/l9-1/checks-3/logs/tests_b5_analysis_test_chain_fixture.log`, SHA-256 `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644`.
+- `tests.b5_analysis.test_dry_run` at `54da41a5e38d7045f120f946b083c6532613a595`: 62 tests, 2 failures, 1 errors, 0 skips, exit 1, 22170.927 s. Log `/workspace/l9-1/dry-3/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2`.
+  - failure_names: tests.b5_analysis.test_dry_run.JoinedRunTests.test_J3_closeout_openers_issuers_and_disclosures_are_ok
+  - failure_names: tests.b5_analysis.test_dry_run.JoinedRunTests.test_J4_completed_without_tooling_refusal
+  - error_names: tests.b5_analysis.test_dry_run.JoinedRunTests.test_L9_real_chain_floor_inventory_sources_and_fill_boundary
+- `tests.b5_analysis.test_joined_probes` at `54da41a5e38d7045f120f946b083c6532613a595`: 2 tests, 2 failures, 0 errors, 0 skips, exit 1, 0.028 s. Log `/workspace/l9-1/dry-3/logs/tests_b5_analysis_test_joined_probes.log`, SHA-256 `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051`.
+  - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_disclosure_main_read_only_driver_output_paths_without_builder_seam
+  - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_load_correlated_restored_units_pass_real_tripwire_and_validator
+
+Additional logs (not completed acceptance modules):
+
+- interrupted nohup dry-run attempt, no completed module result: `/tmp/l9-1/dry-1/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `2e42a4d7fc20e0071a5a25465409762de8ac5f48fcc5d758ec137546b6d43c97`.
+- interrupted tmpfs dry-run attempt, no completed module result: `/tmp/l9-1/dry-2/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `33e0f4f0f768f4094bae6f2496da4ff2a2f6cf0b80cc14b53e4f34204e35ae4d`.
+- fixture-lifetime mechanism probe, not a step-9b replay: `/workspace/l9-1/lifetime-probe/probe.log`, SHA-256 `ee7f85e8dd62de5e97fa78587061a1f500867ca7857823d4aa7214c9d887d58f`.
+
+Exact merged-input diagnostic after the 49-test legacy prefix: admitted VerifiedClaimEvidence, no validator codes, exit 0, 3588.285 s including the prefix; all ten original bound-file hashes matched before and after. This does not replace the failed joined acceptance. Log `/workspace/l9-1/prefix-1/control.log`, SHA-256 `01f46960fd4d4807af7df0b8b7e87f91dfc13ea1bf975347b3a6c1854127bad6`; passive provenance log SHA-256 `808bde69efbf4fcaed346530b58235a30981786e309bbb0dea71004dc3d323ba`. The original runner exited at its completed-module boundary; retained synthetic trees were restored at their exact original locators and their ten bindings reverified.
