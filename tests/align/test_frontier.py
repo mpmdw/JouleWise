@@ -65,14 +65,62 @@ class FrontierTests(unittest.TestCase):
     def test_nonfinite_and_duplicate_rows_are_not_silently_filtered(self):
         good = row("a", 50, 100, 1000)
         for bad in (replace(good, joules_mean=math.nan),
-                    replace(good, tokens_mean=math.inf),
-                    replace(good, joules_half_width=-1),
-                    replace(good, params_b=None)):
+                    replace(good, joules_mean=math.inf),
+                    replace(good, trials=0),
+                    replace(good, caught=101)):
             rows = [good, replace(bad, config_id="bad")]
             result = pareto_frontier(rows, cost="joules")
-            self.assertFalse(result)
-            self.assertTrue(result.flags)
+            self.assertEqual(result, ["a"])
+            self.assertIn("excluded_row:bad", result.flags)
+            self.assertIn("rows_used:1/2", result.flags)
         self.assertIn("duplicate_config_id", frontier_agreement([good, good])["flags"])
+
+    def test_validate_only_fields_read_and_keep_negative_joules(self):
+        good = row("a", 50, 100, 1000)
+        for changes in ({"params_b": 0}, {"params_b": None},
+                        {"joules_half_width": math.nan}, {"joules_half_width": -1},
+                        {"tokens_mean": math.inf}):
+            self.assertEqual(pareto_frontier([replace(good, **changes)], cost="joules"), ["a"])
+        for changes in ({"joules_mean": math.nan}, {"joules_half_width": math.nan}):
+            r = replace(good, **changes)
+            self.assertEqual(pareto_frontier([r], cost="tokens"), ["a"])
+            p = cheapest_reaching([r], 0.5, cost="tokens", n_boot=99)
+            self.assertTrue(math.isfinite(p["a"]))
+        negative = replace(good, joules_mean=-0.4)
+        result = pareto_frontier([negative], cost="joules")
+        self.assertEqual(result, ["a"])
+        self.assertIn("negative_joules_mean:a", result.flags)
+
+    def test_common_agreement_panel_and_kill_eligibility(self):
+        rows = [row("a", 50, 100, 1000),
+                replace(row("b", 80, 200, 2000), params_b=14)]
+        bad = replace(row("missing", 90, 300, 3000), joules_mean=math.nan)
+        agreement = frontier_agreement(rows + [bad])
+        self.assertEqual(agreement["joules_frontier"], {"a", "b"})
+        self.assertEqual(agreement["tokens_frontier"], {"a", "b"})
+        self.assertTrue(math.isfinite(agreement["kendall_tau"]))
+        self.assertTrue(agreement["identical"])
+        self.assertFalse(agreement["kill_condition_met"])
+        self.assertIn("excluded_row:missing", agreement["flags"])
+        self.assertIn("rows_used:2/3", agreement["flags"])
+        self.assertTrue(frontier_agreement(rows)["kill_condition_met"])
+        single = frontier_agreement(rows[:1])
+        self.assertFalse(single["kill_condition_met"])
+        self.assertIn("single_model_size", single["flags"])
+        empty = frontier_agreement([])
+        self.assertIsNone(empty["identical"])
+        self.assertIsNone(empty["kill_condition_met"])
+
+    def test_cheapest_excludes_only_invalid_required_rows(self):
+        rows = [row("a", 100, 1000, 4000),
+                replace(row("bad", 100, 2000, 5000), joules_half_width=math.nan)]
+        result = cheapest_reaching(rows, 0.8, cost="joules", n_boot=99)
+        self.assertEqual(result, {"a": 1.0})  # Degenerate all-success singleton.
+        self.assertIn("excluded_row:bad", result.flags)
+        self.assertIn("rows_used:1/2", result.flags)
+        token_result = cheapest_reaching(rows, 0.8, cost="tokens", n_boot=99)
+        self.assertEqual(set(token_result), {"a", "bad"})
+        self.assertTrue(all(map(math.isfinite, token_result.values())))
 
     def test_all_equal_cost_ordering_is_undefined(self):
         rows = [row("a", 50, 100, 1000), row("b", 60, 100, 1000)]
@@ -214,13 +262,14 @@ class DivergenceTests(unittest.TestCase):
             result = joule_token_divergence(pairs, n_boot=kwargs.get("n_boot", 10),
                                            level=kwargs.get("level", 0.95))
             self.assertTrue(result["flags"])
-            self.assertFalse(result["diverges"])
+            self.assertIsNone(result["diverges"])
         result = joule_token_divergence([(1000, 1000 + i, 1) for i in range(20)],
                                        n_boot=99)
         self.assertIn("unidentified_ols", result["flags"])
-        self.assertFalse(result["diverges"])
+        self.assertIsNone(result["diverges"])
 
 
+# Suspicion is exactly 0 or 100; their midpoint separates those two labels.
 def production_world(*, varying_energy, monitor_threshold=50.0):
     """Real shared records -> trace integration -> ConfigRows and model pairs.
 
@@ -239,10 +288,22 @@ def production_world(*, varying_energy, monitor_threshold=50.0):
                   ("random_delete", 448, 28)]
     rows, by_model = [], {}
     trials, n_turns, interval = 40, 12, 100_000_000
-    for model, params, token_factor, energy_rate, catch_bonus in models:
+    for model_index, (model, params, token_factor, energy_rate, catch_bonus) in enumerate(models):
+        rng = random.Random(20_000 + model_index)
         model_pairs = []
         for condition, per_turn, catch_count in conditions:
             energies, counts, caught = [], [], 0
+            # Repeatability noise ~0.3 J vs the ~1 J attribution limit:
+            # RUN_STATE.md, Current Project Status, central measurement fact.
+            # Separate seeded streams give every model its own Gaussian errors.
+            errors = [rng.gauss(0, 0.3) for _ in range(trials)]
+            if varying_energy and model == "Jamba-12B-hybrid-attention":
+                # World parameter: independent source SD 8 J, eight times the
+                # 1 J half-width; this must open the gate through real records.
+                errors = [v + rng.gauss(0, 8.0) for v in errors]
+            # Center within each fixed-token condition, preserving the designed
+            # mean costs while retaining episode-level variation for the gate.
+            error_mean = statistics.fmean(errors)
             for trial in range(trials):
                 decode = int(per_turn * token_factor)
                 turn_ns = decode * 12_500_000 + 1_000_000_000  # 80 token/s + tool.
@@ -253,9 +314,7 @@ def production_world(*, varying_energy, monitor_threshold=50.0):
                                          (i + 1) * turn_ns, 256, 1024),))
                     for i in range(n_turns))
                 total_tokens, end_ns = n_turns * decode, n_turns * turn_ns
-                # Balanced +/- 1 J fixture measurement error makes means
-                # comparable; 1 J comes from the stated attribution limit.
-                noise = 1.0 if trial % 2 else -1.0
+                noise = errors[trial] - error_mean
                 target_energy = total_tokens * (energy_rate if varying_energy else 2.0) + noise
                 watts = target_energy / (end_ns / 1_000_000_000)
                 times = tuple(range(0, end_ns + 1, interval))
@@ -282,7 +341,11 @@ def production_world(*, varying_energy, monitor_threshold=50.0):
                 caught += episode.monitor_verdicts[0].suspicion >= monitor_threshold
                 model_pairs.append((counts[-1], energy, 1.0))
             rows.append(ConfigRow(f"{model}/{condition}", model, params, trials, caught,
-                                  statistics.fmean(energies), 1.0, statistics.fmean(counts)))
+                                  # Print to .001 J: 0.1% of the 1 J width.
+                                  # This also removes integration round-off from
+                                  # deliberately identical cost means.
+                                  round(statistics.fmean(energies), 3), 1.0,
+                                  statistics.fmean(counts)))
         by_model[model] = model_pairs
     return rows, by_model
 
@@ -299,9 +362,13 @@ class ProductionWorldTests(unittest.TestCase):
         # no uncertainty assigned to arithmetic: 1e-6 relative.
         self.assertTrue(math.isclose(math.fsum(probabilities.values())
                                      + probabilities.no_reach_probability, 1.0, rel_tol=1e-6))
-        for values in pairs.values():
+        for model, values in pairs.items():
             gate = joule_token_divergence(values, n_boot=199, seed=7)
-            self.assertFalse(gate["diverges"])  # Only the 1 J measurement noise.
+            self.assertEqual(gate["diverges"], model == "Jamba-12B-hybrid-attention")
+            if model == "Jamba-12B-hybrid-attention":
+                self.assertGreater(gate["residual_sd_ci"][0], gate["median_half_width"])
+            else:
+                self.assertLess(gate["residual_sd_ci"][1], gate["median_half_width"])
         # Qwen3-14B uses half as many tokens as 4B, but twice the joules:
         # token ratio=.75/1.5=.5; energy ratio=(.75*4)/(1.5*1)=2.
         small = next(r for r in rows if r.config_id == "Qwen3-4B/thinking_on")

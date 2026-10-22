@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import bisect
 import math
+import operator
 import random
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Sequence
 
 
@@ -37,29 +38,62 @@ class _Frontier(list[str]):
         self.flags = tuple(flags)
 
 
-def _finite_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+def _real(value: object) -> float:
+    """Convert real-like inputs, including optional-library scalar types."""
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return math.nan
 
 
-def _row_flags(rows: Sequence[ConfigRow]) -> list[str]:
-    flags = []
+def _select_rows(
+    rows: Sequence[ConfigRow], *, costs: Sequence[str], uncertainty: bool = False,
+    sizes: bool = False,
+) -> tuple[list[ConfigRow], list[str]]:
+    """Normalize only fields this analysis reads; flag every excluded identity."""
+    flags: list[str] = []
     ids = [r.config_id for r in rows]
-    if len(set(ids)) != len(ids):
+    duplicates = {name for name in ids if ids.count(name) > 1}
+    if duplicates:
         flags.append("duplicate_config_id")
+    selected = []
     for row in rows:
-        if (not isinstance(row.trials, int) or isinstance(row.trials, bool)
-                or not isinstance(row.caught, int) or isinstance(row.caught, bool)
-                or row.trials <= 0 or not 0 <= row.caught <= row.trials):
-            flags.append(f"invalid_counts:{row.config_id}")
-        for name in ("params_b", "joules_mean", "joules_half_width", "tokens_mean"):
-            value = getattr(row, name)
-            if not _finite_number(value) or value < 0:
-                flags.append(f"invalid_{name}:{row.config_id}")
-        if row.params_b == 0:
-            flags.append(f"zero_params_b:{row.config_id}")
+        invalid = []
+        changes = {}
+        if not isinstance(row.config_id, str) or not row.config_id or row.config_id in duplicates:
+            invalid.append(f"invalid_config_id:{row.config_id}")
+        try:
+            trials, caught = operator.index(row.trials), operator.index(row.caught)
+            if trials < 1 or not 0 <= caught <= trials:
+                raise ValueError
+            changes.update(trials=trials, caught=caught)
+        except (TypeError, ValueError, OverflowError):
+            invalid.append(f"invalid_counts:{row.config_id}")
+        fields = [f"{cost}_mean" for cost in costs]
+        if uncertainty:
+            fields.append("joules_half_width")
+        if sizes:
+            fields.append("params_b")
+        for name in fields:
+            value = _real(getattr(row, name))
+            if (not math.isfinite(value)
+                    or (name in {"tokens_mean", "joules_half_width"} and value < 0)
+                    or (name == "params_b" and value <= 0)):
+                invalid.append(f"invalid_{name}:{row.config_id}")
+            elif name == "joules_mean" and value < 0:
+                # Idle subtraction can produce negative net energy; retain it.
+                flags.append(f"negative_joules_mean:{row.config_id}")
+            changes[name] = value
+        flags.extend(invalid)
+        if invalid:
+            flags.append(f"excluded_row:{row.config_id}")
+        else:
+            selected.append(replace(row, **changes))
     if not rows:
         flags.append("empty_rows")
-    return flags
+    if len(selected) != len(rows):
+        flags.append(f"rows_used:{len(selected)}/{len(rows)}")
+    return selected, flags
 
 
 def _cost(row: ConfigRow, cost: str) -> float:
@@ -72,14 +106,13 @@ def pareto_frontier(rows: Sequence[ConfigRow], *, cost: str) -> list[str]:
     Catch comparisons use integer cross-products, so two identical rational
     catch rates tie even when their denominators differ. Cost ties use recorded
     values, without a tolerance that would change frontier membership.
-    The returned list has a tuple-valued .flags attribute; invalid input yields
-    an empty, flagged result, without silently dropping any configuration.
+    The returned list has tuple-valued .flags. Invalid rows are excluded with
+    their identities and the count used recorded; unrelated fields are ignored.
+    Negative idle-subtracted joules are retained and flagged.
     """
-    flags = _row_flags(rows)
     if cost not in {"joules", "tokens"}:
-        flags.append("invalid_cost")
-    if flags:
-        return _Frontier([], flags)
+        return _Frontier([], ["invalid_cost"])
+    rows, flags = _select_rows(rows, costs=(cost,))
     frontier = []
     for row in rows:
         dominated = False
@@ -92,7 +125,7 @@ def pareto_frontier(rows: Sequence[ConfigRow], *, cost: str) -> list[str]:
         if not dominated:
             frontier.append(row)
     return _Frontier([r.config_id for r in sorted(
-        frontier, key=lambda r: (_cost(r, cost), r.config_id))])
+        frontier, key=lambda r: (_cost(r, cost), r.config_id))], flags)
 
 
 def _kendall(rows: Sequence[ConfigRow]) -> float:
@@ -119,27 +152,31 @@ def frontier_agreement(rows: Sequence[ConfigRow]) -> dict[str, object]:
     Keys: joules_frontier, tokens_frontier, symmetric_difference (sets of ids),
     kendall_tau, identical, kill_condition_met, flags. Undefined tau is NaN
     with a flag. Invalid/empty input never supplies evidence for the kill gate.
-    A single-size panel is flagged; equality is still returned as requested.
+    Both frontiers and tau use the same valid rows. Kill requires identical
+    frontiers, at least two valid model sizes and no excluded rows. With no
+    usable rows, identical and kill_condition_met are None.
     """
-    flags = _row_flags(rows)
+    original_count = len(rows)
+    rows, flags = _select_rows(rows, costs=("joules", "tokens"), sizes=True)
     joules = set(pareto_frontier(rows, cost="joules"))
     tokens = set(pareto_frontier(rows, cost="tokens"))
-    tau = _kendall(rows) if not flags else math.nan
-    identical = joules == tokens
-    result = {
+    tau = _kendall(rows)
+    identical = joules == tokens if rows else None
+    multiple_sizes = len({r.params_b for r in rows}) >= 2
+    if rows and not multiple_sizes:
+        flags.append("single_model_size")
+    if not math.isfinite(tau):
+        flags.append("undefined_kendall_tau")
+    return {
         "joules_frontier": joules,
         "tokens_frontier": tokens,
         "symmetric_difference": joules ^ tokens,
         "kendall_tau": tau,
         "identical": identical,
-        "kill_condition_met": identical and not flags,
+        "kill_condition_met": (identical and multiple_sizes and len(rows) == original_count)
+                              if rows else None,
+        "flags": tuple(flags),
     }
-    if not math.isfinite(tau):
-        flags.append("undefined_kendall_tau")
-    if rows and len({r.params_b for r in rows}) < 2:
-        flags.append("single_model_size")
-    result["flags"] = tuple(flags)
-    return result
 
 
 class _Probabilities(dict[str, float]):
@@ -159,9 +196,15 @@ def _bootstrap_size(n_boot: int | None) -> tuple[int, list[str]]:
         # B > 1/(4*0.005**2) = 10000 makes even the worst-case SE strictly
         # below half a percentage point, below the two-decimal print quantum.
         return math.floor(0.25 / 0.005**2) + 1, []
-    if not isinstance(n_boot, int) or isinstance(n_boot, bool) or n_boot <= 0:
+    try:
+        if isinstance(n_boot, bool):
+            raise TypeError
+        count = operator.index(n_boot)
+        if count <= 0:
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
         return 0, ["invalid_n_boot"]
-    return n_boot, []
+    return count, []
 
 
 def _binomial_cdf(trials: int, caught: int) -> list[float]:
@@ -209,17 +252,24 @@ def cheapest_reaching(
     Probabilities are unconditional: their sum may be below one when no
     config reaches target. The returned dict exposes .no_reach_probability,
     .flags, .n_boot and .mc_se_bound (worst-case Monte Carlo SE). Normal cost
-    draws are not clipped; negative draws are flagged. Invalid inputs yield
-    NaN for each unique id, without silently filtering configurations.
+    draws are not clipped; negative draws are flagged. Excluded config ids
+    are absent from the result, with identities/count used in flags. Invalid
+    global options yield NaN for each otherwise included config.
     """
     count, flags = _bootstrap_size(n_boot)
-    flags.extend(_row_flags(rows))
+    invalid_options = bool(flags)
     if cost not in {"joules", "tokens"}:
         flags.append("invalid_cost")
-    if not _finite_number(target_catch) or not 0 <= target_catch <= 1:
+        invalid_options = True
+    else:
+        rows, row_flags = _select_rows(rows, costs=(cost,), uncertainty=cost == "joules")
+        flags.extend(row_flags)
+    target_catch = _real(target_catch)
+    if not math.isfinite(target_catch) or not 0 <= target_catch <= 1:
         flags.append("invalid_target_catch")
+        invalid_options = True
     result = _Probabilities(sorted({r.config_id for r in rows}), count, flags)
-    if flags:
+    if invalid_options or not rows:
         result.update((name, math.nan) for name in result)
         return result
     ordered = sorted(rows, key=lambda r: r.config_id)
@@ -328,24 +378,39 @@ def joule_token_divergence(
     median_half_width, diverges, level, n_boot, n_pairs, flags,
     valid_rho_resamples, valid_residual_resamples. Undefined values are NaN.
     Degenerate bootstrap fits are counted/flagged and excluded from that
-    statistic's interval; an unidentified original fit never opens the gate.
+    statistic's interval. Invalid pairs are excluded and named with count used;
+    negative net joules are kept and flagged. An unidentified original fit or
+    unavailable residual interval returns diverges=None.
     """
     count, flags = _bootstrap_size(n_boot)
-    if not _finite_number(level) or not 0 < level < 1:
+    invalid_options = bool(flags)
+    level = _real(level)
+    if not math.isfinite(level) or not 0 < level < 1:
         flags.append("invalid_level")
+        invalid_options = True
+    selected = []
     for i, pair in enumerate(pairs):
-        if len(pair) != 3 or any(not _finite_number(v) or v < 0 for v in pair):
-            flags.append(f"invalid_pair:{i}")
-    if len(pairs) < 3:
+        values = tuple(_real(v) for v in pair)
+        if (len(values) != 3 or any(not math.isfinite(v) for v in values)
+                or values[0] < 0 or values[2] < 0):
+            flags.extend((f"invalid_pair:{i}", f"excluded_pair:{i}"))
+            continue
+        if values[1] < 0:
+            flags.append(f"negative_joules_pair:{i}")
+        selected.append(values)
+    if len(selected) != len(pairs):
+        flags.append(f"pairs_used:{len(selected)}/{len(pairs)}")
+    pairs = selected
+    if len(pairs) < 3:  # OLS fits two coefficients and needs positive residual df.
         flags.append("insufficient_pairs")
     result: dict[str, object] = {
         "spearman_rho": math.nan, "spearman_ci": (math.nan, math.nan),
         "residual_sd": math.nan, "residual_sd_ci": (math.nan, math.nan),
-        "median_half_width": math.nan, "diverges": False,
+        "median_half_width": math.nan, "diverges": None,
         "level": level, "n_boot": count, "n_pairs": len(pairs),
         "valid_rho_resamples": 0, "valid_residual_resamples": 0,
     }
-    if flags:
+    if invalid_options or len(pairs) < 3:
         result["flags"] = tuple(flags)
         return result
     x, y, widths = zip(*pairs)
@@ -375,7 +440,8 @@ def joule_token_divergence(
     result.update(spearman_ci=rho_ci, residual_sd_ci=sd_ci,
                   valid_rho_resamples=len(correlations),
                   valid_residual_resamples=len(deviations),
-                  diverges=math.isfinite(residual) and sd_ci[0] > median_width,
+                  diverges=(sd_ci[0] > median_width)
+                           if math.isfinite(residual) and all(map(math.isfinite, sd_ci)) else None,
                   flags=tuple(flags))
     return result
 

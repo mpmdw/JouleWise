@@ -1,3 +1,7 @@
+# FIX ROUND 1 CHECKPOINT
+Input handling, gate eligibility, Gaussian production worlds and threshold comment prepared.
+NOT EXECUTED: the managed VM is still pending; even pwd cannot run. Final FIX LOG and refreshed report follow after verification or final environment failure.
+
 # SUMMARY
 - Implements the exact A10 ConfigRow and four requested public function signatures.
 - Computes strict joule/token Pareto frontiers and Kendall tau-b with cost ties.
