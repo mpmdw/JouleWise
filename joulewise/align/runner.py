@@ -555,12 +555,19 @@ def run_matrix(spec_path: str | Path) -> Path:
                 except (Exception, KeyboardInterrupt) as exc:
                     construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
                                               else "token_counter.factory_error." + type(exc).__name__)
-            episode, transcript = run_episode(
-                task, condition, endpoint, monitors=monitors, samplers=samplers, seed=seed,
-                max_turns=spec.get("max_turns", 40), max_tokens=spec.get("max_tokens", 600),
-                temperature=spec.get("temperature", 0.0), clock_domain=domain,
-                token_counter=counter, matrix_id=matrix_id, clock=context.clock,
-            )
+            if "episode.interrupted" in construction_flags:
+                timestamp = context.clock()
+                episode = Episode(identity, pair, condition, endpoint_identity, endpoint_identity,
+                                  seed, domain, timestamp, timestamp, (),
+                                  flags=tuple(construction_flags))
+                transcript = []
+            else:
+                episode, transcript = run_episode(
+                    task, condition, endpoint, monitors=monitors, samplers=samplers, seed=seed,
+                    max_turns=spec.get("max_turns", 40), max_tokens=spec.get("max_tokens", 600),
+                    temperature=spec.get("temperature", 0.0), clock_domain=domain,
+                    token_counter=counter, matrix_id=matrix_id, clock=context.clock,
+                )
             runner_metadata = dict(episode.hardware.get("runner", {}))
             runner_metadata.update(order_seed=order_seed, order_index=len(metadata["order"]) - 1)
             hardware = dict(episode.hardware)

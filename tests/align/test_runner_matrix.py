@@ -271,7 +271,9 @@ class MatrixTests(unittest.TestCase):
         runner.register_token_counter_factory("test.interrupted_tokens", interrupted)
         with tempfile.TemporaryDirectory() as directory:
             spec = write_spec(directory, token_counter={"factory": "test.interrupted_tokens"})
-            path = runner.run_matrix(spec)
+            with patch.object(ScriptedEndpoint, "chat") as chat:
+                path = runner.run_matrix(spec)
+            chat.assert_not_called()
             episodes = read_episodes(path)
             self.assertEqual(len(episodes), 1)
             self.assertIn("episode.interrupted", episodes[0].flags)
