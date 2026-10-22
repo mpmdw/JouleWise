@@ -81,11 +81,86 @@ class PreflightTests(unittest.TestCase):
             with self.subTest(moves=moves), tempfile.TemporaryDirectory() as temp:
                 directory = Path(temp)
                 executables = FakeExecutables(directory)
-                library = FakeNvmlLibrary(state_file=executables.state, moves=moves)
-                with mock.patch.dict(os.environ, {"PATH": str(directory) + os.pathsep + os.defpath}):
+                class ClockedLibrary(FakeNvmlLibrary):
+                    def __init__(self) -> None:
+                        super().__init__(state_file=executables.state, moves=moves)
+                        self.now = 10**15
+                        self.wall_origin = 1_800_000_000_000_000_000
+                        self.progress = threading.Condition()
+                        self.active_reads = 0
+
+                    def mono(self) -> int:
+                        with self.progress:
+                            self.now += 100  # Synthetic call cost, not a test tolerance.
+                            return self.now
+
+                    def wall(self) -> int:
+                        with self.progress:
+                            return self.wall_origin+self.now
+
+                    def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
+                        status = super().nvmlDeviceGetPowerUsage(handle, output)
+                        with self.progress:
+                            self.now += 100_000_000  # One actual sensor update per poll.
+                            self.active_reads += int(executables.state.exists())
+                            self.progress.notify_all()
+                        return status
+
+                    def nvmlDeviceGetFieldValues(self, handle: object, count: int, values: object) -> int:
+                        status = super().nvmlDeviceGetFieldValues(handle, count, values)
+                        for index in range(count):
+                            values[index].timestamp = (self.wall_origin+self.now)//1000
+                        return status
+
+                    def wait_readings(self, target: int, *, loaded: bool = False) -> None:
+                        # Deadline only detects deadlock. Phase completion is
+                        # driven by integer driver observations, never elapsed
+                        # wall time or scheduler-dependent short sleeps.
+                        with self.progress:
+                            ready = self.progress.wait_for(
+                                lambda: (self.active_reads if loaded else self.power_calls) >= target,
+                                timeout=120)
+                        if not ready:
+                            raise AssertionError("fake driver did not finish the phase")
+
+                library = ClockedLibrary()
+                original_popen = subprocess.Popen
+
+                def make_sampler(*args: object, **kwargs: object) -> NvmlSampler:
+                    return NvmlSampler(*args, **kwargs, clock_ns=library.mono,
+                                       wall_clock_ns=library.wall)
+
+                def phase_sleep(seconds: float) -> None:
+                    # Runbook: 10 s / 100 ms = 100 idle updates. Recovery is
+                    # 2 s / 100 ms = 20 updates. Record clocks use this grid.
+                    library.wait_readings(library.power_calls+round(seconds/.1))
+
+                def popen(*args: object, **kwargs: object) -> subprocess.Popen:
+                    process = original_popen(*args, **kwargs)
+                    if args[0][0] == str(executables.load):
+                        original_wait = process.wait
+                        measured = False
+
+                        def wait(timeout: float | None = None) -> int:
+                            nonlocal measured
+                            if not measured and timeout == 10.0:
+                                measured = True
+                                # One hundred active updates are the same
+                                # ten-second load span as the runbook defaults.
+                                library.wait_readings(100, loaded=True)
+                                raise subprocess.TimeoutExpired(process.args, timeout)
+                            return original_wait(timeout=timeout)
+                        process.wait = wait
+                    return process
+
+                with mock.patch.dict(os.environ, {"PATH": str(directory) + os.pathsep + os.defpath}), \\
+                        mock.patch.object(preflight, "NvmlSampler", side_effect=make_sampler), \\
+                        mock.patch.object(preflight.subprocess, "Popen", side_effect=popen), \\
+                        mock.patch.object(preflight, "time", types.SimpleNamespace(
+                            monotonic=time.monotonic, monotonic_ns=library.mono, sleep=phase_sleep)):
                     report = preflight.run_preflight(
-                        library=library, idle_seconds=0.45, load_seconds=0.25,
-                        recovery_seconds=0.02, interval_ns=5_000_000,
+                        library=library, idle_seconds=10, load_seconds=10,
+                        recovery_seconds=2, interval_ns=1_000_000,
                         load_cmd=[str(executables.load), str(executables.state)])
                 self.assertFalse(report["refused"])
                 self.assertEqual(report["movement"]["power_moved"], moves)
@@ -101,8 +176,8 @@ class PreflightTests(unittest.TestCase):
                 self.assertEqual(device["nvidia_smi"]["snapshot_power_w"], [50.0])
                 self.assertIn("parser_local_legacy_fallback",
                               device["nvidia_smi"]["snapshot_parse"]["timestamp_timezone_source"])
-                # 0.45 s idle spans at least four independent 100 ms sensor
-                # periods; the 200 W effect is 1000x the 0.2 W ripple.
+                # The fake-clock phases contain 100 updates each; the 200 W
+                # effect is 1000x the 0.2 W ripple and survives clock uncertainty.
                 channels = report["movement"]["channels"]
                 measured = [row for row in channels if row["power_moved"] is not None]
                 self.assertTrue(measured)
@@ -325,6 +400,35 @@ class PreflightTests(unittest.TestCase):
                         break
             libc.prctl(36, old.value, 0, 0, 0)
 
+    @unittest.skipUnless(os.name == "posix", "process-group probe requires POSIX")
+    def test_permission_denied_presence_probe_keeps_cleanup_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            FakeExecutables(directory)
+            original_killpg = os.killpg
+            denied = False
+
+            def killpg(group: int, sig: int) -> None:
+                nonlocal denied
+                if sig == 0 and not denied:
+                    denied = True
+                    # run_preflight has already waited/reaped the short-lived
+                    # leader; emulate Darwin's zombie-only EPERM once.
+                    raise PermissionError("synthetic zombie-group EPERM")
+                original_killpg(group, sig)
+
+            with mock.patch.dict(os.environ, {"PATH": str(directory)+os.pathsep+os.defpath}), \\
+                    mock.patch.object(preflight.os, "killpg", side_effect=killpg):
+                report = preflight.run_preflight(
+                    library=FakeNvmlLibrary(), idle_seconds=0, load_seconds=1,
+                    recovery_seconds=0, load_cmd=[sys.executable, "-c", "pass"])
+            self.assertTrue(denied)
+            self.assertIn("cleanup", report["load"])
+            self.assertTrue(report["load"]["cleanup"]["presence_permission_denied"])
+            self.assertEqual(report["load"]["returncode"], 0)
+            self.assertFalse(any(flag.startswith(("preflight_incomplete", "load_cleanup_failed"))
+                                 for flag in report["flags"]), report["flags"])
+
     def test_failed_sampler_cleanup_owner_never_shuts_down_under_native_call(self) -> None:
         for fail_outer in (False, True):
             with self.subTest(fail_outer=fail_outer), tempfile.TemporaryDirectory() as temp:
@@ -414,9 +518,9 @@ class PreflightTests(unittest.TestCase):
                 false_alarm_rate=alpha)
             exceeded += result["power_moved"]
         fraction = exceeded / seed_count
-        # One binomial standard error at the stated alpha, as requested for
-        # the synthetic calibration; the seed set is fixed before running.
-        bar = math.sqrt(alpha*(1-alpha)/seed_count)
+        # N1: four binomial SE. With alpha=.05 and S=1000 (>304), neither
+        # m=0 (never fires) nor m=S (always fires) can pass this bar.
+        bar = 4*math.sqrt(alpha*(1-alpha)/seed_count)
         print("NVML PREFLIGHT CALIBRATION", json.dumps({
             "seeds": seed_count, "outside": exceeded, "fraction": fraction,
             "alpha": alpha, "binomial_se": bar}))

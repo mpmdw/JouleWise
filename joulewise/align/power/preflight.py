@@ -201,6 +201,12 @@ def _terminate_load(process: subprocess.Popen[Any], timeout_s: float) -> dict[st
             return True
         except ProcessLookupError:
             return False
+        except PermissionError:
+            # Darwin can report EPERM for a group containing only zombies.
+            # The group may still exist: reap our leader and keep a receipt.
+            receipt["presence_permission_denied"] = True
+            process.poll()
+            return True
 
     # The session/group was created by this exact Popen, so its identity is
     # retained even if the leader exited before a child. Do not use leader
@@ -210,6 +216,8 @@ def _terminate_load(process: subprocess.Popen[Any], timeout_s: float) -> dict[st
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
+        except PermissionError as exc:
+            receipt["term_permission_denied"] = str(exc)
     deadline = time.monotonic()+timeout_s
     while present() and time.monotonic() < deadline:
         process.poll()  # Reap an exited leader while waiting for its children.
@@ -220,6 +228,8 @@ def _terminate_load(process: subprocess.Popen[Any], timeout_s: float) -> dict[st
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        except PermissionError as exc:
+            receipt["kill_permission_denied"] = str(exc)
     process.wait(timeout=timeout_s)
     receipt["group_present_after_kill"] = present()
     # A surviving group can consist of zombies awaiting the host's reaper;
@@ -259,9 +269,19 @@ except Exception as exc:
     return [sys.executable, "-c", code, str(ready_path), str(device_index), str(matmul_size)]
 
 
+# Ten seconds contains 100 provisional 100 ms sensor periods and ten 1 s
+# output averages: enough retained idle observations to estimate sigma rather
+# than use a single reading. Two seconds recovery contains two output spans.
+# These operational defaults match the runbook; retained counts still decide
+# whether the predictive k-sigma criterion can be computed (n_idle >= 2).
+_DEFAULT_IDLE_S = 10.0
+_DEFAULT_LOAD_S = 10.0
+_DEFAULT_RECOVERY_S = 2.0
+
+
 def run_preflight(*, device_indices: Sequence[int] | None = None,
-                  idle_seconds: float = 2.0, load_seconds: float = 2.0,
-                  recovery_seconds: float = 1.0, interval_ns: int = 10_000_000,
+                  idle_seconds: float = _DEFAULT_IDLE_S, load_seconds: float = _DEFAULT_LOAD_S,
+                  recovery_seconds: float = _DEFAULT_RECOVERY_S, interval_ns: int = 10_000_000,
                   load_cmd: Sequence[str] | None = None, try_lock_clocks: bool = False,
                   graphics_clock_mhz: int | None = None, false_alarm_rate: float = 0.01,
                   matmul_size: int = 2048, command_timeout_s: float = 5.0,
@@ -491,9 +511,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--device", action="append", type=int)
-    parser.add_argument("--idle-seconds", type=float, default=2.0)
-    parser.add_argument("--load-seconds", type=float, default=2.0)
-    parser.add_argument("--recovery-seconds", type=float, default=1.0)
+    parser.add_argument("--idle-seconds", type=float, default=_DEFAULT_IDLE_S)
+    parser.add_argument("--load-seconds", type=float, default=_DEFAULT_LOAD_S)
+    parser.add_argument("--recovery-seconds", type=float, default=_DEFAULT_RECOVERY_S)
     parser.add_argument("--interval-ms", type=float, default=10.0)
     parser.add_argument("--false-alarm-rate", type=float, default=0.01)
     parser.add_argument("--try-lock-clocks", action="store_true")

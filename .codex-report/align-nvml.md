@@ -180,3 +180,9 @@ worst_case_bias_j=<value>; a missing physical bound cannot make it infinite.
 Added 400-seed/16-replay calibration for aligned, 100 us jitter, 2 ms jitter and
 2 ms plus +/-300 us duration jitter, with 2 W run shifts and .3 W reading noise.
 F2/F3/F9 implementation commit: 8e4f06316030214a6df2df9725c389eceeb71082.
+
+Fourth scoped fix handles zombie-group EPERM with a cleanup receipt and makes
+preflight defaults 10 s idle/10 s load/2 s recovery with sample-count derivations.
+The load/no-load regression now completes phases from fake-clock driver update
+counts while retaining real ctypes sampling, real executables and owned cleanup.
+F1/F5/F8/N2/N3/N4/N5 implementation commit: 1813efd72be981d354520c3f9cfeb0d33737ac73.

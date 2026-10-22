@@ -121,16 +121,24 @@ The public NVIDIA NVML header
 power on Ampere except GA100 and newer architectures can be a one-second
 average, and field 185 is a one-second average. Field 186 requests instantaneous
 power. The records cannot represent an output combining noncontiguous slices;
-those outputs are retained and flagged `output_average_not_single_window`.
-The duty estimator does not pretend that they are a single 25 ms mean. Use
+those outputs are retained with a one-second averaging span and duty_fraction=None
+on the known A100/H100 devices, flagged `output_average_not_single_window`.
+The unknown duty avoids describing ten disjoint slices as one continuous window.
+The duty estimator retains these channels as evidence but cannot pool that model. Use
 the instantaneous field for the initial duty experiment.
 
-`PowerTrace.t_ns` is always the midpoint of the monotonic query bracket.
-JSON notes retain bracket half-widths, raw field timestamps, physical sensor
-facts, output-average facts and diagnostics. Sensor age is distinct from query
-latency. Use mapped `window_end_ns`/`window_timing_half_width_ns` notes when
-available; a legacy reading with an unreported update phase cannot acquire a
-finite timing bound merely because its query was fast.
+`PowerTrace.t_ns` is the mapped sensor window end whenever the driver supplies
+one, as the shared records contract requires. Notes keep the equal known
+`window_end_ns` entries, `query_midpoint_ns`, query `timing_half_width_ns` and
+`window_timing_half_width_ns`. A missing endpoint is None for that sample;
+other endpoints remain intact. For a missing age, the query midpoint is a
+flagged proxy with an age bound of sensor period plus polling interval (or
+one-second output period plus polling interval for output averages). An unknown
+period leaves the age bound unknown. Check these flags before attribution.
+Mapped timing bounds include the full 1 us driver rounding quantum, the local
+wall/monotonic mapping bracket, and maximum wall-clock slew over timestamp age.
+The configurable `wall_clock_slew_ppm=500` cites Linux adjtimex MAXFREQ; supply
+the appropriate bound for another clock discipline.
 
 ## Sample beside the episode matrix
 
@@ -178,11 +186,17 @@ result = estimate_energy(runs)
 The first four offsets tile the period at quarter periods; subsequent offsets
 replicate those phases. Fewer than four phases leave gaps. Four phases can
 recover the point integral but do not estimate within-phase repeatability;
-use at least two replicas per phase for a finite spread term. Repeats need
-the same workload duration. Pass each planned offset as the sampler's
+use at least two replicas per phase for a finite spread term (eight total for
+25-of-100 ms). Six replays leave two phases without a replica and therefore
+an infinite width. Eight rather than four costs four additional episode durations,
+plus their pre/post-roll and dispatch waits; for a 26.7 s episode that adds
+106.8 s of workload GPU time. A finite four-replay interval would need an
+external repeatability/noise model, which this protocol does not invent.
+Actual measured durations may differ: every replay is kept, clipped to its own
+duration, and the duration spread enters run-to-run variability. Pass each planned offset as the sampler's
 repeat_group label when collecting real runs; this identifies intended phase
 replicas while preserving actual, jittered endpoints. Without labels, the
-estimator requires exact geometry replicas. Never round observed timestamps
+estimator groups exact sensor-grid phases independently of terminal duration. Never round observed timestamps
 until runs look identical. For declared groups it normalizes per-run weights,
 derives an auxiliary interval, and widens by its distance from the requested
 point estimate. Variable geometry and the approximate Welch interval are
@@ -196,19 +210,33 @@ prove it from power.
 A reading covers its documented window ending at its actual sensor timestamp.
 The estimator aligns windows on workload start, pools covered intervals and
 integrates them; it does not join sparse points with straight lines. It
-reports coverage fraction and sums quantum, repeatability and
-coverage/smoothing/timing half-widths. The nominal 95% spread interval assumes
+reports coverage fraction and a nominal statistical repeatability half-width
+plus the sensor quantum bound. Duration variability enters the same run spread. The nominal 95% spread interval assumes
 independent Gaussian run shifts (equal normalized shift scale within each
 declared phase). Boundary-straddling windows retain their
 original support, so outside-workload power is accounted for in the bound.
 
-Incomplete coverage, smoothed support or nonzero timing uncertainty needs an
-explicit conservative instantaneous `power_bound_w` in trace notes (the
-sampler accepts the parameter). Supply its evidence, including transients.
-An enforced average power limit alone is not such a bound. Without it the
-interval is infinite and flagged. Do not replace infinity with an invented
-finite uncertainty. Traces without known sensor facts, counter-only data and
-multi-window output averages have explicit unsupported/unknown outcomes.
+Systematic coverage/smoothing/timing bias is separate from that nominal interval.
+A caller-supplied conservative instantaneous `power_bound_w` produces the
+`worst_case_bias_j=<value>` flag. Preserve its physical evidence, including
+transients; an enforced average power limit alone is not an instantaneous bound.
+This diagnostic bound does not size `half_width_j`. With no bound, the systematic
+receipt is `worst_case_bias_j=inf` plus `worst_case_bias_unbounded`; the nominal
+interval remains computable from replay variation and resolution with the
+sampler's default arguments. Report both quantities and all model flags.
+A nominal interval calibrated on synthetic Gaussian replay worlds does not
+validate sensor accuracy, waveform bias or the hardware model. Tiny/no-noise
+fixed worlds can miss this statistical interval; the separate bias receipt
+explains that limitation. Prefer complete phase coverage and validate on the
+first pilot before interpreting energy residuals.
+
+Unknown resolution keeps every run and makes the width infinite. Unknown duty
+with a known window is flagged and does not change the estimate. Invalid power
+readings are individually counted and omitted. Mixed channels or clock domains
+carry `mixed_channels` or `mixed_clock_domains`; use a single physical channel
+and one correctly mapped domain for an interpretable estimate. Traces without
+known windows, counter-only data and multi-window output averages remain explicit
+unsupported/unknown outcomes. Keep their records.
 
 ## Bring back
 
