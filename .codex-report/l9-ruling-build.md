@@ -319,3 +319,6 @@ Passive leaf trace `/workspace/l9-1/fixture-opener-1/leaf.jsonl`, SHA-256 `b84df
 
 Real StepRunner plus outer descriptor capture around retained-input opener: admitted; validator codes []; process exit 0; wall 4651.787 s; execution head `152d8dc9f0098c232704aded50632f9560ab4f7d`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/captured-opener-1/control.log`, SHA-256 `48763bc1e2e530fd276b25624dc0a6f2121a080e42c0c97911da5598fdb6d810`.
 Passive leaf trace `/workspace/l9-1/captured-opener-1/leaf.jsonl`, SHA-256 `99846e91b308f080e90748468cb342f37185c2fcdd1b81da80b6af3e4d81f57e`.
+
+Real captured opener using the completed dry-run module original TMPDIR: admitted; validator codes []; process exit 0; wall 3507.028 s; execution head `54e8b176abe8b6a79ff91480130072832334ac99`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/original-tmp-opener-1/control.log`, SHA-256 `c34342a76c113e3fe83aa17731a4147c180182b29bfe810cdfa1b0f50af47f2d`.
+Passive leaf trace `/workspace/l9-1/original-tmp-opener-1/leaf.jsonl`, SHA-256 `8ec64405a6f907630ea84912e3c1a7a3383ea311d19bc4a0fa3e61a5a8a1121a`.
