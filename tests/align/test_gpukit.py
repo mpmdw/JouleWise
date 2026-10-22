@@ -983,7 +983,9 @@ class FixArithmeticTests(unittest.TestCase):
             output_flags = _validate_output(path, expected_count=1, router=False,
                                             model=matrix["models"][0]["id"],
                                             expected_coordinates=[("task", "benign", 0)])
-            self.assertEqual(output_flags, ("episode_power_mock",))
+            self.assertEqual(output_flags, ("episode_power_coverage_cycle:gpu0",
+                                            "episode_power_coverage_incomplete",
+                                            "episode_power_mock"))
         settings["endpoint_config"] = {"model": "{agent_model}", "base_url": "{agent_base_url}"}
         requested, _ = runner_matrix(matrix, **kwargs)
         self.assertEqual(requested["endpoints"][0]["config"],

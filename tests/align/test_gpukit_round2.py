@@ -1,0 +1,133 @@
+"""R5 coverage worlds pass through the same output validator as session receipts."""
+
+from __future__ import annotations
+
+import json
+import math
+import tempfile
+import unittest
+from dataclasses import replace
+from pathlib import Path
+
+from joulewise.align.gpukit.session import _incomplete_flag, _validate_output
+from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn, write_episodes
+
+
+class CoverageTests(unittest.TestCase):
+    # 10 ms polling and 50 us/channel half-widths model NVML's serial reads.
+    interval = 10_000_000
+    start = 1_000_000_000
+    duration = 2_000_000_000
+
+    def trace(self, channel="energy", gaps=None, *, average=0, period=0, supported=True):
+        gaps = gaps or [10_000_000] * 198
+        times = [self.start + 5_000_000]
+        for gap in gaps:
+            times.append(times[-1] + gap)
+        energy = channel == "energy"
+        notes = dict(supported=supported, timing_half_width_ns=[50_000] * len(times),
+                     sensor_facts={"period_ns": period} if period else {},
+                     field_timestamps_us=[t // 1000 for t in times] if period else [],
+                     output_averaging_window_ns=average)
+        return PowerTrace("nvml_energy" if energy else "nvml_power", "gpu0:" + channel,
+                          "host.monotonic", tuple(times) if supported else (),
+                          tuple(50.0 for _ in times) if supported else (),
+                          "J_cumulative" if energy else "W", self.interval,
+                          notes=json.dumps(notes))
+
+    def episode(self, traces, *, duration=None):
+        end = self.start + (self.duration if duration is None else duration)
+        # Twelve model turns and eleven tool calls, with production-sized usage.
+        step = (end - self.start) // 12
+        turns = tuple(Turn(i, self.start + i * step, self.start + (i + 1) * step,
+                           i * 1200, 1200, 160, tool_calls=(
+                               ToolCall("read", self.start + i * step,
+                                        self.start + i * step + step // 4, 64, 1500),))
+                      for i in range(12))
+        return Episode("e", "shade/task", "benign", "Qwen/Qwen3-8B", "vllm:test", 0,
+                       "host.monotonic", self.start, end, turns,
+                       power_traces=tuple(traces), flags=("power.empty",))
+
+    def validate(self, episode):
+        metrics = {}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "episodes.jsonl"
+            write_episodes(path, [episode])
+            flags = _validate_output(path, expected_count=1, router=False,
+                                     model=episode.agent_model, measured_devices=(0,),
+                                     expected_coordinates=[("shade/task", "benign", 0)],
+                                     power_metrics=metrics)
+        return not any(_incomplete_flag(f) for f in flags), flags, metrics
+
+    def test_clean_jitter_dedup_and_unsupported(self):
+        # Median 10 ms, maximum 18 ms = 1.8 cycles; edges 5 and 15 ms < B.
+        gaps = [10_000_000] * 198
+        gaps[20:22] = [18_000_000, 2_000_000]
+        traces = [self.trace(gaps=gaps),
+                  self.trace("power_average", [100_000_000] * 19, average=1_000_000_000,
+                             period=100_000_000),
+                  self.trace("power_instant", supported=False)]
+        complete, flags, metrics = self.validate(self.episode(traces))
+        self.assertTrue(complete, flags)
+        self.assertIn("episode_power_channel_unsupported:gpu0:power_instant", flags)
+        self.assertEqual(metrics["episodes_checked"], 1)
+        self.assertEqual(metrics["episodes_incomplete_on_power"], 0)
+        self.assertEqual(metrics["episodes_with_lost_reads"], 0)
+
+    def test_covered_lost_read_and_power_hole(self):
+        # One 25 ms gap = 2.5 nominal cycles, above B~20 ms. Other 10 ms
+        # gaps fix C; the final edge is 20 ms. The 1 s average covers 25 ms.
+        gaps = [10_000_000] * 196
+        gaps[20] = 25_000_000
+        for channel, average, complete in (("energy", 0, True),
+                                           ("power_usage", 1_000_000_000, True),
+                                           ("power_instant", 0, False)):
+            ok, flags, metrics = self.validate(self.episode([
+                self.trace(channel, gaps, average=average)]))
+            self.assertEqual(ok, complete, flags)
+            if complete:
+                self.assertIn("episode_power_reads_lost:gpu0:" + channel, flags)
+                self.assertEqual(metrics["episodes_with_lost_reads"], 1)
+            else:
+                self.assertIn("episode_power_coverage_hole:gpu0:" + channel, flags)
+
+    def test_tail_and_offset_uncertainty(self):
+        # Last reading at 1.975 s leaves 25 ms, above two 10.1 ms cycles.
+        trace = self.trace(gaps=[10_000_000] * 197)
+        episode = self.episode([trace])
+        ok, flags, _ = self.validate(episode)
+        self.assertFalse(ok)
+        self.assertIn("episode_power_coverage_edge:gpu0:energy", flags)
+        # A 5 ms mapping half-width covers the excess at the edge. Offset is
+        # exact 1 s and is applied before comparing to the episode clock.
+        shifted = replace(trace, clock_domain="sensor", t_ns=tuple(t - 1_000_000_000 for t in trace.t_ns))
+        mapped = replace(episode, power_traces=(shifted,),
+                         clock_mappings=(ClockMapping("sensor", "host.monotonic",
+                                                      1_000_000_000, 5_000_000, "fixture"),))
+        self.assertTrue(self.validate(mapped)[0])
+
+    def test_two_40_second_probes(self):
+        for name, gaps, check in (
+                ("two", [40_000_000_000], "cycle"),
+                ("stall", [5_000_000, 39_990_000_000, 5_000_000], "hole")):
+            trace = self.trace("power_instant", gaps)
+            trace = replace(trace, t_ns=tuple(t - 5_000_000 for t in trace.t_ns))
+            ok, flags, metrics = self.validate(self.episode([trace], duration=40_000_000_000))
+            self.assertFalse(ok, name)
+            self.assertIn("episode_power_coverage_" + check + ":gpu0:power_instant", flags)
+            self.assertEqual(metrics["episodes_incomplete_on_power"], 1)
+            self.assertEqual(metrics["episodes_with_lost_reads"], 0)
+
+    def test_period_from_driver_stamps_and_missing_supported_device(self):
+        trace = self.trace("power_average", [100_000_000] * 19, period=100_000_000)
+        notes = json.loads(trace.notes)
+        notes["sensor_facts"] = {}
+        trace = replace(trace, notes=json.dumps(notes))
+        ok, flags, _ = self.validate(self.episode([trace]))
+        self.assertTrue(ok, flags)
+        self.assertIn("episode_power_sensor_period_from_driver_timestamps:gpu0:power_average", flags)
+        ok, flags, _ = self.validate(self.episode([self.trace(supported=False)]))
+        self.assertFalse(ok)
+        self.assertIn("episode_measured_device_power_missing:0", flags)
+        empty = replace(self.trace(), t_ns=(), values=())
+        self.assertIn("episode_power_missing", self.validate(self.episode([empty]))[1])

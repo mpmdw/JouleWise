@@ -28,6 +28,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 from urllib.parse import urlsplit
 
+from joulewise.align.gpukit.coverage import power_coverage
 from joulewise.align.gpukit.matrix import expand, load_matrix
 from joulewise.align.gpukit.cost import calibration_slice
 from joulewise.align.gpukit.throttle import snapshot, compare
@@ -233,21 +234,29 @@ def copy_back(paths: Sequence[Path], *, kind: str, destination: str,
 # physical work record; monitor/score errors are retained but do not erase the
 # agent/power product (off-box scoring can be deferred).
 def _incomplete_flag(flag: str) -> bool:
+    if flag.startswith(("episode_power_channel_unsupported:",
+                        "episode_power_sensor_period_from_driver_timestamps:",
+                        "episode_power_reads_lost:")):
+        return False
     return (flag.startswith(("endpoint_", "runner_", "episode_", "model_run_failed",
                              "budget_runner_", "endpoint.error.", "runner.error.",
                              "factory.error.", "task.setup_error.", "sampler.",
                              "usage.", "clock.", "tool.", "token_counter.error."))
             or ".factory_error." in flag
             or flag in {"episode.interrupted", "episode.max_turns",
-                        "power.empty", "condition.unknown", "scratchpad.unclosed",
+                        "condition.unknown", "scratchpad.unclosed",
                         "hidden_tokens.scratchpad_uncounted"}) and flag != "runner_adapter_provisional"
 
 
 def _validate_output(path: Path, *, expected_count: int, router: bool, model: str,
                      expected_coordinates: Sequence[tuple[str, str, int]] = (),
-                     measured_devices: Sequence[int] = ()) -> tuple[str, ...]:
+                     measured_devices: Sequence[int] = (),
+                     power_metrics: dict[str, Any] | None = None) -> tuple[str, ...]:
     """Check coordinates, usable turns and non-mock power spanning each episode."""
     flags: list[str] = []
+    metrics = {"episodes_checked": 0, "episodes_incomplete_on_power": 0,
+               "episodes_with_lost_reads": 0, "max_gap_over_bar": 0.0,
+               "max_cycle_over_two_expected": 0.0}
     try:
         episodes = read_episodes(path)
         if len(episodes) != expected_count:
@@ -273,39 +282,20 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
             flags.extend(episode.flags)
             if not episode.turns:
                 flags.append("episode_turns_missing")
-            if not episode.power_traces:
-                flags.append("episode_power_missing")
-            for device in measured_devices:
-                if not any(re.match(r"^gpu" + str(device) + r"(?=$|[^0-9])", t.channel)
-                           for t in episode.power_traces):
-                    flags.append("episode_measured_device_power_missing:" + str(device))
-            for trace in episode.power_traces:
-                if trace.source == "mock":
-                    flags.append("episode_power_mock")
-                if not trace.t_ns:
-                    flags.append("episode_power_missing")
-                    continue
-                offset = 0
-                if trace.clock_domain != episode.clock_domain:
-                    mappings = [m for m in episode.clock_mappings
-                                if m.trace_domain == trace.clock_domain
-                                and m.episode_domain == episode.clock_domain]
-                    if not mappings:
-                        flags.append("episode_power_clock_unmapped")
-                        continue
-                    offset = mappings[0].offset_ns
-                # A sensor polled at interval I with averaging window W has a
-                # reading within I + W of a boundary. This is the coverage bar,
-                # not an arbitrary duration fraction or an interpolation claim.
-                slack = trace.nominal_interval_ns + (trace.averaging_window_ns or 0)
-                if (trace.nominal_interval_ns <= 0 or slack < 0
-                        or trace.t_ns[0] + offset > episode.start_ns + slack
-                        or trace.t_ns[-1] + offset < episode.end_ns - slack):
-                    flags.append("episode_power_coverage_incomplete")
+            coverage = power_coverage(episode, measured_devices)
+            flags.extend(coverage.flags)
+            metrics["episodes_checked"] += 1
+            metrics["episodes_incomplete_on_power"] += int(coverage.incomplete)
+            metrics["episodes_with_lost_reads"] += int(coverage.lost_reads)
+            metrics["max_gap_over_bar"] = max(metrics["max_gap_over_bar"], coverage.max_gap_over_bar)
+            metrics["max_cycle_over_two_expected"] = max(
+                metrics["max_cycle_over_two_expected"], coverage.max_cycle_over_two_expected)
             if router and episode.router_log is None:
                 flags.append("episode_router_log_missing")
     except (OSError, ValueError, TypeError, KeyError) as exc:
         flags.append(f"runner_output_unreadable:{type(exc).__name__}")
+    if power_metrics is not None:
+        power_metrics.update(metrics)
     return tuple(sorted(set(flags)))
 
 
@@ -371,7 +361,7 @@ def run_session(options: SessionOptions, *,
         "schema": "joulewise.align.gpukit.session.v2", "status": "incomplete",
         "session_id": uuid.uuid4().hex, "flags": flags, "models": [],
         "data_complete": False, "start_ns": time.monotonic_ns(),
-        "data_complete_meaning": "Every planned coordinate exactly once per model, usable turns without runner failures, and non-mock power covering every measured device and episode; scoring may be deferred.",
+        "data_complete_meaning": "Every planned coordinate exactly once per model, usable turns without runner failures, and non-mock supported power on every measured device passing R5 cycle, edge and power-hole checks; unsupported channels and covered lost reads are flags only; scoring may be deferred.",
         "monitor_placement": options.monitor_placement,
     }
     monitor_process = None
@@ -576,10 +566,12 @@ def run_session(options: SessionOptions, *,
                                 model_receipt["flags"].append("runner_timeout")
                             expected = matrix.get("measured_episode_count", matrix["episode_count"])
                             expected //= len(matrix["models"])
+                            model_receipt["power_coverage"] = {}
                             model_receipt["flags"].extend(_validate_output(
                                 model_dir / "episodes.jsonl", expected_count=expected,
                                 router=matrix["kind"] == "moe_stage_a", model=model["id"],
-                                measured_devices=devices, expected_coordinates=[(r.task_pair, r.condition, r.seed)
+                                measured_devices=devices, power_metrics=model_receipt["power_coverage"],
+                                expected_coordinates=[(r.task_pair, r.condition, r.seed)
                                                       for r in expand(matrix) if r.model == model["id"]]))
                 except (OSError, ValueError, KeyError) as exc:
                     model_receipt["flags"].append(f"model_run_failed:{type(exc).__name__}")

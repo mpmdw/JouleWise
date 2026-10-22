@@ -312,3 +312,28 @@ and integrated runner/NVML tree cases. None ran in this continuation seat. The
 report separates the director's bed93a095 results from the final-head commands
 still NOT RUN here and lists the authorized harness wiring changes. Never rent
 on the strength of the authored test inventory alone.
+
+### Round-2 power completeness (R5)
+
+Per episode, exclude channels whose notes JSON says supported=false, recording
+episode_power_channel_unsupported:<channel>. Every measured gpuN needs a supported
+trace, and each supported trace needs samples. power.empty alone is descriptive.
+
+For each device, D is the sum of twice each supported channel's maximum recorded
+timing half-width. Expected spacing E=max(nominal interval+D, sensor period).
+Only deduplicated driver fields (nonempty field_timestamps_us) use a sensor period:
+sensor_facts.period_ns, or the median driver timestamp step in microseconds times
+1000 with a provenance flag. Realized cycle C is the median gap overlapping the
+episode, or E with no such gap. C>2E fails the cycle check; B=2*max(C,E) is the
+lost-read bar. An edge beyond B plus clock-offset uncertainty fails coverage.
+For watts, an interior gap beyond max(B, output_averaging_window_ns) is a hole.
+Cumulative joules span any interior gap. Interior gaps have no offset uncertainty
+because it cancels. Gaps above B that leave no hole are recorded lost reads and
+do not invalidate completeness. These factors implement the lead's R5 ruling.
+
+Each model receipt includes power_coverage: episodes_checked,
+episodes_incomplete_on_power, episodes_with_lost_reads, max_gap_over_bar and
+max_cycle_over_two_expected. The ratios include every supported trace; edge gaps
+subtract clock uncertainty. Inspect these margins on the first paid calibration
+slice before approving a full matrix. This is sampling coverage, not proof of
+sensor calibration, continuous waveform reconstruction or attribution precision.
