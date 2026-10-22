@@ -331,7 +331,7 @@ class AppleCampaignTests(unittest.TestCase):
                 self.assertIn("endpoint_error:ValueError:", summary.failure_message)
                 self.assertFalse((bundle / "outputs/align_episode.json").exists())
 
-    def test_later_model_failure_preserves_partial_episode_and_fails_summary(self) -> None:
+    def test_later_model_failure_keeps_partial_episode_as_flag(self) -> None:
         base = episode_spec(hidden=False)
         turns = list(base.mock_turns)
         turns[1] = {**turns[1], "prompt_tokens": "not-an-int"}

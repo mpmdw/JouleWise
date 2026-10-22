@@ -1,43 +1,48 @@
-# align-apple lane report — fix round 2, continuation fix2c
+# align-apple — second independent review continuation
 
 ## SUMMARY
 
-The lead's local run at 10352c24b executed 23 lane tests: 22 passed; the campaign test failed strict validation because output_policy lacked emitted_tokens.
-Continuation fix2c starts from that pushed apple head, 10352c24bad016a4d26a821a70402582cd63a250; it does not restart from the spine.
-Correction b839ba2f96513660edaf1de25775fd5d572d78bf restores the realized integer count to bundle output_policy while preserving the fixed stop rule and separate episode_outcome.
-Identity-built, equal-across-outcomes and readiness-stack checks remain; realized-count assertions replace the mistaken absence assertion.
-The lead verified R2-1's clock-independent failures, R2-2's mock/real governed identity, and R2-3's mock/real turn-budget flags at 10352c24b.
-Lead-measured H1 retained FAILURES 0 and 63.999944957700336 J versus derived 64.0 J; real-MLX H2 succeeded with 768 output tokens and exact record round-trip.
-The D1 arithmetic and battery guidance remain conditional planning, with the lead's arithmetic check and historical battery ruling attributed below.
-This cloud seat executed 0 Python tests: the environment never became usable; the emitted_tokens correction is NOT EXECUTED.
-R2-7, the battery.py docstring and cooldown/IsCharging proposal, and lead-owned hardware/census/registration gates remain open.
+Continues lane/2026-10-21-align-apple from 86f441c938a803e8f98d08326fb84685ddaa2ecf; all pushes preserve parent history.
+Source fixes cover the remaining runtime-fault outcome, native finish reasons, mock token caps and malformed envelopes.
+Partial runtime failures now use UNKNOWN_ERROR and preserve buffered episode evidence through the controller's existing custody hook.
+Parsing handles template-prefilled and multiple think spans, bare Llama tool JSON and flagged unsupported tool-like formats.
+Non-finite main scores become None with a flag; malformed temperatures and mapping shapes stop during prepare.
+Per-turn provenance records earlier hidden reasoning's contribution to full-prompt prefill, retaining the raw conversation.
+The instrument paragraph cites measured 0.29–0.49 J repeatability on about 50 J points; fix2c verification is attributed to the lead at 86f441c93.
+Seven new production-path regression tests are committed, but this executor never became usable: zero Python tests or reviewer repros executed here.
+Findings 1–7 remain subject to executing verification; the known spine shard failure is untouched.
 
 ## FILES
 
-Round-2 paths (including this fix2c continuation):
+Changed against 86f441c93:
 
-- joulewise/align/apple/workload.py: startup validation before admission; zero-output model failure; shared bundle/readiness model, sampler and fixed policy; episode_outcome. Fix2c restores output_policy.emitted_tokens from the episode's realized decode-token count.
-- joulewise/align/apple/endpoint.py: turn_token_budget_reached:<index> on both mock and MLX paths.
-- tests/align/test_apple_campaign.py: reset/prompt prepare faults, FakeClock/SystemClock empty-run failures, partial-run disclosure, H3 final-turn cut, governed identity across outcomes and temperatures, and readiness agreement. In the existing battery test only the comment changed; all values/assertions remain intact. Fix2c replaces the mistaken emitted_tokens absence assertion with observed-count equality and the fixed stop-rule assertion, and compares readiness against every fixed policy field.
-- tests/align/test_apple_endpoint.py: native-helper budget flag; actual MLX adapter prepare/generation/bundle/readiness chain with only native computation synthesized. Fix2c checks the realized count and compares all fixed readiness policy fields; full projected-stack equality stays intact.
-- docs/align/apple_path.md: corrected evidence attribution, battery evidence/pilot checks, sourced detection-power arithmetic, variance units and quiet-time scenarios.
-- .codex-report/align-apple.md: this report, historical verification attribution and preserved round-1 plus round-2 FIX LOG.
+- joulewise/align/apple/endpoint.py — native finish-reason observation around the unchanged MLX generator; enforced mock cap/default finish semantics; complete think-span extraction; Qwen/Llama tool parsing and malformed/unsupported flags; per-turn prior_hidden_prefill_tokens.
+- joulewise/align/apple/workload.py — spec shape/temperature validation; finite score handling; fault/cut episode outcomes; UNKNOWN_ERROR on runtime faults after returned work; buffered failure-artifact salvage using EvidenceCustodyProvider.
+- tests/align/test_apple_endpoint.py — five new tests through run_benchmark with only the native mlx_lm module and distribution-version lookup injected; native faults on both clocks, stop/length semantics, parsing, NaN scorer, prior-hidden prefill and full governed identity parity.
+- tests/align/test_apple_campaign.py — two new SystemClock tests for malformed specs and actual mock budget enforcement; existing partial-fault regression now requires the authorized structured failure while retaining partial counts/flags/raw energy; existing ambiguous-budget fixture explicitly supplies finish_reason=None.
+- docs/align/apple_path.md — execution/failure semantics, finish reasons, supported parsing, transcript choice and prefill counterfactual, measured repeatability source and lead-attributed fix2c verification.
+- .codex-report/align-apple.md — current report and per-finding FIX LOG.
 
-The existing lane also includes apple/__init__.py, sampler.py and campaign.py;
-they are unchanged this round. The sole workload registry remains
-joulewise/adapters/__init__.py (lazy align_episode wrapping); the earlier
-configs/gates/hazard_refusals.json two-line prospective census exemption is
-unchanged. No round-2 registry exception/addition was needed.
+No registry file is changed in this continuation. Existing modules contain the
+new tests, so no module registry names are added. The original workload registry
+is joulewise/adapters/__init__.py; the earlier minimal
+configs/gates/hazard_refusals.json census exemption is unchanged.
+No protected contract, controller, reducer, shared MLX adapter, hazard, or
+machine-state file is modified. No .review3 script is committed.
 
-Read workloads.py, workload_profile.py, campaign_generator_core.py, suite.py,
-adapters/mlx_runtime.py, adapters/powermetrics.py and the existing anchor code.
-No change to those files, the reducer/controller/identity builder or any
-hazard code. The protected PIPELINE.md, records.py and interfaces.py are
-unchanged. Nothing under .review2/ is committed.
+Read the report first, then PIPELINE.md, records.py and interfaces.py.
+Inspected root AGENTS.md, the generated stop/queue pointers, Mission M0 and
+orchestration. No active stop card/global gate applied; the direct brief selects
+this bounded AGENT work. Nested AGENTS.md paths under joulewise, align/apple,
+tests/align, docs/align and .codex-report return 404 at this head.
+Read the workload/generator/adapter registration surfaces and the existing
+powermetrics/fiducial/kernel-clock/transition machinery. Their implementations
+and anchor remain unchanged. The historical report is retained in Git at
+[86f441c93](https://github.com/mpmdw/JouleWise/blob/86f441c938a803e8f98d08326fb84685ddaa2ecf/.codex-report/align-apple.md).
 
 ## PUBLIC API
 
-All modules below are under joulewise.align.apple; the shared records remain the crossing contract.
+Under joulewise.align.apple (unchanged signatures except the added custody hook):
 
 - sampler.seconds_ns(seconds: float) -> int
 - sampler.monotonic_ns(stamp: ClockStamp) -> int
@@ -46,393 +51,314 @@ All modules below are under joulewise.align.apple; the shared records remain the
 - sampler.ApplePowerSampler(config: BenchmarkConfig, clock: Clock, *, episode_domain: str, context: RunContext | None = None, adapter: Any | None = None)
 - ApplePowerSampler.start() -> None
 - ApplePowerSampler.stop() -> tuple[PowerTrace, ...]
-- ApplePowerSampler.clock_mappings, flags, uncertainty_evidence: recorded adapter/bridge evidence.
-- sampler.HAZARD_UNJUDGED: hazard.unjudged:battery,ac,thermal,contention.
-- sampler.POST_WINDOW_DWELL_S: 1.0, from quiet_mac_exploratory.json:post_window_sampling_dwell_s.
+- ApplePowerSampler.clock_mappings, flags, uncertainty_evidence expose adapter/bridge evidence.
 - endpoint.parse_completion(text: str, *, reasoning_tokens: int = 0) -> tuple[str, str, tuple[ToolCallRequest, ...], tuple[str, ...]]
 - endpoint.MlxEndpoint(runtime: Any, config: BenchmarkConfig, clock: Clock, *, episode_domain: str, prepare_metadata: Mapping[str, Any] | None = None, mock_turns: Sequence[Mapping[str, Any]] = ())
 - MlxEndpoint.chat(messages: Sequence[ChatMessage], *, tools: Sequence[Mapping[str, Any]] = (), max_tokens: int, temperature: float, seed: int | None) -> ChatResult
 - workload.EpisodeSpec(task_factory: str, condition: Condition, seed: int, max_turns: int, max_tokens: int, temperature: float, task_kwargs: Mapping[str, Any] = {}, mock_turns: tuple[Mapping[str, Any], ...] = (), schema: str = SPEC_SCHEMA)
-- EpisodeSpec.to_text() -> str; EpisodeSpec.from_text(text: str) -> EpisodeSpec
-- workload.EpisodeRuntimeAdapter(runtime: Any, clock: Clock): runtime is None only for a structured unsupported-backend prepare failure.
+- EpisodeSpec.to_text() -> str
+- EpisodeSpec.from_text(text: str) -> EpisodeSpec
+- workload.EpisodeRuntimeAdapter(runtime: Any, clock: Clock)
 - EpisodeRuntimeAdapter.prepare(config: BenchmarkConfig, context: RunContext | None = None) -> AdapterResult
 - EpisodeRuntimeAdapter.identity_projection_metadata(config: BenchmarkConfig) -> dict[str, Any]
 - EpisodeRuntimeAdapter.warmup(config: BenchmarkConfig, context: RunContext | None = None) -> AdapterResult
 - EpisodeRuntimeAdapter.run_workload(config: BenchmarkConfig, context: RunContext | None = None) -> RuntimeResult
+- EpisodeRuntimeAdapter.salvage_custody(context: RunContext) -> list[dict[str, Any]] — existing optional controller protocol, now implemented here for buffered failures.
 - EpisodeRuntimeAdapter.cleanup(config: BenchmarkConfig, context: RunContext | None = None) -> AdapterResult
 - workload.read_episode_bundle(bundle: Path) -> Episode
 - campaign.generate_campaign(base: BenchmarkConfig, specs: Sequence[EpisodeSpec], output_root: Path, *, model_tag: str, counterbalance: bool = True) -> tuple[Path, ...]
 
-Round-2 signatures are unchanged. Behavioral/output changes:
+New lane-local data:
 
-- prepare validates task.reset(seed), system_prompt(condition), user_prompt()
-  before runtime preparation/admission; failures retain task_unavailable:<type>:<message>
-  and RUNTIME_UNAVAILABLE.
-- run_workload raises AdapterFailure(UNKNOWN_ERROR, ...) if no chat result
-  returned generated tokens, independently of clock domain.
-- identity_projection_metadata(config) and bundle workload_provenance carry
-  the same model, sampler and fixed output-policy fields. model includes name, source,
-  revision and prepared artifact_identity. sampler preserves the inner MLX
-  greedy controls (or mock deterministic greedy controls), plus
-  requested_temperature and max_tokens.
-- output_policy contains name=agent_episode, requested_tokens=max_turns*max_tokens,
-  max_turns, max_tokens_per_turn and the fixed stop_condition
-  episode_returns_or_turn_budget_reached. The bundle additionally carries
-  emitted_tokens, equal to workload_observed.output_token_count; readiness
-  has no realized count. The unchanged identity builder ignores emitted_tokens.
-- workload_provenance.episode_outcome and metadata.adapters.runtime.align_episode carry the actual
-  emitted_tokens and stop_condition (episode_returned or turn_budget_reached);
-  those outcome fields do not enter the governed identity.
-- MlxEndpoint.flags and Episode.flags add turn_token_budget_reached:<turn>
-  on exact integer equality with the per-turn token budget.
+- Mock script finish_reason defaults to stop for a completion fitting max_tokens;
+  an oversize completion is generated at max_tokens and records length, with
+  proportional text truncation explicitly flagged. Explicit None exercises the
+  no-native-reason fallback.
+- align_turns.jsonl generation records finish_reason, the adapter's original
+  runtime_stop_condition on MLX, and prior_hidden_prefill_tokens/method.
+  The latter is an integer token-count difference for MLX, zero without prior
+  recognized hidden spans, or null/flagged when scripted mock counts do not
+  provide the counterfactual. Negative deltas are kept with a flag.
+- episode_outcome uses endpoint_error/episode_error for faults,
+  turn_budget_reached for episode turn exhaustion, turn_token_budget_reached
+  when a per-turn cut occurred, otherwise episode_returned.
+- A partial runtime fault is a structured failed/unknown_error member. Its
+  summary failure_message contains the outcome and original fault flag.
+  outputs/align_failure.json retains outcome, provenance and realized counts;
+  align_runtime_events.jsonl retains completed-call events. The episode,
+  transcript and turn rows are preserved too; cleanup metadata repeats outcome.
+  Zero-output failures retain the previous no-episode-artifact behavior.
 
 ## TESTS RUN
 
-Lead's local verification at 10352c24b (supplied in the fix2c brief): macOS,
-/opt/homebrew/bin/python3.13, JW_B5_SYNTHETIC_ONLY=1, fresh TMPDIR per run,
-cwd repository root. These are the lead's results, not this cloud seat's.
+**Own executed count: 0. There are no own pass/fail/skip counts or repro outputs.**
+No Python process could start, before or after the source changes. No dependency
+was installed, so no extra-dependency run occurred. The source-only check is not
+a test result and does not satisfy the reviewer's acceptance gates.
 
-| Check | Lead-measured at 10352c24b | Own fix2c execution |
-|---|---|---|
-| python3 -m unittest discover -s tests/align -t . | 23 ran, failures=1; other 22 passed | NOT EXECUTED |
-| 16 existing modules, exact command below | 450 ran, one known spine shard failure (R2-7) | NOT EXECUTED |
-| H1: h1_offset_phase.py repo 100 | Both succeeded; FAILURES 0; dE=63.999944957700336 J, expected 64.0 J | NOT EXECUTED |
-| H3: h3_edges.py repo | 10 cases; reset refusal and final-turn flag corrected; all other lines unchanged from b7739911b | NOT EXECUTED |
-| H4: h4_sys_zero_turn.py repo | 2 cases: reset unsupported/runtime_unavailable; turn-0 failed/unknown_error | NOT EXECUTED |
-| id_probe.py repo | identity built; sampler/artifact/fixed policy recorded | NOT EXECUTED |
-| H2: h2_real_mlx.py repo local-snapshot Qwen3-1.7B-4bit 768 | Succeeded, 1 turn, prefill 168, decode 768; identity built; round-trip True | Not attempted: Apple Silicon required |
-
-The sole lane failure was
-tests.align.test_apple_campaign.AppleCampaignTests.test_generator_real_campaign_and_hidden_work_control
-(line 189 at 10352c24b). The member itself succeeded, but strict campaign
-validation rejected missing output_policy.emitted_tokens and its mismatch
-with workload_observed.output_token_count. The new R2-1/R2-2/R2-3 tests
-were among the other 22 passing tests. Fix2c corrects the missing key;
-there is no executed result for that correction yet.
-
-Lead's exact existing-module command at 10352c24b:
-
-    python3 -m unittest tests.test_mlx_runtime tests.test_adapters_powermetrics tests.test_mock_adapters tests.test_shard_split tests.test_fixture_orphan_census tests.test_custody_mode_inventory tests.test_revision_five_b_readers tests.test_single_count_discipline_census tests.test_digest_pin_census tests.test_identity_pins tests.test_repin tests.test_window_lineage tests.hazards.test_refusal_allowlist tests.test_shard_tests tests.hazards.test_battery tests.test_controller_hazard_flags
-
-Own fix2c attempts: executed Python test count 0. The first tool command was
-python3 --version (cwd /workspace); it failed before process creation:
+The managed environment repeatedly reported observations_current=true,
+pending/starting, connectivity=offline, capabilities=[], failure=null.
+Two startup waits, status retries and retained-diagnostic metadata inspection
+found no usable executor or retained diagnostic capture. Every exec command
+failed before process creation with:
 
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-Discovery and both touched test modules were submitted before and after the
-correction, with cwd /workspace/JouleWise; every attempt failed before launch:
+This prevented local fetch/checkout/status, reading /etc/codex/network-policy.json,
+materializing the unchanged APPENDIX scripts in .review3/, creating fresh
+TMPDIRs/outdirs and running any harness. GitHub inspection confirmed the initial
+head exactly matched 86f441c93. Commits use that head's tree, one parent, force=false
+and an expected-head lease, on the apple branch only. No local user files were
+read or overwritten. The networking policy was not inferred from unready state.
 
-    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest discover -s tests/align -t .
-    JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest tests.align.test_apple_campaign tests.align.test_apple_endpoint
+Exact submitted baseline/setup commands (none launched):
 
-No Python version, own pass/fail/skip count, syntax/import check or harness
-measurement exists. A bounded startup wait and retries left the instance pending/offline with
-capabilities []. Stopped waiting within the brief's approximately ten-minute
-limit. The unavailable executor also prevented local fetch/checkout, reading
-/etc/codex/network-policy.json, fresh TMPDIR creation and writing the scripts
-under .review2/. Read the existing pushed head and
-made commits through GitHub, using parent-preserving, non-forced,
-expected-head updates. No optional dependency was installed and no
-extra-dependency run occurred here. The whole suite was not run.
+    git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-apple
+    JW_B5_SYNTHETIC_ONLY=1 python3 -B /workspace/JouleWise/.review3/e2e_mlx_r2.py /workspace/JouleWise /tmp/apple-review-baseline raise
 
-Required correction reruns remain NOT EXECUTED; use cwd repository root,
-JW_B5_SYNTHETIC_ONLY=1 and a fresh TMPDIR for each command:
+Exact submitted test commands, before and after the changes as applicable,
+workdir /workspace/JouleWise (none launched; even mktemp did not execute):
 
     JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -m unittest discover -s tests/align -t .
     JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -m unittest tests.align.test_apple_campaign tests.align.test_apple_endpoint
-    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -P .review2/h1_offset_phase.py /workspace/JouleWise 100
-    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -P .review2/h3_edges.py /workspace/JouleWise
-    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -P .review2/h4_sys_zero_turn.py /workspace/JouleWise
-    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -P .review2/id_probe.py /workspace/JouleWise
 
-This seat did not materialize or adapt the APPENDIX scripts. The lead's H4
-run at 10352c24b used only the brief-authorized H3-style absent-episode
-try/except around read_episode_bundle. H2 was not attempted here; the lead
-already ran the real MLX path at 10352c24b with mlx_lm 0.31.3.
+The reviewer module group was submitted as separate processes/TMPDIRs:
 
-Historical evidence retained, also not this seat's results:
+```sh
+for apple_module in tests.hazards.test_refusal_allowlist tests.test_shard_tests tests.test_mlx_runtime tests.test_adapters_powermetrics tests.test_mock_adapters tests.test_shard_split tests.test_fixture_orphan_census tests.test_custody_mode_inventory tests.test_revision_five_b_readers tests.test_single_count_discipline_census tests.test_digest_pin_census tests.test_identity_pins tests.test_repin tests.test_window_lineage tests.hazards.test_battery tests.test_controller_hazard_flags
+do
+    JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -m unittest "$apple_module"
+done
+```
 
-| Source | Command / harness | Reported result |
+All reviewer harness commands were also submitted, but the shell never started.
+The .review3 scripts remain unmaterialized; running them requires writing the
+APPENDIX verbatim first. Use a fresh TMPDIR/outdir for each invocation, with
+JW_B5_SYNTHETIC_ONLY=1 and cwd /workspace/JouleWise:
+
+    python3 -B .review3/e2e_cli_r2.py /workspace/JouleWise <fresh outdir>
+    python3 -B .review3/e2e_mlx_r2.py /workspace/JouleWise <fresh outdir> normal
+    python3 -B .review3/e2e_mlx_r2.py /workspace/JouleWise <fresh outdir> truncate
+    python3 -B .review3/e2e_mlx_r2.py /workspace/JouleWise <fresh outdir> raise
+    python3 -B .review3/e2e_mlx_r2.py /workspace/JouleWise <fresh outdir> raise0
+    python3 -B .review3/e2e_mlx_r2.py /workspace/JouleWise <fresh outdir> think
+    python3 -B .review3/mlx_plain_ref.py /workspace/JouleWise <fresh outdir>
+    python3 -B .review3/edge_r2.py /workspace/JouleWise <fresh outdir>
+    python3 -B .review3/sysclock_r2.py /workspace/JouleWise <fresh outdir>
+    python3 -B .review3/hazard_r2.py /workspace/JouleWise
+    python3 -B .review3/strict_identity.py /workspace/JouleWise <e2e_cli outdir> <fresh ref outdir>
+
+Historical execution supplied by the lead/reviewer, not this seat:
+
+| Source | Command/check | Result |
 |---|---|---|
-| Lead at 9162afd6d | python3 -m unittest discover -s tests/align -t . | 19, OK |
-| Lead at 9162afd6d | python3 -m unittest tests.hazards.test_refusal_allowlist tests.test_shard_tests | 27, one known spine shard failure; allowlist passes |
-| Lead at 9162afd6d | First 12 modules of the 16-module command above | 300, OK |
-| Reviewer at b7739911b | python3 -m unittest discover -s tests/align -t . | 19, all passed |
-| Reviewer at b7739911b | Same 16 existing modules | 450, one known spine shard failure |
-| Reviewer at b7739911b | H1 at 100 Hz | Both succeeded; FAILURES 0; worst-turn error 0.02 J |
-| Reviewer at b7739911b | H2, real Qwen3-1.7B-4bit MLX / mock telemetry | Succeeded; 2 turns, 5 parsed/run tool calls; pre-R2-2 identity absent |
-| Lead at b7739911b | H3, H4, id_probe | Pre-fix reset/turn-0 failures, missing governed identity and final-turn flag |
+| Lead, 86f441c93 | python3 -m unittest discover -s tests/align -t . | 23 tests, all OK, 47.6 s; fix2c strict campaign correction executed |
+| Lead, 86f441c93 | e2e_mlx_r2.py normal/truncate/think | strict []; harvest and arm identity ab28006118e6c92f; agent_episode / episode_returns_or_turn_budget_reached on both sides |
+| Lead, 86f441c93 | e2e_mlx_r2.py raise0 | failed/unknown_error; no_model_call_returned_tokens |
+| Lead, 86f441c93 | edge_r2.py and sysclock_r2.py reset_raises | unsupported/runtime_unavailable; task_unavailable:RuntimeError |
+| Lead, 86f441c93 | sysclock_r2.py normal | succeeded, 17.14 J; mapping uncertainty 2263 ns; first token within 477 ns of prefill end; strict clean |
+| Reviewer, b7739911b | 16 existing modules listed above | 450 ran, one pre-existing spine shard failure |
+| Reviewer, b7739911b | tests/align | 19 ran, all passed |
 
-The supplied lead/reviewer results do not separately report skip counts or
-reasons; none are inferred. The original round-2 cloud seat at 10352c24b
-executed no Python either. The lead's later local run verifies those fixes
-as described above; it does not execute b839ba2f96513660edaf1de25775fd5d572d78bf.
-GitHub file/diff/ancestry inspection is source review, not Python execution.
-No test was weakened: integer count and fixed stop-rule checks replace the
-incorrect absence assertion; raw readiness comparisons exclude only the
-unavailable realized count. Built-identity, cross-outcome identity equality,
-all fixed policy fields and full readiness-stack equality remain checked.
+Skip counts/reasons were not separately supplied for those historical runs;
+none are invented. Seven added methods imply 30 discovered tests if discovery
+remains unchanged; **30 is a source count, not an executed result**.
+No existing test is skipped, deleted or weakened to suppress a defect:
+the partial-fault test retains counts/flags and raw measured energy and adds
+the newly authorized failure outcome/artifact assertions. The ambiguous
+at-budget fixture now explicitly lacks a finish reason, preserving its cut
+assertion while new complete-at-budget cases exercise the opposite result.
 
 ## END-TO-END
 
-The lead's local 23-test run at 10352c24b exercised the round-2 regressions below;
-22 passed and the strict campaign test failed as described above. The fix2c
-count correction has no executed verification:
+Own execution is blocked. New tests use real run_benchmark and either
+SystemClock or MLX with only MlxRuntimeAdapter._import_mlx_lm and
+_distribution_version patched. Registry, preparation, warmup, generation loop,
+telemetry, controller, reduction, bundle validation and identity derivation are
+real; no endpoint.chat-only or FakeClock/mock-only test substitutes for these.
 
-- AgentTask startup -> real registry/controller prepare -> unsupported,
-  RUNTIME_UNAVAILABLE before idle/warmup, for reset and both prompt faults.
-  A short SystemClock reset case and a both-clocks turn-0 model failure
-  require the same outcomes as FakeClock; a later failed call retains a
-  successful partial episode with endpoint_error.
-- H3's final turn emits exactly max_tokens and requires
-  turn_token_budget_reached:5; the existing MLX helper world emits its exact
-  512-token budget and requires turn_token_budget_reached:0.
-- Real mock runtime/telemetry -> bundle -> build_stack_identity -> readiness
-  _runtime_probe_metadata/derive_model_runtime_config_from_metadata. Matching
-  registered budgets with episode_returned versus turn_budget_reached must
-  have equal identities; requested temperature 0.7 must differ from 0.0 and
-  retain its mismatch flag. Both outcomes and actual emitted counts stay recorded.
-- Real MLX registry/prepare/_generate/controller/bundle and readiness with a
-  synthetic native stream, local synthetic weight bytes, 2048 prompt tokens
-  and D-019 10 ms/token timing; projected model/sampler/policy must match.
+The native fixture has four turns with 180/260/140/90 completion tokens,
+three 2/1/3 s tool waits, full growing prompts and the reviewer's 1500-token
+preamble/four-character tokenizer construction. Faults occur at turn 0 or 1.
+The cut world requests 400 on turn 1 against 300; exact-stop and explicit-length
+worlds each emit 300 with different native reasons. Parsing variants cover a
+prefilled opener, both think blocks, bare Llama parameters JSON and an unknown
+tool format. NaN scoring must preserve four turns and artifacts.
+The hidden-history fixture derives turn-2 prefill 1795 versus 1721, difference
+74: 40 * len("covert ") + len("<think></think>") = 295 added characters.
+The independent character arithmetic was checked in JavaScript here; it is not
+Python execution or validation of the implementation.
 
-Lead-measured at 10352c24b, H3 retained context_overflow_turn3 at 876.81 J
-with six turns, dict_tool at 615.21 J with five coerced-result flags,
-temperature's mismatch flag, hidden_mid_turn at 637.71 J with 300 hidden
-tokens (+22.5 J), and unclosed_think's reasoning flag. Invalid task,
-condition and boolean budget stop at prepare without an episode.
-reset_fails now gives unsupported/runtime_unavailable and
-task_unavailable:RuntimeError:reset fault under both FakeClock H3 and
-SystemClock H4. H4 turn0_model_call_fails gives failed/unknown_error with
-align_episode:no_model_call_returned_tokens. H3 final_turn_at_budget
-includes turn_token_budget_reached:5.
+The SystemClock mock world has 1500/1800/2200 prompt tokens, 180/300/90 normal
+completion tokens, two short tool waits and 10 Hz telemetry. An alternate
+5000-token script must produce only 300 on turn 1 and an unclosed envelope.
+Nine malformed-spec variants stop during real prepare with SystemClock.
 
-Lead-measured at 10352c24b, H1 at 100 Hz had two succeeded members,
-offset_ns=-1790901234567899904, uncertainty 5123/5004 ns,
-dE turns=63.999944957700336 J versus derived 256 * 0.010 * 25 = 64.0 J,
-FAILURES 0. These are the lead's values, independent of the reviewer's
-earlier 0.02 J worst-turn error quoted below.
+Lead/reviewer-measured eight-turn campaign world (supplied in this brief):
+generate_campaign -> shared renderer/order manifest -> run_campaign CLI ->
+existing mock runtime/telemetry -> bundle/reducer -> read_episode_bundle.
+Two seeds by two conditions; eight tools including two in one turn and one
+zero-duration return. Baseline totals are 38,850 prompt tokens, 3,890 completion
+tokens and 15.5 s tools. D-019 timing gives 38.85 + 38.90 + 15.50 = 93.25 s,
+at 7.5 W = 699.375 J. The sabotage turn adds 300 hidden tokens:
++300 * 0.010 s * 7.5 W = 22.5 J, for 96.25 s / 721.875 J.
+Measured difference was 22.500000000009 J, worst per-turn relative error
+2.2e-15; turn plus tool energy equaled gross, ABBA order and strict validation
+were clean. The required agreement bar is 1e-6 relative because these synthetic
+constants have no printed uncertainty; the effect exceeds the brief's ~1 J
+attribution bar. At 86f441c93 the sabotage-only equality-based cut flag remained;
+the new finish-reason logic is intended to remove it, but has no executed repro.
 
-Lead-measured at 10352c24b, H2 used real MLX, SystemClock, mock telemetry,
-the repo .venv with mlx_lm 0.31.3 and local Qwen3-1.7B-4bit snapshot
-revision 3b1b1768f8f8cf8351c712464f906e86c2b8269e. Status succeeded;
-one turn, 168 prefill and 768 decode tokens, episode 3.151 s.
-Flags included turn_token_budget_reached:0 and unclosed_reasoning_span.
-The greedy sampler was pinned at temperature 0.0 (requested 0.0),
-make_sampler API/parameter temp, max_tokens 768. Model artifact identity
-was present; build_stack_identity returned built; records round-trip True.
-The bundle/readiness fixed policy was name=agent_episode,
-requested_tokens=4608, max_turns=6, max_tokens_per_turn=768,
-stop_condition=episode_returns_or_turn_budget_reached.
-episode_outcome was emitted_tokens=768, stop_condition=episode_returned,
-and workload_observed.output_token_count=768. At that head the bundle
-still lacked output_policy.emitted_tokens, the strict-validation defect
-fixed in b839ba2f96513660edaf1de25775fd5d572d78bf; the lead's H2 did not execute this correction.
-
-Lead-measured id_probe at 10352c24b likewise built the identity, with
-mock artifact identity, sampler and episode_outcome. Its fixed policy
-used requested_tokens=7680, max_turns=6, max_tokens_per_turn=1280 and
-the same stable stop rule; it also lacked the now-restored emitted_tokens.
-
-Prior observed production-shaped world (lead-measured at 9162afd6d):
-six turns, five ledger tools, 27,648 prompt tokens, 4,608 base output tokens
-and 8.3 s tool waits. At D-019's 1 ms/prompt token, 10 ms/output token and
-7.5 W, derived baseline duration is
-27.648 + 46.080 + 8.300 = 82.028 s, energy 615.21 J.
-Adding 256 hidden output tokens gives derived +2.56 s / +19.2 J.
-The lead ran generate_campaign -> shared renderer/write boundary ->
-members/order_manifest -> campaign CLI/controller -> existing mock runtime
-and telemetry -> immutable bundle/reduction -> read_episode_bundle.
-In-process, CLI and policy harnesses succeeded with these values:
-
-| Quantity | Derived baseline / hidden | Lead-measured at 9162afd6d baseline / hidden |
-|---|---:|---:|
-| Duration | 82.028 / 84.588 s | 82.028 / 84.588 s |
-| Gross energy | 615.21 / 634.41 J | 615.2100000000811 / 634.4100000000919 J |
-| Prefill energy | 207.36 / 207.36 J | 207.36 / 207.36 J |
-| Decode energy | 345.60 / 364.80 J | 345.60 / 364.80 J |
-| Tool energy | 62.25 / 62.25 J | 62.25 / 62.25 J |
-
-The lead's observed dE was 19.200000000010846 J; this agrees with the
-derived 19.2 J within the brief's 1e-6 relative deterministic bar.
-The real synthetic HAZARD fixture was 84.587953664 s, six turns and 256
-hidden tokens. Its 46.336 microsecond deficit against derived 84.588 s
-comes from epoch-scale FakeClock float sleeps; at 7.5 W that is about
-0.35 mJ, below the approximately 1 J attribution limit. The lead's passing
-battery test covered the whole episode request: clean control, -865 mA
-late-tool assist disclosure and +865 mA charging exclusion. The model-load
-origin of the real -865 mA observation is now correctly stated.
-
-Reviewer-measured at b7739911b, H1 used an offset monotonic clock with a
-6 microsecond read bracket and 100 Hz phase-dependent telemetry:
-40 W prefill, 25 W decode, 6 W tool waits, 7.5 W otherwise.
-Every turn and tool integration passed its derived sample-edge bar;
-worst-turn error was 0.02 J. The hidden-token effect was
-63.999944957700336 J against derived 256 * 0.010 * 25 = 64.0 J;
-FAILURES 0. Its first-token/prefill checks passed.
-Reviewer-measured at b7739911b, the SystemClock record round-tripped
-exactly with uncertainty 2740 ns. Lead-measured at 9162afd6d, its earlier
-SystemClock harness had uncertainty 2263 ns and exact record round-trip.
-
-Derived D1 arithmetic only: at h=128, B=2 J and the stated
-sigma_window=5 J scenario, rounded historical e=0.0998 gives
-delta=12.7744 J and ceil((2.801585218*5/10.7744)^2)=2 windows/model;
-e=0.37575 gives delta=48.096 J and
-ceil((2.801585218*5/46.096)^2)=1.
-For two models at six hours/window, science time is 24 h / 12 h;
-adding one six-hour pilot per model gives 36 h / 24 h.
-The lead's arithmetic check at 10352c24b confirmed the intermediate
-ratios 1.300112 and 0.303886, squared 1.690291 and 0.092347, hence N=2/1.
-These are known-sigma calculations, not a recommendation that one pilot
-estimates window variance. The plan explicitly requires pilot-estimated
-variance and t quantiles; independent analysis and registration remain open.
+The lead's HAZARD fixture succeeded with 96.24996 s; the reported 40 microsecond
+gap is epoch-scale FakeClock accumulation. Historical real MLX H2 at 10352c24b
+also succeeded with Qwen3-1.7B-4bit / mlx_lm 0.31.3 / SystemClock / mock telemetry,
+one turn, 168 prefill and 768 decode tokens, exact record round-trip. It predates
+this continuation. No hardware was run by this seat.
 
 ## DECISIONS I MADE
 
-- The original round-2 seat continued b7739911b. Fix2c continues its pushed
-  head 10352c24bad016a4d26a821a70402582cd63a250, preserving all prior fixes.
-  The executor could not launch; use GitHub parent-preserving, non-forced
-  expected-head updates and the brief's unexecuted-correction fallback.
-- R2-1 follows the lead's installed disposition: validate reset and both
-  prompts in prepare. Tasks must tolerate repeated reset(seed); prepare's
-  validation reset is outside measured energy, warmup resets, and the measured
-  episode resets again.
-- Use FailureReason.UNKNOWN_ERROR for a prepared measured run in which no
-  model call returns generated tokens. The controller maps it to failed;
-  RUNTIME_UNAVAILABLE would map to unsupported, which is appropriate for
-  prepare/configuration failures instead. Include endpoint/episode flags in
-  the AdapterFailure message. A returned positive completion count followed
-  by any later task/model fault stays a recorded partial episode.
-- Generated token counts are integers: positive means returned work, and
-  exact equality with max_tokens means a per-turn budget cut. No float
-  tolerance is applied to those integer properties.
-- Govern model identity from the inner runtime's prepare metadata. Preserve
-  MLX's actual greedy sampler fields, record requested_temperature separately,
-  retain the mismatch flag, and include max_tokens in sampler identity.
-  The mock inner runtime has no probe; the lane-local adapter supplies its
-  actual deterministic tokenizer/greedy identity using the prepared version.
-- The identity builder retains only output-policy name, requested_tokens and
-  stop_condition. Use a fixed total requested-token budget, stable stop rule,
-  and explicit max_turns/max_tokens_per_turn in bundle/probe policy.
-  Sampler max_tokens preserves per-turn budget identity even when different
-  budget factorizations share the same total. Keep the stop rule fixed;
-  no realized stopping outcome enters those governed policy fields.
-- Keep actual stop_condition/emitted_tokens in episode_outcome and the
-  existing metadata.adapters.runtime.align_episode record. Fix2c also restores
-  emitted_tokens in bundle output_policy, as cli.py requires, equal to
-  workload_observed.output_token_count. identity_pins.py projects only name,
-  requested_tokens and stop_condition, so this does not split identities.
-  Readiness has no realized output; compare fixed policy fields and full
-  projected stacks, and verify realized counts separately. This corrects the
-  lead's earlier disposition and its absence assertion, without weakening
-  identity/readiness checks. Neither cli.py nor identity_pins.py is changed.
-- Keep in-process MLX: existing workloads use the same model load, tokenizer,
-  pinned greedy sampler, stream_generate and events. No server or duplicate
-  model is launched, and all optional imports remain lazy.
-- No new workload registry is needed: adapters/__init__.py already wraps
-  align_episode lazily. Production admission/dwell/hazards, the reducer and
-  clock anchor remain unchanged.
-- Retain round-1 disjoint indexed prefill/decode/tool events, prefill-end
-  first_token_ns, clock half-ulp accounting, standalone hazard disclosure and
-  dwell, pack UUID/ABBA ordering, and the warning that generic ttft_s,
-  decode_latency_s and energy_token_j are not episode reporting metrics.
-- R2-4 removes the unsourced coefficient, uses the explicitly labelled
-  Qwen2.5-1.5B reconstruction and the nearest-size Qwen2.5-7B absolute-cell
-  member mean (n=10), and preserves their D-117 diagnostic/pre-genesis status.
-  All planning results are derived from printed inputs, not measurements here.
-  N counts independent windows in the table; shared window variance does not
-  vanish by increasing pairs. Sigma=5 J is a scenario parameter. Small z-based
-  counts assume known sigma; pilot estimation and t quantiles determine practice.
-- R2-5 follows the quoted 2026-10-06 ruling, which corrects -865 mA to model
-  load. Only the existing battery test comment changes. Keep DISCLOSE for
-  on-AC discharge and the existing charging/AC/missing-evidence exclusions.
-  Carry item-5 sensitivity and item-6 reopen evidence into the pilot.
-  Battery capacity/resume-charge state of charge are pilot parameters, not
-  invented constants. Hazard docstring/cooldown proposals go to the lead.
-- R2-6 now also attributes the local run at 10352c24b to the lead, including
-  real-MLX H2, H1, edge harnesses, identity and test counts. Only the fix2c
-  correction remains NOT EXECUTED; arithmetic stays labelled derived.
-- R2-7 makes no changes: the brief explicitly excludes the spine shard defect
-  and leaves registry merge timing to the lead.
+- Continue the existing lane; never reset to spine or force-push. With the
+  executor unusable, perform the independently doable source work via GitHub
+  and explicitly leave all executable acceptance gates open. Historical
+  evidence is attributed; current repro outputs are not fabricated.
+- Choose the brief's allowed structured-failure option for a model/episode
+  runtime fault after returned work, matching non-align MLX behavior.
+  UNKNOWN_ERROR maps to failed; it is not a physical refusal. This makes
+  summary/harvest status disclose the fault under both clocks. Preserve partial
+  episode evidence and flags using the existing optional custody protocol after
+  sampling; no measured-window filesystem writes or controller changes.
+  Task/tool/scorer conditions retain their flag behavior; analysis membership
+  remains the analysis plan's decision. The previous partial-success assertion
+  is updated to this explicitly authorized outcome, with evidence checks kept.
+- Native finish reasons take precedence over equality. length/max_tokens/
+  max_new_tokens mean cut; a supplied stop at exact budget means complete.
+  No reason plus exact integer equality is ambiguous and flagged as a cut,
+  as the brief requires. A wraps-preserving native observer forwards the same
+  stream/sampler and restores the prepared module in finally.
+- Enforce mock max_tokens before real generation so time/energy/token counts
+  all reflect the cap. A script fitting the budget defaults to stop; exceeding
+  it uses length and a flagged proportional text prefix. An explicit None
+  finish reason models the missing-reason fallback. No tolerance applies to
+  integer tokens, statuses, enum outcomes or governed identity equality.
+- Recognize every closed think span and a leading orphan close (ambiguous
+  template-prefilled opener, flagged). Preserve unclosed reasoning with a flag.
+  MLX hidden-generation counts remain retokenized estimates, explicitly flagged;
+  no claim that delimiter retokenization reproduces stream boundaries.
+- Support bare Llama name/parameters JSON alongside Qwen tool envelopes.
+  Recognized malformed syntax is flagged; suspected unknown tool syntax is
+  retained and flagged. No parser can infer arbitrary unknown protocols from
+  ordinary prose; the documentation now states that limit.
+- Retain raw assistant history for the actual agent. Record the per-turn
+  tokenized-template difference with earlier hidden spans/delimiters removed,
+  allowing both raw-work and hidden-free prefill predictors. Counterfactual
+  encoding overhead remains in tokenize. Mock scripted counts are null/flagged
+  unless the script supplies the counterfactual. This is an annotation, not
+  a transformation of the transcript or a data-exclusion rule.
+- Replace non-finite/non-numeric main scores with None and a recorded flag;
+  never pass NaN to records.to_json(allow_nan=False). Validate malformed spec
+  temperatures and mapping shapes at the existing prepare boundary.
+- F8 follows the lead's source pointer, verified against D-078 clause 11:
+  measured 0.29–0.49 J on ~50 J points in windows a9/a10, versus per-member
+  ~0.7–1.0 J clock-anchor-shift envelopes. Preserve the entry's later provenance
+  caveats and D-117 diagnostic status. The lead's 86f441c93 run executed fix2c;
+  it is no longer described as unexecuted.
+- Keep the existing in-process MLX path, lazy optional imports, powermetrics
+  parser/anchor, phase pairing, identity fields, ABBA ordering, hazard gates,
+  idle admission, dwell and registered D1 planning arithmetic.
+- F9 is explicitly outside this lane. No test registry or shared shard repair.
+  No new module names or registry exceptions are introduced.
 
 ## CONTRACT-CHANGE
 
-No installed contract change. Preserve the prior lane-local proposals:
+No shared contract is modified. Optional proposal: records.Turn could expose
+prior_hidden_prefill_tokens plus its counterfactual method; the installed
+lane-local workaround is align_turns.jsonl generation provenance.
+This quantity includes delimiter/template token-boundary effects, so it must
+be defined as a tokenized-template difference, not a sum of independent hidden
+span tokenizations. Raw transcript choice is recorded above.
 
-1. Optional per-sample integer averaging supports on PowerTrace; current
-   workaround is interval notes and authoritative raw/CSV evidence.
-2. Optional clock-mapping capability on PowerSampler; current workaround is
-   ApplePowerSampler.clock_mappings.
-3. Post-telemetry artifact finalization; current workaround is the immutable
-   episode/trace join in read_episode_bundle.
-
-Round 2 needs no additional shared contract change. The mock identity fallback,
-fixed policy and outcome fields are lane-local. The three protected files are
-unchanged.
+Retain the prior proposals for per-sample PowerTrace averaging supports,
+PowerSampler clock-mapping capability and post-telemetry artifact finalization.
+Current workarounds remain trace notes/raw evidence,
+ApplePowerSampler.clock_mappings and read_episode_bundle's immutable join.
 
 ## OPEN ISSUES
 
-- R2-7: tests.test_shard_tests has the spine defect: shard names tests.align.*
-  versus discovery's align.*. Lead-measured at 9162afd6d and reviewer-measured
-  at b7739911b, and lead-measured at 10352c24b (450 tests, one failure),
-  the relevant existing groups had this sole failure. Do not repair it here.
-- R2-7: merging joulewise/adapters/__init__.py makes registered packs carry
-  code.changed_since_registration; merge timing is the lead's call.
-- Fix2c emitted_tokens correction b839ba2f96513660edaf1de25775fd5d572d78bf is NOT EXECUTED.
-  Rerun discovery, both touched modules and H1/H3/H4/id_probe on a usable host.
-  H4 permits only the specified absent-episode exception wrapper. The lead
-  already verified real-MLX H2 identity and the budget flag at 10352c24b;
-  those measurements precede this strict-validation correction.
-- Lead-owned outside scope: joulewise/hazards/battery.py line 11 still calls
-  the corrected model-load bursts "during inference"; fix that docstring.
-- Lead-owned outside scope: decide whether campaign cooldown should also
-  wait for IsCharging = No before the next member. Sustained adapter deficit
-  can drain the battery across members and later charging costs excluded data;
-  record per-member assist energy, state of charge and charging transitions.
-- Complete the prospective align hazard census before registering a real D1
-  HAZARD pack; the earlier registry exemption is not registration authority.
-- D1 pilot must measure whole-machine draw per candidate, battery capacity
-  and resume-charge state of charge, window/pair variance, cooldown and fit/KV
-  memory. Print each cell with and without battery.assist members; monitor
-  power-limit transitions, matched-second throughput/rails/frequency and
-  battery temperature for ruling reopen evidence.
-- Independent analysis, hardware attribution/calibration transfer, registered
-  extraction membership and authenticated launch remain lead/hardware gates.
-  No hardware was armed, installed, loaded or measured by this seat, and no
-  claim-bearing research result or registration was created.
+- Executing verification is blocked by the managed environment. Materialize
+  APPENDIX .review3 scripts verbatim and run every listed repro, lane discovery
+  and each reviewer module with its own TMPDIR at the pushed head. No current
+  finding is claimed to have passed a repro here. F1–F7 source changes and
+  failure-artifact salvage especially require execution before acceptance.
+- tests.test_shard_tests: known spine mismatch align.test_records versus
+  tests.align.test_records. Report it on rerun; do not repair it in this lane.
+- No real D1 registration/census, model fitting/KV pilot, power calibration,
+  battery/charging/cooldown ruling or independent residual analysis was done.
+  The prospective hazard census and adapters/__init__.py merge timing remain
+  lead-owned. No arming, installation, model load or hardware capture occurred.
+- Prior lead-owned outside-scope battery.py docstring correction and cooldown
+  IsCharging proposal remain unchanged; preserve the installed battery assist
+  DISCLOSE/exclusion rules and the documented pilot/sensitivity requirements.
 
 ## NEEDS_RULING
 
-none. All six authorized fixes follow the lead's dispositions. Existing
-data-membership rules and claim numbers are unchanged. The outside-scope
-battery cooldown proposal and shard/merge issues stay with the lead.
+none. The runtime-failure option and other changes are authorized by this brief.
+Unavailable execution is an infrastructure blocker, not a data-membership ruling.
 
 ## FIX LOG
 
-- 1 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef: remove enclosing align_turn_N phases; retain indexed inner events and turn records.
-- 2 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef: disable idle_admission.enabled in the synthetic campaign test only.
-- 3 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef, b9b0235e883272e04dc4bf2b8dab4724df017c22, 69a0bd56a1948c78fe52e33442b7f16de7507b27: assert success/energy on valid campaign, flag and HAZARD paths, and structured early failure on invalid paths.
-- 4 — fixed, verified by the lead's local run at 9162afd6d, b9b0235e883272e04dc4bf2b8dab4724df017c22: two-line configs/gates/hazard_refusals.json entry; alignment import stays branch-local; merge timing is disclosed above.
-- 5 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef, 69a0bd56a1948c78fe52e33442b7f16de7507b27: bad tasks/specs/mirrors return RUNTIME_UNAVAILABLE at prepare; no failed-spec benign episode is written.
-- 6 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef, b9b0235e883272e04dc4bf2b8dab4724df017c22, 69a0bd56a1948c78fe52e33442b7f16de7507b27: support only mock/MLX execution, reject every other backend at prepare, forward the runtime probe and test real align identity derivation.
-- 7 — fixed, verified by the lead's local run at 9162afd6d, 0882e9ecff2c2ce9ec106badf3e6d7f10abd3a59, 69a0bd56a1948c78fe52e33442b7f16de7507b27: ns-product half-ulp pricing, serialized-stamp resolution and no second charge of the anchor span; clock.py untouched.
-- 8 — fixed (documentation), b9b0235e883272e04dc4bf2b8dab4724df017c22, 69a0bd56a1948c78fe52e33442b7f16de7507b27: sourced historical e evidence, explicit e/sigma sensitivity, and policy-key-derived per-member cooldown in capacity. The lead's local Python runs at 9162afd6d do not independently verify this planning arithmetic; the independent-analysis/pilot requirement remains open.
-- 9 — fixed, verified by the lead's local run at 9162afd6d, b9b0235e883272e04dc4bf2b8dab4724df017c22: runner-compatible members/order_manifest.json and default matched AB/BA order.
-- 10 — fixed, verified by the lead's local run at 9162afd6d, 0882e9ecff2c2ce9ec106badf3e6d7f10abd3a59: hazard.unjudged flag on every standalone trace and one-second post-window dwell.
-- 11 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef, b9b0235e883272e04dc4bf2b8dab4724df017c22: episode/artifact flag names all three misleading summary fields; docs prohibit printing them for align.
-- 12 — fixed, verified by the lead's local run at 9162afd6d, 84fc4efefb73aa587497cc5d3931ded641ea87ef: first_token_ns uses the prefill end event.
-- 13 — fixed, verified by the lead's local run at 9162afd6d, b9b0235e883272e04dc4bf2b8dab4724df017c22: episode ordinal tags and persistent pack-unique UUID run ids.
-- Battery assist continuation — fixed, verified by the lead's local run at 9162afd6d, b9b0235e883272e04dc4bf2b8dab4724df017c22: real-bundle whole-episode span control, late tool-wait discharge and in-turn charging tests, plus per-candidate draw parameters and the DISCLOSE disposition.
-- tests.test_shard_tests — rejected: the brief explicitly identifies the discovery/shard naming mismatch as a spine defect outside WRITE_SCOPE; no source change made. The lead's local run at 9162afd6d reproduced the single known failure in the 27-test refusal/shard group; this fix1c seat could not execute a rerun.
+This section numbers the **second independent review findings 1–9**.
+"Fixed (source)" means implemented and pushed, not an executed pass.
+There is no own post-fix repro output because no Python process could start.
 
-### Round 2
+1. **fixed (source), a17561bc3689beb1e5635540d12cecf2d8b80c9a**. Earlier zero-output/startup cases were fixed by
+   10446eec7068b4d77458a04a73d66d159167080d. Lead at 86f441c93:
+   raise0 => failed/unknown_error/no_model_call_returned_tokens;
+   reset_raises on both harness clocks => unsupported/runtime_unavailable.
+   Remaining partial fault now records endpoint_error, fails the summary and
+   preserves partial artifacts after sampling. Native both-clock regression
+   added. Own raise/raise0 repro: BLOCKED before process creation with the
+   executor error quoted in TESTS RUN; no post-fix output.
+2. **fixed (source), a17561bc3689beb1e5635540d12cecf2d8b80c9a**. Native finish reasons govern cut detection;
+   mock oversize turns are actually capped; incomplete envelopes are flagged;
+   complete exact-budget stop is not cut; episode outcomes disclose cuts.
+   Native and SystemClock/mock regressions cover both directions. Own truncate,
+   mock_over_budget and e2e_cli repros: BLOCKED, no post-fix output.
+3. **fixed (by 5d9a3719c07868c43ff1a283bcb2adf9d199764c and
+   b839ba2f96513660edaf1de25775fd5d572d78bf)**. Lead output at 86f441c93:
+   harvest identity ab28006118e6c92f = arm identity ab28006118e6c92f;
+   agent_episode / episode_returns_or_turn_budget_reached on both sides;
+   normal/truncate/think strict []. No identity policy change this round;
+   new native full-stack/pin parity and realized-count regression retained.
+   Own identity/strict repros at pushed head: BLOCKED, no output.
+4. **fixed (source), a17561bc3689beb1e5635540d12cecf2d8b80c9a**. Prefilled/missing think opener is counted and
+   flagged; all closed blocks stripped; bare Llama tool JSON parsed; unknown
+   tool-like formats flagged. Four native parsing worlds through run_benchmark.
+   Own parsing repro execution: BLOCKED, no post-fix output.
+5. **fixed (source), a17561bc3689beb1e5635540d12cecf2d8b80c9a**. Non-finite main score becomes None plus
+   task_scoring_error:main_score_not_finite_numeric, allowing serialization.
+   Native NaN scorer regression requires succeeded plus written artifacts.
+   Own edge score_nan: BLOCKED, no post-fix output.
+6. **fixed (source), a17561bc3689beb1e5635540d12cecf2d8b80c9a**. Raw assistant history is a documented choice;
+   generation.prior_hidden_prefill_tokens/method records each turn's
+   counterfactual template difference. Native regression requires 1795-1721=74
+   on turn 2, and governed identity equality. Own think harness: BLOCKED;
+   the 74-token result is the lead's prior observation, not a current repro.
+7. **fixed (source), a17561bc3689beb1e5635540d12cecf2d8b80c9a**. from_text rejects non-numeric/non-finite
+   temperature and non-mapping task_kwargs/mock entries. Nine SystemClock
+   prepare-world variants require unsupported/runtime_unavailable.
+   Own malformed-spec edge repro: BLOCKED, no post-fix output.
+8. **fixed (documentation), 4d59950cffe07a2fb32e8502af2e4681a6b1638d**. Source read at 86f441c93,
+   docs/decision_log.md lines 4751–4768, D-078 clause 11 (2026-07-25):
+   "Repeatability is 0.29-0.49 J on ~50 J points"; per-member
+   "clock-anchor-shift envelope of ~0.7-1.0 J". apple_path.md now cites that
+   measured context and attributes 23 passing lane tests / strict [] to the
+   lead at 86f441c93. Source inspection finds neither stale NOT EXECUTED text
+   for fix2c nor "approximately 0.3 J" in that document. No runtime repro needed.
+9. **rejected — explicitly outside lane scope**. The reviewer reproduced
+   tests.test_shard_tests identically on spine 4d47c436. No source/registry edit.
+   Own module rerun was submitted with its own TMPDIR but BLOCKED before launch;
+   no claim of a fresh failing count. Historical reviewer group: 450 tests,
+   one spine shard failure.
 
-- R2-1 — fixed, verified by the lead's local run at 10352c24b, 10446eec7068b4d77458a04a73d66d159167080d: validate task startup at prepare; UNKNOWN_ERROR/failed when no model call returns generated tokens; FakeClock/SystemClock and partial-episode regressions.
-- R2-2 — fixed, verified by the lead's local run at 10352c24b (mock/real identity and readiness; strict emitted_tokens omission corrected separately below), 5d9a3719c07868c43ff1a283bcb2adf9d199764c, c08068e80d6b990b813f0f113b6ed27f5ef0c13e: prepared artifact and sampler provenance, stable registered-budget policy, outcome outside identity, mock/native readiness-versus-bundle regressions.
-- R2-3 — fixed, verified by the lead's local run at 10352c24b, 10446eec7068b4d77458a04a73d66d159167080d: exact-integer turn-token-budget flag shared by mock and MLX, with H3/native-helper assertions.
-- R2-4 — fixed, verified by the lead's local run at 10352c24b (planning arithmetic check, not a hardware result), 0102dd0b47368989006efc7d85c04702d2868e6a: sourced 1.5B/7B coefficients, pair/window variance model, known-sigma/t-pilot caveat and derived quiet-time arithmetic.
-- R2-5 — fixed, verified by the lead's local run at 10352c24b (battery regression passed; documentation follows the quoted ruling, D1 pilot remains prospective), 0102dd0b47368989006efc7d85c04702d2868e6a: correct model-load wording/comment only in existing battery test, cite overload validation, add pilot/sensitivity/sustained-deficit guidance and lead-owned proposals.
-- R2-6 — fixed (documentation; execution status reconciled in fix2c), 0102dd0b47368989006efc7d85c04702d2868e6a: replace stale execution statements with attributed lead/reviewer results; fix2c also records the lead's 10352c24b run and its own unavailable executor.
-- R2-7 — rejected: the round-2 brief explicitly says no action outside this lane; preserve the spine shard defect and adapters/__init__.py merge-timing note in OPEN ISSUES.
-
-- R2-2 emitted_tokens correction (fix2c) — fixed (NOT EXECUTED), b839ba2f96513660edaf1de25775fd5d572d78bf: restore the realized integer to bundle output_policy, equal to workload_observed.output_token_count, while retaining the fixed stop rule and separate episode_outcome. Replace test_apple_campaign.py's mistaken absence assertion with count equality and fixed-stop assertions; retain built identity, cross-outcome equality and full readiness-stack checks. Raw readiness/bundle policy comparisons in both identity tests exclude only the realized count, which readiness cannot know; every fixed field still agrees. This corrects the lead's wrong disposition, not a weakened check. cli.py and identity_pins.py stay unchanged.
+Earlier round-1/fix2c commit-by-commit logs remain in the linked historical
+report at 86f441c93. They are not reclassified as current execution evidence.

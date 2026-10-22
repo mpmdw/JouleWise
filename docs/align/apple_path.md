@@ -31,9 +31,30 @@ unmeasurable configurations, not hazard refusals or discarded observations.
 Prepare also calls reset(seed), system_prompt and user_prompt before idle
 admission. Tasks must tolerate repeated reset(seed): warmup and the measured
 episode reset again. A measured episode with no model call returning generated
-tokens fails with AdapterFailure(UNKNOWN_ERROR); later faults after returned
-tokens remain recorded flags. A completion equal to max_tokens adds
-turn_token_budget_reached:<turn index>, including an unclosed reasoning span.
+tokens fails with AdapterFailure(UNKNOWN_ERROR). A later endpoint or episode
+runtime fault also fails with UNKNOWN_ERROR, with the stop condition and fault
+in the summary failure message. Partial episode/transcript/turn artifacts are
+buffered during the measurement and preserved by the existing
+EvidenceCustodyProvider.salvage_custody hook after the controller stops sampling.
+outputs/align_failure.json records episode_outcome, provenance and realized
+counts; align_runtime_events.jsonl preserves the completed turns' native events.
+Cleanup metadata repeats the fault outcome. These are execution failures, not
+physical refusals; the analysis plan still owns any inclusion/exclusion rule.
+
+A turn is cut when its native finish reason is length/max_tokens/max_new_tokens,
+or when the native stream gives no reason and emits exactly max_tokens.
+A native stop at exactly the budget is complete. The lane observes the stream's
+finish reason while leaving _generate's generation loop intact. Mock scripts
+can supply finish_reason; the default is stop when the scripted count fits.
+A script above the budget generates only max_tokens through the real mock
+adapter, uses a proportional text prefix and records length plus
+mock_text_truncated_proportionally. A cut adds turn_token_budget_reached:<index>
+to the episode and a turn_token_budget_reached outcome when no later error or
+episode turn-budget exhaustion takes precedence. Unclosed recognized tool or
+reasoning envelopes are flagged. Scorer errors are flags; non-finite main
+scores become None plus a flag, preserving the episode artifacts. Malformed specs, including
+non-finite/non-numeric temperatures and non-mapping task kwargs or mock entries,
+stop at prepare as runtime_unavailable.
 
 MLX uses the existing in-process MlxRuntimeAdapter._generate helper, as current
 suite workloads do. This preserves model load, tokenizer, greedy sampler,
@@ -56,11 +77,34 @@ Heavy libraries remain
 lazy optional imports. No implicit weight download is permitted.
 
 The model's chat template receives messages and tools; encoding adds no
-duplicate special tokens. Explicit Qwen-style <tool_call> envelopes become
-calls; unknown formats remain text with flags. Retokenized reasoning counts,
-nonzero temperature against the pinned greedy sampler, tool faults and budget
-exhaustion are flags. Every prompt is rendered in full; cached_prompt_tokens
-is zero.
+duplicate special tokens. Explicit Qwen-style <tool_call> envelopes and bare
+Llama-style {"name": ..., "parameters": ...} JSON become calls. Suspected
+unsupported tool formats (tool/function markers or tool-like JSON keys) remain
+text with unsupported_tool_call_format; malformed recognized formats carry
+malformed_tool_call flags. Ordinary prose cannot reveal an arbitrary unknown
+tool protocol. All closed <think> spans are stripped for the visible completion;
+a leading </think> also handles a template-prefilled opener, with
+reasoning_open_tag_prefilled_or_missing to disclose the ambiguity. Unclosed
+reasoning remains text with a flag. Retokenized hidden-generation counts always
+carry reasoning_tokens_retokenized; they are estimates, not authoritative
+stream token labels. Nonzero requested temperature, tool faults and budgets
+remain recorded conditions.
+
+The agent receives its raw assistant history, including earlier reasoning, to
+preserve the actual task/model conversation. Every prompt is rendered in full;
+cached_prompt_tokens is zero. Each align_turns.jsonl generation row now records
+prior_hidden_prefill_tokens: the signed difference between the tokenized actual
+chat template and the same template with earlier recognized think spans and
+their delimiters removed. The reviewer fixture gives 74 on turn 2 (1795 minus
+1721). prior_hidden_prefill_method names chat_template_token_count_difference
+on MLX. Subtract this delta from prefill_tokens for the counterfactual
+hidden-free predictor; retain raw counts for the actual-work predictor.
+Counterfactual rendering/encoding runs in the existing tokenize phase, so its
+overhead remains measured. A negative delta is recorded and flagged rather than
+clamped. Scripted mock prompts supply no native tokenizer counterfactual:
+a script may state prior_hidden_prefill_tokens, otherwise a prior hidden span
+produces null and prior_hidden_prefill_count_unavailable. These lane-local
+annotations do not change records.v1 or the raw transcript.
 
 The existing controller owns idle admission, warmup, sampling, hazard bindings,
 post-window dwell, custody and reduction. generate_campaign uses
@@ -122,7 +166,7 @@ powermetrics_fiducial.py, kernel_clock.py and load_transition_alignment.py own
 the existing calibration, dispatch/fence, frequency-residual and provisional
 transition evidence. The bridge replaces none of them. The approximately 1 J
 attribution limit is distinct from the measured 0.29–0.49 J repeatability on
-about 50 J points in windows a9/a10: [D-078 clause 11, 2026-07-25](../decision_log.md#d-078).
+about 50 J points in windows a9/a10: [D-078 clause 11, 2026-07-25](https://github.com/mpmdw/JouleWise/blob/86f441c938a803e8f98d08326fb84685ddaa2ecf/docs/decision_log.md#L4751).
 That entry contrasts repeatability with a per-member clock-anchor-shift envelope
 of about 0.7–1.0 J. It also retains later provenance caveats on the old windows;
 these are historical instrument diagnostics, not D1 calibration or claim authority.
@@ -380,3 +424,22 @@ and the MLX normal/truncate/think harnesses printed strict []. This is the
 lead's evidence, not a cloud-seat execution. See the lane report for exact
 commands, attribution and remaining checks.
 Never run the whole suite from this brief.
+
+
+## Second-review continuation
+
+Source fixes for second-review findings 1, 2 and 4–7 are in a17561bc3.
+The updated partial-fault test checks a structured failure, preserved integer
+turn/token counts, retained raw energy and fault artifacts. The budget fixture
+now explicitly states a missing finish reason to exercise the ambiguous cut;
+a separate SystemClock world checks that the default complete mock turn at
+exactly the budget is not cut. No existing test is skipped or removed.
+Seven added tests run through run_benchmark using SystemClock or the MLX backend
+with only the native library and its version lookup injected.
+
+This cloud executor remains pending/starting and offline, with capabilities [].
+No Python process or reviewer harness has executed in this continuation, and
+the APPENDIX scripts could not be materialized under .review3/. Source inspection
+and derived fixture arithmetic are not passing repros. The report lists the
+blocked commands and findings individually; current source fixes require an
+executing rerun before acceptance.
