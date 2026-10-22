@@ -1,4 +1,5 @@
 # SUMMARY
+- FIX ROUND 1 IN PROGRESS: B1 and cost/capture fixes are checkpointed; calibration and verification pending.
 - Implemented lazy HF Qwen3-MoE, Qwen2-MoE and Mixtral routing capture with phase tags.
 - Verified Qwen3-30B-A3B config: 48 layers, 128 experts, top-8.
 - Implemented all routing-statistics APIs, exact/Monte Carlo grouped tests and Holm correction.
@@ -389,3 +390,8 @@ none
 
 # NEEDS_RULING
 none
+
+# FIX LOG
+- B1: fixed in 6ad8e1bc76f5757c1ed1b5eb6d1e22e02f5b820e; regressions in 10a8dea6be7c213e130bbdee1c87c45e2ee91b9b (execution pending).
+- m2: fixed in 030f99db854988532becceb3f7526c2e4aa9d2c4 (execution pending).
+- m3: fixed in 3db851fa49c39e2a522925dc8b0690efba66fd61 and addbcd7ba519ea0864757130e850262995e53d0e (timings/twin pending).
