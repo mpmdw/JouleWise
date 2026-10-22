@@ -251,6 +251,8 @@ class _Channel:
     discontinuities: list[dict[str, Any]] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
     duplicate_field_reads: int = 0
+    window_ends: list[int | None] = field(default_factory=list)
+    window_brackets: list[int | None] = field(default_factory=list)
 
 
 @dataclass
@@ -278,6 +280,7 @@ class NvmlSampler:
                  nvml: Any | None = None, library: Any | None = None,
                  power_bound_w: float | None = None,
                  clock_ns: Callable[[], int] = time.monotonic_ns,
+                 wall_clock_ns: Callable[[], int] = time.time_ns,
                  stop_timeout_s: float = 5.0) -> None:
         self.device_indices = tuple(device_indices) if device_indices is not None else None
         self.interval_ns = interval_ns
@@ -286,6 +289,8 @@ class NvmlSampler:
         self._library = library
         self.power_bound_w = power_bound_w
         self._clock = clock_ns
+        self._wall_clock = wall_clock_ns
+        self._cleanup_thread: threading.Thread | None = None
         self._stop_timeout_s = stop_timeout_s
         self._event = threading.Event()
         self._devices: list[_Device] = []
@@ -376,6 +381,22 @@ class NvmlSampler:
                     channel.flags.append("read_failed") if "read_failed" not in channel.flags else None
                 continue
             after = self._clock()
+            window_end: int | None = None
+            window_bracket: int | None = None
+            if field_timestamp is not None and field_timestamp > 0:
+                # Map the driver's Unix-microsecond timestamp into this host's
+                # monotonic clock through an independent wall-clock bracket.
+                # Query t_ns stays the required monotonic call midpoint.
+                map_before = self._clock()
+                wall_ns = self._wall_clock()
+                map_after = self._clock()
+                window_end = field_timestamp*1000 + (map_before+map_after)//2 - wall_ns
+                # A full microsecond covers unknown timestamp rounding mode;
+                # the other term is the monotonic/Unix mapping bracket.
+                window_bracket = (map_after-map_before+1)//2 + 1000
+                if window_end > after + window_bracket:
+                    window_end = window_bracket = None
+                    channel.flags.append("field_timestamp_after_call")
             midpoint = (before + after) // 2
             # ceil(bracket/2) covers the odd-nanosecond integer midpoint.
             half_width = (after - before + 1) // 2
@@ -410,6 +431,8 @@ class NvmlSampler:
                     channel.field_timestamps_us.append(field_timestamp)
                 channel.times.append(midpoint)
                 channel.brackets.append(half_width)
+                channel.window_ends.append(window_end)
+                channel.window_brackets.append(window_bracket)
                 # NVML exposes mW and mJ; dividing by 1000 converts SI prefixes.
                 channel.values.append(raw / 1000.0)
 
@@ -426,8 +449,9 @@ class NvmlSampler:
         facts = device.inventory.get("sensor_facts") or {}
         flags = list(self._flags) + list(device.inventory.get("flags", ())) + channel.flags
         is_power = channel.unit == "W"
+        architecture_id = device.inventory.get("architecture_id")
         output_average = channel.kind == "power_average" or (
-            channel.kind == "power_usage" and device.inventory.get("architecture_id", 0) >= 7
+            channel.kind == "power_usage" and isinstance(architecture_id, int) and architecture_id >= 7
             and not (device.inventory.get("architecture") == "ampere" and facts))
         if is_power:
             flags.append("resolution_is_quantum_not_accuracy")
@@ -452,6 +476,12 @@ class NvmlSampler:
             "power_bound_w": self.power_bound_w,
             "device": device.inventory,
         }
+        if channel.window_ends and all(value is not None for value in channel.window_ends):
+            notes["window_end_ns"] = list(channel.window_ends)
+            notes["window_timing_half_width_ns"] = list(channel.window_brackets)
+            notes["window_clock_mapping"] = (
+                "driver Unix microseconds mapped by bracketed time.time_ns; "
+                "physical window end assumes driver timestamp semantics")
         return PowerTrace(
             source=channel.source, channel=f"gpu{device.index}:{channel.kind}",
             clock_domain=self.clock_domain, t_ns=tuple(channel.times),
@@ -461,6 +491,14 @@ class NvmlSampler:
             duty_fraction=facts.get("duty_fraction") if is_power else None,
             resolution=0.001,  # Integer mW or mJ NVML API quantum, converted to SI.
             notes=json.dumps(notes, sort_keys=True, allow_nan=False))
+
+    def _shutdown_after_workers(self, workers: Sequence[threading.Thread]) -> None:
+        for worker in workers:
+            worker.join()
+        try:
+            self._nvml.nvmlShutdown()
+        except Exception as exc:
+            self._flags.append(f"deferred_shutdown_failed: {exc}")
 
     def stop(self) -> tuple[PowerTrace, ...]:
         """Return measurements or explanatory empty traces; never raise on failure."""
@@ -476,10 +514,21 @@ class NvmlSampler:
                     if device.thread.is_alive():
                         self._flags.append(f"gpu{device.index}_worker_stop_timeout")
             if self._initialized:
-                try:
-                    self._nvml.nvmlShutdown()
-                except Exception as exc:
-                    self._flags.append(f"shutdown_failed: {exc}")
+                active_workers = [device.thread for device in self._devices
+                                  if device.thread is not None and device.thread.is_alive()]
+                if active_workers:
+                    # No shutdown may race an in-flight native call. A separate
+                    # cleanup owner waits; it never samples another device.
+                    self._flags.append("shutdown_deferred_worker_active")
+                    self._cleanup_thread = threading.Thread(
+                        target=self._shutdown_after_workers, args=(active_workers,),
+                        daemon=True, name="joulewise-nvml-cleanup")
+                    self._cleanup_thread.start()
+                else:
+                    try:
+                        self._nvml.nvmlShutdown()
+                    except Exception as exc:
+                        self._flags.append(f"shutdown_failed: {exc}")
                 self._initialized = False
             if not self._devices:
                 self._devices.append(_Device(
