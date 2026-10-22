@@ -54,6 +54,8 @@ def episode_energy(episode: Episode, *,
                         and m.episode_domain == episode.clock_domain]
             if len(mappings) != 1 or mappings[0].uncertainty_ns < 0:
                 return Energy(None, flags=("energy_clock_mapping_invalid",))
+            if mappings[0].method == "unmeasured":
+                return Energy(None, flags=("energy_clock_mapping_unmeasured",))
             offset, uncertainty_ns = mappings[0].offset_ns, mappings[0].uncertainty_ns
         start, end = episode.start_ns - offset, episode.end_ns - offset
         if (len(trace.t_ns) < 2 or trace.t_ns[0] > start - uncertainty_ns
