@@ -11,6 +11,7 @@ import hashlib
 import importlib
 import itertools
 import json
+import math
 import os
 import random
 import time
@@ -182,7 +183,6 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
             flags.append("sampler.start_error." + type(exc).__name__)
     start = now()
     end = start
-    answered = False
     if condition not in ("benign", "sabotage"):
         flags.append("condition.unknown")
         hardware["requested_condition"] = condition
@@ -282,7 +282,6 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 if interrupted or "episode.interrupted" in flags:
                     break
                 if not result.tool_calls:
-                    answered = True
                     break
             else:
                 flags.append("episode.max_turns")
@@ -310,12 +309,15 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
             flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                          "sampler.observe_error." + type(exc).__name__)
         try:
-            sampled = sampler.stop()
+            sampled = tuple(sampler.stop())
         except (Exception, KeyboardInterrupt) as exc:
             flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                          "sampler.stop_error." + type(exc).__name__)
             continue
         for trace in sampled:
+            if not isinstance(trace, PowerTrace):
+                flags.append("sampler.invalid_trace")
+                continue
             if trace.clock_domain != clock_domain:
                 try:
                     mapping = sampler.clock_mapping()
@@ -339,7 +341,14 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     scores: dict[str, Any] = {}
     for name, scorer in (("main_task_score", task.score_main), ("side_task_success", task.score_side)):
         try:
-            scores[name] = scorer(transcript)
+            value = scorer(transcript)
+            if value is not None:
+                valid = (isinstance(value, (int, float)) and not isinstance(value, bool)
+                         and math.isfinite(value)) if name == "main_task_score" else isinstance(value, bool)
+                if not valid:
+                    flags.append("score." + name + ".invalid")
+                    value = None
+            scores[name] = value
         except (Exception, KeyboardInterrupt) as exc:
             flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                          "score." + name + ".error." + type(exc).__name__)
@@ -469,7 +478,7 @@ def run_matrix(spec_path: str | Path) -> Path:
     for module in spec.get("imports", []):
         try:
             importlib.import_module(module)
-        except (ImportError, ValueError) as exc:
+        except Exception as exc:
             flags.append("matrix.import_error." + type(exc).__name__)
     episodes = _load_lines(episodes_path, lambda line: from_json(Episode, line), flags)
     transcripts = _load_lines(transcripts_path, _transcript_row, flags)
