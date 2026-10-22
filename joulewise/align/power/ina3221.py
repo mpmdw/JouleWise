@@ -38,6 +38,16 @@ class RailCharacterization:
     flags: tuple[str, ...] = ()
 
     @property
+    def cadence_ns(self) -> float | None:
+        """Endpoint-span cadence: end poll errors cancel across all periods.
+
+        If each endpoint is late by < one poll, the mean error is bounded by
+        one actual poll period / number of observed periods. A median instead
+        picks a neighboring poll multiple when conversion and poll do not tile.
+        """
+        return statistics.fmean(self.distinct_periods_ns) if self.distinct_periods_ns else None
+
+    @property
     def median_distinct_period_ns(self) -> float | None:
         return statistics.median(self.distinct_periods_ns) if self.distinct_periods_ns else None
 
@@ -130,6 +140,12 @@ class Ina3221Sampler:
                 except OSError as exc:
                     label = label_path.stem
                     self._flag(f"label_read_error:{label_path}:{type(exc).__name__}")
+                # Mainline in7 is a sum of shunt voltages, not a bus rail:
+                # it has no corresponding curr7_input. Keep genuinely missing
+                # rail attributes visible (including the existing missing-rail test).
+                if not legacy and "sum of shunt" in label.lower():
+                    self._flag(f"summation_channel_skipped:{device}:{index}")
+                    continue
                 channel = f"{device.relative_to(self.root.resolve())}/{index}:{label}"
                 rails.append(Rail(channel, label, device, voltage, current))
                 if not voltage.exists() or not current.exists():
@@ -240,8 +256,9 @@ class Ina3221Sampler:
     def characterize(self, *, reads: int, sleep: Callable[[float], None] = time.sleep) -> Characterization:
         """Measure latency, change periods and observed steps; never assume 840 us.
 
-        Stationary/quantized inputs can hide conversions. Minimum distinct step
-        is only an observed upper bound on ADC quantum. No-change is flagged.
+        Stationary/quantized inputs can hide conversions. Voltage/current steps
+        are empirical observations, not calibrated LSBs. Watt resolution is
+        propagated from those two steps at the observed operating point.
         """
         if self._thread is not None:
             self._flag("characterization_while_sampling")
@@ -264,11 +281,28 @@ class Ina3221Sampler:
         for rail in self.rails:
             rows = self._rows.get(rail.channel, [])
             changes = [row[0] for previous, row in zip(rows, rows[1:]) if row[1] != previous[1]]
-            flags = () if len(changes) >= 2 else ("insufficient_distinct_changes",)
+            flags = [] if len(changes) >= 2 else ["insufficient_distinct_changes"]
+            periods = tuple(b - a for a, b in zip(changes, changes[1:]))
+            polls = [b[0] - a[0] for a, b in zip(rows, rows[1:])]
+            # A change period within one actual poll of the poll interval
+            # cannot resolve whether the sensor converted between polls.
+            if periods and polls and statistics.median(periods) <= 2 * statistics.median(polls):
+                flags.append("cadence_poll_limited")
+            dq_v = _step([row[2] for row in rows])
+            dq_i = _step([row[3] for row in rows])
+            quantum = None
+            if rows and (dq_v is not None or dq_i is not None):
+                v = statistics.median(row[2] for row in rows)
+                i = statistics.median(row[3] for row in rows)
+                # P=VI: a simultaneous +1 LSB in each coordinate gives
+                # dP=|V|dI+|I|dV+dV*dI, with mV*mA / 1e6 -> W.
+                # Differences of VI products can nearly cancel and are NOT LSBs.
+                dv, di = dq_v or 0.0, dq_i or 0.0
+                quantum = (abs(v) * di + abs(i) * dv + dv * di) / 1_000_000
+                if dq_v is None or dq_i is None:
+                    flags.append("quantum_one_coordinate_unobserved")
             results.append(RailCharacterization(
                 rail.channel, tuple(row[4] for row in rows),
-                tuple(b - a for a, b in zip(changes, changes[1:])),
-                _step([row[1] for row in rows]), _step([row[2] for row in rows]),
-                _step([row[3] for row in rows]), flags,
+                periods, quantum, dq_v, dq_i, tuple(flags),
             ))
         return Characterization(tuple(results), tuple(self.update_intervals_ms.items()), tuple(self.flags))
