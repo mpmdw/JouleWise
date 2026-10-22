@@ -7,7 +7,7 @@ YES/NO followed by an opening parenthesis or square bracket now controls the exp
 Kept the failing test case and added positive/negative bracket cases through the real runner.
 Updated the pilot's provisional monitor rule; its lead-confirmation item remains open.
 Inherited both blocker fixes, energy bounds and all existing review regressions unchanged.
-No command has launched: this executor remains pending/offline; validation is still blocking.
+No command launched after more than ten minutes of startup waiting; validation remains blocked.
 Protected contracts and other lanes are untouched; changes are pushed only to this lane.
 
 ## FILES
@@ -162,8 +162,11 @@ failed before process creation with:
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
 apply_patch for .review2r/build_combined.sh failed the same way before creation.
-wait_for_environment is pending; environment_status reports observed_phase=pending,
-connectivity=offline, failure=null. The supported diagnostic history is empty.
+The startup wait exceeded ten minutes. At 2026-10-22 10:29 UTC the final
+python3 --version and fresh-TMPDIR lane-suite submissions still failed before
+process creation. wait_for_environment remained pending; environment_status
+reported starting (previously pending), connectivity=offline, failure=null.
+The supported diagnostic history is empty.
 No automatic approval rejection occurred and no permission question was needed.
 No venv, extra installation, tokenizer/data download, scratch script, combined
 tree or reviewer repro could be executed. No tokenizer hashes were measured.
@@ -174,7 +177,11 @@ At de5bcc2de42c3d3c743e16bbea48004e422f357e, readback of score.py, the review
 test module and pilot doc matched the saved edits exactly; source-text checks
 found no trailing whitespace or control characters. Compare from fd4c0695d
 reported three commits ahead, zero behind, and exactly those three allowed
-paths. These are read-only source checks, not Python, test or CI evidence.
+paths. Readback of the report also matched its saved contents. A subsequent
+compare from fd4c0695d through 8b611f462341fde46a5a8fb8bc671e67939c990d
+reported four commits ahead, zero behind and exactly score.py, the existing
+review test module, pilot doc and lane report. These are read-only source
+checks, not Python, test or CI evidence.
 
 Reviewer/lead baseline supplied in the brief, NOT measured by this seat:
 - At 5e9b160e7: lane suite 40 tests, OK, 1 absent-pyarrow skip, 221 s.
@@ -378,6 +385,10 @@ the supplied measurements are attributed in TESTS RUN and END-TO-END.
 - R2-m6 — fixed (not run), 224f16443c73a34ea222a99b629a8966738a0526; repeated unanimous labels resolve, disagreements get specific trial/Episode flags; production-shaped reply accounting refined in d5453de2d7a71f9eb915ad1db034ac071edb3684.
 
 ### Round 2 re-review (findings on 5e9b160e7)
+fix2c also hit the brief's ten-minute no-executor fallback. Each finding stays
+"fixed (not run)"; an executed-result replacement would be false. The exact
+failed command submissions and current source commits are recorded above.
+
 - R2-B1 — fixed (not run), 37341b370b7e34f0b00d47f7bfd1a8f8a31b5bd4; normalized template-compatible prefix and four-shape stdlib regression; real transformers/vLLM/CLI repros remain unexecuted.
 - R2-B2 — fixed (not run), 56c0d06f18783a8fdd687accaf8b23021e550854; unclosed reasoning recovery, zero answer work for censored thinking, explicit censored ceiling lengths in calibration.
 - R2-m1 — fixed (not run), 56c0d06f18783a8fdd687accaf8b23021e550854; reasoning-filed continuation is answer-only; the repro's tagged 300/3 "truth" annotations are codec errors explained above, not fabricated token targets.
