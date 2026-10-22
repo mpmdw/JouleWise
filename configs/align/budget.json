@@ -6,57 +6,241 @@
     {
       "id": "Qwen/Qwen3-4B",
       "attention": "GQA",
-      "revision": null
+      "revision": null,
+      "tensor_parallel_size": 1,
+      "weight_precision": "bf16",
+      "kv_headroom_bytes": null,
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom."
     },
     {
       "id": "Qwen/Qwen3-8B",
       "attention": "GQA",
-      "revision": null
+      "revision": null,
+      "tensor_parallel_size": 1,
+      "weight_precision": "bf16",
+      "kv_headroom_bytes": null,
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom."
     },
     {
       "id": "Qwen/Qwen3-14B",
       "attention": "GQA",
-      "revision": null
+      "revision": null,
+      "tensor_parallel_size": 1,
+      "weight_precision": "bf16",
+      "kv_headroom_bytes": null,
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom."
     },
     {
-      "id": "microsoft/Phi-3.5-mini-instruct",
-      "attention": "MHA",
-      "revision": null
+      "id": "Qwen/Qwen3-Next-80B-A3B-Thinking",
+      "attention": "hybrid recurrent/attention MoE",
+      "revision": null,
+      "tensor_parallel_size": 4,
+      "weight_precision": "bf16",
+      "kv_headroom_bytes": null,
+      "layout_derivation": "80B * 2 bytes = 160 GB; two 80 GB devices leave zero KV headroom; four-way TP is a provisional layout compatible with two KV heads replicated by serving. KV headroom remains an explicit operator input, and BF16 versus FP8 is NEEDS_RULING."
     }
   ],
   "tasks": [
-    "budget/item-slot-01",
-    "budget/item-slot-02",
-    "budget/item-slot-03",
-    "budget/item-slot-04",
-    "budget/item-slot-05",
-    "budget/item-slot-06",
-    "budget/item-slot-07",
-    "budget/item-slot-08",
-    "budget/item-slot-09",
-    "budget/item-slot-10",
-    "budget/item-slot-11",
-    "budget/item-slot-12",
-    "budget/item-slot-13",
-    "budget/item-slot-14",
-    "budget/item-slot-15",
-    "budget/item-slot-16",
-    "budget/item-slot-17",
-    "budget/item-slot-18",
-    "budget/item-slot-19",
-    "budget/item-slot-20",
-    "budget/item-slot-21",
-    "budget/item-slot-22",
-    "budget/item-slot-23",
-    "budget/item-slot-24",
-    "budget/item-slot-25",
-    "budget/item-slot-26",
-    "budget/item-slot-27",
-    "budget/item-slot-28",
-    "budget/item-slot-29",
-    "budget/item-slot-30",
-    "budget/item-slot-31",
-    "budget/item-slot-32"
+    "budget/item-slot-001",
+    "budget/item-slot-002",
+    "budget/item-slot-003",
+    "budget/item-slot-004",
+    "budget/item-slot-005",
+    "budget/item-slot-006",
+    "budget/item-slot-007",
+    "budget/item-slot-008",
+    "budget/item-slot-009",
+    "budget/item-slot-010",
+    "budget/item-slot-011",
+    "budget/item-slot-012",
+    "budget/item-slot-013",
+    "budget/item-slot-014",
+    "budget/item-slot-015",
+    "budget/item-slot-016",
+    "budget/item-slot-017",
+    "budget/item-slot-018",
+    "budget/item-slot-019",
+    "budget/item-slot-020",
+    "budget/item-slot-021",
+    "budget/item-slot-022",
+    "budget/item-slot-023",
+    "budget/item-slot-024",
+    "budget/item-slot-025",
+    "budget/item-slot-026",
+    "budget/item-slot-027",
+    "budget/item-slot-028",
+    "budget/item-slot-029",
+    "budget/item-slot-030",
+    "budget/item-slot-031",
+    "budget/item-slot-032",
+    "budget/item-slot-033",
+    "budget/item-slot-034",
+    "budget/item-slot-035",
+    "budget/item-slot-036",
+    "budget/item-slot-037",
+    "budget/item-slot-038",
+    "budget/item-slot-039",
+    "budget/item-slot-040",
+    "budget/item-slot-041",
+    "budget/item-slot-042",
+    "budget/item-slot-043",
+    "budget/item-slot-044",
+    "budget/item-slot-045",
+    "budget/item-slot-046",
+    "budget/item-slot-047",
+    "budget/item-slot-048",
+    "budget/item-slot-049",
+    "budget/item-slot-050",
+    "budget/item-slot-051",
+    "budget/item-slot-052",
+    "budget/item-slot-053",
+    "budget/item-slot-054",
+    "budget/item-slot-055",
+    "budget/item-slot-056",
+    "budget/item-slot-057",
+    "budget/item-slot-058",
+    "budget/item-slot-059",
+    "budget/item-slot-060",
+    "budget/item-slot-061",
+    "budget/item-slot-062",
+    "budget/item-slot-063",
+    "budget/item-slot-064",
+    "budget/item-slot-065",
+    "budget/item-slot-066",
+    "budget/item-slot-067",
+    "budget/item-slot-068",
+    "budget/item-slot-069",
+    "budget/item-slot-070",
+    "budget/item-slot-071",
+    "budget/item-slot-072",
+    "budget/item-slot-073",
+    "budget/item-slot-074",
+    "budget/item-slot-075",
+    "budget/item-slot-076",
+    "budget/item-slot-077",
+    "budget/item-slot-078",
+    "budget/item-slot-079",
+    "budget/item-slot-080",
+    "budget/item-slot-081",
+    "budget/item-slot-082",
+    "budget/item-slot-083",
+    "budget/item-slot-084",
+    "budget/item-slot-085",
+    "budget/item-slot-086",
+    "budget/item-slot-087",
+    "budget/item-slot-088",
+    "budget/item-slot-089",
+    "budget/item-slot-090",
+    "budget/item-slot-091",
+    "budget/item-slot-092",
+    "budget/item-slot-093",
+    "budget/item-slot-094",
+    "budget/item-slot-095",
+    "budget/item-slot-096",
+    "budget/item-slot-097",
+    "budget/item-slot-098",
+    "budget/item-slot-099",
+    "budget/item-slot-100",
+    "budget/item-slot-101",
+    "budget/item-slot-102",
+    "budget/item-slot-103",
+    "budget/item-slot-104",
+    "budget/item-slot-105",
+    "budget/item-slot-106",
+    "budget/item-slot-107",
+    "budget/item-slot-108",
+    "budget/item-slot-109",
+    "budget/item-slot-110",
+    "budget/item-slot-111",
+    "budget/item-slot-112",
+    "budget/item-slot-113",
+    "budget/item-slot-114",
+    "budget/item-slot-115",
+    "budget/item-slot-116",
+    "budget/item-slot-117",
+    "budget/item-slot-118",
+    "budget/item-slot-119",
+    "budget/item-slot-120",
+    "budget/item-slot-121",
+    "budget/item-slot-122",
+    "budget/item-slot-123",
+    "budget/item-slot-124",
+    "budget/item-slot-125",
+    "budget/item-slot-126",
+    "budget/item-slot-127",
+    "budget/item-slot-128",
+    "budget/item-slot-129",
+    "budget/item-slot-130",
+    "budget/item-slot-131",
+    "budget/item-slot-132",
+    "budget/item-slot-133",
+    "budget/item-slot-134",
+    "budget/item-slot-135",
+    "budget/item-slot-136",
+    "budget/item-slot-137",
+    "budget/item-slot-138",
+    "budget/item-slot-139",
+    "budget/item-slot-140",
+    "budget/item-slot-141",
+    "budget/item-slot-142",
+    "budget/item-slot-143",
+    "budget/item-slot-144",
+    "budget/item-slot-145",
+    "budget/item-slot-146",
+    "budget/item-slot-147",
+    "budget/item-slot-148",
+    "budget/item-slot-149",
+    "budget/item-slot-150",
+    "budget/item-slot-151",
+    "budget/item-slot-152",
+    "budget/item-slot-153",
+    "budget/item-slot-154",
+    "budget/item-slot-155",
+    "budget/item-slot-156",
+    "budget/item-slot-157",
+    "budget/item-slot-158",
+    "budget/item-slot-159",
+    "budget/item-slot-160",
+    "budget/item-slot-161",
+    "budget/item-slot-162",
+    "budget/item-slot-163",
+    "budget/item-slot-164",
+    "budget/item-slot-165",
+    "budget/item-slot-166",
+    "budget/item-slot-167",
+    "budget/item-slot-168",
+    "budget/item-slot-169",
+    "budget/item-slot-170",
+    "budget/item-slot-171",
+    "budget/item-slot-172",
+    "budget/item-slot-173",
+    "budget/item-slot-174",
+    "budget/item-slot-175",
+    "budget/item-slot-176",
+    "budget/item-slot-177",
+    "budget/item-slot-178",
+    "budget/item-slot-179",
+    "budget/item-slot-180",
+    "budget/item-slot-181",
+    "budget/item-slot-182",
+    "budget/item-slot-183",
+    "budget/item-slot-184",
+    "budget/item-slot-185",
+    "budget/item-slot-186",
+    "budget/item-slot-187",
+    "budget/item-slot-188",
+    "budget/item-slot-189",
+    "budget/item-slot-190",
+    "budget/item-slot-191",
+    "budget/item-slot-192",
+    "budget/item-slot-193",
+    "budget/item-slot-194",
+    "budget/item-slot-195",
+    "budget/item-slot-196",
+    "budget/item-slot-197",
+    "budget/item-slot-198",
+    "budget/item-slot-199",
+    "budget/item-slot-200"
   ],
   "conditions": [
     "thinking_on",
@@ -76,9 +260,9 @@
     1,
     2
   ],
-  "episode_count": 4224,
+  "episode_count": 26400,
   "episode_count_meaning": "Requested trial rows; see measured_episode_count for actual fresh generation episodes.",
-  "monitor_model": "Qwen/Qwen3-4B",
+  "monitor_model": "openai/gpt-oss-20b",
   "monitor_visibilities": [
     "full"
   ],
@@ -87,29 +271,30 @@
     "source": "Polling parameter from nvml lane default; 10 ms polling does not imply a 10 ms sensor update rate."
   },
   "workload": {
-    "prefill_tokens": 4096,
-    "decode_tokens": 2048,
-    "tool_wait_s": 0,
-    "host_overhead_s": 1,
-    "monitor_prefill_tokens": 2048,
-    "monitor_decode_tokens": 32,
-    "source": "Operator-supplied workload-volume and wait/host allowances; these define the requested synthetic planning workload, not measured production token volumes. Override before spend approval.",
-    "shape": "Per fresh generation: reasoning then forced answer, including paired no-hint calls. Conservative full-length work for all budgets; posthoc deletion has no fresh generation."
+    "prefill_tokens": null,
+    "decode_tokens": null,
+    "tool_wait_s": null,
+    "host_overhead_s": null,
+    "monitor_prefill_tokens": null,
+    "monitor_decode_tokens": null,
+    "source": "Unavailable: no sourced production token/wait/host volumes. Calibrate on the exact task/model/precision/GPU layout before spend approval.",
+    "derivation": "Null values carry no estimate; observed per-episode tokens and durations may supply a calibration basis."
   },
   "gpu_classes": {
     "A100-SXM4-80GB": {
       "gpu_count": 1,
-      "setup_s": 1800,
-      "model_load_s": 180,
-      "router_overhead_fraction": 0.25,
-      "source": "Operator-supplied planning allowances retained from original kit; not measurements. Override setup/load/router allowances before approval; excluded from hard lower bound.",
+      "setup_s": null,
+      "model_load_s": null,
+      "router_overhead_fraction": null,
+      "source": "No sourced setup/model-load/router allowances; these remain null. Hardware specifications are sourced separately.",
       "hardware": {
         "memory_bandwidth_bytes_s": {
           "value": 2039000000000,
           "source": {
             "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity).",
+            "quote": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
           }
         },
         "dense_bf16_flops_s": {
@@ -117,7 +302,8 @@
           "source": {
             "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity).",
+            "quote": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
           }
         },
         "memory_bytes": {
@@ -125,56 +311,65 @@
           "source": {
             "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity).",
+            "quote": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
           }
         }
       },
       "throughput": {
         "Qwen/Qwen3-4B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-4B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-8B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-8B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-14B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-14B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-30B-A3B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-30B-A3B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "microsoft/Phi-3.5-mini-instruct": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.microsoft/Phi-3.5-mini-instruct; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Cited hardware values and model_parameters; ideal BF16 single-stream roofline only.",
           "efficiency": null,
           "efficiency_source": null
         }
-      }
+      },
+      "gpu_count_derivation": "Legacy one-device roofline basis; GPU-hour billing uses each models.tensor_parallel_size."
     },
     "H100-SXM-80GB": {
       "gpu_count": 1,
-      "setup_s": 1800,
-      "model_load_s": 180,
-      "router_overhead_fraction": 0.25,
-      "source": "Operator-supplied planning allowances retained from original kit; not measurements. Override setup/load/router allowances before approval; excluded from hard lower bound.",
+      "setup_s": null,
+      "model_load_s": null,
+      "router_overhead_fraction": null,
+      "source": "No sourced setup/model-load/router allowances; these remain null. Hardware specifications are sourced separately.",
       "hardware": {
         "memory_bandwidth_bytes_s": {
           "value": 3350000000000,
           "source": {
             "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/.",
+            "quote": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
           }
         },
         "dense_bf16_flops_s": {
@@ -182,7 +377,8 @@
           "source": {
             "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/.",
+            "quote": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
           }
         },
         "memory_bytes": {
@@ -190,56 +386,65 @@
           "source": {
             "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/.",
+            "quote": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
           }
         }
       },
       "throughput": {
         "Qwen/Qwen3-4B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-4B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-8B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-8B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-14B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-14B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-30B-A3B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-30B-A3B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "microsoft/Phi-3.5-mini-instruct": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.microsoft/Phi-3.5-mini-instruct; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Cited hardware values and model_parameters; ideal BF16 single-stream roofline only.",
           "efficiency": null,
           "efficiency_source": null
         }
-      }
+      },
+      "gpu_count_derivation": "Legacy one-device roofline basis; GPU-hour billing uses each models.tensor_parallel_size."
     },
     "L40S-PCIe-48GB": {
       "gpu_count": 1,
-      "setup_s": 1800,
-      "model_load_s": 180,
-      "router_overhead_fraction": 0.25,
-      "source": "Operator-supplied planning allowances retained from original kit; not measurements. Override setup/load/router allowances before approval; excluded from hard lower bound.",
+      "setup_s": null,
+      "model_load_s": null,
+      "router_overhead_fraction": null,
+      "source": "No sourced setup/model-load/router allowances; these remain null. Hardware specifications are sourced separately.",
       "hardware": {
         "memory_bandwidth_bytes_s": {
           "value": 864000000000,
           "source": {
             "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/.",
+            "quote": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
           }
         },
         "dense_bf16_flops_s": {
@@ -247,7 +452,8 @@
           "source": {
             "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/.",
+            "quote": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
           }
         },
         "memory_bytes": {
@@ -255,42 +461,50 @@
           "source": {
             "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
             "accessed": "2026-10-22",
-            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/.",
+            "quote": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
           }
         }
       },
       "throughput": {
         "Qwen/Qwen3-4B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-4B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-8B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-8B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-14B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-14B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "Qwen/Qwen3-30B-A3B": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-30B-A3B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
           "efficiency": null,
           "efficiency_source": null
         },
         "microsoft/Phi-3.5-mini-instruct": {
-          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
-          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.microsoft/Phi-3.5-mini-instruct; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Cited hardware values and model_parameters; ideal BF16 single-stream roofline only.",
           "efficiency": null,
           "efficiency_source": null
         }
-      }
+      },
+      "gpu_count_derivation": "Legacy one-device roofline basis; GPU-hour billing uses each models.tensor_parallel_size."
     }
   },
   "example_prices": [],
@@ -306,17 +520,18 @@
       "repository": "https://github.com/jkutaso/SHADE-Arena",
       "revision": "6614e77191c1f8e2d0c44c123c6f915905ebafae"
     },
-    "model_configs": "https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json ; https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json (attention design must be rechecked at the supplied immutable model revision)"
+    "model_configs": "https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json ; https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json (attention design must be rechecked at the supplied immutable model revision)",
+    "budget_protocol": "https://github.com/mpmdw/JouleWise/tree/58750718f/joulewise/align/budget"
   },
   "flags": [
     "provisional_planning_inputs",
     "model_revisions_unpinned",
     "runner_lane_not_on_spine",
-    "local_monitor_included_in_estimate",
     "item_slots_require_pinned_manifest",
-    "phi_thinking_control_unverified",
     "throughput_efficiency_not_supplied",
-    "single_stream_bf16_bound_only"
+    "single_stream_bf16_bound_only",
+    "workload_token_volumes_unavailable",
+    "monitor_and_judge_off_measured_gpu"
   ],
   "budget": {
     "fractions": [
@@ -336,11 +551,13 @@
       "budget_0.4",
       "budget_0.3"
     ],
-    "source": "joulewise/align/budget/conditions.py default_conditions and run.py run_matrix at budget lane 232e8516528cd85d94e3a24760cc85465f275664",
-    "item_source": "32 authored item slots (8 per four hint types); replace slots with a digest-pinned public item manifest before scientific use."
+    "source": "https://github.com/mpmdw/JouleWise/blob/58750718f/joulewise/align/budget/run.py run_matrix/_generate; conditions.py default_conditions; docs/align/budget_pilot.md.",
+    "item_source": "200 pilot items, a workload choice from docs/align/budget_pilot.md at 58750718f; immutable item roster and hint assignment must be supplied by the budget driver.",
+    "protocol_commit": "58750718f",
+    "accounting_derivation": "Per model: 200 * 3 calibration Episodes plus 200 * 3 seeds * 7 live conditions * 2 (hinted/no-hint) = 9000 fresh Episodes. Four forced conditions use two Turns in one Episode if cap>0 (one at zero). Eleven views * 200 * 3 = 6600 monitor calls, deletion adds no generation. 13800 agent calls/model if all forced caps are positive; no paired calibration and no calibration monitoring."
   },
-  "measured_episode_count": 5760,
-  "monitor_call_count": 4224,
+  "measured_episode_count": 36000,
+  "monitor_call_count": 26400,
   "model_parameters": {
     "Qwen/Qwen3-4B": {
       "total_parameters": 4000000000,
@@ -348,7 +565,8 @@
       "source": {
         "url": "https://huggingface.co/Qwen/Qwen3-4B",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
+        "quote": "Model card printed counts: total_parameters=4000000000, active_parameters=4000000000."
       }
     },
     "Qwen/Qwen3-8B": {
@@ -357,7 +575,8 @@
       "source": {
         "url": "https://huggingface.co/Qwen/Qwen3-8B",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
+        "quote": "Model card printed counts: total_parameters=8200000000, active_parameters=8200000000."
       }
     },
     "Qwen/Qwen3-14B": {
@@ -366,7 +585,8 @@
       "source": {
         "url": "https://huggingface.co/Qwen/Qwen3-14B",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
+        "quote": "Model card printed counts: total_parameters=14800000000, active_parameters=14800000000."
       }
     },
     "Qwen/Qwen3-30B-A3B": {
@@ -375,7 +595,8 @@
       "source": {
         "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B",
         "accessed": "2026-10-22",
-        "note": "Model Overview: 30.5B total, 3.3B activated."
+        "note": "Model Overview: 30.5B total, 3.3B activated. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
+        "quote": "Model card printed counts: total_parameters=30500000000, active_parameters=3300000000."
       }
     },
     "microsoft/Phi-3.5-mini-instruct": {
@@ -384,14 +605,25 @@
       "source": {
         "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
+        "quote": "Model card printed counts: total_parameters=3800000000, active_parameters=3800000000."
+      }
+    },
+    "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+      "total_parameters": 80000000000,
+      "active_parameters": 3000000000,
+      "source": {
+        "url": "https://github.com/mpmdw/JouleWise/blob/58750718f/docs/align/budget_pilot.md",
+        "accessed": "2026-10-22",
+        "quote": "Record total parameters (80B), active parameters (3B) in the model description"
       }
     }
   },
   "lower_bound_wall_seconds": {
-    "A100-SXM4-80GB": 91000,
-    "H100-SXM-80GB": 54000,
-    "L40S-PCIe-48GB": 210000
+    "A100-SXM4-80GB": null,
+    "H100-SXM-80GB": null,
+    "L40S-PCIe-48GB": null
   },
-  "rounding": "Two significant digits (active parameter counts have as few as two); lower bounds rounded downward, planning values nearest. Full-precision arithmetic is available from cost.estimate."
+  "rounding": "Two significant digits (active parameter counts have as few as two); lower bounds rounded downward, planning values nearest. Full-precision arithmetic is available from cost.estimate.",
+  "judge_model": "openai/gpt-oss-20b"
 }

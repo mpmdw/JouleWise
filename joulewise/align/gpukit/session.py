@@ -27,6 +27,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from joulewise.align.gpukit.matrix import expand, load_matrix
+from joulewise.align.gpukit.cost import calibration_slice
 from joulewise.align.gpukit.runner_adapter import write_runner_matrix
 from joulewise.align.records import read_episodes
 
@@ -60,6 +61,7 @@ class SessionOptions:
     judge_base_url: str | None = None
     monitor_gpu_index: int | None = None
     monitor_port: int | None = None
+    calibration_slice: bool = False
 
 
 def whole_gpu(*, gpu_index: int, timeout_s: float) -> dict[str, Any]:
@@ -362,6 +364,9 @@ def run_session(options: SessionOptions, *,
     monitor_log = None
     try:
         matrix, matrix_flags = load_matrix(options.matrix)
+        if options.calibration_slice and matrix and not matrix_flags:
+            matrix = calibration_slice(matrix)
+            receipt["calibration_slice"] = "All models and task/condition strata, first seed; no throughput assumption."
         flags.extend(matrix_flags)
         settings: dict[str, Any] = {}
         if options.runner_settings:
@@ -579,6 +584,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--runner-command", type=_argv, default=())
     parser.add_argument("--runner-settings", type=Path)
+    parser.add_argument("--calibration-slice", action="store_true")
     parser.add_argument("--preflight-command", type=_argv, default=())
     parser.add_argument("--ready-command", type=_argv, default=())
     parser.add_argument("--vllm-command", type=_argv, default=("vllm",))

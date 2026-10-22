@@ -11,9 +11,15 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, get_args
+
+from joulewise.align.records import Condition, Visibility
 
 SCHEMA = "joulewise.align.gpukit.matrix.v2"
+# budget/conditions.py default_conditions at 58750718f; keep effort labels local.
+BUDGET_CONDITIONS = ("thinking_on", "thinking_off", "concise", "budget_1", "budget_0.6",
+                     "budget_0.4", "budget_0.3", "deletion_1", "deletion_0.6",
+                     "deletion_0.4", "deletion_0.3")
 
 
 @dataclass(frozen=True)
@@ -34,7 +40,36 @@ def expand(matrix: Mapping[str, Any]) -> tuple[Run, ...]:
 def _citation(value: Any) -> bool:
     """Require a dated public source for a claimed physical or measured value."""
     return (isinstance(value, Mapping) and isinstance(value.get("url"), str)
-            and value["url"].startswith("https://") and bool(value.get("accessed")))
+            and value["url"].startswith("https://") and bool(value.get("accessed"))
+            and bool(value.get("quote") or value.get("note")))
+
+
+
+def numeric_provenance(matrix: Mapping[str, Any]) -> tuple[str, ...]:
+    """Require each numeric input's sibling citation or formula referencing sources."""
+    flags: list[str] = []
+
+    def walk(value: Any, path: str) -> None:
+        if not isinstance(value, Mapping):
+            return
+        for key, leaf in value.items():
+            if key.endswith(("_source", "_derivation")) or key in ("source", "derivation"):
+                continue
+            where = path + "." + key
+            if isinstance(leaf, Mapping):
+                walk(leaf, where)
+            elif isinstance(leaf, (int, float)) and not isinstance(leaf, bool):
+                source = value.get(key + "_source", value.get("source"))
+                derivation = value.get(key + "_derivation", value.get("derivation"))
+                if not _citation(source) and not (isinstance(derivation, str) and derivation.strip()):
+                    flags.append("matrix_numeric_source_missing:" + where)
+            elif isinstance(leaf, list):
+                for index, item in enumerate(leaf):
+                    if isinstance(item, Mapping):
+                        walk(item, where + "." + str(index))
+    for section in ("workload", "gpu_classes", "model_parameters"):
+        walk(matrix.get(section, {}), section)
+    return tuple(flags)
 
 
 def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
@@ -59,17 +94,27 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
             flags.append("matrix_episode_count_mismatch")
         if matrix["kind"] not in ("shade", "moe_stage_a", "budget"):
             flags.append("matrix_kind_unknown")
+        allowed = BUDGET_CONDITIONS if matrix["kind"] == "budget" else get_args(Condition)
+        if not set(matrix["conditions"]) <= set(allowed):
+            flags.append("matrix_conditions_invalid")
+        if not set(matrix["monitor_visibilities"]) <= set(get_args(Visibility)):
+            flags.append("matrix_monitor_visibilities_invalid")
+        for model in matrix["models"]:
+            if type(model.get("tensor_parallel_size", 1)) is not int or model.get("tensor_parallel_size", 1) < 1:
+                flags.append("matrix_tensor_parallel_size_invalid")
+            if model.get("weight_precision", "bf16") not in ("bf16", "fp8"):
+                flags.append("matrix_weight_precision_invalid")
         for key in ("prefill_tokens", "decode_tokens", "tool_wait_s", "host_overhead_s",
                     "monitor_prefill_tokens", "monitor_decode_tokens"):
             value = matrix["workload"][key]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
                 flags.append(f"matrix_workload_invalid:{key}")
         if not matrix["workload"]["source"]:
             flags.append("matrix_workload_source_missing")
         for gpu, profile in matrix["gpu_classes"].items():
             for key in ("setup_s", "model_load_s", "router_overhead_fraction"):
                 value = profile[key]
-                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
                     flags.append(f"matrix_gpu_parameter_invalid:{gpu}:{key}")
             if type(profile["gpu_count"]) is not int or profile["gpu_count"] < 1:
                 flags.append(f"matrix_gpu_count_invalid:{gpu}")
@@ -81,7 +126,7 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
                     flags.append(f"matrix_hardware_invalid:{gpu}:{key}")
                 if value is not None and not _citation(datum["source"]):
                     flags.append(f"matrix_hardware_source_missing:{gpu}:{key}")
-            for model in [m["id"] for m in matrix["models"]] + [matrix["monitor_model"]]:
+            for model in [m["id"] for m in matrix["models"]]:
                 rate = profile["throughput"][model]
                 efficiency = rate["efficiency"]
                 if efficiency is not None:
@@ -130,6 +175,7 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
             flags.append("matrix_monitor_call_count_mismatch")
     except (KeyError, TypeError, ValueError, OverflowError):
         flags.append("matrix_required_field_invalid")
+    flags.extend(numeric_provenance(matrix))
     return tuple(sorted(set(flags)))
 
 
