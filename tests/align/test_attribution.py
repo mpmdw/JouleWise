@@ -157,6 +157,85 @@ class AttributionChecks(unittest.TestCase):
         self.assertLessEqual(abs(exact - estimate.joules), estimate.half_width_j)
         self.assertIn("window.edge_allocation_unresolved", estimate.flags)
 
+    def test_c2_window_cut_is_clipped_and_shared_window_counts_once(self):
+        period, window = NS // 10, NS // 40  # 100 ms polls, 25 ms duty.
+        sensor = trace(times=(0, period, 2 * period, 3 * period),
+                       values=(70.0, 300.0, 300.0, 70.0),
+                       nominal_interval_ns=period, averaging_window_ns=window,
+                       duty_fraction=0.25, resolution=0.001)  # Integer mW.
+        clock = mapping(uncertainty=0)
+        reconstruction = attribution._Trace(sensor, clock)
+        a = 90 * NS // 1000  # Fixture cut inside the [75,100] ms window.
+        # Fixture dispatch gaps: 1 us, 0.1 ms, 1 ms and 10 ms.
+        for length in (NS // 1_000_000, NS // 10_000, NS // 1000, NS // 100):
+            with self.subTest(length_ns=length):
+                b = a + length
+                estimate = trace_energy(sensor, a, b, mapping=clock)
+                # Three neighbouring means span 300-70 W. A one-step
+                # allocation is bounded by both range*w/4 and range*length.
+                expected_cut = (300 - 70) * min(window / 4, length) / NS
+                cut = reconstruction._window_uncertainty(a, b)
+                self.close(cut, expected_cut, half_width=estimate.half_width_j)
+                self.assertLessEqual(cut, (300 - 70) * length / NS)
+                # The raw bracket rises 230 W in .1 s: line-minus-hold is
+                # slope*(b^2-a^2)/2 at each strict-interior end. The end
+                # exactly at 100 ms contributes zero, so it counts once.
+                endpoint_terms = 1 if b == period else 2
+                c1 = endpoint_terms * (300 - 70) / (period / NS) * (
+                    (b / NS) ** 2 - (a / NS) ** 2) / 2
+                self.close(estimate.half_width_j,
+                           c1 + expected_cut + sensor.resolution * length / NS)
+                # Fixture truth in these cuts is 400 W: a 70->400 W
+                # step inside [75,100] ms can produce its 300 W mean.
+                # Its error here is (400-300) W * requested seconds.
+                self.assertLessEqual(abs(estimate.joules - 400 * length / NS),
+                                     estimate.half_width_j)
+        # Distinct cut windows each retain their own term: both overlaps
+        # exceed w/4, hence two range*w/4 contributions.
+        cut = reconstruction._window_uncertainty(a, 190 * NS // 1000)
+        self.close(cut, 2 * (300 - 70) * (window / NS) / 4)
+
+    def test_short_period_flag_for_each_sensor_shape_and_exact_threshold(self):
+        period = NS // 10  # Fixture 100 ms nominal sensor period.
+        sensors = (
+            trace(times=(0, period, 2 * period), nominal_interval_ns=period),
+            trace(times=(0, period, 2 * period), nominal_interval_ns=period,
+                  averaging_window_ns=NS // 40, duty_fraction=0.25),
+            trace(times=(period, 2 * period), values=(100.0, 100.0),
+                  nominal_interval_ns=period, averaging_window_ns=period),
+            trace(times=(0, period, 2 * period), values=(0.0, 10.0, 20.0),
+                  source="nvml_energy", unit="J_cumulative",
+                  nominal_interval_ns=period, resolution=0.001),
+        )
+        for sensor in sensors:
+            # Integer ns exercise the exact recorded-period threshold,
+            # including a zero-length interval; no numerical tolerance applies.
+            for length in (0, period - 1, period, period + 1):
+                with self.subTest(unit=sensor.unit, window=sensor.averaging_window_ns,
+                                  length_ns=length):
+                    estimate = trace_energy(sensor, 0, length)
+                    self.assertEqual("segment.shorter_than_period" in estimate.flags,
+                                     length < period)
+
+    def test_moving_average_overlap_keeps_energy_and_infinite_uncertainty(self):
+        period, window = NS // 10, NS  # Fixture 100 ms polls, 1 s means.
+        edge = 5 * NS  # Fixture physical step from 70 W to 300 W at 5 s.
+        times = tuple(range(window, 20 * NS, period))
+        values = tuple((70 * max(0, min(t, edge) - (t - window))
+                        + 300 * max(0, t - max(t - window, edge))) / NS
+                       for t in times)
+        sensor = trace(times=times, values=values, nominal_interval_ns=period,
+                       averaging_window_ns=window, duty_fraction=1.0,
+                       resolution=0.001)  # Integer mW quantum.
+        for a, b in ((4 * NS, 6 * NS), (5 * NS, 11 * NS // 2), (2 * NS, 5 * NS)):
+            with self.subTest(interval=(a, b)):
+                estimate = trace_energy(sensor, a, b)
+                exact = (70 * max(0, min(b, edge) - a)
+                         + 300 * max(0, b - max(a, edge))) / NS
+                self.assertIn("window.overlap", estimate.flags)
+                self.assertTrue(math.isinf(estimate.half_width_j))
+                self.assertLessEqual(abs(estimate.joules - exact), estimate.half_width_j)
+
     def test_single_window_covers_time_before_its_timestamp(self):
         estimate = trace_energy(trace(times=(NS,), values=(60.0,), averaging_window_ns=NS),
                                 0, NS, mapping=mapping())
@@ -329,6 +408,7 @@ class AttributionChecks(unittest.TestCase):
         estimate = trace_energy(sensor, -NS, 2 * NS, mapping=mapping())
         self.close(estimate.joules, 50 * 2 + 100, half_width=estimate.half_width_j)
         self.assertIn("window.overlap", estimate.flags)
+        self.assertTrue(math.isinf(estimate.half_width_j))
 
     def test_turn_tool_and_gap_tiling_includes_tampered_work(self):
         calls = (ToolCall("local_search", 3 * NS, 4 * NS, 128, 2048, logged=False),

@@ -300,23 +300,34 @@ class _Trace:
                 # |dP|*L/2 on the gap length L inside this query.
                 terms.append(abs(self.values[k] - self.values[k - 1])
                              * (overlap / _NS_PER_S) / 2)
+        cut_windows: set[int] = set()
         for t in (t0, t1):
             k = bisect_left(self.times, t)
-            if k < len(self.times) and self.times[k] - self.window < t < self.times[k]:
+            if (k < len(self.times) and k not in cut_windows
+                    and self.times[k] - self.window < t < self.times[k]):
+                cut_windows.add(k)
                 neighbours = self.values[max(0, k - 1):k + 2]
                 # C2(b), assuming at most one step per window: allocating
-                # a trailing mean across a cut errs by dP*w*u*(1-u).
-                # Its maximum is |dP|*w/4 at the midpoint. Use the range
-                # of adjacent means as the observed step sensitivity;
-                # an unseen burst or an unobserved larger step is unbounded.
+                # a trailing mean across a cut errs by dP*w*u*(1-u),
+                # at most |dP|*w/4. Inside one window, error over [a,b]
+                # also cannot exceed range*(b-a). Clip to this query's
+                # window overlap and count a shared end window only once.
+                # Adjacent means set the observed range; unseen bursts or
+                # larger unobserved steps remain unbounded.
+                overlap = min(t1, self.times[k]) - max(t0, self.times[k] - self.window)
                 terms.append((max(neighbours) - min(neighbours))
-                             * (self.window / _NS_PER_S) / 4)
+                             * min(self.window / 4, overlap) / _NS_PER_S)
         return math.fsum(terms)
 
     def energy(self, t0: int, t1: int, idle_watts: float) -> EnergyEstimate:
         flags = list(self.flags)
         if t1 < t0:
             return EnergyEstimate(0.0, math.inf, self.method, _flags(flags + ["interval.reversed"]))
+        # A request shorter than one nominal poll cannot resolve two
+        # physical phase edges within that poll. This metadata threshold is
+        # the recorded sensor period, for point, window and counter traces.
+        if t1 - t0 < self.trace.nominal_interval_ns:
+            flags.append("segment.shorter_than_period")
         if not math.isfinite(idle_watts):
             return EnergyEstimate(math.nan, math.inf, self.method, _flags(flags + ["idle.nonfinite"]))
         if t1 == t0:
@@ -345,6 +356,11 @@ class _Trace:
                         uncovered_ns += b - a
         missing_ns = (t1 - t0) - covered_ns
         bounds: list[float] = []
+        if "window.overlap" in flags:
+            # Earliest-ending windows still define the energy estimate, but
+            # overlapping means do not identify the underlying waveform.
+            # No supported variation bound exists for this sensor shape.
+            bounds.append(math.inf)
         if missing_ns:
             flags.append("trace.partial_coverage")
             bounds.append(math.inf if self.counter_peak_missing else
@@ -412,7 +428,11 @@ def trace_energy(
 
     Endpoint hold-versus-line comparisons are clipped to the query itself.
     Windowed sensors compare raw sample brackets and add the C2 duty-gap
-    and within-window allocation sensitivities under a one-step assumption.
+    and query-clipped within-window allocation sensitivities under a
+    one-step assumption. Intervals shorter than nominal_interval_ns carry
+    segment.shorter_than_period for every sensor shape, without a new width
+    term. Overlapping windows retain their estimate and window.overlap flag
+    with infinite uncertainty because their waveform is unsupported.
     window.edge_allocation_unresolved retains the warning that arbitrary
     unsampled work is unbounded. A held counter jumps
     at the right sample; that jump counts when the partial interval reaches it.
