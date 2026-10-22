@@ -106,7 +106,15 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
     repeated = n - 1 - len(changes)
     effective_interval = interval
-    if len(changes) >= math.isqrt(n) and observed_periods and repeated * 2 >= n - 1:
+    # Repeats alone do not establish sample-and-hold: integer-mW flat
+    # plateaus repeat even when the sensor converts every poll. Require every
+    # completed change-to-change run to span more than one poll. Consecutive
+    # changing polls demonstrate native-rate information, which thinning must
+    # preserve. This conservative test can leave an ambiguous hold unthinned;
+    # it cannot turn ordinary constant phases into a slower conversion clock.
+    hold_runs = [b - a for a, b in zip(changes, changes[1:])]
+    if (len(changes) >= math.isqrt(n) and observed_periods and
+            repeated * 2 >= n - 1 and min(hold_runs) > 1):
         effective_interval = max(interval, round(statistics.median(observed_periods)))
         flags.append("held_values_cadence_inferred")
     # Thin by the observed cadence rather than removing entire constant
