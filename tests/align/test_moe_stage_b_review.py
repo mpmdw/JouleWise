@@ -167,6 +167,14 @@ class TestMoeStageBReview(unittest.TestCase):
             emit("p5 "+("stalls" if world.decode_miss_stalls else "no-stalls"), compact(result))
             if "episode_outcomes" in result:
                 emit("p5 dropped_episode", result["episode_outcomes"][0])
+                if world.decode_miss_stalls:
+                    full_feature = results[("default", ina.name)]["episode_outcomes"][0]["features"]
+                    dropped_feature = result["episode_outcomes"][0]["features"]
+                    emit("p5 default_drop_change", dict(
+                        full_j_per_token=full_feature["energy_per_decode_token_j"],
+                        dropped_j_per_token=dropped_feature["energy_per_decode_token_j"],
+                        change_j_per_token=(dropped_feature["energy_per_decode_token_j"]
+                                            -full_feature["energy_per_decode_token_j"])))
         # F10 ablation: restore only the legacy noise seed, preserving all
         # routing/timing/sensor inputs. This is evidence, never the registered run.
         import random as standard_random
