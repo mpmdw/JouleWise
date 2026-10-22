@@ -1,11 +1,12 @@
 """Review regressions for cadence quantization and physical power resolution."""
 
 import itertools
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.align.power.ina3221 import Ina3221Sampler
+from joulewise.align.power.ina3221 import Characterization, Ina3221Sampler, RailCharacterization
 from tests.align.test_power_ina3221 import Ina3221Test
 
 
@@ -72,6 +73,65 @@ class CharacterizationReviewTest(unittest.TestCase):
             expected = (4980 * 8 + 2156 * 8 + 8 * 8) / 1e6
             # No printed uncertainty: required relative agreement bar.
             self.assertAlmostEqual(rail.quantum_w, expected, delta=expected * 1e-6)
+
+    def test_driver_metadata_and_characterization_disagreement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            (dev / "samples").write_text("4")
+            sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)
+            rail, = sampler.discover()
+            sampler.characterization = Characterization((
+                RailCharacterization(rail.channel, (), (4_000_000, 4_000_000),
+                                     0.04, 8.0, 8.0),), (), ())
+            sampler.sample_once()
+            trace, = sampler.stop()
+            # Driver reports 1 ms; measured conversion/averaging takes 4 ms.
+            self.assertEqual(trace.averaging_window_ns, 4_000_000)
+            self.assertAlmostEqual(trace.resolution, 0.04, delta=0.04 * 1e-6)
+            self.assertIn("driver_characterized_cadence_disagreement", trace.notes)
+            self.assertEqual(json.loads(trace.notes)["samples"][str(dev)], 4)
+
+    def test_alarm_clear_set_missing_and_separate_throttle_counter(self):
+        for value in (None, "0", "1"):
+            with self.subTest(alarm=value), tempfile.TemporaryDirectory() as tmp:
+                dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+                if value is not None:
+                    (dev / "curr1_crit_alarm").write_text(value)
+                    (dev / "curr1_max_alarm").write_text("0")
+                    (dev / "in1_warning").write_text("0")
+                # NVIDIA documents OC counters in class/hwmon, including a
+                # separate soctherm hwmon. No INA name is required there.
+                thermal = Path(tmp) / "class/hwmon/hwmon8"
+                thermal.mkdir(parents=True)
+                counter = thermal / "oc3_event_cnt"
+                counter.write_text("7")
+                sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)
+                sampler.start()
+                counter.write_text("9")
+                trace, = sampler.stop()
+                notes = json.loads(trace.notes)
+                key = "class/hwmon/hwmon8/oc3_event_cnt"
+                self.assertEqual(notes["health_start"][key], 7)
+                self.assertEqual(notes["health_stop"][key], 9)
+                self.assertEqual(notes["oc_event_count_deltas"][key], 2)
+                self.assertTrue(any(f.startswith("overcurrent_throttle_events") for f in notes["flags"]))
+                alarm_set = any(f.startswith("hardware_alarm_set") for f in notes["flags"])
+                self.assertEqual(alarm_set, value == "1")
+                if value is None:
+                    self.assertIn("alarm_attributes_unavailable", notes["flags"])
+
+    def test_health_attribute_read_loss_is_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            alarm = dev / "curr1_max_alarm"
+            alarm.write_text("0")
+            sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)
+            sampler.start()
+            alarm.unlink()
+            trace, = sampler.stop()
+            self.assertIn("health_read_error", trace.notes)
+            key = str(alarm.relative_to(Path(tmp)))
+            self.assertIsNone(json.loads(trace.notes)["health_stop"][key])
 
 
 if __name__ == "__main__":

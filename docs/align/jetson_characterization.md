@@ -5,8 +5,12 @@ evidence cannot establish the board's conversion cadence or measurement floor.
 
 ## Setup
 
-Use a borrowed Orin Nano Super on its normal, adequately rated supply and
-cooling. Record board revision, JetPack/L4T and kernel versions, power mode,
+Use a borrowed Orin Nano Super with cooling. Before collection, run an
+idle-to-load preflight on the intended supply and cable: retain the INA
+alarm snapshots, OC event-counter deltas and VDD_IN voltage across the
+load step. Investigate any asserted alarm, advancing counter, or input
+voltage sag against the module's documented voltage range. Do not raise
+current limits or disable protection to make this check pass. Record board revision, JetPack/L4T and kernel versions, power mode,
 clock policy, fan policy, ambient conditions and workload identity. Keep other
 GPU users off the board. No hardware work runs from a Codex build seat.
 
@@ -32,7 +36,8 @@ episode. Retain raw samples, timestamps, read failures and configuration notes.
    latency and board CPU overhead. Measure each complete rail read's elapsed
    time and retain the distribution rather than only its mean.
 3. Record the time between successive *distinct readings* for each rail and the
-   minimum nonzero step in voltage, current and computed watts. A stable load
+   minimum nonzero steps in voltage and current. Compute watt resolution
+   from those coordinate steps at the observed operating point. A stable load
    can repeat identical quantized readings across several conversions:
    distinct-value periods are observations, not proof of conversion periods.
 4. Repeat with load transitions so that a flat input cannot masquerade as a slow
@@ -58,8 +63,21 @@ episode. Retain raw samples, timestamps, read failures and configuration notes.
 The requested polling interval is a scheduler target. The driver's
 update_interval is configuration. Read latency is software acquisition cost.
 Distinct-value period is observed change cadence, confounded by quantization
-and stationary input. The smallest observed nonzero step is an empirical
-upper bound on quantum, not a calibrated ADC least significant bit. A sample
+and stationary input. Report cadence as the mean distinct-change period
+(endpoint span divided by number of periods); preserve the median too.
+The cadence endpoint error is bounded by one actual poll period divided
+by the number of periods. A change every poll is poll-limited evidence.
+
+Minimum voltage/current steps are empirical, not calibrated LSBs. Do not
+take the minimum gap between V*I products: changes in V and I can cancel.
+At median operating voltage V and current I, propagate coordinate steps
+as dP=(|V|dI+|I|dV+dV*dI)/1e6 for mV and mA. A stationary coordinate is
+unobserved and flagged. Driver exposure and samples are recorded; the
+update_interval already accounts for samples, so do not multiply it again.
+Supplied characterization can widen the exposure; disagreement with the
+driver beyond one poll is flagged. Without characterization or board shunt
+resistance the trace's current-resolution term is only integer-mA print
+precision, explicitly flagged, not a calibrated ADC resolution. A sample
 may average over a conversion/averaging window; timestamp it at the end and
 preserve that window. Do not invent a known window when it is unavailable.
 
@@ -87,6 +105,19 @@ coverage or polling overhead comparable with the workload must be investigated
 and flagged. Choose an application-specific maximum loss and overhead budget
 before collection; this protocol supplies no unexplained numeric cutoff.
 
+Supply limiting and over-current throttling are physical hazards: they
+change both workload timing and power during an episode. At start and stop,
+the sampler records every exposed INA alarm/warning and L4T OC counter.
+The documented counter path is /sys/class/hwmon/hwmon*/oc*_event_cnt;
+it may be a separate soctherm device rather than an INA hwmon. Positive
+counter deltas and asserted alarms are flags; absent attributes and read
+failures are also recorded. Compare input-rail voltage under idle and load
+to see supply sag even when a current average conceals a short transient.
+An alarm-free snapshot cannot exclude a transient between snapshots.
+
+Source: [NVIDIA Jetson Linux r36.4.4, Power and Performance, Overcurrent
+Event Status](https://docs.nvidia.com/jetson/archives/r36.4.4/DeveloperGuide/SD/PlatformPowerAndPerformance/JetsonOrinNanoSeriesJetsonOrinNxSeriesAndJetsonAgxOrinSeries.html#overcurrent-event-status).
+
 Thermal or electrical hazards stop a physical run. Other deficiencies remain
 recorded flags and limitations. No episode is silently removed because a rail
 is missing or a phase detector cannot label it. The M3 Max instrument's about
@@ -102,7 +133,7 @@ From a checkout of this lane, without any optional dependencies:
 
 ```sh
 python3 -m unittest discover -s tests/align -t .
-python3 -m unittest discover -s tests
+python3 -m unittest tests.test_battery_float_consumers tests.test_battery_float_sweep
 python3 -m tests.align.test_phase_detect --study
 ```
 

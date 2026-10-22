@@ -70,7 +70,8 @@ class Ina3221Sampler:
 
     The polling interval is a caller-selected scheduler target, not a claim
     about sensor conversion time. Use characterize() under changing load to
-    measure observed cadence. No ADC resolution or averaging window is assumed.
+    measure observed cadence. Driver exposure is carried into every trace. ADC current resolution needs
+    the board shunt or a supplied characterization.
     """
 
     clock_domain = "host.monotonic"
@@ -79,6 +80,8 @@ class Ina3221Sampler:
         self, *, sysfs_root: str | Path = "/sys", sample_interval_ns: int,
         update_interval_ms: int | None = None,
         averaging_window_ns: int | None = None,
+        characterization: Characterization | None = None,
+        shunt_resistance_ohm: float | None = None,
         clock_domain: str = "host.monotonic",
         clock: Callable[[], int] = time.monotonic_ns,
         read_text: Callable[[Path], str] | None = None,
@@ -87,12 +90,18 @@ class Ina3221Sampler:
         self.sample_interval_ns = sample_interval_ns
         self.requested_update_interval_ms = update_interval_ms
         self.averaging_window_ns = averaging_window_ns
+        self.characterization = characterization
+        self.shunt_resistance_ohm = shunt_resistance_ohm
         self.clock_domain = clock_domain
         self._clock = clock
         self._read = read_text or (lambda path: path.read_text(encoding="utf-8").strip())
         self.flags: list[str] = []
         self.rails: tuple[Rail, ...] = ()
         self.update_intervals_ms: dict[str, int | None] = {}
+        self.samples: dict[str, int | None] = {}
+        self._health_before: dict[str, int | None] | None = None
+        self._health_after: dict[str, int | None] = {}
+        self._health_paths: set[Path] = set()
         self._original_intervals: dict[Path, str] = {}
         self._rows: dict[str, list[tuple[int, float, float, float, int]]] = {}
         self._event = threading.Event()
@@ -154,10 +163,102 @@ class Ina3221Sampler:
             if not interval_path.exists() and (device.parent / "update_interval").exists():
                 interval_path = device.parent / "update_interval"
             self._configure_interval(device, interval_path)
+            try:
+                self.samples[str(device)] = int(self._read(device / "samples"))
+            except (OSError, ValueError) as exc:
+                self.samples[str(device)] = None
+                self._flag(f"samples_unavailable:{device}:{type(exc).__name__}")
         self.rails = tuple(rails)
         if not self.rails:
             self._flag("ina3221_unavailable")
         return self.rails
+
+    def _health_snapshot(self) -> dict[str, int | None]:
+        """Read exposed alarms/warnings and the documented L4T OC nodes.
+
+        NVIDIA L4T r36.4.4 Power and Performance / Overcurrent Event Status:
+        /sys/class/hwmon/hwmon<x>/oc*_event_cnt. These can belong to a
+        separate soctherm hwmon device, so discovery is independent of INA.
+        No current limits, throttle enables or alarm controls are written.
+        """
+        devices = {rail.device for rail in self.rails}
+        for device in devices:
+            self._health_paths.update(path.resolve() for path in device.glob("*alarm*"))
+            self._health_paths.update(path.resolve() for path in device.glob("*warn*"))
+        # Resolve aliases once; do not count a physical counter twice.
+        for pattern in ("class/hwmon/hwmon*/oc*_event_cnt",
+                        "devices/platform/**/hwmon/hwmon*/oc*_event_cnt"):
+            self._health_paths.update(path.resolve() for path in self.root.glob(pattern))
+        for device in devices:
+            self._health_paths.update(path.resolve() for path in device.glob("oc*_event_cnt"))
+        if not any(p.name.endswith("_event_cnt") for p in self._health_paths):
+            self._flag("oc_event_counters_unavailable")
+        if not any("alarm" in p.name or "warn" in p.name for p in self._health_paths):
+            self._flag("alarm_attributes_unavailable")
+        snapshot = {}
+        for path in sorted(self._health_paths):
+            key = str(path.relative_to(self.root.resolve()))
+            try:
+                value = int(self._read(path))
+                snapshot[key] = value
+                if not path.name.endswith("_event_cnt") and value:
+                    self._flag(f"hardware_alarm_set:{key}")
+            except (OSError, ValueError) as exc:
+                snapshot[key] = None
+                self._flag(f"health_read_error:{key}:{type(exc).__name__}")
+        return snapshot
+
+    def _trace_sensor_metadata(self, rail: Rail) -> tuple[int | None, float | None]:
+        """Propagate driver exposure and optional measured calibration.
+
+        update_interval already includes the driver's averaging samples;
+        multiplying by samples again would count averaging twice. Integer
+        sysfs print precision supplies only a lower resolution bound when
+        no shunt resistance/calibration is supplied; this is flagged.
+        """
+        rows = self._rows.get(rail.channel, [])
+        configured = self.update_intervals_ms.get(str(rail.device))
+        driver_window = configured * 1_000_000 if configured is not None and configured > 0 else None
+        calibration = next((r for r in self.characterization.rails if r.channel == rail.channel),
+                           None) if self.characterization else None
+        cadence = calibration.cadence_ns if calibration else None
+        # Held register values can reveal a slower cadence than the configured
+        # integer-ms exposure. This is an observation, confounded by steady
+        # loads; keep that limitation visible and prefer supplied calibration.
+        changed = [row[0] for previous, row in zip(rows, rows[1:]) if row[1] != previous[1]]
+        repeats = sum(a[1] == b[1] for a, b in zip(rows, rows[1:]))
+        if cadence is None and len(changed) >= 2 and repeats * 2 >= len(rows) - 1:
+            cadence = statistics.median(b - a for a, b in zip(changed, changed[1:]))
+            self._flag(f"cadence_inferred_from_held_values:{rail.channel}")
+        if cadence and driver_window and abs(cadence - driver_window) > self.sample_interval_ns:
+            # One poll is the endpoint quantization bound for one cadence
+            # interval; disagreement larger than this is observable.
+            self._flag(f"driver_characterized_cadence_disagreement:{rail.channel}")
+        window = self.averaging_window_ns
+        if window is None:
+            exposures = [x for x in (driver_window, cadence) if x is not None]
+            window = math.ceil(max(exposures)) if exposures else None
+        quantum = calibration.quantum_w if calibration else None
+        if quantum is None and rows:
+            dv = _step([row[2] for row in rows])
+            di = _step([row[3] for row in rows])
+            # INA3221 bus LSB is 8 mV; shunt LSB is 40 uV (datasheet).
+            # Current LSB depends on the actual board shunt, never assumed.
+            dv = max(8.0, dv or 0.0)
+            resistance = self.shunt_resistance_ohm
+            if resistance is not None and resistance > 0 and math.isfinite(resistance):
+                di = max(40e-6 / resistance * 1000, di or 0.0)
+            else:
+                # Mainline current is printed as integer mA. This bounds
+                # print resolution only; it cannot establish the ADC LSB.
+                di = max(1.0, di or 0.0)
+                self._flag(f"resolution_print_precision_only:{rail.channel}")
+            voltage = abs(statistics.median(row[2] for row in rows))
+            current = abs(statistics.median(row[3] for row in rows))
+            quantum = (voltage * di + current * dv + dv * di) / 1_000_000
+        if window is None:
+            self._flag(f"averaging_window_unknown:{rail.channel}")
+        return window, quantum
 
     def _configure_interval(self, device: Path, path: Path) -> None:
         try:
@@ -216,7 +317,11 @@ class Ina3221Sampler:
         self.flags.clear()
         self._rows.clear()
         self.update_intervals_ms.clear()
+        self.samples.clear()
+        self._health_paths.clear()
+        self._health_after.clear()
         self.discover()
+        self._health_before = self._health_snapshot()
         self._event.clear()
         if self.sample_interval_ns <= 0:
             self._flag("invalid_sample_interval_ns")
@@ -241,16 +346,38 @@ class Ina3221Sampler:
         if self._thread is not None:
             self._thread.join()
             self._thread = None
+        # Manual sample_once users also receive a stop snapshot. A missing
+        # start snapshot cannot establish a counter delta and is explicit.
+        if self._health_before is None:
+            self._health_before = self._health_snapshot()
+            self._flag("health_start_snapshot_unavailable")
+        self._health_after = self._health_snapshot()
+        deltas = {}
+        for key in sorted(set(self._health_before) | set(self._health_after)):
+            if not key.endswith("_event_cnt"):
+                continue
+            before, after = self._health_before.get(key), self._health_after.get(key)
+            deltas[key] = after - before if before is not None and after is not None else None
+            if deltas[key] is not None:
+                if deltas[key] > 0:
+                    self._flag(f"overcurrent_throttle_events:{key}")
+                elif deltas[key] < 0:
+                    self._flag(f"oc_counter_reset:{key}")
+        metadata = {rail.channel: self._trace_sensor_metadata(rail) for rail in self.rails}
         self._restore_intervals()
         channels = [rail.channel for rail in self.rails] or ["unavailable"]
-        notes = json.dumps({"flags": self.flags, "update_intervals_ms": self.update_intervals_ms,
-                            "timestamps": "end_of_nonatomic_voltage_current_read"}, sort_keys=True)
+        notes = json.dumps({
+            "flags": self.flags, "update_intervals_ms": self.update_intervals_ms,
+            "samples": self.samples, "health_start": self._health_before,
+            "health_stop": self._health_after, "oc_event_count_deltas": deltas,
+            "timestamps": "end_of_nonatomic_voltage_current_read",
+        }, sort_keys=True)
         return tuple(PowerTrace(
             "ina3221", channel, self.clock_domain,
             tuple(row[0] for row in self._rows.get(channel, [])),
             tuple(row[1] for row in self._rows.get(channel, [])), "W",
-            max(0, self.sample_interval_ns), self.averaging_window_ns,
-            notes=notes,
+            max(0, self.sample_interval_ns), metadata.get(channel, (None, None))[0],
+            resolution=metadata.get(channel, (None, None))[1], notes=notes,
         ) for channel in channels)
 
     def characterize(self, *, reads: int, sleep: Callable[[float], None] = time.sleep) -> Characterization:
