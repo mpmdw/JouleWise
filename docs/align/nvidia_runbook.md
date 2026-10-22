@@ -99,6 +99,13 @@ The sampler returns separate `gpu0:power_usage`, `gpu0:power_instant`,
 empty, with reasons. It creates one thread per device. Polling faster does not
 create independent sensor observations; duplicate field timestamps are counted.
 
+A sampler can be reused for successive episodes; each start/stop cycle has
+fresh traces. A timed-out native call keeps shutdown deferred. Starting another
+cycle before that cleanup finishes returns empty traces flagged
+`restart_blocked_by_previous_workers`. Resolve the blocked driver before the
+next episode. If cleanup threads cannot start, preflight flags retained native
+references; process exit is their final owner, and no shutdown races the call.
+
 | Architecture and device | Provisional sensor slice | Source |
 |---|---|---|
 | Ampere, A100 only | 25 ms of every 100 ms, duty 0.25 | Shared `joulewise/align/records.py:PowerTrace` contract |

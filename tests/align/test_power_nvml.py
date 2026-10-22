@@ -236,7 +236,12 @@ class NvmlSamplerTests(unittest.TestCase):
                 # measurement uncertainty is asserted by this exact ABI input.
                 self.assertTrue(all(math.isclose(value, 250.0, rel_tol=1e-6)
                                     for value in later.values))
-                self.assertNotEqual(earlier.values, later.values)
+                # Declared 200 W contrast minus 0.2 W idle ripple and
+                # two half-quantum endpoints gives this detectable lower bar.
+                contrast_bar_w = 250.0-50.0-0.2-later.resolution
+                self.assertGreater(
+                    math.fsum(later.values)/len(later.values) -
+                    math.fsum(earlier.values)/len(earlier.values), contrast_bar_w)
 
     def test_thread_start_failure_keeps_native_cleanup_balanced(self) -> None:
         library = FakeNvmlLibrary()
