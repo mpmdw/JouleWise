@@ -108,7 +108,14 @@ class DiskBudgetTests(unittest.TestCase):
             self.assertNotIn("disk_budget", inputs)
 
     def test_missing_and_inconsistent_p_are_flags(self):
-        for terms in (None, {}, {"B_bytes": 10}):
+        # Exact integer identity: P = 2*(101+7200)+3 = 14605 bytes.
+        exact = dict(B_bytes=101, extra_wait_raw_bytes=7200, fixed_retained_bytes=3,
+                     required_free_bytes=14605, peak_copies=2, session_wait_budget_s=7200)
+        self.assertTrue(plan_inputs.valid_disk_terms(exact))
+        inconsistent = [dict(exact, required_free_bytes=14605 + delta) for delta in (1, -1)]
+        for terms in inconsistent:
+            self.assertFalse(plan_inputs.valid_disk_terms(terms))
+        for terms in (None, {}, {"B_bytes": 10}, *inconsistent):
             inputs = {"pack_root": str(ROOT / "configs/campaigns/bytes-s1-p1"),
                       "bytes_per_member": plan_inputs.BYTES_PER_MEMBER,
                       "thresholds": {"disk": {"headroom_bytes": 20 * 1024 ** 3}}}

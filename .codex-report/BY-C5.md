@@ -1,5 +1,7 @@
 ## PROGRESS
 
+Part 3 (review r3 of 436cd4353) complete: findings 1/2 fixed with exact regression tests; M8/M9 SURVIVED baseline and KILLED revised tests; 30/30 focused tests pass. Finding 3 disclosed in R6/OPEN ISSUES; finding 4 rejected per R2-6c; operational free-space fact recorded. Only two tests and two reports changed; production values unchanged. Director owns commit/push and PR #547 final-head verification. The following progress paragraph records Part 2.
+
 A1–A8 and R2-1–R2-6 are resolved as recorded in BY-C5-fix1.md; BY-MERGE remains a director hand-forward. All twelve committed-fixed budgets match native planner/arm/precheck boundaries. Native H 36/36 and 103/113 importer/native individual tests pass; the remaining capture 4, cold-pass 5 and desk-resume 1 are delegated to PR #547 CI on the final head (director) on PR #547 at c36ef1c51. No additional slow runs in this final report-only slice. Director owns CI adjudication, final verification, report commit/push and ledger done line.
 
 BY-C5-fix1 COMPLETE
@@ -11,7 +13,7 @@ C5 now replaces the 150 GiB reserve with H-DISK-RULING exact rational P.
 Rates derive from one raw bundle's allocated byte receipts, without altering retained_bytes.
 All twelve pass packs print both bases, per-model counts and allowances, WAIT, fixed, c and P.
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
-All 20 bytes_gates tests pass in fix round; H rates agree with disk_h at the required 1e-6 relative bar.
+All 21 bytes_gates tests pass after Part 3 (20 before its added regression); H rates agree with disk_h at the required 1e-6 relative bar from prior verification.
 Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
 Native producer now emits one-copy raw allocated-byte receipts; fully observed native-export C5 integration passes.
 All twelve H P values equal the actual planner and disk-hazard requirement, as exact integers.
@@ -265,7 +267,7 @@ Slice-6 intake df: 87,373,108 KiB available = 89,470,062,592 B, exceeding all P 
 
 Lead disk-state fact: the director observed about 67 GiB (~72 GB) free at 07:5x UTC, at which s3/s4 would physically refuse while s1/s2/s5 were within a few GB. This slice re-ran `df -k /Users/edr`: `/dev/disk3s5 971350180 902869204 44779048 96% ... /System/Volumes/Data`. Available=44,779,048 KiB=45,853,745,152 B (~42.7 GiB), above the 10 GiB stop gate but below all six P values, so every sub-pack would physically refuse at this reading. These are correct free<P refusals, not a defect; free space is time-dependent.
 
-The committed fixed source is configs/campaigns/bytes_mac_check/registration/sizing_b5.json, pointer /packs/bytes-mac-check/disk_derivation/fixed_retained_bytes (SHA-256 42bd19f9b4387944b919346ac946f0b996bf694f5f9af084f15adff4d35622c6). The stopped-session measured 1,266,544,640 B is unused disclosure. PRECHECK uses P with zero headroom; with smoke due it adds only ceil(2 B m/n) retained smoke member bytes. Missing P is flagged, without an inherited reserve; DriverLane retains its registration hold. Smoke metadata labels its actual native requirement separately from full-pack P.
+The committed fixed source is configs/campaigns/bytes_mac_check/registration/sizing_b5.json, pointer /packs/bytes-mac-check/disk_derivation/fixed_retained_bytes (SHA-256 42bd19f9b4387944b919346ac946f0b996bf694f5f9af084f15adff4d35622c6). The stopped-session measured 1,266,544,640 B is unused disclosure. PRECHECK uses P with zero headroom; with smoke due it adds only ceil(2 B m/n) retained smoke member bytes. This share excludes the smoke session's own fixed files (including custody); PRECHECK can START a smoke that the full-session arm later refuses, short by at most those fixed bytes. The cost is at most one wasted smoke; arm still measures free bytes against P. Missing P is flagged, without an inherited reserve; DriverLane retains its registration hold. Smoke metadata labels its actual native requirement separately from full-pack P.
 
 ## CI
 
@@ -310,6 +312,10 @@ The production/test map below records the governing numerical clauses. Counterfa
 | Brief rule 8, missing replay row retained as flag | scripts/bytes_gates.py:383 replay_disk | tests/test_bytes_gates.py:138 test_missing_inputs_are_listed_never_refused | Drop missing row: unavailable/session-count assertion fails. |
 
 ## OPEN ISSUES
+
+Part 3 / review r3: at review time `df -g /Users/edr` showed about 53 GiB available, below every pass P (62.8 to 85.1 GB), so every BYTES pass session would refuse at arm now; BY-SLOTS needs at least 85,140,886,637 B free plus the smoke share for s4. Part 3 intake also showed 53 GiB. These are time-specific observations, not new arm receipts.
+
+Part 3 finding 3 (disclosed, no code change): the precheck smoke share counts only smoke member bytes, ceil(2·B·m/n), excluding its own fixed files. PRECHECK may START a smoke followed by full-session arm refusal, short by at most those fixed bytes; arm protects the physics and the cost is at most one wasted smoke.
 
 Reviewer free space 53,472,432,128 B is below all pass P values: correct arm refusal/PRECHECK WAIT until operator frees about 9.3–31.7 GB, plus up to 1.83 GB smoke retention. Part 2 slice 4 intake free space is 48 GiB; during tests 47 GiB. No arming or measurement was attempted.
 

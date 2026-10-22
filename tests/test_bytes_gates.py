@@ -189,6 +189,28 @@ class World(unittest.TestCase):
 
 
 class GatesTests(World):
+    def test_varying_stream_overhead_uses_largest_and_exact_p(self):
+        receipts = [dict(request_s=2, stream_s=3, member_wall_s=4, raw_allocated_bytes=150),
+                    dict(request_s=4, stream_s=7, member_wall_s=8, raw_allocated_bytes=350)]
+        # Request spread gives margin=4/2-1=1. Overheads are 1 and 3 seconds.
+        # Exact rationals/bytes pin the ruling, rather than a floating tolerance.
+        margin = Fraction(4, 2) - 1
+        expected_allowance = (Fraction(2 + 4, 2) + Fraction(3)) * (1 + margin)
+        allowance = gates.disk_allowance(receipts, count=3, margin=margin)
+        self.assertEqual(allowance['stream_allowance_s'], expected_allowance)
+        # r_s=max(150/3,350/7)=50; r_w=max(150/4,350/8)=175/4.
+        # Stream basis=ceil(50*3*12)=1800; wall=ceil((175/4)*3*12)=1575.
+        # WAIT=ceil(50*7200)=360000; fixed=7; P=2*(1800+360000)+7.
+        terms = gates.disk_terms(Fraction(50), Fraction(175, 4), {'model': allowance}, 7)
+        expected_stream = math.ceil(Fraction(50) * 3 * expected_allowance)
+        expected_wall = math.ceil(Fraction(175, 4) * 3 * Fraction(4 + 8, 2) * 2)
+        expected_p = 2 * (expected_stream + math.ceil(Fraction(50) * 7200)) + 7
+        self.assertGreater(expected_stream, expected_wall)
+        self.assertEqual(terms['stream_basis_bytes'], expected_stream)
+        self.assertEqual(terms['wall_basis_bytes'], expected_wall)
+        self.assertEqual(terms['B_bytes'], expected_stream)
+        self.assertEqual(terms['required_free_bytes'], expected_p)
+
     def test_hand_computed_p_includes_margin_reference_and_tree_counts(self):
         measured = deepcopy(self.measured)
         science = {m['run_id'] for m in self.plan['members'] if m['model_id'] != 'reference'}

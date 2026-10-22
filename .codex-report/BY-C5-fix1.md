@@ -1,5 +1,14 @@
 ## PROGRESS
 
+Part 3 (review r3 of 436cd4353) started at 436cd4353
+
+- Done (Part 3): clean baseline confirmed at 436cd4353; both exact regression tests added. test_plan_inputs passes 9/9; test_bytes_gates passes 21/21. No production changes needed.
+- Done (Part 3): M8 and M9 SURVIVED baseline and are KILLED by revised tests; disclosures recorded; 682-path sealed inventory diff empty; production modules byte-identical to baseline.
+- Next (Part 3): director reviews/commits the four scoped files, pushes the lane, checks PR #547 CI on the resulting head and owns final verification.
+- Open (Part 3): no implementation blockers; physical free-space recovery and PR #547 final-head verification remain director-owned. NEEDS_RULING: none.
+
+BY-C5-fix1 PART 3 COMPLETE
+
 - Done: Part 2 (review of dcceb8480) started at 0a585bb8e; all A1–A8, BY-MERGE and R2-1–R2-6 dispositions are recorded below. Director committed and pushed slice 8 as c36ef1c51; this final slice changes reports only.
 - Done: all twelve committed-fixed P values pass native planner/arm/precheck boundaries; four desk freshness cases pass; M4/M8/M12/M13 are CAUGHT; sealed inventory diff is empty (682 files).
 - Done: 103 of 113 importer/native individual tests pass, zero failures and no skips in those 103. The ten remaining tests (capture_screen_reachability 4, cold_pass_fixes 5, desk_resume_finalize 1) are **delegated to PR #547 CI on the final head (director)** on PR #547 at c36ef1c51. They are not claimed as local passes. No slow importer test was rerun in this final slice.
@@ -10,6 +19,8 @@ BY-C5-fix1 COMPLETE
 
 ## SUMMARY
 
+Part 3 (review r3 of 436cd4353) is done: both test-only minors fixed, smoke fixed-file gap disclosed, carried-over smoke-path nit rejected per director ruling, operational disk fact recorded. M8/M9 change from SURVIVED to KILLED; focused modules pass 30/30; no production values moved.
+
 BY-C5 fix round 1 is complete under the director's final-slice instruction.
 C5 uses committed fixed artifacts of 4,046,531,103 B; measured partial fixed bytes remain unused disclosure.
 All twelve H-derived P values (62,811,368,483–85,140,886,637 B) equal native planner requirements exactly and pass the arm/precheck boundary checks.
@@ -18,7 +29,7 @@ Fresh-output desk status distinguishes program_fault from unavailable, fail and 
 Hand-computed P and missing-P coverage catch M4/M8/M12/M13; disclosure labels and decimal stdout are fixed.
 Director's real replay refuses 0 of 10 available sessions, with r2-alpha prepared, never ran; 682 sealed files are unchanged.
 103 of 113 importer/native tests passed individually; ten are delegated to PR #547 CI on the final head (director), with no CI result claimed here.
-Only the two reports changed in this final slice; director owns commit/push, CI adjudication and final verification on PR #547.
+Part 2's final slice changed only the two reports; Part 3 adds two regression-test changes and the disclosures below. Director owns commit/push, CI adjudication and final verification on PR #547.
 
 ## FIX LOG
 
@@ -545,3 +556,103 @@ JW_B5_SYNTHETIC_ONLY=1 and its own TMPDIR under /private/tmp.
   cold_pass_fixes 3 of 5, desk_resume_finalize 1 of 1). Two (cold_pass_fixes
   test_exit4_and_acceptance_unavailable_reharvest_into_new_archive and test_physical_and_opening_no_bound_stops_rotate)
   hit the director's 560 s per-test limit under machine load with no failure output; they are left to PR #547 CI.
+
+## PART 3 (review r3 of 436cd4353)
+
+### FIX LOG
+
+| Finding | Disposition / evidence |
+|---|---|
+| 1 minor | Fixed: `GatesTests.test_varying_stream_overhead_uses_largest_and_exact_p`. Requests 2,4 s; stream overheads 1,3 s; margin=4/2−1=1; expected exact Fraction allowance=((2+4)/2+3)×2=12 s. Raw bytes 150,350 give r_s=50 and r_w=175/4 B/s. Three members yield stream=1800 B > wall=1575 B, WAIT=360000 B, fixed=7 B, P=2(1800+360000)+7=723607 B. Expected values are computed from inputs without calling production arithmetic. Exact rational and integer assertions are appropriate because identity is the property. M9 now KILLED (1 failing test of 21), versus SURVIVED (0 of 20) on baseline. |
+| 2 minor | Fixed: `DiskBudgetTests.test_missing_and_inconsistent_p_are_flags`. Complete valid terms have B=101, WAIT=7200, fixed=3, hence exact P=14605 B. `valid_disk_terms` is True for 14605 and False for 14606 and 14604; each off-by-one row encodes `disk.budget_missing` and null required_free_bytes. M8 now KILLED (1 failing test of 9), versus SURVIVED (0 of 9) on baseline. |
+| 3 nit | Fixed by disclosure only, as directed. BY-C5 OPEN ISSUES and R6 DRAFT state smoke share ceil(2·B·m/n) covers member bytes only and excludes smoke fixed files. PRECHECK may START a smoke which the full-session arm refuses, short by at most those fixed bytes; arm still measures free bytes against P, and the cost is at most one wasted smoke. No code change. |
+| 4 nit | Rejected-with-reason / no change: director's part-2 R2-6c ruling already settled it. Precheck and loop share `compose.registered_smoke_keep`; all twelve bytes-s entries are present. No current effect and no new path policy adopted. |
+| Operational fact | Recorded only in BY-C5 OPEN ISSUES: at review time `df -g /Users/edr` showed about 53 GiB available, below every pass P (62.8 to 85.1 GB), so every BYTES pass session would refuse at arm now; BY-SLOTS needs at least 85,140,886,637 B free plus the smoke share for s4. Intake independently showed 53 GiB, above the local 10 GiB stop gate. No arm attempted. |
+
+### MUTANTS
+
+Copied the reviewer's script, without executing its ten-mutant form:
+
+```sh
+cp /Users/edr/code/jw-wt/byc5-review-opus-tmp/mut/mut.py /private/tmp/byc5f3/mut89.py
+```
+
+Filtered `muts` to names starting `M8 ` or `M9 ` and restricted M8 modules to `tests.b6.test_plan_inputs` to fit the slice. M9 retains `tests.test_bytes_gates`. Exact reviewer old/new mutation strings and restoration logic were preserved. Both trees are disposable copies; the working clone was never mutated.
+
+Baseline preparation and successful probe:
+
+```sh
+mkdir -p /private/tmp/byc5f3/base-tree
+git archive 436cd4353 | tar -x -C /private/tmp/byc5f3/base-tree
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/byc5f3/run.py mut89-base /opt/homebrew/bin/python3.13 -B /private/tmp/byc5f3/mut89.py /private/tmp/byc5f3/base-tree
+```
+
+Exit 0; exact output:
+
+```text
+M8 valid_disk_terms skips P check -> SURVIVED 0 9
+M9 allowance overhead max->min -> SURVIVED 0 20
+```
+
+Revised preparation and probe:
+
+```sh
+cp -R /Users/edr/code/JouleWise-by-c5 /private/tmp/byc5f3/mut-tree
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/byc5f3/run.py mut89 /opt/homebrew/bin/python3.13 -B /private/tmp/byc5f3/mut89.py /private/tmp/byc5f3/mut-tree
+```
+
+Exit 0; exact output:
+
+```text
+M8 valid_disk_terms skips P check -> KILLED 1 9
+M9 allowance overhead max->min -> KILLED 1 21
+```
+
+`run.py` creates a fresh `tempfile.TemporaryDirectory(prefix='jwtmp-byc5f3.', dir='/private/tmp')`, sets TMPDIR to it and JW_B5_SYNTHETIC_ONLY/PYTHONDONTWRITEBYTECODE to 1 in the child environment, captures combined output to `/private/tmp/byc5f3/<label>.log`, returns the child exit code and deletes the temporary directory. This implements the prescribed fresh-TMPDIR invocation with reliable cleanup. Baseline/revised logs remain `mut89-base.log` and `mut89.log`. Disposable tree copies were deleted after verification.
+
+### TESTS RUN
+
+Working directory for all commands: `/Users/edr/code/JouleWise-by-c5`.
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/byc5f3/run.py tests.b6.test_plan_inputs /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_plan_inputs
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/byc5f3/run.py tests.test_bytes_gates /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_gates
+git diff --check
+```
+
+Results: plan_inputs 9 tests / exit 0 / OK, bytes_gates 21 tests / exit 0 / OK; zero skips or test failures. The registry diagnostic `registered BYTES sizing rows checked: 0` is a pre-existing baseline condition, not evidence of twelve registered rows. The new consistency cases use complete synthetic terms. `git diff --check` exits 0 with no output. Only the two permitted modules ran; CI owns the full suite. No production module changed, so real H rerun and importer modules were not required; no real session input was read.
+
+Execution deviations: initial shell commands containing `rm -rf` cleanup were rejected before execution by the command runner (no tests started); cleanup was implemented with TemporaryDirectory. One prematurely started baseline probe exited 1 with FileNotFoundError while archive extraction was still running; waited for archive completion, reran and obtained the successful baseline results above. No sysmond, pgrep, launchd, launchctl, powermetrics, bootsessionuuid, process-group, or fixture-git-commit failures occurred in completed test runs.
+
+### SEALED INVENTORY
+
+Exact check, exit 0:
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B - <<'PY'
+import json
+from pathlib import Path
+import subprocess
+paths = list(json.loads(Path('configs/campaigns/v5_claim_25g83/sealed_inventory.json').read_text())['files'])
+command = ['git', 'diff', '--name-only', 'bda481d5a', '--', *paths]
+result = subprocess.run(command, capture_output=True, text=True, check=True)
+assert not result.stdout, result.stdout
+print(f'SEALED INVENTORY: {len(paths)} paths; git diff --name-only bda481d5a -- <inventory paths>: empty')
+for path in ('scripts/bytes_gates.py', 'joulewise/b6/plan_inputs.py'):
+    assert Path(path).read_bytes() == subprocess.check_output(['git', 'show', '436cd4353:' + path])
+print('Production modules byte-identical to 436cd4353')
+PY
+```
+
+Output: `SEALED INVENTORY: 682 paths; git diff --name-only bda481d5a -- <inventory paths>: empty`; `Production modules byte-identical to 436cd4353`. This compares the baseline to the current working tree, including uncommitted work.
+
+### DECISIONS I MADE
+
+- Applied the director's findings 1–4 and operational disclosure as written; no thresholds or production semantics changed.
+- Used exact Fraction/integer assertions for identity; chose stream-winning synthetic inputs so M9 moves P as well as the allowance.
+- Scoped M8 execution to plan_inputs only as expressly authorized. M8/M9 here are the review-r3 mutants, distinct from similarly numbered historical probes in parts 1/2.
+- Changed only the two tests and two reports. No commits, pushes, integrations, measurement tasks or prohibited data reads. Director owns final diff review, PR #547 CI and BY-MERGE.
+
+### NEEDS_RULING
+
+none.
