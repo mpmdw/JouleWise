@@ -260,7 +260,12 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
             # ChatEndpoint guarantees identity, not a .model attribute; the runner
             # may therefore put a serving identity containing the model ID here.
             identity = episode.agent_model
-            if identity != model and not any(
+            # The runner's built-in mock intentionally identifies synthetic-8B.
+            # It cannot claim a planned HF model and is already ineligible power
+            # evidence. Do not add a second model failure to that declared world.
+            declared_mock = (episode.endpoint.startswith("mock/") and episode.power_traces
+                             and all(t.source == "mock" for t in episode.power_traces))
+            if not declared_mock and identity != model and not any(
                     model + separator in identity for separator in ("@", ":", "|", " ")):
                 if not identity.endswith(model):
                     flags.append("runner_episode_model_mismatch")
@@ -271,7 +276,7 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
                 flags.append("episode_power_missing")
             for device in measured_devices:
                 if not any(re.match(r"^gpu" + str(device) + r"(?=$|[^0-9])", t.channel)
-                           and t.source != "mock" for t in episode.power_traces):
+                           for t in episode.power_traces):
                     flags.append("episode_measured_device_power_missing:" + str(device))
             for trace in episode.power_traces:
                 if trace.source == "mock":
@@ -466,7 +471,11 @@ def run_session(options: SessionOptions, *,
                 if not isinstance(report, dict) or type(report.get("refused")) is not bool:
                     raise ValueError("preflight verdict missing")
                 receipt["preflight"] = {k: report.get(k) for k in ("refused", "measurement_ready", "flags")}
-                flags.extend(report.get("flags", ()))
+                report_flags = report.get("flags", [])
+                if isinstance(report_flags, list) and all(isinstance(f, str) for f in report_flags):
+                    flags.extend(report_flags)
+                else:
+                    flags.append("nvml_preflight_flags_invalid")
                 if report["refused"]:
                     flags.append("nvml_preflight_refused")
                     receipt["status"] = "refused"

@@ -199,6 +199,9 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
         if gpu[k] is None:
             flags.append("planning_input_unavailable:" + k)
             plan_available = False
+    for key in ("prefill_tokens", "decode_tokens", "tool_wait_s", "host_overhead_s"):
+        if work[key] is None:
+            flags.append("planning_input_unavailable:" + key)
     # Null token volumes take precedence over efficiency: both are missing inputs.
     if any(gpu["throughput"][m]["efficiency"] is None for m in counts):
         flags.append("throughput_efficiency_not_supplied")
@@ -213,7 +216,11 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
     if calibration is not None:
         basis, calibration_flags = _calibration(Path(calibration), counts)
         flags.extend(calibration_flags)
-        if len(basis) == len(counts):
+        if matrix["kind"] == "budget":
+            flags.append("budget_calibration_strata_unavailable")
+            for row in basis.values():
+                row["projected_episode_seconds"] = None
+        elif len(basis) == len(counts):
             generation_seconds = math.fsum(b["projected_episode_seconds"] for b in basis.values())
         # No invented setup/load allowance turns an episode extrapolation into a
         # complete rental plan. Operator timeout bounds cover this paid pilot.

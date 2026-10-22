@@ -930,6 +930,21 @@ class FixArithmeticTests(unittest.TestCase):
         self.assertEqual(first["task_pairs"][0]["config"], {})
         self.assertEqual(first["clock"], settings["clock"])
         self.assertEqual(first["clock_domain"], "mock.monotonic")
+        from joulewise.align.records import Episode, PowerTrace, Turn, write_episodes
+        from joulewise.align.gpukit.session import _validate_output
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "mock.jsonl"
+            write_episodes(path, [Episode(
+                "mock-id", "task", "benign", "synthetic-8B", "mock/synthetic-8B/v1/test",
+                0, "mock.monotonic", 0, 1_000_000_000,
+                (Turn(0, 0, 1_000_000_000, 0, 800, 80),),
+                power_traces=(PowerTrace("mock", "gpu0", "mock.monotonic",
+                                        (0, 1_000_000_000), (55.0, 55.0),
+                                        "W", 100_000_000),))])
+            output_flags = _validate_output(path, expected_count=1, router=False,
+                                            model=matrix["models"][0]["id"],
+                                            expected_coordinates=[("task", "benign", 0)])
+            self.assertEqual(output_flags, ("episode_power_mock",))
         settings["endpoint_config"] = {"model": "{agent_model}", "base_url": "{agent_base_url}"}
         requested, _ = runner_matrix(matrix, **kwargs)
         self.assertEqual(requested["endpoints"][0]["config"],
