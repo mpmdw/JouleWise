@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import math
 import json
+import subprocess
+import sys
+from pathlib import Path
 import random
 import statistics
 import unittest
@@ -485,6 +488,38 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         self.assertLessEqual(max(map(abs, result["true_extra_j_per_decode_token_range"])), bar)
         self.assertFalse(result["forecast"]["detectable_under_assumptions"])
         self.assertIn("no_routing_energy_coupling", result["forecast"]["flags"])
+
+    def test_standalone_cli_runs_all_default_worlds_and_emits_finite_json(self):
+        # This verifies the installed module entry and JSON boundary across
+        # both sensors and both residency settings through the real world chain.
+        command = [sys.executable, "-m", "joulewise.align.moe_stage_b.experiment"]
+        result = subprocess.run(command, cwd=Path(__file__).resolve().parents[2],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "SYNTHETIC_ONLY")
+        self.assertEqual(len(payload["results"]), 2*2)  # Two sensors x two residency settings.
+        evidence = []
+        for case in payload["results"]:
+            self.assertEqual(case["episodes"], 2*payload["world"]["groups"])
+            self.assertEqual(case["decode_tokens_per_episode"],
+                             payload["world"]["turns"]*payload["world"]["decode_tokens_per_turn"])
+            if case["all_resident"]:
+                self.assertEqual(case["total_modelled_bytes"], 0)
+                self.assertFalse(case["forecast"]["detectable_under_assumptions"])
+            evidence.append({
+                "sensor": case["sensor"]["name"], "resident": case["all_resident"],
+                "episodes": case["episodes"], "samples": case["total_samples"],
+                "true_extra_j_per_token": case["true_extra_j_per_decode_token_range"],
+                "apparent_extra_j_per_token": case["apparent_extra_j_per_decode_token_range"],
+                "within_condition_r": {name: recovery["within_condition_held_out_correlation"]
+                                       for name, recovery in case["recovery"].items()},
+                "required_r": case["requirement"]["minimum_absolute_correlation"],
+                "phase_sweep_error_std_j": case["phase_sweep_energy_error_std_j"],
+                "conditional_detection": case["forecast"]["detectable_under_assumptions"],
+            })
+        print("STAGEB_CLI_COMMAND " + " ".join(command))
+        print("STAGEB_CLI_EVIDENCE " + json.dumps(evidence, sort_keys=True, allow_nan=False))
 
     def test_unavailable_worlds_preserve_flagged_episode_records(self):
         world = WorldConfig(groups=1, turns=1, prefill_tokens_per_turn=4,
