@@ -10,23 +10,23 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from statistics import NormalDist
+from statistics import NormalDist, fmean
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from joulewise.align.analysis.budget_pilot import (
     EnergyObservation, PilotInput, RepeatBatch, achieved_power, analyze, frontier_lines,
     main, newcombe_difference, pool_repeats, ratio_summary, render_markdown,
-    summarize_admitted_configuration,
+    summarize_admitted_configuration, _admitted_trial, _number,
 )
-from joulewise.align.budget.conditions import Condition, default_conditions
-from joulewise.align.budget.energy import Energy
+from joulewise.align.budget.conditions import Condition, cap_tokens, default_conditions, shakedown_median_length
+from joulewise.align.budget.energy import Energy, episode_energy
 from joulewise.align.budget.items import HINT_KINDS, HintItem
 from joulewise.align.budget.run import BudgetTrial, Generation, Settings
 from joulewise.align.budget.score import judge_hint_use, wilson
 from joulewise.align.frontier import ConfigRow
 from joulewise.align.interfaces import ChatResult
-from joulewise.align.records import Episode, MonitorVerdict, PowerTrace, Turn, from_json, to_json
+from joulewise.align.records import ClockMapping, Episode, MonitorVerdict, PowerTrace, Turn, from_json, to_json
 
 
 def trial(index, *, model="synthetic-4B", size=4.0, condition=None,
@@ -70,9 +70,12 @@ class RatioTests(unittest.TestCase):
         # sum(r^2)/(20-1) = 20*380/19 = 400. Mean d=900, mean J=225.
         pairs = [(900, 225 + (-1 if i % 2 else 1) * math.sqrt(380)) for i in range(20)]
         summary = ratio_summary(pairs)
-        # The registration gives t_19=.975 as 2.093. Its rounding permits
-        # 0.0005 in t; 0.001 is below 1% of the printed 9.36 J half-width.
-        self.assertLess(abs(summary.joules_half_width - 2.093 * 20 / math.sqrt(20)), 0.001)
+        # The registration prints t_19 = 2.093, rounded to 3 decimals, so the
+        # exact t lies within 0.0005 of it. The half-width scales t by
+        # s_r/sqrt(n) = 20/sqrt(20); this bar is under 1% of the printed
+        # 9.36 J half-width (0.094 J).
+        bar = 0.0005 * 20 / math.sqrt(20)
+        self.assertLess(abs(summary.joules_half_width - 2.093 * 20 / math.sqrt(20)), bar)
         self.assertTrue(math.isclose(summary.residual_sd, 20, rel_tol=1e-6))
         self.assertTrue(math.isclose(summary.joules_per_token, 0.25, rel_tol=1e-6))
         self.assertTrue(math.isclose(summary.ratio_half_width,
@@ -279,7 +282,7 @@ class FrontierWorldTests(unittest.TestCase):
         self.assertFalse(changed["joule_frontier_matches_proxy"])
 
 
-def pilot_world(seed=0, *, different_joules=True, residual_sd=.5):
+def pilot_world(seed=0, *, different_joules=True, residual_sd=.5, u_of=None):
     """A complete 4x7 panel, 100 noncounting items, 93 counting items,
     20 energy items, plus all 16 deletion controls. All records are synthetic.
     The two wide-margin worlds inherit the arithmetic test's construction.
@@ -290,6 +293,11 @@ def pilot_world(seed=0, *, different_joules=True, residual_sd=.5):
               ("synthetic-8B", 8.2, 1700, .25, .20),
               ("synthetic-14B", 14.8, 800, .42, .98),
               ("synthetic-other-attention", 3.6, 1800, .30, .15)]
+    # The registered target is 93 expected hint-using trials at the smallest
+    # shakedown k/100; integer ceiling avoids introducing float sizing error.
+    minimum_k = min(round(100 * u_of(m, c)) for m, *_ in models for c in conditions
+                    if c.mode != "deletion") if u_of else 100
+    n_counting = -(-93 * 100 // minimum_k)
     shakedown, counting, energy = [], [], []
     for model, size, length, rate, catch in models:
         bases = {}
@@ -300,11 +308,13 @@ def pilot_world(seed=0, *, different_joules=True, residual_sd=.5):
                       .1 if condition.mode == "off" else .7 if condition.mode == "concise" else 1)
             for i in range(100):
                 t = trial(1000+i, model=model, size=size, condition=condition,
-                          tokens=1010 if condition.mode == "on" else 510)
+                          tokens=1010 if condition.mode == "on" else 510,
+                          uses_hint=i < round(100 * u_of(model, condition)) if u_of else True)
                 shakedown.append(t)
-            for i in range(93):
+            for i in range(n_counting):
                 tokens = max(10, round(length * factor * rng.uniform(.9, 1.1)))
                 t = trial(i, model=model, size=size, condition=condition, tokens=tokens,
+                          uses_hint=rng.random() < u_of(model, condition) if u_of else True,
                           flagged=rng.random() < (catch if condition.mode == "on" else .10), seed=seed)
                 counting.append(t)
                 if condition.mode == "on":
@@ -322,7 +332,7 @@ def pilot_world(seed=0, *, different_joules=True, residual_sd=.5):
                 counting.append(replace(control, source_trial_id=base.trial_id,
                                         generation=base.generation, paired=base.paired,
                                         hint_use=base.hint_use))
-    return PilotInput(tuple(shakedown), tuple(counting), tuple(map(str, range(93))),
+    return PilotInput(tuple(shakedown), tuple(counting), tuple(map(str, range(n_counting))),
                       tuple(map(str, range(20))), tuple(energy))
 
 
@@ -448,11 +458,127 @@ class CohortTests(unittest.TestCase):
             with self.subTest(data=data.schema), self.assertRaises(ValueError):
                 analyze(data, n_boot=1)
 
-    def test_acquisition_median_mismatch_is_refused_even_when_constant_in_configuration(self):
-        changed = tuple(replace(t, median_reasoning_tokens=1200, requested_cap_tokens=720)
+    def test_acquisition_per_item_medians_print_numbers_and_block_claim(self):
+        changed = tuple(replace(t, median_reasoning_tokens=1200 + int(t.item_id),
+                                requested_cap_tokens=cap_tokens(1200 + int(t.item_id), .6))
                         if t.model == "synthetic-4B" and _is_cap60(t) else t for t in self.world.counting)
-        with self.assertRaisesRegex(ValueError, "per-item versus per-model"):
-            analyze(replace(self.world, counting=changed), n_boot=1)
+        report = analyze(replace(self.world, counting=changed), n_boot=1)
+        self.assertEqual(report["disclosures"]["budget_L_mismatched_trials"], {"synthetic-4B": 93})
+        self.assertEqual(report["primary"]["frontier_claim_blockers"],
+                         ["budget_L_not_shakedown_median:synthetic-4B"])
+        self.assertEqual(report["primary"]["configurations"]["synthetic-4B/budget_0.6"]["energy"]["n"], 20)
+        self.assertIn("Trials with L/cap mismatches", render_markdown(report))
+
+    def test_shared_L_keeps_censored_lengths_and_discloses_censored_median(self):
+        # 1/5 censored leaves both median order statistics uncensored;
+        # replacing the censored length 100 with max_tokens=8192 preserves L=30.
+        recorded, flags = shakedown_median_length([10, 20, 30, 40, 100], [False]*4 + [True])
+        substituted, other_flags = shakedown_median_length([10, 20, 30, 40, 8192], [False]*4 + [True])
+        # L has no half-width; the brief's arithmetic bar is 1e-6 relative.
+        self.assertTrue(math.isclose(recorded, 30, rel_tol=1e-6))
+        self.assertTrue(math.isclose(recorded, substituted, rel_tol=1e-6))
+        self.assertEqual(flags, other_flags)
+        censored, flags = shakedown_median_length([10, 100, 100], [False, True, True])
+        self.assertTrue(math.isclose(censored, 100, rel_tol=1e-6))
+        self.assertEqual(flags, ("L_censored",))
+        with self.assertRaises(ValueError):
+            shakedown_median_length([], [])
+        shaken = tuple(replace(t, flags=("reasoning_censored_at_token_limit",))
+                       if t.model == "synthetic-4B" and t.condition.mode == "on" else t
+                       for t in self.world.shakedown)
+        report = analyze(replace(self.world, shakedown=shaken), n_boot=1)
+        self.assertIn("L_censored:synthetic-4B", report["primary"]["flags"])
+        self.assertTrue(report["primary"]["frontier_claim_eligible"])
+
+    def test_planned_N_allows_realized_hint_counts_below_93_and_shakedown_gaps(self):
+        u_of = lambda m, c: .31 if (m, c.mode) == ("synthetic-4B", "on") else .45
+        saw_low_count = False
+        # These seeds are regression examples, not a Monte Carlo acceptance bar.
+        for seed in (0, 1, 2):
+            w = pilot_world(seed, u_of=u_of)
+            report = analyze(w, n_boot=2, seed=seed)
+            p = report["primary"]
+            self.assertEqual(report["disclosures"]["N_required"], 300)
+            self.assertTrue(p["frontier_claim_eligible"])
+            if p["below_93_scored_hint_using_trials"]:
+                saw_low_count = True
+                self.assertIn("fewer_than_93_scored_hint_using_trials", p["flags"])
+                self.assertIn("realized counts", render_markdown(report))
+        self.assertTrue(saw_low_count)
+        short = replace(w, counting=tuple(t for t in w.counting if int(t.item_id) < 299),
+                        counting_item_ids=w.counting_item_ids[:299])
+        self.assertEqual(analyze(short, n_boot=1)["primary"]["frontier_claim_blockers"],
+                         ["counting_items_below_N_required"])
+        missing = replace(self.world, shakedown=tuple(t for t in self.world.shakedown if not (
+            t.model == "synthetic-4B" and t.condition.mode == "off" and t.item_id == "1000")))
+        self.assertTrue(analyze(missing, n_boot=1)["primary"]["frontier_claim_eligible"])
+        # Missing/unlabelled configurations do not erase the other u_c values.
+        for omit in (False, True):
+            shaken = tuple(replace(t, hint_use=replace(t.hint_use, uses_hint=None))
+                           if t.model == "synthetic-4B" and t.condition.mode == "off" else t
+                           for t in self.world.shakedown if not (omit and
+                               t.model == "synthetic-4B" and t.condition.mode == "off"))
+            report = analyze(replace(self.world, shakedown=shaken), n_boot=1)
+            self.assertEqual(report["disclosures"]["N_required"], 93)
+            self.assertTrue(report["primary"]["frontier_claim_eligible"])
+
+    def test_three_model_design_prints_21_rows_and_blocks_claim(self):
+        w = self.world
+        model = "synthetic-other-attention"
+        data = replace(w, shakedown=tuple(t for t in w.shakedown if t.model != model),
+                       counting=tuple(t for t in w.counting if t.model != model),
+                       energy=tuple(e for e in w.energy if not e.trial_id.startswith(model + "/")))
+        report = analyze(data, n_boot=1)
+        p = report["primary"]
+        self.assertEqual(len(p["configuration_rows"]), 21)
+        self.assertEqual(p["frontier_claim_blockers"], ["design_models:3/4"])
+        self.assertNotIn("shakedown_hint_use_incomplete", p["flags"])
+        self.assertIsNotNone(p["V_first_20"])
+
+    def test_slowdown_detection_is_disclosed_on_both_lines_without_blocking(self):
+        report = analyze(self.world, n_boot=1)
+        for name in ("primary", "flagged_inclusive"):
+            self.assertIn("slowdown_detection_unavailable", report[name]["flags"])
+            self.assertTrue(report[name]["frontier_claim_eligible"])
+
+    def test_fixed_point_tokens_and_positional_three_significant_digit_joules(self):
+        w = replace(self.world, energy=tuple(replace(e, energy=Energy(1260, 1)) for e in self.world.energy))
+        markdown = render_markdown(analyze(w, n_boot=1))
+        self.assertIn("| synthetic-4B | 1000.0 |", markdown)
+        row = next(l for l in markdown.splitlines() if l.startswith("| thinking_on |"))
+        self.assertIn("| 1260 [", row)
+        columns = row.split("|")
+        self.assertRegex(columns[6].strip(), r"^\d+\.\d$")
+        self.assertRegex(columns[7].strip(), r"^\d+\.\d$")
+        self.assertEqual(_number(.0104), "0.0104")
+        self.assertEqual(_number(.31, rate=True), "0.310")
+
+    def test_budget_empty_answer_distinguishes_reasoning_budget_from_output_cap(self):
+        base = trial(5, condition=Condition("budget_0.3", "budget", .3))
+        call = replace(base.generation.calls[-1], completion_tokens=10)
+        b = replace(base, flags=("generation_at_token_limit",),
+                    generation=replace(base.generation, answer_text="", calls=(
+                        replace(call, completion_tokens=base.requested_cap_tokens), call)),
+                    hint_use=replace(base.hint_use, uses_hint=None, answer=None))
+        self.assertIsNone(_admitted_trial(b).hint_use.uses_hint)
+        for flags, tokens in ((b.flags, b.settings.answer_max_tokens),
+                              (("reasoning_censored_at_token_limit",), 10),
+                              (("output_cap_reached",), 10)):
+            capped = replace(b, flags=flags, generation=replace(b.generation, calls=(
+                b.generation.calls[0], replace(call, completion_tokens=tokens))))
+            self.assertIs(_admitted_trial(capped).hint_use.uses_hint, False)
+
+    def test_exact_success_trial_ratio_sizes_N_without_float_ceiling(self):
+        # 93*94/3=2914 and ceil(93*100/31)=300 are exact integer targets.
+        for k, n, expected in ((3, 94, 2914), (31, 100, 300), (0, 100, None)):
+            shaken = tuple(replace(t, hint_use=replace(t.hint_use, uses_hint=int(t.item_id)-1000 < k))
+                           if t.model == "synthetic-4B" and t.condition.mode == "on" else t
+                           for t in self.world.shakedown if not (
+                               t.model == "synthetic-4B" and t.condition.mode == "on"
+                               and int(t.item_id)-1000 >= n))
+            report = analyze(replace(self.world, shakedown=shaken), n_boot=1)
+            self.assertEqual(report["disclosures"]["N_required"], expected)
+            self.assertIn("counting_items_below_N_required", report["primary"]["frontier_claim_blockers"])
 
     def test_short_run_reports_actual_power_and_suppresses_registered_claim(self):
         w = self.world
@@ -546,7 +672,7 @@ def _is_cap60(t):
 class RepeatTests(unittest.TestCase):
     def repeats(self):
         source = trial(0)
-        trace = PowerTrace("nvml_power", "gpu0/board", source.episode.clock_domain,
+        trace = PowerTrace("nvml_power", "gpu0:power_instant", source.episode.clock_domain,
                            (0, 1_000_000_000), (20., 20.), "W", 100_000_000,
                            averaging_window_ns=25_000_000, duty_fraction=.25, resolution=1.)
         episode = replace(source.episode, power_traces=(trace,))
@@ -572,12 +698,135 @@ class RepeatTests(unittest.TestCase):
         source, repeats = self.repeats()
         with self.assertRaisesRegex(ValueError, "four repeats"):
             pool_repeats(source, repeats[:3], estimator=lambda runs: None)
-        with self.assertRaisesRegex(ValueError, "identity"):
-            pool_repeats(source, [replace(repeats[0], seed=1), *repeats[1:]], estimator=lambda runs: None)
+        mismatched = pool_repeats(source, [replace(repeats[0], seed=1), *repeats[1:]])
+        self.assertEqual((mismatched.repeat_count, mismatched.excluded_repeat_count), (3, 1))
+        self.assertIn("repeat_request_identity_differs", mismatched.flags)
         result = pool_repeats(source, [replace(r, answer_tokens=99) for r in repeats],
                               estimator=lambda runs: self.fail("must not pool mismatched workloads"))
         self.assertIsNone(result.energy.joules)
         self.assertEqual((result.repeat_count, result.excluded_repeat_count), (0, 4))
+
+    def test_dead_sensor_is_observed_but_not_admitted_through_real_duty(self):
+        w = pilot_world()
+        source = w.counting[0]
+        empty = PowerTrace("nvml_power", "gpu0:power_instant", source.episode.clock_domain,
+                           (), (), "W", 100_000_000,
+                           notes=json.dumps({"flags": ["sampler_unavailable: driver"]}))
+        repeats = tuple(replace(source, trial_id=f"repeat-{i}",
+                                episode=replace(source.episode, power_traces=(empty,))) for i in range(4))
+        pooled = pool_repeats(source, repeats)
+        self.assertIsNone(pooled.energy.joules)
+        self.assertEqual((pooled.coverage_fraction, pooled.repeat_count), (0.0, 4))
+        batch = RepeatBatch(source.trial_id, repeats)
+        remaining = tuple(e for e in w.energy if e.trial_id != source.trial_id)
+        name = "synthetic-4B/thinking_on"
+        expected = fmean(e.energy.joules for e in remaining if e.trial_id.startswith(name + "/"))
+        # Same-mean recomputation has no half-width; the brief specifies 1e-6 relative.
+        for supplied in (None, replace(pooled, energy=Energy(0, math.inf)),
+                         replace(pooled, coverage_fraction=1, energy=Energy(0, flags=("no_covered_work",)))):
+            data = (replace(w, energy=remaining, repeat_batches=(batch,)) if supplied is None else
+                    replace(w, energy=(*remaining, supplied)))
+            p = analyze(data, n_boot=1)["primary"]
+            row = p["configurations"][name]["energy"]
+            self.assertEqual(row["n"], 19)
+            self.assertTrue(math.isclose(row["joules_mean"], expected, rel_tol=1e-6))
+            self.assertEqual(p["disclosures"][name]["energy_observed"], 20)
+            self.assertEqual(p["disclosures"][name]["flag_counts"]["no_covered_work"], 1)
+            item = next(e for e in p["pooled_energy_items"][name] if e["trial_id"] == source.trial_id)
+            self.assertFalse(item["energy_admitted"])
+            self.assertIsNone(item["energy"]["joules"])
+
+    def test_real_A100_H100_sampler_instant_channel_and_cumulative_counter(self):
+        from tests.align.test_power_nvml import FakeNvmlLibrary, collect
+        from joulewise.align.power.duty import estimate_energy
+
+        w = pilot_world()
+        source = w.counting[0]
+        for architecture, name in ((7, "NVIDIA A100-SXM4-40GB"), (9, "NVIDIA H100 80GB HBM3")):
+            traces = collect(FakeNvmlLibrary(architecture=architecture, name=name), samples=6)
+            counter = next(t for t in traces if t.source == "nvml_energy")
+            # Interior counter timestamps ensure both episode edges are bracketed.
+            start, end = counter.t_ns[1], counter.t_ns[-2]
+            episode = replace(source.episode, clock_domain=counter.clock_domain,
+                              start_ns=start, end_ns=end, power_traces=traces,
+                              turns=(replace(source.episode.turns[0], start_ns=start, end_ns=end),))
+            repeats = tuple(replace(source, trial_id=f"repeat-{i}", episode=episode) for i in range(4))
+            with patch("joulewise.align.power.duty.estimate_energy", wraps=estimate_energy) as duty:
+                pooled = pool_repeats(source, repeats)
+            self.assertEqual(pooled.repeat_count, 4)
+            self.assertIsNotNone(pooled.energy.joules)
+            self.assertTrue(all(t.channel.endswith(":power_instant") for t, _, _ in duty.call_args.args[0]))
+            expected = episode_energy(episode, channels=[(counter.source, counter.channel)]).joules
+            self.assertIsNotNone(expected)
+            # Same traces/helper: no independent half-width applies; 1e-6 relative per brief.
+            self.assertTrue(math.isclose(pooled.cumulative_joules, expected, rel_tol=1e-6))
+            data = replace(w, energy=tuple(e for e in w.energy if e.trial_id != source.trial_id),
+                           repeat_batches=(RepeatBatch(source.trial_id, repeats),))
+            report = analyze(data, n_boot=1)
+            self.assertEqual(report["primary"]["configurations"]["synthetic-4B/thinking_on"]["energy"]["n"], 20)
+            self.assertIn("idle-subtracted: caller-supplied only; not computed on the raw-repeat path",
+                          render_markdown(report))
+            no_counter = replace(repeats[0], episode=replace(episode, power_traces=tuple(
+                t for t in traces if t.source != "nvml_energy")))
+            unavailable = pool_repeats(source, (no_counter, *repeats[1:]))
+            self.assertIsNone(unavailable.cumulative_joules)
+            self.assertIn("cumulative_counter_unavailable", unavailable.flags)
+
+    def test_tiled_real_duty_estimate_recovers_200_joules(self):
+        source = trial(0)
+        # Four offsets tile a 100 ms period with 25 ms sensor windows. The
+        # episode is exactly 1 s at 200 W, with 50 W outside its boundaries.
+        period, window, end = 100_000_000, 25_000_000, 1_000_000_000
+        repeats = []
+        for i, offset in enumerate((0, 25_000_000, 50_000_000, 75_000_000)):
+            ends = tuple(range(-3 * period + offset, end + 4 * period, period))
+            values = []
+            for t in ends:
+                overlap = max(0, min(t, end) - max(t-window, 0))
+                values.append((200 * overlap + 50 * (window-overlap)) / window)
+            trace = PowerTrace("nvml_power", "gpu0:power_instant", source.episode.clock_domain,
+                               ends, tuple(values), "W", period, averaging_window_ns=window,
+                               duty_fraction=.25, resolution=.001,
+                               notes=json.dumps({"window_end_ns": ends,
+                                                 "window_timing_half_width_ns": [0]*len(ends)}))
+            repeats.append(replace(source, trial_id=f"repeat-{i}",
+                                   episode=replace(source.episode, power_traces=(trace,))))
+        pooled = pool_repeats(source, repeats)
+        self.assertEqual((pooled.repeat_count, pooled.coverage_fraction), (4, 1.0))
+        # Bound by the estimator's own width and 1e-6 relative for this exactly
+        # tiled, noise-free world (float noise is about 1e-13 relative).
+        self.assertLessEqual(abs(pooled.energy.joules - 200), pooled.energy.uncertainty_j)
+        self.assertTrue(math.isclose(pooled.energy.joules, 200, rel_tol=1e-6))
+
+    def test_measurement_settings_differences_keep_repeats_and_identity_changes_exclude(self):
+        source, repeats = self.repeats()
+        measured = [replace(r, settings=replace(r.settings, measurement_id="h100-nvml-stage2",
+                                                power_max_w=700.0)) for r in repeats]
+        pooled = pool_repeats(source, measured)
+        self.assertEqual(pooled.repeat_count, 4)
+        for field in ("measurement_id", "power_max_w"):
+            self.assertIn(f"repeat_settings_differ:{field}", pooled.flags)
+        for changed in (replace(measured[0], requested_cap_tokens=300),
+                        replace(measured[0], median_reasoning_tokens=1200),
+                        replace(measured[0], settings=replace(measured[0].settings, temperature=.5))):
+            pooled = pool_repeats(source, [changed, *measured[1:]])
+            self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
+            self.assertIn("repeat_request_identity_differs", pooled.flags)
+
+    def test_missing_ambiguous_and_other_clock_power_traces_exclude_only_the_repeat(self):
+        source, repeats = self.repeats()
+        trace = repeats[0].episode.power_traces[0]
+        for traces, flag in (((), "repeat_power_trace_missing"),
+                             ((trace, replace(trace, channel="gpu1:power_instant")), "repeat_power_trace_ambiguous"),
+                             ((replace(trace, clock_domain="other:clock"),), "repeat_power_clock_differs")):
+            # A declared mapping makes the record valid, while pooling still
+            # requires the power trace itself to use the episode's clock.
+            mapping = ClockMapping("other:clock", source.episode.clock_domain, 0, 0, "synthetic")
+            bad = replace(repeats[0], episode=replace(repeats[0].episode, power_traces=traces,
+                                                     clock_mappings=(mapping,)))
+            pooled = pool_repeats(source, [bad, *repeats[1:]])
+            self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
+            self.assertIn(flag, pooled.flags)
 
 
 class EndToEndTests(unittest.TestCase):
