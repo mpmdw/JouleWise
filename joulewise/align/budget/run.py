@@ -402,7 +402,8 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
         "schema": SCHEMA,
         "implementation": _digest({
             name: Path(__file__).with_name(name).read_text(encoding="utf-8")
-            for name in ("run.py", "score.py", "conditions.py", "items.py", "energy.py")
+            for name in ("run.py", "score.py", "conditions.py", "items.py", "energy.py",
+                         "storage.py", "synthetic.py", "fixture.py")
         }),
         "items": questions, "source_flags": source_flags, "metadata": metadata,
         "models": [{"model": m.model, "size_b": m.size_b, "backend": m.backend,

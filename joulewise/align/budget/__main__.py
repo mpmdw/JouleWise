@@ -38,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
             confidence = 0.95
         else:
             config = json.loads(args.config.read_text(encoding="utf-8"))
+            if any(key not in config for key in ("models", "monitor", "settings")):
+                raise ValueError("config requires models, monitor and settings")
             source = config.get("dataset", {})
             kwargs = {"timeout_s": source.get("timeout_s", 60), "seed": source.get("seed", 0)}
             if "pin" in source:

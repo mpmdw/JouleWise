@@ -23,7 +23,7 @@ class TraceStore:
         self.path = path
         self.traces: dict[str, PowerTrace] = {}
         self.flags: list[str] = []
-        self.references: dict[int, str] = {}
+        self.references: dict[int, tuple[PowerTrace, str]] = {}
         if path is not None and path.exists():
             with path.open(encoding="utf-8") as handle:
                 for line in handle:
@@ -38,7 +38,8 @@ class TraceStore:
 
     def default(self, value: Any) -> Any:
         if isinstance(value, PowerTrace):
-            key = self.references.get(id(value))
+            cached = self.references.get(id(value))
+            key = cached[1] if cached is not None and cached[0] is value else None
             if key is None:
                 raw = to_json(value)
                 key = hashlib.sha256(raw.encode()).hexdigest()
@@ -56,7 +57,7 @@ class TraceStore:
                             handle.write('{"id":' + json.dumps(key) + ',"trace":' + raw + '}\n')
                             handle.flush()
                     self.traces[key] = value
-                self.references[id(value)] = key
+                self.references[id(value)] = (value, key)
             return {"$trace": key}
         if is_dataclass(value):
             # Return only the next object's fields, never recursively build

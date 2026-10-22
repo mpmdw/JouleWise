@@ -59,7 +59,7 @@ class ItemSource(Protocol):
 
 @dataclass(frozen=True)
 class HubPin:
-    """A caller-reviewed HF commit and SHA-256 of raw JSON bytes, never a moving ref."""
+    """A caller-reviewed HF commit and SHA-256 of raw dataset bytes, never a moving ref."""
 
     repository: str
     revision: str
