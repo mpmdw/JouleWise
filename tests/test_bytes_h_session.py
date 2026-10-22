@@ -648,12 +648,22 @@ class SessionTests(unittest.TestCase):
             h.write(self.session/'receipts'/(name+'.json'), {'schema_version': 'joulewise.bytes_h_'+name+'.v1',
                 'non_claim': True, 'session_id': supplied['session_id'], 'values': values,
                 'derivation': 'Controlled synthetic arithmetic from tests.test_bytes_gates.synthetic_harvest; never live evidence.'})
+        # Production has a raw tree and an archive clone; seed both copies.
+        for row in native_rows:
+            source = self.session / 'archive/sources/claim-runs' / row['run_id']
+            key = 'bound' if 'bound-collection' in row['stage_id'] else 'claim'
+            raw = Path(state['runs_roots'][key]) / row['run_id']
+            shutil.copytree(source, raw)
         # Keep the session directory's own allocation stable for the snapshot
         # comparison; only membership-dependent backup content is added later.
         backup_dirs = [self.session / name for name in ('backup-claim', 'backup-bound')]
         for backup in backup_dirs:
             backup.mkdir()
         measured = h.measurements(state, exported.csv_path)
+        for rid, receipt in measured['runs'].items():
+            with self.subTest(run_id=rid):
+                # Equal allocated synthetic copies: integer byte identity.
+                self.assertEqual(receipt['retained_bytes'], 2 * receipt['raw_allocated_bytes'])
         self.assertEqual(measured['disk']['backup_retained_bytes'], sum(h.disk_bytes(p) for p in backup_dirs))
         for index, backup in enumerate(backup_dirs):
             source = self.session / 'archive/sources/claim-runs' / native_rows[index]['run_id']

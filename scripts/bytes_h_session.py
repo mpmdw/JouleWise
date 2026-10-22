@@ -639,6 +639,12 @@ def measurements(state, export_csv):
         bundle = bundle_of(archive, night_plan, rid)
         paths = [p for p in [*raw, bundle] if p and p.is_dir()]
         bundle_dirs.extend(paths)
+        raw_paths, raw_seen = [p for p in raw if p.is_dir()], set()
+        try:
+            raw_allocated = sum(disk_bytes(p, seen=raw_seen) for p in raw_paths) if raw_paths else None
+        except OSError:
+            raw_allocated = None
+            unavailable('raw bundle disk usage: ' + rid)
         try:
             retained = sum(disk_bytes(p, seen=seen) for p in paths)
         except OSError:
@@ -668,6 +674,7 @@ def measurements(state, export_csv):
             if fit is not None:
                 rate_observations.append({'run_id': rid, 'samples': len(selected), **fit})
         result['runs'][rid] = {'request_s': request, 'member_wall_s': wall, 'stream_s': stream,
+            'raw_allocated_bytes': raw_allocated,
             'retained_bytes': retained, 'thermal_level': level, 'outside_cpu_s': cpu, 'census_quanta': k}
         if wall is not None:
             per_stage[row['stage_id']].append((begin['wall_s'], end['wall_s']))
@@ -753,6 +760,7 @@ def measurements(state, export_csv):
         'rate_standard_error_ppm': 'single-fit noise model: independent uniform +/- WINDOW_SKEW_MAX_NS anchor error; SE = (WINDOW_SKEW_MAX_NS/sqrt(3))/sqrt(Sxx)*1e6, Sxx=sum((RAW_ns-mean_RAW_ns)^2). At 1 s monitor cadence Sxx~n*span_ns^2/12: about 0.27 ppm for a 150 s member with n~150 and the admitted 250000 ns skew limit. Actual admitted timestamps/count used; not empirical uncertainty or a multiplicity correction for worst-of-members selection; registered gate unchanged',
         'frequency_word_ppm': 'worst signed observed kernel raw_word / hazards.clock.FREQUENCY_SCALE',
         'retained_bytes': 'POSIX st_blocks*512 for raw and archive bundle trees, inode-deduplicated; disk usage at desk snapshot',
+        'raw_allocated_bytes': 'POSIX st_blocks*512 for this run raw bundle tree only (runs-parent/<stage dir>/<run_id>), inode-deduplicated with its own seen-set, independent of archive; null for members that never ran',
         'fixed_retained_bytes': 'remaining allocated session bytes, excluding per-run bundle subtrees and backup-claim/backup-bound',
         'backup_retained_bytes': 'POSIX st_blocks*512 for backup-claim and backup-bound trees, inode-deduplicated against raw/archive/fixed bytes at desk snapshot',
         'pre_arm_free_bytes': 'minimum observed native arm disk target free_bytes; null when no arm receipt exists; prepare snapshot is not substituted',

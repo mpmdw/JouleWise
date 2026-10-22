@@ -1,13 +1,12 @@
 ## PROGRESS
 
-- Slice 5: director replay table imported from replay.json: 0 refusals / 10 available (nine block-6 + H), r2-alpha unavailable; largest pass refuses 0. No real session trees read.
-- P PER SUB-PACK now has readable integer terms and per-model allowances; exact fractions stay in director C5.json. R6 carries real P values. Current df available 44,779,048 KiB (~42.7 GiB), above 10 GiB stop gate, below every P.
-- Done earlier: exact raw allocated-byte rates; P and native q/headroom; synthetic real DriverLane/planner/disk hazard P-1/P proof; 17 C5 tests including replay.
-- Passed this slice: alpha/beta/gamma production regression all 6 subtests (167.493 s), confirming /tmp aliasing only; machine_test 29; lane_adapters 21; round2_review_fixes 8; s3_cold_fixes 6; ColdPassTests 9; ScreenInputsTests 2. hazards clock: 33 pass, one environmental kern.bootsessionuuid probe failure. Exact commands in TESTS RUN.
-- Full cold_pass_fixes timed out at 100 s; FullRoundTests still owed separately. capture_screen_reachability timed out at 75 s (recorded below); ChainReachabilityTests still owed separately. b6_loop separately passed 55 tests (23.277 s).
-- Currently running: desk_resume_finalize session 97218; capture_screen_reachability.PolicyReadTests + CaptureDispositionTests session 64707. Earlier batches 85156 and 49000 are finished; they stopped on their first timed-out module and did not run later modules. loop_round_desk remains entirely unrun.
-- Next: collect running results; run any remaining importer modules/classes split small; extend real writer equality to all twelve real-H terms; final report audit (including clause-map site lines and any NOT PINNED gaps). No new implementation edits in slice 5.
-- Open: hazards arm environmental process-group census failures (25 tests, 17 assertions fail; sysmond/pgrep unavailable), clock bootsessionuuid failure; BY-H2 native raw_allocated_bytes producer; known H native-export integration expectation; hazards import-graph GO/NULL failure; CI/director final review. No Git writes attempted.
+- Slice 6: authorized native raw_allocated_bytes producer complete (8 additive source lines, retained_bytes unchanged); production-shaped native-export integration passes, including all synthetic retained == 2*raw integer identities. tests.test_bytes_gates passes all 17 tests.
+- All twelve real-H P terms now verified through real DriverLane / plan_inputs / plan.write_window_plan / disk hazard: exact required_bytes == P, PASS at P. Existing synthetic E2E covers REFUSE at P-1.
+- Director real replay is recorded: 0 of 10 available sessions (9 block-6 + H), r2-alpha unavailable, largest-pass refusal count 0. Tables/R6 finalized. Sealed inventory remains unchanged; git diff --check passes.
+- Long runs still pending at this checkpoint: tests.test_bytes_h_session (session 2636, 30 completion dots before long native harvest); tests.b6.test_cold_pass_fixes.FullRoundTests (58018); tests.b6.test_capture_screen_reachability.ChainReachabilityTests (80568); PolicyReadTests + CaptureDispositionTests (85396, five completion dots); tests.b6.test_desk_resume_finalize (57847); tests.b6.test_loop_round_desk (59897, one completion dot). Prior-slice sessions do not survive; slice-6 reruns replace them. Do not infer success from dots.
+- Director environmental-pending: hazards arm (sysmond/pgrep), import-graph GO/NULL, clock bootsessionuuid. CI/PR and final executing review remain director-owned. No hardware runs, no Git writes. Intake HEAD 98ed69513, local by-c5; intended lane/2026-10-22-bytes-c5-gates.
+- Disk at intake 87,373,108 KiB; later 82,383,072 KiB, both above 10 GiB stop gate. Scope preserved: slice 6 changes only scripts/bytes_h_session.py, tests/test_bytes_h_session.py and this report.
+- PolicyReadTests isolated: 4 pass, 0.006 s, exit 0. Native module excluding its one long real-harvest test: 31 pass, 20.471 s, exit 0 (including the fixed native-export integration). Next: collect long-run results if still available; any exceeding the slice is named for director to run outside sandbox. No unobserved outcome is claimed.
 
 ## SUMMARY
 
@@ -18,7 +17,8 @@ All twelve pass packs print both bases, per-model counts and allowances, WAIT, f
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
 All 17 bytes_gates tests pass; H rates agree with disk_h at the required 1e-6 relative bar.
 Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
-Only authorized source/test/report files changed; no hardware operation or Git write ran.
+Native producer now emits one-copy raw allocated-byte receipts; fully observed native-export C5 integration passes.
+All twelve H P values equal the actual planner and disk-hazard requirement, as exact integers.
 Director real replay: 0 refusals of 10 available sessions, 1 unavailable row; largest pass also refuses 0. CI remains director-owned.
 
 ## GATES FIX
@@ -75,7 +75,7 @@ Per-model allowances below are seconds, displayed to nine decimals for readabili
 | bytes-s6-p1/p2 | qwen35-122b | 50 | 114.679302444 | 189.463644769 |
 | bytes-s6-p1/p2 | reference | 25 | 93.759871868 | 130.734032387 |
 
-The all-twelve encoded requirement column uses actual plan_inputs.encode_disk_budget with real stage_plan counts, checked in slice 4. Real plan.write_window_plan and disk-hazard equality are exercised by the production-shaped synthetic E2E test below; extending that real-writer proof to every real-H term remains a useful final check.
+Slice 6 extended this column through actual DriverLane preparation/build/launch, plan.write_window_plan and disk.measure/judge for all twelve H-derived terms: every required_bytes integer is exactly P and every row passes at P. One temporary ProductionPlanRenderTests checkout was used, with each C5.json sessions[pack].disk_derivation placed in temporary sizing and the synthetic launch binding attached as in the E2E test. Exit 0; no real session tree or hardware read. The synthetic E2E test separately proves both P-1 refusal and P passage.
 
 ## PACK ENCODING
 
@@ -140,6 +140,45 @@ subprocess.run(["git", "diff", "--name-only", "HEAD", "--", *paths], check=True)
 Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
+
+Slice 6 native module split: 31 tests PASS in 20.471 s, exit 0, no skips. Only test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates was excluded from this split because its full-module invocation remains running; all other native-module tests, including the real producer C5 integration, passed. Exact command:
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B - <<'PY'
+import unittest
+suite=unittest.defaultTestLoader.loadTestsFromName('tests.test_bytes_h_session')
+def tests(s):
+    for t in s:
+        if isinstance(t, unittest.TestSuite): yield from tests(t)
+        else: yield t
+selected=unittest.TestSuite(t for t in tests(suite) if not t.id().endswith('.test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates'))
+r=unittest.TextTestRunner(verbosity=1).run(selected)
+raise SystemExit(not r.wasSuccessful())
+PY
+```
+
+
+Slice 6 isolated policy check: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_capture_screen_reachability.PolicyReadTests` — exit 0, 4 tests, 0.006 s, no skips. The combined capture-class run remains pending independently.
+
+Slice 6 remaining long checks: the commands below each use the prefix `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest`. They were started in this slice, each in its own fresh TMPDIR; completion is still pending at the final audit. No exit code, count or success is inferred from partial dots. Director can run these outside the sandbox if the runner expires before a subsequent result is captured:
+
+- `tests.test_bytes_h_session` (session 2636, 30 completion dots); all 31 tests other than test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates are independently confirmed passing above. That one slow native harvest test remains owed if this module does not finish.
+- `tests.b6.test_cold_pass_fixes.FullRoundTests` (58018).
+- `tests.b6.test_capture_screen_reachability.ChainReachabilityTests` (80568).
+- `tests.b6.test_capture_screen_reachability.PolicyReadTests tests.b6.test_capture_screen_reachability.CaptureDispositionTests` (85396, five completion dots).
+- `tests.b6.test_desk_resume_finalize` (57847).
+- `tests.b6.test_loop_round_desk` (59897, one completion dot).
+
+The prior-slice pending tool sessions could not be resumed (unknown process IDs); no result is attributed to them. Environmental hazard reruns remain director-owned as explicitly ruled. The whole repository suite was not run.
+
+
+Slice 6: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session.SessionTests.test_fully_observed_native_export_extracts_and_clears_c5` — exit 0, 1 test, 5.579 s, no skips. The real producer now clears C5, and all 123 synthetic clone/raw receipt pairs satisfy exact retained_bytes == 2*raw_allocated_bytes.
+
+Slice 6 all-twelve writer check: synthetic-only Python heredoc imported ProductionPlanRenderTests, setUp once, read director C5.json sessions, installed each pack disk_derivation in the temporary sizing, supplied the same fixture launch declaration, called render(pack, False), then disk.measure/disk.judge at P. It asserted actual observed required_bytes == C5 P (integer identity) and PASS for all twelve packs; exit 0. All twelve integers match the table.
+
+Slice 6: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_gates` — exit 0, 17 tests, 4.798 s, no skips. Initial native-export fixture attempt errored on stage-id/claim-bound lookup; corrected the fixture, production behavior unchanged. The explicit integration rerun passes as recorded above; the full native module remains pending at this checkpoint.
+
+Slice 6 sealed-inventory checks repeated against bda481d5a and HEAD including the working tree: exit 0, empty stdout for both. `git diff --check`: exit 0. No sealed file changes.
 
 Slice 5: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_arm` — exit 1, 25 tests, 72.295 s, 17 failure assertions (including five subtests), no skips. Environmental process-group census: `instrument REFUSE: the capture's process group was not proven gone: census_exit_3: sysmon request failed with error: sysmond service not found; pgrep: Cannot get process list`. Later dwell/final/census expectations consequently stop early at instrument. Failures: battery-current-during-dwell, agent-during-dwell, charging-during-dwell, clock-step, contending-daemon, frequency-word-change, clean-census-at-go, smc-cross-check, network-time-output, quiet-float-go, record-only-collectors, unmeasured-arm-only (battery/thermal/disk/clock/contention subtests), no-smc-fallback. No hazard code was changed; this is the process-group environmental lane named in the brief and is not chased. This also offers a likely explanation for the earlier GO/NULL import-graph failure, but that exact earlier run did not print its reasons.
 
@@ -217,20 +256,24 @@ Exit 0; 11 tests in 1.132 seconds; OK, no skips or environmental failures. This 
 
 For each BYTES pass session the sole disk refusal is measured session-volume free bytes, statvfs f_bavail multiplied by f_frsize with purgeable bytes excluded, below P. P = 2(B + WAIT) + fixed. B is the larger of ceil(r_s times the sum of model count times that model’s stream allowance) and ceil(r_w times the sum of model count times that model’s member-wall allowance). Rates are maxima over timed H members of one raw bundle tree’s inode-deduplicated POSIX st_blocks times 512 divided by stream seconds or member-wall seconds respectively. Each model uses its own measured allowances including the measured request max/min margin; the stream allowance includes mean request time plus maximum stream-minus-request time. Each full basis rounds up once in exact rational arithmetic. WAIT=ceil(r_s times 7200 seconds), fixed is the committed fixed-artifact allocation, and two copies count raw plus the partitioned rsync backups; the harvest APFS clone adds no copy. No reserve or further margin is added. All terms, P, free bytes and the measured whole-window implied copy count are disclosed; missing inputs are flags. The native three-target budget encodes P exactly with q=floor(2B/(3n)) and headroom=(2B-3nq)+2WAIT+fixed, where n is the writer’s actual members-plus-spares count; disk.budget_encoded_from_p names that encoding. H gives r_s=1,805,538.5168827055 B/s, r_w=1,285,759.0452694688 B/s, WAIT=12,999,877,322 B, and fixed=1,266,544,640 B. With c=2, P for each p1/p2 session is s1=71,034,160,574 B; s2=73,201,827,056 B; s3=76,684,408,632 B; s4=82,360,900,174 B; s5=73,069,026,714 B; s6=60,031,382,020 B. Each B, winning basis, allowance, q and headroom is in the tables above. BY-SLOTS fills these pack-specific values; the stopped-session sizing remains PROVISIONAL.
 
+Slice-6 intake df: 87,373,108 KiB available = 89,470,062,592 B, exceeding all P values at that instant; later reading 82,383,072 KiB = 84,360,265,728 B, also above all P. These desk readings are not a future arm receipt.
+
 Lead disk-state fact: the director observed about 67 GiB (~72 GB) free at 07:5x UTC, at which s3/s4 would physically refuse while s1/s2/s5 were within a few GB. This slice re-ran `df -k /Users/edr`: `/dev/disk3s5 971350180 902869204 44779048 96% ... /System/Volumes/Data`. Available=44,779,048 KiB=45,853,745,152 B (~42.7 GiB), above the 10 GiB stop gate but below all six P values, so every sub-pack would physically refuse at this reading. These are correct free<P refusals, not a defect; free space is time-dependent.
 
 ## CI
 
-Director creates draft PR and reads CI under the local route. No PR number supplied yet.
+Director creates draft PR and reads CI under the local route. Draft PR number and CI state unavailable to this worker; no remote operation attempted. Current local branch by-c5, intake/current committed HEAD 98ed69513; uncommitted slice-6 diff is ready for the director to commit and push to lane/2026-10-22-bytes-c5-gates. Proposed commit: BY-C5 slice 6: native raw-byte producer and full planner equality evidence.
 
 ## DECISIONS I MADE
+
+Slice 6 scope grant: emit raw_allocated_bytes natively with a fresh raw seen-set for each run, independent of archive/retained accounting; no raw tree yields null. Keep retained_bytes unchanged. This supersedes the earlier BY-H2 producer handoff. Only the authorized measurement lines, derivation, fixture and report change in this slice.
 
 Slice 4: replay B is the measured one-copy sum, as the director specifies, rather than pass allowances. The same supplied C5 H stream rate determines WAIT and the same C5 committed fixed-artifact bytes supplies fixed across replay rows, without a new reserve or margin. B6 compressed-file logical bytes retain BY-0's lower-bound label; H uses augmented allocated raw bytes. Desk replay results do not add an arm refusal site; scripts/bytes_gates.py already has the registry not_scanned=desk disposition. No new imports, scan entries or harvested flag codes are needed. Missing/malformed row inputs are caught and flagged, and all rows remain in session_count with separate unavailable_count.
 
 
 Slice 3: registered disk terms live in sizing_b5.json packs[label].disk_derivation, next to that pack’s own time allowances; BYTES draft registration files remain unchanged. The sealed writer cannot accept diagnostic input keys or zero bytes_per_member. DriverLane keeps disk_budget in session metadata, and an absent P yields a durable disk.budget_missing diagnostic plus LaneMissing before planning, never Refused. The draft pass tree’s deliberately absent launch declaration is supplied only by the synthetic E2E fixture; actual launch readiness belongs to BY-SLOTS. Flags here are preparation metadata, not harvested member flags, so no flag-catalog mutation is required for this step.
 
-Director ruling 1: per-run raw_allocated_bytes is the only disk-rate byte source (allocated st_blocks*512, raw-only tree, inode-deduplicated). Missing raw byte receipts enter no rate, are counted in disk.raw_bytes_missing; no rate makes disk unavailable. Never halve retained_bytes. Rates compare at 1e-6 relative; derived integer bytes compare exactly. BY-H2 owns native producer support. Synthetic never-ran receipts carry raw_allocated_bytes=null.
+Director ruling 1: per-run raw_allocated_bytes is the only disk-rate byte source (allocated st_blocks*512, raw-only tree, inode-deduplicated). Missing raw byte receipts enter no rate, are counted in disk.raw_bytes_missing; no rate makes disk unavailable. Never halve retained_bytes. Rates compare at 1e-6 relative; derived integer bytes compare exactly. Director slice-6 scope grant authorizes the minimal native producer addition implemented below. Synthetic never-ran receipts carry raw_allocated_bytes=null.
 
 
 Applied director precedence: H ruling and committed disk_terms win over the paraphrase; B is the maximum of two summed bases, each rounded once using exact rational arithmetic. c=2; measured c is disclosure. WAIT uses stream rate for registered 7200 seconds; fixed comes unchanged from disk.fixed_retained_bytes. Local route overrides cloud setup, commits and PR operations.
@@ -248,6 +291,7 @@ The production/test map below records the governing numerical clauses. Counterfa
 | H-DISK-RULING.md:23, committed fixed | scripts/bytes_gates.py:103 | tests/test_bytes_gates.py:298 expected P=4811 | Omit fixed_bytes: expected P fails by 7 bytes. |
 | H-DISK-RULING.md:27, no reserve | scripts/bytes_gates.py:103 | tests/test_bytes_gates.py:298 expected P=4811 | Add any reserve to the computed P: expected integer P assertion fails. |
 | H-DISK-RULING.md:39, measured c disclosure | scripts/bytes_gates.py:101 | tests/test_bytes_gates.py:277 test_measured_copy_factor_is_disclosure_only | Use measured_c instead of 2: unchanged-P assertion fails. |
+| Slice-6 grant, native raw producer independent of archive | scripts/bytes_h_session.py measurements raw_seen and per-run field | tests/test_bytes_h_session.py test_fully_observed_native_export_extracts_and_clears_c5 retained == 2*raw and full C5 pass | Share archive accounting seen-set or use retained: byte identity or disk-rate contract fails. |
 | Director ruling 1, raw-only byte source | scripts/bytes_gates.py calculate disk rates | tests/test_bytes_gates.py:298 retained_bytes multiplied by 3, derivation unchanged | Derive rates from retained_bytes: invariance assertion fails. |
 | Director ruling 1, missing raw flag and unavailable | scripts/bytes_gates.py calculate disk missing-rate path | tests/test_bytes_gates.py:288 test_disk_missing_raw_bytes_is_unavailable_and_flagged | Return fail rather than unavailable: disk status set assertion fails. |
 | Addendum 1, native budget exactly P and named flag | joulewise/b6/plan_inputs.py:164; driver_lane.py:91 | tests/b6/test_b6_plan_render.py:196 real writer requirement and metadata flag | Increment q or omit metadata disk_budget: exact required_bytes or metadata assertion fails. |
@@ -256,13 +300,11 @@ The production/test map below records the governing numerical clauses. Counterfa
 
 ## OPEN ISSUES
 
-BY-H2 must add raw_allocated_bytes to scripts/bytes_h_session.py measurements(): POSIX st_blocks*512 of that run's raw bundle tree only (one copy, runs-parent/<stage dir>/<run_id>, inode-deduplicated); null for members that never ran. retained_bytes keeps raw plus archive allocations and must not be halved.
+Native producer support is implemented and the fully observed native-export integration passes under the explicit slice-6 scope grant: raw-only POSIX st_blocks*512, independent per-run seen-set, null absent raw trees; retained_bytes unchanged. Synthetic full raw/archive copies assert retained_bytes == 2*raw_allocated_bytes. No BY-H2 producer blocker remains.
 
 The production reader path-alias regression is resolved: all six subtests pass under /private/tmp. No production fix was necessary.
 
-The native producer lacks raw_allocated_bytes, so tests.test_bytes_h_session.test_fully_observed_native_export_extracts_and_clears_c5 currently expects pass where the new contract requires unavailable. BY-H2 producer support must restore that integration; its file and test are outside this write scope.
-
-Remaining: importer regressions and final report audit. Planner/hazard synthetic boundary proof, replay program/tests and R6 draft are done. Real replay is recorded above; CI remains director-owned. Local branch by-c5; intake HEAD d49f11fb3; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5 slice 5: real replay tables, readable P terms, R6 numbers and importer regression evidence.
+Environmental-pending for director outside sandbox: tests.hazards.test_arm (sysmond/pgrep), tests.hazards.test_import_graph GO/NULL, tests.hazards.test_clock bootsessionuuid. Director explicitly owns these reruns; no hardware path changes made. CI/PR, executing review, replay re-run and final verification remain director-owned. Long importer checks listed in TESTS RUN have not yet produced final results; the director may run them outside the sandbox per the slice-6 instruction. Local intake HEAD 98ed69513 on by-c5; destination lane/2026-10-22-bytes-c5-gates. No Git writes attempted.
 
 ## NEEDS_RULING
 
