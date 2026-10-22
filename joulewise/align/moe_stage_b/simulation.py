@@ -199,7 +199,7 @@ def simulate_episode(
         return SimulatedEpisode(replace(episode, flags=tuple(dict.fromkeys(flags))),
                                 TrafficResult((), (), ("missing_router_log",)), tuple(flags))
     if windows is None:
-        timing = episode_token_windows(episode)
+        timing = episode_token_windows(episode, prefill_batch_tokens=config.prefill_batch_tokens)
         flags.extend(timing.flags)
         windows = timing.windows
     traffic = model_traffic(episode.router_log, config, windows=windows)
