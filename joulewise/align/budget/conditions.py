@@ -112,7 +112,8 @@ class LocalEndpoint:
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         if self.transport is not None:
             return self.transport(path, payload)
-        request = Request(self.base_url.rstrip("/") + path,
+        root = self.base_url.rstrip("/").removesuffix("/v1")
+        request = Request(root + path,
                           data=json.dumps(payload, allow_nan=False).encode(),
                           headers={"Content-Type": "application/json"})
         with urlopen(request, timeout=self.timeout_s) as response:
