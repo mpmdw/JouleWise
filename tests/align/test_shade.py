@@ -27,6 +27,7 @@ from joulewise.align.shade.monitor import ShadeMonitorVerdict, render_transcript
 from joulewise.align.records import Episode, MonitorVerdict, from_json, to_json, read_episodes, write_episodes
 from joulewise.align.shade.task import _Column, _dedented
 from joulewise.align.shade.upstream import FILE_LIST_SHA256, UPSTREAM_COMMIT, file_list_sha256
+from tests.git_fixture import init_git_fixture
 
 FIXTURE = Path(__file__).parent / "fixtures/shade"
 
@@ -43,7 +44,7 @@ def fixture_source():
         cache = Path(directory)
         staging = cache / "source"
         shutil.copytree(FIXTURE, staging, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        git(staging, "init", "--quiet")
+        init_git_fixture(staging, "--quiet")
         git(staging, "add", "--all")
         tree = git(staging, "write-tree").decode().strip()
         # A deterministic raw synthetic commit needs no configured author identity.
