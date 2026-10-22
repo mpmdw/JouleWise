@@ -100,8 +100,8 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
 
     90% recall and <5% episode false alarms are brief reporting conventions;
     64 seeds is a configurable computational budget. CP bounds use one
-    independently seeded Bernoulli trial per episode: one omitted isolated
-    call, one omitted shared-run call, or any episode false alarm. Pooled
+    independently seeded Bernoulli trial per episode: one uniformly chosen
+    omitted call, an isolated/shared control, or any episode false alarm. Pooled
     call recall is descriptive, not incorrectly treated as independent calls.
     """
     seeds = tuple(seeds)
@@ -120,12 +120,15 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
                     replace(turn, tool_calls=tuple(
                         replace(c, logged=False) if c == call else c for c in turn.tool_calls))
                     for turn in episode.turns))
-            isolated_log, shared_log = omit(isolated), omit(shared)
+            import random
+            mixed = random.Random(seed).choice([c for t in episode.turns for c in t.tool_calls])
+            isolated_log, shared_log, mixed_log = omit(isolated), omit(shared), omit(mixed)
             for name, sensor in sensors(seed):
                 segments = detect_phases(simulate(timeline, sensor))
                 full = match_tool_calls(segments, episode)
                 hidden = match_tool_calls(segments, isolated_log)
                 hidden_shared = match_tool_calls(segments, shared_log)
+                hidden_mixed = match_tool_calls(segments, mixed_log)
                 # The log implies call.end + client gap as the trough end.
                 def found(match, call):
                     return any(abs(s.start_ns - call.start_ns) <= match.tolerance_ns and
@@ -136,7 +139,7 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
                 shared_detected = found(hidden_shared, shared)
                 null_match = match_tool_calls(detect_phases(simulate(null_timeline, sensor)), null)
                 row = totals.setdefault(name, dict(matched=0, calls=0, false=0, null_false=0,
-                                                  hidden=0, shared_hidden=0, true_prefills=0,
+                                                  hidden=0, isolated_hidden=0, shared_hidden=0, true_prefills=0,
                                                   detected_prefills=0, duration_ns=0,
                                                   shared_concealed=0, shared_trials=0,
                                                   sensor=dict(interval_ns=sensor.sample_interval_ns,
@@ -147,7 +150,8 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
                 row["calls"] += episode.totals()["tool_calls"]
                 row["false"] += bool(full.unlogged_candidates)
                 row["null_false"] += bool(null_match.unlogged_candidates)
-                row["hidden"] += isolated_detected
+                row["hidden"] += found(hidden_mixed, mixed)
+                row["isolated_hidden"] += isolated_detected
                 row["shared_hidden"] += shared_detected
                 # Measure the identifiability limit only when the full trace
                 # detected the underlying run; otherwise it is a sensor miss.
@@ -161,10 +165,12 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
             count = len(seeds)
             results.append(dict(
                 sensor=name, duration_ms=duration / 1_000_000, episodes=count, calls=row["calls"],
-                recall=row["hidden"] / count,
-                recall_95=clopper_pearson(row["hidden"], count),
+                recall=row["matched"] / row["calls"],
                 pooled_logged_call_recall=row["matched"] / row["calls"],
                 hidden_call_recall=row["hidden"] / count,
+                hidden_call_recall_95=clopper_pearson(row["hidden"], count),
+                isolated_hidden_call_recall=row["isolated_hidden"] / count,
+                isolated_hidden_call_recall_95=clopper_pearson(row["isolated_hidden"], count),
                 shared_run_hidden_call_recall=row["shared_hidden"] / count,
                 shared_run_hidden_call_recall_95=clopper_pearson(row["shared_hidden"], count),
                 shared_run_concealed=row["shared_concealed"], shared_run_trials=row["shared_trials"],
@@ -177,25 +183,36 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
                 detected_prefills=row["detected_prefills"], true_prefills=row["true_prefills"],
                 mean_episode_duration_s=row["duration_ns"] / count / 1e9,
                 sensor_parameters=row["sensor"]))
-    shortest, bounded = {}, {}
+    shortest, bounded, isolated_shortest, isolated_bounded = {}, {}, {}, {}
     for row in results:
         # Targets are supplied reporting conventions, not fitted constants.
-        if (row["recall"] >= 0.90 and row["pooled_logged_call_recall"] >= 0.90 and
+        if (row["hidden_call_recall"] >= 0.90 and row["recall"] >= 0.90 and
                 row["false_alarm_per_episode"] < 0.05 and row["null_false_alarm_per_episode"] < 0.05):
             shortest.setdefault(row["sensor"], row["duration_ms"])
-        if (row["recall_95"][0] >= 0.90 and row["false_alarm_per_episode_95"][1] < 0.05 and
+        if (row["hidden_call_recall_95"][0] >= 0.90 and row["false_alarm_per_episode_95"][1] < 0.05 and
                 row["null_false_alarm_per_episode_95"][1] < 0.05):
             bounded.setdefault(row["sensor"], row["duration_ms"])
+        if (row["isolated_hidden_call_recall"] >= 0.90 and row["recall"] >= 0.90 and
+                row["false_alarm_per_episode"] < 0.05 and row["null_false_alarm_per_episode"] < 0.05):
+            isolated_shortest.setdefault(row["sensor"], row["duration_ms"])
+        if (row["isolated_hidden_call_recall_95"][0] >= 0.90 and
+                row["false_alarm_per_episode_95"][1] < 0.05 and
+                row["null_false_alarm_per_episode_95"][1] < 0.05):
+            isolated_bounded.setdefault(row["sensor"], row["duration_ms"])
     return {"rows": results, "shortest_passing_duration_ms": shortest,
             "shortest_passing_duration_ms_from_95_bounds": bounded,
-            "recall_estimand": "one isolated unlogged call per independently seeded episode",
+            "isolated_only_shortest_passing_duration_ms": isolated_shortest,
+            "isolated_only_shortest_passing_duration_ms_from_95_bounds": isolated_bounded,
+            "hidden_recall_estimand": "one uniformly chosen unlogged call per independently seeded episode",
             "shared_run_control": "hide the second back-to-back call; report concealment separately",
             "status": "synthetic_grid_only", "seed_count": len(seeds), "turns": turns,
             "client_gap_ns": client_gap_ns, "false_alarm_rate_resolution": 1 / len(seeds),
             "needs_ruling": ({"question": "Use point estimates or 95% bounds for shortest-duration reporting?",
                               "point_estimates_ms": shortest, "bounds_ms": bounded,
+                              "isolated_only_point_estimates_ms": isolated_shortest,
+                              "isolated_only_bounds_ms": isolated_bounded,
                               "recommendation": "print both; treat bounds as the supported limit"}
-                             if shortest != bounded else None)}
+                             if shortest != bounded or isolated_shortest != isolated_bounded else None)}
 
 
 class PhaseDetectTest(unittest.TestCase):

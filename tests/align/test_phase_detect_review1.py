@@ -6,11 +6,27 @@ from dataclasses import replace
 from joulewise.align.phase_detect import detect_phases, match_tool_calls
 from joulewise.align.records import PowerTrace
 from joulewise.align.sensor_sim import SensorModel, simulate, timeline_from_episode
-from tests.align.test_sensor_sim import model, world
+from tests.align.test_sensor_sim import model, production_world, world
 from tests.align.test_phase_detect import clopper_pearson, production_sensor_models, sensor_models
 
 
 class PhaseReviewTest(unittest.TestCase):
+    def test_thirty_turn_transition_edges_have_no_false_waits_or_extra_prefills(self):
+        episode = production_world(1, 500_000_000)
+        timeline = timeline_from_episode(episode, model())
+        for name, sensor in sensor_models(1):
+            with self.subTest(sensor=name):
+                segments = detect_phases(simulate(timeline, sensor))
+                matches = match_tool_calls(segments, episode)
+                # Brief convention >=90% call recall and <5% episode FA;
+                # one fully logged control requires zero false candidates.
+                self.assertGreaterEqual(matches.recall, .90)
+                self.assertEqual(len(matches.unlogged_candidates), 0)
+                # A sensor may miss sub-window prefills; it cannot invent an
+                # extra prefill (the pipeline's hidden-turn signature).
+                self.assertLessEqual(sum(s.label == "prefill" for s in segments),
+                                     len(episode.turns))
+
     def test_exact_binomial_bounds_against_closed_form_oracles(self):
         import math
         # Equal-tail 95% is the brief's reporting convention. At zero/all

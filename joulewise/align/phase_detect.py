@@ -313,8 +313,14 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
     for s in segments:
         if s.label != "idle":
             continue
-        if s.clock_domain in ("", episode.clock_domain) and any(
-                s.start_ns < c.end_ns and s.end_ns > c.start_ns for c in logged):
+        offset = 0
+        if s.clock_domain not in ("", episode.clock_domain):
+            mappings = [m for m in episode.clock_mappings if
+                        m.trace_domain == s.clock_domain and m.episode_domain == episode.clock_domain]
+            if len(mappings) != 1 or mappings[0].uncertainty_ns < 0:
+                continue
+            offset = mappings[0].offset_ns
+        if any(s.start_ns + offset < c.end_ns and s.end_ns + offset > c.start_ns for c in logged):
             candidates.append(s)
     transformed, indeterminate = [], []
     tolerance = 0

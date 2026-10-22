@@ -227,6 +227,9 @@ class Ina3221Sampler:
         driver_window = configured * 1_000_000 if configured is not None and configured > 0 else None
         calibration = next((r for r in self.characterization.rails if r.channel == rail.channel),
                            None) if self.characterization else None
+        if calibration:
+            for flag in calibration.flags:
+                self._flag(f"characterization:{rail.channel}:{flag}")
         cadence = calibration.cadence_ns if calibration else None
         # Held register values can reveal a slower cadence than the configured
         # integer-ms exposure. This is an observation, confounded by steady
@@ -256,6 +259,8 @@ class Ina3221Sampler:
             if resistance is not None and resistance > 0 and math.isfinite(resistance):
                 di = max(40e-6 / resistance * 1000, di or 0.0)
             else:
+                if resistance is not None:
+                    self._flag(f"invalid_shunt_resistance:{rail.channel}")
                 # Mainline current is printed as integer mA. This bounds
                 # print resolution only; it cannot establish the ADC LSB.
                 di = max(1.0, di or 0.0)
@@ -375,7 +380,14 @@ class Ina3221Sampler:
         channels = [rail.channel for rail in self.rails] or ["unavailable"]
         notes = json.dumps({
             "flags": self.flags, "update_intervals_ms": self.update_intervals_ms,
-            "samples": self.samples, "health_start": self._health_before,
+            "samples": self.samples,
+            # Retain voltage extrema and their read-end times for the supply
+            # sag preflight; no unexplained voltage-sag cutoff is imposed.
+            "voltage_mv_extrema": {
+                channel: {"minimum": min((row[2], row[0]) for row in rows),
+                          "maximum": max((row[2], row[0]) for row in rows)}
+                for channel, rows in self._rows.items() if rows},
+            "health_start": self._health_before,
             "health_stop": self._health_after, "oc_event_count_deltas": deltas,
             "timestamps": "end_of_nonatomic_voltage_current_read",
         }, sort_keys=True)

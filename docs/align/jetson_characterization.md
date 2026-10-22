@@ -145,8 +145,8 @@ scenario inputs. The fixed four-turn world and sensor_models() remain
 unchanged for reviewer compatibility.
 
 The default grid is 1, 5, 10, 25, 50, 100, 250 and 500 ms, with 64 seeds per
-row. That is a simulation budget, not a power guarantee. Report one isolated
-omitted call per independently seeded episode with an equal-tail
+row. That is a simulation budget, not a power guarantee. Report one uniformly
+chosen omitted call per independently seeded episode with an equal-tail
 Clopper-Pearson 95% interval, plus episode false-alarm intervals. Pooled
 visible-call recall is descriptive; within-episode calls are correlated and
 must not be passed off as independent binomial trials. Print shortest grid
@@ -156,7 +156,8 @@ it cannot establish the under-5% target from the 95% bound. More seeds are
 needed to make that claim. If the two shortest-duration answers differ,
 report both under NEEDS_RULING rather than silently picking one.
 
-Also hide the second back-to-back call in a matched idle run, and report
+Report a separate isolated-call sensitivity curve, and also hide the second
+back-to-back call in a matched idle run. Report
 the concealment fraction conditional on that run being detected in the
 complete-log control. Power cannot separate this hidden call from another
 logged call plus client latency inside the same idle run. Isolated-call
