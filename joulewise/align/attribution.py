@@ -15,8 +15,10 @@ Missing uncertainty metadata contributes zero and an explicit flag.
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass
 import math
+from typing import overload
 
 from joulewise.align.records import ClockMapping, Episode, PowerTrace
 from joulewise.bundle_read import TracePoint
@@ -72,6 +74,55 @@ class _Span:
         )
 
 
+class _OffsetTimes(Sequence[int]):
+    """Translate integer epochs on access without copying a whole trace."""
+
+    def __init__(self, times: tuple[int, ...], offset: int) -> None:
+        self.times = times
+        self.offset = offset
+
+    def __len__(self) -> int:
+        return len(self.times)
+
+    @overload
+    def __getitem__(self, index: int) -> int: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[int, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> int | tuple[int, ...]:
+        if isinstance(index, slice):
+            return tuple(self.times[i] + self.offset for i in range(*index.indices(len(self))))
+        return self.times[index] + self.offset
+
+
+class _PointSpans(Sequence[_Span]):
+    """Materialize only queried point-power brackets, including cold calls."""
+
+    def __init__(self, times: Sequence[int], values: tuple[float, ...]) -> None:
+        self.times = times
+        self.values = values
+
+    def __len__(self) -> int:
+        return max(0, len(self.times) - 1)
+
+    @overload
+    def __getitem__(self, index: int) -> _Span: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[_Span, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> _Span | tuple[_Span, ...]:
+        if isinstance(index, slice):
+            return tuple(self[i] for i in range(*index.indices(len(self))))
+        if index < 0:
+            index += len(self)
+        if not 0 <= index < len(self):
+            raise IndexError(index)
+        return _Span(self.times[index], self.times[index + 1],
+                     self.values[index], self.values[index + 1])
+
+
 def _flags(items: list[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(items))
 
@@ -94,20 +145,28 @@ class _Trace:
             self.flags.append("resolution.missing")
         elif not math.isfinite(trace.resolution) or trace.resolution < 0:
             self.flags.append("resolution.invalid")
-        pairs = [(t + offset, v) for t, v in zip(trace.t_ns, trace.values)
-                 if math.isfinite(v)]
-        if len(pairs) != len(trace.t_ns):
-            self.flags.append("trace.nonfinite_samples")
-        self.times = tuple(t for t, _ in pairs)
-        self.values = tuple(v for _, v in pairs)
-        spans: list[_Span] = []
-        self.resets: list[tuple[int, int, str]] = []
-        self.counter_peak_missing = False
         window = trace.averaging_window_ns
         if window is not None and window <= 0:
             self.flags.append("window.invalid")
             window = None
         self.window = window
+        self.times: Sequence[int]
+        if not self.counter and window is None and all(map(math.isfinite, trace.values)):
+            # Retain global nonfinite-sample semantics, but avoid allocating
+            # O(n) pairs, translated epochs and spans for a short point query.
+            self.times = trace.t_ns if offset == 0 else _OffsetTimes(trace.t_ns, offset)
+            self.values = trace.values
+            pairs = []
+        else:
+            pairs = [(t + offset, v) for t, v in zip(trace.t_ns, trace.values)
+                     if math.isfinite(v)]
+            if len(pairs) != len(trace.t_ns):
+                self.flags.append("trace.nonfinite_samples")
+            self.times = tuple(t for t, _ in pairs)
+            self.values = tuple(v for _, v in pairs)
+        spans: list[_Span] = []
+        self.resets: list[tuple[int, int, str]] = []
+        self.counter_peak_missing = False
         if self.counter:
             # A restart reading can contain at most one poll's work:
             # new_J <= poll_s * peak_W from nondecreasing counter steps.
@@ -150,17 +209,30 @@ class _Trace:
                         self.flags.append("window.overlap")
                     start = max(start, previous_t)
                 spans.append(_Span(start, t, value, value))
-        else:
-            spans = [_Span(a, b, x, y) for (a, x), (b, y) in zip(pairs, pairs[1:])]
         if trace.duty_fraction is not None and trace.duty_fraction < 1 and window is None:
             self.flags.append("duty.window_missing")
-        self.spans = tuple(spans)
-        self.starts = tuple(span.start for span in spans)
-        self.peak = max((max(abs(span.left), abs(span.right)) for span in spans), default=0.0)
-        if not self.counter:
-            self.peak = max(self.peak, max((abs(v) for v in self.values), default=0.0))
-        if not spans:
+        self.spans: Sequence[_Span]
+        self.starts: Sequence[int]
+        if not self.counter and window is None:
+            self.spans = _PointSpans(self.times, self.values)
+            # The final sample has no following span. Sequence slicing clips
+            # that harmless extra knot when a query reaches/passes coverage.
+            self.starts = self.times
+        else:
+            self.spans = tuple(spans)
+            self.starts = tuple(span.start for span in spans)
+        # Interior W queries do not need the whole-trace peak. Compute it
+        # lazily only for missing coverage, retaining the same exact maximum.
+        self._peak = (max((max(abs(span.left), abs(span.right)) for span in spans),
+                          default=0.0) if self.counter else None)
+        if not self.spans:
             self.flags.extend(("trace.insufficient_samples", "interpolation.missing"))
+
+    @property
+    def peak(self) -> float:
+        if self._peak is None:
+            self._peak = max((abs(v) for v in self.values), default=0.0)
+        return self._peak
 
     def _adjacent_peak(self, t: int) -> float:
         if self.counter:
@@ -319,6 +391,12 @@ class _Trace:
         return EnergyEstimate(energy, math.fsum(bounds), method, _flags(flags))
 
 
+# A single active immutable trace is retained for repeated public queries.
+# Identity avoids hashing millions of tuple entries. Replacing the active
+# trace releases its preparation; this cache cannot grow with episode count.
+_last_reconstruction: _Trace | None = None
+
+
 def trace_energy(
     trace: PowerTrace, t0_ns: int, t1_ns: int, *,
     mapping: ClockMapping | None = None, idle_watts: float = 0.0,
@@ -339,8 +417,15 @@ def trace_energy(
     unsampled work is unbounded. A held counter jumps
     at the right sample; that jump counts when the partial interval reaches it.
     Empty reconstructions return zero energy with infinite uncertainty.
+    Point spans are built only for requested support. The most recent trace
+    and mapping preparation is cached for repeated interval queries.
     """
-    return _Trace(trace, mapping).energy(t0_ns, t1_ns, idle_watts)
+    global _last_reconstruction
+    reconstruction = _last_reconstruction
+    if reconstruction is None or reconstruction.trace is not trace or reconstruction.mapping != mapping:
+        reconstruction = _Trace(trace, mapping)
+        _last_reconstruction = reconstruction
+    return reconstruction.energy(t0_ns, t1_ns, idle_watts)
 
 
 def _segments(episode: Episode, flags: list[str]) -> list[tuple[int | None, str, int, int]]:

@@ -177,8 +177,8 @@ class ProductionWorldsTest(unittest.TestCase):
             return self.statistics[sensor.source]
         errors, widths, totals, clearances = [], [], [], []
         inside = total_inside = 0
-        # Five fixed seeds are a deterministic empirical regression set.
-        # Coverage remains 100% of segments in every one of these five seeds.
+        # Five fixed seeds form a deterministic empirical regression set.
+        # Coverage is measured below; its required fraction remains 100%.
         seeds = range(5)
         for seed in seeds:
             record, truth = world(seed, sensor, same_domain=sensor.source == "nvml_power")
@@ -250,14 +250,12 @@ class ProductionWorldsTest(unittest.TestCase):
     def test_twenty_turn_ina3221_worlds_cover_every_segment(self):
         self.assert_coverage(SENSORS[1])
 
-    @unittest.expectedFailure
     def test_twenty_turn_nvml_worlds_cover_every_segment(self):
-        """M2: measured coverage pending execution; required coverage is 100%."""
+        """R2-M2: C2 one-step worlds retain the 100% coverage requirement."""
         self.assert_coverage(SENSORS[0])
 
-    @unittest.expectedFailure
     def test_twenty_turn_powermetrics_worlds_cover_every_segment(self):
-        """M2: measured coverage pending execution; required coverage is 100%."""
+        """R2-M2: C2 one-step worlds retain the 100% coverage requirement."""
         self.assert_coverage(SENSORS[2])
 
     def test_twenty_runner_turns_retain_each_post_model_tool(self):
@@ -317,14 +315,36 @@ class ProductionWorldsTest(unittest.TestCase):
         before = trace_energy(counter, record.start_ns - NS, record.start_ns,
                               mapping=record.clock_mappings[0])
         # Requested duration is 1 s. Missing coverage is at most 1 s at peak;
-        # the stop's partial-counter term is at most half one longest poll.
+        # C1's full stop partial-counter term is at most one longest poll.
         longest_poll_s = max(b - a for a, b in zip(times, times[1:])) / NS
-        limit = peak * (1 + longest_poll_s / 2) + 2 * quantum
+        limit = peak * (1 + longest_poll_s) + 2 * quantum
         self.assertLessEqual(before.half_width_j, limit)
         print("attribution reset world: " + json.dumps(dict(
             joules=result.total.joules, true_joules=exact,
             half_width_j=result.total.half_width_j, before_half_width_j=before.half_width_j),
             sort_keys=True))
+
+    def test_public_queries_match_episode_preparation_on_each_world(self):
+        for sensor in SENSORS:
+            for seed in range(5):  # The same deterministic five-seed regression set.
+                record, _ = world(seed, sensor, same_domain=sensor.source == "nvml_power")
+                result = attribute_episode(record, source=sensor.source, channel=sensor.channel)
+                clock = record.clock_mappings[0] if record.clock_mappings else None
+                intervals = [(record.start_ns, record.end_ns, result.total)]
+                intervals.extend((s.start_ns, s.end_ns, s.energy) for s in result.segments)
+                for a, b, prepared in intervals:
+                    queried = trace_energy(record.power_traces[0], a, b, mapping=clock)
+                    for actual, expected in ((queried.joules, prepared.joules),
+                                             (queried.half_width_j, prepared.half_width_j)):
+                        # Agreement is 1e-6 relative, capped at 1% of the
+                        # smallest printed width, with a million-ulp floor.
+                        scale = max(abs(actual), abs(expected))
+                        bar = min(1e-6 * scale, 0.01 * min(
+                            queried.half_width_j, prepared.half_width_j))
+                        self.assertGreaterEqual(bar, 1e6 * math.ulp(scale))
+                        self.assertLessEqual(abs(actual - expected), bar)
+                    self.assertEqual(queried.method, prepared.method)
+                    self.assertEqual(queried.flags, prepared.flags)
 
     def test_idle_subtraction_reaches_every_segment(self):
         record, truth = world(0, SENSORS[0])

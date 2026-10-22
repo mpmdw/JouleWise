@@ -6,6 +6,9 @@ import math
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
+
+from joulewise.align import attribution
 
 from joulewise.align.attribution import attribute_episode, trace_energy
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn
@@ -432,6 +435,29 @@ class AttributionChecks(unittest.TestCase):
         self.assertNotIn("trace.partial_coverage", estimate.flags)
         bad = trace_energy(trace(), 0, NS, idle_watts=math.nan)
         self.assertIn("idle.nonfinite", bad.flags)
+
+    def test_cold_point_query_builds_only_its_requested_spans_and_reuses_preparation(self):
+        period = NS // 1000  # A 1 kHz rail sampled for this 10 s fixture.
+        times = tuple(range(0, 10 * NS + 1, period))
+        sensor = trace(times=times, values=tuple(12.0 for _ in times),
+                       nominal_interval_ns=period)
+        a, b = 2 * NS, 2 * NS + NS // 10
+        with patch.object(attribution, "_Trace", wraps=attribution._Trace) as prepare:
+            with patch.object(attribution, "_Span", wraps=attribution._Span) as span:
+                first = trace_energy(sensor, a, b)
+                # One span per overlapping sample interval, plus the two
+                # endpoint comparisons. A cold call must not build all 10 s.
+                self.assertLessEqual(span.call_count, (b - a) // period + 2)
+            second = trace_energy(sensor, a + NS, b + NS)
+            self.assertEqual(prepare.call_count, 1)  # Exactly one immutable trace preparation.
+            translated = trace_energy(sensor, a + NS, b + NS,
+                                      mapping=mapping(offset=NS, uncertainty=0))
+            self.assertEqual(prepare.call_count, 2)  # A different mapping needs a preparation.
+        self.close(first.joules, 12 * (b - a) / NS, half_width=first.half_width_j)
+        for result in (second, translated):
+            self.close(result.joules, first.joules, half_width=min(
+                result.half_width_j, first.half_width_j))
+            self.close(result.half_width_j, first.half_width_j)
 
     def test_import_works_without_site_packages(self):
         result = subprocess.run([sys.executable, "-S", "-c",
