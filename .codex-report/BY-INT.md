@@ -7,11 +7,11 @@ All merge checkpoints were pushed, without force, only to `lane/2026-10-22-bytes
 The sole manual conflict was `tests/fixtures/bytes/campaign.py`; NR1, M1, Q1/Q2 and blinding behavior are preserved.
 The new Q2 CLI regression fails under the pre-judge CLI and passes on the integrated CLI in both cases.
 All 39 plan-generator outputs reproduce byte for byte; the Mac kit check passes; catalog SHA and README are filled.
-The 14 requested modules cover 258 tests: 256 pass, one catalog-reproduction test fails, and one branch-presence test skips.
+The 14 requested modules cover 258 tests: 256 pass, one catalog-reproduction test failed until the builder fix below, and one branch-presence test skips.
 The main-refresh bridge module adds 3 passing tests; no whole suite ran locally.
 The 12-session synthetic CLI chain and scratch open_packs checks pass; alpha/beta/gamma and loop hashes are unchanged; refusal census arrays are empty.
-SCOPE_BLOCKED: the catalog builder omits the three existing B4 entries; its exact-file scope expansion is pending, so the builder remains untouched.
-Legacy agreement passes but omits NR1/Q2 fields pending BY-TWIN; CI is reported below without claiming a green final head.
+Catalog builder: the lead granted `scripts/build_b6_flag_catalog.py`; the three B4 entries were added (243e398e3), `--check` and the catalog test pass, catalog bytes unchanged. CI shard 7's git-fixture guard defect (two B4 `git init` sites) was fixed in 960c7c163.
+Legacy agreement passes but omits NR1/Q2 fields pending BY-TWIN. CI and the lead's local verification are under CI and LEAD VERIFICATION.
 
 ## MERGES
 
@@ -21,7 +21,7 @@ Legacy agreement passes but omits NR1/Q2 fields pending BY-TWIN; CI is reported 
 4. Manifest/KV `99c9099d8`: resulting head `4f6237d46d7ed8bd87e1f50e2a4b4d961c18492e`; no conflicts.
 5. Registration `91b20d7c2`: resulting head `e7ffa7c8c1e55b18e6dd9bb48035b416979e75ca`; no conflicts. Twelve registrations auto-merged B4 flag effects with registration-lane estimators and notes.
 6. Regeneration: resulting checkpoint head `b2da126598da59dbaea3ef8a4318e5e88d556d69`. `scripts/bytes_plan_trees.py` produced no tracked differences. `--check` and `scripts/bytes_mac_kit.py --check` pass. `scripts/build_b6_flag_catalog.py --check` exits 1: inherited B4 catalog entries are absent from its builder. Exact-file scope expansion requested; builder untouched pending reply.
-7. `origin/main` at `ef520743cec50833a8ee6af37388610bef22798e`: resulting head `5f89a9e0051b64f74454a193f9f3e9f20db7d65a`; no conflicts. Auto-merges in `configs/gates/hazard_refusals.json`, `tests/test_b5_plan.py`, and `tests/test_night_agent_install.py` required no manual changes. Final remote observation found main advanced to `4d49364ca720c6ccf505f5c277ddfe27f26a9e90` (PR #530, bridge/tooling only). Refreshed step 7 by merging that head cleanly, resulting in `2f5bd560a9d546c5e07bfcbc6b714035c8770707`, then pushed. No conflict files; no BYTES arithmetic, fixture, registration or generator changed. `tests.test_codex_app_bridge`: 3 tests, exit 0.
+7. `origin/main` at `ef520743cec50833a8ee6af37388610bef22798e`: resulting head `5f89a9e0051b64f74454a193f9f3e9f20db7d65a`; no conflicts. Auto-merges in `configs/gates/hazard_refusals.json`, `tests/test_b5_plan.py`, and `tests/test_night_agent_install.py` required no manual changes. Final remote observation found main advanced to `4d49364ca720c6ccf505f5c277ddfe27f26a9e90` (PR #530, bridge/tooling only). Refreshed step 7 by merging that head cleanly, resulting in `2f5bd560a9d546c5e07bfcbc6b714035c8770707`, then pushed. No conflict files; no BYTES arithmetic, fixture, registration or generator changed. `tests.test_codex_app_bridge`: 3 tests, exit 0. Lead refresh (director, 10-22): main advanced again to `bfab7c950` (PR #538, Codex MCP server and census tests); merged cleanly as `d401c6213`. The two sides change no common file; no BYTES path changed.
 
 ## GENERATED
 
@@ -145,6 +145,19 @@ Latest observation while local work was still running, 2026-10-22 03:05:06 UTC, 
 - CI run https://github.com/mpmdw/JouleWise/actions/runs/39713991637: build, changes, fences, quick and installed-wheel all green (5 jobs); one calibration-exclusive job and test shards 1, 2 and 9 running (4); the other 11 jobs queued. No final suite result yet.
 - Gate ledger https://github.com/mpmdw/JouleWise/actions/runs/39713991678: failed as expected; independent execution review, whole-suite evidence, final-head CI and cold gates are not claimed by this seat.
 - The report-only closeout push will trigger a fresh CI run; no green final-head claim is made. The known catalog-builder mismatch independently blocks the requested green acceptance. The seat does not wait on CI after its other work is complete.
+
+Lead observation, 2026-10-22 05:31 UTC: CI run https://github.com/mpmdw/JouleWise/actions/runs/39721528108 on `960c7c163` completed with all 20 jobs green (12 test shards, calibration exclusives, build, quick, fences, installed-wheel, changes). Gate ledger failed as expected (merge-ledger keys not claimed). The main-refresh head `d401c6213` and this report update start a new run.
+
+## LEAD VERIFICATION
+
+The director re-ran the acceptance on the Mac at `d401c6213` (worktree `/Users/edr/code/jw-wt/by-int-verify`), each process with `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`, its own fresh TMPDIR and `/opt/homebrew/bin/python3.13 -B`, test by test in parallel for the three long modules:
+
+- `tests.test_bytes_analysis` 69/69 (the 60-campaign `CampaignWordRates` test run one world per process; every assertion in it is per world); `tests.test_bytes_h_session` 32/32; `tests.test_bytes_agreement` 8/8; `tests.test_bytes_twin` 57; `tests.test_bytes_manifest` 16; `tests.test_bytes_mac_kit` 4; `tests.test_bytes_gates` 7; `tests.b6.test_bytes_packs` 9; `tests.b6.test_blinding` 8; `tests.b6.test_export_runs` 11; `tests.b6.test_release_subset` 4; `tests.b6.test_catalog` 4; `tests.hazards.test_import_graph` 6; `tests.hazards.test_refusal_allowlist` 23 (no skip on the Mac); `tests.test_git_fixture_maintenance` 5; main-delta `tests.test_codex_mcp_server` 34 and `tests.test_arm_census` 20. All exit 0.
+- `tests.hazards.refusal_census`: all five arrays empty.
+- `scripts/bytes_plan_trees.py --check`, `scripts/build_b6_flag_catalog.py --check`, `scripts/bytes_mac_kit.py --check`: exit 0. `bytes_plan_trees.py --output-root <scratch>` emits 39 files, all byte-identical to the checkout.
+- Q2 regression replayed against `scripts/bytes_analyze.py` from `c2dad351e`: both cases fail at `frozen line/fit-point mismatch` (exit 1); on the integrated CLI both pass.
+- Catalog SHA-256 `4cd222c4fd7cc43e1e2625f9afae6f6cc742b40876241fb5cc5864d8ee7eaa4f` equals the file and Appendix A.
+- `tests.test_agent_identity.AncestorCensusLiveTests` fails on the Mac at this head and identically on main `bfab7c950`: with more than 20 listed processes (concurrent agent sessions), the census stderr truncates at 20 entries and the test's own pid falls in the elided part. Environmental for this lane; a main test defect to note, not a BYTES one.
 
 ## DECISIONS I MADE
 
