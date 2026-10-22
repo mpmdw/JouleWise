@@ -137,35 +137,66 @@ python3 -m unittest tests.test_battery_float_consumers tests.test_battery_float_
 python3 -m tests.align.test_phase_detect --study
 ```
 
-The last command runs the actual simulator, detector and matcher for four-turn
-episodes (512 prefill and 96 decode tokens per turn), with growing cached
-context, three waits and one omitted call in a copied log. It reports complete
-call recall, omitted-call recall, false alarms on episodes with calls and false
-alarms on separate episodes with no tools. Its default grid is 1, 5, 10, 25, 50,
-100, 250 and 500 ms, with 64 seeds per grid point and sensor. These durations
-are an explicit experimental grid, not physics-derived thresholds; the seed
-count is a configurable simulation budget, not a power guarantee.
+The last command runs the actual simulator, detector and matcher on 30-turn
+minute-scale episodes. Tool results feed the next prefill, cached context
+grows, one to three calls share tool turns, and 20 ms of client/serving
+latency separates the last call from the next turn. These are configurable
+scenario inputs. The fixed four-turn world and sensor_models() remain
+unchanged for reviewer compatibility.
 
-The synthetic INA scenario polls/averages at 1 ms; that is a scenario parameter
-and must be replaced with the board's characterization result. The other two
-scenarios use 100/25 ms (NVML) and 100/100 ms (powermetrics). All use specified
-0.05 W Gaussian read noise and 0.01 W quantum, with a 5 W idle floor, about
-21 W prefill and 13 W decode. These are controlled synthetic inputs, not claims
-about any of those physical instruments. Each episode has 2,048 fresh tokens,
-384 decoded tokens and three waits; decode is 64 tokens/s, prefill 2,000
-tokens/s, and token ripple amplitude is 0.1 W. Vary these parameters before
-drawing conclusions about a target model or rail.
+The default grid is 1, 5, 10, 25, 50, 100, 250 and 500 ms, with 64 seeds per
+row. That is a simulation budget, not a power guarantee. Report one isolated
+omitted call per independently seeded episode with an equal-tail
+Clopper-Pearson 95% interval, plus episode false-alarm intervals. Pooled
+visible-call recall is descriptive; within-episode calls are correlated and
+must not be passed off as independent binomial trials. Print shortest grid
+duration twice, from point estimates and from interval bounds. At 64 seeds,
+even zero false alarms has upper bound 1 - 0.025**(1/64), about 0.056:
+it cannot establish the under-5% target from the 95% bound. More seeds are
+needed to make that claim. If the two shortest-duration answers differ,
+report both under NEEDS_RULING rather than silently picking one.
 
-Binary segmentation uses a known-variance BIC-style penalty: an extra mean
-plus a boundary location gives two parameters, hence 2 sigma-squared log(n)
-in SSE units. When noise is not supplied, first-difference MAD is divided by
-sqrt(2) Phi-inverse(0.75), with the quantization variance as a lower bound.
-The universal Gaussian excursion bound separates segment levels; higher,
-shorter bursts are prefill, intermediate plateaus decode, and interior low
-segments tool-wait candidates. Single-level or conflicting level/duration
-patterns are flagged. Greedy segmentation can miss short balanced troughs;
-that is why the duration study is required.
+Also hide the second back-to-back call in a matched idle run, and report
+the concealment fraction conditional on that run being detected in the
+complete-log control. Power cannot separate this hidden call from another
+logged call plus client latency inside the same idle run. Isolated-call
+sensitivity must never be presented as recall over that unidentifiable set.
 
-No sensitivity numbers or shortest passing duration are claimed until these
-commands actually run. As of this checkpoint, the managed executor was
-unavailable, so the software and tests are unverified.
+The production sensor set uses the INA3221 bus LSB of 8 mV and shunt LSB
+of 40 uV. P3767's public L4T device tree specifies 5000 micro-ohm shunts,
+so its current LSB is 8 mA. At the stated synthetic 5 V, 2 A operating
+point, the propagated watt resolution is 0.056064 W. The cadence remains
+a supplied 1 ms scenario, not a measured board result. NVML and the selected
+powermetrics output use 0.001 W (integer mW) precision. Independent
+Gaussian read sd defaults to q/sqrt(12), an explicit resolution-scaled
+noise scenario in addition to quantization; override it with actual
+characterization. No measured analog-noise claim is made.
+
+Source: [P3767 device tree, public L4T mirror](https://github.com/OE4T/t23x-public-dts/blob/patches-rel-36/tegra234-p3767.dtsi).
+Verify the borrowed board's running device tree before adopting that shunt.
+
+Binary segmentation retains the 2 variance log(n) BIC-style SSE penalty.
+For held readings it infers a change cadence and thins to independent
+conversion-sized observations while retaining the duration of constant
+plateaus. Noise estimation first removes bit-identical repeats. A robust
+difference-variance envelope at dyadic lags through sqrt(n) includes
+correlated token ripple as within-phase variation. This avoids treating
+every ripple half-cycle as a prefill. Persistent levels use complete-span
+grouping; mixed-exposure leaves borrow adjacent sustained labels, and
+adjacent equal labels merge. Read gaps need at least two nominal periods;
+touching boundaries carry uncertainty widened by the gap and unmatched
+troughs there are indeterminate, not unlogged-call candidates.
+
+Matching uses idle runs implied by visible generation and tool intervals.
+All logged calls in a matched run count toward recall; individual call
+timing inside a shared run is unresolved. Precision counts matched runs,
+so it remains a probability when a run contains several calls.
+
+FIX ROUND 1 EXECUTION STATUS: the cloud executor is still unavailable.
+Source fixes and regression tests are saved, but none of the required
+commands, reviewer probes or the new production study has run in this seat.
+There are no measured sensitivity curves, detected/true-prefill counts,
+concealment rates or shortest passing durations to report yet. The old
+reviewer results at 08b493a1e describe the pre-fix tree only. Restore an
+executor and run the report's exact validation checklist before interpreting
+any synthetic sensitivity result. Hardware status remains PROVISIONAL.

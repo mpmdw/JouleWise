@@ -10,7 +10,7 @@ from dataclasses import replace
 from joulewise.align.phase_detect import detect_phases, estimate_noise_sd, match_tool_calls
 from joulewise.align.records import ClockMapping, PowerTrace
 from joulewise.align.sensor_sim import SensorModel, simulate, timeline_from_episode
-from tests.align.test_sensor_sim import model, world
+from tests.align.test_sensor_sim import model, production_world, world
 
 
 def sensor_models(seed):
@@ -25,59 +25,178 @@ def sensor_models(seed):
     )
 
 
+def production_sensor_models(seed, *, ina_cadence_ns=1_000_000,
+                             shunt_resistance_ohm=0.005,
+                             operating_voltage_v=5.0, operating_current_a=2.0,
+                             noise_sd_by_sensor=None):
+    """Resolution-derived study instruments, distinct from fixed repro worlds.
+
+    INA cadence is an explicit scenario input, not measured Orin evidence.
+    P3767 L4T device tree: shunt-resistor-micro-ohms = <5000> (OE4T mirror,
+    patches-rel-36/tegra234-p3767.dtsi). Verify the borrowed board's DT.
+    Independent Gaussian read sd defaults to one uniform LSB / sqrt(12);
+    actual read noise is unknown and can be supplied per sensor.
+    """
+    # INA3221: bus LSB 8 mV, shunt LSB 40 uV. I=Vshunt/R.
+    dv = 8e-3
+    di = 40e-6 / shunt_resistance_ohm
+    ina_quantum = abs(operating_voltage_v) * di + abs(operating_current_a) * dv + dv * di
+    quanta = {"ina3221_1ms": ina_quantum,
+              "nvml_100ms_25ms": 1e-3,  # NVML power usage is integer mW.
+              "powermetrics_100ms": 1e-3}  # Selected mW output precision.
+    supplied = noise_sd_by_sensor or {}
+    noise = {key: supplied.get(key, quantum / math.sqrt(12)) for key, quantum in quanta.items()}
+    return (
+        ("ina3221_1ms", SensorModel.ina3221(
+            cadence_ns=ina_cadence_ns, noise_sd_w=noise["ina3221_1ms"],
+            quantum_w=ina_quantum, seed=seed)),
+        ("nvml_100ms_25ms", SensorModel.nvml(
+            noise_sd_w=noise["nvml_100ms_25ms"], quantum_w=1e-3, seed=seed)),
+        ("powermetrics_100ms", SensorModel.powermetrics(
+            noise_sd_w=noise["powermetrics_100ms"], quantum_w=1e-3, seed=seed)),
+    )
+
+
+def clopper_pearson(successes, trials, *, confidence=0.95):
+    """Exact equal-tail binomial interval; confidence is a reporting convention."""
+    if not trials:
+        return (0.0, 1.0)  # No observations: the entire probability space.
+    alpha = 1 - confidence
+
+    def cdf(k, p):
+        if p <= 0:
+            return 1.0
+        if p >= 1:
+            return 1.0 if k >= trials else 0.0
+        # Log-sum-exp avoids underflow for minute-scale call counts.
+        logs = [math.lgamma(trials + 1) - math.lgamma(j + 1) -
+                math.lgamma(trials - j + 1) + j * math.log(p) +
+                (trials - j) * math.log1p(-p) for j in range(k + 1)]
+        largest = max(logs)
+        return min(1.0, math.exp(largest) * math.fsum(math.exp(x - largest) for x in logs))
+
+    def invert(k, target):
+        left, right = 0.0, 1.0
+        # Binary64 has sys.float_info.mant_dig bits of precision; after that
+        # many bisections the interval cannot contain distinguishable points.
+        for _ in range(sys.float_info.mant_dig):
+            middle = (left + right) / 2
+            if cdf(k, middle) > target:
+                left = middle
+            else:
+                right = middle
+        return (left + right) / 2
+
+    lower = invert(successes - 1, 1 - alpha / 2) if successes else 0.0
+    upper = invert(successes, alpha / 2) if successes < trials else 1.0
+    return (lower, upper)
+
+
 def run_duration_study(*, seeds=range(64), durations_ns=(
         1_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000,
-        100_000_000, 250_000_000, 500_000_000)):
-    """Return empirical duration curves, including separate no-tool controls.
+        100_000_000, 250_000_000, 500_000_000), turns=30,
+        client_gap_ns=20_000_000, sensors=production_sensor_models):
+    """Production worlds with isolated and shared-run omission controls.
 
-    90% recall and <5% episode false alarms are user-specified reporting
-    conventions. They are not physical constants or confidence guarantees.
+    90% recall and <5% episode false alarms are brief reporting conventions;
+    64 seeds is a configurable computational budget. CP bounds use one
+    independently seeded Bernoulli trial per episode: one omitted isolated
+    call, one omitted shared-run call, or any episode false alarm. Pooled
+    call recall is descriptive, not incorrectly treated as independent calls.
     """
     seeds = tuple(seeds)
     results = []
     for duration in durations_ns:
         totals = {}
         for seed in seeds:
-            episode = world(seed, duration)
-            null = world(seed, duration, tools=False)
-            for name, sensor in sensor_models(seed):
-                segments = detect_phases(simulate(timeline_from_episode(episode, model()), sensor))
+            episode = production_world(seed, duration, turns=turns, client_gap_ns=client_gap_ns)
+            null = production_world(seed, duration, tools=False, turns=turns)
+            timeline = timeline_from_episode(episode, model())
+            null_timeline = timeline_from_episode(null, model())
+            isolated = episode.turns[0].tool_calls[0]
+            shared = episode.turns[1].tool_calls[-1]  # Immediately after another logged call.
+            def omit(call):
+                return replace(episode, turns=tuple(
+                    replace(turn, tool_calls=tuple(
+                        replace(c, logged=False) if c == call else c for c in turn.tool_calls))
+                    for turn in episode.turns))
+            isolated_log, shared_log = omit(isolated), omit(shared)
+            for name, sensor in sensors(seed):
+                segments = detect_phases(simulate(timeline, sensor))
                 full = match_tool_calls(segments, episode)
-                # Remove one actual call from the visible log without modifying power.
-                hidden_call = episode.turns[1].tool_calls[0]
-                altered = replace(episode, turns=tuple(
-                    replace(t, tool_calls=tuple(replace(c, logged=False) if c == hidden_call else c
-                                                for c in t.tool_calls)) for t in episode.turns))
-                visible = match_tool_calls(segments, altered)
-                bound = sensor.sample_interval_ns + sensor.averaging_window_ns
-                hidden_detected = any(abs(s.start_ns - hidden_call.start_ns) <= bound and
-                                      abs(s.end_ns - hidden_call.end_ns) <= bound
-                                      for s in visible.unlogged_candidates)
-                null_match = match_tool_calls(detect_phases(simulate(
-                    timeline_from_episode(null, model()), sensor)), null)
-                row = totals.setdefault(name, [0, 0, 0, 0, 0])
-                row[0] += full.matched_count
-                row[1] += episode.totals()["tool_calls"]
-                row[2] += bool(full.unlogged_candidates)
-                row[3] += bool(null_match.unlogged_candidates)
-                row[4] += hidden_detected
+                hidden = match_tool_calls(segments, isolated_log)
+                hidden_shared = match_tool_calls(segments, shared_log)
+                # The log implies call.end + client gap as the trough end.
+                bound = hidden.tolerance_ns
+                def found(match, call):
+                    return any(abs(s.start_ns - call.start_ns) <= match.tolerance_ns and
+                               s.end_ns >= call.end_ns - match.tolerance_ns and
+                               s.end_ns <= call.end_ns + client_gap_ns + match.tolerance_ns
+                               for s in match.unlogged_candidates)
+                isolated_detected = found(hidden, isolated)
+                shared_detected = found(hidden_shared, shared)
+                null_match = match_tool_calls(detect_phases(simulate(null_timeline, sensor)), null)
+                row = totals.setdefault(name, dict(matched=0, calls=0, false=0, null_false=0,
+                                                  hidden=0, shared_hidden=0, true_prefills=0,
+                                                  detected_prefills=0, duration_ns=0,
+                                                  shared_concealed=0, shared_trials=0,
+                                                  sensor=dict(interval_ns=sensor.sample_interval_ns,
+                                                              window_ns=sensor.averaging_window_ns,
+                                                              quantum_w=sensor.quantum_w,
+                                                              noise_sd_w=sensor.noise_sd_w)))
+                row["matched"] += full.matched_count
+                row["calls"] += episode.totals()["tool_calls"]
+                row["false"] += bool(full.unlogged_candidates)
+                row["null_false"] += bool(null_match.unlogged_candidates)
+                row["hidden"] += isolated_detected
+                row["shared_hidden"] += shared_detected
+                # Measure the identifiability limit only when the full trace
+                # detected the underlying run; otherwise it is a sensor miss.
+                shared_run_seen = shared not in full.unmatched_logged
+                row["shared_trials"] += shared_run_seen
+                row["shared_concealed"] += shared_run_seen and not shared_detected
+                row["true_prefills"] += len(episode.turns)
+                row["detected_prefills"] += sum(s.label == "prefill" for s in segments)
+                row["duration_ns"] += episode.end_ns - episode.start_ns
         for name, row in totals.items():
-            results.append(dict(sensor=name, duration_ms=duration / 1_000_000,
-                                episodes=len(seeds), calls=row[1],
-                                recall=row[0] / row[1],
-                                hidden_call_recall=row[4] / len(seeds),
-                                false_alarm_per_episode=row[2] / len(seeds),
-                                null_false_alarm_per_episode=row[3] / len(seeds)))
-    shortest = {}
+            count = len(seeds)
+            results.append(dict(
+                sensor=name, duration_ms=duration / 1_000_000, episodes=count, calls=row["calls"],
+                recall=row["hidden"] / count,
+                recall_95=clopper_pearson(row["hidden"], count),
+                pooled_logged_call_recall=row["matched"] / row["calls"],
+                hidden_call_recall=row["hidden"] / count,
+                shared_run_hidden_call_recall=row["shared_hidden"] / count,
+                shared_run_hidden_call_recall_95=clopper_pearson(row["shared_hidden"], count),
+                shared_run_concealed=row["shared_concealed"], shared_run_trials=row["shared_trials"],
+                shared_run_concealment_rate=(row["shared_concealed"] / row["shared_trials"]
+                                            if row["shared_trials"] else None),
+                false_alarm_per_episode=row["false"] / count,
+                false_alarm_per_episode_95=clopper_pearson(row["false"], count),
+                null_false_alarm_per_episode=row["null_false"] / count,
+                null_false_alarm_per_episode_95=clopper_pearson(row["null_false"], count),
+                detected_prefills=row["detected_prefills"], true_prefills=row["true_prefills"],
+                mean_episode_duration_s=row["duration_ns"] / count / 1e9,
+                sensor_parameters=row["sensor"]))
+    shortest, bounded = {}, {}
     for row in results:
-        # Targets are the reporting conventions specified by this lane brief.
-        if (row["hidden_call_recall"] >= 0.90 and row["recall"] >= 0.90 and
-                row["false_alarm_per_episode"] < 0.05 and
-                row["null_false_alarm_per_episode"] < 0.05):
+        # Targets are supplied reporting conventions, not fitted constants.
+        if (row["recall"] >= 0.90 and row["pooled_logged_call_recall"] >= 0.90 and
+                row["false_alarm_per_episode"] < 0.05 and row["null_false_alarm_per_episode"] < 0.05):
             shortest.setdefault(row["sensor"], row["duration_ms"])
+        if (row["recall_95"][0] >= 0.90 and row["false_alarm_per_episode_95"][1] < 0.05 and
+                row["null_false_alarm_per_episode_95"][1] < 0.05):
+            bounded.setdefault(row["sensor"], row["duration_ms"])
     return {"rows": results, "shortest_passing_duration_ms": shortest,
-            "status": "synthetic_empirical_grid_only",
-            "seed_count": len(seeds), "false_alarm_rate_resolution": 1 / len(seeds)}
+            "shortest_passing_duration_ms_from_95_bounds": bounded,
+            "recall_estimand": "one isolated unlogged call per independently seeded episode",
+            "shared_run_control": "hide the second back-to-back call; report concealment separately",
+            "status": "synthetic_grid_only", "seed_count": len(seeds), "turns": turns,
+            "client_gap_ns": client_gap_ns, "false_alarm_rate_resolution": 1 / len(seeds),
+            "needs_ruling": ({"question": "Use point estimates or 95% bounds for shortest-duration reporting?",
+                              "point_estimates_ms": shortest, "bounds_ms": bounded,
+                              "recommendation": "print both; treat bounds as the supported limit"}
+                             if shortest != bounded else None)}
 
 
 class PhaseDetectTest(unittest.TestCase):

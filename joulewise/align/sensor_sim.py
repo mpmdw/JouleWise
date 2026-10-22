@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import math
 import random
+from bisect import bisect_left, bisect_right
+from functools import cached_property
 from dataclasses import dataclass
 
 from joulewise.align.records import Episode, PowerSource, PowerTrace
@@ -45,10 +47,23 @@ class Timeline:
     intervals: tuple[PowerInterval, ...]
     flags: tuple[str, ...] = ()
 
+    @cached_property
+    def _interval_starts(self) -> tuple[int, ...]:
+        return tuple(span.start_ns for span in self.intervals)
+
+    @cached_property
+    def _interval_ends(self) -> tuple[int, ...]:
+        return tuple(span.end_ns for span in self.intervals)
+
     def integral(self, start_ns: int, end_ns: int) -> float:
         """Integral in watt-nanoseconds, with idle outside the episode too."""
         total = self.idle_w * (end_ns - start_ns)
-        for span in self.intervals:
+        # Timeline intervals are ordered and disjoint. Binary bounds retain
+        # identical contribution order while avoiding a full episode scan for
+        # every sub-ms window in minutes-long production-shaped worlds.
+        left_index = bisect_right(self._interval_ends, start_ns)
+        right_index = bisect_left(self._interval_starts, end_ns)
+        for span in self.intervals[left_index:right_index]:
             left, right = max(start_ns, span.start_ns), min(end_ns, span.end_ns)
             if right <= left:
                 continue

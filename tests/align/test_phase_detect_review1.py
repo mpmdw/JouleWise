@@ -7,10 +7,45 @@ from joulewise.align.phase_detect import detect_phases, match_tool_calls
 from joulewise.align.records import PowerTrace
 from joulewise.align.sensor_sim import SensorModel, simulate, timeline_from_episode
 from tests.align.test_sensor_sim import model, world
-from tests.align.test_phase_detect import sensor_models
+from tests.align.test_phase_detect import clopper_pearson, production_sensor_models, sensor_models
 
 
 class PhaseReviewTest(unittest.TestCase):
+    def test_exact_binomial_bounds_against_closed_form_oracles(self):
+        import math
+        # Equal-tail 95% is the brief's reporting convention. At zero/all
+        # successes, binomial tail inversion has an independent closed form.
+        confidence, trials = 0.95, 64
+        alpha = 1 - confidence
+        lower, upper = clopper_pearson(0, trials, confidence=confidence)
+        expected = 1 - (alpha / 2) ** (1 / trials)
+        self.assertEqual(lower, 0.0)  # Definitional probability endpoint.
+        self.assertAlmostEqual(upper, expected, delta=expected * 1e-6)
+        lower, upper = clopper_pearson(trials, trials, confidence=confidence)
+        expected = (alpha / 2) ** (1 / trials)
+        self.assertAlmostEqual(lower, expected, delta=expected * 1e-6)
+        self.assertEqual(upper, 1.0)
+        # With one success in two trials, solve the quadratic tails directly.
+        low, high = clopper_pearson(1, 2, confidence=confidence)
+        expected_low = 1 - math.sqrt(1 - alpha / 2)
+        expected_high = math.sqrt(1 - alpha / 2)
+        self.assertAlmostEqual(low, expected_low, delta=expected_low * 1e-6)
+        self.assertAlmostEqual(high, expected_high, delta=expected_high * 1e-6)
+
+    def test_production_sensor_resolution_uses_shunt_and_output_units(self):
+        import math
+        sensors = dict(production_sensor_models(0))
+        # P3767 DT 5 milliohm shunt: 40 uV / 5 milliohm = 8 mA.
+        # At 5 V, 2 A, dP = 5*.008 + 2*.008 + .008*.008 W.
+        expected = 5 * .008 + 2 * .008 + .008 * .008
+        self.assertAlmostEqual(sensors["ina3221_1ms"].quantum_w, expected,
+                               delta=expected * 1e-6)
+        for name in ("nvml_100ms_25ms", "powermetrics_100ms"):
+            sensor = sensors[name]
+            self.assertAlmostEqual(sensor.quantum_w, .001, delta=.001 * 1e-6)
+            expected = .001 / math.sqrt(12)  # Uniform one-LSB rounding sd.
+            self.assertAlmostEqual(sensor.noise_sd_w, expected, delta=expected * 1e-6)
+
     def test_held_reads_with_estimated_and_supplied_noise(self):
         episode = world(5, 250_000_000)
         timeline = timeline_from_episode(episode, model())

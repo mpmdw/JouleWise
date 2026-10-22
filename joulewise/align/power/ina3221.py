@@ -182,6 +182,11 @@ class Ina3221Sampler:
         No current limits, throttle enables or alarm controls are written.
         """
         devices = {rail.device for rail in self.rails}
+        for rail in self.rails:
+            if rail.current.name.startswith("curr"):
+                index = rail.current.name.removeprefix("curr").removesuffix("_input")
+                self._health_paths.update((rail.device / f"curr{index}_{kind}_alarm").resolve()
+                                          for kind in ("crit", "max"))
         for device in devices:
             self._health_paths.update(path.resolve() for path in device.glob("*alarm*"))
             self._health_paths.update(path.resolve() for path in device.glob("*warn*"))
@@ -193,7 +198,8 @@ class Ina3221Sampler:
             self._health_paths.update(path.resolve() for path in device.glob("oc*_event_cnt"))
         if not any(p.name.endswith("_event_cnt") for p in self._health_paths):
             self._flag("oc_event_counters_unavailable")
-        if not any("alarm" in p.name or "warn" in p.name for p in self._health_paths):
+        if not any(p.exists() and ("alarm" in p.name or "warn" in p.name)
+                   for p in self._health_paths):
             self._flag("alarm_attributes_unavailable")
         snapshot = {}
         for path in sorted(self._health_paths):
@@ -227,7 +233,8 @@ class Ina3221Sampler:
         # loads; keep that limitation visible and prefer supplied calibration.
         changed = [row[0] for previous, row in zip(rows, rows[1:]) if row[1] != previous[1]]
         repeats = sum(a[1] == b[1] for a, b in zip(rows, rows[1:]))
-        if cadence is None and len(changed) >= 2 and repeats * 2 >= len(rows) - 1:
+        if (cadence is None and len(changed) >= max(2, math.isqrt(len(rows))) and
+                repeats * 2 >= len(rows) - 1):
             cadence = statistics.median(b - a for a, b in zip(changed, changed[1:]))
             self._flag(f"cadence_inferred_from_held_values:{rail.channel}")
         if cadence and driver_window and abs(cadence - driver_window) > self.sample_interval_ns:

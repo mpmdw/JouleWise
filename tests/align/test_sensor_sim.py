@@ -36,7 +36,68 @@ def world(seed=0, tool_duration_ns=250_000_000, tools=True):
                    "mock:local", seed, "host.monotonic", 0, t + 500_000_000, tuple(turns))
 
 
+def production_world(seed=0, tool_duration_ns=250_000_000, tools=True, *,
+                     turns=30, client_gap_ns=20_000_000, calls_per_turn=(1, 3),
+                     bytes_per_result_token=4):
+    """Minute-scale SHADE-shaped scenario; these counts/rates are inputs.
+
+    Results feed the next prefill, cached context grows, and multiple calls
+    share a contiguous idle run. First two tool turns guarantee both an
+    isolated call and a shared run for the two identifiability controls.
+    """
+    import random
+    rng = random.Random(seed)
+    cursor = 500_000_000 + rng.randrange(100_000_000)  # Random slow-sensor alignment.
+    context, prefill = 0, 1800  # Scenario system prompt + task input.
+    output = []
+    for index in range(turns):
+        decoded = rng.randint(30, 400)  # Scenario production output-length distribution.
+        first = cursor + round(prefill / 2000 * 1e9)  # Model's 2000 prefill tokens/s.
+        end = first + round(decoded / 64 * 1e9)  # Scenario 64 decoded tokens/s.
+        number = rng.randint(*calls_per_turn) if tools and index < turns - 1 else 0
+        if tools and index < turns - 1:
+            if index == 0:
+                number = 1
+            elif index == 1:
+                number = 2
+        # Explicit synthetic text-size ratio ties result bytes to the next
+        # prefill's token count; it is not a tokenizer calibration.
+        result_tokens = [rng.randint(150, 3000) for _ in range(number)]
+        calls = tuple(ToolCall(
+            f"lookup{k}", end + k * tool_duration_ns,
+            end + (k + 1) * tool_duration_ns, 100,
+            result_tokens[k] * bytes_per_result_token) for k in range(number))
+        output.append(Turn(index, cursor, end, context, prefill, decoded,
+                           first_token_ns=first, tool_calls=calls))
+        context += prefill + decoded
+        # Tool-result token volume is a scenario input, never a power constant.
+        prefill = sum(result_tokens) if calls else 200
+        # Null control removes tools and their round-trip/client wait; the
+        # mixed-call study retains serving gaps in every tool-bearing turn.
+        cursor = end + number * tool_duration_ns + (client_gap_ns if calls else 0)
+    return Episode(f"production-{seed}", "shade/synthetic", "benign", "local-8b",
+                   "mock:local", seed, "host.monotonic", 0, cursor + 500_000_000, tuple(output))
+
+
 class SensorSimTest(unittest.TestCase):
+    def test_production_world_has_results_context_and_multi_call_client_gaps(self):
+        episode = production_world(11, 500_000_000)
+        self.assertEqual(len(episode.turns), 30)  # Declared production study scenario.
+        self.assertTrue(any(len(t.tool_calls) >= 2 for t in episode.turns))
+        self.assertTrue(all(b.context_tokens > a.context_tokens
+                            for a, b in zip(episode.turns, episode.turns[1:])))
+        self.assertTrue(any(t.prefill_tokens != 1800 for t in episode.turns[1:]))
+        for a, b in zip(episode.turns, episode.turns[1:]):
+            self.assertEqual(b.start_ns - a.tool_calls[-1].end_ns, 20_000_000)
+        timeline = timeline_from_episode(episode, model())
+        sensor = SensorModel.powermetrics(noise_sd_w=0, quantum_w=0)
+        trace = simulate(timeline, sensor)
+        got = math.fsum(trace.values) * sensor.averaging_window_ns
+        expected = timeline.integral(episode.start_ns, trace.t_ns[-1])
+        # Tiled, noiseless windows agree with analytic energy; no printed
+        # uncertainty, so the required comparison is relative 1e-6.
+        self.assertAlmostEqual(got, expected, delta=abs(expected) * 1e-6)
+
     def test_complete_episode_chain_reproducible_and_tools_omitted_only_from_log(self):
         from dataclasses import replace
         episode = world()
