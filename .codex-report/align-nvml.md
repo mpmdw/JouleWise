@@ -166,3 +166,9 @@ probes and optional package installation remain pending runtime availability.
 First scoped fix normalizes ctypes scalar results and replaces the optional
 pynvml test's high-level mocks with a C-ABI resolver, exercising real pynvml
 function bodies through sampler and preflight CLI JSON serialization.
+
+Second scoped fix makes mapped window ends the structured timestamps, retains
+query midpoint/bracket notes, gives output-average channels the one-second span
+and unknown duty, and bounds wall-clock slew over measured sensor age. A bad field
+timestamp now affects only its own endpoint and gets a period-plus-poll age bound.
+F4 implementation commit: c05dfd6f2796a76689cee70210d994ad8ffc6424.

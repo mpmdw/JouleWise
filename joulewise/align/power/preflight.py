@@ -100,16 +100,13 @@ def _spaced_values(trace: PowerTrace, start: int, end: int) -> list[float]:
     facts = notes.get("sensor_facts") or {}
     spacing = max(trace.nominal_interval_ns, facts.get("period_ns") or 0,
                   notes.get("output_averaging_window_ns") or 0)
-    timestamps = notes.get("window_end_ns")
-    brackets = notes.get("window_timing_half_width_ns")
-    if timestamps is None:
-        # Synthetic/external traces may state their sensor endpoint directly.
-        # NVML query-only channels explicitly report unresolved sensor age.
+    timestamps = trace.t_ns
+    brackets = notes.get("window_timing_half_width_ns", notes.get("timing_half_width_ns"))
+    if brackets is None:
         if any(flag in notes.get("flags", ()) for flag in (
                 "sensor_update_phase_unreported", "driver_field_timestamp_is_wall_clock")):
             return []
-        timestamps = trace.t_ns
-        brackets = notes.get("timing_half_width_ns", [0]*len(trace.values))
+        brackets = [0]*len(trace.values)
     if brackets is None or len(timestamps) != len(trace.values) or len(brackets) != len(trace.values):
         return []
     width = notes.get("output_averaging_window_ns") or trace.averaging_window_ns or 0
@@ -118,7 +115,7 @@ def _spaced_values(trace: PowerTrace, start: int, end: int) -> list[float]:
     for timestamp, value, bracket in zip(timestamps, trace.values, brackets):
         # All of a physical observation's support and endpoint uncertainty
         # must belong to the phase; cached idle means cannot prove load work.
-        if start <= timestamp-width-bracket and timestamp+bracket < end and math.isfinite(value):
+        if bracket is not None and start <= timestamp-width-bracket and timestamp+bracket < end and math.isfinite(value):
             if last is None or timestamp-last >= spacing:
                 selected.append(value)
                 last = timestamp

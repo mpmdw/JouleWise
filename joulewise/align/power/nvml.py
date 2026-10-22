@@ -264,6 +264,7 @@ class _Channel:
     duplicate_field_reads: int = 0
     window_ends: list[int | None] = field(default_factory=list)
     window_brackets: list[int | None] = field(default_factory=list)
+    sample_flags: list[list[str]] = field(default_factory=list)
 
 
 @dataclass
@@ -294,7 +295,8 @@ class NvmlSampler:
                  power_bound_w: float | None = None, repeat_group: str | int | None = None,
                  clock_ns: Callable[[], int] = time.monotonic_ns,
                  wall_clock_ns: Callable[[], int] = time.time_ns,
-                 stop_timeout_s: float = 5.0) -> None:
+                 stop_timeout_s: float = 5.0,
+                 wall_clock_slew_ppm: float = 500.0) -> None:
         self.device_indices = tuple(device_indices) if device_indices is not None else None
         self.interval_ns = interval_ns
         self.clock_domain = clock_domain or f"{socket.gethostname()}:monotonic"
@@ -306,6 +308,10 @@ class NvmlSampler:
         self._wall_clock = wall_clock_ns
         self._cleanup_thread: threading.Thread | None = None
         self._stop_timeout_s = stop_timeout_s
+        # Linux adjtimex MAXFREQ is 500 ppm (include/uapi/linux/timex.h;
+        # man7.org/linux/man-pages/man2/adjtimex.2.html). Other clock disciplines
+        # can supply their own nonnegative maximum slew rate.
+        self.wall_clock_slew_ppm = wall_clock_slew_ppm
         self._event = threading.Event()
         self._devices: list[_Device] = []
         self._flags: list[str] = []
@@ -361,6 +367,9 @@ class NvmlSampler:
         try:
             if not isinstance(self.interval_ns, int) or self.interval_ns <= 0:
                 raise NvmlError("interval_ns must be a positive integer")
+            if not math.isfinite(self.wall_clock_slew_ppm) or self.wall_clock_slew_ppm < 0:
+                self._flags.append("invalid_wall_clock_slew_rate")
+                return
             if self.power_bound_w is not None and (
                     not math.isfinite(self.power_bound_w) or self.power_bound_w <= 0):
                 self._flags.append("invalid_power_bound_ignored")
@@ -431,10 +440,12 @@ class NvmlSampler:
             after = self._clock()
             window_end: int | None = None
             window_bracket: int | None = None
+            sample_flags: list[str] = []
             if field_timestamp is not None and field_timestamp > 0:
                 # Map the driver's Unix-microsecond timestamp into this host's
                 # monotonic clock through an independent wall-clock bracket.
-                # Query t_ns stays the required monotonic call midpoint.
+                # PowerTrace.t_ns is the sensor window end when known; the
+                # query midpoint and bracket are retained separately in notes.
                 map_before = self._clock()
                 wall_ns = self._wall_clock()
                 map_after = self._clock()
@@ -444,7 +455,13 @@ class NvmlSampler:
                 window_bracket = (map_after-map_before+1)//2 + 1000
                 if window_end > after + window_bracket:
                     window_end = window_bracket = None
-                    channel.flags.append("field_timestamp_after_call")
+                    sample_flags.append("field_timestamp_after_call")
+                else:
+                    # The mapping uses wall time now, but the field timestamp
+                    # is older. Slew over that measured age also changes the
+                    # offset; include both brackets in the age bound.
+                    age_bound_ns = max(0, map_after-window_end) + window_bracket
+                    window_bracket += math.ceil(age_bound_ns*self.wall_clock_slew_ppm/1_000_000)
             midpoint = (before + after) // 2
             # ceil(bracket/2) covers the odd-nanosecond integer midpoint.
             half_width = (after - before + 1) // 2
@@ -481,6 +498,8 @@ class NvmlSampler:
                 channel.brackets.append(half_width)
                 channel.window_ends.append(window_end)
                 channel.window_brackets.append(window_bracket)
+                channel.sample_flags.append(sample_flags)
+                channel.flags.extend(sample_flags)
                 # NVML exposes mW and mJ; dividing by 1000 converts SI prefixes.
                 channel.values.append(raw / 1000.0)
 
@@ -509,35 +528,74 @@ class NvmlSampler:
                 flags.append("sensor_update_phase_unreported")
             else:
                 flags.append("driver_field_timestamp_is_wall_clock")
+        # Internal arrays retain acquisition order. A single unmappable field
+        # gets a query-clock proxy only for itself. Sort power observations by
+        # their reported endpoint so its proxy cannot discard other known ends.
+        order = sorted(range(len(channel.times)), key=lambda i: (
+            channel.window_ends[i] if is_power and channel.window_ends[i] is not None
+            else channel.times[i]))
+        times = [channel.window_ends[i] if is_power and channel.window_ends[i] is not None
+                 else channel.times[i] for i in order]
+        # Equal mapped endpoints denote the same sensor instant; retain one
+        # reading and record this exceptional clock-mapping collision.
+        retained = [i for j, i in enumerate(order) if j == 0 or times[j] != times[j-1]]
+        if len(retained) != len(order):
+            flags.append("duplicate_mapped_endpoint")
+        order = retained
+        times = [channel.window_ends[i] if is_power and channel.window_ends[i] is not None
+                 else channel.times[i] for i in order]
+        period = facts.get("period_ns")
+        # With no timestamp, the latest update can be one sensor period old
+        # plus one poll lag. Output averages can update as slowly as their
+        # one-second span. This is a declared age bound, not measured latency.
+        age_bound = (max(period, 1_000_000_000 if output_average else period)
+                     + self.interval_ns) if period else None
+        if is_power and any(channel.window_ends[i] is None for i in order):
+            flags.append("sensor_age_unknown")
+            if age_bound is None:
+                flags.append("sensor_age_bound_unknown")
+        window_brackets = [
+            channel.window_brackets[i] if channel.window_brackets[i] is not None
+            else channel.brackets[i]+age_bound if age_bound is not None else None
+            for i in order]
         notes = {
             "format": "joulewise.align.nvml.v1", "measurement": channel.kind,
             "supported": channel.supported, "flags": sorted(set(flags)),
             "failures": list(channel.failures),
-            "timing_half_width_ns": list(channel.brackets),
-            "timing_rule": "monotonic call midpoint; bracket excludes unknown sensor age",
+            "timing_half_width_ns": [channel.brackets[i] for i in order],
+            "query_midpoint_ns": [channel.times[i] for i in order],
+            "sample_flags": [channel.sample_flags[i] for i in order],
+            "timing_rule": "t_ns is mapped sensor window end when known; query midpoint otherwise",
+            "unknown_sensor_age_bound_ns": age_bound if is_power else None,
+            "wall_clock_slew_ppm": self.wall_clock_slew_ppm,
             "sensor_facts": facts or None,
             "output_averaging_window_ns": 1_000_000_000 if output_average else None,
             "duplicate_field_reads": channel.duplicate_field_reads,
-            "field_timestamps_us": list(channel.field_timestamps_us),
+            "field_timestamps_us": ([channel.field_timestamps_us[i] for i in order]
+                                    if channel.field_timestamps_us else []),
             "counter_discontinuities": list(channel.discontinuities),
             "raw_energy_mj": list(channel.raw_mj) if not is_power else None,
             "power_bound_w": self.power_bound_w,
             "repeat_group": self.repeat_group,
             "device": device.inventory,
         }
-        if channel.window_ends and all(value is not None for value in channel.window_ends):
-            notes["window_end_ns"] = list(channel.window_ends)
-            notes["window_timing_half_width_ns"] = list(channel.window_brackets)
+        if is_power:
+            notes["window_end_ns"] = [channel.window_ends[i] for i in order]
+            notes["window_timing_half_width_ns"] = window_brackets
             notes["window_clock_mapping"] = (
                 "driver Unix microseconds mapped by bracketed time.time_ns; "
-                "physical window end assumes driver timestamp semantics")
+                "rounding plus mapping bracket plus slew over timestamp age; "
+                "None endpoints use query midpoint with period-plus-poll age bound")
         return PowerTrace(
             source=channel.source, channel=f"gpu{device.index}:{channel.kind}",
-            clock_domain=self.clock_domain, t_ns=tuple(channel.times),
-            values=tuple(channel.values), unit=channel.unit,
+            clock_domain=self.clock_domain, t_ns=tuple(times),
+            values=tuple(channel.values[i] for i in order), unit=channel.unit,
             nominal_interval_ns=self.interval_ns,
-            averaging_window_ns=facts.get("averaging_window_ns") if is_power else None,
-            duty_fraction=facts.get("duty_fraction") if is_power else None,
+            averaging_window_ns=(1_000_000_000 if output_average and facts else
+                                 facts.get("averaging_window_ns") if is_power else None),
+            # Disjoint slices inside a one-second output cannot be represented
+            # as one duty window; None plus the output flag avoids that claim.
+            duty_fraction=facts.get("duty_fraction") if is_power and not output_average else None,
             resolution=0.001,  # Integer mW or mJ NVML API quantum, converted to SI.
             notes=json.dumps(notes, sort_keys=True, allow_nan=False))
 

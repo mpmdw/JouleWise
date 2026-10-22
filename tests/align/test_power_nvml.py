@@ -311,6 +311,59 @@ class NvmlSamplerTests(unittest.TestCase):
                 self.assertIn("output_average_not_single_window", notes["flags"])
                 self.assertEqual(notes["output_averaging_window_ns"], 1_000_000_000)
 
+    def test_structured_channel_windows_on_four_device_classes(self) -> None:
+        for architecture, name in (
+                (7, "NVIDIA A100-SXM4-80GB"), (9, "NVIDIA H100 80GB HBM3"),
+                (8, "NVIDIA L4"), (7, "NVIDIA A10G")):
+            traces = collect(FakeNvmlLibrary(architecture=architecture, name=name))
+            for trace in traces:
+                with self.subTest(name=name, channel=trace.channel):
+                    known = "A100" in name or "H100" in name
+                    average = trace.channel.endswith(":power_average") or (
+                        "H100" in name and trace.channel.endswith(":power_usage"))
+                    if known and trace.unit == "W":
+                        self.assertEqual(trace.averaging_window_ns,
+                                         1_000_000_000 if average else 25_000_000)
+                        self.assertEqual(trace.duty_fraction, None if average else 0.25)
+                    else:
+                        self.assertIsNone(trace.averaging_window_ns)
+                        self.assertIsNone(trace.duty_fraction)
+
+    def test_one_future_field_timestamp_keeps_other_window_ends(self) -> None:
+        library = FakeNvmlLibrary()
+        original = library.nvmlDeviceGetFieldValues
+        bad_count = 0
+
+        def fields(handle: object, count: int, values: object) -> int:
+            nonlocal bad_count
+            status = original(handle, count, values)
+            if values[0].fieldId == POWER_INSTANT_FIELD:
+                bad_count += 1
+                if bad_count == 2:
+                    # One second in the future exceeds driver rounding,
+                    # mapping bracket and a whole 100 ms sensor period.
+                    values[0].timestamp += 1_000_000
+            return status
+
+        library.nvmlDeviceGetFieldValues = fields
+        trace = next(t for t in collect(library, samples=6)
+                     if t.channel.endswith(":power_instant"))
+        notes = json.loads(trace.notes)
+        self.assertEqual(sum(x is None for x in notes["window_end_ns"]), 1)
+        self.assertTrue(all(t == w for t, w in zip(trace.t_ns, notes["window_end_ns"])
+                            if w is not None))
+        self.assertIn("sensor_age_unknown", notes["flags"])
+        # The unknown sample alone carries period + poll + call-bracket age;
+        # known endpoints retain their independent wall-clock mapping bounds.
+        unknown = notes["window_end_ns"].index(None)
+        self.assertGreaterEqual(notes["window_timing_half_width_ns"][unknown],
+                                100_000_000+trace.nominal_interval_ns)
+        from joulewise.align.power.duty import estimate_energy
+        start = min(trace.t_ns)-25_000_000
+        end = max(trace.t_ns)
+        result = estimate_energy([(trace, start, end)]*2)
+        self.assertTrue(math.isfinite(result.half_width_j), result)
+
     def test_cached_field_values_do_not_fabricate_new_measurements(self) -> None:
         library = FakeNvmlLibrary()
         library.constant_field_timestamp = 1_000_000
@@ -380,8 +433,11 @@ class NvmlSamplerTests(unittest.TestCase):
                 self.assertEqual(len(notes["window_end_ns"]), len(trace.values))
                 # The declared 300 ms sensor age exceeds one 100 ms period,
                 # and must remain visible rather than becoming query latency.
-                self.assertLess(notes["window_end_ns"][0], trace.t_ns[0]-100_000_000)
-                self.assertGreaterEqual(notes["window_timing_half_width_ns"][0], 1000)
+                self.assertEqual(notes["window_end_ns"], list(trace.t_ns))
+                self.assertLess(trace.t_ns[0], notes["query_midpoint_ns"][0]-100_000_000)
+                # Measured 300 ms age at Linux's 500 ppm slew limit adds
+                # at least 150 us to the full 1 us driver rounding bound.
+                self.assertGreaterEqual(notes["window_timing_half_width_ns"][0], 151_000)
 
     def test_native_worker_timeout_defers_shutdown_until_call_returns(self) -> None:
         class BlockingLibrary(FakeNvmlLibrary):
