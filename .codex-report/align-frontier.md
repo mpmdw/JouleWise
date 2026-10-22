@@ -66,7 +66,7 @@ def joule_token_divergence(pairs: Sequence[tuple[float, float, float]], *, level
 - Twin interpreter requirement: Python >=3.12 for random.Random.binomialvariate. No actual interpreter skip is claimed; a Python install could not run.
 - Extra-dependency run, NOT EXECUTED: `python3 -m venv /tmp/np`, `/tmp/np/bin/pip install numpy`, `/tmp/np/bin/python -m unittest -v tests.align.test_frontier_inputs`. The optional unittest.skipUnless guard and reason remain unchanged.
 - Round-1 scratch probes are also unexecuted by this seat; no historical unexecuted result is converted into a pass.
-- Remote/static checks only: read back the pushed diff; count 22+10 declared methods; inspect prepared Python sources for trailing whitespace and terminal newlines; verify the changed paths remain inside WRITE_SCOPE. JavaScript-derived reference arithmetic below is not Python testing.
+- Remote/static checks only: GitHub comparison from 5801e762e to b85dd52fd357d17915c414c8ff533d40a17d3527 confirmed exactly frontier.py, test_frontier_inputs.py and this report changed, with 2 fast-forward commits and no protected-file changes; read back the pushed code diff; count 22+10 declared methods; inspect prepared Python sources for trailing whitespace and terminal newlines; verify the changed paths remain inside WRITE_SCOPE. JavaScript-derived reference arithmetic below is not Python testing.
 
 # END-TO-END
 - This seat executed no synthetic world. Construction and derived expectations are distinguished from reviewer measurements.
@@ -137,6 +137,7 @@ F5 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — independent
 F6 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — threshold 50 is derived as the midpoint of suspicion scores 0 and 100.
 
 ## Round 2
+R2-2 fixed (NOT EXECUTED) b85dd52fd357d17915c414c8ff533d40a17d3527 — report uses the authorized no-executor fallback, removes the prior merge-safety verdict, labels reviewer-measured at 5801e762e separately, and records zero tests/probes executed in this seat; round-1 checks were NOT executed this round.
 R2-1 fixed (NOT EXECUTED) 797197d43365958136470847a59c2f2efdff8138 — retain unknown-size rows in both frontiers and tau; flag invalid_params_b without size-only exclusion; unknown size keeps kill False; three-row and production regressions added.
 R2-3 rejected (NOT EXECUTED) — changing the gate's definition requires the lead's ruling; its existing percentile computation and 40-seed upper-bound test are unchanged; reviewer-measured rates and derived pivot references are under NEEDS_RULING.
 R2-4 fixed (NOT EXECUTED) 797197d43365958136470847a59c2f2efdff8138 — ConfigRow documents mean uncertainty, hint-using trials and missing energy; adapter itself is deferred to the lead under CONTRACT-CHANGE.
