@@ -2,8 +2,9 @@
 
 **Status.** Section-by-section outline, written 2026-10-21 (PDT) by Opus 5.5 (an AI model session) for Ed, the
 project's owner, and revised the same night after two separate first-use checks of its wording and a re-check of its
-numbers against their sources. It is not a draft of the paper's prose and has not been sent to anyone; whether any of
-it goes to the advisor (the academic supervising the work, to whom the paper would go) is Ed's decision.
+numbers against their sources. On 22 October, §6 and §12 took in the battery reading's reporting delay, measured by a
+later ruling (BAT-2). It is not a draft of the paper's prose and has not been sent to anyone; whether any of it goes
+to the advisor (the academic supervising the work, to whom the paper would go) is Ed's decision.
 
 **Why it exists.** Ed, 2026-10-20: "seems we're close to an instrument paper, whatever the first paper is i forget if
 joules per request matches up in disag inference as you'd expect by model size" (his mail, transcribed in
@@ -518,7 +519,13 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   `docs/process_traces/2026-10-22-forward/BAT-1-BATTERY-ASSIST.md:19-21` (where in the request the battery helped)
   and `:26` (no block-6 run had any battery help); it integrates the monitor's journal instead of the reads embedded
   in the meter stream (§2), so its per-run joules differ from those below by up to 0.85 J, inside its own agreement
-  bar for the two paths (one second of the run's largest discharge power, 5.0 to 6.4 J on 70B).
+  bar for the two paths (one second of the run's largest discharge power, 5.0 to 6.4 J on 70B). The same branch, now
+  at `fc7548a17`, adds the BAT-2 ruling, `docs/process_traces/2026-10-22-forward/BAT-RULING.md:125-162` (how late a
+  battery reading arrives, measured on session H: the refresh, the gap between polls, the longest run of late discharge
+  readings (2.13 s) and the 2.302 s bound) and `:54-56` (the 122B decode joules are the prompt's discharge
+  reported late), and BAT-1's re-run table of where those joules sit,
+  `docs/process_traces/2026-10-22-forward/BAT-1-BATTERY-ASSIST.md:114-123` at `fc7548a17` (with `:95` there: the gap
+  between the warm-up and the measured request read no discharge).
 - **Status.** Writable now from session H (non-claim). Block 6's count of battery-assisted runs is a flag count,
   which the registration releases as structure (`:1130`): zero in all nine sessions (BAT-1 record).
 - **Worked example (session H, 21 October, real).**
@@ -535,6 +542,19 @@ recompute (§9); a record of how the software was built and checked (§10); the 
     1.49 J, 0.080% to 0.110%. In the Qwen3-1.7B check requests of the same session the battery never discharged.
   - So the meter alone would have under-read the 70B requests by at most 0.29%; adding the battery term removes that.
     The term's own resolution is one SMC reading per second, which the paper states as a limit.
+  - The term also arrives late, by three delays that add. A published battery reading is the average over the second
+    before its publication (up to 1.0 s); it stays current, and every poll of the meter stream records it, until the
+    next publication a second later (up to 1.0 s more); and a poll sees a new publication only at its own next
+    reading, at most one gap between polls later (0.302 s at most on session H). Battery energy is therefore recorded
+    up to 2 × 1.0 + 0.302 = 2.302 s after it flows, never before; on session H, discharge readings went on for up to
+    2.13 s after the power dropped at the start of a 122B decode, inside that bound. A request's total moves only if
+    the battery discharges within 2.302 s before the request starts or
+    ends; on session H the gap before each request read no discharge, and no discharge reading fell near a request's
+    end. Split by phase, the delay does move energy across the edge between prefill and decode: the five 122B check
+    requests record 1.07 to 1.49 J of battery energy each, of which 0.78 to 1.15 J falls in the first 2 s of decode,
+    although in decode the meter never read above 92.0 W, far below the adapter's ceiling. That energy is the prompt's
+    discharge arriving late. So a per-phase battery term must carry, as uncertainty, the battery energy recorded in
+    the 2.302 s after each phase edge, the rule the BAT-2 ruling adopted.
 - **Figures.** *Figure 10: one 70B request at the ceiling.* x axis time within the request (s), with a vertical
   dashed line "prefill ends" at 26.6 s. Upper panel, y axis power (W): a thin line "DC input (meter, 50 Hz)", a
   horizontal dotted line "adapter ceiling ≈ 136.5 W", and a stepped line "rails (one value per power record)". Lower
@@ -755,7 +775,8 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   workload-dependent (§2, worked example 2).
 - The meter's boundary is DC input at the adapter's USB-C socket; the adapter's AC-to-DC loss is outside every
   number, and the cable's loss between meter and laptop is inside the machine number (registration `:1035`).
-- The battery term is read once a second (§6).
+- The battery term is read once a second and recorded up to 2.3 s after the energy flows, so near a phase edge it
+  can fall on the wrong side of the edge (§6).
 - The capture's pulse-derived timing bound is measured on GPU pulses; applying it to sustained mixed inference is an
   assumption that M13 checks only at the pulse transitions it timed (`docs/paper/draft-v2-skeleton.md:159`).
 - The rules' cut-offs come partly from rehearsals during which an agent process was alive, drawing 0.02 to 0.03
@@ -812,9 +833,11 @@ and adds the instrument chain, the hazard measurements, the rule set, the automa
   11.11, 11.44 and 11.26 ± 0.38 J reference runs and the rule's predicted 104 and 107 J, the 0.47 J half-width, 0.047
   J per ms, 3.4 to 5.5 J per dropped record, 42 W, 7 × 10⁻¹⁵ J, and the threshold note's sizes 0.19 J and 2.4 W);
   session H of 21 October (every value in §2 worked example 2 and in §6, recomputed from the session's harvest
-  records and raw files with the repository's `km003c_parse` functions; BAT-1's 0.85 J and 5.0 to 6.4 J); the agent
-  draw (8 to 47 W); the adapter (140 W); draft-v2's worked pulse from a July capture made before both claim
-  collections (42.55 W pulse height, σ floor 0.001 W); or a synthetic registration example (7.20 J and its parts;
+  records and raw files with the repository's `km003c_parse` functions, except two values in §6's last bullet, taken
+  from BAT-1's re-run table, which matches the BAT-2 ruling's own table to its printed digits: the 0.78 to 1.15 J of
+  122B battery energy in early decode and the 92.0 W largest meter sample in decode; and BAT-1's 0.85 J and 5.0 to
+  6.4 J); the agent draw (8 to 47 W); the adapter (140 W); draft-v2's worked pulse from a July capture made before
+  both claim collections (42.55 W pulse height, σ floor 0.001 W); or a synthetic registration example (7.20 J and its parts;
   b_op 50.818 ms). None comes from a block-5 or block-6 session. Block-5 and block-6 values that appear are structure
   only: verdicts, run counts, one flag count (battery assist, zero), stage and session timing, and hazard readings
   (the block-5 charger drop and sleep, the block-6 pre-checks before t0).
