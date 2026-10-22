@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import math
 import random
+import threading
 import unittest
 
 from joulewise.align.power.duty import (
     DUTY_CONFIDENCE, DutyEstimate, _student_quantile, estimate_energy, plan_offsets,
 )
+from joulewise.align.power.nvml import NvmlSampler
+from tests.align.test_power_nvml import FakeNvmlLibrary
 from joulewise.align.records import Episode, PowerTrace, ToolCall, Turn, from_json, to_json
 
 TICK_NS = 25_000_000
@@ -87,6 +91,101 @@ def sampled_runs(episode: Episode, powers: tuple[float, ...], repeats: int, *,
 
 
 class DutyWorldTests(unittest.TestCase):
+    def test_waveform_through_ctypes_threads_estimator_and_episode(self) -> None:
+        episode, powers, truth = agent_world()
+
+        class Clock:
+            def __init__(self, endpoint: int) -> None:
+                self.now = episode.start_ns+endpoint
+                self.lock = threading.Lock()
+                # A synthetic Unix origin, aligned to the driver's microsecond
+                # quantum. It is not a wall-clock timestamp in the Episode.
+                self.wall_origin = 1_800_000_000_000_000_000
+
+            def monotonic(self) -> int:
+                with self.lock:
+                    result = self.now
+                    self.now += 100
+                    return result
+
+            def wall(self) -> int:
+                with self.lock:
+                    return self.wall_origin+self.now-episode.start_ns
+
+            def advance(self, endpoint: int) -> None:
+                with self.lock:
+                    self.now = max(self.now, episode.start_ns+endpoint)
+
+        class WaveformLibrary(FakeNvmlLibrary):
+            def __init__(self, offset: int) -> None:
+                super().__init__()
+                first = offset if offset else PERIOD_NS
+                self.ends = list(range(first, episode.end_ns-episode.start_ns+1, PERIOD_NS))
+                self.position = -1
+                self.current = self.ends[0]
+                self.clock = Clock(self.current)
+                self.finished = threading.Event()
+
+            def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
+                self.position = min(self.position+1, len(self.ends)-1)
+                self.current = self.ends[self.position]
+                self.clock.advance(self.current)
+                self.power_calls += 1
+                self._put(output, ctypes.c_uint,
+                          round(powers[self.current//TICK_NS-1]*1000))
+                return 0
+
+            def nvmlDeviceGetFieldValues(self, handle: object, count: int, values: object) -> int:
+                for index in range(count):
+                    value = values[index]
+                    value.nvmlReturn = 0
+                    value.valueType = 1
+                    value.value.uiVal = round(powers[self.current//TICK_NS-1]*1000)
+                    value.timestamp = (self.clock.wall_origin+self.current)//1000
+                    value.latencyUsec = 0
+                return 0
+
+            def nvmlDeviceGetTotalEnergyConsumption(self, handle: object, output: object) -> int:
+                # This fake cumulative channel is sampled through the same
+                # production binding, although reconstruction uses power.
+                joules = math.fsum(powers[:self.current//TICK_NS])*TICK_NS/1_000_000_000
+                self._put(output, ctypes.c_ulonglong, round(joules*1000))
+                if self.position == len(self.ends)-1:
+                    self.finished.set()
+                return 0
+
+        runs = []
+        for offset in plan_offsets(PERIOD_NS, 0.25, 8):
+            library = WaveformLibrary(offset)
+            sampler = NvmlSampler(
+                library=library, interval_ns=1_000_000, clock_domain=episode.clock_domain,
+                clock_ns=library.clock.monotonic, wall_clock_ns=library.clock.wall,
+                power_bound_w=400.0, repeat_group=f"phase-{offset}")
+            sampler.start()
+            try:
+                self.assertTrue(library.finished.wait(timeout=5))
+            finally:
+                traces = sampler.stop()
+            trace = next(trace for trace in traces if trace.channel.endswith(":power_instant"))
+            self.assertEqual(len(trace.values), len(library.ends))
+            self.assertIn("window_end_ns", json.loads(trace.notes))
+            runs.append((trace, episode.start_ns, episode.end_ns))
+        result = estimate_energy(runs)
+        self.assertTrue(math.isfinite(result.half_width_j))
+        # The driver microsecond quantum and 100 ns mapping bracket determine
+        # the real-path interval. Use its 1% agreement bar, above float noise.
+        self.assertLessEqual(abs(result.joules-truth), 0.01*result.half_width_j)
+        preserved = Episode(**{
+            **episode.__dict__, "power_traces": tuple(trace for trace, _, _ in runs)})
+        restored = from_json(Episode, to_json(preserved))
+        replay = estimate_energy([
+            (trace, restored.start_ns, restored.end_ns) for trace in restored.power_traces])
+        self.assertEqual(replay, result)  # Identical code on byte-identical record inputs.
+        print("NVML DRIVER END-TO-END", json.dumps({
+            "truth_j": truth, "joules": result.joules, "half_width_j": result.half_width_j,
+            "coverage": result.coverage_fraction, "repeats": len(runs),
+            "samples_per_run": [len(trace.values) for trace, _, _ in runs]}))
+
     def test_phase_plan_tiles_then_replicates(self) -> None:
         self.assertEqual(plan_offsets(PERIOD_NS, 0.25, 8),
                          [0, 25_000_000, 50_000_000, 75_000_000]*2)

@@ -11,6 +11,7 @@ import signal
 import statistics
 import subprocess
 import time
+import types
 import sys
 import tempfile
 import unittest
@@ -113,6 +114,9 @@ class PreflightTests(unittest.TestCase):
                     else:
                         self.assertLessEqual(row["load_peak_w"], row["threshold_w"])
                 json.dumps(report, allow_nan=False)
+                print("NVML PREFLIGHT WORLD", json.dumps({
+                    "moves": moves, "measurement_ready": report["measurement_ready"],
+                    "channels": measured}))
 
     def test_vgpu_and_mig_slice_are_refused_before_load_or_clocks(self) -> None:
         for mode in ("vgpu", "mig"):
@@ -189,8 +193,9 @@ class PreflightTests(unittest.TestCase):
             previous_handler = signal.getsignal(signal.SIGTERM)
             with mock.patch.dict(os.environ, {"PATH": str(directory) + os.pathsep + os.defpath}), \
                     mock.patch.object(preflight, "open_nvml", return_value=backend), \
-                    mock.patch.object(preflight.time, "sleep",
-                                      side_effect=lambda _: signal.raise_signal(signal.SIGTERM)):
+                    mock.patch.object(preflight, "time", types.SimpleNamespace(
+                        monotonic=time.monotonic, monotonic_ns=time.monotonic_ns,
+                        sleep=lambda _: signal.raise_signal(signal.SIGTERM))):
                 with self.assertRaises(SystemExit):
                     preflight.main(["--out", str(directory / "interrupted.json"),
                                     "--try-lock-clocks"])
@@ -285,7 +290,8 @@ class PreflightTests(unittest.TestCase):
                 child = (
                     "import os,signal,time;from pathlib import Path;"
                     "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
-                    f"Path({str(ready)!r}).write_text(str(os.getpid()));"
+                    f"p=Path({str(ready)!r});pending=p.with_suffix('.pending');"
+                    "pending.write_text(str(os.getpid()));os.replace(pending,p);"
                     "time.sleep(60)")
                 leader = (
                     "import subprocess,sys,time;from pathlib import Path;"
@@ -309,11 +315,13 @@ class PreflightTests(unittest.TestCase):
                 except ProcessLookupError:
                     pass
                 process.wait(timeout=2)
-            if child_pid is not None:
-                try:
-                    os.waitpid(child_pid, 0)
-                except ChildProcessError:
-                    pass
+                # Reap every adopted member of this owned group even if the
+                # PID receipt was never parsed; unrelated children are excluded.
+                while True:
+                    try:
+                        os.waitpid(-process.pid, 0)
+                    except ChildProcessError:
+                        break
             libc.prctl(36, old.value, 0, 0, 0)
 
     def test_predictive_criterion_has_its_stated_nominal_false_alarm_rate(self) -> None:
@@ -338,6 +346,9 @@ class PreflightTests(unittest.TestCase):
         # One binomial standard error at the stated alpha, as requested for
         # the synthetic calibration; the seed set is fixed before running.
         bar = math.sqrt(alpha*(1-alpha)/seed_count)
+        print("NVML PREFLIGHT CALIBRATION", json.dumps({
+            "seeds": seed_count, "outside": exceeded, "fraction": fraction,
+            "alpha": alpha, "binomial_se": bar}))
         self.assertLessEqual(abs(fraction-alpha), bar,
                              (exceeded, seed_count, fraction, alpha, bar))
 
