@@ -90,7 +90,7 @@ def calibration_slice(matrix: Mapping[str, Any]) -> dict[str, Any]:
     import copy
     result = copy.deepcopy(dict(matrix))
     result["seeds"] = matrix["seeds"][:1]
-    result["name"] += "-calibration"
+    result["name"] = (matrix.get("name") if isinstance(matrix.get("name"), str) else "campaign") + "-calibration"
     result["episode_count"] = len(result["models"]) * len(result["tasks"]) * len(result["conditions"])
     counts = work_counts(result)
     result["measured_episode_count"] = sum(n for n, _ in counts.values())

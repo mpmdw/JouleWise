@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from joulewise.align.gpukit.matrix import validate
+from joulewise.align.gpukit.matrix import validate, structural_flags
 
 
 def runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str,
@@ -48,7 +48,8 @@ def runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str,
     imports = settings.get("imports", [])
     if not isinstance(imports, list) or any(not isinstance(x, str) for x in imports):
         flags.append("runner_adapter_imports_invalid")
-    if any(f != "runner_adapter_provisional" for f in flags):
+    if structural_flags(matrix) or any(
+            f != "runner_adapter_provisional" and not f.startswith("matrix_") for f in flags):
         return {}, tuple(sorted(set(flags)))
 
     def api(url: str | None) -> str | None:
@@ -84,7 +85,8 @@ def runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str,
                 "config": fill(settings.get(kind + "_config", {}))}
 
     result = {
-        "matrix_id": matrix["name"] + ":" + model + ":" + (session_id or uuid.uuid4().hex),
+        "matrix_id": (matrix.get("name") if isinstance(matrix.get("name"), str) else "campaign")
+                     + ":" + model + ":" + (session_id or uuid.uuid4().hex),
         "order_seed": settings["order_seed"],
         "task_pairs": [{**component("task"), "task_pair": task} for task in matrix["tasks"]],
         "conditions": list(matrix["conditions"]), "seeds": list(matrix["seeds"]),

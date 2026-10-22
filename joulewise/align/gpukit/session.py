@@ -654,7 +654,8 @@ def run_session(options: SessionOptions, *,
                         monitor_endpoint=monitor_endpoint, judge_endpoint=judge_endpoint,
                         device_indices=devices)
                     model_receipt["flags"].extend(adapter_flags)
-                    if any(f != "runner_adapter_provisional" for f in adapter_flags):
+                    if any(f != "runner_adapter_provisional" and not f.startswith("matrix_")
+                           for f in adapter_flags):
                         flags.extend(model_receipt["flags"])
                         continue
                 before = [snapshot(gpu_index=i, directory=model_dir, label="before",

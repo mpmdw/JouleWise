@@ -937,18 +937,30 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
 
 
 
+    def _record_settings(self):
+        path = self.base / "record-settings.json"
+        path.write_text(json.dumps(dict(
+            task_factory="fixture.task", endpoint_factory="fixture.endpoint",
+            sampler_factory="fixture.power", token_counter_factory="fixture.tokens",
+            max_turns=12, max_tokens=8000, order_seed=0, temperature=0.0)))
+        return path
+
     def test_record_matrix_provenance_flag_still_collects(self):
         matrix = json.loads((CONFIG / "shade.json").read_text())
         matrix["workload"]["prefill_tokens"] = 40000  # Fixture's twelve-turn context work.
         matrix["workload"]["derivation"] = ""
         path = self.base / "unsourced.json"
         path.write_text(json.dumps(matrix))
-        result = run_session(self._options("unsourced", matrix=path))
+        result = run_session(self._options("unsourced", matrix=path,
+                                            runner_settings=self._record_settings()))
         self.assertTrue(result["data_complete"])
         self.assertEqual(result["status"], "completed_with_flags")
         self.assertIn("matrix_numeric_source_missing:workload.prefill_tokens", result["flags"])
         self.assertEqual(len(result["models"]), 2)
         self.assertIn("preflight_returncode", result)
+        translated = json.loads((self.base / "unsourced/model-0/runner-matrix.json").read_text())
+        self.assertEqual(translated["seeds"], matrix["seeds"])
+        self.assertIn("runner_returncode", result["models"][0])
 
     def test_stale_declared_counts_do_not_change_data_completeness(self):
         matrix = json.loads((CONFIG / "shade.json").read_text())
@@ -956,7 +968,8 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         matrix["seeds"] = [0, 1]
         path = self.base / "stale.json"
         path.write_text(json.dumps(matrix))
-        result = run_session(self._options("stale", matrix=path))
+        result = run_session(self._options("stale", matrix=path,
+                                            runner_settings=self._record_settings()))
         self.assertTrue(result["data_complete"])
         self.assertIn("matrix_measured_episode_count_mismatch", result["flags"])
         self.assertEqual([m["power_coverage"]["episodes_checked"] for m in result["models"]], [20, 20])
@@ -966,7 +979,8 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         matrix["workload"] = None
         path = self.base / "bad-planning.json"
         path.write_text(json.dumps(matrix))
-        result = run_session(self._options("bad-planning", matrix=path))
+        result = run_session(self._options("bad-planning", matrix=path,
+                                            runner_settings=self._record_settings()))
         self.assertTrue(result["data_complete"])
         self.assertIn("matrix_planning_field_invalid", result["flags"])
         self.assertEqual(len(result["models"]), 2)

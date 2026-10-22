@@ -32,9 +32,10 @@ Qwen publishes [Qwen3-Next-80B-A3B-Thinking-FP8](https://huggingface.co/Qwen/Qwe
 Its [pinned model card](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8/blob/1a28d48a94e799860201879be67616b9e21c4bd2/README.md)
 was fetched by the lead and quoted in the fix-2 brief, including its FP8 serve
 command; fetching provenance is recorded in the matrix notes. Model dimension/count sources now point
-directly to the supplied immutable HF configs/cards. The provisional matrix uses BF16/4; either alternative runs by
-copying its checkpoint, weight_precision, tensor_parallel_size and headroom into
-that model's fields. This choice changes the joules' configuration and needs Ed.
+directly to the supplied immutable HF configs/cards. The provisional matrix uses BF16/4; a cost-only alternative becomes a served configuration by
+creating its own model entry whose id equals the selected checkpoint, and setting
+weight_precision, tensor_parallel_size and headroom. Bind the matching parameter
+and throughput rows to that id as well. This choice changes the joules' configuration and needs Ed.
 
 ## Matrices and work accounting
 
