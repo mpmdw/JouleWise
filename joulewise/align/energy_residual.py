@@ -238,8 +238,8 @@ def fit_energy_model(rows: Sequence[TurnRow]) -> EnergyModel:
     order; unidentified coefficients and covariance entries are zero and flagged.
     Exclude unusable fit rows, flag excluded_turn_rows=N, and count only used rows.
     Safeguarded Newton/bisection converges at sqrt(float epsilon) relative
-    moment error with degrees of freedom n-p_kept. Covariance is (X'WX)^-1 in original column units, without a
-    second reduced-chi-square multiplier. Benign complete logs and separate
+    moment error with degrees of freedom n-p_kept. Covariance is (X'WX)^-1
+    on the kept columns in original units, without a second reduced-chi-square multiplier. Benign complete logs and separate
     hardware/serving configurations are the caller's responsibility:
     TurnRow has no condition label.
     """
@@ -481,7 +481,8 @@ def min_detectable_hidden_decode_tokens(
     This uses alpha's normal threshold, not the empirical grouped threshold,
     and assumes hidden decode adds energy without changing D or adding a call
     intercept. Nonpositive e gives infinity above the false-positive power;
-    requested power <= alpha needs no hidden work. Ceil H for a token budget.
+    when context and hidden-token energy are identified, requested power <= alpha
+    needs no hidden work. Ceil H for a token budget.
     An unidentified context-decode coefficient contributes zero with its flag;
     an unidentified decode coefficient makes hidden-token energy undefined.
     """

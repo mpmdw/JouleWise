@@ -48,7 +48,8 @@ values in these columns, while continuing with the identifiable model.
 The implementation scales each design column by its largest magnitude before
 Householder QR. Thus token products near 1e7 have the same scale as the intercept,
 and QR avoids squaring the design condition number in normal equations.
-Coefficients and (X'WX)^-1 covariance return in original feature units; covariance
+Coefficients and (X'WX)^-1 covariance on the kept columns return in original
+feature units, embedded in five dimensions with zeros elsewhere; covariance
 does not get another reduced-chi-square multiplier. It conditions on the
 estimated extra variance, so small-sample normal approximations remain limited.
 When h=0 at the variance boundary, limiting weights use one ULP of the
@@ -123,7 +124,8 @@ For hidden work distributed at that mean context and adding no call intercept:
 The function returns a fractional boundary; ceil it for an integer token budget.
 It uses the normal threshold implied by alpha, not the empirical grouped
 threshold. For an empirical threshold t substitute t for z_(1-alpha).
-Requested power at or below alpha needs zero hidden tokens. Above that
+When context and hidden-token energy are identified, requested power at or below
+alpha needs zero hidden tokens. Above that
 false-positive power, zero or negative e gives infinity and a flag. No
 hidden-energy cost implies only the false-positive rate, whatever the count.
 An unidentified context-decode coefficient contributes zero with its flag
