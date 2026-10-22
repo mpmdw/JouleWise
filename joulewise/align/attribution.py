@@ -106,6 +106,7 @@ class _Trace:
         if window is not None and window <= 0:
             self.flags.append("window.invalid")
             window = None
+        self.window = window
         if self.counter:
             for (a, x), (b, y) in zip(pairs, pairs[1:]):
                 if y < x:
@@ -162,10 +163,19 @@ class _Trace:
     def _interpolation(self, t: int, t0: int, t1: int, *, start: bool) -> float:
         if not self.spans:
             return 0.0
-        i = bisect_right(self.starts, t) - 1
-        if i < 0 or i >= len(self.spans):
-            return 0.0
-        span = self.spans[i]
+        if self.window is not None and not self.counter:
+            # "Partial sample interval" refers to the timestamp bracket.
+            # A constant window reconstruction can still straddle a true edge.
+            i = bisect_right(self.times, t) - 1
+            if i < 0 or i + 1 >= len(self.times):
+                return 0.0
+            span = _Span(self.times[i], self.times[i + 1],
+                         self.values[i], self.values[i + 1])
+        else:
+            i = bisect_right(self.starts, t) - 1
+            if i < 0 or i >= len(self.spans):
+                return 0.0
+            span = self.spans[i]
         if not span.start < t < span.end:
             return 0.0
         a, b = (t, min(t1, span.end)) if start else (max(t0, span.start), t)
@@ -237,6 +247,14 @@ class _Trace:
         if resolution is not None and math.isfinite(resolution) and resolution >= 0:
             bounds.append(2 * resolution if self.counter else resolution * duration)
         method = self.method
+        if self.window is not None:
+            # Window means do not identify the position of work inside a
+            # window. The specified three terms do not bound that ambiguity.
+            for t in (t0, t1):
+                i = bisect_right(self.starts, t) - 1
+                if i >= 0 and self.spans[i].start < t < self.spans[i].end:
+                    flags.append("window.edge_allocation_unresolved")
+                    break
         if uncovered_ns:
             flags.append("duty.uncovered")
             method += ";duty.uncovered_fraction=" + repr(uncovered_ns / (t1 - t0))
@@ -259,7 +277,9 @@ def trace_energy(
     observed-peak sensitivity for work lost before the reset.
 
     Endpoint hold-versus-line comparisons are clipped to the query itself.
-    Constant window support has zero such difference. A held counter jumps
+    Windowed sensors compare raw sample brackets, because their means can
+    straddle a phase edge; window.edge_allocation_unresolved records the
+    missing allocation bound. A held counter jumps
     at the right sample; that jump counts when the partial interval reaches it.
     Empty reconstructions return zero energy with infinite uncertainty.
     """
