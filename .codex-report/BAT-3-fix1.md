@@ -1,20 +1,29 @@
 ## PROGRESS (round c, findings on 9bdcf6c95)
 
+- Final slice-2 verification: all local work complete; earlier round-b/a report tail byte-identical to baseline (SHA-256 `b6ddcef892097f03310cd52e2d2a79274521ef15cc1e267b490a7acdd59638ee`), baseline ancestry holds, all four cumulative round-c paths within scope, `git diff --check` clean. `/tmp/bat3f1r3/final-preservation.json` records the checks. Only this report is uncommitted; no child session remains running, all mutant copies and synthetic identity worlds removed. Director's next step is commit/push this report, then lead-owned H/CI/final review.
+- Slice 2 resumed from clean director commit `3912e7484` (full hash recorded at final handoff), a descendant of the round-c baseline. Reread the progress, recent log, scope, stop-card/intake, bridge contract, current production/test diff and BAT-2 §4 in full. Continue only remaining bounded verification; no H-data reads, Git writes or network actions.
+- Slice-2 progress: M29 KILLED (1 test, six assertion failures, exit 1); disposable tree/TMPDIR deleted. Default campaign identity passes across all three stages: 1,339,707 common scalar fields, zero differences/additions/removals, three expected digests.
+- ReviewerProbeTests passed: 1 test, exit 0, no skips, 51.062 s unittest / 51.853 s process. All prescribed bounded analysis classes have now passed (57 distinct tests across slices, with final changed methods rerun).
+- Agreement completed as expected: seven passes / one defects failure, 238 above-bar field identities exactly unchanged from round b (added=[], removed=[]). Instant identity passes (1,704,795 common scalars) and delayed identity passes (1,694,491 common scalars), each with zero differences/new/removed keys and three expected digests.
 - Slice 1 started from clean `9bdcf6c95255f2701188b9bb54531699ff5ca256` on `lane/2026-10-22-bytes-battery-term`; no active stop card. Read whole brief and BAT-2 ruling, with §4 reread in full. Explicit delegated brief selects this work; state/queue/run-report files outside scope remain untouched. No H data or forbidden night directories read.
 - Implemented findings 1, 2 and 5: combined reasons join distinct unevaluated pass causes in pass order with the specified fallback; marker evaluation requires B0AC in both success and fallback paths; contract describes receive-time/SMC retention correctly. All four new regression methods pass; remaining verification is listed below.
 - Focused tests pass: 5 tests, exit 0, no skips (18.602 s unittest / 19.379 s process), including all four new methods and existing blinded-stage regression. Log `/tmp/bat3f1r3/roundc-focused.log`. No new CLI chain or fixture edit.
 - Done: meter/ruling (7), battery (22), boundary (10), production archive (4) and Addendum 7 (13) tests pass; packs (9) and float sweep (5) pass; all five refusal-census arrays empty. M26–M28 KILLED; all copies and TMPDIRs removed. Final changed marker/blinded methods reran green.
-- Next slice: run ReviewerProbeTests; kill M29 using `/tmp/bat3f1r3/mutate_roundc.py M29`; run `/tmp/bat3f1r3/bit_identity_roundc.py <scenario>` for default/instant/delayed; run `/tmp/bat3f1r3/agreement_run.py` and compare field identities against `/tmp/bat3f1r2/agreement-all-fields.json` (expected same 238). Use run_check.py, required environment and fresh TMPDIR for every run. Adapted workers and base export `/tmp/bat3f1r3/base-9bdcf6c95` are ready; baseline child cwd must be the export. Identity expects zero new/removed keys and zero non-digest differences. Long CampaignWordRates remains CI-only. Logs/runners: `/tmp/bat3f1r3/`.
-- Open local fixture issue: import-graph modules have 8 passes / 1 NULL-versus-GO failure; same failure reproduced on exported 9bdcf6c95 and recorded in round a. No hazard repair. No process remains running at handoff.
+- Done in slice 2: ReviewerProbeTests passed, M29 killed, default/instant/delayed all-stage identity exact, agreement's same 238 above-bar field identities confirmed. All prescribed bounded local work is complete. All launched child sessions finished, mutant copies and identity worlds removed, and per-run TMPDIRs deleted. Long CampaignWordRates remains CI-only. Logs/runners: `/tmp/bat3f1r3/`.
+- Open local fixture issue: import-graph modules have 8 passes / 1 NULL-versus-GO failure; same failure reproduced on exported 9bdcf6c95 and recorded in round a. No hazard repair. No tracked check session remains running at handoff.
 - Open: no scope expansion or science ruling needed. Director owns commits/pushes, H reruns, CI PR #544 and final review; BY-TWIN-BAT and BY-MERGE retain their work.
+
+BAT-3-fix1 ROUND C COMPLETE
+
+Final handoff: branch `lane/2026-10-22-bytes-battery-term`, head worked on `3912e74848d9833e81c5e31f3bbdd832602844ee`. Findings 1–5 fixed as detailed below: combined reason labels preserve actual causes; marker evaluation requires a B0AC reading on both meter paths; exact per-model aggregation and idle-charge cell tests close both test gaps; contract retention sentence matches the implementation. All four required mutants killed. All 57 distinct prescribed bounded analysis tests and 14 pack/float-sweep tests pass; import-graph modules have eight passes plus one baseline-reproduced NULL-versus-GO failure. All three standard-campaign identity scenarios pass with zero value/key changes apart from expected module/predictions digests. Agreement has seven passes and only the expected defects failure, with the same 238 field identities. All five refusal-census arrays remain empty. No scope expansion or ruling needed. Only this report changed in slice 2; director commits/pushes it and owns H, current CI observation and final review. CI PR #544 state was not observed from this sandbox.
 
 ## FIX LOG (round c)
 
-1. Implemented joined combined reasons; exact new regression passes. Missing reason falls back to `not evaluated at the blinded stage` as directed.
-2. Implemented B0AC-qualified marker evaluation, including successful meter decode with an empty current-reading marker window; new focused tests pass; M28 killed. End-window completeness retains round b's any-poll definition.
-3. Exact per-model battery aggregation test passes on the assisted campaign, with unequal pass means; M26 killed.
-4. Test-only idle charging stream mutation and exact cell weighting test pass; no standard campaign output change.
-5. Fixed only the inaccurate retention sentence in the stream paragraph; existing stage-correct reason contract already suffices.
+1. Fixed joined combined reasons, ordered deduplication and the specified missing-field fallback. `BatteryCampaignTests.test_combined_unevaluated_reason_preserves_meter_stage_causes` pins exact causes/labels and kills M29. Existing `test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated` pins unchanged blinded text.
+2. Fixed B0AC-qualified marker evaluation on both failed and successful meter paths. `BatteryCampaignTests.test_marker_requires_current_readings_on_failed_and_successful_meter_paths` pins False, null cell counts and run-specific stage-correct reasons, and kills M28. End-window completeness retains round b's any-poll definition.
+3. Test gap fixed: `BatteryCampaignTests.test_combined_battery_columns_use_exact_pass_aggregations` pins mean/max/sum/max exactly using unequal assisted-campaign pass means and kills M26.
+4. Test gap fixed: `BatteryCampaignTests.test_idle_charge_changes_secondary_cell_battery_column_only` mutates a test copy's idle current, pins exact secondary weighting and unchanged gross columns, and kills M27. No fixture or standard campaign output change.
+5. Fixed only the inaccurate retention sentence in the stream paragraph; exact diff inspection verifies the documented windows/mapping behavior. Existing stage-correct reason contract already suffices; no second sentence needed.
 - τ stall question: handed forward, no code change (director forwards to ruling owner).
 - 1-ulp meter watts difference: no change, older than BAT-3; battery fields bit-identical per review evidence, no new H claim.
 
@@ -58,6 +67,13 @@ BatteryCampaignTests passed all 22 tests before the final exact combined-blinded
 
 A report-update Python stdin command initially had a syntax error before executing; corrected and reran. No repository code or report was changed by that failed command.
 
+Slice-2 checks use the same required environment and fresh/deleted TMPDIR wrapper, with exact argv/cwd/exit/time in `/tmp/bat3f1r3/checks.jsonl`:
+
+- `roundc-reviewer`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.ReviewerProbeTests`; 1 test, 51.062 s unittest / 51.853 s process, exit 0, no skips. Log `/tmp/bat3f1r3/roundc-reviewer.log`.
+- Identity wrapper child commands: `/opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/bit_identity_roundc.py default` (19.464 s), same with `instant` (31.181 s), same with `delayed` (42.210 s); all exit 0. All three use `roundc-identity-<scenario>` labels, same environment and TMPDIR wrapper. Exact invocation and field counts are below.
+- `roundc-agreement`: `/opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/agreement_run.py` (loads the whole `tests.test_bytes_agreement` module); 8 tests, 61.557 s unittest / 62.384 s process, exit 1, no skips. Seven pass; only `AgreementTests.test_defects_campaign` fails as expected with 238 above-bar fields. Exact wrapper prefix is the same as above. Logs `/tmp/bat3f1r3/roundc-agreement.log`, full rows `/tmp/bat3f1r3/agreement-all-fields.json`.
+- Field comparator: Python stdin loaded `/tmp/bat3f1r2/agreement-all-fields.json` and the round-c file, then compared sets of `(campaign, stage, group, key)` for every `above` row. Exit 0: 238 before, 238 after, added=[], removed=[]. Summary `/tmp/bat3f1r3/agreement-field-comparison.json` records all field names and per-campaign counts. Other campaigns: bytes 9,986, minimum 10,110, resident 9,986 and time 9,986 comparisons, each zero above-bar; defects 10,031 comparisons, 238 above-bar. No changed failure identities; BY-TWIN-BAT retains ownership.
+
 ## MUTATION KILLS (round c)
 
 Commands: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/mutate_roundc.py M26 M27 M28`, then same command with M28 only after changing the test assertion to `.get`, turning an absent field into an explicit assertion failure. Child: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.<test below>`. Each mutant copies this working tree without .git into `/tmp/bat3f1r3/mut/<name>`, runs there with required variables and a fresh TMPDIR, then deletes both in finally. Clone source never mutated. Exact argv/time/exit: `/tmp/bat3f1r3/mutations.jsonl`; failure logs `<name>.log`.
@@ -65,12 +81,20 @@ Commands: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/py
 - M26 KILLED by `BatteryCampaignTests.test_combined_battery_columns_use_exact_pass_aggregations`: 1 test / 1 failure, exit 1; 15.393 s unittest / 16.140 s process. `AssertionError: 0.53969027349212 != 0.5395184700793934`.
 - M27 KILLED by `BatteryCampaignTests.test_idle_charge_changes_secondary_cell_battery_column_only`: 1 test / 1 failure, exit 1; 16.644 s unittest / 17.399 s process. `AssertionError: 0.51096 != 0.817536`.
 - M28 KILLED by `BatteryCampaignTests.test_marker_requires_current_readings_on_failed_and_successful_meter_paths`: final 1 test / 2 subcase failures, exit 1; 17.468 s unittest / 18.264 s process. `True is not False` (failed meter) and `None is not False` (successful meter). Initial kill was 1 failure plus a missing-key error; final test style uses `.get` and clean source reran green.
-- M29 pending; new killing test `BatteryCampaignTests.test_combined_unevaluated_reason_preserves_meter_stage_causes` passes clean source; mutation prepared in runner.
+- M29 KILLED by `BatteryCampaignTests.test_combined_unevaluated_reason_preserves_meter_stage_causes`: 1 test / six subcase assertion failures, exit 1; 15.479 s unittest / 16.252 s process. Failure: `AssertionError: 'not evaluated at the blinded stage' != 'decode marker not evaluated: no mapped me[6443 chars]t-9)'`. Exact command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/mutate_roundc.py M29`; same disposable-copy/fresh-TMPDIR lifecycle above. Failure log `/tmp/bat3f1r3/M29.log`; copy deleted.
 
 
 ## BIT-IDENTITY (round c)
 
-Pending against 9bdcf6c95, expected only module/predictions digests.
+Runner adapted from round b: `/tmp/bat3f1r3/bit_identity_roundc.py` and `identity_worker_roundc.py`; baseline exported with read-only `git archive` to `/tmp/bat3f1r3/base-9bdcf6c95`. Each worker uses its own tree as process cwd, both required environment variables, and fresh/deleted TMPDIR. The baseline builds the production-shaped synthetic archive; final code reuses precisely that input. Both invoke `cli_stage_chain` (blinded, fit, all), then compare every JSON output and `load_records` output with recursive exact equality. No standard campaigns or fixtures changed.
+
+Exact invocation for each scenario: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/run_check.py roundc-identity-<scenario> /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/bit_identity_roundc.py <scenario>`.
+
+- Default: exit 0, 19.464 s process; 1,339,707 common scalar fields, zero differences, zero new/removed keys, three expected digest changes.
+- Assisted instant: exit 0, 31.181 s process; 1,704,795 common scalar fields, zero differences, zero new/removed keys, three expected digest changes.
+- Assisted delayed: exit 0, 42.210 s process; 1,694,491 common scalar fields, zero differences, zero new/removed keys, three expected digest changes.
+
+Comparison summaries: `/tmp/bat3f1r3/comparison-<scenario>-base.json`; child/parent logs: `identity-<scenario>-<base|final>.log` and `roundc-identity-<scenario>.log`. Each compares 17 stage JSON outputs plus records from 1,000 runs. Only the allowed `bytes_analysis_sha256` and `predictions_sha256` keys are excluded from scalar identity and recorded separately. Completed scenario input worlds deleted after comparison.
 
 ## DECISIONS I MADE (round c)
 
@@ -84,7 +108,8 @@ Final slice-1 preservation: earlier round-b/a tail exactly equals 9bdcf6c95; `gi
 
 ## OPEN ISSUES (round c)
 
-- Remaining: ReviewerProbeTests, M29, three identity scenarios and agreement field-list comparison. Earlier rounds exactly preserved; all four changed paths within scope; no process left running. No measurements, Git writes, network actions, new CLI chains or campaign fixture changes.
+- No remaining bounded local implementation or prescribed check. Earlier rounds preserved; all four round-c changed paths within scope; only report changes in slice 2. No measurements, Git writes, network actions, new CLI chains or campaign fixture changes. All tracked check sessions completed; no system-wide process census claimed.
+- Known import-graph fixture failure remains as reproduced on baseline: `ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module`, `AssertionError: 'NULL' != 'GO'`; no hazard/fixture change authorized or made. The expected agreement failure retains precisely the same 238 fields, owned by BY-TWIN-BAT.
 - Director owns real-H reruns, final review, commit/push and CI; BY-TWIN-BAT owns expected agreement failure, BY-MERGE owns integration.
 
 ## NEEDS_RULING (round c)
