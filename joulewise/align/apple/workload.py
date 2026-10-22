@@ -12,6 +12,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
@@ -59,9 +60,18 @@ class EpisodeSpec:
     @classmethod
     def from_text(cls, text: str) -> "EpisodeSpec":
         obj = json.loads(text)
+        if not isinstance(obj, Mapping):
+            raise ValueError("Apple episode spec must be a mapping")
         if obj.get("schema") != SPEC_SCHEMA:
             raise ValueError("unknown Apple episode spec schema")
-        obj["mock_turns"] = tuple(obj.get("mock_turns", ()))
+        if not isinstance(obj.get("task_kwargs", {}), Mapping):
+            raise ValueError("task_kwargs must be a mapping")
+        mock_turns = obj.get("mock_turns", ())
+        if not isinstance(mock_turns, (list, tuple)) or any(
+            not isinstance(turn, Mapping) for turn in mock_turns
+        ):
+            raise ValueError("mock_turns must contain mappings")
+        obj["mock_turns"] = tuple(mock_turns)
         spec = cls(**obj)
         if spec.condition not in ("benign", "sabotage"):
             raise ValueError("unknown episode condition")
@@ -70,6 +80,8 @@ class EpisodeSpec:
                 raise ValueError("turn and token budgets must be positive integers")
         if type(spec.seed) is not int:
             raise ValueError("seed must be an integer")
+        if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
+            raise ValueError("temperature must be numeric and finite")
         return spec
 
 
@@ -85,6 +97,7 @@ class EpisodeRuntimeAdapter:
         self.flags: list[str] = []
         self.prepared: dict[str, Any] = {}
         self._runtime_ready = False
+        self._failed_episode_result: RuntimeResult | None = None
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None,
@@ -94,6 +107,7 @@ class EpisodeRuntimeAdapter:
         self.spec = None
         self.task = None
         self._runtime_ready = False
+        self._failed_episode_result = None
         if config.hardware_target.runtime_backend not in (RuntimeBackend.MOCK, RuntimeBackend.MLX):
             return AdapterResult(
                 ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
@@ -297,6 +311,11 @@ class EpisodeRuntimeAdapter:
         if task is not None:
             try:
                 main_score = task.score_main(transcript)
+                if main_score is not None and (
+                    type(main_score) not in (int, float) or not math.isfinite(main_score)
+                ):
+                    flags.append("task_scoring_error:main_score_not_finite_numeric")
+                    main_score = None
                 side_success = task.score_side(transcript)
             except Exception as exc:
                 flags.append(f"task_scoring_error:{type(exc).__name__}:{exc}")
@@ -332,11 +351,20 @@ class EpisodeRuntimeAdapter:
         if not endpoint.prompt_token_ids:
             prompt["realized_token_count"] = None
         identity = self.identity_projection_metadata(config)
+        stop = "episode_returned"
+        if any(flag.startswith("turn_token_budget_reached:") for flag in flags):
+            stop = "turn_token_budget_reached"
+        if "turn_budget_reached" in flags:
+            stop = "turn_budget_reached"
+        if any(flag.startswith("episode_error:") for flag in flags):
+            stop = "episode_error"
+        if any(flag.startswith("endpoint_error:") for flag in flags):
+            stop = "endpoint_error"
         outcome = {
-            "stop_condition": "turn_budget_reached" if "turn_budget_reached" in flags else "episode_returned",
+            "stop_condition": stop,
             "emitted_tokens": sum(t.decode_tokens for t in turns),
         }
-        return RuntimeResult(
+        runtime_result = RuntimeResult(
             events=events,
             output_artifacts={
                 "align_episode.json": to_json(episode) + "\n",
@@ -372,12 +400,64 @@ class EpisodeRuntimeAdapter:
             metadata={"align_episode": {"id": episode_id, "flags": list(episode.flags), **outcome}},
         )
 
+        if stop in ("endpoint_error", "episode_error"):
+            # Like non-align MLX, a runtime fault is a failed execution, not a
+            # physical refusal. Keep the partial evidence in memory until the
+            # controller stops sampling and invokes EvidenceCustodyProvider.
+            self._failed_episode_result = runtime_result
+            raise AdapterFailure(
+                FailureReason.UNKNOWN_ERROR,
+                "align_episode:" + json.dumps(outcome, sort_keys=True) + "; "
+                + "; ".join(flag for flag in flags if flag.startswith(("endpoint_error:", "episode_error:"))),
+            )
+        return runtime_result
+
+    def salvage_custody(self, context: RunContext) -> list[dict[str, Any]]:
+        """Persist buffered partial evidence after the controller stops sampling."""
+        result = self._failed_episode_result
+        if result is None:
+            return []
+        artifacts = {
+            **result.output_artifacts,
+            "align_failure.json": json.dumps({
+                "episode_outcome": result.workload_provenance["episode_outcome"],
+                "workload_provenance": result.workload_provenance,
+                "token_count": result.token_count,
+                "output_token_count": result.output_token_count,
+            }, sort_keys=True, allow_nan=False) + "\n",
+            "align_runtime_events.jsonl": "".join(
+                json.dumps(to_jsonable(event), sort_keys=True, allow_nan=False) + "\n"
+                for event in result.events
+            ),
+        }
+        paths = []
+        for name, content in artifacts.items():
+            path = context.outputs_dir / name
+            if path.exists():
+                if path.read_text(encoding="utf-8") != content:
+                    raise ValueError(f"partial episode artifact differs: {name}")
+            else:
+                # Do not overwrite existing bundle evidence, including on retry.
+                with path.open("x", encoding="utf-8") as handle:
+                    handle.write(content)
+            paths.append(path)
+        context.acknowledge_custody("align-episode-failure", paths)
+        return [{"acknowledged": True, "artifacts": sorted(artifacts)}]
+
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
         if self.runtime is None:
             return AdapterResult(ok=True)
-        return self.runtime.cleanup(config, context)
+        result = self.runtime.cleanup(config, context)
+        if self._failed_episode_result is not None:
+            failed = self._failed_episode_result
+            return replace(result, metadata={
+                **result.metadata,
+                "align_episode": failed.metadata["align_episode"],
+                "episode_outcome": failed.workload_provenance["episode_outcome"],
+            })
+        return result
 
 
 def read_episode_bundle(bundle: Path) -> Episode:

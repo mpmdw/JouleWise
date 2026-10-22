@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 from dataclasses import replace
+from functools import wraps
 from typing import Any, Mapping, Sequence
 
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
@@ -20,47 +21,123 @@ from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 _TOOL_CALL = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
+def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
+    """Remove every closed think span, including a template-prefilled opener."""
+    visible: list[str] = []
+    hidden: list[str] = []
+    flags: list[str] = []
+    cursor = 0
+    while cursor < len(text):
+        opening = text.find("<think>", cursor)
+        closing = text.find("</think>", cursor)
+        if closing >= 0 and (opening < 0 or closing < opening):
+            if cursor == 0:
+                hidden.append(text[:closing])
+                flags.append("reasoning_open_tag_prefilled_or_missing")
+            else:
+                visible.append(text[cursor:closing + len("</think>")])
+                flags.append("unmatched_reasoning_close")
+            cursor = closing + len("</think>")
+        elif opening >= 0:
+            visible.append(text[cursor:opening])
+            closing = text.find("</think>", opening + len("<think>"))
+            if closing < 0:
+                visible.append(text[opening:])
+                flags.append("unclosed_reasoning_span")
+                break
+            hidden.append(text[opening + len("<think>"):closing])
+            cursor = closing + len("</think>")
+        else:
+            visible.append(text[cursor:])
+            break
+    return "".join(visible), "\n".join(hidden), tuple(flags)
+
+
 def parse_completion(
     text: str, *, reasoning_tokens: int = 0,
 ) -> tuple[str, str, tuple[ToolCallRequest, ...], tuple[str, ...]]:
-    """Parse Qwen-style explicit tool envelopes; retain malformed text and flags.
+    """Parse think spans, Qwen envelopes and bare Llama name/parameters JSON.
 
-    Tool schemas and tokenizer chat templates remain task/model owned. Unknown
-    formats are visible text rather than silently invented tool invocations.
+    Unknown tool-like syntax remains text with a flag. Retokenization is an
+    estimate of hidden generation, never a server-provided ground-truth count.
     """
-    flags: list[str] = []
-    reasoning = ""
-    visible = text
-    if "<think>" in text:
-        before, _, rest = text.partition("<think>")
-        hidden, close, after = rest.partition("</think>")
-        if close:
-            reasoning = hidden
-            visible = before + after
-        else:
-            flags.append("unclosed_reasoning_span")
+    visible, reasoning, reasoning_flags = _split_reasoning(text)
+    flags = list(reasoning_flags)
     calls: list[ToolCallRequest] = []
-    for index, match in enumerate(_TOOL_CALL.finditer(visible)):
+
+    def add_call(obj: Any, emitted: str) -> None:
         try:
-            obj = json.loads(match.group(1))
             name = obj["name"]
-            if not isinstance(name, str):
-                raise ValueError("tool name is not a string")
-            arguments = obj.get("arguments", {})
+            if not isinstance(name, str) or not name:
+                raise ValueError("tool name is not a nonempty string")
+            arguments = obj.get("arguments", obj.get("parameters", {}))
             arguments_json = arguments if isinstance(arguments, str) else json.dumps(
-                arguments, sort_keys=True, separators=(",", ":")
+                arguments, sort_keys=True, separators=(",", ":"), allow_nan=False
             )
-            # Call ids are transcript identity, derived from emitted bytes and
-            # ordinal; they are not randomness or a claim about upstream ids.
+            # Transcript identity derives from emitted bytes and ordinal.
             call_id = hashlib.sha256(
-                f"{index}\0{match.group(0)}".encode("utf-8")
+                f"{len(calls)}\0{emitted}".encode("utf-8")
             ).hexdigest()
             calls.append(ToolCallRequest(call_id, name, arguments_json))
-        except (KeyError, TypeError, ValueError) as exc:
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
             flags.append(f"malformed_tool_call:{type(exc).__name__}")
+
+    matches = list(_TOOL_CALL.finditer(visible))
+    for match in matches:
+        try:
+            obj = json.loads(match.group(1))
+        except ValueError as exc:
+            flags.append(f"malformed_tool_call:{type(exc).__name__}")
+        else:
+            add_call(obj, match.group(0))
+    # Recognized envelopes left outside complete matches are incomplete even
+    # if the stream stopped normally; cuts must not look like final answers.
+    remainder = _TOOL_CALL.sub("", visible)
+    if "<tool_call>" in remainder or "</tool_call>" in remainder:
+        flags.append("malformed_tool_call:unclosed_or_unmatched_envelope")
+    candidate = visible.strip()
+    if not matches:
+        candidate = candidate.removeprefix("<|python_tag|>").removesuffix("<|eom_id|>").strip()
+        try:
+            obj = json.loads(candidate)
+        except ValueError:
+            obj = None
+            if candidate.startswith("{") and '"name"' in candidate and any(
+                marker in candidate for marker in ('"parameters"', '"arguments"')
+            ):
+                flags.append("malformed_tool_call:invalid_or_truncated_json")
+        if isinstance(obj, dict) and "name" in obj and (
+            "parameters" in obj or "arguments" in obj
+        ):
+            add_call(obj, visible)
+        elif any(marker in visible for marker in (
+            "<tool", "<function", "<|python_tag|>", "[TOOL_CALLS]",
+            '"tool_calls"', '"name"', '"parameters"', '"arguments"',
+        )) and not any(flag.startswith("malformed_tool_call:") for flag in flags):
+            flags.append("unsupported_tool_call_format")
     if reasoning and reasoning_tokens == 0:
         flags.append("reasoning_token_count_unavailable")
     return visible, reasoning, tuple(calls), tuple(flags)
+
+
+class _StreamObservation:
+    """Observe native finish reasons without replacing MLX's generation loop."""
+
+    def __init__(self, native: Any) -> None:
+        self.native = native
+        self.finish_reason: str | None = None
+
+        @wraps(native.stream_generate)
+        def stream_generate(*args: Any, **kwargs: Any):
+            for response in native.stream_generate(*args, **kwargs):
+                reason = getattr(response, "finish_reason", None)
+                self.finish_reason = reason if isinstance(reason, str) else None
+                yield response
+
+        self.stream_generate = stream_generate
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.native, name)
 
 
 class MlxEndpoint:
@@ -126,17 +203,28 @@ class MlxEndpoint:
         text = ""
         prompt_tokens = completion_tokens = reasoning_tokens = 0
         first_epoch: float | None = None
-        provenance: Mapping[str, Any] = {}
+        provenance: dict[str, Any] = {}
+        finish_reason: str | None = None
+        prior_hidden = any(
+            message.role == "assistant" and _split_reasoning(message.content)[0] != message.content
+            for message in messages
+        )
+        prior_hidden_prefill_tokens: int | None = None if prior_hidden else 0
         try:
             if self.config.hardware_target.runtime_backend == RuntimeBackend.MOCK:
                 script = self.mock_turns[turn_index] if turn_index < len(self.mock_turns) else {}
+                requested_tokens = int(script.get("completion_tokens", max_tokens))
+                emitted_tokens = min(requested_tokens, max_tokens)
+                finish_reason = script.get("finish_reason", "stop")
+                if requested_tokens > max_tokens:
+                    finish_reason = "length"
                 profile = replace(
                     self.config.workload_profile, name="align_turn",
                     prompt_text=None, dataset_ref=None, suite_manifest_ref=None,
                     suite_manifest_sha256=None, generator_sidecar_ref=None,
                     prompt_token_expectation=None,
                     prompt_tokens=int(script["prompt_tokens"]) if "prompt_tokens" in script else None,
-                    output_tokens=int(script.get("completion_tokens", max_tokens)),
+                    output_tokens=emitted_tokens,
                 )
                 if profile.prompt_tokens is None:
                     profile = replace(profile, prompt_text=json.dumps(
@@ -145,12 +233,25 @@ class MlxEndpoint:
                 result = self.runtime.run_workload(replace(self.config, workload_profile=profile))
                 new_events = result.events
                 text = str(script.get("content", result.output_artifacts.get("response.txt", "")))
+                if requested_tokens > max_tokens:
+                    # Synthetic text is spread uniformly over scripted tokens.
+                    # The ratio is a fixture construction, not tokenizer inference.
+                    text = text[:len(text) * max_tokens // requested_tokens]
+                    flags.append("mock_text_truncated_proportionally")
                 prompt_tokens = (result.token_count or 0) - (result.output_token_count or 0)
                 completion_tokens = result.output_token_count or 0
                 reasoning_tokens = int(script.get("reasoning_tokens", 0))
                 if reasoning_tokens < 0 or reasoning_tokens > completion_tokens:
                     flags.append("mock_reasoning_count_outside_completion")
                     reasoning_tokens = 0
+                if "prior_hidden_prefill_tokens" in script:
+                    count = script["prior_hidden_prefill_tokens"]
+                    if type(count) is int and 0 <= count <= prompt_tokens:
+                        prior_hidden_prefill_tokens = count
+                    else:
+                        flags.append("mock_prior_hidden_prefill_count_invalid")
+                elif prior_hidden:
+                    flags.append("prior_hidden_prefill_count_unavailable:mock_scripted_prompt")
                 provenance = dict(result.workload_provenance or {})
                 actual_ids = self.runtime._prompt_token_ids(prompt_tokens)
                 self.prompt_token_ids.extend(actual_ids)
@@ -162,27 +263,52 @@ class MlxEndpoint:
 
                 tokenizer = self.runtime._tokenizer
 
-                def prepare_prompt():
-                    rendered = tokenizer.apply_chat_template(
+                def render_prompt(chat: Sequence[ChatMessage]) -> str:
+                    return tokenizer.apply_chat_template(
                         [
                             {
                                 "role": message.role, "content": message.content,
                                 **({"name": message.name} if message.name else {}),
                                 **({"tool_call_id": message.tool_call_id} if message.tool_call_id else {}),
                             }
-                            for message in messages
+                            for message in chat
                         ],
                         tools=list(tools) or None, tokenize=False,
                         add_generation_prompt=True,
                     )
+
+                def prepare_prompt():
+                    nonlocal prior_hidden_prefill_tokens
+                    rendered = render_prompt(messages)
                     # Chat templates already contain their special tokens.
                     ids = _encode(tokenizer, rendered, add_special_tokens=False)
+                    if prior_hidden:
+                        scrubbed = [
+                            replace(message, content=_split_reasoning(message.content)[0])
+                            if message.role == "assistant" else message
+                            for message in messages
+                        ]
+                        hidden_free_ids = _encode(
+                            tokenizer, render_prompt(scrubbed), add_special_tokens=False
+                        )
+                        prior_hidden_prefill_tokens = len(ids) - len(hidden_free_ids)
+                        if prior_hidden_prefill_tokens < 0:
+                            flags.append("prior_hidden_prefill_token_delta_negative")
                     return ids, ids, rendered
 
-                record = self.runtime._generate(
-                    None, [], None, max_tokens, suppress_eos=False,
-                    prepare_prompt=prepare_prompt,
-                )
+                native = self.runtime._mlx_lm
+                observation = _StreamObservation(native)
+                # Sequential in-process turns own this prepared runtime. Restore
+                # the module even on a native fault; identity/probes see it intact.
+                self.runtime._mlx_lm = observation
+                try:
+                    record = self.runtime._generate(
+                        None, [], None, max_tokens, suppress_eos=False,
+                        prepare_prompt=prepare_prompt,
+                    )
+                finally:
+                    self.runtime._mlx_lm = native
+                finish_reason = observation.finish_reason
                 text = record.text
                 prompt_tokens = record.prompt_tokens
                 completion_tokens = record.output_tokens
@@ -196,7 +322,8 @@ class MlxEndpoint:
                         json.dumps(record.prompt_token_ids, separators=(",", ":")).encode("utf-8")
                     ).hexdigest(),
                     "output_token_ids": record.output_token_ids,
-                    "stop_condition": record.stop_condition,
+                    "stop_condition": finish_reason or record.stop_condition,
+                    "runtime_stop_condition": record.stop_condition,
                 }
                 _, hidden, _, _ = parse_completion(text)
                 if hidden:
@@ -218,9 +345,25 @@ class MlxEndpoint:
                     first_epoch = event.timestamp_s
         except Exception as exc:
             flags.append(f"endpoint_error:{type(exc).__name__}:{exc}")
-        # Token counts are integers: exact equality identifies the registered cut.
-        if completion_tokens == max_tokens:
+        # A native stop is authoritative even at the exact integer budget.
+        # With no finish reason, equality is the only available cut evidence.
+        if not isinstance(finish_reason, str) or not finish_reason:
+            finish_reason = None
+        cut = finish_reason in ("length", "max_tokens", "max_new_tokens") or (
+            finish_reason is None and completion_tokens == max_tokens
+        )
+        if cut:
             flags.append(f"turn_token_budget_reached:{turn_index}")
+        provenance.update(
+            finish_reason=finish_reason,
+            stop_condition=("requested_tokens_emitted" if cut else finish_reason or provenance.get("stop_condition")),
+            prior_hidden_prefill_tokens=prior_hidden_prefill_tokens,
+            prior_hidden_prefill_method=(
+                "chat_template_token_count_difference"
+                if self.config.hardware_target.runtime_backend == RuntimeBackend.MLX
+                else "scripted_prompt_count"
+            ),
+        )
         end_stamp = self.clock.stamp()
         end_ns = max(start_ns, monotonic_ns(end_stamp))
         mapping, _ = stamp_mapping(

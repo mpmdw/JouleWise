@@ -331,7 +331,7 @@ class AppleCampaignTests(unittest.TestCase):
                 self.assertIn("endpoint_error:ValueError:", summary.failure_message)
                 self.assertFalse((bundle / "outputs/align_episode.json").exists())
 
-    def test_later_model_failure_keeps_partial_episode_as_flag(self) -> None:
+    def test_later_model_failure_preserves_partial_episode_and_fails_summary(self) -> None:
         base = episode_spec(hidden=False)
         turns = list(base.mock_turns)
         turns[1] = {**turns[1], "prompt_tokens": "not-an-int"}
@@ -340,12 +340,24 @@ class AppleCampaignTests(unittest.TestCase):
                 as_config(replace(base, mock_turns=tuple(turns)), "apple-partial"),
                 Path(directory), FakeClock(),
             )
-            self.assertEqual(summary.status.value, "succeeded", summary)
-            self.assertIsNotNone(summary.gross_energy_j)
+            self.assertEqual(summary.status.value, "failed", summary)
+            self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+            self.assertIn('"stop_condition": "endpoint_error"', summary.failure_message)
+            self.assertIn("endpoint_error:ValueError:", summary.failure_message)
             episode = read_episode_bundle(bundle)
             self.assertEqual(episode.turns[0].decode_tokens, COMPLETIONS[0])
             self.assertEqual(episode.turns[1].decode_tokens, 0)
             self.assertTrue(any(flag.startswith("endpoint_error:ValueError:") for flag in episode.flags))
+            reader = BundleReader(bundle)
+            window = reader.measured_window()
+            self.assertIsNotNone(window)
+            # The partial model/tool work exceeds the brief's ~1 J attribution
+            # limit; check preserved raw energy even though a failed summary has
+            # no reduced gross metric. This retains the old measured-work check.
+            self.assertGreater(_integrate(reader.summed_curve(), window.start_s, window.end_s), 1.0)
+            failure = json.loads((bundle / "outputs/align_failure.json").read_text())
+            self.assertEqual(failure["episode_outcome"]["stop_condition"], "endpoint_error")
+            self.assertEqual(failure["episode_outcome"]["emitted_tokens"], COMPLETIONS[0])
 
     def test_flag_paths_succeed_with_measured_energy(self) -> None:
         base = episode_spec(hidden=False)
@@ -356,7 +368,9 @@ class AppleCampaignTests(unittest.TestCase):
         # 99,999 is a deliberately impossible usage fixture, above this
         # world's largest completion count (1,024), not an acceptance bar.
         at_budget = list(base.mock_turns)
-        at_budget[-1] = {**at_budget[-1], "completion_tokens": base.max_tokens}
+        # An absent native finish reason at exact budget is a cut. Mock
+        # scripts otherwise default to "stop" for a complete scripted turn.
+        at_budget[-1] = {**at_budget[-1], "completion_tokens": base.max_tokens, "finish_reason": None}
         cases = (
             (replace(base, mock_turns=tuple(at_budget)), "turn_token_budget_reached:5", 6),
             (replace(base, max_turns=3), "turn_budget_reached", 3),
@@ -532,3 +546,66 @@ class AppleCampaignTests(unittest.TestCase):
             found = battery.span_findings(charged, span, request=span)
             self.assertIn("battery.member_span", [item["code"] for item in found])
             self.assertNotIn("battery.assist", [item["code"] for item in found])
+
+
+    def test_malformed_spec_shapes_and_temperature_fail_in_prepare_system_clock(self) -> None:
+        base = episode_spec(hidden=False)
+        valid = json.loads(base.to_text())
+        changes = (
+            {"temperature": "hot"}, {"temperature": float("nan")},
+            {"temperature": float("inf")}, {"temperature": True},
+            {"task_kwargs": []}, {"task_kwargs": None},
+            {"mock_turns": [None]}, {"mock_turns": [{"content": "done"}, []]},
+            {"mock_turns": "not-a-sequence-of-mappings"},
+        )
+        for index, change in enumerate(changes):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                config = as_config(base, f"apple-malformed-review-{index}")
+                config = replace(config, workload_profile=replace(
+                    config.workload_profile, prompt_text=json.dumps({**valid, **change})
+                ))
+                bundle, summary = run_benchmark(config, Path(directory), SystemClock())
+                self.assertEqual(summary.status.value, "unsupported", summary)
+                self.assertEqual(summary.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
+                self.assertIn("task_unavailable:ValueError:", summary.failure_message)
+                self.assertFalse((bundle / "outputs/align_episode.json").exists())
+                events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+                self.assertFalse(any(event.get("phase") in ("idle_baseline", "warmup", "measured_run") for event in events))
+
+    def test_system_clock_mock_budget_truncates_work_and_preserves_complete_exact_stop(self) -> None:
+        for over_budget in (False, True):
+            with self.subTest(over_budget=over_budget), tempfile.TemporaryDirectory() as directory:
+                # Ledger prompts and 180/300/90-token model outputs have the
+                # reviewer's production shape. The padded JSON envelope puts a
+                # 5000 -> 300 token cut after <tool_call> and before its close.
+                content = '<tool_call>' + " " * 400 + json.dumps({
+                    "name": "read", "arguments": {"turn": 1, "seconds": 0.2},
+                }) + '</tool_call>'
+                script = (
+                    {"prompt_tokens": 1500, "completion_tokens": 180, "content":
+                     '<tool_call>{"name":"read","arguments":{"turn":0,"seconds":0.3}}</tool_call>'},
+                    {"prompt_tokens": 1800, "completion_tokens": 5000 if over_budget else 300, "content": content},
+                    {"prompt_tokens": 2200, "completion_tokens": 90, "content": "Done."},
+                )
+                spec = EpisodeSpec(
+                    task_factory="tests.align.test_apple_endpoint:make_review_task",
+                    condition="benign", seed=7, max_turns=3, max_tokens=300,
+                    temperature=0.0, mock_turns=script,
+                )
+                config = as_config(spec, "apple-system-mock-budget")
+                # Reviewer SystemClock baseline: ten samples at production 10 Hz.
+                config = replace(config, sampling=replace(config.sampling, idle_seconds=1.0))
+                bundle, summary = run_benchmark(config, Path(directory), SystemClock())
+                self.assertEqual(summary.status.value, "succeeded", summary)
+                self.assertIsNotNone(summary.gross_energy_j)
+                episode = read_episode_bundle(bundle)
+                self.assertEqual(episode.turns[1].decode_tokens, 300)
+                self.assertEqual("turn_token_budget_reached:1" in episode.flags, over_budget)
+                if over_budget:
+                    self.assertEqual(len(episode.turns), 2)
+                    self.assertTrue(any(flag.startswith("malformed_tool_call:") for flag in episode.flags))
+                else:
+                    self.assertEqual(len(episode.turns), 3)
+                    self.assertFalse(any(flag.startswith("turn_token_budget_reached:") for flag in episode.flags))
+                from joulewise.cli import validate_bundle
+                self.assertEqual(validate_bundle(bundle, strict=True), [])
