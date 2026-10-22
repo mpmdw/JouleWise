@@ -6,7 +6,8 @@
 // then exits nonzero. EOF/SIGTERM/SIGINT terminate the child as well.
 // Turns have no adapter deadline. The caller's MCP tool timeout still limits
 // the call: Claude Code's MCP_TOOL_TIMEOUT controls that caller-side budget.
-// Progress is a heartbeat, not a promise to extend a hard timeout. Configure
+// The MCP TypeScript SDK defaults to a 60-second request timeout; progress
+// resets it only when the caller opts into resetTimeoutOnProgress. Configure
 // that budget at the caller or use the audited CLI for long work; no settings
 // are changed here. CODEX_MCP_FRAME_LOG explicitly records full sensitive frames.
 
@@ -20,10 +21,12 @@ const EFFORTS = new Set(["high", "xhigh"]);
 // Three times T3's 10-second control-operation budget allows local startup
 // contention. This bounds RPC acknowledgements, NEVER the duration of a turn.
 const CONTROL_MS = 30_000;
-// Six heartbeats per control budget, well within a typical 60-second MCP wait.
-const PROGRESS_MS = CONTROL_MS / 6;
-// A tenth of the control budget lets SIGTERM reap before escalating to SIGKILL.
-const REAP_MS = CONTROL_MS / 10;
+// A 5-second heartbeat leaves 55 seconds of scheduling/transport slack under
+// the SDK's 60-second default, when the caller opts into progress resets.
+const PROGRESS_MS = 5_000;
+// Review measured 0.0–0.01 s after child death; lead measured 0.0 s after EOF.
+// Allow 990 ms beyond the measured 10 ms maximum for loaded-machine teardown.
+const REAP_MS = 1_000;
 // T3's per-line transport bound; avoids unbounded unterminated JSONL input.
 const MAX_FRAME_BYTES = 128 * 1024 * 1024;
 const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -42,7 +45,7 @@ const tools = [
         "approval-policy": { type: "string", enum: ["on-request", "never"], description: "on-request only; never is retained for compatibility and refused." },
         "base-instructions": { type: "string", description: "Replace default base instructions." },
         "compact-prompt": { type: "string", description: "Prompt used when compacting the conversation." },
-        config: { type: "object", additionalProperties: true, description: "Config overrides; model_reasoning_effort high (default) or xhigh. Reverse Claude MCP is always disabled." },
+        config: { type: "object", additionalProperties: true, description: "Config overrides; model_reasoning_effort high (default) or xhigh. Caller mcp_servers overrides are refused; reverse Claude MCP is disabled with an inert command." },
         cwd: { type: "string", description: "Working directory, relative to the MCP server cwd if not absolute." },
         "developer-instructions": { type: "string", description: "Developer role instructions." },
         model: { type: "string", description: "Only gpt-6.1-sol is permitted." },
@@ -177,13 +180,12 @@ function argumentsFor(name, args) {
   check(args.config === undefined || object(args.config), "config must be an object");
   const config = flattenConfig(args.config ?? {});
   for (const [key, value] of Object.entries(config)) {
-    // Profiles can override these same settings: validate those too, even when
-    // an explicit thread/turn parameter would otherwise take precedence.
-    if (key === "model" || /^profiles\.[^.]+\.model$/.test(key)) check(value === MODEL, `model must be ${MODEL}`);
-    if (key === "model_reasoning_effort" || /^profiles\.[^.]+\.model_reasoning_effort$/.test(key)) check(EFFORTS.has(value), "reasoning effort must be high or xhigh");
-    if (key === "sandbox_mode" || /^profiles\.[^.]+\.sandbox_mode$/.test(key)) check(["read-only", "workspace-write"].includes(value), "sandbox must be read-only or workspace-write; danger-full-access is forbidden");
-    if (key === "approval_policy" || /^profiles\.[^.]+\.approval_policy(?:\.|$)/.test(key) || key.startsWith("approval_policy.")) check(["on-request", "untrusted"].includes(value), "approval policy must retain approvals (on-request or untrusted)");
-    if (key === "approvals_reviewer" || /^profiles\.[^.]+\.approvals_reviewer$/.test(key)) check(value === "user", "approvals_reviewer must be user; auto approvals are unavailable");
+    check(key !== "mcp_servers" && !key.startsWith("mcp_servers."), "caller mcp_servers config is forbidden");
+    if (key === "model") check(value === MODEL, `model must be ${MODEL}`);
+    if (key === "model_reasoning_effort") check(EFFORTS.has(value), "reasoning effort must be high or xhigh");
+    if (key === "sandbox_mode") check(["read-only", "workspace-write"].includes(value), "sandbox must be read-only or workspace-write; danger-full-access is forbidden");
+    if (key === "approval_policy" || key.startsWith("approval_policy.")) check(["on-request", "untrusted"].includes(value), "approval policy must retain approvals (on-request or untrusted)");
+    if (key === "approvals_reviewer") check(value === "user", "approvals_reviewer must be user; auto approvals are unavailable");
   }
   const model = args.model ?? config.model ?? MODEL;
   const effort = config.model_reasoning_effort ?? "high";
@@ -193,11 +195,10 @@ function argumentsFor(name, args) {
   check(EFFORTS.has(effort), "reasoning effort must be high or xhigh");
   check(["read-only", "workspace-write"].includes(sandbox), "sandbox must be read-only or workspace-write; danger-full-access is forbidden");
   check(["on-request", "untrusted"].includes(approvalPolicy), "approval policy must retain approvals (on-request or untrusted)");
-  // Remove every conflicting ancestor/descendant, then install the forced leaf.
-  for (const key of Object.keys(config)) {
-    if (["mcp_servers", "mcp_servers.claude"].includes(key) || key === "mcp_servers.claude.enabled" || key.startsWith("mcp_servers.claude.enabled.")) delete config[key];
-  }
-  Object.assign(config, { "mcp_servers.claude.enabled": false, model_reasoning_effort: effort });
+  // Disabled stdio entries still need a command to parse when an untrusted
+  // checkout's project command is absent from the effective configuration.
+  Object.assign(config, { "mcp_servers.claude.enabled": false,
+    "mcp_servers.claude.command": "/usr/bin/false", model_reasoning_effort: effort });
   if (args["compact-prompt"] !== undefined) config.compact_prompt = args["compact-prompt"];
   return {
     cwd: resolve(args.cwd ?? process.cwd()), model, sandbox, approvalPolicy,
@@ -306,17 +307,28 @@ function notification(method, params) {
 }
 
 function serverRequest(frame) {
-  const p = frame.params;
-  check(object(p), `malformed ${frame.method} server request`);
+  const handled = new Set(["item/commandExecution/requestApproval", "item/fileChange/requestApproval",
+    "item/permissions/requestApproval", "item/tool/requestUserInput", "mcpServer/elicitation/request",
+    "execCommandApproval", "applyPatchApproval", "item/tool/call"]);
+  // Unknown requests may have no params or any future payload shape. Refuse
+  // them without imposing fields belonging to a different request method.
+  if (handled.has(frame.method)) check(object(frame.params), `malformed ${frame.method} server request`);
+  const p = object(frame.params) ? frame.params : {};
   let result;
   const requiredStrings = (keys) => check(keys.every((key) => typeof p[key] === "string"), `malformed ${frame.method} request fields`);
-  if (frame.method.startsWith("item/")) requiredStrings(["threadId", "turnId", "itemId"]);
+  if (["item/commandExecution/requestApproval", "item/fileChange/requestApproval",
+    "item/permissions/requestApproval", "item/tool/requestUserInput"].includes(frame.method)) requiredStrings(["threadId", "turnId", "itemId"]);
   if (["item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval"].includes(frame.method)) {
     check(Number.isInteger(p.startedAtMs), `malformed ${frame.method} startedAtMs`);
   }
   switch (frame.method) {
     case "item/commandExecution/requestApproval":
     case "item/fileChange/requestApproval": result = { decision: "decline" }; break;
+    case "execCommandApproval":
+    case "applyPatchApproval":
+      result = { decision: { denied: { rejection: "MCP adapter has no interactive approver" } } }; break;
+    case "item/tool/call":
+      result = { success: false, contentItems: [] }; break;
     // An empty grant is the schema's denial representation; no permissions added.
     case "item/permissions/requestApproval":
       requiredStrings(["cwd"]);
@@ -333,7 +345,7 @@ function serverRequest(frame) {
       appSend({ id: frame.id, error: { code: -32601, message: `Unsupported server request: ${frame.method}` } });
   }
   const declined = { method: frame.method, requestId: frame.id, itemId: p.itemId ?? null, response: result ?? "method-not-found" };
-  const ctx = activeThreads.get(p.threadId);
+  const ctx = activeThreads.get(p.threadId ?? p.conversationId);
   if (ctx) ctx.declined.push(declined);
   else process.stderr.write(`codex-mcp: declined unassociated request ${frame.method}\n`);
   if (result) appSend({ id: frame.id, result });
@@ -426,7 +438,7 @@ async function invoke(message, ctx) {
         const resumeParams = {
           threadId: ctx.threadId, excludeTurns: true, model: MODEL,
           sandbox: "read-only", approvalPolicy: "on-request", approvalsReviewer: "user",
-          config: { "mcp_servers.claude.enabled": false, model_reasoning_effort: "high" },
+          config: { "mcp_servers.claude.enabled": false, "mcp_servers.claude.command": "/usr/bin/false", model_reasoning_effort: "high" },
         };
         try { await rpc("thread/resume", resumeParams, bind); }
         catch (error) {

@@ -5,7 +5,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
 
 if (process.argv[2] !== "app-server") throw new Error("replay peer expects app-server");
-const entries = readFileSync(process.env.CODEX_REPLAY_TRANSCRIPT, "utf8").trim().split("\n").map(JSON.parse);
+const entries = readFileSync(process.env.CODEX_REPLAY_TRANSCRIPT, "utf8")
+  .replaceAll("{{CWD}}", process.cwd().replaceAll("\\", "\\\\"))
+  .trim().split("\n").map(JSON.parse);
 const header = entries.shift();
 if (header.type !== "transcript_start") throw new Error("missing transcript_start");
 if (process.env.CODEX_REPLAY_PID) writeFileSync(process.env.CODEX_REPLAY_PID, String(process.pid));
@@ -53,20 +55,29 @@ process.on("SIGTERM", () => {
 
 try {
   while (cursor < entries.length) {
-    const entry = entries[cursor++];
+    const entry = entries[cursor];
     if (entry.type === "expect_outbound") {
       const actual = await take();
       subset(actual, entry.frame);
       if (entry.frame.method && "id" in entry.frame) clientIds.set(entry.frame.id, actual.id);
       // Responses must still correlate to the peer's request id.
       if (!entry.frame.method && "id" in entry.frame && actual.id !== entry.frame.id) throw new Error("server-request response id mismatch");
+      cursor++; // Never consume an expectation before the frame arrives/matches.
     } else if (entry.type === "emit_inbound") {
       // afterMs comes directly from the scripted transcript, not an idle bound.
       if (entry.afterMs) await new Promise((res) => setTimeout(res, entry.afterMs));
       const frame = structuredClone(entry.frame);
       if (frame && !frame.method && clientIds.has(frame.id)) frame.id = clientIds.get(frame.id);
       process.stdout.write(`${JSON.stringify(frame)}\n`);
+      cursor++;
     } else if (entry.type === "runtime_exit") {
+      cursor++;
+      // A successful recording ends at MCP EOF, after the caller received its
+      // final result. Keep that teardown boundary instead of racing completion.
+      if (entry.status === "success") {
+        while (!ended) await new Promise((res) => { wake = res; });
+      }
+      finish(); // A trailing unconsumed entry is an error, including on crashes.
       process.stderr.write(`REPLAY EXIT ${entry.status}\n`);
       process.exit(entry.status === "success" ? 0 : 7);
     } else throw new Error(`unknown replay entry ${entry.type}`);

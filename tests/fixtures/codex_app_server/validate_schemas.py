@@ -35,11 +35,14 @@ def main():
         "item/permissions/requestApproval": "PermissionsRequestApprovalResponse",
         "item/tool/requestUserInput": "ToolRequestUserInputResponse",
         "mcpServer/elicitation/request": "McpServerElicitationRequestResponse",
+        "execCommandApproval": "ExecCommandApprovalResponse",
+        "applyPatchApproval": "ApplyPatchApprovalResponse",
+        "item/tool/call": "DynamicToolCallResponse",
     }
     responses = {method: annotations_removed(json.loads(next(source.rglob(f"{name}.json")).read_text()))
                  for method, name in names.items()}
     frames = 0
-    for path in sorted(fixtures.glob("*.ndjson")):
+    for path in sorted(fixtures.rglob("*.ndjson")):
         pending = {}
         entries = [json.loads(line) for line in path.read_text().splitlines()]
         for entry in entries[1:]:

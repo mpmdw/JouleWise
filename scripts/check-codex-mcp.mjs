@@ -7,10 +7,14 @@ import { resolve } from "node:path";
 import readline from "node:readline";
 
 // Match the adapter's control-RPC budget: three times T3's 10-second bound.
-// The optional live turn gets 20 budgets (10 minutes); cleanup gets 1/10.
 const CONTROL_MS = 30_000;
-const LIVE_MS = CONTROL_MS * 20;
-const REAP_MS = CONTROL_MS / 10;
+// --live waits for one trivial no-tools model answer. The lead's recorded
+// turn1 took 4.1 s; allow up to 60 s for provider queueing and generation,
+// matching the MCP SDK's default request timeout. No live work runs by default.
+const LIVE_MS = 60_000;
+// Review observed 0.0–0.01 s on child death; lead observed 0.0 s on EOF.
+// Allow 990 ms beyond that 10 ms maximum for loaded-machine cleanup.
+const REAP_MS = 1_000;
 const rootResult = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
 if (rootResult.status !== 0) {
   process.stderr.write("FAIL: run this check inside the JouleWise Git repository\n");
@@ -82,6 +86,7 @@ function connect(commandName, args, { cwd = repoRoot, env = {} } = {}) {
         child.stdin.end();
       });
       assert(!stderr.includes("REPLAY ERROR"), stderr);
+      if (env.CODEX_REPLAY_TRANSCRIPT) assert(stderr.includes("REPLAY OK "), `replay did not finish: ${stderr}`);
       assert(status === 0, `MCP teardown failed (${status}): ${stderr.trim()}`);
     },
   };
@@ -136,15 +141,19 @@ try {
   assert(help.includes("generate-json-schema"), "installed Codex CLI does not have app-server");
   checkReverseConfig();
   pass(`CLI ${codexVersion} has app-server; Claude Code ${claudeVersion}; Node.js ${nodeVersion}`);
-  await withClient(codexServer.command, codexServer.args, {}, async (client, initialized) => {
+  // Refusal probes write diagnostic call rows. Keep those in scratch, rather
+  // than appending to an operator's checkout log during a connection check.
+  scratch = mkdtempSync(resolve(tmpdir(), "codex-mcp-check-"));
+  await withClient(codexServer.command, [resolve(repoRoot, codexServer.args[0])], { cwd: scratch }, async (client, initialized) => {
     assert(initialized.serverInfo.name === "codex", "wrong MCP server name");
     validateCodexTools((await client.request("tools/list")).tools);
     pass("project Codex MCP starts and exposes compatible codex / codex-reply schemas");
-    for (const args of [{ model: "gpt-5.6-sol" }, { sandbox: "danger-full-access" }, { "approval-policy": "never" }]) {
+    for (const args of [{ model: "gpt-5.6-sol" }, { sandbox: "danger-full-access" }, { "approval-policy": "never" },
+      { config: { "mcp_servers.other.command": "claude" } }, { config: { mcp_servers: { claude: { enabled: false } } } }]) {
       const result = await client.request("tools/call", { name: "codex", arguments: { prompt: "Refusal check; never run a turn.", ...args } });
       assert(result.isError && result.structuredContent.threadId === null, `unsafe input was not refused before thread start: ${JSON.stringify(args)}`);
     }
-    pass("wrong model, danger-full-access, and removed approvals are refused before thread start");
+    pass("wrong model, danger-full-access, removed approvals, and caller MCP config are refused before thread start");
     if (process.argv.includes("--live")) {
       const started = await client.request("tools/call", {
         name: "codex", arguments: { prompt: "Reply with exactly CODEX_MCP_LIVE_OK. Do not use tools.", cwd: repoRoot,
@@ -157,7 +166,6 @@ try {
     }
   });
   // Verify real thread params against a transcript peer, spending no live turn.
-  scratch = mkdtempSync(resolve(tmpdir(), "codex-mcp-check-"));
   const fixture = resolve(repoRoot, "tests/fixtures/codex_app_server/normal.ndjson");
   const header = JSON.parse(readFileSync(fixture, "utf8").split("\n")[0]);
   const frameLog = resolve(scratch, "frames.ndjson");
@@ -165,15 +173,14 @@ try {
     cwd: scratch, env: { CODEX_BIN: resolve(repoRoot, "tests/fixtures/codex_app_server/replay_peer.mjs"),
       CODEX_REPLAY_TRANSCRIPT: fixture, CODEX_MCP_FRAME_LOG: frameLog },
   }, async (client) => {
-    const result = await client.request("tools/call", { name: "codex", arguments: {
-      ...header.metadata.arguments, config: { mcp_servers: { claude: { enabled: true } } },
-    } });
+    const result = await client.request("tools/call", { name: "codex", arguments: header.metadata.arguments });
     assert(!result.isError, `one-hop replay failed: ${JSON.stringify(result)}`);
     const frames = readFileSync(frameLog, "utf8").trim().split("\n").map(JSON.parse);
     const start = frames.find((e) => e.type === "expect_outbound" && e.frame.method === "thread/start");
     assert(start?.frame.params.config["mcp_servers.claude.enabled"] === false, "reverse Claude server was not forcibly disabled");
+    assert(start?.frame.params.config["mcp_servers.claude.command"] === "/usr/bin/false", "reverse Claude command was not made inert");
   });
-  pass("recorded replay verifies forced one-hop config despite caller override");
+  pass("recorded replay verifies forced one-hop disabled setting and inert command");
   await withClient(nodeBin, [resolve(repoRoot, "scripts/claude-bridge-mcp.mjs")], {}, async (client) => {
     const tools = (await client.request("tools/list")).tools;
     assert(tools.length === 1 && tools[0].name === "consult_fable", "reverse bridge must expose only consult_fable");

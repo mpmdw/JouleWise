@@ -820,8 +820,12 @@ rubber-stamping delegated implementation.
   caller budget; long evidence-heavy runs still use the audited CLI.
 
 The forward adapter permits only `gpt-6.1-sol` and high/xhigh effort,
-defaults to read-only/on-request, forces `mcp_servers.claude.enabled=false`
-on every start/resume, and explicitly selects the user approval reviewer.
+defaults to read-only/on-request, refuses all caller config keys at or under
+`mcp_servers` (any server name, dotted or nested), and explicitly selects the
+user approval reviewer. Every start/resume forces both
+`mcp_servers.claude.enabled=false` and
+`mcp_servers.claude.command="/usr/bin/false"`; the inert command keeps this
+boundary effective outside a Codex-trusted checkout as well.
 It declines command, file-change, permissions, input, and MCP elicitation
 requests, reporting the declines in the tool result and hash-only call log.
 Model/effort metadata comes from app-server responses and settings/reroute

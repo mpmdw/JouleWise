@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -23,11 +24,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "scripts/codex-mcp-server.mjs"
 FIXTURES = ROOT / "tests/fixtures/codex_app_server"
 PEER = FIXTURES / "replay_peer.mjs"
-# Three adapter heartbeat intervals cover interpreter startup and scripted IO.
-# Polling is 1/100 of a heartbeat; tests never wait for a real model.
+# The longest replay delay tests a second 5-second heartbeat (5.1 seconds).
+# Allow 9.9 additional seconds for process startup, local pipe IO and teardown.
+# Poll every 50 ms to observe pipe/log/PID changes without busy-waiting.
 HEARTBEAT = 5
-WAIT = HEARTBEAT * 3
-POLL = HEARTBEAT / 100
+WAIT = 15
+POLL = 0.05
 MODEL = "gpt-6.1-sol"
 
 
@@ -91,17 +93,22 @@ def validate(value, schema, root=None):
 
 
 class Session:
-    def __init__(self, case, scenario, entries=None, env=None, directory=None):
+    def __init__(self, case, scenario, entries=None, env=None, directory=None,
+                 require_replay_ok=True, expect_replay_error=False):
         self.case = case
         self.tmp = tempfile.TemporaryDirectory(prefix="codex-mcp-test-") if directory is None else None
-        self.directory = Path(self.tmp.name) if self.tmp else directory
-        self.frames = self.directory / f"{scenario}-frames.ndjson"
-        self.pidfile = self.directory / f"{scenario}-peer.pid"
+        # Match Node's physical process.cwd() through macOS /var -> /private/var.
+        self.directory = (Path(self.tmp.name) if self.tmp else directory).resolve()
+        self.require_replay_ok = require_replay_ok
+        self.expect_replay_error = expect_replay_error
+        stem = Path(scenario).name
+        self.frames = self.directory / f"{stem}-frames.ndjson"
+        self.pidfile = self.directory / f"{stem}-peer.pid"
         path = FIXTURES / f"{scenario}.ndjson"
         if entries is not None:
-            path = self.directory / f"{scenario}.ndjson"
+            path = self.directory / f"{stem}.ndjson"
             path.write_text("".join(json.dumps(e) + "\n" for e in entries))
-        self.entries = entries or transcript(scenario)
+        self.entries = json.loads(json.dumps(entries or transcript(scenario)).replace("{{CWD}}", str(self.directory)))
         self.messages = []
         self.errors = []
         self.output = queue.Queue()
@@ -177,7 +184,17 @@ class Session:
         self.proc.wait(timeout=WAIT)
         for reader in self.readers:
             reader.join(timeout=WAIT)
-        self.case.assertNotIn("REPLAY ERROR", "".join(self.errors))
+        self.check_replay()
+
+    def check_replay(self):
+        errors = "".join(self.errors)
+        if self.expect_replay_error:
+            self.case.assertIn("REPLAY ERROR", errors)
+            self.case.assertNotIn("REPLAY OK", errors)
+        else:
+            self.case.assertNotIn("REPLAY ERROR", errors)
+            if self.require_replay_ok:
+                self.case.assertIn("REPLAY OK " + self.entries[0]["scenario"], errors)
 
     def cleanup(self):
         if self.proc.poll() is None:
@@ -194,6 +211,7 @@ class Session:
                 stream.close()
         if self.tmp:
             self.tmp.cleanup()
+        self.check_replay()
 
 
 @unittest.skipUnless(shutil.which("node"), "Node is required")
@@ -339,17 +357,66 @@ class CodexMcpTests(unittest.TestCase):
         self.assertIn("without a final agent message", result["content"][0]["text"])
         session.stop()
 
-    def test_one_hop_is_forced_for_nested_dotted_and_parent_overrides(self):
+    def test_caller_mcp_config_is_refused_for_every_server_and_path_shape(self):
         for config in [{"mcp_servers": {"claude": {"enabled": True}}},
+                       {"mcp_servers": {"another": {"command": "claude"}}},
+                       {"mcp_servers.other.command": "claude"},
+                       {"mcp_servers.claude.command": "/bin/echo"},
+                       {"mcp_servers": {}}, {"mcp_servers": None},
                        {"mcp_servers.claude.enabled": True},
                        {"mcp_servers.claude": True},
                        {"mcp_servers.claude.enabled.child": True}]:
             with self.subTest(config=config):
-                session = self.session()
+                session = self.session("initialize_only")
                 args = {**session.entries[0]["metadata"]["arguments"], "config": config}
                 session.call(args)
+                result = session.receive(3)["result"]
+                self.assertTrue(result["isError"])
+                self.assertIsNone(result["structuredContent"]["threadId"])
+                self.assertIn("caller mcp_servers config is forbidden", result["content"][0]["text"])
+                self.assertTrue(all(row["threadId"] is None for row in session.log()))
+                session.stop()  # Any thread RPC fails this initialization-only replay.
+
+    def test_one_hop_forces_disabled_and_inert_command_on_start_and_resume(self):
+        for scenario in ["normal", "resume"]:
+            with self.subTest(scenario=scenario):
+                session = self.session(scenario)
+                session.call()
                 self.assertNotIn("isError", session.receive(3)["result"])
-                session.stop()  # Peer checks forced config in actual thread/start.
+                session.stop()
+                frames = [json.loads(line) for line in session.frames.read_text().splitlines()]
+                config = next(e["frame"]["params"]["config"] for e in frames
+                              if e.get("frame", {}).get("method") in ["thread/start", "thread/resume"])
+                self.assertIs(config["mcp_servers.claude.enabled"], False)
+                self.assertEqual(config["mcp_servers.claude.command"], "/usr/bin/false")
+
+    def test_obsolete_profiles_are_opaque_config_not_policy_overrides(self):
+        entries = transcript("normal")
+        config = {"profiles.legacy.model": "other", "profiles.legacy.approval_policy": "never"}
+        for e in entries:
+            if e.get("frame", {}).get("method") == "thread/start":
+                e["frame"]["params"]["config"].update(config)
+        session = self.session(entries=entries)
+        session.call({**entries[0]["metadata"]["arguments"], "config": config})
+        self.assertNotIn("isError", session.receive(3)["result"])
+        session.stop()
+
+    def test_legacy_profile_rejection_from_cli_is_reported_without_a_turn(self):
+        entries = transcript("normal")
+        index = next(i for i, e in enumerate(entries) if e.get("frame", {}).get("method") == "thread/start")
+        entries[index]["frame"]["params"]["config"]["profile"] = "x"
+        # Exact configuration error from the reviewer's real 0.163.0 probe.
+        reason = ('failed to load configuration: legacy `profile = "x"` config is no longer supported; '
+                  'use `--profile x` with `x.config.toml` instead')
+        entries = entries[:index + 1] + [{"type": "emit_inbound", "frame": {
+            "id": entries[index]["frame"]["id"], "error": {"code": -32600, "message": reason}}}]
+        session = self.session(entries=entries)
+        session.call({**entries[0]["metadata"]["arguments"], "config": {"profile": "x"}})
+        result = session.receive(3)["result"]
+        self.assertTrue(result["isError"])
+        self.assertIsNone(result["structuredContent"]["threadId"])
+        self.assertIn(reason, result["content"][0]["text"])
+        session.stop()
 
     def test_refusals_do_not_start_or_resume_a_thread(self):
         session = self.session("initialize_only")
@@ -361,8 +428,7 @@ class CodexMcpTests(unittest.TestCase):
             {"config": {"sandbox_mode": "danger-full-access"}}, {"config": {"approval_policy": "never"}},
             {"config": {"approval_policy": {"granular": {"sandbox_approval": False}}}},
             {"config": {"approvals_reviewer": "auto_review"}},
-            {"config": {"profiles": {"unsafe": {"approval_policy": "never"}}}},
-            {"config": {"profiles.unsafe.model": "other"}}, {"config": []}, {"config": {"model'": "other"}},
+            {"config": []}, {"config": {"model'": "other"}},
             {"effort": "high"}, {"prompt": ""}, {"prompt": 7},
         ]
         for number, override in enumerate(bad, 10):
@@ -427,6 +493,84 @@ class CodexMcpTests(unittest.TestCase):
                 self.assertEqual(session.log()[-1]["declinedRequests"], refused)
                 session.stop()  # Transcript checks exact schema decline responses.
 
+    def test_legacy_approvals_are_denied_mid_turn_and_associated_by_conversation(self):
+        session = self.session("legacy_declined")
+        session.call()
+        result = session.receive(3)["result"]
+        self.assertNotIn("isError", result)
+        declined = result["structuredContent"]["declinedRequests"]
+        self.assertEqual([r["method"] for r in declined], ["execCommandApproval", "applyPatchApproval"])
+        for request in declined:
+            self.assertEqual(request["response"], {"decision": {"denied": {"rejection": "MCP adapter has no interactive approver"}}})
+        self.assertEqual(session.log()[-1]["declinedRequests"], declined)
+        session.stop()
+
+    def test_unhandled_requests_are_refused_without_stopping_the_turn(self):
+        entries = transcript("normal")
+        thread_id = next(e["frame"]["params"]["threadId"] for e in entries
+                         if e.get("frame", {}).get("method") == "turn/start")
+        injected = []
+        requests = [
+            ("item/tool/call", {"threadId": thread_id, "turnId": "turn", "callId": "dynamic",
+                                "tool": "unsupported", "arguments": {}},
+             {"result": {"success": False, "contentItems": []}}),
+            ("item/tool/future", {"threadId": thread_id, "turnId": "turn"},
+             {"error": {"code": -32601, "message": "Unsupported server request: item/tool/future"}}),
+            ("future/noParams", None,
+             {"error": {"code": -32601, "message": "Unsupported server request: future/noParams"}}),
+        ]
+        for request_id, (method, params, response) in enumerate(requests, 100):
+            frame = {"id": request_id, "method": method}
+            if params is not None:
+                frame["params"] = params
+            if method == "item/tool/call":
+                catalog = json.loads((FIXTURES / "schema-catalog.json").read_text())["schemas"]
+                validate(frame, catalog["server:item/tool/call"])
+                validate(response["result"], catalog["result:DynamicToolCallResponse"])
+            injected += [{"type": "emit_inbound", "frame": frame},
+                         {"type": "expect_outbound", "frame": {"id": request_id, **response}}]
+        index = next(i for i, e in enumerate(entries) if e.get("frame", {}).get("method") == "item/completed")
+        entries[index:index] = injected
+        session = self.session(entries=entries)
+        session.call()
+        result = session.receive(3)["result"]
+        self.assertNotIn("isError", result)
+        self.assertEqual(result["structuredContent"]["turnStatus"], "completed")
+        self.assertEqual([r["method"] for r in result["structuredContent"]["declinedRequests"]],
+                         ["item/tool/call", "item/tool/future"])
+        self.assertIn("fixture simple ok", result["content"][0]["text"])
+        session.stop()
+        self.assertIn("declined unassociated request future/noParams", "".join(session.errors))
+
+    def test_live_recording_replays_all_three_original_mcp_calls(self):
+        session = self.session("live/live_0163_smoke")
+        results = []
+        for request_id, call in enumerate(session.entries[0]["metadata"]["calls"], 3):
+            session.call(call["arguments"], name=call["name"], id=request_id)
+            result = session.receive(request_id)["result"]
+            self.assertEqual(result, call["expected"])
+            results.append(result)
+        self.assertEqual(results[0]["content"][0]["text"], "LIVE_OK_1")
+        self.assertEqual(results[1]["content"][0]["text"], "LIVE_OK_2")
+        self.assertEqual(results[0]["structuredContent"]["threadId"], results[1]["structuredContent"]["threadId"])
+        self.assertEqual([r["method"] for r in results[2]["structuredContent"]["declinedRequests"]],
+                         ["item/commandExecution/requestApproval"])
+        session.stop()
+
+    def test_replay_detects_unconsumed_expectations_after_normal_and_crash(self):
+        for scenario in ["normal", "crash"]:
+            with self.subTest(scenario=scenario):
+                entries = transcript(scenario)
+                entries.append({"type": "expect_outbound", "frame": {"method": "unexpected/required"}})
+                session = self.session(scenario, entries=entries, expect_replay_error=True)
+                session.call()
+                result = session.receive(3)["result"]
+                if scenario == "crash":
+                    self.assertTrue(result["isError"])
+                    session.proc.wait(timeout=WAIT)
+                    self.assertNotEqual(session.proc.returncode, 0)
+                session.stop()  # Requires REPLAY ERROR and forbids REPLAY OK.
+
     def test_decline_notice_keeps_agent_bridge_envelope_final(self):
         entries = transcript("command_declined")
         envelope = 'BRIDGE_REPORT_V1\n{"status":"DISCUSSION","summary":"fixture","pathspec":[],"verification":[],"flags":[]}'
@@ -471,7 +615,7 @@ class CodexMcpTests(unittest.TestCase):
                 self.assertEqual(session.log()[-1]["status"], "error")
 
     def test_external_child_kill_fails_call_then_exits_adapter(self):
-        session = self.session("cancel")
+        session = self.session("cancel", require_replay_ok=False)
         session.call()
         session.wait_frame("turn/started")
         os.kill(int(session.pidfile.read_text()), signal.SIGKILL)
@@ -482,7 +626,7 @@ class CodexMcpTests(unittest.TestCase):
         self.assertNotEqual(session.proc.returncode, 0)
 
     def test_missing_binary_exits_before_initialization(self):
-        session = Session(self, "initialize_only", env={"CODEX_BIN": "/definitely/missing/codex"})
+        session = Session(self, "initialize_only", env={"CODEX_BIN": "/definitely/missing/codex"}, require_replay_ok=False)
         # Spawn can fail before stdin is read; no initialization success may
         # escape in either ordering. There need not be an in-flight call yet.
         session.proc.wait(timeout=WAIT)
@@ -554,18 +698,51 @@ class CodexMcpTests(unittest.TestCase):
 
 
 class FixtureSchemaTests(unittest.TestCase):
+    def test_live_fixture_contains_only_fixed_privacy_placeholders(self):
+        text = (FIXTURES / "live/live_0163_smoke.ndjson").read_text()
+        for forbidden in ["/Users/", "planType", "credits"]:
+            self.assertNotIn(forbidden, text)
+        entries = transcript("live/live_0163_smoke")
+        remote = next(e["frame"]["params"] for e in entries
+                      if e.get("frame", {}).get("method") == "remoteControl/status/changed")
+        self.assertEqual(remote["serverName"], "scrubbed-host")
+        self.assertEqual(remote["installationId"], "scrubbed-installation")
+        # The recording's hostname and installation id cannot remain anywhere,
+        # including strings unrelated to the remote-control notification.
+        self.assertNotRegex(text, r"[\w.-]+\.local")
+        # Fingerprint of the original installation id from frames.ndjson;
+        # keep the private id itself out of the test source as well.
+        installation_fingerprint = "f668514ceb19e15d0a7907b62d1b13d513d7826dd9e9f3848e34aee746bd70b6"
+        for candidate in re.findall(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", text):
+            self.assertNotEqual(hashlib.sha256(candidate.encode()).hexdigest(), installation_fingerprint)
+        self.assertNotIn("Mac OS", text)
+        self.assertIn("{{CWD}}", text)
+
+    def test_scrubber_is_deterministic_and_changes_only_private_values(self):
+        spec = importlib.util.spec_from_file_location("scrub_recording", FIXTURES / "scrub_recording.py")
+        scrubber = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scrubber)
+        entries = transcript("live/live_0163_smoke")
+        # Re-projecting the committed projection is byte-equivalent in value.
+        smoke = {f"turn{i}": {"result": call["expected"]}
+                 for i, call in enumerate(entries[0]["metadata"]["calls"], 1)}
+        self.assertEqual(scrubber.project(entries, smoke), entries)
+
     def test_every_kept_frame_matches_cli_01630_schema(self):
         catalog = json.loads((FIXTURES / "schema-catalog.json").read_text())["schemas"]
         results = dict(zip(
             ["initialize", "thread/start", "thread/resume", "thread/unarchive", "turn/start", "turn/interrupt",
              "item/commandExecution/requestApproval", "item/fileChange/requestApproval",
-             "item/permissions/requestApproval", "item/tool/requestUserInput", "mcpServer/elicitation/request"],
+             "item/permissions/requestApproval", "item/tool/requestUserInput", "mcpServer/elicitation/request",
+             "execCommandApproval", "applyPatchApproval", "item/tool/call"],
             ["InitializeResponse", "ThreadStartResponse", "ThreadResumeResponse", "ThreadUnarchiveResponse", "TurnStartResponse", "TurnInterruptResponse",
-             "CommandExecutionRequestApprovalResponse", "FileChangeRequestApprovalResponse", "PermissionsRequestApprovalResponse", "ToolRequestUserInputResponse", "McpServerElicitationRequestResponse"]))
-        for path in sorted(FIXTURES.glob("*.ndjson")):
+             "CommandExecutionRequestApprovalResponse", "FileChangeRequestApprovalResponse", "PermissionsRequestApprovalResponse", "ToolRequestUserInputResponse", "McpServerElicitationRequestResponse",
+             "ExecCommandApprovalResponse", "ApplyPatchApprovalResponse", "DynamicToolCallResponse"]))
+        for path in sorted(FIXTURES.rglob("*.ndjson")):
             pending = {}
-            entries = transcript(path.stem)
-            self.assertIn("Adapted from t3code (MIT, T3 Tools Inc.), commit defb7e6e,", entries[0]["metadata"]["attribution"])
+            entries = [json.loads(line) for line in path.read_text().splitlines()]
+            if path.parent == FIXTURES:
+                self.assertIn("Adapted from t3code (MIT, T3 Tools Inc.), commit defb7e6e,", entries[0]["metadata"]["attribution"])
             for number, e in enumerate(entries[1:], 2):
                 with self.subTest(fixture=path.name, line=number):
                     if "frame" not in e:

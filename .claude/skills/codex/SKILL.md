@@ -50,7 +50,7 @@ Apply contract §4's t3 applicability and preferred-presentation-plane rule.
    `scripts/codex-bridge new` or `scripts/codex-bridge review`. For MCP, call
    project tool `codex` with the
    Git-root `cwd`, model `gpt-6.1-sol`, config
-   `{"model_reasoning_effort":"<selected-effort>","mcp_servers.claude.enabled":false}`,
+   `{"model_reasoning_effort":"<selected-effort>"}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
    and hop headers in developer instructions or the bridge prompt.
    Service tier (Ed 2026-08-09, supersedes the T1 fast-default): DEFAULT tier
@@ -89,8 +89,12 @@ The project `.mcp.json` runs `node scripts/codex-mcp-server.mjs`, backed by
 one installed `codex app-server` child (`CODEX_BIN` overrides PATH). Defaults
 are `gpt-6.1-sol`, `high`, `read-only`, and `on-request`; explicit per-task
 effort selection remains mandatory. The adapter accepts nested or dotted
-config overrides, forces the reverse Claude server off on start/resume,
-and declines every approval/input request with a visible result notice.
+config overrides, refuses every caller key at or under `mcp_servers` for
+any server name (dotted or nested), and forces both
+`mcp_servers.claude.enabled=false` and
+`mcp_servers.claude.command="/usr/bin/false"` on start/resume, including outside
+a Codex-trusted checkout. Omit all MCP server keys from caller config. It
+declines every approval/input request with a visible result notice.
 `codex-reply` accepts `prompt` and `threadId` (`conversationId` is the legacy
 alias). In-process continuations retain confirmed settings; after a restart,
 resume applies high/read-only/on-request again. Start a new thread to choose

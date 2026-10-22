@@ -18,8 +18,10 @@ thread, including after an adapter restart).
 Select effort only as specified by `.claude/skills/codex/SKILL.md` §Effort
 selection.
 
-The adapter forces the reverse Claude server off for each started or resumed
-thread, refuses other models, efforts outside high/xhigh, unsafe sandboxes,
+The adapter refuses every caller `config` key at or under `mcp_servers`
+(any server, dotted or nested). It forces `mcp_servers.claude.enabled=false`
+and `mcp_servers.claude.command="/usr/bin/false"` on every start/resume, including
+outside a trusted checkout. It refuses other models, efforts outside high/xhigh, unsafe sandboxes,
 and policies that remove approvals. It declines approval/input requests and
 reports them. Its native app-server child lives for the adapter's lifetime;
 child failure terminates the adapter so the census cannot miss an idle Node
