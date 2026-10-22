@@ -51,10 +51,10 @@ def _held_change_indices(values: tuple[float, ...]) -> list[int]:
 @dataclass(frozen=True)
 class TimelineModel:
     idle_w: float
-    prefill_base_w: float
+    prefill_base_w: float  # Increment above idle, retained original model semantics.
     prefill_token_w: float
     context_token_w: float
-    decode_w: float
+    decode_w: float  # Increment above idle; the decode plateau is idle_w + decode_w.
     ripple_w: float
     prefill_tokens_per_s: float
 

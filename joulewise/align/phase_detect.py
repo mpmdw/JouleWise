@@ -272,7 +272,15 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         # local height alone.
         post_peak_ranks = {rank[anchors[k + 1][0]] for k in peaks}
         peaks = {k for k in peaks if rank[anchors[k][0]] not in post_peak_ranks}
-        decode_anchors = set(following_bursts)
+        # Equal low head/tail levels establish the timeline's idle floor.
+        # A single short edge excursion cannot promote that known floor to
+        # decode across the episode. Cropped active-only traces have unlike
+        # edge levels and therefore do not acquire this idle constraint.
+        edge_idle_ranks = ({rank[anchors[0][0]]} if
+                           rank[anchors[0][0]] == rank[anchors[-1][0]] and
+                           0 not in peaks else set())
+        decode_anchors = {k for k in following_bursts
+                          if rank[anchors[k][0]] not in edge_idle_ranks}
         for k in peaks:
             following = k + 1
             # A low head and equal-level tail establish idle. In a trace
@@ -280,7 +288,7 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             edge_idle = (following == len(anchors) - 1 and
                          rank[anchors[0][0]] == rank[anchors[following][0]] and
                          0 not in peaks)
-            if not edge_idle:
+            if not edge_idle and rank[anchors[following][0]] not in edge_idle_ranks:
                 decode_anchors.add(following)
         if not decode_anchors:
             # Too little temporal structure for peak/fall identification:
@@ -342,8 +350,9 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         # Retain low-segment exposures to test whether an empty visible gap
         # can explain their convolution. Even a partial-window trough can
         # refute a short client gap; it need not be a pure-idle observation.
-        # Gaussian tail <=1/n plus bounded rounding derives the power bar.
-        low_bar = quantum + math.sqrt(2 * variance * math.log(max(2, n)))
+        # Two independent level errors have variance <=2*variance; the
+        # Gaussian tail <=1/n and bounded rounding derive the power bar.
+        low_bar = quantum + math.sqrt(4 * variance * math.log(max(2, n)))
         observations = tuple((times[k] - window, times[k], xs[k]) for k in range(left, right)
                              if low and label == "low")
         observation_uncertainty = boundary_uncertainty + (effective_interval if changes else 0)
@@ -480,15 +489,16 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
             return True  # No amplitude evidence; retain timing uncertainty.
         uncertainty = segment.observation_uncertainty_ns
         left, right = left - uncertainty, right + uncertainty
+        # Partial edge exposures do not determine instantaneous decode power:
+        # token ripple can vanish in full windows and survive partial ones.
+        # Use only exposures compatible with the established idle level.
+        # Their whole averaging window must fit an explained empty gap.
+        # Disjoint level-error intervals are needed to identify a pure low.
+        if segment.active_floor_w - segment.idle_floor_w <= 2 * segment.power_uncertainty_w:
+            return True
         for a, b, value in segment.low_observation_windows:
-            idle_duration = max(0, min(b, right) - max(a, left))
-            active_fraction = (1 - idle_duration / (b - a) if b > a else
-                               float(not left <= b <= right))
-            # Idle and decode are conservative lower power levels; prefill
-            # can only raise the expected average outside the visible gap.
-            expected = segment.idle_floor_w + active_fraction * (
-                segment.active_floor_w - segment.idle_floor_w)
-            if value < expected - segment.power_uncertainty_w:
+            if (abs(value - segment.idle_floor_w) <= segment.power_uncertainty_w and
+                    (a < left or b > right)):
                 return False
         return True
 

@@ -248,6 +248,11 @@ def run_duration_study(*, seeds=range(72), durations_ns=(
             "needs_ruling": None}
 
 
+def _study_duration(duration_ns):
+    """Pickleable CLI worker; duration rows are independent simulation jobs."""
+    return run_duration_study(durations_ns=(duration_ns,))
+
+
 class PhaseDetectTest(unittest.TestCase):
     def test_episode_to_sensor_to_phase_to_omitted_call(self):
         episode = world(7, tool_duration_ns=500_000_000)
@@ -361,6 +366,20 @@ class PhaseDetectTest(unittest.TestCase):
 
 if __name__ == "__main__":
     if "--study" in sys.argv:
-        print(json.dumps(run_duration_study(), sort_keys=True, indent=2))
+        import concurrent.futures
+        import os
+        # Resource budget only; it changes no seeds, worlds or rate estimands.
+        durations = run_duration_study.__kwdefaults__["durations_ns"]
+        with concurrent.futures.ProcessPoolExecutor(
+                max_workers=min(len(durations), os.cpu_count() or 1)) as pool:
+            parts = list(pool.map(_study_duration, durations))
+        report = dict(parts[0])
+        report["rows"] = [row for part in parts for row in part["rows"]]
+        for key in ("shortest_passing_duration_ms", "shortest_passing_duration_ms_from_95_bounds"):
+            report[key] = {}
+            for part in parts:  # Duration grid order, preserving the shortest.
+                for sensor, duration in part[key].items():
+                    report[key].setdefault(sensor, duration)
+        print(json.dumps(report, sort_keys=True, indent=2))
     else:
         unittest.main()

@@ -4,7 +4,7 @@ import unittest
 from dataclasses import replace
 
 from joulewise.align.phase_detect import detect_phases, estimate_noise_sd, match_tool_calls
-from joulewise.align.records import PowerTrace
+from joulewise.align.records import Episode, PowerTrace, ToolCall, Turn
 from joulewise.align.sensor_sim import SensorModel, simulate, timeline_from_episode
 from tests.align.test_phase_detect import production_sensor_models, sensor_models
 from tests.align.test_sensor_sim import model, production_world, world
@@ -68,6 +68,58 @@ class PhaseReviewTwoTest(unittest.TestCase):
                     if null.turns[0].start_ns + sensor.averaging_window_ns < t <= null.turns[-1].end_ns]
             cropped = replace(trace, t_ns=tuple(t for t, _ in kept), values=tuple(v for _, v in kept))
             self.assertEqual(len(match_tool_calls(detect_phases(cropped), null).unlogged_candidates), 0)
+
+    def test_observed_mid_turn_omission_keeps_full_log_control_clean(self):
+        base = world(3, 500_000_000)
+        first = base.turns[0]
+        original = first.tool_calls[0]
+        duration = original.end_ns - original.start_ns
+        middle = first.first_token_ns + (first.end_ns - first.first_token_ns) // 2
+        call = replace(original, start_ns=middle, end_ns=middle + duration)
+        first = replace(first, end_ns=first.end_ns + duration, tool_calls=(call,))
+        episode = replace(base, turns=(first,) + base.turns[1:])
+        hidden = replace(episode, turns=(replace(first, tool_calls=(replace(call, logged=False),)),)
+                         + episode.turns[1:])
+        for name, sensor in sensor_models(3):
+            with self.subTest(sensor=name):
+                phases = detect_phases(simulate(timeline_from_episode(episode, model()), sensor))
+                full = match_tool_calls(phases, episode)
+                self.assertEqual(full.matched_count, 3)
+                self.assertEqual(len(full.unlogged_candidates), 0)
+                omitted = match_tool_calls(phases, hidden)
+                # 500 ms spans five 100 ms samples of the slowest sensor;
+                # the visible generation envelope claims the whole call.
+                self.assertTrue(any(2 * max(0, min(s.end_ns, call.end_ns) -
+                                            max(s.start_ns, call.start_ns)) >= duration
+                                    for s in omitted.unlogged_candidates))
+
+    def test_unobserved_covered_call_has_identical_sensor_counterfactual(self):
+        # Production token counts, two turns and a 20 ms client gap. The
+        # hidden 5 ms call lies in NVML's unobserved 75 ms of each 100 ms.
+        ms = 1_000_000
+        call = ToolCall('lookup', 1769 * ms, 1774 * ms, 128, 2048)
+        first = Turn(0, 500 * ms, 1769 * ms, 0, 512, 64,
+                     first_token_ns=756 * ms, tool_calls=(call,))
+        second = Turn(1, 1794 * ms, 3550 * ms, 576, 512, 96,
+                      first_token_ns=2050 * ms)
+        true = Episode('blind-call', 'synthetic/covered', 'benign', 'local-8b',
+                       'mock:local', 3, 'host.monotonic', 0, 4050 * ms, (first, second))
+        visible = replace(true, turns=(replace(first, end_ns=call.end_ns,
+                          tool_calls=(replace(call, logged=False),)), second))
+        counterfactual = replace(visible, turns=(replace(visible.turns[0], tool_calls=()), second))
+        sensor = SensorModel.nvml(noise_sd_w=.05, quantum_w=.01, seed=3)
+        tm = replace(model(), ripple_w=0)  # Valid no-surviving-ripple world.
+        actual = simulate(timeline_from_episode(true, tm), sensor)
+        absent = simulate(timeline_from_episode(counterfactual, tm), sensor)
+        # Every exposure is disjoint from the call; this is an exact integer
+        # interval property. Same sampled physical inputs and noise seed
+        # give bit-identical output, so no power-only classifier can separate.
+        self.assertTrue(all(min(t, call.end_ns) <= max(t - sensor.averaging_window_ns,
+                                                      call.start_ns) for t in actual.t_ns))
+        self.assertEqual(actual.values, absent.values)
+        phases = detect_phases(actual)
+        self.assertEqual(match_tool_calls(phases, visible),
+                         match_tool_calls(detect_phases(absent), counterfactual))
 
     def test_held_noninteger_ratio_noise_is_nonzero_and_calls_survive(self):
         episode = world(3, 500_000_000)
