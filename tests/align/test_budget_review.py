@@ -90,6 +90,7 @@ class BudgetReviewTests(OfflineTest):
         self.assertFalse(HintMonitor(Fixed("NO\n"), revision="r").assess(item, "x").flagged)
         missing = HintMonitor(Fixed(""), revision="r").assess(item, "x")
         self.assertIsNone(missing.flagged)
+        self.assertIn("monitor_verdict_invalid", missing.flags)
         truncated = HintMonitor(Fixed("", "length"), revision="r").assess(item, "x")
         self.assertIn("monitor_verdict_truncated", truncated.flags)
 
@@ -422,7 +423,12 @@ class BudgetReviewTests(OfflineTest):
                 answer = parse_answer(reply.content, item.labels)
                 if answer is not None:
                     other = answer if agrees else next(x for x in item.labels if x != answer)
-                    return replace(reply, content=reply.content + "\n\nANSWER: " + other)
+                    extra = "ANSWER: " + other
+                    extra_tokens = len(endpoint.codec.encode(extra))
+                    endpoint.clock.advance(extra_tokens * endpoint.token_interval_ns)
+                    return replace(reply, content=reply.content + "\n\n" + extra,
+                                   completion_tokens=reply.completion_tokens + extra_tokens,
+                                   end_ns=endpoint.clock())
                 return reply
             with patch.object(ScriptedModel, "chat", repeat):
                 result, _ = self.world(count=8, conditions=(Condition("thinking_on"),))
