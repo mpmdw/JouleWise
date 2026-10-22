@@ -206,7 +206,15 @@ that the existing branch began at 6da3afe2d21b06dbffe0f521eb5768fd6aeb8ee2.
 Four implementation commits were fast-forwarded with force=false. GitHub
 compare showed four ahead/zero behind and only eight allowed lane files
 before this report. The upstream master head still equals the retained pin.
-No syntax, import or runtime success is inferred from any remote read.
+At 2026-10-22 05:50:12 UTC, all nine changed file bodies at
+691060c692028f2645695f4ef923218e7069a3e3 matched the intended text on
+read-back. The final comparison at that snapshot was five ahead/zero behind,
+with only the nine allowed paths listed above. A further align-suite attempt
+was again rejected before execution. The review-pinned runner source was
+read remotely: its endpoint exception handler precedes Turn creation, and
+its monitor exception handler omits the verdict and records its type.
+Environment diagnostics contained no records. No syntax, import or runtime
+success is inferred from any remote read.
 
 ## END-TO-END
 
