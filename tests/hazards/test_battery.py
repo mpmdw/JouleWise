@@ -10,6 +10,7 @@ import unittest.mock
 
 from joulewise import battery_float
 from joulewise.hazards import base, battery, smc
+from tests.live_hw import LiveHardwareTestCase
 from tests.hazards.fakes import BATTERY, FakeClocks, FakeSmc, Runner, battery_bytes, completed, update_time
 from tests.hazards.fakes import ROOT
 
@@ -772,7 +773,7 @@ class FrozenGrammarRegistrationTests(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real gauge (macOS)")
-class LiveReadOnlyTests(unittest.TestCase):
+class LiveReadOnlyTests(LiveHardwareTestCase):
     def test_live_ioreg_parses_and_carries_accumulators(self):
         measurement = battery.measure(base.Context())
         self.assertIsNone(measurement.error)

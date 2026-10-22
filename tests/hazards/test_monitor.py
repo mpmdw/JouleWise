@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from joulewise.hazards import base, battery, contention, monitor, smc, thermal
+from tests.live_hw import LiveHardwareTestCase
 from tests.hazards.fakes import (
     FakeClocks, FakeProcessTable, FakeRegistry, FakeSmc, FrequencyReader, Runner, battery_bytes,
     completed, frequency_probe,
@@ -599,7 +600,7 @@ class SmcMonitorTests(unittest.TestCase):
         self.assertEqual(codes[:2], [battery.SMC_UNAVAILABLE, battery.ASSIST])
 
 
-class SupervisorTests(unittest.TestCase):
+class SupervisorTests(LiveHardwareTestCase):
     """The real monitor process: started, killed, restarted with the gap recorded, stopped."""
 
     def setUp(self):
