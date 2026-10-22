@@ -769,15 +769,42 @@ applicable.
 - `deterministic_rotation` + `exchangeability = none` (the current Slice-2M
   design): status `not_required`; no permutation p-value is invented.
 - `paired_label_swap_within_block`: with at least six exchangeable blocks,
-  enumerate all `2^n` sign flips of the paired deltas at `n <= 20`. The exact
-  two-sided p-value is the fraction whose absolute mean is at least the
-  observed absolute mean. Compare absolute sums exactly over the supplied
-  binary float values (the common `n` divisor cancels), using integer ratios
-  or equivalent exact arithmetic. Include exact ties with `>=`; no floating
-  comparison tolerance or rounded mean enters the count. Exact rescaling,
-  such as multiplication by `1/1024` or `1024` without underflow or overflow,
-  preserves the p-value. Multiplication by `1000` can round the inputs and
-  therefore can change the exact p-value for tie-heavy data.
+  enumerate all `2^n` sign flips of the paired deltas at `n <= 20`. For the
+  supplied finite floats `x_i`, define a tie band
+  `tau = K * sum|x_i| / 2^53`, where `K = 10^6`. IEEE-754 binary64 unit
+  roundoff is `2^-53`: a decimal delta read into a float carries relative
+  error at most `2^-53`, so a signed sum carries representation noise at
+  most `2^-53 * sum|x_i|`. The project's agreement bar lies between `10^6`
+  times that noise and 1% of the smallest printed uncertainty; the band
+  takes the lower edge. Its size is about `7.8e-8 J` for
+  `sum|x_i| = 702.6 J` and at most about `2.2e-6 J` for 20 deltas of at
+  most `1000 J` each. Both are more than three orders of magnitude below
+  1% of the ~1 J attribution limit (`0.01 J`), so the band cannot absorb a
+  physically resolvable difference.
+
+  Use exact integer arithmetic for counting. Let `D` be the largest
+  power-of-two denominator among the inputs, and lift each input to the
+  integer `m_i = x_i * D`. Define the observed absolute sum `O = |sum m_i|`
+  and absolute total `A = sum|m_i|`. For an assignment's signed integer sum
+  `S`, count it as extreme when `|S| * 2^53 >= O * 2^53 - K * A`, or
+  equivalently `|S| >= T` with `T = O - (K * A) // 2^53` computed once.
+  The two-sided p-value is this integer count divided by `2^n`. The common
+  `n` divisor of the means cancels; no floating arithmetic enters the
+  count, and the comparison includes ties with `>=`.
+
+  Exact binary counting was rejected: the decimal-recorded world
+  `(151.1, -144.4, -160.0, 8.9, -38.9, -199.3)` has decimal truth `18/64`,
+  but exact binary counting gives `16/64` in J and `18/64` in mJ. The band
+  can only add counts, so it is never less conservative. The rule is
+  homogeneous in `m_i`, so power-of-two rescaling such as `1/1024` or
+  `1024`, without underflow or overflow, preserves the p-value exactly.
+  The regression worlds in `tests/test_analysis_multiplicity.py` (two
+  six-delta tie worlds and two ten-delta worlds recorded on a 0.1 J grid)
+  give the decimal-truth count in J, mJ, kJ and Wh.
+
+  The band covers representation noise of the deltas themselves. Noise
+  inherited from forming `delta = value_b - value_a` in float is covered
+  only while `|value_a| / |delta|` stays well below about `1e5`.
 - fewer than six exchangeable blocks: status `not_run`, reason
   `randomization_check_insufficient_blocks`; the t interval remains primary
   and the artifact carries the required caveat.

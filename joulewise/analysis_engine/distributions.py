@@ -174,17 +174,42 @@ def two_sided_student_t_p_value(statistic: float, df: int) -> float:
 def exact_sign_flip_p_value(
     deltas: list[float] | tuple[float, ...],
 ) -> float:
-    """Enumerate the exact two-sided paired sign-flip distribution.
+    """Enumerate a two-sided paired sign-flip p-value with a derived tie band.
 
     Each element is one already-paired block delta.  Applicability (including
     the P2-037 minimum of six exchangeable blocks and manifest design) remains
     the caller's responsibility.  Enumeration is deliberately refused above
     20 blocks, the frozen exact-enumeration ceiling.
 
-    Compare absolute sums exactly over the supplied binary float values.
-    The common block-count divisor cancels, and exact ties count as extreme;
-    no floating comparison tolerance or rounded mean enters the count.
-    Exact rescaling preserves the count; rounding the inputs can change it.
+    For supplied floats x_i, define the tie band tau = K * sum|x_i| / 2^53,
+    where K = 10^6.  IEEE-754 binary64 unit roundoff is 2^-53: reading decimal
+    deltas into floats introduces relative error at most 2^-53, so their
+    signed sums carry representation noise at most 2^-53 * sum|x_i|.  The
+    project's agreement bar lies between 10^6 times that noise and 1% of the
+    smallest printed uncertainty; tau takes the lower edge.  It is about
+    7.8e-8 J for sum|x_i| = 702.6 J and at most about 2.2e-6 J for 20 deltas
+    of at most 1000 J each.  Both are more than three orders of magnitude
+    below 1% of the ~1 J attribution limit (0.01 J), so the band cannot
+    absorb a physically resolvable difference.
+
+    Lift each x_i to an integer m_i using the largest power-of-two input
+    denominator D, so m_i = x_i * D.  Let O = |sum m_i|, A = sum|m_i|, and
+    S be a sign assignment's signed integer sum.  Count it as extreme when
+    |S| * 2^53 >= O * 2^53 - K * A, equivalently when
+    |S| >= O - (K * A) // 2^53.  The common block-count divisor cancels;
+    the threshold and count use exact integers, and ties use >=.
+
+    Exact binary tie counting was rejected because decimal-recorded deltas
+    [151.1, -144.4, -160.0, 8.9, -38.9, -199.3] have decimal truth 18/64,
+    but exact binary counting gives 16/64 in J and 18/64 in mJ.  The band can
+    only add counts, so it is never less conservative.  The rule is
+    homogeneous in m_i, so power-of-two rescaling without underflow or
+    overflow preserves the p-value exactly.  Decimal-recorded tie regressions
+    agree with decimal truth in J, mJ, kJ and Wh.
+
+    The band covers representation noise of the deltas themselves.  Noise
+    inherited from forming delta = value_b - value_a in float is covered
+    only while |value_a| / |delta| stays well below about 1e5.
     """
 
     if not isinstance(deltas, (list, tuple)):
@@ -216,12 +241,23 @@ def exact_sign_flip_p_value(
         numerator * (denominator // divisor) for numerator, divisor in ratios
     )
     observed_sum = abs(sum(exact_values))
+    absolute_total = sum(abs(value) for value in exact_values)
+    # IEEE-754 binary64 unit roundoff is 2^-53: a decimal delta read into a
+    # float has relative error at most 2^-53, giving signed-sum representation
+    # noise at most 2^-53 * sum|x_i|.  The project's agreement bar lies between
+    # 10^6 times that noise and 1% of the smallest printed uncertainty; take
+    # the lower edge, K = 10^6.  This is about 7.8e-8 J for sum|x_i| = 702.6 J
+    # and at most about 2.2e-6 J for 20 deltas of 1000 J each: both are more
+    # than three orders below 1% of the ~1 J attribution limit (0.01 J), so
+    # the band cannot absorb a physically resolvable difference.
+    K = 10**6
+    threshold = observed_sum - (K * absolute_total) // 2**53
     extreme_count = 0
 
     def enumerate_sums(index: int, signed_sum: int) -> None:
         nonlocal extreme_count
         if index == block_count:
-            if abs(signed_sum) >= observed_sum:
+            if abs(signed_sum) >= threshold:
                 extreme_count += 1
             return
         value = exact_values[index]
