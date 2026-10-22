@@ -24,6 +24,11 @@ OUTPUT_LABEL = "512 decode forward passes, one of which yields no returned token
 H1_CHECKS = 21
 # Addendum 4: separate primary families on each boundary.
 H2_INTERVALS = {"rails": 9, "DC input": 9, "rest": 11}
+REGISTERED_MODELS = frozenset((
+    "Qwen3-1.7B-4bit", "Qwen3-4B-4bit", "Qwen3-8B-4bit", "Qwen3-14B-4bit",
+    "Qwen3-32B-4bit", "Qwen3-8B-8bit", "Llama-3.3-70B-Instruct-4bit",
+    "Qwen3-30B-A3B-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit", "Qwen3.5-122B-A10B-4bit"))
+DROPPABLE_MODEL = "Qwen3-8B-8bit"
 SCHEMA = "joulewise.bytes_predictions.v1"
 BOUND_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                "E_whole_window_drift_allowance_j")
@@ -377,10 +382,21 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
             "rest": rest, "loo_description": loo}
 
 
+def h1_checks(manifest):
+    """R5/registration §10: the frozen roster defines the family, even for missing rows."""
+    # Arithmetic-only callers historically freeze with an empty manifest stub;
+    # CLI manifests always pass validate_manifest before reaching this helper.
+    if not manifest.get("models"):
+        return H1_CHECKS
+    return len(HYPOTHESES) * sum(m["role"] == "heldout" for m in manifest["models"])
+
+
 def validate_manifest(manifest):
     models = manifest["models"]
-    if len(models) != 10 or len({m["model"] for m in models}) != 10:
-        raise AnalysisError("manifest requires ten distinct models")
+    names = {m["model"] for m in models}
+    if len(names) != len(models) or names not in (
+            REGISTERED_MODELS, REGISTERED_MODELS - {DROPPABLE_MODEL}):
+        raise AnalysisError("manifest requires the registered roster, optionally without Qwen3-8B-8bit")
     if sum(m["role"] == "fit" for m in models) != 3 or sum(bool(m["moe"]) for m in models) != 3:
         raise AnalysisError("manifest requires three fit and three MoE models")
     if sum(bool(m["tier"]) for m in models) != 6:
@@ -1041,7 +1057,7 @@ def _registered_estimate(records, energies, bounds, *, minimum_units=5):
                                  minimum_units=minimum_units)
 
 
-def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5):
+def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5, h1_family=H1_CHECKS):
     """Identical estimator for the reported cell and its without-assisted diagnostic."""
     duration = _weighted(kept, [r["duration_s"] for r in kept])
     drift_inputs = module[0].get("neg8_inputs", {})
@@ -1072,7 +1088,7 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5):
     estimate = _registered_estimate(kept, energies, bounds, minimum_units=minimum_units)
     interval = estimate["interval"]
     # R5 multiplicity widens h only; registered B is unchanged.
-    h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), interval["df"]) * math.sqrt(interval["variance"])
+    h = student_t_quantile(1 - .05 / (2 * h1_family), interval["df"]) * math.sqrt(interval["variance"])
     bound, mean = interval["B_j"], estimate["mean_j"]
     offset = {}
     if boundary != "rails":
@@ -1141,7 +1157,7 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                 rows.append({**base, "status": "unavailable", "reason": "NEG-8 export references unavailable",
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
-            cell = _phase_cell(kept, removed, module, boundary, secondary)
+            cell = _phase_cell(kept, removed, module, boundary, secondary, h1_family=h1_checks(manifest))
             assisted = [r for r in kept if "battery.assist" in r["flags"]]
             if assisted:
                 units = {(r["stratum"], r["unit_id"]) for r in assisted}
@@ -1150,7 +1166,8 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                 n_b = len({r["unit_id"] for r in without if r["stratum"] == "quad"})
                 below = min(n_r, n_b) < 5
                 diagnostic = _phase_cell(without, removed + [r["run_id"] for r in kept if r not in without],
-                                         module, boundary, secondary, minimum_units=2) if n_r and n_b else {
+                                         module, boundary, secondary, minimum_units=2,
+                                         h1_family=h1_checks(manifest)) if n_r and n_b else {
                     "status": "undefined_estimate", "n_r": n_r, "n_b": n_b, "mean_j": None,
                     "h_j": None, "B_j": None, "lower_j": None, "upper_j": None,
                     "reason": "fixed stratum weights require both strata"}
@@ -1253,8 +1270,11 @@ def frozen_predictions(points, manifest, neg8_inputs=None):
             continue
         lines.append({"selection": selection, "basis": basis, "boundary": boundary,
                       "lines": freeze_lines(subset) if all(p.get("status") != "unavailable" for p in subset) else None})
-    return {"schema": SCHEMA, "manifest_sha256": digest(manifest), "H1_checks": H1_CHECKS,
-            "H2_intervals": H2_INTERVALS,  # full-roster expectation; actual k is printed with each fit
+    models = manifest.get("models", [])
+    dropped = len(models) == 9 and all(m["model"] != DROPPABLE_MODEL for m in models)
+    return {"schema": SCHEMA, "manifest_sha256": digest(manifest), "H1_checks": h1_checks(manifest),
+            "H2_intervals": {boundary: k - int(dropped) for boundary, k in H2_INTERVALS.items()},
+            # Roster expectation; actual k is printed with each fit (Addendum 7 D9).
             "bytes_analysis_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "neg8_inputs": neg8_inputs or {}, "fit_points": points, "rival_lines": lines,
             "tier_fit_inputs": [{**_point_label(p), **{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power", "resident", "time")}}
@@ -1268,8 +1288,9 @@ def evaluate(points, frozen):
         key = tuple(group[k] for k in ("selection", "basis", "boundary"))
         labels = dict(zip(("selection", "basis", "boundary"), key))
         subset = [p for p in points if tuple(p[k] for k in labels) == key]
-        if len(subset) != 10:
-            raise AnalysisError("held-out analysis requires all ten model records, including refusals")
+        # Three fit models plus the manifest's frozen held-out family (three checks each).
+        if len(subset) != 3 + frozen["H1_checks"] // len(HYPOTHESES):
+            raise AnalysisError("held-out analysis requires all manifest model records, including refusals")
         missing = [p for p in subset if p.get("status") != "computed"]
         if group["lines"] is None or missing:
             unavailable.append({**labels, "models": [p["model"] for p in missing],
