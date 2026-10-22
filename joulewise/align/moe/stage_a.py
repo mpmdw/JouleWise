@@ -13,10 +13,10 @@ import math
 import random
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Sequence
+from typing import Iterable, Iterator, Sequence
 
-from joulewise.align.records import Episode, RouterLog, read_episodes
-from joulewise.align.moe.stats import episode_stats, grouped_permutation_test, routing_flags
+from joulewise.align.records import Episode, from_json
+from joulewise.align.moe.stats import METRICS, PHASES, episode_stats, grouped_permutation_test, routing_flags
 
 METADATA_FEATURES = ("prefill_tokens", "visible_decode_tokens", "turns", "tool_calls")
 
@@ -185,7 +185,7 @@ def _held_out_scores(features: Sequence[Sequence[float]], labels: Sequence[int],
     return tuple(scores), tuple(dict.fromkeys(flags))
 
 
-def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
+def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
                     confidence: float = 0.95, n_perm: int | None = None,
                     seed: int = 0) -> StageAResult:
     """Compute all 12 routing tests, Holm adjustment, effect CIs and held-out AUCs.
@@ -196,31 +196,23 @@ def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
     those fitted models; they do not account for classifier-refitting uncertainty.
     Both undefined and valid bootstrap replicate counts are disclosed.
     """
-    episodes = tuple(episodes)
-    labels = tuple({"benign": 0, "sabotage": 1}.get(e.condition, -1) for e in episodes)
-    groups = tuple(e.task_pair for e in episodes)
+    episode_ids, labels, groups = [], [], []
+    models = set()
     flags = []
-    if len(set(e.episode_id for e in episodes)) != len(episodes):
-        flags.append("duplicate_episode_ids")
-    if len(set(e.agent_model for e in episodes)) > 1:
-        flags.append("mixed_agent_models_may_confound_routing")
-    if not episodes:
-        flags.append("no_episodes")
-    if set(labels) != {0, 1}:
-        flags.append("both_conditions_required_for_inference")
-    if len(set(groups)) < 2:
-        flags.append("fewer_than_two_task_groups")
     if not isinstance(n_bootstrap, int) or n_bootstrap <= 0:
         flags.append("invalid_bootstrap_budget")
         n_bootstrap = 0
     if not 0 < confidence < 1:
         flags.append("invalid_interval_confidence")
-    for group in dict.fromkeys(groups):
-        if len({y for y, g in zip(labels, groups) if g == group}) < 2:
-            flags.append(f"group_has_no_label_exchangeability:{group}")
     features = []
-    keys = tuple(episode_stats(RouterLog("empty", 1, 1, (0,), (), ())))
+    keys = tuple(f"{phase}_{name}" for phase in PHASES for name in METRICS)
+    # Do not retain Episodes/RouterLogs: a JSONL iterator can release a large
+    # capture before the next record is parsed. Only scalar features survive.
     for episode in episodes:
+        episode_ids.append(episode.episode_id)
+        labels.append({"benign": 0, "sabotage": 1}.get(episode.condition, -1))
+        groups.append(episode.task_pair)
+        models.add(episode.agent_model)
         if episode.router_log is None:
             routing = dict.fromkeys(keys, math.nan)
             flags.append(f"{episode.episode_id}:router_log_missing")
@@ -235,6 +227,21 @@ def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
                                         totals["turns"], totals["tool_calls"]))))
         features.append({**routing, **metadata})
         flags.extend(f"{episode.episode_id}:episode_flag:{flag}" for flag in episode.flags)
+        del episode
+    labels, groups = tuple(labels), tuple(groups)
+    if len(set(episode_ids)) != len(episode_ids):
+        flags.append("duplicate_episode_ids")
+    if len(models) > 1:
+        flags.append("mixed_agent_models_may_confound_routing")
+    if not episode_ids:
+        flags.append("no_episodes")
+    if set(labels) != {0, 1}:
+        flags.append("both_conditions_required_for_inference")
+    if len(set(groups)) < 2:
+        flags.append("fewer_than_two_task_groups")
+    for group in dict.fromkeys(groups):
+        if len({y for y, g in zip(labels, groups) if g == group}) < 2:
+            flags.append(f"group_has_no_label_exchangeability:{group}")
     bootstrap = _bootstrap_indices(groups, n_bootstrap, seed)
     raw = {}
     for name in keys:
@@ -257,7 +264,7 @@ def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
         local_flags = []
         if dropped:
             local_flags.append(f"dropped_nonfinite_episodes:{len(dropped)}")
-            local_flags.extend(f"dropped_nonfinite_episode:{episodes[i].episode_id}" for i in dropped)
+            local_flags.extend(f"dropped_nonfinite_episode:{episode_ids[i]}" for i in dropped)
         for group in dict.fromkeys(local_groups):
             if len({y for y, g in zip(local_labels, local_groups) if g == group}) < 2:
                 local_flags.append(f"group_has_no_label_exchangeability:{group}")
@@ -302,7 +309,7 @@ def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
                               [labels[i] for i in indices])
              - mann_whitney_auc([predictions["metadata"][i] for i in indices],
                                [labels[i] for i in indices]) for indices in bootstrap]
-    return StageAResult(tuple(e.episode_id for e in episodes), labels, groups, tuple(features),
+    return StageAResult(tuple(episode_ids), labels, groups, tuple(features),
                         statistics, aucs, intervals, predictions, aucs["combined"] - aucs["metadata"],
                         _interval(gains, confidence), n_bootstrap, confidence, seed,
                         tuple(dict.fromkeys(flags)))
@@ -318,6 +325,14 @@ def _json_safe(value):
     return value
 
 
+def iter_episodes(path: Path) -> Iterator[Episode]:
+    """Stream shared Episode JSONL using the authoritative record decoder."""
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                yield from_json(Episode, line)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Read shared Episode JSONL and print a finite JSON analysis report."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -327,17 +342,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--n-perm", type=int)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
-    input_flags = ()
     try:
-        episodes = read_episodes(args.episodes)
+        result = analyze_stage_a(iter_episodes(args.episodes), n_bootstrap=args.n_bootstrap,
+                                 confidence=args.confidence, n_perm=args.n_perm, seed=args.seed)
     except (OSError, ValueError) as exc:
-        # A failed file/record read produces a flagged, non-estimable report;
-        # malformed rows are never silently filtered into a smaller dataset.
-        episodes = ()
-        input_flags = (f"episode_input_unreadable:{type(exc).__name__}",)
-    result = analyze_stage_a(episodes, n_bootstrap=args.n_bootstrap,
-                             confidence=args.confidence, n_perm=args.n_perm, seed=args.seed)
-    result = replace(result, flags=result.flags + input_flags)
+        # Preserve the existing failed-file policy: never silently analyze a
+        # prefix of a malformed file as if it were the complete dataset.
+        result = analyze_stage_a((), n_bootstrap=args.n_bootstrap,
+                                 confidence=args.confidence, n_perm=args.n_perm, seed=args.seed)
+        result = replace(result, flags=result.flags + (
+            f"episode_input_unreadable:{type(exc).__name__}",))
     print(json.dumps(_json_safe(asdict(result)), sort_keys=True, allow_nan=False))
     return 0
 
@@ -346,4 +360,4 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["METADATA_FEATURES", "StatisticResult", "StageAResult", "mann_whitney_auc", "analyze_stage_a"]
+__all__ = ["METADATA_FEATURES", "StatisticResult", "StageAResult", "mann_whitney_auc", "analyze_stage_a", "iter_episodes"]
