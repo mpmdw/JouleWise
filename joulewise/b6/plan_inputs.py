@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 
 from joulewise.b5 import plan
+from joulewise.b5.plan import SESSION_WAIT_BUDGET_S
 from joulewise.b6 import registration
 from joulewise.b6.capture_screen import operative_bound_stop_s
 
@@ -136,7 +137,7 @@ def encode_disk_budget(inputs, terms):
         keys = ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes")
         if not isinstance(terms, dict) or any(type(terms.get(k)) is not int or terms[k] < 0 for k in keys):
             raise ValueError("missing or malformed disk terms")
-        if terms.get("peak_copies") != 2 or terms.get("session_wait_budget_s") != 7200:
+        if terms.get("peak_copies") != 2 or terms.get("session_wait_budget_s") != SESSION_WAIT_BUDGET_S:
             raise ValueError("disk terms differ from H-DISK-RULING")
         b, wait, fixed, required = (terms[k] for k in keys)
         if required != 2 * (b + wait) + fixed or n <= 0:

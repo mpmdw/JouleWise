@@ -24,6 +24,9 @@ if str(ROOT) not in sys.path:
 from joulewise.b5.chain import SETTLE_S
 from joulewise.b5.plan import SESSION_WAIT_BUDGET_S
 
+COMMITTED_SIZING = ROOT / "configs/campaigns/bytes_mac_check/registration/sizing_b5.json"
+FIXED_POINTER = "/packs/bytes-mac-check/disk_derivation/fixed_retained_bytes"
+
 KIT = ROOT / "configs/campaigns/bytes_mac_check/collection_plan.json"
 # Registration §8.6 / D8: the 5 ms per-run clock budget is retained;
 # h=0 for the pre-arm HOLD and the registered frequency margin is 0.25 ppm.
@@ -114,7 +117,19 @@ def disk_allowance(receipts, count, margin):
             "member_allowance_s": wall * (1 + margin)}
 
 
-def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
+def committed_fixed(path):
+    """Committed artifact bytes only; missing provenance never falls back to H's partial desk."""
+    source = {"path": str(path), "sha256": None, "json_pointer": FIXED_POINTER}
+    try:
+        raw = Path(path).read_bytes()
+        source["sha256"] = hashlib.sha256(raw).hexdigest()
+        value = json.loads(raw)["packs"]["bytes-mac-check"]["disk_derivation"]["fixed_retained_bytes"]
+        return integer(value, "committed fixed bytes"), source, None
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, source, {"code": "disk.committed_fixed_missing", "detail": str(exc)}
+
+
+def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing=COMMITTED_SIZING):
     if (measured.get("schema_version") != "joulewise.bytes_mac_measurements.v1"
             or measured.get("non_claim") is not True or sidecar.get("non_claim") is not True
             or sidecar.get("pack_id") != "bytes-mac-check" or plan.get("non_claim") is not True):
@@ -288,8 +303,9 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
             models[model].update(measured_margin_complete=False, runs_measured=len(run_ids))
         gates.append(clock_line(model, stream, measured["clock"]))
     disk = measured["disk"]
-    fixed_bytes = integer(disk["fixed_retained_bytes"], "fixed retained bytes")
-    footprint = fixed_bytes + sum(r["retained_bytes"] for r in receipts.values())
+    measured_fixed = integer(disk["fixed_retained_bytes"], "measured fixed retained bytes")
+    fixed_bytes, fixed_source, fixed_flag = committed_fixed(committed_sizing)
+    footprint = measured_fixed + sum(r["retained_bytes"] for r in receipts.values())
     free = integer(disk["pre_arm_free_bytes"], "pre-arm free bytes")
     raw_missing = sorted(r for r in measured_ids if receipts[r].get("raw_allocated_bytes") is None)
     raw_runs = [receipts[r] for r in sorted(measured_ids) if r not in raw_missing]
@@ -297,7 +313,10 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
         integer(receipt["raw_allocated_bytes"], "raw_allocated_bytes")
     flags = ([{"code": "disk.raw_bytes_missing", "count": len(raw_missing), "run_ids": raw_missing}]
              if raw_missing else [])
-    rates = None if not raw_runs else (
+    if fixed_flag:
+        flags.append(fixed_flag)
+    disk_reason = "disk.committed_fixed_missing" if fixed_flag else "disk.raw_bytes_missing"
+    rates = None if not raw_runs or fixed_flag else (
         max(Fraction(r["raw_allocated_bytes"]) / Fraction(r["stream_s"]) for r in raw_runs),
         max(Fraction(r["raw_allocated_bytes"]) / Fraction(r["member_wall_s"]) for r in raw_runs))
     kit_terms = None if rates is None else disk_terms(*rates,
@@ -308,7 +327,9 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
     gates.append(line("disk:kit", "unavailable" if kit_terms is None else
                       "pass" if free >= kit_terms["required_free_bytes"] else "fail",
                       measured_footprint_bytes=footprint, pre_arm_free_bytes=free,
-                      **({"required_free_bytes": None, "reason": "disk.raw_bytes_missing"} if kit_terms is None else kit_terms)))
+                      committed_fixed_source=fixed_source,
+                      measured_fixed_retained_bytes_unused=measured_fixed,
+                      **({"required_free_bytes": None, "reason": disk_reason} if kit_terms is None else kit_terms)))
     sizing = measured["sizing"]
     # Explicitly measured desk/stage overheads, never block-5 pilot proxies.
     fixed_s = optional(sizing["fixed_desk_s"], "fixed desk seconds")
@@ -331,7 +352,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
                 (sum(50 * models[m]["member_wall_mean_s"] for m in mids)
                  + reference_count * ref_mean_wall) * (1 + margin)
                 + (len(collections) + 1) * SETTLE_S + len(collections) * stage_s + fixed_s)
-            projected_bytes = fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
+            projected_bytes = None if fixed_bytes is None else fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
             allowances = {m: disk_allowance([receipts[r] for r in groups[m] if r in measured_ids],
                            sum(row["module_id"] == "bytes-" + m for row in tree["science"]), disk_margin)
                           for m in mids}
@@ -348,8 +369,9 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
                 sessions[pack_id]["measured_margin_complete"] = False
             gates.append(line("disk:" + pack_id, "unavailable" if terms is None else
                               "pass" if free >= terms["required_free_bytes"] else "fail",
-                              pre_arm_free_bytes=free,
-                              **({"required_free_bytes": None, "reason": "disk.raw_bytes_missing"} if terms is None else terms)))
+                              pre_arm_free_bytes=free, committed_fixed_source=fixed_source,
+                              measured_fixed_retained_bytes_unused=measured_fixed,
+                              **({"required_free_bytes": None, "reason": disk_reason} if terms is None else terms)))
             if sizing_absent:
                 gates.append(line("sizing:" + pack_id, "unavailable", est_minutes=None,
                                   reason="sizing receipt absent: " + ",".join(sizing_absent)))
@@ -361,6 +383,8 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
                                      {"reason": "margin from incomplete check/soak groups (see spread_groups)"})))
     statuses = {g["status"] for g in gates}
     return {"schema_version": "joulewise.bytes_c5.v1", "non_claim": True, "session_id": session,
+            "committed_fixed_source": fixed_source,
+            "measured_fixed_retained_bytes_unused": measured_fixed,
             "measured_margin": margin, "spread_groups": spread_groups,
             "models": models, "sessions": sessions, "gates": gates, "flags": flags,
             "cpu_contention_alternative": cpu_alternative,
@@ -507,6 +531,8 @@ def main(argv=None):
     parser.add_argument("--runs", type=Path, required=True)
     parser.add_argument("--measurements", type=Path, required=True)
     parser.add_argument("--kit-plan", type=Path, default=KIT)
+    parser.add_argument("--committed-sizing", type=Path, default=COMMITTED_SIZING,
+                        help="committed H sizing supplying fixed-artifact bytes")
     parser.add_argument("--disk-evidence", type=Path, help="BY-0 disk_h.json; measured c disclosure only")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -517,10 +543,13 @@ def main(argv=None):
         measured = read(args.measurements)
         if args.disk_evidence:
             measured["disk"]["measured_c"] = optional(read(args.disk_evidence).get("c_implied_alloc"), "measured c")
-        result = calculate(rows, read(sidecar_path), measured, read(args.kit_plan))
+        result = calculate(rows, read(sidecar_path), measured, read(args.kit_plan),
+                           committed_sizing=args.committed_sizing)
         sources = [args.runs, sidecar_path, args.measurements, args.kit_plan]
         if args.disk_evidence:
             sources.append(args.disk_evidence)
+        if result["committed_fixed_source"]["sha256"] is not None:
+            sources.append(args.committed_sizing)
         result["inputs"] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
         print("bytes_gates: " + str(exc), file=sys.stderr)

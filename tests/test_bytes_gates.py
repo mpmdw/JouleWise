@@ -131,7 +131,8 @@ class ReplayTests(unittest.TestCase):
         for row in result["sessions"]:
             self.assertEqual(row["required_free_bytes"], self.p)
             self.assertEqual(row["D_bytes"], 50)
-            self.assertTrue(math.isclose(row["measured_c"], 50 / 101, rel_tol=1e-6))
+            # Same integer division on both sides: bit identity is the property.
+            self.assertEqual(row["measured_c"], 50 / 101)
         below = self.b6("below", self.p - 1)
         self.assertTrue(gates.replay_disk([below], self.c5, self.measured)["sessions"][0]["refused"])
 
@@ -201,7 +202,7 @@ class GatesTests(World):
         self.assertEqual(self.export.row_count, 123)
         self.assertEqual(len(report["models"]), 10)
         self.assertEqual(len(report["sessions"]), 12)
-        self.assertEqual(len(report["inputs"]), 4)
+        self.assertEqual(len(report["inputs"]), 5)
         self.assertEqual(len(result.stdout.splitlines()), len(report["gates"]))
         lines = {r["gate"]: r for r in report["gates"]}
         for model in self.measured["regimes"]:
@@ -212,6 +213,32 @@ class GatesTests(World):
             self.assertEqual(lines["calibration_T10:" + model]["status"], "flag_only")
         # No MLX/hardware or key material is read by the C5 desk path.
         self.assertFalse((self.root / "private").exists())
+
+    def test_committed_fixed_source_override_and_missing_never_fallback(self):
+        source = self.root / "committed-sizing.json"
+        # Exact integer artifact sizes: changing committed fixed changes P byte for byte.
+        write(source, {"packs": {"bytes-mac-check": {"disk_derivation": {"fixed_retained_bytes": 7}}}})
+        baseline = self.result()
+        result = gates.calculate(deepcopy(self.rows), deepcopy(self.sidecar),
+            deepcopy(self.measured), deepcopy(self.plan), committed_sizing=source)
+        committed = gates.committed_fixed(gates.COMMITTED_SIZING)[0]
+        for pack, sized in result["sessions"].items():
+            self.assertEqual(sized["required_free_bytes"], baseline["sessions"][pack]["required_free_bytes"] - committed + 7)
+        self.assertEqual(result["committed_fixed_source"], {"path": str(source),
+            "sha256": gates.hashlib.sha256(source.read_bytes()).hexdigest(), "json_pointer": gates.FIXED_POINTER})
+        self.assertEqual(result["measured_fixed_retained_bytes_unused"], 1024**2)
+        for value in (None, True, -1, "7", 1.5):
+            write(source, {"packs": {"bytes-mac-check": {"disk_derivation": {"fixed_retained_bytes": value}}}})
+            result = gates.calculate(deepcopy(self.rows), deepcopy(self.sidecar),
+                deepcopy(self.measured), deepcopy(self.plan), committed_sizing=source)
+            self.assertEqual({g["status"] for g in result["gates"] if g["gate"].startswith("disk:")}, {"unavailable"})
+            self.assertIn("disk.committed_fixed_missing", [f["code"] for f in result["flags"]])
+        source.unlink()
+        out = self.root / "missing-fixed-c5.json"
+        code = gates.main(["--runs", str(self.export.csv_path), "--measurements", str(self.root / "measurements.json"),
+                           "--committed-sizing", str(source), "--out", str(out)])
+        self.assertEqual(code, 1)
+        self.assertTrue(out.is_file())
 
     def test_spread_and_sizing_use_measured_soak_times_without_fixed_margin(self):
         result = self.result()

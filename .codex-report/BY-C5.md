@@ -1,12 +1,9 @@
 ## PROGRESS
 
-- Slice 6: authorized native raw_allocated_bytes producer complete (8 additive source lines, retained_bytes unchanged); production-shaped native-export integration passes, including all synthetic retained == 2*raw integer identities. tests.test_bytes_gates passes all 17 tests.
-- All twelve real-H P terms now verified through real DriverLane / plan_inputs / plan.write_window_plan / disk hazard: exact required_bytes == P, PASS at P. Existing synthetic E2E covers REFUSE at P-1.
-- Director real replay is recorded: 0 of 10 available sessions (9 block-6 + H), r2-alpha unavailable, largest-pass refusal count 0. Tables/R6 finalized. Sealed inventory remains unchanged; git diff --check passes.
-- Long runs still pending at this checkpoint: tests.test_bytes_h_session (session 2636, 30 completion dots before long native harvest); tests.b6.test_cold_pass_fixes.FullRoundTests (58018); tests.b6.test_capture_screen_reachability.ChainReachabilityTests (80568); PolicyReadTests + CaptureDispositionTests (85396, five completion dots); tests.b6.test_desk_resume_finalize (57847); tests.b6.test_loop_round_desk (59897, one completion dot). Prior-slice sessions do not survive; slice-6 reruns replace them. Do not infer success from dots.
-- Director environmental-pending: hazards arm (sysmond/pgrep), import-graph GO/NULL, clock bootsessionuuid. CI/PR and final executing review remain director-owned. No hardware runs, no Git writes. Intake HEAD 98ed69513, local by-c5; intended lane/2026-10-22-bytes-c5-gates.
-- Disk at intake 87,373,108 KiB; later 82,383,072 KiB, both above 10 GiB stop gate. Scope preserved: slice 6 changes only scripts/bytes_h_session.py, tests/test_bytes_h_session.py and this report.
-- PolicyReadTests isolated: 4 pass, 0.006 s, exit 0. Native module excluding its one long real-harvest test: 31 pass, 20.471 s, exit 0 (including the fixed native-export integration). Next: collect long-run results if still available; any exceeding the slice is named for director to run outside sandbox. No unobserved outcome is claimed.
+Fix round 1 is in progress; current status and evidence are in [BY-C5-fix1.md](BY-C5-fix1.md).
+Findings 2 and 7 are implemented in the first local slice. The historical tables below use the earlier measured fixed term and are superseded by the committed-fixed table in the fix-round report until the final refresh.
+H C5 exit 2 reflects both completeness failures and the thermal line (thermal_level 1), not completeness alone.
+Native raw-byte producer changes were authorized under the recorded director grant; no further scope action required.
 
 ## SUMMARY
 
