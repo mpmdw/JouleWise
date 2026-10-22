@@ -9,7 +9,7 @@ C5 now replaces the 150 GiB reserve with H-DISK-RULING exact rational P.
 Rates derive from one raw bundle's allocated byte receipts, without altering retained_bytes.
 All twelve pass packs print both bases, per-model counts and allowances, WAIT, fixed, c and P.
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
-All 19 bytes_gates tests pass in fix round; H rates agree with disk_h at the required 1e-6 relative bar.
+All 20 bytes_gates tests pass in fix round; H rates agree with disk_h at the required 1e-6 relative bar.
 Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
 Native producer now emits one-copy raw allocated-byte receipts; fully observed native-export C5 integration passes.
 All twelve H P values equal the actual planner and disk-hazard requirement, as exact integers.
@@ -21,7 +21,7 @@ Baseline 8386706f2 preserves the author of 66b330b15, as directed. Evidence dire
 
 - Before: exit 1, stderr `bytes_gates: [<class 'decimal.ConversionSyntax'>]`, no output JSON.
 - After (8386706f2): exit 2, empty stderr, output JSON written. Exit 2 reflects failing computed lines on the stopped session; it is not a program fault.
-- Sole production caller: scripts/bytes_h_session.py desk maps 1 to unavailable, 2 to fail, 0 to pass, other codes to program_fault, and its CLI returns gates_exit unchanged. Tests invoke bytes_gates directly; scripts/bytes_mac_kit.py only documents its command. Census: `rg -n 'bytes_gates|gates_exit' --glob '!*.json' --glob '!*.csv' --glob '!*.md' --glob '!*.html' .`.
+- Sole production caller: scripts/bytes_h_session.py desk removes its derived C5.json immediately before each gates invocation, then records c5_written and c5_sha256. Without a newly written C5 it records program_fault regardless of exit. With one it maps 1 to unavailable, 2 to fail, 0 to pass, other codes to program_fault; its CLI returns gates_exit unchanged. Tests invoke bytes_gates directly; scripts/bytes_mac_kit.py only documents its command. Census: `rg -n 'bytes_gates|gates_exit' --glob '!*.json' --glob '!*.csv' --glob '!*.md' --glob '!*.html' .`.
 
 ## P PER SUB-PACK
 
@@ -33,7 +33,7 @@ Slice 2 real-H command (extracted data files only in TMPDIR):
 
 Exit 2 from stopped completeness gates and thermal_level 1; empty stderr; no ConversionSyntax. Rates use exact fractions of raw allocated bytes over measured decimal seconds. Agreement bar is 1e-6 relative per director ruling 1: stream 1805538.5168827055 vs disk_h 1805538.5168827053 B/s (relative difference 2.220446049250313e-16), wall 1285759.0452694688 vs 1285759.0452694688 B/s (relative difference 0). Optional --disk-evidence discloses BY-0 c_implied_alloc alongside c=2, hashes the additional source, and changes no P or refusal. With no evidence file, measured_c=null explicitly leaves the measurement unavailable.
 
-All twelve exact fraction records, rates, allowances and source hashes remain in `/Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json`; the bulky JSON dump is omitted here. All byte cells below are integers. Both p variants have identical terms. c=2 is operative; measured c=0.8020750916018277 is disclosure only.
+All twelve exact fraction records, rates, allowances and source hashes remain in `/Users/edr/night-archive/forward-20261021/BY-C5/replay-dcceb8480/C5.json`; the bulky JSON dump is omitted here. All byte cells below are integers. Both p variants have identical terms. c=2 is operative; measured c=0.8020750916018277 is disclosure only.
 
 | pack | members n | stream basis B_s | wall basis B_w | B (winner) | WAIT | fixed | c | measured c | P | q | headroom | encoded requirement == P |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|
@@ -83,13 +83,13 @@ The production-shaped synthetic test supplies the omitted launch declaration in 
 
 ## REPLAY PROGRAM
 
-Historical real replay table below uses fixed=1,266,544,640 B and largest-pass P=82,360,900,174 B. It is retained as prior executed evidence, not the current committed-fixed replay. Current replay consumes C5 fixed=4,046,531,103 B and largest-pass P=85,140,886,637 B; director must re-run real sessions. Reviewer independently reported 0/10 even with committed fixed. Worker tests only synthetic replay receipts.
+Committed-fixed real replay below is the director's dcceb8480 replay: fixed=4,046,531,103 B, largest-pass P=85,140,886,637 B, 0 of 10 available sessions refused. Worker tests synthetic replay receipts and reads only the archived director outputs.
 
 Implemented as `scripts/bytes_gates.py replay --c5 <C5.json> --measurements <MEASUREMENTS.raw.json> --out <replay.json> <session-root>...`. It prints one JSON row per session and a final refusal_count/session_count, unavailable_count and largest-pass refusal count. JSON includes an empty refusal_census. Exit codes: 2 any measured free<P, 1 unavailable rows with no refusal, 0 all available rows pass. This desk subcommand never arms a session.
 
 Inputs: B6 free-at-arm is the minimum valid target on the session st_dev (ignoring measurement/target errors and foreign devices), free-at-desk is compression-summary.free_bytes_before, and B is summed compression.jsonl compress/runs size. These logical compressed-file sizes are a lower bound on one raw copy (implied c an upper bound), as BY-0 documents. H uses desk.json disk free values and the sum of timed augmented raw_allocated_bytes; never-ran null receipts enter no sum. WAIT and fixed are the committed terms already disclosed in C5 disk:kit, reused without adding margins. Each row discloses the byte basis, B, WAIT, fixed, c=2, P, both free readings, D, measured c, refusal, largest pass P and its refusal. Missing/malformed inputs remain flagged rows, never dropped or refused.
 
-Synthetic tests exercise nine B6 plus one H with zero refusals, exact P and P-1 boundaries, foreign-device/error filtering, runs-only/event filtering, missing inputs and the executable CLI. All 17 C5 tests pass. Synthetic evidence is separate from the director real replay recorded below.
+Synthetic tests exercise nine B6 plus one H with zero refusals, exact P and P-1 boundaries, foreign-device/error filtering, runs-only/event filtering, missing inputs and the executable CLI. All 20 C5 tests pass. Synthetic evidence is separate from the director real replay recorded below.
 
 Exact director command (do not execute in this worker; C5_JSON is the output generated from augmented H receipts; REPLAY_JSON is the director-chosen output):
 
@@ -99,27 +99,27 @@ Exact director command (do not execute in this worker; C5_JSON is the output gen
 
 The ending alpha/beta/gamma globs exclude -smoke-0 directories. Director owns real replay and committed table; worker accessed no prohibited session tree.
 
-Director real replay at d49f11fb3: source `/Users/edr/night-archive/forward-20261021/BY-C5/replay/replay.json` (byte counts only). L = compression runs-root logical-size sum (one-copy lower bound); A = H timed raw_allocated_bytes sum (allocated). Displayed measured c is rounded to nine decimals; JSON preserves full precision. Largest-pass P is 82,360,900,174 bytes (bytes-s4-p1) for every row.
+Director real replay at dcceb8480: source `/Users/edr/night-archive/forward-20261021/BY-C5/replay-dcceb8480/replay.json` (byte counts only). L = compression runs-root logical-size sum (one-copy lower bound); A = H timed raw_allocated_bytes sum (allocated). Displayed measured c is rounded to nine decimals; JSON preserves full precision. Largest-pass P is 85,140,886,637 bytes (bytes-s4-p1) for every row.
 
 | session | B basis | B bytes | WAIT | fixed | c | P | free at arm | free at desk start | D | measured c | refused | largest-pass P refused |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| r1-alpha | L | 20,055,016,087 | 12,999,877,322 | 1,266,544,640 | 2 | 67,376,331,458 | 174,331,416,576 | 162,829,508,608 | 11,501,907,968 | 0.573517763 | no | no |
-| r2-alpha | L | unavailable | 12,999,877,322 | 1,266,544,640 | 2 | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
-| r3-alpha | L | 20,047,779,056 | 12,999,877,322 | 1,266,544,640 | 2 | 67,361,857,396 | 151,146,446,848 | 140,108,296,192 | 11,038,150,656 | 0.550592194 | no | no |
-| r4-alpha | L | 20,108,842,246 | 12,999,877,322 | 1,266,544,640 | 2 | 67,483,983,776 | 133,102,612,480 | 113,618,456,576 | 19,484,155,904 | 0.968934744 | no | no |
-| r1-beta | L | 20,447,426,571 | 12,999,877,322 | 1,266,544,640 | 2 | 68,161,152,426 | 169,934,139,392 | 158,655,823,872 | 11,278,315,520 | 0.551576282 | no | no |
-| r2-beta | L | 20,546,600,800 | 12,999,877,322 | 1,266,544,640 | 2 | 68,359,500,884 | 162,810,486,784 | 152,628,854,784 | 10,181,632,000 | 0.495538513 | no | no |
-| r3-beta | L | 20,493,154,726 | 12,999,877,322 | 1,266,544,640 | 2 | 68,252,608,736 | 147,161,776,128 | 124,931,256,320 | 22,230,519,808 | 1.084777825 | no | no |
-| r1-gamma | L | 17,299,704,879 | 12,999,877,322 | 1,266,544,640 | 2 | 61,865,709,042 | 166,263,980,032 | 156,454,031,360 | 9,809,948,672 | 0.567058730 | no | no |
-| r2-gamma | L | 17,391,012,615 | 12,999,877,322 | 1,266,544,640 | 2 | 62,048,324,514 | 159,616,585,728 | 150,028,029,952 | 9,588,555,776 | 0.551351206 | no | no |
-| r3-gamma | L | 17,307,433,044 | 12,999,877,322 | 1,266,544,640 | 2 | 61,881,165,372 | 154,232,840,192 | 144,652,926,976 | 9,579,913,216 | 0.553514388 | no | no |
-| h-20261021T185555Z | A | 16,749,187,072 | 12,999,877,322 | 1,266,544,640 | 2 | 60,764,673,428 | 108,612,526,080 | 95,109,353,472 | 13,503,172,608 | 0.806198686 | no | no |
+| r1-alpha | L | 20,055,016,087 | 12,999,877,322 | 4,046,531,103 | 2 | 70,156,317,921 | 174,331,416,576 | 162,829,508,608 | 11,501,907,968 | 0.573517763 | no | no |
+| r2-alpha (prepared, never ran) | L | unavailable | 12,999,877,322 | 4,046,531,103 | 2 | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
+| r3-alpha | L | 20,047,779,056 | 12,999,877,322 | 4,046,531,103 | 2 | 70,141,843,859 | 151,146,446,848 | 140,108,296,192 | 11,038,150,656 | 0.550592194 | no | no |
+| r4-alpha | L | 20,108,842,246 | 12,999,877,322 | 4,046,531,103 | 2 | 70,263,970,239 | 133,102,612,480 | 113,618,456,576 | 19,484,155,904 | 0.968934744 | no | no |
+| r1-beta | L | 20,447,426,571 | 12,999,877,322 | 4,046,531,103 | 2 | 70,941,138,889 | 169,934,139,392 | 158,655,823,872 | 11,278,315,520 | 0.551576282 | no | no |
+| r2-beta | L | 20,546,600,800 | 12,999,877,322 | 4,046,531,103 | 2 | 71,139,487,347 | 162,810,486,784 | 152,628,854,784 | 10,181,632,000 | 0.495538513 | no | no |
+| r3-beta | L | 20,493,154,726 | 12,999,877,322 | 4,046,531,103 | 2 | 71,032,595,199 | 147,161,776,128 | 124,931,256,320 | 22,230,519,808 | 1.084777825 | no | no |
+| r1-gamma | L | 17,299,704,879 | 12,999,877,322 | 4,046,531,103 | 2 | 64,645,695,505 | 166,263,980,032 | 156,454,031,360 | 9,809,948,672 | 0.567058730 | no | no |
+| r2-gamma | L | 17,391,012,615 | 12,999,877,322 | 4,046,531,103 | 2 | 64,828,310,977 | 159,616,585,728 | 150,028,029,952 | 9,588,555,776 | 0.551351206 | no | no |
+| r3-gamma | L | 17,307,433,044 | 12,999,877,322 | 4,046,531,103 | 2 | 64,661,151,835 | 154,232,840,192 | 144,652,926,976 | 9,579,913,216 | 0.553514388 | no | no |
+| h-20261021T185555Z | A | 16,749,187,072 | 12,999,877,322 | 4,046,531,103 | 2 | 63,544,659,891 | 108,612,526,080 | 95,109,353,472 | 13,503,172,608 | 0.806198686 | no | no |
 
-Refusal count: 0 of 10 available sessions (9 block-6 + H); 1 unavailable (r2-alpha, inputs absent).
+Refusal count: 0 of 10 available sessions (9 block-6 + H); 1 unavailable (r2-alpha, prepared, never ran).
 
-Director C5 command: `/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py --runs <data-branch runs.csv> --measurements /Users/edr/night-archive/forward-20261021/BY-C5/MEASUREMENTS.raw.json --disk-evidence <data-branch disk_h.json> --out /Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json` — exit 2 (stopped-session completeness and thermal_level 1), empty stderr.
+Director C5 command: `/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py --runs <data-branch runs.csv> --measurements /Users/edr/night-archive/forward-20261021/BY-C5/MEASUREMENTS.raw.json --disk-evidence <data-branch disk_h.json> --out /Users/edr/night-archive/forward-20261021/BY-C5/replay-dcceb8480/C5.json` — exit 2 (stopped-session completeness and thermal_level 1), empty stderr.
 
-Director replay command is the exact template above with C5_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json and REPLAY_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay/replay.json — exit 1 for the unavailable r2-alpha row. All ten available rows pass; largest-pass refusal count is also 0. Worker read these replay outputs only, never the real session trees.
+Director replay command is the exact template above with C5_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay-dcceb8480/C5.json and REPLAY_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay-dcceb8480/replay.json — exit 1 for the unavailable r2-alpha row. All ten available rows pass; largest-pass refusal count is also 0. Worker read these replay outputs only, never the real session trees.
 
 ## END-TO-END
 

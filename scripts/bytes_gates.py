@@ -243,6 +243,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             model_flags.append({"code": "model.observations_missing", "model_id": model})
             models[model] = {"status": "unavailable", "reason": reason,
                              "request_mean_s": None, "member_wall_mean_s": None,
+                             "bytes_per_member_note": "two-copy retained maximum per measured member; disclosure only; no gate reads this value",
                              "T_stream_max_s": None, "bytes_per_member": None}
             for name in ("contention:", "cpu_contention:", "calibration_T10:", "resolvability:", "clock:"):
                 gates.append(line(name + model, "unavailable", reason=reason))
@@ -307,6 +308,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
         models[model] = {"request_mean_s": mean_request, "member_wall_mean_s": mean_wall,
                          "measured_margin": margin, "est_minutes": 50 * mean_wall * (1 + margin) / 60,
                          "T_stream_max_s": stream,
+                         "bytes_per_member_note": "two-copy retained maximum per measured member; disclosure only; no gate reads this value",
                          "bytes_per_member": max(receipts[r]["retained_bytes"] for r in all_model)}
         if not margin_complete:
             models[model].update(measured_margin_complete=False, runs_measured=len(run_ids))
@@ -373,6 +375,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             sessions[pack_id] = {"programmed_span_s": seconds, "est_minutes": None if seconds is None else seconds / 60,
                                  "T_stream_max_s": None if missing_models else max(models[m]["T_stream_max_s"] for m in mids),
                                  "measured_margin": margin, "projected_footprint_bytes": projected_bytes,
+                                 "projected_footprint_bytes_note": "committed fixed bytes plus two-copy retained member maxima; disclosure only; no gate reads this value",
                                  "required_free_bytes": None if terms is None else terms["required_free_bytes"],
                                  "disk_derivation": terms,
                                  "modules": {m: models[m] for m in mids}, "non_claim": True}
@@ -571,6 +574,16 @@ def main(argv=None):
         detail = ""
         if gate["gate"].startswith("disk:") and "B_bytes" in gate:
             detail = " " + json.dumps({k: v for k, v in gate.items() if k not in ("gate", "status")}, default=json_default, sort_keys=True)
+            # Nine significant digits exceed the seven needed to show the
+            # ruled 1e-6 relative rate agreement. JSON retains exact fractions.
+            def displayed(value):
+                exact = Fraction(value["numerator"], value["denominator"])
+                return f"{float(exact):.9g} ({exact.numerator}/{exact.denominator})"
+            detail += " r_s=" + displayed(gate["stream_rate_bytes_per_s"])
+            detail += " r_w=" + displayed(gate["wall_rate_bytes_per_s"])
+            for model, allowance in sorted(gate["allowances_by_model"].items()):
+                detail += " " + model + ":stream_s=" + displayed(allowance["stream_allowance_s"])
+                detail += ",member_wall_s=" + displayed(allowance["member_allowance_s"])
         print(gate["gate"] + ": " + gate["status"].replace("_", " ") + detail)
     # 1 also covers a written C5 whose lines are "unavailable" (receipt absent).
     return 2 if result["status"] == "fail" else 1 if result["status"] == "unavailable" else 0

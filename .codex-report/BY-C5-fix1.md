@@ -1,5 +1,10 @@
 ## PROGRESS
 
+- Next after Part 2 slice 2: inspect /tmp/byc5f1/r2-desk-status.log first (native harvest makes these cases long; do not launch duplicate runs). Finish any uncompleted desk cases individually, remaining allowed importer/class runs, final report cleanup and COMPLETE line. Director commits/pushes; no worker Git writes.
+- Part 2 slice 2 started at feb44c928 (descendant of requested 0a585bb8e); clean tree, 48 GiB free. R2-4 freshness/status code and four real-desk tests added; subprocess test run in progress at /tmp/byc5f1/r2-desk-status.log.
+- Done (Part 2 slice 2): R2-5 sibling disclosure labels; R2-6a nine-significant-digit decimals beside exact rates/allowances. Gates 20 tests OK, exit 0 (/tmp/byc5f1/r2-gates-display.log). Real-H main exit 2, C5-r2-display.json written; stdout H-C5-r2-display.stdout. Twelve planner/precheck/arm test rerun passes (all12-r2.log).
+- Done (Part 2 slice 2): BY-C5.md replay table refreshed directly from director replay-dcceb8480/replay.json, 0/10 refused, r2-alpha prepared, never ran. Full numeric audit, final FIX LOG, importer checks and final completion remain for next slice.
+
 - Part 2 (review of dcceb8480) started at 0a585bb8e.
 - Done (Part 2 slice 1): R2-3 deliberate missing-P hold comment and actionable disk-budget receipt; real DriverLane.prepare_session tests absent/malformed disk_derivation before any prepared pointer/plan. Registry checks every bytes-s sizing row (currently 0). /tmp/byc5f1/r2-3.log: 10 tests OK, exit 0.
 - Done (Part 2 slice 1): R2-2 hand-computed calculate test with science counts 2/3, reference count 1, margin 1; exact rational allowances, bases 2600/2467 B, B=2600, WAIT=360000, fixed=7, P=725207 B. /tmp/byc5f1/r2-2.log: 1 test OK, exit 0.
@@ -31,15 +36,20 @@ Findings 3 and 7 are fixed; finding 1 implementation and synthetic boundary chec
 
 | Finding | Disposition / evidence |
 |---|---|
-| 1 major | Implementation fixed in plan_inputs.sizing_label/valid_disk_terms/registered_disk_terms/member_count and precheck.thresholds_for/run_precheck. Tests: DiskBudgetTests twelve-shape boundaries and non-BYTES identity; PrecheckTests.test_bytes_disk_bar_and_missing_record_through_run_precheck. All twelve updated-H integer P values verified through real planner/arm/precheck thresholds, all12-step4.log (1 test, 6.007 s, exit 0). Desk wait registered in hazard_refusals.json desk_wait_sites. |
-| 2 major | Code fixed in bytes_gates.committed_fixed/calculate/main. GatesTests.test_committed_fixed_source_override_and_missing_never_fallback checks integer delta, provenance, invalid types, missing CLI input and no fallback. Real H targets agree; all twelve native planner requirements equal P exactly (all12-step4.log). |
-| 3 minor | Fixed in bytes_gates.calculate: guard absent model observations, record model.observations_missing; mark dependent packs unavailable. StoppedSessionTests.test_model_never_ran_cli_writes_unavailable_dependent_packs runs main on all 21 qwen35-122b rows never-ran and checks exit 2, JSON output, five unavailable model lines, s6 dependent null candidates, unaffected packs and llama clock. Full module 19 tests passes. |
-| 4 minor | Form unchanged as directed; R6 now states both allowances, check/soak-only margin and reference terms, and requires recomputation if BY-SLOTS changes form. Re-derived per-model-max-nonrequest P deltas: s1 0; s2 +486,009,912; s3 +271,803,398; s4 0; s5 0; s6 +497,717,866 B (variants-step4.log, exit 0). Reference spread 0.022169313982700597 < margin 0.03325233382759357. No code form change. |
-| 5 nit | No change needed: maximum of two whole summed bases; reviewer rederive confirms stated deltas. |
-| 6 nit | Fixed in DriverLane.prepare_session after real smoke reduction: native requirement and count replace full-pack values; pack_required_free_bytes and pack_member_count preserve derivation labels. ProductionPlanRenderTests.test_bytes_pack_p_through_real_planner_and_disk_hazard executes the real DriverLane smoke path and checks metadata/notes against native count, q and headroom; exit 0. |
-| 7 nit | Fixed: ReplayTests.test_nine_plus_h_replay_and_integer_boundaries uses exact int/int equality; plan_inputs imports SESSION_WAIT_BUDGET_S from sealed plan, unchanged. |
-| 8 nit | Thermal/completeness and committed-fixed report/R6/table corrections applied; final PROGRESS cleanup pending importer checks. Scope grant acknowledged for native raw-byte producer. |
+| A1 major | Implementation fixed in plan_inputs.sizing_label/valid_disk_terms/registered_disk_terms/member_count and precheck.thresholds_for/run_precheck. Tests: DiskBudgetTests twelve-shape boundaries and non-BYTES identity; PrecheckTests.test_bytes_disk_bar_and_missing_record_through_run_precheck. All twelve updated-H integer P values verified through real planner/arm/precheck thresholds, all12-step4.log (1 test, 6.007 s, exit 0). Desk wait registered in hazard_refusals.json desk_wait_sites. |
+| A2 major | Code fixed in bytes_gates.committed_fixed/calculate/main. GatesTests.test_committed_fixed_source_override_and_missing_never_fallback checks integer delta, provenance, invalid types, missing CLI input and no fallback. Real H targets agree; all twelve native planner requirements equal P exactly (all12-step4.log). |
+| A3 minor | Fixed in bytes_gates.calculate: guard absent model observations, record model.observations_missing; mark dependent packs unavailable. StoppedSessionTests.test_model_never_ran_cli_writes_unavailable_dependent_packs runs main on all 21 qwen35-122b rows never-ran and checks exit 2, JSON output, five unavailable model lines, s6 dependent null candidates, unaffected packs and llama clock. Full module 19 tests passes. |
+| A4 minor | Form unchanged as directed; R6 now states both allowances, check/soak-only margin and reference terms, and requires recomputation if BY-SLOTS changes form. Re-derived per-model-max-nonrequest P deltas: s1 0; s2 +486,009,912; s3 +271,803,398; s4 0; s5 0; s6 +497,717,866 B (variants-step4.log, exit 0). Reference spread 0.022169313982700597 < margin 0.03325233382759357. No code form change. |
+| A5 nit | No change needed: maximum of two whole summed bases; reviewer rederive confirms stated deltas. |
+| A6 nit | Fixed in DriverLane.prepare_session after real smoke reduction: native requirement and count replace full-pack values; pack_required_free_bytes and pack_member_count preserve derivation labels. ProductionPlanRenderTests.test_bytes_pack_p_through_real_planner_and_disk_hazard executes the real DriverLane smoke path and checks metadata/notes against native count, q and headroom; exit 0. |
+| A7 nit | Fixed: ReplayTests.test_nine_plus_h_replay_and_integer_boundaries uses exact int/int equality; plan_inputs imports SESSION_WAIT_BUDGET_S from sealed plan, unchanged. |
+| A8 nit | Thermal/completeness and committed-fixed report/R6/table corrections applied; final PROGRESS cleanup pending importer checks. Scope grant acknowledged for native raw-byte producer. |
+| R2 open issue | No code change needed: reviewer free space below every pass P correctly refuses/WAITs; operator must free space. Reviewer quantities and smoke share recorded under OPEN ISSUES. |
 | BY-MERGE | No change needed in this lane; hand-forward recorded below. |
+| R2-1 major | Numeric audit corrected BY-C5.md replay table from director dcceb8480 archived replay; all old P values absent, measured fixed remains explicitly unused. All twelve native writer/boundary lines re-executed in all12-r2.log, 1 test OK. Final summary/completion cleanup waits for importer runs. |
+| R2-4 minor | Implemented freshness by unlinking derived C5.json immediately before every gates invocation, including convergence reruns. desk.json records c5_written and c5_sha256; without a new file status is program_fault regardless of exit. Four real desk/harvest/export tests stub only gates (three required exit-1 cases plus usage exit 2). Verification result recorded below when complete. |
+| R2-5 nit | Fixed sibling notes keep both keys intact and identify retained two-copy disclosure; no gate consumes them. Reader search quoted below; other bytes_per_member hits belong to native planner inputs, not C5 output. |
+| R2-6 nit | Decimal stdout fixed and CLI assertions pin each rate/allowance exact formatting; 20 gates tests pass. Replay row now prepared, never ran. No smoke-source change: precheck.py:88 uses compose.registered_smoke_keep; loop.py:368 calls compose.smoke_keep; compose.py:223-225 dispatches to registered_smoke_keep; smoke.py:29 KEEP_PATH, :263 same registration. |
 | R2-2 minor | Fixed hand-computed terms coverage in GatesTests.test_hand_computed_p_includes_margin_reference_and_tree_counts (calculate, no helper re-derivation). All 20 module tests pass. M4/M12/M13 CAUGHT. M13 renames the reference key rather than dropping its numeric contribution, so the test explicitly pins the reference-labelled count/allowances too. |
 | R2-3 minor | Fixed: Director's registered-input exception kept deliberately in DriverLane.prepare_session; plan_inputs.encode_disk_budget receipt names missing disk_derivation and registration remedy. AdapterTests.test_bytes_missing_disk_derivation_holds_before_prepared_or_plan passes both absent/malformed rows through real build/prepare; registry test prints 0 rows checked. Refusal census does not scan driver_lane.py or recognize LaneMissing holds (rg produces no matching driver_lane/LaneMissing entries); no registry edit required by disposition 3d. Nine block-6 sessions and H never enter this BYTES driver branch; director replay remains 0 of 10. |
 
@@ -222,6 +232,8 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 
 ## OPEN ISSUES
 
+R2 open issue, no code change: reviewer free space 53,472,432,128 B was below every pass P. Correct arm refusal/precheck WAIT until operator frees about 9.3 GB (s6) to 31.7 GB (s4), plus smoke share up to 1.83 GB. No measurement or arming attempted by worker. Current slice intake 48 GiB; machine-space recovery is operator-owned.
+
 - Remaining authorized work: finish tests.b6.test_precheck by test name, tests.test_bytes_h_session by class/test, tests.b6.test_bytes_packs, importer modules from the rg list below, and final report/probe registered-P evidence. No completion claim. Slice 3 finding 6 integration passed in /tmp/byc5f1/smoke-metadata-step3-final.log (earlier attempts needed venv fixture setup).
 - BY-MERGE: pass1 ancestors carry changes to sealed files relative to main (plan.py, driver.py, hazards/clock.py and others); resolve in BY-MERGE, never in this lane.
 - Director re-runs real replay with updated fixed from C5; prior 0/10 evidence uses old fixed. Reviewer reports committed-fixed also 0/10; worker has not read real session trees.
@@ -249,3 +261,84 @@ Slice 4 additional exact commands, all standard JW_B5_SYNTHETIC_ONLY/PYTHONDONTW
 Required importer census command: `rg -n 'from joulewise.b6 import.*(precheck|plan_inputs|driver_lane)|from joulewise.b6.(precheck|plan_inputs|driver_lane)' tests --glob '*.py'`. Besides touched/requested modules, this names hazards.test_clock, hazards.test_arm, test_b6_machine_test, b6.test_cold_pass_fixes, b6.test_round2_review_fixes, b6.test_capture_screen_reachability, b6.test_desk_resume_finalize, b6.test_s3_cold_fixes, b6.test_integration_seams, b6.test_loop_round_desk. Existing environmental hazards reruns remain director-owned; inspect broader support/round_support importers as appropriate.
 
 Slice 4 handoff: local branch by-c5, HEAD dcceb8480bf9a7094b640e4ac57eade16b9e0666. Proposed director commit/push: `BY-C5 fix1 slice 4: verify all twelve committed-fixed native/precheck budgets; correct R6 and tables`, destination lane/2026-10-22-bytes-c5-gates, draft PR #547. No Git writes by worker. No real session reads. No COMPLETE marker until remaining authorized checks/report work finishes.
+
+## DESK STATUS (R2-4)
+
+The desk removes only its derived C5.json before each gates run; no hash-only freshness inference. New output records c5_written=true and its SHA-256. No output records false/null and program_fault even on exit 1 or 2. Test cases: exit 1/no file → program_fault; exit 1/new file → unavailable; stale file plus no new file → program_fault; usage exit 2/no file → program_fault. Tests exercise real preparation/harvest/export/measurements/desk; only gates subprocess is stubbed.
+
+## PART 2 SLICE 2 EVIDENCE
+
+Exact commands (runner gives each module a fresh physical TMPDIR and deletes it):
+
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-gates-display.log -m unittest tests.test_bytes_gates`: 20 tests, exit 0.
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/H-C5-r2-display.stdout scripts/bytes_gates.py --runs /tmp/byc5f1/bytes-h-20261021T185555335572Z-calibration.runs.csv --measurements /tmp/byc5f1/MEASUREMENTS.raw.json --disk-evidence /tmp/byc5f1/disk_h.json --out /tmp/byc5f1/C5-r2-display.json`: exit 2 (stopped H); all twelve lines show decimal and exact terms. r_s=1805538.52, r_w=1285759.05 B/s, nine significant digits. Exact JSON fractions unchanged.
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/all12-r2.log -m unittest tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_all_twelve_committed_fixed_budgets_through_native_planner_and_precheck`: 1 test, exit 0. Twelve lines:
+
+```text
+bytes-s1-p1 P 73814147037 n 125 q 116714296 headroom 30046286037 smoke_retained 1400571562 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s1-p2 P 73814147037 n 125 q 116714296 headroom 30046286037 smoke_retained 1400571562 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s2-p1 P 75981813519 n 125 q 122494740 headroom 30046286019 smoke_retained 1469936889 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s2-p2 P 75981813519 n 125 q 122494740 headroom 30046286019 smoke_retained 1469936889 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s3-p1 P 79464395095 n 125 q 131781624 headroom 30046286095 smoke_retained 1581379500 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s3-p2 P 79464395095 n 125 q 131781624 headroom 30046286095 smoke_retained 1581379500 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s4-p1 P 85140886637 n 125 q 146918935 headroom 30046286012 smoke_retained 1763027229 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s4-p2 P 85140886637 n 125 q 146918935 headroom 30046286012 smoke_retained 1763027229 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s5-p1 P 75849013177 n 75 q 203567677 headroom 30046285852 smoke_retained 1832109098 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s5-p2 P 75849013177 n 75 q 203567677 headroom 30046285852 smoke_retained 1832109098 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s6-p1 P 62811368483 n 75 q 145622589 headroom 30046285958 smoke_retained 1310603310 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s6-p2 P 62811368483 n 75 q 145622589 headroom 30046285958 smoke_retained 1310603310 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+```
+
+Reader audit before labels, exact command `rg -n 'projected_footprint_bytes|bytes_per_member' scripts/ joulewise/ tests/ tools/ > /tmp/byc5f1/r2-disclosure-readers.log 2>&1` (exit 2 because tools/ does not exist; every existing requested tree searched):
+
+```text
+rg: tools/: No such file or directory (os error 2)
+scripts/bytes_gates.py:246:                             "T_stream_max_s": None, "bytes_per_member": None}
+scripts/bytes_gates.py:310:                         "bytes_per_member": max(receipts[r]["retained_bytes"] for r in all_model)}
+scripts/bytes_gates.py:366:            projected_bytes = None if fixed_bytes is None or missing_models else fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
+scripts/bytes_gates.py:375:                                 "measured_margin": margin, "projected_footprint_bytes": projected_bytes,
+scripts/rehearse_b5_real.py:358:        "bytes_per_member": BYTES_PER_MEMBER,
+tests/test_b6_machine_test.py:251:        self.assertEqual(inputs["bytes_per_member"], 182 * 1024 * 1024)
+joulewise/b5/plan.py:84:    "T_stream_max_s", "bytes_per_member", "thresholds", "g10", "registration",
+joulewise/b5/plan.py:541:    _number(inputs["bytes_per_member"], "bytes_per_member", integer=True)
+joulewise/b5/plan.py:810:    planned_bytes = inputs["bytes_per_member"] * (members + spare_members)
+tests/test_bytes_h_session.py:355:        self.assertEqual(state['inputs']['bytes_per_member'], 150_690_066)
+tests/test_bytes_h_session.py:356:        self.assertEqual(budget['bytes_per_member'], state['inputs']['bytes_per_member'])
+tests/test_bytes_h_session.py:363:        self.assertEqual(budget['bytes_per_member'], quotient)
+tests/b6/test_b6_plan_render.py:247:                    "q", budget["bytes_per_member"], "headroom", budget["headroom_bytes"],
+tests/b6/test_b6_plan_render.py:306:        native_required = 3 * m * smoke_metadata["inputs"]["bytes_per_member"] + \
+tests/test_b5_plan.py:109:                self.assertEqual((members + 7) * inputs["bytes_per_member"], window["planned_bytes"])
+joulewise/b6/plan_inputs.py:113:              "T_stream_max_s": allowance("T_stream_max_s"), "bytes_per_member": BYTES_PER_MEMBER,
+joulewise/b6/plan_inputs.py:175:    inputs["bytes_per_member"] = q
+joulewise/b6/plan_inputs.py:178:                             "member_count": n, "native_copies": 3, "bytes_per_member": q,
+tests/b6/test_plan_inputs.py:106:            self.assertEqual(inputs["bytes_per_member"], 182 * 1024 * 1024)
+tests/b6/test_plan_inputs.py:113:                      "bytes_per_member": plan_inputs.BYTES_PER_MEMBER,
+tests/b6/test_plan_inputs.py:130:            self.assertEqual(3 * n * inputs["bytes_per_member"] +
+joulewise/b6/driver_lane.py:116:                    required_free_bytes=3 * m * inputs["bytes_per_member"] +
+scripts/bytes_h_session.py:323:        'native_copies': native_copies, 'bytes_per_member': per_member,
+scripts/bytes_h_session.py:344:                  bytes_per_member=per_member)
+tests/fixtures/b5_plan/fake_window.py:290:        "bytes_per_member": 190840832, "thresholds": json.loads(json.dumps(THRESHOLDS)),
+```
+
+Numeric report audit command:
+
+`rg -n '1,266,544,640|1266544640|71,034,160,574|71034160574|73,201,827,056|73201827056|76,684,408,632|76684408632|82,360,900,174|82360900174|73,069,026,714|73069026714|60,031,382,020|60031382020' .codex-report/BY-C5.md > /tmp/byc5f1/r2-number-audit.log`
+
+Final output (exit 0; only explicitly unused measured disclosures remain):
+
+```text
+28:Updated for committed fixed in fix round: all twelve requirements below verified through the real planner and disk hazard, and real precheck thresholds with smoke/no-smoke boundaries (all12-step4.log). C5 provenance records the source path, SHA-256 and JSON pointer. Measured fixed=1,266,544,640 B is unused disclosure.
+261:The committed fixed source is configs/campaigns/bytes_mac_check/registration/sizing_b5.json, pointer /packs/bytes-mac-check/disk_derivation/fixed_retained_bytes (SHA-256 42bd19f9b4387944b919346ac946f0b996bf694f5f9af084f15adff4d35622c6). The stopped-session measured 1,266,544,640 B is unused disclosure. PRECHECK uses P with zero headroom; with smoke due it adds only ceil(2 B m/n) retained smoke member bytes. Missing P is flagged, without an inherited reserve; DriverLane retains its registration hold. Smoke metadata labels its actual native requirement separately from full-pack P.
+```
+
+Sealed inventory: `/opt/homebrew/bin/python3.13 -B` loads `files` from configs/campaigns/v5_claim_25g83/sealed_inventory.json, then `git diff --name-only bda481d5a -- <all 682 file paths>`: exit 0, empty stdout, saved /tmp/byc5f1/sealed-r2-slice2.log. `git diff --check`: exit 0, empty output.
+
+Applied R2-4 decision: freshness uses removal of the derived desk-owned output before every invocation; a new file is required for pass/fail/unavailable, and its SHA-256 is recorded. The bytes_gates exit contract stays unchanged. R2-5 labels preserve keys; no new bar. R2-6 decimals use nine significant digits, exceeding seven required for the ruled 1e-6 relative rate agreement; exact JSON is unchanged.
+
+Additional slice-2 exact commands:
+
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-bytes-packs.log -m unittest tests.b6.test_bytes_packs`: 9 tests, exit 0, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-refusals.log -m unittest tests.hazards.test_refusal_allowlist`: 23 tests, exit 0, 1 skip because the block-5 design branch is absent in this standalone clone (test_refusal_allowlist.py:233).
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-desk-status.log -m unittest tests.test_bytes_h_session.SessionTests.test_desk_gates_exit_one_without_c5_is_program_fault tests.test_bytes_h_session.SessionTests.test_desk_gates_exit_one_with_new_c5_is_unavailable tests.test_bytes_h_session.SessionTests.test_desk_stale_c5_does_not_hide_program_fault tests.test_bytes_h_session.SessionTests.test_desk_usage_exit_two_without_c5_is_program_fault`: long native harvest run, inspect log at next intake for count/exit before claiming completion. One completed-test dot at current checkpoint, no failure marker. No fixture harvest results or measurements are stubbed.
+
+Direct import census: `rg -l 'from scripts import .*bytes_gates|from scripts import .*bytes_h_session|import scripts.bytes_gates|import scripts.bytes_h_session|bytes_h_session|bytes_gates' tests --glob '*.py'` finds only tests/test_bytes_h_session.py and tests/test_bytes_gates.py (saved /tmp/byc5f1/r2-importer-modules.txt). Broader round-required precheck/loop/smoke/adapters/graph runs remain to be finalized.

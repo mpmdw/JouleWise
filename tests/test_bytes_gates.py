@@ -257,6 +257,23 @@ class GatesTests(World):
         self.assertEqual(len(report["sessions"]), 12)
         self.assertEqual(len(report["inputs"]), 5)
         self.assertEqual(len(result.stdout.splitlines()), len(report["gates"]))
+        for session in report["sessions"].values():
+            self.assertIn("disclosure only; no gate reads", session["projected_footprint_bytes_note"])
+        for model in report["models"].values():
+            self.assertIn("two-copy retained maximum", model["bytes_per_member_note"])
+        for gate in report["gates"]:
+            if gate["gate"].startswith("disk:") and "B_bytes" in gate:
+                output = next(s for s in result.stdout.splitlines() if s.startswith(gate["gate"] + ":"))
+                terms = [("r_s=", gate["stream_rate_bytes_per_s"]),
+                         ("r_w=", gate["wall_rate_bytes_per_s"])]
+                for model, allowance in gate["allowances_by_model"].items():
+                    terms.extend([(model + ":stream_s=", allowance["stream_allowance_s"]),
+                                  (",member_wall_s=", allowance["member_allowance_s"])])
+                for label, value in terms:
+                    exact = Fraction(value["numerator"], value["denominator"])
+                    # Printed representation is exact formatting, not a
+                    # numerical agreement bar; nine digits exceed ruled seven.
+                    self.assertIn(label + f"{float(exact):.9g} ({exact.numerator}/{exact.denominator})", output)
         lines = {r["gate"]: r for r in report["gates"]}
         for model in self.measured["regimes"]:
             contention = lines["contention:" + model]

@@ -709,6 +709,49 @@ class SessionTests(unittest.TestCase):
         self.assertIsNone(invalid['cpu_contention']['w_j_per_cpu_s'])
         self.assertIn('records.measurement_source_unreadable', [f['code'] for f in unavailable['flags']])
 
+    def check_desk_gates_status(self, *, writes_c5, stale_c5, exit_code=1):
+        state = self.prepared()
+        self.seed_collection(state)
+        c5_path = self.session / 'C5.json'
+        if stale_c5:
+            h.write(c5_path, {'stale': True})
+        calls = []
+
+        def child(argv, **kwargs):
+            if Path(argv[1]).name == 'bytes_gates.py':
+                # Only gates is stubbed: real preparation, harvest, export,
+                # measurements and the desk convergence loop run unchanged.
+                self.assertFalse(c5_path.exists())
+                calls.append(argv)
+                if writes_c5:
+                    h.write(c5_path, {'status': 'unavailable'})
+                return SimpleNamespace(returncode=exit_code, stdout='', stderr='synthetic gates result')
+            return subprocess.run([*argv, '--workers', '4'], **kwargs)
+
+        with redirect_stdout(io.StringIO()):
+            result = h.desk(self.session, run=child,
+                statvfs=lambda _: SimpleNamespace(f_bavail=90_000_000_000, f_frsize=1))
+        self.assertTrue(calls)
+        self.assertEqual(result, h.read(self.session / 'desk.json'))
+        self.assertEqual(result['gates_exit'], exit_code)
+        self.assertEqual(result['status'], 'unavailable' if writes_c5 else 'program_fault')
+        self.assertEqual(result['c5_written'], writes_c5)
+        self.assertEqual(result['c5_sha256'],
+            hashlib.sha256(c5_path.read_bytes()).hexdigest() if writes_c5 else None)
+        self.assertEqual(c5_path.exists(), writes_c5)
+
+    def test_desk_gates_exit_one_without_c5_is_program_fault(self):
+        self.check_desk_gates_status(writes_c5=False, stale_c5=False)
+
+    def test_desk_gates_exit_one_with_new_c5_is_unavailable(self):
+        self.check_desk_gates_status(writes_c5=True, stale_c5=False)
+
+    def test_desk_stale_c5_does_not_hide_program_fault(self):
+        self.check_desk_gates_status(writes_c5=False, stale_c5=True)
+
+    def test_desk_usage_exit_two_without_c5_is_program_fault(self):
+        self.check_desk_gates_status(writes_c5=False, stale_c5=True, exit_code=2)
+
     def test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates(self):
         state = self.prepared()
         self.seed_collection(state)

@@ -836,15 +836,23 @@ def desk(session_root, *, run=subprocess.run, statvfs=os.statvfs):
     # then name exactly the final MEASUREMENTS bytes.
     while True:
         write(session / 'MEASUREMENTS.json', measured)
+        # This derived output belongs to this invocation. A matching input hash
+        # cannot distinguish a stale result from a subprocess that wrote nothing.
+        c5_path = session / 'C5.json'
+        c5_path.unlink(missing_ok=True)
         gates = run(gate_argv, check=False, capture_output=True, text=True, timeout=HARVEST_TIMEOUT_S)
+        c5_written = c5_path.is_file()
         (session / 'staging/gates.stdout').write_text(gates.stdout or '')
         (session / 'staging/gates.stderr').write_text(gates.stderr or '')
         status = {'schema_version': 'joulewise.bytes_h_desk.v1', 'non_claim': True,
             'session_id': measured['session_id'], 'plan_id': state['session_id'],
             'harvest_argv': argv, 'harvest_exit': result.returncode,
             'gates_argv': gate_argv, 'gates_exit': gates.returncode,
+            'c5_written': c5_written,
+            'c5_sha256': locator(c5_path)['sha256'] if c5_written else None,
             'measurements': str(session / 'MEASUREMENTS.json'), 'export': native,
-            'status': 'unavailable' if gates.returncode == 1 else 'fail' if gates.returncode == 2
+            'status': 'program_fault' if not c5_written else
+                      'unavailable' if gates.returncode == 1 else 'fail' if gates.returncode == 2
                       else 'pass' if gates.returncode == 0 else 'program_fault',
             'flags': measured['flags'], 'registration_ready': False, 'disk': allocation}
         write(session / 'desk.json', status)
