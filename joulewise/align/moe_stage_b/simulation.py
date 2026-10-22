@@ -233,6 +233,14 @@ def simulate_episode(
         for call in turn.tool_calls:
             if call.end_ns > call.start_ns:
                 loads.append(PowerPulse(call.start_ns, call.end_ns, tool_load_w))
+    if config.decode_miss_stalls:
+        # Baseline + decode load already supply running power during the added
+        # upload time. Adjust only those transfer intervals if the configured
+        # stalled platform power differs; memory J/B stays in traffic pulses.
+        adjustment = config.running_power_w-(baseline_w+decode_load_w)
+        for pulse in traffic.pulses:
+            if traffic.tokens[pulse.token_index].phase == "decode":
+                loads.append(PowerPulse(pulse.start_ns, pulse.end_ns, adjustment))
     sampled = simulate_trace(traffic, sensor, start_ns=episode.start_ns,
                              end_ns=episode.end_ns, clock_domain=episode.clock_domain,
                              baseline_w=baseline_w, loads=loads, seed=seed,

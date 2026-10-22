@@ -11,6 +11,7 @@ import math
 import bisect
 from collections import OrderedDict
 from dataclasses import dataclass, replace
+from fractions import Fraction
 from typing import Any, Mapping, Sequence
 
 from joulewise.align.records import Episode, RouterLog
@@ -80,6 +81,7 @@ class TokenTraffic:
     energy_j: float
     transfer_time_s: float
     stall_energy_j: float = 0.0
+    transfer_duration_ns: int = 0
 
     @property
     def incremental_energy_j(self) -> float:
@@ -100,6 +102,10 @@ class TrafficResult:
     @property
     def total_energy_j(self) -> float:
         return math.fsum(token.energy_j for token in self.tokens)
+
+    @property
+    def total_incremental_energy_j(self) -> float:
+        return math.fsum(token.incremental_energy_j for token in self.tokens)
 
 
 @dataclass(frozen=True)
@@ -298,6 +304,9 @@ def model_traffic(
         flags.append("transfer_only_time_axis")
     flags.append("serialized_token_start_transfer_profile")
     cache = _Cache(config)
+    # Interpret the printed bandwidth parameter exactly before rounding to the
+    # integer-nanosecond clock. Float division can make an integral ns ceil up.
+    rate = Fraction(str(config.bandwidth_bytes_s))
     tokens: list[TokenTraffic] = []
     pulses: list[TransferPulse] = []
     available_ns = windows[0].start_ns if windows else 0
@@ -340,15 +349,17 @@ def model_traffic(
             moved += n_miss * config.expert_bytes[layer]
         energy = moved * config.joules_per_byte
         duration_s = moved / config.bandwidth_bytes_s
+        numerator = moved*NS_PER_SECOND*rate.denominator
+        duration_ns = (numerator+rate.numerator-1)//rate.numerator
         tokens.append(TokenTraffic(i, phase, selected, resident_hits, hits, batch_reuse,
                                    misses, moved, energy, duration_s,
-                                   (math.ceil(duration_s*NS_PER_SECOND)/NS_PER_SECOND
-                                    * config.running_power_w
-                                    if phase == "decode" and config.decode_miss_stalls else 0.0)))
+                                   (duration_ns/NS_PER_SECOND*config.running_power_w
+                                    if phase == "decode" and config.decode_miss_stalls else 0.0),
+                                   duration_ns))
         if moved:
             start = max(available_ns, windows[batch_start].start_ns if windows is not None else 0)
             # Round upward to integer ns so the profile never exceeds configured bandwidth.
-            end = start + math.ceil(duration_s * NS_PER_SECOND)
+            end = start + duration_ns
             pulses.append(TransferPulse(i, start, end, moved, energy))
             available_ns = end
             if windows is not None and end > windows[batch_end].end_ns:
@@ -381,6 +392,12 @@ def apply_decode_stalls(
     nominal = tuple(windows)
     if router is None or len(nominal) != len(router.phase):
         return StallTiming(episode, nominal, 0, ("missing_stall_token_timing",))
+    if (any(w.token_index != i or not isinstance(w.start_ns, int)
+            or not isinstance(w.end_ns, int) or isinstance(w.start_ns, bool)
+            or isinstance(w.end_ns, bool) or w.end_ns <= w.start_ns
+            for i, w in enumerate(nominal))
+            or any(b.start_ns < a.start_ns for a, b in zip(nominal, nominal[1:]))):
+        return StallTiming(episode, nominal, 0, ("invalid_stall_token_timing",))
     reference_ns = sum(w.end_ns-w.start_ns for w, phase in zip(nominal, router.phase)
                        if phase == "decode")
     if not config.decode_miss_stalls:
@@ -390,7 +407,7 @@ def apply_decode_stalls(
     counts = model_traffic(router, config)
     if len(counts.tokens) != len(nominal):
         return StallTiming(episode, nominal, reference_ns, counts.flags)
-    delays = [(w.end_ns, math.ceil(t.transfer_time_s*NS_PER_SECOND))
+    delays = [(w.end_ns, t.transfer_duration_ns)
               for w, t in zip(nominal, counts.tokens) if t.phase == "decode"]
     ends = [end for end, _ in delays]
     cumulative = [0]

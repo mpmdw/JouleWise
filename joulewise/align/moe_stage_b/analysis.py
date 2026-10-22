@@ -206,6 +206,10 @@ def extract_features(
     # blocking time. The trace already contains that power: do not add a pulse.
     stall_energy = (baseline_w*(duration_ns-reference_decode_duration_ns)/NS_PER_SECOND
                     if reference_decode_duration_ns is not None else 0.0)
+    if stall_energy and coverage_ns < duration_ns:
+        # A total nominal duration cannot locate missing stall energy. Keep it
+        # missing rather than filling unsampled cells with the model reference.
+        return missing("stall_energy_reference_requires_complete_decode_coverage")
     if stall_energy:
         flags.append("nominal_compute_energy_reference")
         flags.append("variance_excludes_running_stall_energy")

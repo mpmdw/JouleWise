@@ -492,7 +492,9 @@ def reference_detection_forecast(
 
 
 # Continuation oracle independently authored by gpt-6.1-sol without production code.
-def reference_within_condition_fisher_interval(r, heldout_episodes):
+def reference_within_condition_fisher_interval(
+    r: float | None, heldout_episodes: int,
+) -> tuple[float, float] | None:
     import math
     if (not isinstance(heldout_episodes, int)
             or isinstance(heldout_episodes, bool) or heldout_episodes <= 5
@@ -505,8 +507,10 @@ def reference_within_condition_fisher_interval(r, heldout_episodes):
             (spread*plus - minus)/(spread*plus + minus))
 
 
-def reference_decode_stall_schedule(windows, phases, moved_bytes,
-                                    bandwidth_bytes_s, boundaries):
+def reference_decode_stall_schedule(
+    windows: Sequence[tuple[int, int, int]], phases: Sequence[str], moved_bytes: Sequence[int],
+    bandwidth_bytes_s: float, boundaries: Mapping[str, int | None],
+) -> tuple[tuple[tuple[int, int, int], ...], dict[str, int | None], int]:
     from fractions import Fraction
     rate = Fraction(str(bandwidth_bytes_s))
     insertions = []
@@ -515,15 +519,16 @@ def reference_decode_stall_schedule(windows, phases, moved_bytes,
             exact_ns = Fraction(count * 1_000_000_000, 1) / rate
             dt = (exact_ns.numerator + exact_ns.denominator - 1) // exact_ns.denominator
             insertions.append((end, dt))
-    def mapped(t):
+    def mapped(t: int | None) -> int | None:
         return None if t is None else t + sum(dt for end, dt in insertions if end <= t)
     adjusted = tuple((index, mapped(start), mapped(end)) for index, start, end in windows)
     adjusted_bounds = {name: mapped(t) for name, t in boundaries.items()}
     return adjusted, adjusted_bounds, sum(dt for _, dt in insertions)
 
 
-def reference_residual_adjusted_correlation(signal_sd, residual_sd,
-                                            white_j, phase_j, decode_tokens):
+def reference_residual_adjusted_correlation(
+    signal_sd: float, residual_sd: float, white_j: float, phase_j: float, decode_tokens: int,
+) -> float | None:
     """Independent episode-scale sum of signal, mapping and sensor variances."""
     import math
     signal_j = signal_sd * decode_tokens

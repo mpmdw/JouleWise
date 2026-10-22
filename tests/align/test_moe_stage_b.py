@@ -640,11 +640,10 @@ class TestMoeStageBContinuation(StageBAssertions):
         self.assertIn("held_out_recovery_inconclusive_at_cohort_size", result["flags"])
 
     def test_blocking_stall_retimes_actual_windows_tools_and_running_energy_end_to_end(self):
-        # 3 decode tokens: 10/0/10 bytes at 1000 B/s add 10/0/10ms.
-        # Nominal 2/5/3ms -> actual 12/5/13ms. These are timing inputs.
-        router = one_layer([(0,), (0,), (1,)])
-        # Layer size is fixed: use three tokens 10/0/10 bytes, 20ms added.
-        # The independent oracle also tests 10/0/20 unequal traffic separately.
+        # Two layers and pinned experts give 10/0/20 bytes at 1000 B/s:
+        # 10/0/20ms stalls. Nominal 2/5/3ms -> actual 12/5/23ms.
+        router = RouterLog("stall", 64, 1, (0, 1), ("decode",)*3,
+                           (((0,), (0,)), ((0,), (0,)), ((1,), (1,))))
         windows = (TokenWindow(0, 0, 2_000_000), TokenWindow(1, 2_000_000, 7_000_000),
                    TokenWindow(2, 7_000_000, 10_000_000))
         call = ToolCall("lookup_document", 10_000_000, 15_000_000, 96, 2048)
@@ -652,7 +651,9 @@ class TestMoeStageBContinuation(StageBAssertions):
                           0, "test", 0, 15_000_000,
                           (Turn(0, 0, 10_000_000, 0, 0, 3, first_token_ns=0,
                                 tool_calls=(call,)),), router_log=router)
-        config = small_config(bandwidth_bytes_s=1000, joules_per_byte=.001,
+        config = small_config(expert_bytes={0: 10, 1: 20},
+                              resident=frozenset({(0, 1), (1, 0)}), cache_capacity_bytes=30,
+                              bandwidth_bytes_s=1000, joules_per_byte=.001,
                               decode_miss_stalls=True, running_power_w=12)
         timing = apply_decode_stalls(episode, config, windows=windows)
         traffic = model_traffic(router, config, windows=timing.windows)
@@ -663,10 +664,10 @@ class TestMoeStageBContinuation(StageBAssertions):
         actual = tuple((w.token_index, w.start_ns, w.end_ns) for w in timing.windows)
         self.assertEqual(actual, expected_windows)
         self.assertEqual(actual, ((0, 0, 12_000_000), (1, 12_000_000, 17_000_000),
-                                  (2, 17_000_000, 30_000_000)))
+                                  (2, 17_000_000, 40_000_000)))
         self.assertEqual(timing.episode.turns[0].end_ns, bounds["turn_end"])
         self.assertEqual(timing.episode.end_ns, bounds["tool_end"])
-        self.assertEqual(stall_ns, 20_000_000)
+        self.assertEqual(stall_ns, 30_000_000)
         sensor = SensorModel("stall-fixture", "mock", "test", 100_000, 100_000, .0001, 0)
         sampled = simulate_episode(timing.episode, config, sensor, baseline_w=8,
                                    prefill_load_w=0, decode_load_w=4, tool_load_w=1,
@@ -675,12 +676,12 @@ class TestMoeStageBContinuation(StageBAssertions):
                                     baseline_w=12, noise_std_w=0, noise_multiplier=1,
                                     attribution_floor_j=0, windows=timing.windows,
                                     reference_decode_duration_ns=timing.reference_decode_duration_ns)
-        # 20B*.001J/B + 12W*.020s = .26J incremental. Sensor q/2
-        # times actual .030s is its rounding bound; /400 comparison is below
+        # 30B*.001J/B + 12W*.030s = .39J incremental. Sensor q/2
+        # times actual .040s is its rounding bound; /400 comparison is below
         # 1% of that bound and above 1e6*float noise at this energy scale.
-        expected_energy = .02+12*.020
+        expected_energy = .03+12*.030
         self.assertLessEqual(abs(features.energy_per_decode_token_j*3-expected_energy),
-                             sensor.quantum_w*.030/400)
+                             sensor.quantum_w*.040/400)
         self.assertRelative(sum(t.incremental_energy_j for t in traffic.tokens), expected_energy)
         self.assertEqual(timing.episode.turns[0].tool_calls[0].end_ns
                          -timing.episode.turns[0].tool_calls[0].start_ns, 5_000_000)
@@ -690,6 +691,40 @@ class TestMoeStageBContinuation(StageBAssertions):
         self.assertEqual(automatic.episode.end_ns, timing.episode.end_ns)
         self.assertEqual(automatic.reference_decode_duration_ns, 10_000_000)
         self.assertEqual(len(automatic.windows), len(windows))
+        automatic_features = extract_features(
+            automatic.episode, automatic.episode.power_traces[-1], baseline_w=12,
+            noise_std_w=0, noise_multiplier=1, attribution_floor_j=0,
+            windows=automatic.windows,
+            reference_decode_duration_ns=automatic.reference_decode_duration_ns)
+        self.assertLessEqual(abs(automatic_features.energy_per_decode_token_j*3-expected_energy),
+                             sensor.quantum_w*.040/400)
+        # The configured stalled running power may differ from compute power.
+        cooler_config = replace(config, running_power_w=6)
+        cooler = simulate_episode(timing.episode, cooler_config, sensor, baseline_w=8,
+                                  prefill_load_w=0, decode_load_w=4, tool_load_w=1,
+                                  windows=timing.windows)
+        cooler_features = extract_features(
+            cooler.episode, cooler.episode.power_traces[-1], baseline_w=12,
+            noise_std_w=0, noise_multiplier=1, attribution_floor_j=0,
+            windows=timing.windows, reference_decode_duration_ns=10_000_000)
+        self.assertLessEqual(abs(cooler_features.energy_per_decode_token_j*3-(.03+6*.030)),
+                             sensor.quantum_w*.040/400)
+        trace = sampled.episode.power_traces[-1]
+        sparse = replace(trace, t_ns=trace.t_ns[::2], values=trace.values[::2])
+        missing = extract_features(
+            sampled.episode, sparse, baseline_w=12, noise_std_w=0,
+            noise_multiplier=1, attribution_floor_j=0, windows=timing.windows,
+            reference_decode_duration_ns=10_000_000)
+        self.assertIsNone(missing.energy_per_decode_token_j)
+        self.assertIn("stall_energy_reference_requires_complete_decode_coverage", missing.flags)
+
+    def test_transfer_ns_ceil_matches_exact_integer_oracle_at_real_expert_size(self):
+        # 37 * 3,538,944 bytes / 32e9 B/s is exactly 4,091,904ns.
+        # Float ceil previously returned 4,091,905ns; ns is the clock quantum.
+        config = small_config(expert_bytes={0: 37*3_538_944}, bandwidth_bytes_s=32e9)
+        traffic = model_traffic(one_layer([(0,)]), config)
+        self.assertEqual(traffic.tokens[0].transfer_duration_ns, 4_091_904)
+        self.assertEqual(traffic.pulses[0].end_ns, 4_091_904)
 
     def test_variable_schedule_preserves_routes_and_uses_nonuniform_windows(self):
         world = WorldConfig(turns=2)
