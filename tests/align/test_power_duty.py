@@ -443,6 +443,13 @@ class DutyWorldTests(unittest.TestCase):
                 self.assertIn("sensor_resolution_unknown", result.flags)
             else:
                 self.assertEqual(result.half_width_j, baseline.half_width_j)
+        bad_timing = PowerTrace(**{**trace.__dict__,
+            "notes": json.dumps({"timing_half_width_ns": [-1]})})
+        result = estimate_energy([(bad_timing, start, end)]+runs[1:])
+        self.assertEqual(result.joules, baseline.joules)
+        self.assertIn("runs_retained=12", result.flags)
+        self.assertIn("invalid_window_timing", result.flags)
+        self.assertTrue(math.isinf(result.half_width_j))
         mixed = PowerTrace(**{**trace.__dict__, "channel": "gpu1:power_instant",
                               "clock_domain": "other:monotonic"})
         result = estimate_energy([(mixed, start, end)]+runs[1:])

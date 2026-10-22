@@ -89,8 +89,8 @@ assumptions to check on the first hardware data, not a demonstrated live rate.
   it or silently unwrap a driver reset. Preserve the raw mJ values and flags;
   use uninterrupted segments or explicitly report the missing evidence.
 - Missing sensor calibration accuracy is not supplied by the API's 1 mW/mJ
-  quantum. A duty interval reports quantum, coverage and repeatability terms;
-  it cannot supply an absent accuracy calibration.
+  quantum. A duty estimate reports coverage separately from its nominal
+  quantum/repeatability width; it cannot supply an absent accuracy calibration.
 
 ## Choose the channel and check the sensor
 
@@ -124,7 +124,8 @@ power. The records cannot represent an output combining noncontiguous slices;
 those outputs are retained with a one-second averaging span and duty_fraction=None
 on the known A100/H100 devices, flagged `output_average_not_single_window`.
 The unknown duty avoids describing ten disjoint slices as one continuous window.
-The duty estimator retains these channels as evidence but cannot pool that model. Use
+The sampler retains these channels as evidence; the duty estimator flags and
+skips their incompatible window model. Use
 the instantaneous field for the initial duty experiment.
 
 `PowerTrace.t_ns` is the mapped sensor window end whenever the driver supplies
@@ -220,11 +221,11 @@ Systematic coverage/smoothing/timing bias is separate from that nominal interval
 A caller-supplied conservative instantaneous `power_bound_w` produces the
 `worst_case_bias_j=<value>` flag. Preserve its physical evidence, including
 transients; an enforced average power limit alone is not an instantaneous bound.
-This diagnostic bound does not size `half_width_j`. With no bound, the systematic
-receipt is `worst_case_bias_j=inf` plus `worst_case_bias_unbounded`; the nominal
+This diagnostic bound does not size `half_width_j`. When the systematic mismatch/timing area is nonzero and no bound is given,
+the systematic receipt is `worst_case_bias_j=inf` plus `worst_case_bias_unbounded`; the nominal
 interval remains computable from replay variation and resolution with the
 sampler's default arguments. Report both quantities and all model flags.
-A nominal interval calibrated on synthetic Gaussian replay worlds does not
+Even successful calibration on synthetic Gaussian replay worlds would not
 validate sensor accuracy, waveform bias or the hardware model. Tiny/no-noise
 fixed worlds can miss this statistical interval; the separate bias receipt
 explains that limitation. Prefer complete phase coverage and validate on the

@@ -198,7 +198,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 flags.add("sensor_duty_unknown")
             run_duration = end - start
             quantum = trace.resolution
-            run_unknown_resolution = (quantum is None or not math.isfinite(quantum) or quantum <= 0)
+            run_unknown_resolution = (not isinstance(quantum, (int, float)) or
+                                      not math.isfinite(quantum) or quantum <= 0)
             if run_unknown_resolution:
                 flags.add("sensor_resolution_unknown")
                 quantum = 0.0  # Resolution affects uncertainty, never the energy estimate.
@@ -208,10 +209,14 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
             if timing is None:
                 timing = [0] * len(trace.values)
                 flags.add("timing_uncertainty_unreported")
-            if (len(timing) != len(trace.values) or len(endpoints) != len(trace.values)
-                    or any(x is not None and (not isinstance(x, int) or x < 0) for x in timing)
-                    or any(not isinstance(x, int) for x in endpoints)):
+            if (not isinstance(timing, (list, tuple)) or len(timing) != len(trace.values)
+                    or any(x is not None and (not isinstance(x, int) or x < 0) for x in timing)):
                 flags.add("invalid_window_timing")
+                # Metadata cannot remove otherwise usable sensor readings.
+                # Keep the energy; unidentified timing makes width infinite.
+                timing = [None]*len(trace.values)
+            if any(not isinstance(x, int) for x in endpoints):
+                flags.add("invalid_window_endpoints")
                 continue
             run_unknown_timing = any(x is None for x in timing)
             if any(flag in metadata.get("flags", ()) for flag in
