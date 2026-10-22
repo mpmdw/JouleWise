@@ -10,6 +10,7 @@ from collections import deque
 from contextlib import AbstractContextManager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from unittest.mock import patch
 
 from joulewise.align.endpoints import MockEndpoint, OpenAICompatEndpoint, assistant_message
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage, TokenCounter, ToolCallRequest
@@ -103,6 +104,8 @@ class HTTPWorld(AbstractContextManager):
         self.url = "http://127.0.0.1:" + str(self.server.server_address[1]) + "/v1"
 
     def __enter__(self) -> "HTTPWorld":
+        self._proxy_patch = patch.dict("os.environ", {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"})
+        self._proxy_patch.start()
         self.thread.start()
         return self
 
@@ -110,6 +113,7 @@ class HTTPWorld(AbstractContextManager):
         self.server.shutdown()
         self.thread.join()
         self.server.server_close()
+        self._proxy_patch.stop()
         if self.errors:
             raise self.errors[0]
 

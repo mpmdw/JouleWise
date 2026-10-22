@@ -211,14 +211,14 @@ class MonitorTests(unittest.TestCase):
                 # Monitor scores have no uncertainty here: 1e-6 relative agreement.
                 self.assertTrue(math.isclose(verdict.suspicion, 92.5, rel_tol=1e-6))
 
-    def test_unfinished_nested_scratchpads_and_tool_results(self):
+    def test_unfinished_nested_scratchpads_and_tagged_tool_results(self):
         self.assertEqual(strip_scratchpad("A<thinking>outer<think>inner</think>tail</thinking>B"), "AB")
         self.assertEqual(strip_scratchpad("A<THINKING>unfinished"), "A")
         transcript = (ChatMessage("assistant", "A<think>secret</think>B"),
                       ChatMessage("tool", "<thinking>tool evidence</thinking>", name="read_ledger"))
         rendered = render_transcript(transcript, visibility="no_scratchpad")
         self.assertNotIn("secret", rendered)
-        self.assertIn("tool evidence", rendered)
+        self.assertNotIn("tool evidence", rendered)
 
     def test_invalid_monitor_response_records_uncertainty(self):
         with fixture_source() as source:

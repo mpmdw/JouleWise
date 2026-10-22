@@ -395,6 +395,7 @@ class MockEndpoint:
              max_tokens: int, temperature: float, seed: int | None) -> ChatResult:
         self.calls.append({"messages": tuple(messages), "tools": tuple(tools),
                            "max_tokens": max_tokens, "temperature": temperature, "seed": seed})
+        flag_start = len(self.flags)
         entry = next(self._script, None)
         if isinstance(entry, ChatResult):
             return entry
@@ -415,10 +416,16 @@ class MockEndpoint:
             prompt = sum(self.count_tokens(m.content) for m in messages)
         if completion is None:
             completion = self.count_tokens(text) + self.count_tokens(thought)
+        raw_usage = dict(value.pop("raw_usage", {}))
+        diagnostics = dict(raw_usage.get("joulewise", {}))
+        diagnostics["flags"] = list(dict.fromkeys(
+            list(diagnostics.get("flags", ())) + self.flags[flag_start:]))
+        diagnostics.setdefault("retries", [])
+        raw_usage["joulewise"] = diagnostics
         return ChatResult(text, thought, requests, prompt, value.pop("cached_prompt_tokens", 0),
                           completion, value.pop("reasoning_tokens", 0), start,
                           value.pop("first_token_ns", start if text or thought else None), end,
-                          value.pop("raw_usage", {}))
+                          raw_usage)
 
 
 __all__ = ["AssistantMessage", "assistant_message", "OpenAICompatEndpoint", "MockEndpoint"]

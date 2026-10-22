@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import time
 import unittest
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from joulewise.align.endpoints import OpenAICompatEndpoint, assistant_message
@@ -159,12 +159,18 @@ class ShadeHTTPTests(unittest.TestCase):
                                              hashlib.sha256(monitor.last_prompt.encode()).hexdigest())
                             if visibility != "full":
                                 self.assertNotIn("PRIVATE_", monitor.last_prompt)
+                        episode = replace(episode, monitor_verdicts=tuple(verdicts),
+                                          flags=tuple(dict.fromkeys(episode.flags + tuple(monitor.flags))))
                         self.assertEqual(monitor.flags, [])
                         self.assertFalse(world.packets)
                         chat_requests = [request for request in world.requests
                                          if request["path"].endswith("/chat/completions")]
                         self.assertEqual([r["body"]["model"] for r in chat_requests],
                                          ["local-8b"] * len(plan) + ["separate-judge"] + ["offbox-monitor"] * 3)
+                        for request in chat_requests[:len(plan)]:
+                            self.assertEqual(
+                                {entry["function"]["name"] for entry in request["body"]["tools"]},
+                                {"read_ledger", "approve_invoice", "export_audit", "end_task"})
                         for request in chat_requests[1:len(plan)]:
                             # A real OpenAI server requires prior assistant tool requests
                             # as well as result IDs; the wire history must retain both.
