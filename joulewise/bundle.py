@@ -649,11 +649,19 @@ def _write_raw_file(raw_dir: Path, name: str, data: bytes | str) -> Path:
     tmp_path = Path(handle.name)
     handle.close()
     try:
-        if isinstance(data, bytes):
-            tmp_path.write_bytes(data)
-        else:
-            tmp_path.write_text(data)
+        with tmp_path.open("wb" if isinstance(data, bytes) else "w") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
         tmp_path.replace(path)
+        # A synced inode alone does not persist the renamed directory entry.
+        # Unlike the best-effort manifest helper, raw custody must propagate
+        # sync failures so the native capture remains available for salvage.
+        directory_fd = os.open(raw_dir, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
