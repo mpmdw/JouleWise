@@ -1,53 +1,46 @@
-# Round 2 execution checkpoint
-
-Continued from 932719cfc5f73c7029048f38696d17d08ec2833b.
-The test-only baseline checkpoint is e229ff9b9eb405c7dd705b7f2835c8132f7b4bae.
-The managed environment has not supplied a shell. The explicit no-shell CI
-fallback ports all listed worlds/pass conditions into test_moe_stage_b_round2.
-F1/F2 implement condition fixed effects and explicit Episode.condition.
-F3 adds an independent per-episode compute-duration factor and a sweep.
-F8 replaces the dither switch by continuous Gaussian Fourier bounds.
-F4/F5/F6 use the brief's permitted limitations; F7 is deferred to the lead.
-Execution and a final evidence-based decision are pending; the prior report
-below is historical and its affirmative counterfactual no-stall conclusion
-is withdrawn pending the fixed run.
-
----
-
 # align-stageb lane report
 
 ## SUMMARY
 
-Continued lane/2026-10-21-align-stageb from ebba5483358d088d4cae81cbdfc944fae0503027; shared contracts are unchanged.
-Stage B now uses group-held-out power recovery after timing control, with timing-only, energy and mean-power alternatives printed beside it.
-Removed the simulator compute reference; observed coverage supplies every energy feature, and blind sensors no longer produce yes.
-Dithered rounding uses q²/12; same-sign q*T remains a labelled alternative, never the verdict.
-INA defaults to shunt-slice acquisition; small prefill batches update cache, and sensor noise has its own seed stream.
-Dropped samples retain numeric features, coverage flags and all 24 episodes; hardware procedures now cover supply and throttling hazards.
-All 42 alignment tests executed successfully in CI, with zero failures/errors/skips; summed module time was 448.824s.
-Stalled worlds fail the chosen increment criterion; no-stall INA clears it. Mean-power alternatives differ and are recorded under NEEDS_RULING.
-PR #526 remains draft and unmerged; final-head CI continues independently, with no hardware or external inference service used.
+Continued the pushed lane at 0e5f1733553a3e4f7d8571e685ba39b4a0c9bafb; the shared contracts and inherited registry file are unchanged.
+F1/F2 use training-only condition fixed effects and Episode.condition; opaque hash IDs preserve the increment bit for bit.
+The former affirmative counterfactual no-upload-stall INA result changes from 0.893842 to 0.735609 [0.625652, 0.816906], inconclusive.
+The base stalled E2E INA result is 0.048994 [-0.156278, 0.250209], a nominal scenario no; independent episode timing spread can change it to yes.
+The stalled episode-factor grid changes from no at 0.368832 ms/token SD to inconclusive at 0.868869 and yes at 1.575544; this is a sensitivity result, not a physical threshold.
+F8 uses continuous Gaussian Fourier rounding and covariance bounds; current-world recovery values and upstream slot-guard arithmetic remain intact.
+F4/F5/F6 explicitly retain the permitted marginal-effect, simulator-baseline and uncalibrated-null limitations; F7 is deferred to the lead.
+CI 39739338982 passed all 41 Stage B tests plus 4 shared-record tests, with zero lane failures, errors or skips; no extras, network tests or hardware were used.
+The report and runbook now contain executed before/final evidence, the timing sweep and ordered dispositions; PR #526 remains draft and unmerged.
 
 ## FILES
 
-- joulewise/align/moe_stage_b/__init__.py: exports the added increment recovery API.
-- joulewise/align/moe_stage_b/analysis.py: observed-coverage features, timing/mean power, grouped timing control, random rounding and labelled alternative bound.
-- joulewise/align/moe_stage_b/experiment.py: real-world orchestration, compatible output keys, episode flags, candidate recoveries and provenance.
-- joulewise/align/moe_stage_b/simulation.py: disjoint INA shunt acquisition and independently derived sensor-noise seed.
-- joulewise/align/moe_stage_b/traffic.py: <=32 prefill cache updates, upstream slot guard and unavailable legacy reference alias.
-- joulewise/align/moe_stage_b/reference.py: list/pairwise oracle maintenance for cache and rounding, plus timing-projection oracle.
-- tests/align/test_moe_stage_b.py: existing 34 tests updated for the corrected feature, sensor, bounds and zero/control assertions.
-- tests/align/test_moe_stage_b_review.py: CI fallback port of every reviewer pass condition, shunt averaging/cache regressions and noise-seed ablation.
-- docs/align/moe_stage_b.md: revised criterion, uncertainty, interpretation, sensor alternatives and hardware hazard procedure.
-- .codex-report/align-stageb.md: this report and complete evidence.
-- No new registry edit. tests/test_shard_tests.py retains the inherited r0 line exactly as instructed by F7.
+- joulewise/align/moe_stage_b/__init__.py: package exports.
+- joulewise/align/moe_stage_b/traffic.py: expert byte sizing, residency/SLRU traffic, transfer pulses and blocking-stall timing; pinned small-batch/slot guard remains.
+- joulewise/align/moe_stage_b/simulation.py: exact acquisition overlaps, disjoint INA shunt slices, independent sensor-noise seed, shared PowerTrace outputs.
+- joulewise/align/moe_stage_b/analysis.py: trace features, scalar recovery, condition-fixed-effect increment, nominal uncertainty and continuous rounding/covariance bounds.
+- joulewise/align/moe_stage_b/reference.py: separately formulated numerical oracles, including within-condition pair-difference increment.
+- joulewise/align/moe_stage_b/experiment.py: production-shaped world orchestration, Episode.condition adapter, episode timing factor, sensitivity sweep and fallback provenance.
+- tests/align/test_moe_stage_b.py: 34 existing lane tests, including end-to-end/CLI paths and the corrected continuous-rounding oracle test.
+- tests/align/test_moe_stage_b_review.py: four round-1 reviewer tests, retained blind/coverage/cache regressions and explicit condition in its oracle capture.
+- tests/align/test_moe_stage_b_round2.py: three tests porting every round-2 repro pass condition, the timing sweep and the continuous-rounding/covariance bound.
+- docs/align/moe_stage_b.md: fixed decision/outcome tables, both timing-spread sweeps, F4/F5/F6 limitations and existing pinned hardware procedure.
+- .codex-report/align-stageb.md: this report, full CI-printed before/final evidence and ordered FIX LOG.
+- tests/test_shard_tests.py: inherited registry normalization, not edited in round 2 or this continuation; F7 belongs to the lead.
+
+Only the eight files in the round-2 diff from 932719cfc are changed this round.
+This continuation changes only the report and runbook. No .review2 directory,
+probe file, local checkout, shared contract, main branch or other lane was written.
+The public GitHub connector was used with force=false and expected-head checks.
+Blob identity against 932719cfc was verified for PIPELINE.md (829c944b),
+records.py (ca3523d5), interfaces.py (b0468f41), and the inherited registry
+file (6f19d939). No protected source or registry change is present.
 
 ## PUBLIC API
 
 - `OffloadConfig(expert_bytes: Mapping[int, int], resident: frozenset[tuple[int, int]], cache_capacity_bytes: int, cache_policy: str, bandwidth_bytes_s: float, joules_per_byte: float, path: str, bandwidth_source: str, energy_source: str, prefill_mode: str = "bypass", prefill_batch_tokens: int = 1, flags: tuple[str, ...] = (), decode_miss_stalls: bool = False, running_power_w: float = 0.0)`
 - `TokenWindow(token_index: int, start_ns: int, end_ns: int)`; `PowerPulse(start_ns: int, end_ns: int, watts: float)`.
 - `SensorModel(name: str, source: str, channel: str, interval_ns: int, averaging_window_ns: int, quantum_w: float, noise_std_w: float, phase_ns: int = 0, notes: str = "", acquisition_slices_ns: tuple[tuple[int, int], ...] = ())`.
-- `RoutingObservation(episode_id: str, group: str, routing_statistic: float, features: PowerFeatures)`.
+- `RoutingObservation(episode_id: str, group: str, routing_statistic: float, features: PowerFeatures, condition: str | None = None)`.
 - `expert_size_from_config(config: Mapping[str, Any], *, block_elements: int, block_bytes: int) -> ExpertSize`
 - `episode_token_windows(episode: Episode, *, prefill_batch_tokens: int = 1) -> TimingResult`
 - `model_traffic(router: RouterLog, config: OffloadConfig, *, windows: Sequence[TokenWindow] | None = None) -> TrafficResult`
@@ -77,47 +70,62 @@ PR #526 remains draft and unmerged; final-head CI continues independently, with 
 - reference_detection_forecast(..., *, n_per_condition: int) -> ReferenceDetectionForecast; reference_power_increment(observations) -> tuple[float | None, int] (test oracles).
 - run_world additionally returns power_increment_over_timing, timing and mean-power recovery, candidate verdicts, episode_outcomes, forecast provenance and a labelled quantization alternative. The nominal_decode_duration_s_range alias is None. true_extra retains physical transfer + running-stall truth; transfer_only is the target for the observed baseline-subtracted energy feature.
 
+- `rounding_uncertainty(quantum_w: float, noise_std_w: float) -> tuple[float, float]`: continuous bias-W and rounding-plus-covariance W² bounds.
+- `WorldConfig` adds `decode_episode_factor_half_width: float = 0.0`; all prior fields/defaults remain.
+- `timing_spread_sweep(config: WorldConfig, sensor: SensorModel, *, jitter_points_ns: tuple[int, ...] = (2_000_000, 10_000_000, 25_000_000), episode_factor_half_widths: tuple[float, ...] = (0.0, 0.025, 0.05, 0.10, 0.20), stage_a_effect_sd: float, n_per_condition: int, alpha: float, power: float, comparisons: int) -> list[dict[str, Any]]`.
+- New `run_world` keys: `timing_scenario`, `within_condition_sd_episode_mean_decode_ms`, `mean_decode_ms_per_token`, `requirement_effect_provenance`, `energy_baseline_provenance`, `increment_null_calibration`. Existing reviewer patch seams and output keys remain.
+
 ## TESTS RUN
 
-The managed environment failed to provision: snapshot_materialization_failed /
-gateway_unavailable. No shell, local git checkout, .review1 file creation or
-literal local command ran. The brief's explicit CI fallback was used. Each
-review test scopes JW_B5_SYNTHETIC_ONLY=1 using patch.dict; it restores the
-environment afterward. Tests make no network or hardware calls.
+The managed environment remained pending and supplied no usable shell. The
+initial exec attempt returned "No usable execution environment is available".
+The explicitly authorized no-shell CI fallback is used: the literal local
+discovery and isolated .review2 commands are UNRUN. No local fetch, checkout,
+git status or probe-file creation is claimed. All their pass-condition worlds
+were already ported to the in-scope round-2 test by the prior seat, and their
+executed CI evidence was read and checked in this continuation.
 
-**Executed fixed code: dfe3436e10c07a57ed65f086b7228b213009ba35,
-[CI 39726492085](https://github.com/mpmdw/JouleWise/actions/runs/39726492085).**
+Requested local discovery (UNRUN; no executor):
 
-| Actual CI module / job | Tests | Failures | Errors | Skips | Module elapsed seconds |
+```sh
+JW_B5_SYNTHETIC_ONLY=1 python3 -m unittest discover -s tests/align -t .
+```
+
+**Executed production/test code: 0e5f1733553a3e4f7d8571e685ba39b4a0c9bafb,
+[CI 39739338982](https://github.com/mpmdw/JouleWise/actions/runs/39739338982):
+completed success.** Build, fences, quick, installed-wheel, all twelve ordinary
+shards and all three exclusive jobs succeeded. This is CI execution, not a local
+whole-repository run; no whole repository suite was launched by this seat.
+The separate gate-ledger run 39739338897 failed for unfilled lead gates.
+
+| Actual CI module / job | Tests | Failures | Errors | Skips | Module seconds |
 |---|---:|---:|---:|---:|---:|
-| tests.align.test_moe_stage_b / 119653179134 (shard 9) | 34 | 0 | 0 | 0 | 159.159 |
-| tests.align.test_moe_stage_b_review / 119653178717 (shard 8) | 4 | 0 | 0 | 0 | 289.657 |
-| tests.align.test_records / 119653178824 (shard 5) | 4 | 0 | 0 | 0 | 0.008 |
-| Total | 42 | 0 | 0 | 0 | 448.824 |
+| tests.align.test_moe_stage_b / 119694267510 (shard 9) | 34 | 0 | 0 | 0 | 88.874 |
+| tests.align.test_moe_stage_b_review / 119694267283 (shard 8) | 4 | 0 | 0 | 0 | 284.661 |
+| tests.align.test_moe_stage_b_round2 / 119694267390 (shard 5) | 3 | 0 | 0 | 0 | 1085.650 |
+| tests.align.test_records / 119694267305 (shard 4) | 4 | 0 | 0 | 0 | 0.005 |
+| Stage B subtotal | 41 | 0 | 0 | 0 | 1459.185 |
+| Alignment total including shared records | 45 | 0 | 0 | 0 | 1459.190 |
 
-The observed span across these parallel CI modules was 296.463s
-(05:16:31.2318399 to 05:21:27.6947200 UTC). That span and the summed module
-times are not the wall time of the unrun local discovery command.
+The module times are summed, not wall time. Relative to the reviewed 42-test
+alignment total, the round-2 module adds three tests; no earlier test is removed.
+Each reviewer module scopes JW_B5_SYNTHETIC_ONLY=1 with patch.dict and restores
+it. No lane test imports an optional dependency or uses network/hardware.
+Extras installed: none. Extra-dependent tests: none; no skip reasons or extra
+run apply.
 
-The original 34-test module took 134.801s at the baseline checkpoint and
-159.159s after the fix (+24.358s). The required reviewer port took 246.748s
-before and 289.657s after (+42.909s), now also covering the 48-episode
-noise-seed ablation, eight-episode oracle and two small source regressions.
-It runs 874 episode simulations; the existing large E2E/CLI cases run another
-576. This cost is the requested repro coverage, not a new parameter grid.
+Baseline production code is exactly 932719cfc: checkpoint
+e229ff9b9eb405c7dd705b7f2835c8132f7b4bae changes only the evidence test.
+[Baseline CI 39732398546](https://github.com/mpmdw/JouleWise/actions/runs/39732398546)
+completed success. Its round-2 evidence collector ran one test, zero
+failures/errors/skips, 635.709s (job 119671578296, shard 5); it deliberately
+printed the existing failures rather than asserting the new pass conditions.
+The final test enables those assertions. The baseline reproduces the hash-ID
+StatisticsError, condition-only yes and two random-covariate FAILs.
 
-Before fixed-code publication, checkpoint f0c25415485c3e866bfdb8cc669d5231de9f5c2f
-retained unchanged ebba54833 production code and ran the p1--p5 worlds:
-[baseline CI 39722816945](https://github.com/mpmdw/JouleWise/actions/runs/39722816945).
-All 34 original Stage B tests, four records tests and the one baseline evidence
-test executed successfully: 39 tests, zero lane skips/failures/errors,
-381.553s summed module time. The original table and all major failures match
-the lead's repro values.
-
-CI's **actual** unchanged entry is the heredoc below, with SHARD_COUNT=12 and
-SHARD_INDEX=5,8,9 for the relevant module jobs. It uses unittest's loader and
-TextTestRunner through shard_tests.run_units. It is not claimed as the literal
-unrun discovery or isolated-script command.
+CI actually invokes unittest through the repository sharder. The exact heredoc
+below is from the unchanged workflow; SHARD_COUNT=12 and SHARD_INDEX=4,5,8,9
+select the listed module jobs. It is not the unrun discovery command.
 
 ```sh
 python - <<'PY'
@@ -166,2970 +174,351 @@ raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
 PY
 ```
 
-The standalone CLI was actually invoked by the existing subprocess test:
+The existing CLI test actually invokes:
 
 ```text
 /opt/hostedtoolcache/Python/3.13.16/x64/bin/python -m joulewise.align.moe_stage_b.experiment
 ```
 
-Build, fences, installed-wheel and quick tier passed in fixed-code CI before
-the report-only checkpoint superseded it. The ordinary jobs were then cancelled
-by the unchanged PR concurrency policy, **after all three alignment MODULE PASS
-lines**. This is focused execution evidence, not a passing whole-repository
-suite or final-head CI claim. No whole suite was launched locally.
-The final report/runbook commit changes no Python source relative to the tested
-head. Final-head CI is intentionally not awaited; PR #526 stays draft.
-
-The literal commands requested below remain **UNRUN** because no executor
-existed. Their worlds and pass conditions were ported into the review module;
-the port keeps calling experiment.simulate_episode and experiment.extract_features
-through the experiment globals. In p3, the final port explicitly spells out the
-same original 6.6ms and 1.1ms alternatives after the default changes to shunt
-acquisition. No routing, timing, cohort or noise parameter from a repro was tuned.
-
-```sh
-JW_B5_SYNTHETIC_ONLY=1 python3 -m unittest discover -s tests/align -t .
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p1_leak.py e2e
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p1_leak.py e2e_blind
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p1_leak.py default
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p1_leak.py default_blind
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p2_quant.py
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p3_ina_slice.py
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p4_flags.py
-JW_B5_SYNTHETIC_ONLY=1 python3 -I /workspace/JouleWise/.review1/p5_drop_world.py
-```
-
-Extras: none installed, imported or required by the lane. There are no
-extra-dependent lane tests and zero skip reasons to list. CI's packaging
-frontend is not a project extra; no extra-dependency run was applicable.
+Final report/runbook CI: publication and final-head validation are recorded
+after the evidence commit; PR #526 remains draft and unmerged throughout.
 
 ## END-TO-END
 
-Production chain: synthetic_episode -> synthetic_token_schedule ->
-apply_decode_stalls -> model_traffic -> simulate_episode -> shared PowerTrace ->
-extract_features(actual windows) -> grouped scalar recovery / timing-controlled
-recovery -> nominal Fisher interval / fixed Stage A design comparison.
+The real chain is synthetic_episode -> synthetic_token_schedule ->
+apply_decode_stalls -> model_traffic -> simulate_episode -> shared
+Episode/PowerTrace -> extract_features(actual windows) ->
+group-held-out scalar/fixed-effect increment -> nominal Fisher interval and
+the fixed scenario requirement. experiment's four patched globals remain the
+entry points. The review tests capture the actual RoutingObservations.
 
-E2E: 48 task groups per condition, three turns, 768 prefill and 384 decode tokens,
-three local tool calls per episode, N=96. Default: 12 groups per condition,
-four turns, 1024 prefill and 512 decode tokens, four tool calls, N=24.
-Compute jitter is the declared +/-2ms scenario around 50ms steps; blocking stalls
-are explicit. Architecture/cache/bandwidth/J-per-byte parameters are unchanged.
-Required r remains 0.6471202066782847 for d=1, n=50, alpha=.05, power=.8,
-three supplied comparisons.
+Default worlds: 12 matched task groups per condition, four turns, 1024 prefill
+and 512 decode tokens, four tool calls per episode, N=24. E2E worlds: 48
+matched groups per condition, three turns, 768 prefill and 384 decode tokens,
+three tool calls, N=96. The default per-token compute step is 50 ms plus
+uniform ±2 ms. Upload stalls, sensor phase, quantization, white noise and tool
+gaps run through the production functions. INA is 1.1 ms shunt acquisition
+per 10 ms poll, q=0.036032 W, scenario noise SD=0.04 W; NVML is 25 ms per
+100 ms, q=0.001 W, scenario noise SD=1 W. These are synthetic scenarios,
+not device calibrations. Every no-stall case, including raw e2e_nostall,
+nostall, p2/p3, variable-timing and no-stalls tags below, is a
+**counterfactual** because the pinned llama.cpp blocks dependent uploads.
 
-INA is now 1.1ms shunt acquisition / 10ms cadence with 0.036032W quantum and
-0.04W scenario noise. The contiguous 6.6ms frame is an alternative. NVML remains
-25ms / 100ms, 0.001W quantum and 1W stress-scenario noise. Both see the same
-synthetic running loads; these are not RTX/Jetson calibrations.
+The supplied planning design d_A=1, n=50, alpha=.05, power=.8 and comparisons=3
+still gives required r=0.6471202066782847. F4 means this is a marginal-effect
+scenario comparison, not proven conditional design power. F5 means the energy
+column and fitted forecast use simulator running-level truth. F6 means no
+nominal Fisher no is a measured absence of signal.
 
-### Current criterion and the other readings
+### Fixed outcome table
 
-| World / sensor | Energy r [95% CI] | Timing-only r [95% CI] | Mean-power r [95% CI] | Increment r [95% CI] | Stage B |
+| World / sensor | Energy r [95% CI], simulator running level (F5) | Timing r [95% CI] | Mean power r [95% CI] | Increment r [95% CI] | Stage B scenario comparison |
 |---|---|---|---|---|---|
-| e2e ina3221 | 0.7847682385203254 [0.6922172578618175, 0.8519241883004665] | 0.8213906829904342 [0.7423138889988465, 0.8779015354109604] | 0.844028133904538 [0.7737286721887902, 0.8937942788319294] | 0.03878094817615853 [-0.16624431709872659, 0.24059214797596737] | no |
-| e2e nvml_100ms_25ms | 0.274986590911851 [0.07663600667060576, 0.45240035809789975] | 0.8213906829904342 [0.7423138889988465, 0.8779015354109604] | 0.2797199163562553 [0.08173163642031049, 0.45646919101002054] | 0.13023441275020084 [-0.07548000626420594, 0.32531560352046] | no |
-| default ina3221 | 0.7740006547148806 [0.5230834994984437, 0.9014464496892164] | 0.8438154771382044 [0.6553517606446033, 0.9333699301483963] | 0.8478338120759732 [0.6633335569803914, 0.9351652157432788] | 0.1734304799794651 [-0.2791638835042857, 0.5629748878035307] | no |
-| default nvml_100ms_25ms | 0.6345858161086284 [0.29076507775888405, 0.8332611577713871] | 0.8438154771382044 [0.6553517606446033, 0.9333699301483963] | 0.6736148880248951 [0.35195791312058256, 0.8529787790146469] | -0.5886004907339206 [-0.8135700110924684, -0.21035765763800887] | no |
-| p3 shunt_slice_1.1ms | 0.7245660029010135 [0.611758967778493, 0.8084904919807115] | -0.010303124188217116 [-0.21248013030776805, 0.19271978742984244] | 0.7235703428110349 [0.6104476360084228, 0.8077643915236326] | 0.8938423135247563 [0.8437692437918409, 0.9284890626614218] | yes |
-| p3 contiguous_6.6ms (alternative) | 0.8107156206127827 [0.7276193778957244, 0.8703636017948386] | -0.010303124188217116 [-0.21248013030776805, 0.19271978742984244] | 0.8083738802855257 [0.7244060763277498, 0.8687062918438864] | 0.9270878135830587 [0.891800255448484, 0.9511640036403203] | yes |
+| Default stalled INA | 0.774001 [0.523083, 0.901446] | 0.843815 [0.655352, 0.933370] | 0.847834 [0.663334, 0.935165] | 0.156939 [-0.294722, 0.551283] | no |
+| Default stalled NVML | 0.634586 [0.290765, 0.833261] | 0.843815 [0.655352, 0.933370] | 0.673615 [0.351958, 0.852979] | -0.532326 [-0.783882, -0.130658] | no |
+| E2E stalled INA | 0.784768 [0.692217, 0.851924] | 0.821391 [0.742314, 0.877902] | 0.844028 [0.773729, 0.893794] | 0.048994 [-0.156278, 0.250209] | no |
+| E2E stalled NVML | 0.274987 [0.076636, 0.452400] | 0.821391 [0.742314, 0.877902] | 0.279720 [0.081732, 0.456469] | 0.133760 [-0.071911, 0.328520] | no |
+| E2E counterfactual no-stall INA | 0.724566 [0.611759, 0.808490] | -0.010303 [-0.212480, 0.192720] | 0.723570 [0.610448, 0.807764] | 0.735609 [0.625652, 0.816906] | inconclusive |
+| E2E counterfactual no-stall NVML | 0.120411 [-0.084265, 0.315338] | -0.010303 [-0.212480, 0.192720] | 0.120470 [-0.084206, 0.315392] | 0.097389 [-0.108475, 0.295243] | no |
+| E2E counterfactual no-stall INA, contiguous 6.6 ms alternative | 0.810716 [0.727619, 0.870364] | -0.010303 [-0.212480, 0.192720] | 0.808374 [0.724406, 0.868706] | 0.821912 [0.742523, 0.878529] | yes |
 
-All four blind worlds complete with 96/24 episodes, zero observed extra energy,
-constant-feature flags and inconclusive verdicts. Their timing-only r is still
-0.8213906829904342 (E2E) / 0.8438154771382044 (default).
-The stalled worlds therefore show timing recovery without a detected conditional
-power increment. The no-stall shunt INA world clears the chosen increment bar,
-while its energy-only / mean-power intervals are inconclusive. The difference
-between these estimands is retained for a prospective lead ruling below; no
-physical detectability or independent validation is claimed.
 
-### Numbers moved from the reviewed head
+### Which printed values moved
 
-| Probe | Before energy r / verdict | After energy r / verdict | Change in energy r |
-|---|---|---|---|
-| e2e ina3221 | 0.8232371412861 / yes | 0.7847682385203254 / no | -0.03846890276577464 |
-| e2e nvml_100ms_25ms | 0.7470347806978304 / inconclusive at this cohort size | 0.274986590911851 / no | -0.47204818978597934 |
-| default ina3221 | 0.80737563681128 / inconclusive at this cohort size | 0.7740006547148806 / no | -0.03337498209639944 |
-| default nvml_100ms_25ms | 0.6653557102979055 / inconclusive at this cohort size | 0.6345858161086284 / no | -0.030769894189277114 |
-| p2 q | 0.8093149327426429 / no | 0.7245660029010135 / yes | -0.0847489298416294 |
-| p2 fine | 0.8093078674101826 / yes | 0.7245426207698503 / yes | -0.08476524664033225 |
-| p3 shunt_slice_1.1ms | 0.7225503465515355 / inconclusive at this cohort size | 0.7245660029010135 / yes | 0.002015656349477979 |
-| p3 contiguous_6.6ms | 0.8093149327426429 / no | 0.8107156206127827 / yes | 0.0014006878701398051 |
-| p5 stalls | null / null | 0.7740014099210382 / no | new numeric result |
-| p5 no-stalls | 0.7847843468528873 / inconclusive at this cohort size | 0.6919038002129244 / yes | -0.09288054663996292 |
+| Case | Before r | Fixed r | Fixed minus before | Fixed verdict |
+|---|---:|---:|---:|---|
+| Default stalled INA | 0.173430480 | 0.156938561 | -0.016491919 | no |
+| Default stalled NVML | -0.588600491 | -0.532326097 | 0.056274394 | no |
+| E2E counterfactual no-stall INA | 0.893842314 | 0.735608748 | -0.158233566 | inconclusive at this cohort size |
+| E2E counterfactual no-stall NVML | 0.201304006 | 0.097389003 | -0.103915003 | no |
+| E2E stalled INA | 0.038780948 | 0.048993963 | 0.010213015 | no |
+| Stalled INA ±10 ms token jitter | 0.603187623 | 0.543588417 | -0.059599206 | inconclusive at this cohort size |
+| Stalled INA ±25 ms token jitter | 0.917115563 | 0.757955289 | -0.159160274 | yes |
+| Counterfactual condition-only sensor +0.3 W | 0.753929524 | -0.268944258 | -1.022873782 | no |
 
-These verdict changes include the deliberately changed primary criterion.
-A new increment r is not numerically compared to the former energy r as if they
-were the same statistic. Physical true_extra ranges, actual decode-duration
-ranges and default traffic counts remain unchanged. Apparent extra is now the
-trace integral above running baseline over actual covered windows; nominal
-compute-duration output is the unavailable None alias.
 
-F2: q/fine now both give yes for the chosen increment. At real q the random
-rounding contrast SD is 0.0009114822446086623J versus the labelled same-sign
-alternative 0.6917183744201088J; contrast stays 0.5982422458787154J.
-Before, q alone flipped no -> yes when reduced. Measured rounding SD moves from
-0.004727768884084749 to 0.004324237908642516J (delta
--0.0004035309754422331); its condition-mean
-difference moves from 0.0005183719920603264 to 0.00097816833854091J
-(delta 0.00045979634648058354).
-The old negative-physical-result language is withdrawn.
+Stalled E2E NVML moves from 0.13023441275020084 to 0.13375996013901492
+(+0.0035255473888140814), remaining no. Timing, energy-only and mean-power
+point estimates are unchanged for the same unmodified worlds: F1 changes the
+increment fit, F2 changes label provenance, and the zero episode-factor
+default preserves simulation values. The 6.6 ms contiguous counterfactual
+alternative moves from increment 0.9270878135830587 to 0.8219116242960651
+(-0.10517618928699357), still yes; it is not the default INA acquisition.
 
-F4, holding each final no-stall world fixed: the shunt energy r is
-0.7245660029010135 versus 0.8107156206127827 for the labelled contiguous frame;
-the chosen increments are 0.8938423135247563 and 0.9270878135830587.
-Both criteria/readings and uncertainties are printed rather than silently
-substituting the 6.6ms approximation for the INA result.
+F8 does not change any trace or recovery point estimate. In the counterfactual
+E2E INA forecast, the contrast bound changes from 0.0009114822446086623 J to
+0.0009114822573562025 J (+1.2747540111164579e-11 J). This is far below 1% of
+the smaller printed bound (9.114822446086624e-6 J), the rule-3 agreement
+scale; no scenario verdict changes from this bound. Strong dithering has
+sigma/q=1.1101 for INA and 1000 for NVML; covariance/Fourier corrections are
+tiny there. At sigma=0 the bound is q²/4, so the zero-noise forecast oracle
+now includes quantization rather than assuming zero white contribution.
 
-### Coverage and cohort retention
+### Timing-spread sweep (F3)
 
-| Sensor | Before full J/token | Before dropped | After full J/token | After dropped J/token | Drop change J/token | Covered fraction |
-|---|---:|---|---:|---:|---:|---:|
-| p4 ina3221 | 0.16757110982072204 | None | 0.05066580741928828 | 0.050664452419288276 | -0.000001355000000001494 | 0.9993467110604671 |
-| p4 nvml_100ms_25ms | 0.16819281044078907 | None | 0.04696391021256252 | 0.04671195708756252 | -0.0002519531250000026 | 0.9934671106046709 |
+One independent uniform episode factor multiplies every compute-only decode
+duration before blocking transfers are added. Running watts remain constant;
+compute background energy scales with duration, transfer bytes/J are fixed,
+and acquisition alignment changes. The default factor half-width is zero and
+uses no extra route/timing RNG draws. Context length/DVFS are motivating
+episode-level causes, not additional simulated physical models.
 
-p5 stalled changes unavailable -> ok with all 24 episodes, numeric energy
-recovery r=0.7740014099210382, and verdict no. The dropped episode carries
-incomplete_decode_coverage in both its feature flags and outcome flags.
-Its full feature is 0.009750006204274273J/token; after deletion it is
-0.009750032454274273J/token, delta 2.6250000000060947e-8J/token.
-No sensor cell is filled from truth. The no-stall dropped world likewise keeps
-24 episodes and prints its full numeric recovery and verdict below.
+The scenario grid is token jitter ±2/10/25 ms, then episode-factor half-widths
+0/2.5/5/10/20% with ±2 ms token jitter. Grid points are scenario inputs, not
+bars. The sweep axis is the mean of the two condition population SDs of
+episode-mean decode time per token.
 
-### Small-prefill and seed effects
+#### Blocking-upload INA
 
-F8 alone changes default printed traffic/energy by exactly zero: all default
-prefills contain two complete 128-token microbatches per turn, above max_batch.
-The 32-token and 33-token cache tests prime 32 ten-byte slots and independently
-probe warmth and eviction. Thirty-two updates/evicts, while 33 preserves the
-old cache. Integer byte/count assertions test identity, not a measurement bar.
+| Scenario input (grid point) | Within-condition SD of episode-mean decode time (ms/token) | Increment r [nominal 95% CI] | Scenario verdict |
+|---|---:|---|---|
+| Token jitter ±2 ms | 0.368832 | 0.048994 [-0.156278, 0.250209] | no |
+| Token jitter ±10 ms | 0.447588 | 0.543588 [0.382200, 0.672798] | inconclusive |
+| Token jitter ±25 ms | 0.816151 | 0.757955 [0.655447, 0.833042] | yes |
+| Episode factor ±0% (token jitter ±2 ms) | 0.368832 | 0.048994 [-0.156278, 0.250209] | no |
+| Episode factor ±2.5% (token jitter ±2 ms) | 0.868869 | 0.686035 [0.560681, 0.780649] | inconclusive |
+| Episode factor ±5% (token jitter ±2 ms) | 1.575544 | 0.761929 [0.660779, 0.835898] | yes |
+| Episode factor ±10% (token jitter ±2 ms) | 3.043434 | 0.796699 [0.707873, 0.860719] | yes |
+| Episode factor ±20% (token jitter ±2 ms) | 6.010339 | 0.772448 [0.674944, 0.843439] | yes |
 
-F10's paired comparison changes only the noise seed in the final world:
+#### Counterfactual no-upload-stall INA
 
-| Sensor (same final world) | Legacy-noise energy r → new r (delta) | Legacy increment r → new r (delta) | Energy-error SD J, legacy → new |
-|---|---|---|---|
-| ina3221 | 0.77844467529509 → 0.7740006547148806 (-0.004444020580209429) | 0.13403185926456668 → 0.1734304799794651 (0.039398620714898414) | 0.2813990239517388 → 0.28231468187151165 |
-| nvml_100ms_25ms | 0.15004646401054125 → 0.6345858161086284 (0.4845393520980872) | -0.04329725523392728 → -0.5886004907339206 (-0.5453032354999934) | 1.4877634899422347 → 1.6344200800256645 |
+| Scenario input (grid point) | Within-condition SD of episode-mean decode time (ms/token) | Increment r [nominal 95% CI] | Scenario verdict |
+|---|---:|---|---|
+| Token jitter ±2 ms | 0.071625 | 0.735609 [0.625652, 0.816906] | inconclusive |
+| Token jitter ±10 ms | 0.292804 | 0.755908 [0.652705, 0.831569] | yes |
+| Token jitter ±25 ms | 0.779390 | 0.788357 [0.696502, 0.854791] | yes |
+| Episode factor ±0% (token jitter ±2 ms) | 0.071625 | 0.735609 [0.625652, 0.816906] | inconclusive |
+| Episode factor ±2.5% (token jitter ±2 ms) | 0.757150 | 0.764849 [0.664703, 0.837994] | yes |
+| Episode factor ±5% (token jitter ±2 ms) | 1.499974 | 0.781413 [0.687071, 0.849844] | yes |
+| Episode factor ±10% (token jitter ±2 ms) | 2.988072 | 0.774920 [0.678282, 0.845207] | yes |
+| Episode factor ±20% (token jitter ±2 ms) | 5.965506 | 0.787803 [0.695748, 0.854397] | yes |
 
-INA apparent range changes from [0.0026808824290117726, 0.05281653112874765]
-to [0.0027584071277335217, 0.05281015158707227]J/token
-(endpoint deltas +0.00007752469872174912, -0.0000063795416753789636).
-NVML changes from [0.0015384068183945433, 0.05326329968906447]
-to [-0.001115443389494129, 0.05854830610006447]J/token
-(deltas -0.0026538502078886726, +0.005285006411).
-Both default increment verdicts remain no. Routing, timing, physical traffic
-and bounds are identical in this ablation.
 
-The unequal-traffic fixture now observes .03J above a 12W running baseline,
-rather than adding .36J from a simulator-only compute reference. Physical
-incremental traffic truth still includes .03J transfer + .36J running-stall
-energy = .39J. The lower stalled-power fixture observes -.15J above the same
-running baseline, with .21J physical incremental truth. Negative corrected
-energy is retained, not clipped. Sparse traces remain numeric and flagged.
+The stalled episode-factor verdict changes no -> inconclusive -> yes between
+the printed 0, 2.5% and 5% points, i.e. SD 0.368832 -> 0.868869 -> 1.575544
+ms/token. No exact transition is inferred between grid points. The final
+stalled point reaches 6.010339/54.403347=11.05% of mean decode time; the
+counterfactual final point reaches 5.965506/48.915798=12.20%. Both exceed the
+lead's 5% reach criterion. Per-token jitter alone gives stalled SD
+0.368832/0.447588/0.816151 ms/token, showing why averaged token jitter
+cannot represent general between-episode timing causes.
 
-### Complete before output of the reviewer-world port
+### Pass-condition audit
 
-These are the actual baseline STAGEB_REVIEW records. The port's extra full raw
-Episode dump for the unavailable p5 episode is reduced to its id, flags and
-features: the supplied p5 script itself prints only recovery/status/counts.
-All measured pass-condition values are retained; literal stdout and individual
-elapsed_s of the unrun scripts are not claimed. No raw routing fixture is needed
-in the handoff report.
+- F1: all five q6 fixed shipped values equal the reviewer's within-condition sketch bit for bit in these CI runs; each pair is printed below. The separate pair-difference oracle differs by at most binary64 rounding (largest observed difference 1.1102230246251565e-16), below 1% of each printed 95% half-width. No design difference needs accounting.
+- All five q7 variants give no or inconclusive. The counterfactual +0.3 W condition-only sensor changes from 0.7539295242538844 / yes to -0.26894425758502544 / no; q8 prints the same sketch value. The stalled +0.3 W case is 0.7245091211015002 [0.610971134479966, 0.8088429772481662], inconclusive. This is nominal uncalibrated output, not a validated null distribution.
+- l1 counterfactual INA, counterfactual NVML and stalled INA all print PASS. Their largest random-covariate deviations from constant timing are 0.008362403145948716, 0.04677865335404372 and 0.014352092360890967, below respective printed constant-result half-widths 0.09681743656959485, 0.20169205205071722 and 0.07752558485831718. These bars are supplied by the lead: a change below the 95% half-width is not a measured difference.
+- q5 completes for both sensors and flags constant within-condition timing. Counterfactual INA real/constant increment is 0.7356087476296433/0.7316358556654516; NVML is 0.09738900253260493/0.10168638294763703.
+- q2 const_off is inconclusive with constant-increment flags; noise_only is no at -0.20539816781350065. The four round-1 sensors stuck at their true running level remain inconclusive and keep their full N=96/24 cohorts.
+- q2 b_plus1 preserves the increment and mean-power verdict/point estimates within the mandated 1%-of-half-width bar: increment 0.04899396302686891 -> 0.048993963026867746 and mean-power 0.844028133904538 -> 0.8440281339045353. F5's energy-only offset sensitivity is disclosed: const_off energy-only remains 0.8213906829904345 / yes because the allowed fallback is used.
+- F2: all four q1 hash worlds complete with the same verdict and bit-identical increment r/interval as suffix worlds. All four q1b captured-observation replacements also preserve bit identity. Missing/unknown conditions have unavailable predictions, a missing_or_unknown_condition flag and 95 of 96 observations in within-condition statistics. The synthetic ID constructor may retain suffixes; production condition readers do not parse them.
+- q4 counterfactual INA seeds 1..6 span r=0.722259776923693 to 0.7833267733949544: three yes and three inconclusive, rather than the old uniformly affirmative 0.907..0.921 range. NVML seeds 1..3 are 0.05417111919095635, -0.22654561383560248 and 0.048887136883611744, all no.
+- F8: test_continuous_rounding_bound checks both sides of sigma=q/2, the zero-noise/zero-quantum limits and an analytic Gaussian-bin variance example with nonzero rounding covariance. The test's q/2 agreement bar is 1% of the printed uncertainty; its analytic variance comparison uses rule 3's 1e-6 relative bar. No sigma=q/2 branch remains.
+- Prior-round prefill slot guard and documentation byte/time/energy/device-fit arithmetic are unchanged. All 34 original tests and four prior reviewer tests pass.
 
-```json
-[
-  {
-    "label": "e2e ina3221",
-    "data": {
-      "apparent": [
-        0.009469296710107855,
-        0.17662586599104335
-      ],
-      "bound": 0.7676456827982208,
-      "ci": [
-        0.7448633282056377,
-        0.879202531603253
-      ],
-      "contrast": 2.0003725096569545,
-      "episodes": 96,
-      "forecast_r": 0.833440396453997,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.0642570569198771,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "yes",
-      "within_r": 0.8232371412861
-    }
-  },
-  {
-    "label": "e2e nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0.002850384235903659,
-        0.17947287898939324
-      ],
-      "bound": 0.021304553807677085,
-      "ci": [
-        0.6415172066752958,
-        0.8248085321163152
-      ],
-      "contrast": 2.0003725096569545,
-      "episodes": 96,
-      "forecast_r": 0.7098517319843417,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 1.4780627284508816,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.7470347806978304
-    }
-  },
-  {
-    "label": "e2e_blind ina3221",
-    "data": {
-      "apparent": [
-        0.006594048000000001,
-        0.12378700799999999
-      ],
-      "bound": 0.7676456827982208,
-      "ci": [
-        0.7472798566036094,
-        0.880433855878124
-      ],
-      "contrast": 2.0003725096569545,
-      "episodes": 96,
-      "forecast_r": 0.23018146032595468,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 8.352651279661636,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "yes",
-      "within_r": 0.8249858080477791
-    }
-  },
-  {
-    "label": "e2e_blind nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0.006594048000000001,
-        0.12378700799999999
-      ],
-      "bound": 0.021304553807677085,
-      "ci": [
-        0.7472798566036094,
-        0.880433855878124
-      ],
-      "contrast": 2.0003725096569545,
-      "episodes": 96,
-      "forecast_r": 0.2301814603259547,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 8.352651279661636,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "yes",
-      "within_r": 0.8249858080477791
-    }
-  },
-  {
-    "label": "default ina3221",
-    "data": {
-      "apparent": [
-        0.010193455699749773,
-        0.17654024210091254
-      ],
-      "bound": 1.0232899505603228,
-      "ci": [
-        0.5848415582162446,
-        0.9168823931438648
-      ],
-      "contrast": 2.8861834224992293,
-      "episodes": 24,
-      "forecast_r": 0.8470073684678862,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.0866584442041829,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.80737563681128
-    }
-  },
-  {
-    "label": "default nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0.01174969970150001,
-        0.17697168368906446
-      ],
-      "bound": 0.02839947686945834,
-      "ci": [
-        0.33877503376500123,
-        0.8488484865196229
-      ],
-      "contrast": 2.8861834224992293,
-      "episodes": 24,
-      "forecast_r": 0.7594288439245359,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 1.4877634899422347,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.6653557102979055
-    }
-  },
-  {
-    "label": "default_blind ina3221",
-    "data": {
-      "apparent": [
-        0.007130592,
-        0.123708384
-      ],
-      "bound": 1.0232899505603228,
-      "ci": [
-        0.5893045511592465,
-        0.917960688988899
-      ],
-      "contrast": 2.8861834224992293,
-      "episodes": 24,
-      "forecast_r": 0.24737518439024686,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 11.158883730059388,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.8097335676240313
-    }
-  },
-  {
-    "label": "default_blind nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0.007130592,
-        0.123708384
-      ],
-      "bound": 0.02839947686945834,
-      "ci": [
-        0.5893045511592465,
-        0.917960688988899
-      ],
-      "contrast": 2.8861834224992293,
-      "episodes": 24,
-      "forecast_r": 0.2473751843902468,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 11.158883730059388,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.8097335676240313
-    }
-  },
-  {
-    "label": "p2 q",
-    "data": {
-      "apparent": [
-        0.002413391021682021,
-        0.05295295995323052
-      ],
-      "bound": 0.6917183744201088,
-      "ci": [
-        0.7256969362755795,
-        0.8693724612976198
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.811229791048336,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.17020184370230057,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "no",
-      "within_r": 0.8093149327426429
-    }
-  },
-  {
-    "label": "p2 fine",
-    "data": {
-      "apparent": [
-        0.0024181331680919985,
-        0.052958985405741066
-      ],
-      "bound": 1.9197334991677085e-8,
-      "ci": [
-        0.7256872424278559,
-        0.8693674605738089
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.8114431582001935,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.1693596921841463,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "yes",
-      "within_r": 0.8093078674101826
-    }
-  },
-  {
-    "label": "p2 rounding",
-    "data": {
-      "condition_difference_j": 0.0005183719920603264,
-      "max_abs_j": 0.0116563919086623,
-      "sd_j": 0.004727768884084749
-    }
-  },
-  {
-    "label": "p3 contiguous_6.6ms",
-    "data": {
-      "apparent": [
-        0.002413391021682021,
-        0.05295295995323052
-      ],
-      "bound": 0.6917183744201088,
-      "ci": [
-        0.7256969362755795,
-        0.8693724612976198
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.811229791048336,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.17020184370230057,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "no",
-      "within_r": 0.8093149327426429
-    }
-  },
-  {
-    "label": "p3 shunt_slice_1.1ms",
-    "data": {
-      "apparent": [
-        0.002275719966728688,
-        0.05336706359221885
-      ],
-      "bound": 0.6917183744201088,
-      "ci": [
-        0.6091048951018189,
-        0.80702027853956
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.7292501346950881,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.39763430027584623,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.7225503465515355
-    }
-  },
-  {
-    "label": "p4 ina3221",
-    "data": {
-      "change_j_per_token": null,
-      "dropped": {
-        "coverage_fraction": 0,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": null,
-        "energy_per_decode_token_j": null,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "stall_energy_reference_requires_complete_decode_coverage"
-        ],
-        "token_energy_variance_j2": null,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": null
-      },
-      "full": {
-        "coverage_fraction": 1,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.0011383579299676476,
-        "energy_per_decode_token_j": 0.16757110982072204,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "duty_cycled_apparent_energy",
-          "nominal_compute_energy_reference",
-          "variance_excludes_running_stall_energy",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "token_energy_variance_j2": 0.00008098993205882508,
-        "token_rate_amplitude_w": 0.7556738492549713,
-        "token_rate_hz": 16.7241968520425
-      },
-      "samples": 2492,
-      "without_reference": {
-        "coverage_fraction": 0.9993467110604671,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.0011376342032777488,
-        "energy_per_decode_token_j": 0.04986562732072203,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "token_energy_variance_j2": 0.00008087669344351342,
-        "token_rate_amplitude_w": 0.7566111548667901,
-        "token_rate_hz": 16.7241968520425
-      }
-    }
-  },
-  {
-    "label": "p4 reference",
-    "data": {
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "blocking_decode_upload_stalls",
-        "constant_running_power_during_stall",
-        "compute_only_schedule_retimed",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_cache_bypassed",
-        "prefill_batch_union_profile_assumption",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "serialized_token_start_transfer_profile",
-        "sensor_duty_gaps",
-        "synthetic_power_trace",
-        "duty_cycled_apparent_energy",
-        "invalid_reference_decode_duration"
-      ]
-    }
-  },
-  {
-    "label": "p4 nvml_100ms_25ms",
-    "data": {
-      "change_j_per_token": null,
-      "dropped": {
-        "coverage_fraction": 0,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": null,
-        "energy_per_decode_token_j": null,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "stall_energy_reference_requires_complete_decode_coverage"
-        ],
-        "token_energy_variance_j2": null,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": null
-      },
-      "full": {
-        "coverage_fraction": 1,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.004853970092240914,
-        "energy_per_decode_token_j": 0.16819281044078907,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "duty_cycled_apparent_energy",
-          "nominal_compute_energy_reference",
-          "variance_excludes_running_stall_energy",
-          "token_rate_at_or_above_nyquist",
-          "per_token_energy_underresolved"
-        ],
-        "token_energy_variance_j2": 0.004814170162236688,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": 16.7241968520425
-      },
-      "samples": 251,
-      "without_reference": {
-        "coverage_fraction": 0.9934671106046709,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.004837933515826764,
-        "energy_per_decode_token_j": 0.05024829356578908,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "token_rate_at_or_above_nyquist",
-          "per_token_energy_underresolved"
-        ],
-        "token_energy_variance_j2": 0.004819416986754716,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": 16.7241968520425
-      }
-    }
-  },
-  {
-    "label": "p4 reference",
-    "data": {
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "blocking_decode_upload_stalls",
-        "constant_running_power_during_stall",
-        "compute_only_schedule_retimed",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_cache_bypassed",
-        "prefill_batch_union_profile_assumption",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "serialized_token_start_transfer_profile",
-        "sensor_duty_gaps",
-        "synthetic_power_trace",
-        "duty_cycled_apparent_energy",
-        "invalid_reference_decode_duration"
-      ]
-    }
-  },
-  {
-    "label": "p5 stalls",
-    "data": {
-      "apparent": null,
-      "bound": null,
-      "ci": null,
-      "contrast": null,
-      "episodes": 24,
-      "forecast_r": null,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": null,
-      "status": "unavailable",
-      "timing": null,
-      "true": null,
-      "verdict": null,
-      "within_r": null
-    }
-  },
-  {
-    "label": "p5 dropped_episode",
-    "data": {
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "blocking_decode_upload_stalls",
-        "constant_running_power_during_stall",
-        "compute_only_schedule_retimed",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_cache_bypassed",
-        "prefill_batch_union_profile_assumption",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "serialized_token_start_transfer_profile",
-        "sensor_duty_gaps",
-        "synthetic_power_trace"
-      ],
-      "features": {
-        "coverage_fraction": 0,
-        "decode_tokens": 512,
-        "energy_half_width_per_token_j": null,
-        "energy_per_decode_token_j": null,
-        "episode_id": "stageb-task-0-benign",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_cache_bypassed",
-          "prefill_batch_union_profile_assumption",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "serialized_token_start_transfer_profile",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "stall_energy_reference_requires_complete_decode_coverage"
-        ],
-        "token_energy_variance_j2": null,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": null
-      },
-      "estimates": null,
-      "episode_id": "stageb-task-0-benign"
-    }
-  },
-  {
-    "label": "p5 no-stalls",
-    "data": {
-      "apparent": [
-        0.0026176096544841473,
-        0.05228057185569165
-      ],
-      "bound": 0.9224808593080986,
-      "ci": [
-        0.5427539160736634,
-        0.9064696062145731
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.8326439820417312,
-      "increment": null,
-      "mean_power": null,
-      "phase_err_sd_J": 0.19185825239682444,
-      "status": "ok",
-      "timing": null,
-      "true": [
-        0.00304238592,
-        0.05278224384
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": 0.7847843468528873
-    }
-  },
-  {
-    "label": "elapsed",
-    "data": {
-      "seconds": 246.74594485099996
-    }
-  }
-]
+### Exact CI-printed before and final evidence
+
+These are the authorized no-shell ports, not fabricated isolated-script logs.
+Baseline source: e229ff9b9 on unchanged 932719cfc production, job 119671578296,
+test_all_reviewer_worlds. Final source: 0e5f17335, job 119694267390.
+The final test_all_reviewer_worlds prints q1, q1b, q2, q3, q4, q5, q6, q7,
+q8 and l1 plus reference/unknown-condition/check arrays.
+test_between_episode_timing_sweep prints both sweep arrays.
+test_continuous_rounding_bound passes without an evidence line.
+Sensor index 0=INA, 1=NVML; e2e=stalled, e2e_nostall/nostall=counterfactual.
+Repeated identical worlds are consolidated by the CI port's cache. Every
+world parameter and patched experiment global in the lead probes is retained.
+q5 emits its three recovery comparisons; its extra in-sample descriptive
+correlations are not printed by the port. q6 emits the shipped/sketch/SD
+comparison; random-covariate draws for the shared worlds are printed by l1.
+No attribute/key adaptation was required, and no .review2 script was edited.
+
+Before (all 41 STAGEB_R2 evidence lines):
+
+```text
+STAGEB_R2 q1_ids default 0 {"hash_ids": {"error": "StatisticsError", "message": "fmean requires at least one data point"}, "suffix_ids": {"ci": [-0.2791638835042857, 0.5629748878035307], "decode_s": [25.856373476, 30.914227554], "episodes": 24, "flags": [], "r": 0.1734304799794651, "recovery": {"decode_seconds_per_token": [0.8438154771382044, [0.6553517606446033, 0.9333699301483963], "yes"], "energy_per_decode_token_j": [0.7740006547148806, [0.5230834994984437, 0.9014464496892164], "inconclusive at this cohort size"], "mean_decode_power_w": [0.8478338120759732, [0.6633335569803914, 0.9351652157432788], "yes"], "token_energy_variance_j2": [0.8075488647977788, [0.585168978991736, 0.9169616657713987], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.0478756886311657, [-0.38143894286501157, 0.46020170271264166], "no"]}, "required": 0.6471202066782847, "verdict": "no"}}
+STAGEB_R2 q1_ids default 1 {"hash_ids": {"error": "StatisticsError", "message": "fmean requires at least one data point"}, "suffix_ids": {"ci": [-0.8135700110924684, -0.21035765763800887], "decode_s": [25.856373476, 30.914227554], "episodes": 24, "flags": [], "r": -0.5886004907339206, "recovery": {"decode_seconds_per_token": [0.8438154771382044, [0.6553517606446033, 0.9333699301483963], "yes"], "energy_per_decode_token_j": [0.6345858161086284, [0.29076507775888405, 0.8332611577713871], "inconclusive at this cohort size"], "mean_decode_power_w": [0.6736148880248951, [0.35195791312058256, 0.8529787790146469], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.2858705700385963, [-0.15434780908481388, 0.6313864502855886], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}}
+STAGEB_R2 q1_ids e2e_nostall 0 {"hash_ids": {"error": "StatisticsError", "message": "fmean requires at least one data point"}, "suffix_ids": {"ci": [0.8437692437918409, 0.9284890626614218], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": [], "r": 0.8938423135247563, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.7245660029010135, [0.611758967778493, 0.8084904919807115], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7235703428110349, [0.6104476360084228, 0.8077643915236326], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6325631403793299, [0.4931497081242412, 0.7402993283247059], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.16429493178438637, [-0.03964543115308715, 0.3550945831277374], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}}
+STAGEB_R2 q1_ids e2e_nostall 1 {"hash_ids": {"error": "StatisticsError", "message": "fmean requires at least one data point"}, "suffix_ids": {"ci": [-0.002510872103624055, 0.38906128288021297], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": [], "r": 0.20130400551357638, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.1204111321940513, [-0.08426533948028601, 0.3153381677919225], "no"], "mean_decode_power_w": [0.12046980734966435, [-0.08420622312773121, 0.31539178517467187], "no"], "token_energy_variance_j2": [0.07548130253882322, [-0.12911395980406556, 0.2739126494513399], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}}
+STAGEB_R2 q1b_increment_ids e2e_nostall 0 {"flags": [], "hash_ids": [0.9966216618198721, [0.9948975321730986, 0.9977638591474751]], "suffix_ids": [0.8938423135247563, [0.8437692437918409, 0.9284890626614218]]}
+STAGEB_R2 q1b_increment_ids e2e 0 {"flags": [], "hash_ids": [0.038659643150421454, [-0.16636244431743252, 0.24047768969798505]], "suffix_ids": [0.03878094817615853, [-0.16624431709872659, 0.24059214797596737]]}
+STAGEB_R2 q1b_increment_ids default 1 {"flags": [], "hash_ids": [-0.5859372347082612, [-0.812190951972158, -0.20646891039257317]], "suffix_ids": [-0.5886004907339206, [-0.8135700110924684, -0.21035765763800887]]}
+STAGEB_R2 q1b_increment_ids e2e_nostall 1 {"flags": [], "hash_ids": [0.7840143022656317, [0.690600267155911, 0.8516987991115142]], "suffix_ids": [0.20130400551357638, [-0.002510872103624055, 0.38906128288021297]]}
+STAGEB_R2 q2_blind real {"ci": [-0.16624431709872659, 0.24059214797596737], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": [], "r": 0.03878094817615853, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.7847682385203254, [0.6922172578618175, 0.8519241883004665], "yes"], "mean_decode_power_w": [0.844028133904538, [0.7737286721887902, 0.8937942788319294], "yes"], "token_energy_variance_j2": [0.8381683660231627, [0.7655635678094398, 0.8896923523279705], "yes"], "token_rate_amplitude_w": [0.07137319129642268, [-0.13317330306237754, 0.2700878527620881], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q2_blind const_off {"ci": null, "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["constant_power_increment_feature", "undefined_power_increment_correlation"], "r": null, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.8213906829904345, [0.7423138889988471, 0.8779015354109607], "yes"], "mean_decode_power_w": [null, null, "inconclusive at this cohort size"], "token_energy_variance_j2": [0.4414712166485143, [0.2623150128656091, 0.5912075984022859], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q2_blind noise_only {"ci": [-0.3883582249975427, 0.0033390591349903463], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": [], "r": -0.20050924019146646, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [-0.08439446277323642, [-0.2821895901071562, 0.12028296760037162], "no"], "mean_decode_power_w": [-0.09448574784196434, [-0.2915251544181646, 0.11024545971170721], "no"], "token_energy_variance_j2": [0.10143301539051935, [-0.1033108573842711, 0.2979304103482086], "no"], "token_rate_amplitude_w": [0.061147925419471554, [-0.1432474711313166, 0.26054045880124954], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q2_blind b_plus1 {"ci": [-0.1662443170987273, 0.24059214797596667], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": [], "r": 0.038780948176157785, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.760866939930668, [0.6599961882575257, 0.8347901739898798], "yes"], "mean_decode_power_w": [0.8440281339045353, [0.7737286721887865, 0.8937942788319275], "yes"], "token_energy_variance_j2": [0.8273292843611642, [0.750521593907891, 0.8820828436939568], "yes"], "token_rate_amplitude_w": [0.07137319129642268, [-0.13317330306237754, 0.2700878527620881], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q3_jitter 2000000 {"ci": [-0.16624431709872659, 0.24059214797596737], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": [], "r": 0.03878094817615853, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.7847682385203254, [0.6922172578618175, 0.8519241883004665], "yes"], "mean_decode_power_w": [0.844028133904538, [0.7737286721887902, 0.8937942788319294], "yes"], "token_energy_variance_j2": [0.8381683660231627, [0.7655635678094398, 0.8896923523279705], "yes"], "token_rate_amplitude_w": [0.07137319129642268, [-0.13317330306237754, 0.2700878527620881], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q3_jitter 10000000 {"ci": [0.45543838785555724, 0.7186004264964722], "decode_s": [19.343161443, 23.329624284], "episodes": 96, "flags": [], "r": 0.6031876227914476, "recovery": {"decode_seconds_per_token": [0.6225176900943571, [0.4805056345873075, 0.7327170804703199], "inconclusive at this cohort size"], "energy_per_decode_token_j": [0.7264095395603055, [0.6141886312454425, 0.8098342452953273], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7820990654664629, [0.688600580828382, 0.8500178561535348], "yes"], "token_energy_variance_j2": [0.6669244285863579, [0.5368497566270211, 0.7660294487870302], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.10058636269437991, [-0.10415703297145576, 0.29715075739843305], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q3_jitter 25000000 {"ci": [0.8773089747932467, 0.9443896458835185], "decode_s": [19.025162695, 23.675648954], "episodes": 96, "flags": [], "r": 0.9171155628350061, "recovery": {"decode_seconds_per_token": [0.2859490702192582, [0.08845340175038621, 0.4618126164680928], "no"], "energy_per_decode_token_j": [0.7662433679640117, [0.6672118847040501, 0.8386568718179834], "yes"], "mean_decode_power_w": [0.7971912255617452, [0.7091115522216582, 0.860773367424369], "yes"], "token_energy_variance_j2": [0.8051881665486867, [0.7200405372012578, 0.8664495092420316], "yes"], "token_rate_amplitude_w": [0.1442228433755383, [-0.060155640816427325, 0.33699556961298033], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 1 nostall 0 {"ci": [0.8748034191200041, 0.943212550944873], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.9153862845386987, "recovery": {"decode_seconds_per_token": [-0.1734213042388982, [-0.36327680504652665, 0.030262672483032518], "no"], "energy_per_decode_token_j": [0.7774302906770401, [0.6822856471615543, 0.8466791188403034], "yes"], "mean_decode_power_w": [0.776883978880419, [0.6815476385009901, 0.8462880833088657], "yes"], "token_energy_variance_j2": [0.6369981023518875, [0.4987507409182385, 0.7436381131427936], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.205034538075162, [0.0025185857901886427, 0.39139492685545024], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 2 nostall 0 {"ci": [0.8633049220107933, 0.9377885042940577], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.9074310261715518, "recovery": {"decode_seconds_per_token": [-0.056861874647458115, [-0.2565269139370425, 0.14745762659407177], "no"], "energy_per_decode_token_j": [0.7087154761500463, [0.5909564393779485, 0.7969008278244267], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7094594134758346, [0.5919293064006004, 0.7974462392194557], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6223490728820592, [0.48029390098456276, 0.7325895752695265], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17738062394290716, [-0.02618092888868043, 0.3668174359891461], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 3 nostall 0 {"ci": [0.8728085576148743, 0.9422741470840753], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.9140084042025864, "recovery": {"decode_seconds_per_token": [-0.11977129945425358, [-0.3147534075654113, 0.08490988981658565], "no"], "energy_per_decode_token_j": [0.7690089886764835, [0.6709308740129158, 0.8406430521953545], "yes"], "mean_decode_power_w": [0.768035140159154, [0.6696207560314941, 0.8399438850442931], "yes"], "token_energy_variance_j2": [0.6579603699438198, [0.5253817429396007, 0.7593475391516569], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.1933671394540508, [-0.009630781079792051, 0.381057817065991], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 4 nostall 0 {"ci": [0.8726575017799989, 0.9422030443587197], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.9139040289778375, "recovery": {"decode_seconds_per_token": [-0.07203581912200638, [-0.2707052071743779, 0.13251900526454705], "no"], "energy_per_decode_token_j": [0.7331632776876585, [0.6231078370228275, 0.8147495766865345], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7341578785931354, [0.6244237617876964, 0.8154724521637098], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6285609813194366, [0.4881051755919032, 0.7372818028680461], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17896739933980382, [-0.024543182257106094, 0.36823487483348327], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 5 nostall 0 {"ci": [0.88320110115919, 0.9471509729132014], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.9211762802330011, "recovery": {"decode_seconds_per_token": [-0.07903806123652074, [-0.2772190555986949, 0.125593876782121], "no"], "energy_per_decode_token_j": [0.7669820969472144, [0.6682047863231438, 0.8391875919339726], "yes"], "mean_decode_power_w": [0.7658670242592706, [0.6667061886393493, 0.8383864448493503], "yes"], "token_energy_variance_j2": [0.6971338479802602, [0.5758548766192376, 0.7883912736599059], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17737442810851145, [-0.02618732160792211, 0.36681189963368804], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 6 nostall 0 {"ci": [0.8685714194836089, 0.9402773258097541], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.9110785933432388, "recovery": {"decode_seconds_per_token": [-0.1326868504663593, [-0.32652868328607904, 0.07186585425846996], "no"], "energy_per_decode_token_j": [0.7150178906016696, [0.5992091328607609, 0.8015168445531617], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7151801313522064, [0.599421904367454, 0.8016355370342293], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.591162198426132, [0.4414150248463187, 0.7088728389547391], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17320505397851166, [-0.030485413818306873, 0.3630832646783135], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 1 nostall 1 {"ci": [-0.0018639874559796548, 0.3896101138915353], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.2019245983495024, "recovery": {"decode_seconds_per_token": [-0.1734213042388982, [-0.36327680504652665, 0.030262672483032518], "no"], "energy_per_decode_token_j": [0.07281622897394084, [-0.13174817741300668, 0.27143208676661595], "no"], "mean_decode_power_w": [0.07279156049065869, [-0.1317725467995254, 0.27140911382338734], "no"], "token_energy_variance_j2": [0.11782763832017552, [-0.08686683188082994, 0.3129761355638427], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q4_seeds 2 nostall 1 {"ci": [-0.07973666853308871, 0.3214810364644569], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.12602226174224798, "recovery": {"decode_seconds_per_token": [-0.056861874647458115, [-0.2565269139370425, 0.14745762659407177], "no"], "energy_per_decode_token_j": [-0.00414258556378954, [-0.20658976463271522, 0.19864473644866554], "no"], "mean_decode_power_w": [-0.0041483492457129985, [-0.20659528241280326, 0.19863920009860186], "no"], "token_energy_variance_j2": [0.16256098975569117, [-0.04142402825134878, 0.3535367108265941], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q4_seeds 3 nostall 1 {"ci": [-0.006070555120189861, 0.386036188721665], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": [], "r": 0.19788607129369648, "recovery": {"decode_seconds_per_token": [-0.11977129945425358, [-0.3147534075654113, 0.08490988981658565], "no"], "energy_per_decode_token_j": [0.06322440122788221, [-0.14120510088016233, 0.26248243781689423], "no"], "mean_decode_power_w": [0.06320599562883387, [-0.14122321181933367, 0.26246523146648193], "no"], "token_energy_variance_j2": [0.13557089408869877, [-0.06894353204627356, 0.3291499107628256], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 l1_random_covariate e2e_nostall 0 {"bar_half_width": 0.0963503716416596, "const": [0.733196937462531, [0.6224555827995162, 0.8151563260828354], []], "random_covariate": [0.7631290641895777, 0.7336908867925656, 0.7838751843513776, 0.8613686056719941, 0.7302761191359117, 0.8727129980715291, 0.7492413689506917, 0.7619985731742132, 0.9475886565330001, 0.7780211657515587], "real": [0.8938423135247563, [0.8437692437918409, 0.9284890626614218]], "result": "FAIL", "worst_abs_change": 0.21439171907046906}
+STAGEB_R2 q5_procedure 0 {"a_increment": 0.8938423135247563, "b_increment_no_timing": 0.733196937462531, "c_energy_only_within": 0.7245660029010135}
+STAGEB_R2 l1_random_covariate e2e_nostall 1 {"bar_half_width": 0.20062831298994882, "const": [0.12562673254529513, [-0.08013599238807052, 0.32112063359182713], []], "random_covariate": [0.12532544167568951, 0.10951654646997767, 0.09647240493257737, 0.18974462056736574, 0.11903957348424346, 0.1928325544815843, 0.17625188889053722, 0.13019199403634898, 0.29898651898698403, 0.1448654408096689], "real": [0.20130400551357638, [-0.002510872103624055, 0.38906128288021297]], "result": "PASS", "worst_abs_change": 0.1733597864416889}
+STAGEB_R2 q5_procedure 1 {"a_increment": 0.20130400551357638, "b_increment_no_timing": 0.12562673254529513, "c_energy_only_within": 0.1204111321940513}
+STAGEB_R2 l1_random_covariate e2e 0 {"bar_half_width": 0.07803421009142092, "const": [0.7917726830598384, [0.7011520600031974, 0.8572204801860392], []], "random_covariate": [0.8168948977173967, 0.7949776685281287, 0.8398346712831682, 0.8948259772662789, 0.7892186058174446, 0.9038547917335561, 0.8035114112913352, 0.8108497012718527, 0.96025572351735, 0.8258592221676905], "real": [0.03878094817615853, [-0.16624431709872659, 0.24059214797596737]], "result": "FAIL", "worst_abs_change": 0.1684830404575116}
+STAGEB_R2 q6_leak e2e_nostall 0 2000000 {"shipped": [0.8938423135247563, [0.8437692437918409, 0.9284890626614218], "yes"], "within_condition_nuisance_fit": [0.7356087476296433, [0.6256522408405558, 0.8169055178178175]], "within_sd_timing_ms": 0.07162480821319159}
+STAGEB_R2 q6_leak e2e_nostall 1 2000000 {"shipped": [0.20130400551357638, [-0.002510872103624055, 0.38906128288021297], "no"], "within_condition_nuisance_fit": [0.09738900253260493, [-0.10847497677598433, 0.2952434901072392]], "within_sd_timing_ms": 0.07162480821319159}
+STAGEB_R2 q6_leak e2e 0 2000000 {"shipped": [0.03878094817615853, [-0.16624431709872659, 0.24059214797596737], "no"], "within_condition_nuisance_fit": [0.04899396302686891, [-0.15627770234212882, 0.2502086290193932]], "within_sd_timing_ms": 0.3688315632613681}
+STAGEB_R2 q6_leak e2e 0 10000000 {"shipped": [0.6031876227914476, [0.45543838785555724, 0.7186004264964722], "inconclusive at this cohort size"], "within_condition_nuisance_fit": [0.5435884172451112, [0.3821995378666403, 0.6727977743083902]], "within_sd_timing_ms": 0.44758826828606724}
+STAGEB_R2 q6_leak e2e 0 25000000 {"shipped": [0.9171155628350061, [0.8773089747932467, 0.9443896458835185], "yes"], "within_condition_nuisance_fit": [0.7579552887635139, [0.655447422233347, 0.8330417830958603]], "within_sd_timing_ms": 0.8161511237517547}
+STAGEB_R2 q7_condition_sensor e2e_nostall 0.0 {"ci": [-0.20248551718228558, 0.20493766726548754], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": [], "r": 0.0012791581581449239, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.005258572032977311, [-0.19757252545565196, 0.20765789855472713], "no"], "mean_decode_power_w": [0.005320448181600522, [-0.19751306224587817, 0.20771710738803323], "no"], "token_energy_variance_j2": [-0.03232339278983169, [-0.23341525146250872, 0.17141988696677804], "no"], "token_rate_amplitude_w": [-0.06522211814070869, [-0.26434923707022345, 0.13923855214862202], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q7_condition_sensor e2e_nostall 0.1 {"ci": [0.6443634494043755, 0.8270740953324667], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": [], "r": 0.7496702614943103, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [-0.12054370338844832, [-0.3154593096364715, 0.08413176939143467], "no"], "mean_decode_power_w": [-0.11932708838864414, [-0.31434734414326115, 0.08535727540101107], "no"], "token_energy_variance_j2": [-0.1394069182865722, [-0.3326317502207593, 0.06505114766548425], "no"], "token_rate_amplitude_w": [-0.07336935498451479, [-0.2719471353184851, 0.13120169292619924], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q7_condition_sensor e2e_nostall 0.3 {"ci": [0.650056105517618, 0.8301442143957536], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": [], "r": 0.7539295242538844, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [-0.3152958261098426, [-0.48681596630306806, -0.1203647973478505], "no"], "mean_decode_power_w": [-0.3292735132938631, [-0.49862691147762717, -0.1357069706116846], "no"], "token_energy_variance_j2": [-0.056094961663672505, [-0.25580803405948355, 0.1482101792991354], "no"], "token_rate_amplitude_w": [-0.08155440856839881, [-0.279555450974594, 0.12310036085941158], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q8_fixcheck {"shipped": 0.7539295242538844, "within_condition_fit": [-0.26894425758502544, [-0.44810573375996904, -0.0690133929008036]]}
+STAGEB_R2 q7_condition_sensor e2e_nostall 1.0 {"ci": [0.6493085157493267, 0.829741652054187], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": [], "r": 0.7533706729430419, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [-0.6853923950889547, [-0.7797284914392767, -0.5606289335140712], "no"], "mean_decode_power_w": [-0.823235888079771, [-0.8792016488894461, -0.7448615971039794], "no"], "token_energy_variance_j2": [-0.03249199524255191, [-0.2335748293186135, 0.1712560620674549], "no"], "token_rate_amplitude_w": [-0.07110964516799272, [-0.2698422677472176, 0.1334334865496318], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q7_condition_sensor e2e 0.3 {"ci": [0.002564217247430469, 0.3933596477605623], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": [], "r": 0.20616843448885078, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [-0.06998215027366496, [-0.2687913215430803, 0.13454627725011767], "no"], "mean_decode_power_w": [-0.4179198947602215, [-0.5720958739302694, -0.23521731787918765], "no"], "token_energy_variance_j2": [0.05635192984113401, [-0.14795804914994826, 0.25604893247636484], "no"], "token_rate_amplitude_w": [0.0653197600201441, [-0.1391423923124313, 0.26444044188955873], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 checks [["opaque IDs complete and preserve verdict", false], ["opaque IDs complete and preserve verdict", false], ["opaque IDs complete and preserve verdict", false], ["opaque IDs complete and preserve verdict", false], ["ID-only replacement is bit-identical", false], ["ID-only replacement is bit-identical", false], ["ID-only replacement is bit-identical", false], ["ID-only replacement is bit-identical", false], ["blind sensor gives no yes", true], ["blind sensor gives no yes", true], ["noise-only verdict", true], ["baseline shift preserves verdict", true], ["baseline shift preserves increment", true], ["baseline shift preserves mean_decode_power_w", true], ["independent random covariate stays below printed uncertainty", false], ["constant timing is flagged", false], ["independent random covariate stays below printed uncertainty", true], ["constant timing is flagged", false], ["independent random covariate stays below printed uncertainty", false], ["constant timing is flagged", false], ["within-condition sketch agrees", false], ["within-condition sketch agrees", false], ["within-condition sketch agrees", false], ["within-condition sketch agrees", false], ["within-condition sketch agrees", false], ["condition-offset sensor gives no yes", true], ["condition-offset sensor gives no yes", true], ["condition-offset sensor gives no yes", false], ["condition-offset sensor gives no yes", false], ["condition-offset sensor gives no yes", true]]
 ```
 
-### Complete final output of the reviewer-world port
+Final (all printed STAGEB_R2 lines, including both sweep arrays):
 
-Candidate held_out_effective_n is the raw scalar recovery's count; its
-within-condition intervals use N-2. The increment uses N-3. The full default
-CLI evidence below also prints the centered count and all scalar candidates.
-
-```json
-[
-  {
-    "label": "e2e ina3221",
-    "data": {
-      "apparent": [
-        0.0018100693076293552,
-        0.05323122222085053
-      ],
-      "bound": 0.0009602049996847113,
-      "ci": [
-        0.6922172578618175,
-        0.8519241883004665
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.7868317148173697,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 93,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.03878094817615853,
-        "within_condition_held_out_interval_95": [
-          -0.16624431709872659,
-          0.24059214797596737
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.844028133904538,
-        "within_condition_held_out_interval_95": [
-          0.7737286721887902,
-          0.8937942788319294
-        ]
-      },
-      "phase_err_sd_J": 0.2514318404779241,
-      "recovery_meets": true,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8213906829904342,
-        "within_condition_held_out_interval_95": [
-          0.7423138889988465,
-          0.8779015354109604
-        ]
-      },
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "no",
-      "within_r": 0.7847682385203254,
-      "worst_case_bound_j": 0.7676456827982208
-    }
-  },
-  {
-    "label": "e2e nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        -0.0020557139120364475,
-        0.05875739027365367
-      ],
-      "bound": 0.0000842705045427661,
-      "ci": [
-        0.07663600667060576,
-        0.45240035809789975
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.34931967851221857,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 93,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.13023441275020084,
-        "within_condition_held_out_interval_95": [
-          -0.07548000626420594,
-          0.32531560352046
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.2797199163562553,
-        "within_condition_held_out_interval_95": [
-          0.08173163642031049,
-          0.45646919101002054
-        ]
-      },
-      "phase_err_sd_J": 1.5550265470318823,
-      "recovery_meets": false,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8213906829904342,
-        "within_condition_held_out_interval_95": [
-          0.7423138889988465,
-          0.8779015354109604
-        ]
-      },
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "no",
-      "within_r": 0.274986590911851,
-      "worst_case_bound_j": 0.021304553807677085
-    }
-  },
-  {
-    "label": "e2e_blind ina3221",
-    "data": {
-      "apparent": [
-        0,
-        0
-      ],
-      "bound": 0.0009602049996847113,
-      "ci": null,
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.07136020806232629,
-      "increment": {
-        "flags": [
-          "constant_power_increment_feature",
-          "undefined_power_increment_correlation"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "mean_power": {
-        "flags": [
-          "constant_training_power_feature",
-          "undefined_observed_correlation",
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "phase_err_sd_J": 8.352651279661636,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8213906829904342,
-        "within_condition_held_out_interval_95": [
-          0.7423138889988465,
-          0.8779015354109604
-        ]
-      },
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": null,
-      "worst_case_bound_j": 0.7676456827982208
-    }
-  },
-  {
-    "label": "e2e_blind nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0,
-        0
-      ],
-      "bound": 0.0000842705045427661,
-      "ci": null,
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.07136020806232628,
-      "increment": {
-        "flags": [
-          "constant_power_increment_feature",
-          "undefined_power_increment_correlation"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "mean_power": {
-        "flags": [
-          "constant_training_power_feature",
-          "undefined_observed_correlation",
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "phase_err_sd_J": 8.352651279661636,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8213906829904342,
-        "within_condition_held_out_interval_95": [
-          0.7423138889988465,
-          0.8779015354109604
-        ]
-      },
-      "true": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": null,
-      "worst_case_bound_j": 0.021304553807677085
-    }
-  },
-  {
-    "label": "default ina3221",
-    "data": {
-      "apparent": [
-        0.0027584071277335217,
-        0.05281015158707227
-      ],
-      "bound": 0.0011086205166570683,
-      "ci": [
-        0.5230834994984437,
-        0.9014464496892164
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.8165087416167143,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 21,
-        "held_out_episodes": 24,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.1734304799794651,
-        "within_condition_held_out_interval_95": [
-          -0.2791638835042857,
-          0.5629748878035307
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8478338120759732,
-        "within_condition_held_out_interval_95": [
-          0.6633335569803914,
-          0.9351652157432788
-        ]
-      },
-      "phase_err_sd_J": 0.28231468187151165,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "within_r": 0.7740006547148806,
-      "worst_case_bound_j": 1.0232899505603228
-    }
-  },
-  {
-    "label": "default nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        -0.001115443389494129,
-        0.05854830610006447
-      ],
-      "bound": 0.00009729590068353058,
-      "ci": [
-        0.29076507775888405,
-        0.8332611577713871
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.43832762070182724,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 21,
-        "held_out_episodes": 24,
-        "verdict": "no",
-        "within_condition_held_out_correlation": -0.5886004907339206,
-        "within_condition_held_out_interval_95": [
-          -0.8135700110924684,
-          -0.21035765763800887
-        ]
-      },
-      "mean_power": {
-        "flags": [
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": 0.6736148880248951,
-        "within_condition_held_out_interval_95": [
-          0.35195791312058256,
-          0.8529787790146469
-        ]
-      },
-      "phase_err_sd_J": 1.6344200800256645,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "within_r": 0.6345858161086284,
-      "worst_case_bound_j": 0.02839947686945834
-    }
-  },
-  {
-    "label": "default_blind ina3221",
-    "data": {
-      "apparent": [
-        0,
-        0
-      ],
-      "bound": 0.0011086205166570683,
-      "ci": null,
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.0770312679988224,
-      "increment": {
-        "flags": [
-          "constant_power_increment_feature",
-          "undefined_power_increment_correlation"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "mean_power": {
-        "flags": [
-          "constant_training_power_feature",
-          "undefined_observed_correlation",
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "phase_err_sd_J": 11.158883730059388,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": null,
-      "worst_case_bound_j": 1.0232899505603228
-    }
-  },
-  {
-    "label": "default_blind nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0,
-        0
-      ],
-      "bound": 0.00009729590068353058,
-      "ci": null,
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.0770312679988224,
-      "increment": {
-        "flags": [
-          "constant_power_increment_feature",
-          "undefined_power_increment_correlation"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "mean_power": {
-        "flags": [
-          "constant_training_power_feature",
-          "undefined_observed_correlation",
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 0,
-        "held_out_episodes": 0,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": null,
-        "within_condition_held_out_interval_95": null
-      },
-      "phase_err_sd_J": 11.158883730059388,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "inconclusive at this cohort size",
-      "within_r": null,
-      "worst_case_bound_j": 0.02839947686945834
-    }
-  },
-  {
-    "label": "p2 q",
-    "data": {
-      "apparent": [
-        0.002272316637171021,
-        0.05334247548443969
-      ],
-      "bound": 0.0009114822446086623,
-      "ci": [
-        0.611758967778493,
-        0.8084904919807115
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.7291350447390186,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 93,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8938423135247563,
-        "within_condition_held_out_interval_95": [
-          0.8437692437918409,
-          0.9284890626614218
-        ]
-      },
-      "mean_power": {
-        "flags": [
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": 0.7235703428110349,
-        "within_condition_held_out_interval_95": [
-          0.6104476360084228,
-          0.8077643915236326
-        ]
-      },
-      "phase_err_sd_J": 0.3979013764714221,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": -0.010303124188217116,
-        "within_condition_held_out_interval_95": [
-          -0.21248013030776805,
-          0.19271978742984244
-        ]
-      },
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "yes",
-      "within_r": 0.7245660029010135,
-      "worst_case_bound_j": 0.6917183744201088
-    }
-  },
-  {
-    "label": "p2 fine",
-    "data": {
-      "apparent": [
-        0.002271042140340114,
-        0.05334264081385203
-      ],
-      "bound": 2.529646549202549e-11,
-      "ci": [
-        0.6117281652871647,
-        0.8084734431306272
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.7293773753792719,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 93,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8938542030020322,
-        "within_condition_held_out_interval_95": [
-          0.8437862787820146,
-          0.928497218267882
-        ]
-      },
-      "mean_power": {
-        "flags": [
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": 0.7235435867348866,
-        "within_condition_held_out_interval_95": [
-          0.6104124055358314,
-          0.8077448757175925
-        ]
-      },
-      "phase_err_sd_J": 0.39733896561676096,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": -0.010303124188217116,
-        "within_condition_held_out_interval_95": [
-          -0.21248013030776805,
-          0.19271978742984244
-        ]
-      },
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "yes",
-      "within_r": 0.7245426207698503,
-      "worst_case_bound_j": 1.9197334991677085e-8
-    }
-  },
-  {
-    "label": "p2 rounding",
-    "data": {
-      "condition_difference_j": 0.00097816833854091,
-      "max_abs_j": 0.010848884880678922,
-      "sd_j": 0.004324237908642516
-    }
-  },
-  {
-    "label": "p3 contiguous_6.6ms",
-    "data": {
-      "apparent": [
-        0.0024222549777566885,
-        0.05298272846853936
-      ],
-      "bound": 0.0009114822446086623,
-      "ci": [
-        0.7276193778957244,
-        0.8703636017948386
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.8109358181564447,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 93,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.9270878135830587,
-        "within_condition_held_out_interval_95": [
-          0.891800255448484,
-          0.9511640036403203
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8083738802855257,
-        "within_condition_held_out_interval_95": [
-          0.7244060763277498,
-          0.8687062918438864
-        ]
-      },
-      "phase_err_sd_J": 0.1713564423832338,
-      "recovery_meets": true,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": -0.010303124188217116,
-        "within_condition_held_out_interval_95": [
-          -0.21248013030776805,
-          0.19271978742984244
-        ]
-      },
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "yes",
-      "within_r": 0.8107156206127827,
-      "worst_case_bound_j": 0.6917183744201088
-    }
-  },
-  {
-    "label": "p3 shunt_slice_1.1ms",
-    "data": {
-      "apparent": [
-        0.002272316637171021,
-        0.05334247548443969
-      ],
-      "bound": 0.0009114822446086623,
-      "ci": [
-        0.611758967778493,
-        0.8084904919807115
-      ],
-      "contrast": 0.5982422458787154,
-      "episodes": 96,
-      "forecast_r": 0.7291350447390186,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 93,
-        "held_out_episodes": 96,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8938423135247563,
-        "within_condition_held_out_interval_95": [
-          0.8437692437918409,
-          0.9284890626614218
-        ]
-      },
-      "mean_power": {
-        "flags": [
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": 0.7235703428110349,
-        "within_condition_held_out_interval_95": [
-          0.6104476360084228,
-          0.8077643915236326
-        ]
-      },
-      "phase_err_sd_J": 0.3979013764714221,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 96,
-        "held_out_episodes": 96,
-        "verdict": "no",
-        "within_condition_held_out_correlation": -0.010303124188217116,
-        "within_condition_held_out_interval_95": [
-          -0.21248013030776805,
-          0.19271978742984244
-        ]
-      },
-      "true": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "yes",
-      "within_r": 0.7245660029010135,
-      "worst_case_bound_j": 0.6917183744201088
-    }
-  },
-  {
-    "label": "p4 ina3221",
-    "data": {
-      "change_j_per_token": -0.000001355000000001494,
-      "dropped": {
-        "coverage_fraction": 0.9993467110604671,
-        "decode_seconds_per_token": 0.0597936037734375,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.00006312827100861793,
-        "energy_per_decode_token_j": 0.050664452419288276,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "dithered_rounding_uncertainty",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "mean_decode_power_w": 12.847876183794083,
-        "token_energy_variance_j2": 0.00022266500212545843,
-        "token_rate_amplitude_w": 0.8598610329956956,
-        "token_rate_hz": 16.7241968520425
-      },
-      "full": {
-        "coverage_fraction": 1,
-        "decode_seconds_per_token": 0.0597936037734375,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.00006314891206353711,
-        "energy_per_decode_token_j": 0.05066580741928828,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "duty_cycled_apparent_energy",
-          "dithered_rounding_uncertainty",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "mean_decode_power_w": 12.847344936947852,
-        "token_energy_variance_j2": 0.00022273011818427197,
-        "token_rate_amplitude_w": 0.8591568043131121,
-        "token_rate_hz": 16.7241968520425
-      },
-      "samples": 2492,
-      "without_reference": {
-        "coverage_fraction": 0.9993467110604671,
-        "decode_seconds_per_token": 0.0597936037734375,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.00006312827100861793,
-        "energy_per_decode_token_j": 0.050664452419288276,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "dithered_rounding_uncertainty",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "mean_decode_power_w": 12.847876183794083,
-        "token_energy_variance_j2": 0.00022266500212545843,
-        "token_rate_amplitude_w": 0.8598610329956956,
-        "token_rate_hz": 16.7241968520425
-      }
-    }
-  },
-  {
-    "label": "p4 reference",
-    "data": {
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "blocking_decode_upload_stalls",
-        "constant_running_power_during_stall",
-        "compute_only_schedule_retimed",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_upstream_batch_cache_policy",
-        "prefill_batch_union_profile_assumption",
-        "serialized_token_start_transfer_profile",
-        "prefill_cache_bypassed",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "sensor_duty_gaps",
-        "synthetic_power_trace",
-        "duty_cycled_apparent_energy",
-        "reference_decode_duration_ignored",
-        "dithered_rounding_uncertainty",
-        "spectrum_includes_acquisition_transfer_function"
-      ]
-    }
-  },
-  {
-    "label": "p4 nvml_100ms_25ms",
-    "data": {
-      "change_j_per_token": -0.0002519531250000026,
-      "dropped": {
-        "coverage_fraction": 0.9934671106046709,
-        "decode_seconds_per_token": 0.0597936037734375,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.004808232226783042,
-        "energy_per_decode_token_j": 0.04671195708756252,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "dithered_rounding_uncertainty",
-          "token_rate_at_or_above_nyquist",
-          "per_token_energy_underresolved"
-        ],
-        "mean_decode_power_w": 12.78635714996249,
-        "token_energy_variance_j2": 0.00498414621561689,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": 16.7241968520425
-      },
-      "full": {
-        "coverage_fraction": 1,
-        "decode_seconds_per_token": 0.0597936037734375,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.004824073491357244,
-        "energy_per_decode_token_j": 0.04696391021256252,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "duty_cycled_apparent_energy",
-          "dithered_rounding_uncertainty",
-          "token_rate_at_or_above_nyquist",
-          "per_token_energy_underresolved"
-        ],
-        "mean_decode_power_w": 12.785433679336546,
-        "token_energy_variance_j2": 0.004979605078914651,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": 16.7241968520425
-      },
-      "samples": 251,
-      "without_reference": {
-        "coverage_fraction": 0.9934671106046709,
-        "decode_seconds_per_token": 0.0597936037734375,
-        "decode_tokens": 256,
-        "energy_half_width_per_token_j": 0.004808232226783042,
-        "energy_per_decode_token_j": 0.04671195708756252,
-        "episode_id": "stageb-task-0-sabotage",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "dithered_rounding_uncertainty",
-          "token_rate_at_or_above_nyquist",
-          "per_token_energy_underresolved"
-        ],
-        "mean_decode_power_w": 12.78635714996249,
-        "token_energy_variance_j2": 0.00498414621561689,
-        "token_rate_amplitude_w": null,
-        "token_rate_hz": 16.7241968520425
-      }
-    }
-  },
-  {
-    "label": "p4 reference",
-    "data": {
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "blocking_decode_upload_stalls",
-        "constant_running_power_during_stall",
-        "compute_only_schedule_retimed",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_upstream_batch_cache_policy",
-        "prefill_batch_union_profile_assumption",
-        "serialized_token_start_transfer_profile",
-        "prefill_cache_bypassed",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "sensor_duty_gaps",
-        "synthetic_power_trace",
-        "duty_cycled_apparent_energy",
-        "reference_decode_duration_ignored",
-        "dithered_rounding_uncertainty",
-        "token_rate_at_or_above_nyquist",
-        "per_token_energy_underresolved"
-      ]
-    }
-  },
-  {
-    "label": "p4 flags",
-    "data": {
-      "bad_resident": [
-        "invalid_resident_expert"
-      ],
-      "duplicate": [
-        "transfer_only_time_axis",
-        "serialized_token_start_transfer_profile",
-        "duplicate_expert_ids"
-      ]
-    }
-  },
-  {
-    "label": "p5 stalls",
-    "data": {
-      "apparent": [
-        0.0027584071277335217,
-        0.05281015158707227
-      ],
-      "bound": 0.0011086205166570683,
-      "ci": [
-        0.5230848677653802,
-        0.901446802677942
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.8165087557801681,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 21,
-        "held_out_episodes": 24,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.17342777046824073,
-        "within_condition_held_out_interval_95": [
-          -0.2791664593294462,
-          0.5629729796510822
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8479268386238027,
-        "within_condition_held_out_interval_95": [
-          0.6635188382529319,
-          0.9352067244694103
-        ]
-      },
-      "phase_err_sd_J": 0.2823146132068166,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "within_r": 0.7740014099210382,
-      "worst_case_bound_j": 1.0232899505603228
-    }
-  },
-  {
-    "label": "p5 dropped_episode",
-    "data": {
-      "episode_id": "stageb-task-0-benign",
-      "features": {
-        "coverage_fraction": 0.9996243028128502,
-        "decode_seconds_per_token": 0.0519866814765625,
-        "decode_tokens": 512,
-        "energy_half_width_per_token_j": 0.000041631571557083775,
-        "energy_per_decode_token_j": 0.009750032454274273,
-        "episode_id": "stageb-task-0-benign",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "blocking_decode_upload_stalls",
-          "constant_running_power_during_stall",
-          "compute_only_schedule_retimed",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "dithered_rounding_uncertainty",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "mean_decode_power_w": 12.187619148091954,
-        "token_energy_variance_j2": 0.00023975498485812123,
-        "token_rate_amplitude_w": 0.17498982799784016,
-        "token_rate_hz": 19.235695982072574
-      },
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "blocking_decode_upload_stalls",
-        "constant_running_power_during_stall",
-        "compute_only_schedule_retimed",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_upstream_batch_cache_policy",
-        "prefill_batch_union_profile_assumption",
-        "serialized_token_start_transfer_profile",
-        "prefill_cache_bypassed",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "sensor_duty_gaps",
-        "synthetic_power_trace",
-        "irregular_sample_cadence",
-        "duty_cycled_apparent_energy",
-        "incomplete_decode_coverage",
-        "dithered_rounding_uncertainty",
-        "spectrum_includes_acquisition_transfer_function"
-      ]
-    }
-  },
-  {
-    "label": "p5 default_drop_change",
-    "data": {
-      "change_j_per_token": 2.6250000000060947e-8,
-      "dropped_j_per_token": 0.009750032454274273,
-      "full_j_per_token": 0.009750006204274273
-    }
-  },
-  {
-    "label": "p5 no-stalls",
-    "data": {
-      "apparent": [
-        0.003045773153486021,
-        0.053131074082086026
-      ],
-      "bound": 0.0010525972690221938,
-      "ci": [
-        0.3816110664807926,
-        0.8620455405219152
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.7841676030012349,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 21,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.9596333732125151,
-        "within_condition_held_out_interval_95": [
-          0.9013326708991012,
-          0.9837791605007762
-        ]
-      },
-      "mean_power": {
-        "flags": [
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": 0.6906719367623417,
-        "within_condition_held_out_interval_95": [
-          0.37959349128425857,
-          0.8614382433473007
-        ]
-      },
-      "phase_err_sd_J": 0.41687177928493097,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [
-          "held_out_recovery_inconclusive_at_cohort_size"
-        ],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "inconclusive at this cohort size",
-        "within_condition_held_out_correlation": 0.47585170050420866,
-        "within_condition_held_out_interval_95": [
-          0.06784869432119592,
-          0.747498967265982
-        ]
-      },
-      "true": [
-        0.00304238592,
-        0.05278224384
-      ],
-      "verdict": "yes",
-      "within_r": 0.6919038002129244,
-      "worst_case_bound_j": 0.9224808593080986
-    }
-  },
-  {
-    "label": "p5 dropped_episode",
-    "data": {
-      "episode_id": "stageb-task-0-benign",
-      "features": {
-        "coverage_fraction": 0.9996097805899696,
-        "decode_seconds_per_token": 0.0500519694765625,
-        "decode_tokens": 512,
-        "energy_half_width_per_token_j": 0.000040848372712468824,
-        "energy_per_decode_token_j": 0.00867615008279152,
-        "episode_id": "stageb-task-0-benign",
-        "flags": [
-          "synthetic_episode",
-          "variable_decode_step_timing",
-          "prefill_batch_boundaries_unavailable",
-          "prefill_upstream_batch_cache_policy",
-          "prefill_batch_union_profile_assumption",
-          "serialized_token_start_transfer_profile",
-          "prefill_cache_bypassed",
-          "prefill_readonly_cache_reuse_unmodelled",
-          "sensor_duty_gaps",
-          "synthetic_power_trace",
-          "irregular_sample_cadence",
-          "duty_cycled_apparent_energy",
-          "incomplete_decode_coverage",
-          "dithered_rounding_uncertainty",
-          "spectrum_includes_acquisition_transfer_function"
-        ],
-        "mean_decode_power_w": 12.173410499074684,
-        "token_energy_variance_j2": 0.00022731527898793815,
-        "token_rate_amplitude_w": 0.15274491691252376,
-        "token_rate_hz": 19.979233793552584
-      },
-      "flags": [
-        "synthetic_episode",
-        "variable_decode_step_timing",
-        "prefill_batch_boundaries_unavailable",
-        "prefill_upstream_batch_cache_policy",
-        "prefill_batch_union_profile_assumption",
-        "serialized_token_start_transfer_profile",
-        "prefill_cache_bypassed",
-        "prefill_readonly_cache_reuse_unmodelled",
-        "sensor_duty_gaps",
-        "synthetic_power_trace",
-        "irregular_sample_cadence",
-        "duty_cycled_apparent_energy",
-        "incomplete_decode_coverage",
-        "dithered_rounding_uncertainty",
-        "spectrum_includes_acquisition_transfer_function"
-      ]
-    }
-  },
-  {
-    "label": "p10 legacy_noise_seed ina3221",
-    "data": {
-      "apparent": [
-        0.0026808824290117726,
-        0.05281653112874765
-      ],
-      "bound": 0.0011086205166570683,
-      "ci": [
-        0.5311575366964828,
-        0.9035206867800984
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.8166973732785391,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 21,
-        "held_out_episodes": 24,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.13403185926456668,
-        "within_condition_held_out_interval_95": [
-          -0.315942482743387,
-          0.5347826436338446
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8510559223219214,
-        "within_condition_held_out_interval_95": [
-          0.6697642486097328,
-          0.9366015351799866
-        ]
-      },
-      "phase_err_sd_J": 0.2813990239517388,
-      "recovery_meets": null,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "within_r": 0.77844467529509,
-      "worst_case_bound_j": 1.0232899505603228
-    }
-  },
-  {
-    "label": "p10 legacy_noise_seed nvml_100ms_25ms",
-    "data": {
-      "apparent": [
-        0.0015384068183945433,
-        0.05326329968906447
-      ],
-      "bound": 0.00009729590068353058,
-      "ci": [
-        -0.2899089614371101,
-        0.5376490190826543
-      ],
-      "contrast": 0.8631576590651903,
-      "episodes": 24,
-      "forecast_r": 0.43832762070182724,
-      "increment": {
-        "flags": [],
-        "held_out_effective_n": 21,
-        "held_out_episodes": 24,
-        "verdict": "no",
-        "within_condition_held_out_correlation": -0.04329725523392728,
-        "within_condition_held_out_interval_95": [
-          -0.4662757116124196,
-          0.395794282196503
-        ]
-      },
-      "mean_power": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "no",
-        "within_condition_held_out_correlation": 0.14666166455732987,
-        "within_condition_held_out_interval_95": [
-          -0.29307586132869246,
-          0.5351839184135365
-        ]
-      },
-      "phase_err_sd_J": 1.4877634899422347,
-      "recovery_meets": false,
-      "required_r": 0.6471202066782847,
-      "status": "ok",
-      "timing": {
-        "flags": [],
-        "held_out_effective_n": 24,
-        "held_out_episodes": 24,
-        "verdict": "yes",
-        "within_condition_held_out_correlation": 0.8438154771382044,
-        "within_condition_held_out_interval_95": [
-          0.6553517606446033,
-          0.9333699301483963
-        ]
-      },
-      "true": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "within_r": 0.15004646401054125,
-      "worst_case_bound_j": 0.02839947686945834
-    }
-  },
-  {
-    "label": "elapsed",
-    "data": {
-      "seconds": 287.618557817
-    }
-  }
-]
+```text
+STAGEB_R2 q1_ids default 0 {"hash_ids": {"ci": [-0.294722386403027, 0.5512831521892628], "decode_s": [25.856373476, 30.914227554], "episodes": 24, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.15693856071329085, "recovery": {"decode_seconds_per_token": [0.8438154771382044, [0.6553517606446033, 0.9333699301483963], "yes"], "energy_per_decode_token_j": [0.7740006547148806, [0.5230834994984437, 0.9014464496892164], "inconclusive at this cohort size"], "mean_decode_power_w": [0.8478338120759732, [0.6633335569803914, 0.9351652157432788], "yes"], "token_energy_variance_j2": [0.8075488647977788, [0.585168978991736, 0.9169616657713987], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.0478756886311657, [-0.38143894286501157, 0.46020170271264166], "no"]}, "required": 0.6471202066782847, "verdict": "no"}, "suffix_ids": {"ci": [-0.294722386403027, 0.5512831521892628], "decode_s": [25.856373476, 30.914227554], "episodes": 24, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.15693856071329085, "recovery": {"decode_seconds_per_token": [0.8438154771382044, [0.6553517606446033, 0.9333699301483963], "yes"], "energy_per_decode_token_j": [0.7740006547148806, [0.5230834994984437, 0.9014464496892164], "inconclusive at this cohort size"], "mean_decode_power_w": [0.8478338120759732, [0.6633335569803914, 0.9351652157432788], "yes"], "token_energy_variance_j2": [0.8075488647977788, [0.585168978991736, 0.9169616657713987], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.0478756886311657, [-0.38143894286501157, 0.46020170271264166], "no"]}, "required": 0.6471202066782847, "verdict": "no"}}
+STAGEB_R2 q1_ids default 1 {"hash_ids": {"ci": [-0.7838822249695361, -0.13065781262560253], "decode_s": [25.856373476, 30.914227554], "episodes": 24, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.5323260965864958, "recovery": {"decode_seconds_per_token": [0.8438154771382044, [0.6553517606446033, 0.9333699301483963], "yes"], "energy_per_decode_token_j": [0.6345858161086284, [0.29076507775888405, 0.8332611577713871], "inconclusive at this cohort size"], "mean_decode_power_w": [0.6736148880248951, [0.35195791312058256, 0.8529787790146469], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.2858705700385963, [-0.15434780908481388, 0.6313864502855886], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}, "suffix_ids": {"ci": [-0.7838822249695361, -0.13065781262560253], "decode_s": [25.856373476, 30.914227554], "episodes": 24, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.5323260965864958, "recovery": {"decode_seconds_per_token": [0.8438154771382044, [0.6553517606446033, 0.9333699301483963], "yes"], "energy_per_decode_token_j": [0.6345858161086284, [0.29076507775888405, 0.8332611577713871], "inconclusive at this cohort size"], "mean_decode_power_w": [0.6736148880248951, [0.35195791312058256, 0.8529787790146469], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.2858705700385963, [-0.15434780908481388, 0.6313864502855886], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}}
+STAGEB_R2 q1_ids e2e_nostall 0 {"hash_ids": {"ci": [0.6256522408405558, 0.8169055178178175], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7356087476296433, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.7245660029010135, [0.611758967778493, 0.8084904919807115], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7235703428110349, [0.6104476360084228, 0.8077643915236326], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6325631403793299, [0.4931497081242412, 0.7402993283247059], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.16429493178438637, [-0.03964543115308715, 0.3550945831277374], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}, "suffix_ids": {"ci": [0.6256522408405558, 0.8169055178178175], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7356087476296433, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.7245660029010135, [0.611758967778493, 0.8084904919807115], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7235703428110349, [0.6104476360084228, 0.8077643915236326], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6325631403793299, [0.4931497081242412, 0.7402993283247059], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.16429493178438637, [-0.03964543115308715, 0.3550945831277374], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}}
+STAGEB_R2 q1_ids e2e_nostall 1 {"hash_ids": {"ci": [-0.10847497677598433, 0.2952434901072392], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.09738900253260493, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.1204111321940513, [-0.08426533948028601, 0.3153381677919225], "no"], "mean_decode_power_w": [0.12046980734966435, [-0.08420622312773121, 0.31539178517467187], "no"], "token_energy_variance_j2": [0.07548130253882322, [-0.12911395980406556, 0.2739126494513399], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}, "suffix_ids": {"ci": [-0.10847497677598433, 0.2952434901072392], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.09738900253260493, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.1204111321940513, [-0.08426533948028601, 0.3153381677919225], "no"], "mean_decode_power_w": [0.12046980734966435, [-0.08420622312773121, 0.31539178517467187], "no"], "token_energy_variance_j2": [0.07548130253882322, [-0.12911395980406556, 0.2739126494513399], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}}
+STAGEB_R2 q1b_increment_ids e2e_nostall 0 {"flags": ["nominal_fisher_interval_not_null_calibrated"], "hash_ids": [0.7356087476296433, [0.6256522408405558, 0.8169055178178175]], "suffix_ids": [0.7356087476296433, [0.6256522408405558, 0.8169055178178175]]}
+STAGEB_R2 q1b_increment_ids e2e 0 {"flags": ["nominal_fisher_interval_not_null_calibrated"], "hash_ids": [0.04899396302686891, [-0.15627770234212882, 0.2502086290193932]], "suffix_ids": [0.04899396302686891, [-0.15627770234212882, 0.2502086290193932]]}
+STAGEB_R2 q1b_increment_ids default 1 {"flags": ["nominal_fisher_interval_not_null_calibrated"], "hash_ids": [-0.5323260965864958, [-0.7838822249695361, -0.13065781262560253]], "suffix_ids": [-0.5323260965864958, [-0.7838822249695361, -0.13065781262560253]]}
+STAGEB_R2 q1b_increment_ids e2e_nostall 1 {"flags": ["nominal_fisher_interval_not_null_calibrated"], "hash_ids": [0.09738900253260493, [-0.10847497677598433, 0.2952434901072392]], "suffix_ids": [0.09738900253260493, [-0.10847497677598433, 0.2952434901072392]]}
+STAGEB_R2 q2_blind real {"ci": [-0.15627770234212882, 0.2502086290193932], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.04899396302686891, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.7847682385203254, [0.6922172578618175, 0.8519241883004665], "yes"], "mean_decode_power_w": [0.844028133904538, [0.7737286721887902, 0.8937942788319294], "yes"], "token_energy_variance_j2": [0.8381683660231627, [0.7655635678094398, 0.8896923523279705], "yes"], "token_rate_amplitude_w": [0.07137319129642268, [-0.13317330306237754, 0.2700878527620881], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q2_blind const_off {"ci": null, "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["constant_power_increment_feature", "undefined_power_increment_correlation", "nominal_fisher_interval_not_null_calibrated"], "r": null, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.8213906829904345, [0.7423138889988471, 0.8779015354109607], "yes"], "mean_decode_power_w": [null, null, "inconclusive at this cohort size"], "token_energy_variance_j2": [0.4414712166485143, [0.2623150128656091, 0.5912075984022859], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q2_blind noise_only {"ci": [-0.39267956038217, -0.001759893663998019], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.20539816781350065, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [-0.08439446277323642, [-0.2821895901071562, 0.12028296760037162], "no"], "mean_decode_power_w": [-0.09448574784196434, [-0.2915251544181646, 0.11024545971170721], "no"], "token_energy_variance_j2": [0.10143301539051935, [-0.1033108573842711, 0.2979304103482086], "no"], "token_rate_amplitude_w": [0.061147925419471554, [-0.1432474711313166, 0.26054045880124954], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q2_blind b_plus1 {"ci": [-0.15627770234212998, 0.2502086290193921], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.048993963026867746, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.760866939930668, [0.6599961882575257, 0.8347901739898798], "yes"], "mean_decode_power_w": [0.8440281339045353, [0.7737286721887865, 0.8937942788319275], "yes"], "token_energy_variance_j2": [0.8273292843611642, [0.750521593907891, 0.8820828436939568], "yes"], "token_rate_amplitude_w": [0.07137319129642268, [-0.13317330306237754, 0.2700878527620881], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q3_jitter 2000000 {"ci": [-0.15627770234212882, 0.2502086290193932], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.04899396302686891, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [0.7847682385203254, [0.6922172578618175, 0.8519241883004665], "yes"], "mean_decode_power_w": [0.844028133904538, [0.7737286721887902, 0.8937942788319294], "yes"], "token_energy_variance_j2": [0.8381683660231627, [0.7655635678094398, 0.8896923523279705], "yes"], "token_rate_amplitude_w": [0.07137319129642268, [-0.13317330306237754, 0.2700878527620881], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q3_jitter 10000000 {"ci": [0.3821995378666403, 0.6727977743083902], "decode_s": [19.343161443, 23.329624284], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.5435884172451112, "recovery": {"decode_seconds_per_token": [0.6225176900943571, [0.4805056345873075, 0.7327170804703199], "inconclusive at this cohort size"], "energy_per_decode_token_j": [0.7264095395603055, [0.6141886312454425, 0.8098342452953273], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7820990654664629, [0.688600580828382, 0.8500178561535348], "yes"], "token_energy_variance_j2": [0.6669244285863579, [0.5368497566270211, 0.7660294487870302], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.10058636269437991, [-0.10415703297145576, 0.29715075739843305], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q3_jitter 25000000 {"ci": [0.655447422233347, 0.8330417830958603], "decode_s": [19.025162695, 23.675648954], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7579552887635139, "recovery": {"decode_seconds_per_token": [0.2859490702192582, [0.08845340175038621, 0.4618126164680928], "no"], "energy_per_decode_token_j": [0.7662433679640117, [0.6672118847040501, 0.8386568718179834], "yes"], "mean_decode_power_w": [0.7971912255617452, [0.7091115522216582, 0.860773367424369], "yes"], "token_energy_variance_j2": [0.8051881665486867, [0.7200405372012578, 0.8664495092420316], "yes"], "token_rate_amplitude_w": [0.1442228433755383, [-0.060155640816427325, 0.33699556961298033], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 1 nostall 0 {"ci": [0.6896671071861853, 0.8512087551075963], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7833267733949544, "recovery": {"decode_seconds_per_token": [-0.1734213042388982, [-0.36327680504652665, 0.030262672483032518], "no"], "energy_per_decode_token_j": [0.7774302906770401, [0.6822856471615543, 0.8466791188403034], "yes"], "mean_decode_power_w": [0.776883978880419, [0.6815476385009901, 0.8462880833088657], "yes"], "token_energy_variance_j2": [0.6369981023518875, [0.4987507409182385, 0.7436381131427936], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.205034538075162, [0.0025185857901886427, 0.39139492685545024], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 2 nostall 0 {"ci": [0.6080054879778116, 0.8072052266701767], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.722259776923693, "recovery": {"decode_seconds_per_token": [-0.056861874647458115, [-0.2565269139370425, 0.14745762659407177], "no"], "energy_per_decode_token_j": [0.7087154761500463, [0.5909564393779485, 0.7969008278244267], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7094594134758346, [0.5919293064006004, 0.7974462392194557], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6223490728820592, [0.48029390098456276, 0.7325895752695265], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17738062394290716, [-0.02618092888868043, 0.3668174359891461], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q4_seeds 3 nostall 0 {"ci": [0.6849675002567868, 0.8487364925675429], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.779860734196797, "recovery": {"decode_seconds_per_token": [-0.11977129945425358, [-0.3147534075654113, 0.08490988981658565], "no"], "energy_per_decode_token_j": [0.7690089886764835, [0.6709308740129158, 0.8406430521953545], "yes"], "mean_decode_power_w": [0.768035140159154, [0.6696207560314941, 0.8399438850442931], "yes"], "token_energy_variance_j2": [0.6579603699438198, [0.5253817429396007, 0.7593475391516569], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.1933671394540508, [-0.009630781079792051, 0.381057817065991], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 4 nostall 0 {"ci": [0.6411533714902434, 0.8253380407471964], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7472646186855327, "recovery": {"decode_seconds_per_token": [-0.07203581912200638, [-0.2707052071743779, 0.13251900526454705], "no"], "energy_per_decode_token_j": [0.7331632776876585, [0.6231078370228275, 0.8147495766865345], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7341578785931354, [0.6244237617876964, 0.8154724521637098], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.6285609813194366, [0.4881051755919032, 0.7372818028680461], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17896739933980382, [-0.024543182257106094, 0.36823487483348327], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q4_seeds 5 nostall 0 {"ci": [0.6823778214804334, 0.8473711069710954], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7779483125592, "recovery": {"decode_seconds_per_token": [-0.07903806123652074, [-0.2772190555986949, 0.125593876782121], "no"], "energy_per_decode_token_j": [0.7669820969472144, [0.6682047863231438, 0.8391875919339726], "yes"], "mean_decode_power_w": [0.7658670242592706, [0.6667061886393493, 0.8383864448493503], "yes"], "token_energy_variance_j2": [0.6971338479802602, [0.5758548766192376, 0.7883912736599059], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17737442810851145, [-0.02618732160792211, 0.36681189963368804], "no"]}, "required": 0.6471202066782847, "verdict": "yes"}
+STAGEB_R2 q4_seeds 6 nostall 0 {"ci": [0.6150890088219804, 0.811111955623506], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7276283867137295, "recovery": {"decode_seconds_per_token": [-0.1326868504663593, [-0.32652868328607904, 0.07186585425846996], "no"], "energy_per_decode_token_j": [0.7150178906016696, [0.5992091328607609, 0.8015168445531617], "inconclusive at this cohort size"], "mean_decode_power_w": [0.7151801313522064, [0.599421904367454, 0.8016355370342293], "inconclusive at this cohort size"], "token_energy_variance_j2": [0.591162198426132, [0.4414150248463187, 0.7088728389547391], "inconclusive at this cohort size"], "token_rate_amplitude_w": [0.17320505397851166, [-0.030485413818306873, 0.3630832646783135], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 q4_seeds 1 nostall 1 {"ci": [-0.15120943433420556, 0.2550682753918178], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.05417111919095635, "recovery": {"decode_seconds_per_token": [-0.1734213042388982, [-0.36327680504652665, 0.030262672483032518], "no"], "energy_per_decode_token_j": [0.07281622897394084, [-0.13174817741300668, 0.27143208676661595], "no"], "mean_decode_power_w": [0.07279156049065869, [-0.1317725467995254, 0.27140911382338734], "no"], "token_energy_variance_j2": [0.11782763832017552, [-0.08686683188082994, 0.3129761355638427], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q4_seeds 2 nostall 1 {"ci": [-0.41127707218258597, -0.02393846315558513], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.22654561383560248, "recovery": {"decode_seconds_per_token": [-0.056861874647458115, [-0.2565269139370425, 0.14745762659407177], "no"], "energy_per_decode_token_j": [-0.00414258556378954, [-0.20658976463271522, 0.19864473644866554], "no"], "mean_decode_power_w": [-0.0041483492457129985, [-0.20659528241280326, 0.19863920009860186], "no"], "token_energy_variance_j2": [0.16256098975569117, [-0.04142402825134878, 0.3535367108265941], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q4_seeds 3 nostall 1 {"ci": [-0.1563821679697834, 0.2501082475440196], "decode_s": [19.129320208, 19.254973083], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.048887136883611744, "recovery": {"decode_seconds_per_token": [-0.11977129945425358, [-0.3147534075654113, 0.08490988981658565], "no"], "energy_per_decode_token_j": [0.06322440122788221, [-0.14120510088016233, 0.26248243781689423], "no"], "mean_decode_power_w": [0.06320599562883387, [-0.14122321181933367, 0.26246523146648193], "no"], "token_energy_variance_j2": [0.13557089408869877, [-0.06894353204627356, 0.3291499107628256], "no"], "token_rate_amplitude_w": [null, null, "inconclusive at this cohort size"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 l1_random_covariate e2e_nostall 0 {"bar_half_width": 0.09681743656959485, "const": [0.7316358556654516, [0.6203884638189294, 0.8140233369581191], ["constant_within_condition_training_timing", "nominal_fisher_interval_not_null_calibrated"]], "random_covariate": [0.7283444879972638, 0.7293210138485989, 0.7399982588114004, 0.7319168084417005, 0.7298210346335631, 0.7271541946040583, 0.7286368619975135, 0.733157836494763, 0.7294448552394854, 0.7359791265387123], "real": [0.7356087476296433, [0.6256522408405558, 0.8169055178178175]], "result": "PASS", "worst_abs_change": 0.008362403145948716}
+STAGEB_R2 q5_procedure 0 {"a_increment": 0.7356087476296433, "b_increment_no_timing": 0.7316358556654516, "c_energy_only_within": 0.7245660029010135}
+STAGEB_R2 l1_random_covariate e2e_nostall 1 {"bar_half_width": 0.20169205205071722, "const": [0.10168638294763703, [-0.10418366499328183, 0.29920043910815264], ["constant_within_condition_training_timing", "nominal_fisher_interval_not_null_calibrated"]], "random_covariate": [0.09561171021961921, 0.10051261805126235, 0.05490772959359331, 0.1017286670891391, 0.10497642702380444, 0.09944068897912295, 0.10083954441266163, 0.09479306370646332, 0.09612464631394875, 0.09608677851587658], "real": [0.09738900253260493, [-0.10847497677598433, 0.2952434901072392]], "result": "PASS", "worst_abs_change": 0.04677865335404372}
+STAGEB_R2 q5_procedure 1 {"a_increment": 0.09738900253260493, "b_increment_no_timing": 0.10168638294763703, "c_energy_only_within": 0.1204111321940513}
+STAGEB_R2 l1_random_covariate e2e 0 {"bar_half_width": 0.07752558485831718, "const": [0.7933314786596826, [0.7032769009140677, 0.858328070630702], ["constant_within_condition_training_timing", "nominal_fisher_interval_not_null_calibrated"]], "random_covariate": [0.7901126002810928, 0.795126441289289, 0.8076835710205735, 0.7958452332789305, 0.793334802924029, 0.7942573681228108, 0.7911826305838826, 0.7912961304333402, 0.7932982473252719, 0.794805226852127], "real": [0.04899396302686891, [-0.15627770234212882, 0.2502086290193932]], "result": "PASS", "worst_abs_change": 0.014352092360890967}
+STAGEB_R2 q6_leak e2e_nostall 0 2000000 {"shipped": [0.7356087476296433, [0.6256522408405558, 0.8169055178178175], "inconclusive at this cohort size"], "within_condition_nuisance_fit": [0.7356087476296433, [0.6256522408405558, 0.8169055178178175]], "within_sd_timing_ms": 0.07162480821319159}
+STAGEB_R2 reference e2e_nostall 0 2000000 {"count": 96, "r": 0.7356087476296433}
+STAGEB_R2 q6_leak e2e_nostall 1 2000000 {"shipped": [0.09738900253260493, [-0.10847497677598433, 0.2952434901072392], "no"], "within_condition_nuisance_fit": [0.09738900253260493, [-0.10847497677598433, 0.2952434901072392]], "within_sd_timing_ms": 0.07162480821319159}
+STAGEB_R2 reference e2e_nostall 1 2000000 {"count": 96, "r": 0.09738900253260492}
+STAGEB_R2 q6_leak e2e 0 2000000 {"shipped": [0.04899396302686891, [-0.15627770234212882, 0.2502086290193932], "no"], "within_condition_nuisance_fit": [0.04899396302686891, [-0.15627770234212882, 0.2502086290193932]], "within_sd_timing_ms": 0.3688315632613681}
+STAGEB_R2 reference e2e 0 2000000 {"count": 96, "r": 0.04899396302686888}
+STAGEB_R2 q6_leak e2e 0 10000000 {"shipped": [0.5435884172451112, [0.3821995378666403, 0.6727977743083902], "inconclusive at this cohort size"], "within_condition_nuisance_fit": [0.5435884172451112, [0.3821995378666403, 0.6727977743083902]], "within_sd_timing_ms": 0.44758826828606724}
+STAGEB_R2 reference e2e 0 10000000 {"count": 96, "r": 0.5435884172451113}
+STAGEB_R2 q6_leak e2e 0 25000000 {"shipped": [0.7579552887635139, [0.655447422233347, 0.8330417830958603], "yes"], "within_condition_nuisance_fit": [0.7579552887635139, [0.655447422233347, 0.8330417830958603]], "within_sd_timing_ms": 0.8161511237517547}
+STAGEB_R2 reference e2e 0 25000000 {"count": 96, "r": 0.757955288763514}
+STAGEB_R2 q7_condition_sensor e2e_nostall 0.0 {"ci": [-0.40433453752383347, -0.015614262883346408], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.21863075142373237, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [0.005258572032977311, [-0.19757252545565196, 0.20765789855472713], "no"], "mean_decode_power_w": [0.005320448181600522, [-0.19751306224587817, 0.20771710738803323], "no"], "token_energy_variance_j2": [-0.03232339278983169, [-0.23341525146250872, 0.17141988696677804], "no"], "token_rate_amplitude_w": [-0.06522211814070869, [-0.26434923707022345, 0.13923855214862202], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q7_condition_sensor e2e_nostall 0.1 {"ci": [-0.653134405604882, -0.35183918816532955], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.51839569320646, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [-0.12054370338844832, [-0.3154593096364715, 0.08413176939143467], "no"], "mean_decode_power_w": [-0.11932708838864414, [-0.31434734414326115, 0.08535727540101107], "no"], "token_energy_variance_j2": [-0.1394069182865722, [-0.3326317502207593, 0.06505114766548425], "no"], "token_rate_amplitude_w": [-0.07336935498451479, [-0.2719471353184851, 0.13120169292619924], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q7_condition_sensor e2e_nostall 0.3 {"ci": [-0.44810573375996904, -0.0690133929008036], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.26894425758502544, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [-0.3152958261098426, [-0.48681596630306806, -0.1203647973478505], "no"], "mean_decode_power_w": [-0.3292735132938631, [-0.49862691147762717, -0.1357069706116846], "no"], "token_energy_variance_j2": [-0.056094961663672505, [-0.25580803405948355, 0.1482101792991354], "no"], "token_rate_amplitude_w": [-0.08155440856839881, [-0.279555450974594, 0.12310036085941158], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q8_fixcheck {"shipped": -0.26894425758502544, "within_condition_fit": [-0.26894425758502544, [-0.44810573375996904, -0.0690133929008036]]}
+STAGEB_R2 q7_condition_sensor e2e_nostall 1.0 {"ci": [-0.5186089792273828, -0.15984809827284843], "decode_s": [19.121838945, 19.261471238], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": -0.3520947617513574, "recovery": {"decode_seconds_per_token": [-0.010303124188217116, [-0.21248013030776805, 0.19271978742984244], "no"], "energy_per_decode_token_j": [-0.6853923950889547, [-0.7797284914392767, -0.5606289335140712], "no"], "mean_decode_power_w": [-0.823235888079771, [-0.8792016488894461, -0.7448615971039794], "no"], "token_energy_variance_j2": [-0.03249199524255191, [-0.2335748293186135, 0.1712560620674549], "no"], "token_rate_amplitude_w": [-0.07110964516799272, [-0.2698422677472176, 0.1334334865496318], "no"]}, "required": 0.6471202066782847, "verdict": "no"}
+STAGEB_R2 q7_condition_sensor e2e 0.3 {"ci": [0.610971134479966, 0.8088429772481662], "decode_s": [19.382917268, 23.189452019], "episodes": 96, "flags": ["nominal_fisher_interval_not_null_calibrated"], "r": 0.7245091211015002, "recovery": {"decode_seconds_per_token": [0.8213906829904342, [0.7423138889988465, 0.8779015354109604], "yes"], "energy_per_decode_token_j": [-0.06998215027366496, [-0.2687913215430803, 0.13454627725011767], "no"], "mean_decode_power_w": [-0.4179198947602215, [-0.5720958739302694, -0.23521731787918765], "no"], "token_energy_variance_j2": [0.05635192984113401, [-0.14795804914994826, 0.25604893247636484], "no"], "token_rate_amplitude_w": [0.0653197600201441, [-0.1391423923124313, 0.26444044188955873], "no"]}, "required": 0.6471202066782847, "verdict": "inconclusive at this cohort size"}
+STAGEB_R2 unknown_condition None {"episodes": 95, "flags": ["missing_or_unknown_condition", "insufficient_grouped_training_data", "nominal_fisher_interval_not_null_calibrated"]}
+STAGEB_R2 unknown_condition unknown {"episodes": 95, "flags": ["missing_or_unknown_condition", "insufficient_grouped_training_data", "nominal_fisher_interval_not_null_calibrated"]}
+STAGEB_R2 checks [["opaque IDs complete and preserve verdict", true], ["opaque IDs preserve increment", true], ["opaque IDs complete and preserve verdict", true], ["opaque IDs preserve increment", true], ["opaque IDs complete and preserve verdict", true], ["opaque IDs preserve increment", true], ["opaque IDs complete and preserve verdict", true], ["opaque IDs preserve increment", true], ["ID-only replacement is bit-identical", true], ["ID-only replacement is bit-identical", true], ["ID-only replacement is bit-identical", true], ["ID-only replacement is bit-identical", true], ["blind sensor gives no yes", true], ["blind sensor gives no yes", true], ["noise-only verdict", true], ["baseline shift preserves verdict", true], ["baseline shift preserves increment", true], ["baseline shift preserves mean_decode_power_w", true], ["independent random covariate stays below printed uncertainty", true], ["constant timing is flagged", true], ["independent random covariate stays below printed uncertainty", true], ["constant timing is flagged", true], ["independent random covariate stays below printed uncertainty", true], ["constant timing is flagged", true], ["independent pairwise reference agrees", true], ["within-condition sketch agrees", true], ["independent pairwise reference agrees", true], ["within-condition sketch agrees", true], ["independent pairwise reference agrees", true], ["within-condition sketch agrees", true], ["independent pairwise reference agrees", true], ["within-condition sketch agrees", true], ["independent pairwise reference agrees", true], ["within-condition sketch agrees", true], ["condition-offset sensor gives no yes", true], ["condition-offset sensor gives no yes", true], ["condition-offset sensor gives no yes", true], ["condition-offset sensor gives no yes", true], ["condition-offset sensor gives no yes", true], ["unknown condition records a flag", true], ["unknown condition retains an unavailable prediction", true], ["unknown condition omitted from within stats", true], ["unknown condition records a flag", true], ["unknown condition retains an unavailable prediction", true], ["unknown condition omitted from within stats", true]]
+STAGEB_R2 timing_spread_sweep stalled [{"episode_factor_half_width": 0.0, "increment_r": 0.04899396302686891, "interval_95": [-0.15627770234212882, 0.2502086290193932], "jitter_ns": 2000000, "mean_decode_ms_per_token": 55.480608874159074, "scenario_axis": "per_token_jitter", "timing_scenario": "blocking_uploads", "verdict": "no", "within_condition_sd_episode_mean_decode_ms": 0.3688315632613681}, {"episode_factor_half_width": 0.0, "increment_r": 0.5435884172451112, "interval_95": [0.3821995378666403, 0.6727977743083902], "jitter_ns": 10000000, "mean_decode_ms_per_token": 55.47849509122721, "scenario_axis": "per_token_jitter", "timing_scenario": "blocking_uploads", "verdict": "inconclusive at this cohort size", "within_condition_sd_episode_mean_decode_ms": 0.44758826828606724}, {"episode_factor_half_width": 0.0, "increment_r": 0.7579552887635139, "interval_95": [0.655447422233347, 0.8330417830958603], "jitter_ns": 25000000, "mean_decode_ms_per_token": 55.490341776828345, "scenario_axis": "per_token_jitter", "timing_scenario": "blocking_uploads", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 0.8161511237517547}, {"episode_factor_half_width": 0.0, "increment_r": 0.04899396302686891, "interval_95": [-0.15627770234212882, 0.2502086290193932], "jitter_ns": 2000000, "mean_decode_ms_per_token": 55.480608874159074, "scenario_axis": "episode_factor", "timing_scenario": "blocking_uploads", "verdict": "no", "within_condition_sd_episode_mean_decode_ms": 0.3688315632613681}, {"episode_factor_half_width": 0.025, "increment_r": 0.686035327557215, "interval_95": [0.5606805189143128, 0.7806487860091953], "jitter_ns": 2000000, "mean_decode_ms_per_token": 55.34595117629666, "scenario_axis": "episode_factor", "timing_scenario": "blocking_uploads", "verdict": "inconclusive at this cohort size", "within_condition_sd_episode_mean_decode_ms": 0.8688691178706056}, {"episode_factor_half_width": 0.05, "increment_r": 0.7619290435616316, "interval_95": [0.6607793529019045, 0.8358978828515917], "jitter_ns": 2000000, "mean_decode_ms_per_token": 55.21129348255751, "scenario_axis": "episode_factor", "timing_scenario": "blocking_uploads", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 1.5755438019786991}, {"episode_factor_half_width": 0.1, "increment_r": 0.7966994781193362, "interval_95": [0.7078734222005973, 0.860719110764389], "jitter_ns": 2000000, "mean_decode_ms_per_token": 54.94197809209527, "scenario_axis": "episode_factor", "timing_scenario": "blocking_uploads", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 3.04343443276818}, {"episode_factor_half_width": 0.2, "increment_r": 0.7724484684654346, "interval_95": [0.6749436307508296, 0.8434393353124494], "jitter_ns": 2000000, "mean_decode_ms_per_token": 54.40334730919053, "scenario_axis": "episode_factor", "timing_scenario": "blocking_uploads", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 6.010339323851212}]
+STAGEB_R2 timing_spread_sweep counterfactual_no_stall [{"episode_factor_half_width": 0.0, "increment_r": 0.7356087476296433, "interval_95": [0.6256522408405558, 0.8169055178178175], "jitter_ns": 2000000, "mean_decode_ms_per_token": 49.993059874159066, "scenario_axis": "per_token_jitter", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "inconclusive at this cohort size", "within_condition_sd_episode_mean_decode_ms": 0.07162480821319159}, {"episode_factor_half_width": 0.0, "increment_r": 0.7559081407867783, "interval_95": [0.6527045689491857, 0.8315688504317809], "jitter_ns": 10000000, "mean_decode_ms_per_token": 49.99094609122721, "scenario_axis": "per_token_jitter", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 0.29280442094163983}, {"episode_factor_half_width": 0.0, "increment_r": 0.7883569959239218, "interval_95": [0.6965016556413341, 0.8547913703832256], "jitter_ns": 25000000, "mean_decode_ms_per_token": 50.00279277682834, "scenario_axis": "per_token_jitter", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 0.7793901184962744}, {"episode_factor_half_width": 0.0, "increment_r": 0.7356087476296433, "interval_95": [0.6256522408405558, 0.8169055178178175], "jitter_ns": 2000000, "mean_decode_ms_per_token": 49.993059874159066, "scenario_axis": "episode_factor", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "inconclusive at this cohort size", "within_condition_sd_episode_mean_decode_ms": 0.07162480821319159}, {"episode_factor_half_width": 0.025, "increment_r": 0.7648486353025981, "interval_95": [0.6647033382309879, 0.8379937630944094], "jitter_ns": 2000000, "mean_decode_ms_per_token": 49.858402176296664, "scenario_axis": "episode_factor", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 0.7571497079850513}, {"episode_factor_half_width": 0.05, "increment_r": 0.7814125835657253, "interval_95": [0.687070678939731, 0.8498437707744042], "jitter_ns": 2000000, "mean_decode_ms_per_token": 49.72374448255751, "scenario_axis": "episode_factor", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 1.4999744697804493}, {"episode_factor_half_width": 0.1, "increment_r": 0.7749197465052431, "interval_95": [0.6782816331764044, 0.8452069632920194], "jitter_ns": 2000000, "mean_decode_ms_per_token": 49.45442909209527, "scenario_axis": "episode_factor", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 2.9880719983742057}, {"episode_factor_half_width": 0.2, "increment_r": 0.7878029811651506, "interval_95": [0.6957480998268136, 0.8543971011153042], "jitter_ns": 2000000, "mean_decode_ms_per_token": 48.915798309190535, "scenario_axis": "episode_factor", "timing_scenario": "counterfactual_no_upload_stalls", "verdict": "yes", "within_condition_sd_episode_mean_decode_ms": 5.965505972909796}]
 ```
 
-### Final enlarged E2E and default CLI evidence
+Additional unchanged-path evidence from round-1 review/CLI at the fixed head:
 
-The main E2E cases additionally cover resident and synchronized controls. The
-CLI includes every energy/variance/spectrum/timing/mean-power recovery and
-interval, with the chosen increment printed beside them. Forecast agreement
-is fitted on these same episodes and is never an independent check.
-
-```json
-{
-  "e2e": [
-    {
-      "apparent_extra_j_per_token": [
-        0.0018100693076293552,
-        0.05323122222085053
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.0009602049996847113,
-      "contrast_j": 0.5982422458787154,
-      "decode_tokens_per_episode": 384,
-      "episodes": 96,
-      "forecast_r": 0.7868317148173697,
-      "increment_ci": [
-        -0.16624431709872659,
-        0.24059214797596737
-      ],
-      "increment_r": 0.03878094817615853,
-      "interval_ns": 10000000,
-      "model_forecast_detection": true,
-      "n_eff": 94,
-      "phase_sweep_error_std_j": 0.2514318404779241,
-      "required_r": 0.6471202066782847,
-      "resident": false,
-      "samples": 342862,
-      "sensor": "ina3221",
-      "timing_r": 0.8213906829904342,
-      "true_extra_j_per_token": [
-        0.00940750848,
-        0.17660279808
-      ],
-      "verdict": "no",
-      "window_ns": 1100000,
-      "within_condition_held_out_r": 0.7847682385203254,
-      "within_condition_interval_95": [
-        0.6922172578618175,
-        0.8519241883004665
-      ],
-      "world": "variable timing + stalls"
-    },
-    {
-      "apparent_extra_j_per_token": [
-        0.002272316637171021,
-        0.05334247548443969
-      ],
-      "conditional_detection": true,
-      "contrast_bound_j": 0.0009114822446086623,
-      "contrast_j": 0.5982422458787154,
-      "decode_tokens_per_episode": 384,
-      "episodes": 96,
-      "forecast_r": 0.7291350447390186,
-      "increment_ci": [
-        0.8437692437918409,
-        0.9284890626614218
-      ],
-      "increment_r": 0.8938423135247563,
-      "interval_ns": 10000000,
-      "model_forecast_detection": true,
-      "n_eff": 94,
-      "phase_sweep_error_std_j": 0.3979013764714221,
-      "required_r": 0.6471202066782847,
-      "resident": false,
-      "samples": 322624,
-      "sensor": "ina3221",
-      "timing_r": -0.010303124188217116,
-      "true_extra_j_per_token": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "yes",
-      "window_ns": 1100000,
-      "within_condition_held_out_r": 0.7245660029010135,
-      "within_condition_interval_95": [
-        0.611758967778493,
-        0.8084904919807115
-      ],
-      "world": "variable timing"
-    },
-    {
-      "apparent_extra_j_per_token": [
-        -0.00024306621700481145,
-        0.00004826684806935423
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.0009114822446086623,
-      "contrast_j": 0,
-      "decode_tokens_per_episode": 384,
-      "episodes": 96,
-      "forecast_r": 0,
-      "increment_ci": [
-        -0.2639854534893615,
-        0.1418535543369694
-      ],
-      "increment_r": -0.06369908635704787,
-      "interval_ns": 10000000,
-      "model_forecast_detection": false,
-      "n_eff": 94,
-      "phase_sweep_error_std_j": 0.023420397160116152,
-      "required_r": 0.6471202066782847,
-      "resident": true,
-      "samples": 322624,
-      "sensor": "ina3221",
-      "timing_r": -0.010303124188217116,
-      "true_extra_j_per_token": [
-        0,
-        0
-      ],
-      "verdict": "no",
-      "window_ns": 1100000,
-      "within_condition_held_out_r": -0.12887496770191031,
-      "within_condition_interval_95": [
-        -0.32305958767407406,
-        0.07572294954090107
-      ],
-      "world": "variable timing"
-    },
-    {
-      "apparent_extra_j_per_token": [
-        -0.006266718386585925,
-        0.10127244643353649
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.0000799944477066525,
-      "contrast_j": 0.5982422458787154,
-      "decode_tokens_per_episode": 384,
-      "episodes": 96,
-      "forecast_r": 0.09225533631484562,
-      "increment_ci": [
-        -0.002510872103624055,
-        0.38906128288021297
-      ],
-      "increment_r": 0.20130400551357638,
-      "interval_ns": 100000000,
-      "model_forecast_detection": false,
-      "n_eff": 94,
-      "phase_sweep_error_std_j": 6.444814550829642,
-      "required_r": 0.6471202066782847,
-      "resident": false,
-      "samples": 32342,
-      "sensor": "nvml_100ms_25ms",
-      "timing_r": -0.010303124188217116,
-      "true_extra_j_per_token": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "no",
-      "window_ns": 25000000,
-      "within_condition_held_out_r": 0.1204111321940513,
-      "within_condition_interval_95": [
-        -0.08426533948028601,
-        0.3153381677919225
-      ],
-      "world": "variable timing"
-    },
-    {
-      "apparent_extra_j_per_token": [
-        -0.00010984461328331275,
-        0.06908736215874102
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.0009115455092094964,
-      "contrast_j": 0.5982422458787154,
-      "decode_tokens_per_episode": 384,
-      "episodes": 96,
-      "forecast_r": 0.18717864223339423,
-      "increment_ci": [
-        -0.23539126894257953,
-        0.17160014601796592
-      ],
-      "increment_r": -0.03327495820373523,
-      "interval_ns": 10000000,
-      "model_forecast_detection": false,
-      "n_eff": 94,
-      "phase_sweep_error_std_j": 3.114516000188875,
-      "required_r": 0.6471202066782847,
-      "resident": false,
-      "samples": 322656,
-      "sensor": "ina3221",
-      "timing_r": null,
-      "true_extra_j_per_token": [
-        0.00281346048,
-        0.05281579008
-      ],
-      "verdict": "no",
-      "window_ns": 1100000,
-      "within_condition_held_out_r": -0.04025951315215988,
-      "within_condition_interval_95": [
-        -0.24091485778265323,
-        0.16369640990358336
-      ],
-      "world": "synchronized bursts"
-    }
-  ],
-  "default_cli": [
-    {
-      "apparent_extra_j_per_token": [
-        0.0027584071277335217,
-        0.05281015158707227
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.0011086205166570683,
-      "contrast_j": 0.8631576590651903,
-      "decode_duration_s": [
-        25.856373476,
-        30.914227554
-      ],
-      "episodes": 24,
-      "forecast_r": 0.8165087416167143,
-      "increment_ci": [
-        -0.2791638835042857,
-        0.5629748878035307
-      ],
-      "increment_r": 0.1734304799794651,
-      "interval_ns": 10000000,
-      "model_forecast_detection": true,
-      "n_eff": 22,
-      "nominal_decode_duration_s": null,
-      "phase_sweep_error_std_j": 0.28231468187151165,
-      "raw_held_out": {
-        "decode_seconds_per_token": {
-          "interval_95": [
-            0.9943819688263544,
-            0.9989823896833857
-          ],
-          "r": 0.9976078720241663
-        },
-        "energy_per_decode_token_j": {
-          "interval_95": [
-            0.992414058661466,
-            0.9986248252564206
-          ],
-          "r": 0.9967681151452294
-        },
-        "mean_decode_power_w": {
-          "interval_95": [
-            0.9945820455099386,
-            0.9990187107664488
-          ],
-          "r": 0.9976931965003263
-        },
-        "token_energy_variance_j2": {
-          "interval_95": [
-            -0.1368954223044181,
-            0.6154539120258312
-          ],
-          "r": 0.2820857914617048
-        },
-        "token_rate_amplitude_w": {
-          "interval_95": [
-            0.360275095250203,
-            0.8433364877760778
-          ],
-          "r": 0.6667722654674202
-        }
-      },
-      "required_r": 0.6471202066782847,
-      "resident": false,
-      "samples": 114259,
-      "sensor": "ina3221",
-      "transfer_only_j_per_token": [
-        0.00304238592,
-        0.05278224384
-      ],
-      "true_extra_j_per_token": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "window_ns": 1100000,
-      "within_condition_interval_95": {
-        "decode_seconds_per_token": [
-          0.6553517606446033,
-          0.9333699301483963
-        ],
-        "energy_per_decode_token_j": [
-          0.5230834994984437,
-          0.9014464496892164
-        ],
-        "mean_decode_power_w": [
-          0.6633335569803914,
-          0.9351652157432788
-        ],
-        "token_energy_variance_j2": [
-          0.585168978991736,
-          0.9169616657713987
-        ],
-        "token_rate_amplitude_w": [
-          -0.38143894286501157,
-          0.46020170271264166
-        ]
-      },
-      "within_condition_r": {
-        "decode_seconds_per_token": 0.8438154771382044,
-        "energy_per_decode_token_j": 0.7740006547148806,
-        "mean_decode_power_w": 0.8478338120759732,
-        "token_energy_variance_j2": 0.8075488647977788,
-        "token_rate_amplitude_w": 0.0478756886311657
-      }
-    },
-    {
-      "apparent_extra_j_per_token": [
-        -0.000246092073863229,
-        5.645516951471672e-7
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.0010525972690221938,
-      "contrast_j": 0,
-      "decode_duration_s": [
-        25.548059603,
-        25.654410814
-      ],
-      "episodes": 24,
-      "forecast_r": 0,
-      "increment_ci": [
-        -0.4266963011340857,
-        0.4366647107691784
-      ],
-      "increment_r": 0.006125763882418828,
-      "interval_ns": 10000000,
-      "model_forecast_detection": false,
-      "n_eff": 22,
-      "nominal_decode_duration_s": null,
-      "phase_sweep_error_std_j": 0.03093924476022808,
-      "raw_held_out": {
-        "decode_seconds_per_token": {
-          "interval_95": [
-            -0.2606562260453995,
-            0.5288892556214323
-          ],
-          "r": 0.15952058653078854
-        },
-        "energy_per_decode_token_j": {
-          "interval_95": [
-            -0.28342830337144503,
-            0.5109453044414076
-          ],
-          "r": 0.13546330717084304
-        },
-        "mean_decode_power_w": {
-          "interval_95": [
-            -0.28268796601877944,
-            0.511539770336325
-          ],
-          "r": 0.13625327337151083
-        },
-        "token_energy_variance_j2": {
-          "interval_95": [
-            0.018576256895744478,
-            0.703396954626719
-          ],
-          "r": 0.4188408694130792
-        },
-        "token_rate_amplitude_w": {
-          "interval_95": [
-            -0.22131619649011441,
-            0.5583100053396628
-          ],
-          "r": 0.19993744501731298
-        }
-      },
-      "required_r": 0.6471202066782847,
-      "resident": true,
-      "samples": 107546,
-      "sensor": "ina3221",
-      "transfer_only_j_per_token": [
-        0,
-        0
-      ],
-      "true_extra_j_per_token": [
-        0,
-        0
-      ],
-      "verdict": "no",
-      "window_ns": 1100000,
-      "within_condition_interval_95": {
-        "decode_seconds_per_token": [
-          0.06784869432119592,
-          0.747498967265982
-        ],
-        "energy_per_decode_token_j": [
-          -0.6399834855631528,
-          0.1402336481125445
-        ],
-        "mean_decode_power_w": [
-          -0.6396169834311675,
-          0.14084189321320292
-        ],
-        "token_energy_variance_j2": [
-          -0.5099376561133768,
-          0.3244960526022412
-        ],
-        "token_rate_amplitude_w": [
-          -0.4775131869009861,
-          0.36231809184316377
-        ]
-      },
-      "within_condition_r": {
-        "decode_seconds_per_token": 0.47585170050420866,
-        "energy_per_decode_token_j": -0.29906362256283436,
-        "mean_decode_power_w": -0.2984985142042681,
-        "token_energy_variance_j2": -0.1125122710454576,
-        "token_rate_amplitude_w": -0.06998851199468009
-      }
-    },
-    {
-      "apparent_extra_j_per_token": [
-        -0.001115443389494129,
-        0.05854830610006447
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.00009729590068353058,
-      "contrast_j": 0.8631576590651903,
-      "decode_duration_s": [
-        25.856373476,
-        30.914227554
-      ],
-      "episodes": 24,
-      "forecast_r": 0.43832762070182724,
-      "increment_ci": [
-        -0.8135700110924684,
-        -0.21035765763800887
-      ],
-      "increment_r": -0.5886004907339206,
-      "interval_ns": 100000000,
-      "model_forecast_detection": false,
-      "n_eff": 22,
-      "nominal_decode_duration_s": null,
-      "phase_sweep_error_std_j": 1.6344200800256645,
-      "raw_held_out": {
-        "decode_seconds_per_token": {
-          "interval_95": [
-            0.9943819688263544,
-            0.9989823896833857
-          ],
-          "r": 0.9976078720241663
-        },
-        "energy_per_decode_token_j": {
-          "interval_95": [
-            0.9732868575981087,
-            0.9951190955190516
-          ],
-          "r": 0.9885561808791966
-        },
-        "mean_decode_power_w": {
-          "interval_95": [
-            0.9716461389049296,
-            0.9948157879280854
-          ],
-          "r": 0.9878475269019805
-        },
-        "token_energy_variance_j2": {
-          "interval_95": [
-            0.9356274817694415,
-            0.9880517819715711
-          ],
-          "r": 0.9721188826407583
-        },
-        "token_rate_amplitude_w": {
-          "interval_95": null,
-          "r": null
-        }
-      },
-      "required_r": 0.6471202066782847,
-      "resident": false,
-      "samples": 11446,
-      "sensor": "nvml_100ms_25ms",
-      "transfer_only_j_per_token": [
-        0.00304238592,
-        0.05278224384
-      ],
-      "true_extra_j_per_token": [
-        0.01017297792,
-        0.17649062784
-      ],
-      "verdict": "no",
-      "window_ns": 25000000,
-      "within_condition_interval_95": {
-        "decode_seconds_per_token": [
-          0.6553517606446033,
-          0.9333699301483963
-        ],
-        "energy_per_decode_token_j": [
-          0.29076507775888405,
-          0.8332611577713871
-        ],
-        "mean_decode_power_w": [
-          0.35195791312058256,
-          0.8529787790146469
-        ],
-        "token_energy_variance_j2": [
-          -0.15434780908481388,
-          0.6313864502855886
-        ],
-        "token_rate_amplitude_w": null
-      },
-      "within_condition_r": {
-        "decode_seconds_per_token": 0.8438154771382044,
-        "energy_per_decode_token_j": 0.6345858161086284,
-        "mean_decode_power_w": 0.6736148880248951,
-        "token_energy_variance_j2": 0.2858705700385963,
-        "token_rate_amplitude_w": null
-      }
-    },
-    {
-      "apparent_extra_j_per_token": [
-        -0.005458077447687488,
-        0.005693036182566417
-      ],
-      "conditional_detection": false,
-      "contrast_bound_j": 0.00009237913046689412,
-      "contrast_j": 0,
-      "decode_duration_s": [
-        25.548059603,
-        25.654410814
-      ],
-      "episodes": 24,
-      "forecast_r": 0,
-      "increment_ci": [
-        -0.36327314001347183,
-        0.49548289114755223
-      ],
-      "increment_r": 0.08114609838360143,
-      "interval_ns": 100000000,
-      "model_forecast_detection": false,
-      "n_eff": 22,
-      "nominal_decode_duration_s": null,
-      "phase_sweep_error_std_j": 1.4323521011358258,
-      "raw_held_out": {
-        "decode_seconds_per_token": {
-          "interval_95": [
-            -0.2606562260453995,
-            0.5288892556214323
-          ],
-          "r": 0.15952058653078854
-        },
-        "energy_per_decode_token_j": {
-          "interval_95": [
-            -0.07910801541118548,
-            0.6504858529444615
-          ],
-          "r": 0.3349854764266539
-        },
-        "mean_decode_power_w": {
-          "interval_95": [
-            -0.07859192725435775,
-            0.6507853291496519
-          ],
-          "r": 0.33544643783291844
-        },
-        "token_energy_variance_j2": {
-          "interval_95": [
-            -0.3032002380491858,
-            0.4947829314912479
-          ],
-          "r": 0.11416704907568495
-        },
-        "token_rate_amplitude_w": {
-          "interval_95": null,
-          "r": null
-        }
-      },
-      "required_r": 0.6471202066782847,
-      "resident": true,
-      "samples": 10771,
-      "sensor": "nvml_100ms_25ms",
-      "transfer_only_j_per_token": [
-        0,
-        0
-      ],
-      "true_extra_j_per_token": [
-        0,
-        0
-      ],
-      "verdict": "no",
-      "window_ns": 25000000,
-      "within_condition_interval_95": {
-        "decode_seconds_per_token": [
-          0.06784869432119592,
-          0.747498967265982
-        ],
-        "energy_per_decode_token_j": [
-          -0.12919760929886176,
-          0.6465722345801956
-        ],
-        "mean_decode_power_w": [
-          -0.12908889268613838,
-          0.6466365700615198
-        ],
-        "token_energy_variance_j2": [
-          -0.2694754963767281,
-          0.5532213385045905
-        ],
-        "token_rate_amplitude_w": null
-      },
-      "within_condition_r": {
-        "decode_seconds_per_token": 0.47585170050420866,
-        "energy_per_decode_token_j": 0.30926374761666786,
-        "mean_decode_power_w": 0.30936373027737335,
-        "token_energy_variance_j2": 0.1716406981346448,
-        "token_rate_amplitude_w": null
-      }
-    }
-  ]
-}
+```text
+STAGEB_REVIEW e2e nvml_100ms_25ms {"apparent": [-0.0020557139120364475, 0.05875739027365367], "bound": 8.42705045427661e-05, "ci": [0.07663600667060576, 0.45240035809789975], "contrast": 0.5982422458787154, "episodes": 96, "forecast_r": 0.34931967851221857, "increment": {"flags": ["nominal_fisher_interval_not_null_calibrated"], "held_out_effective_n": 93, "held_out_episodes": 96, "verdict": "no", "within_condition_held_out_correlation": 0.13375996013901492, "within_condition_held_out_interval_95": [-0.0719114299727998, 0.32852019036886765]}, "mean_power": {"flags": [], "held_out_effective_n": 96, "held_out_episodes": 96, "verdict": "no", "within_condition_held_out_correlation": 0.2797199163562553, "within_condition_held_out_interval_95": [0.08173163642031049, 0.45646919101002054]}, "phase_err_sd_J": 1.5550265470318823, "recovery_meets": false, "required_r": 0.6471202066782847, "status": "ok", "timing": {"flags": [], "held_out_effective_n": 96, "held_out_episodes": 96, "verdict": "yes", "within_condition_held_out_correlation": 0.8213906829904342, "within_condition_held_out_interval_95": [0.7423138889988465, 0.8779015354109604]}, "true": [0.00940750848, 0.17660279808], "verdict": "no", "within_r": 0.274986590911851, "worst_case_bound_j": 0.021304553807677085}
+STAGEB_REVIEW e2e_blind ina3221 {"apparent": [0.0, 0.0], "bound": 0.0009602050137892887, "ci": null, "contrast": 0.5982422458787154, "episodes": 96, "forecast_r": 0.07136020806232629, "increment": {"flags": ["constant_power_increment_feature", "undefined_power_increment_correlation", "nominal_fisher_interval_not_null_calibrated"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "mean_power": {"flags": ["constant_training_power_feature", "undefined_observed_correlation", "held_out_recovery_inconclusive_at_cohort_size"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "phase_err_sd_J": 8.352651279661636, "recovery_meets": null, "required_r": 0.6471202066782847, "status": "ok", "timing": {"flags": [], "held_out_effective_n": 96, "held_out_episodes": 96, "verdict": "yes", "within_condition_held_out_correlation": 0.8213906829904342, "within_condition_held_out_interval_95": [0.7423138889988465, 0.8779015354109604]}, "true": [0.00940750848, 0.17660279808], "verdict": "inconclusive at this cohort size", "within_r": null, "worst_case_bound_j": 0.7676456827982208}
+STAGEB_REVIEW e2e_blind nvml_100ms_25ms {"apparent": [0.0, 0.0], "bound": 8.42705045427661e-05, "ci": null, "contrast": 0.5982422458787154, "episodes": 96, "forecast_r": 0.07136020806232628, "increment": {"flags": ["constant_power_increment_feature", "undefined_power_increment_correlation", "nominal_fisher_interval_not_null_calibrated"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "mean_power": {"flags": ["constant_training_power_feature", "undefined_observed_correlation", "held_out_recovery_inconclusive_at_cohort_size"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "phase_err_sd_J": 8.352651279661636, "recovery_meets": null, "required_r": 0.6471202066782847, "status": "ok", "timing": {"flags": [], "held_out_effective_n": 96, "held_out_episodes": 96, "verdict": "yes", "within_condition_held_out_correlation": 0.8213906829904342, "within_condition_held_out_interval_95": [0.7423138889988465, 0.8779015354109604]}, "true": [0.00940750848, 0.17660279808], "verdict": "inconclusive at this cohort size", "within_r": null, "worst_case_bound_j": 0.021304553807677085}
+STAGEB_REVIEW default_blind ina3221 {"apparent": [0.0, 0.0], "bound": 0.0011086205353178814, "ci": null, "contrast": 0.8631576590651903, "episodes": 24, "forecast_r": 0.0770312679988224, "increment": {"flags": ["constant_power_increment_feature", "undefined_power_increment_correlation", "nominal_fisher_interval_not_null_calibrated"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "mean_power": {"flags": ["constant_training_power_feature", "undefined_observed_correlation", "held_out_recovery_inconclusive_at_cohort_size"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "phase_err_sd_J": 11.158883730059388, "recovery_meets": null, "required_r": 0.6471202066782847, "status": "ok", "timing": {"flags": [], "held_out_effective_n": 24, "held_out_episodes": 24, "verdict": "yes", "within_condition_held_out_correlation": 0.8438154771382044, "within_condition_held_out_interval_95": [0.6553517606446033, 0.9333699301483963]}, "true": [0.01017297792, 0.17649062784], "verdict": "inconclusive at this cohort size", "within_r": null, "worst_case_bound_j": 1.0232899505603228}
+STAGEB_REVIEW default_blind nvml_100ms_25ms {"apparent": [0.0, 0.0], "bound": 9.729590068353058e-05, "ci": null, "contrast": 0.8631576590651903, "episodes": 24, "forecast_r": 0.0770312679988224, "increment": {"flags": ["constant_power_increment_feature", "undefined_power_increment_correlation", "nominal_fisher_interval_not_null_calibrated"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "mean_power": {"flags": ["constant_training_power_feature", "undefined_observed_correlation", "held_out_recovery_inconclusive_at_cohort_size"], "held_out_effective_n": 0, "held_out_episodes": 0, "verdict": "inconclusive at this cohort size", "within_condition_held_out_correlation": null, "within_condition_held_out_interval_95": null}, "phase_err_sd_J": 11.158883730059388, "recovery_meets": null, "required_r": 0.6471202066782847, "status": "ok", "timing": {"flags": [], "held_out_effective_n": 24, "held_out_episodes": 24, "verdict": "yes", "within_condition_held_out_correlation": 0.8438154771382044, "within_condition_held_out_interval_95": [0.6553517606446033, 0.9333699301483963]}, "true": [0.01017297792, 0.17649062784], "verdict": "inconclusive at this cohort size", "within_r": null, "worst_case_bound_j": 0.02839947686945834}
+STAGEB_REVIEW p3 contiguous_6.6ms {"apparent": [0.0024222549777566885, 0.05298272846853936], "bound": 0.0009114822573562025, "ci": [0.7276193778957244, 0.8703636017948386], "contrast": 0.5982422458787154, "episodes": 96, "forecast_r": 0.8109358181564447, "increment": {"flags": ["nominal_fisher_interval_not_null_calibrated"], "held_out_effective_n": 93, "held_out_episodes": 96, "verdict": "yes", "within_condition_held_out_correlation": 0.8219116242960651, "within_condition_held_out_interval_95": [0.7425226466559279, 0.8785286784177099]}, "mean_power": {"flags": [], "held_out_effective_n": 96, "held_out_episodes": 96, "verdict": "yes", "within_condition_held_out_correlation": 0.8083738802855257, "within_condition_held_out_interval_95": [0.7244060763277498, 0.8687062918438864]}, "phase_err_sd_J": 0.1713564423832338, "recovery_meets": true, "required_r": 0.6471202066782847, "status": "ok", "timing": {"flags": [], "held_out_effective_n": 96, "held_out_episodes": 96, "verdict": "no", "within_condition_held_out_correlation": -0.010303124188217116, "within_condition_held_out_interval_95": [-0.21248013030776805, 0.19271978742984244]}, "true": [0.00281346048, 0.05281579008], "verdict": "yes", "within_r": 0.8107156206127827, "worst_case_bound_j": 0.6917183744201088}
+STAGEB_REVIEW p5 default_drop_change {"change_j_per_token": 2.6250000000060947e-08, "dropped_j_per_token": 0.009750032454274273, "full_j_per_token": 0.009750006204274273}
 ```
 
 ## DECISIONS I MADE
 
-- Continue the existing lane head, never recreate from the spine. GitHub fast-forward ref updates replace unavailable local checkout/push; only this lane branch is updated, with expected-head checks and force=false.
-- The environment never supplied a shell. Follow the explicit CI fallback: port every reviewer pass condition into the in-scope review test, retaining production-shaped worlds, real traffic/sampling/extraction and monkeypatch seams.
-- F1: predeclare grouped timing-residual energy recovery as the primary increment criterion. Timing->energy and timing->routing fits use other task groups; conditions center evaluation only. Print raw energy, timing and mean-power candidates beside the increment.
-- Remove the nominal compute reference instead of estimating a hardware reference from simulator truth. Preserve deprecated None aliases and an ignored extraction argument. Thus no reference uncertainty enters features.
-- Energy subtracts the supplied running baseline over actual covered decode time. Physical true_extra retains transfer plus running-stall truth; transfer_only targets this observed energy feature. Gross mean power comes from observed energy / covered time plus that baseline.
-- Keep the lead's d=1, n=50, alpha=.05, power=.8 and comparisons=3 planning parameters. Extra printed candidates are diagnostics, not a search for a passing detector. The required r remains 0.6471202066782847.
-- The primary nominal Fisher interval accounts for two condition means plus one timing covariate (N-3 effective observations). It shares the existing episode/CV-dependence limitation.
-- F2: use uniform dithered rounding variance q²/12 propagated through independent readings and the two condition means. The supplied systematic half-width remains a measured/scenario parameter, zero in these uncalibrated worlds. q*T is printed as an alternative and never decides Stage B.
-- F3: retain the one dropped-sample episode, integrate existing cells without filling, flag incomplete coverage, and retain the same 24 episodes. No eligibility rule is added.
-- F4: adopt shunt slices as requested by the datasheet sequence; use 1.1ms acquisition / 10ms polling. Four averages use separated slices. Keep 6.6ms as the labelled alternative.
-- F5/F6: label phase_bias_std_j as fitted on the same evaluated episodes and INA 0.04W noise as a scenario parameter. Neither is independent hardware validation.
-- F8: use actual prefill microbatch size, including the last partial batch. Pinned max_batch=32 is at :230, with the size/slot guard at :503. Defaults have only full 128-token batches, so this change alone moves no default numbers.
-- F9: algebraic zero gets a float-noise bar; apparent resident energy gets separate quantum, noise and boundary-mixing bars.
-- F10: preserve route and phase RNGs; derive only sensor noise from f"noise-{seed}". Print an old-noise-seed ablation with every other final input fixed.
-- Keep the inherited registry normalization untouched; the lead lands its shared spine fix.
-- STAGEB-S: per the sampler lanes, record alarms, OC counters and power/throttle reasons per episode; report all-inclusive primary and labelled unflagged sensitivity counts, and stop physical work on electrical limiting events.
-- Existing oracle provenance remains historical. This seat maintained the oracle and added the timing-projection comparison; that new work is not claimed as an independent different-model derivation. No helpers were started.
-- No optional dependencies, network tests, hardware operations, inference service, merge, ready-for-review transition or out-of-scope write.
+- Continue the pushed head; do not redo any already-pushed code. Use the available GitHub connector because the managed workspace has no usable executor. Every ref update is a fast-forward, expected-head-checked and force=false, only on lane/2026-10-21-align-stageb.
+- The governing round-2 brief determines the primary conditional increment. Every nuisance fit, residual slope and target condition mean is training-only and within condition. The final score additionally centres held-out truth/prediction within condition, matching the reviewer sketch. No pooled-mean term enters both target and prediction. q6 shows no design difference.
+- Carry condition explicitly in the lane-local RoutingObservation, sourced from Episode.condition. Keep condition=None as a compatible construction default; it records a flag and unavailable prediction rather than guessing from opaque IDs. Scalar unconditional candidates remain descriptive; their within-condition evaluation reads the field.
+- Constant timing uses zero timing slopes and a flag. Its arithmetic threshold is derived from O(N) ulps of centering, not a measured-effect bar. Missing labels are omitted only from within-condition statistics, never silently relabelled or removed from the episode ledger.
+- Episode timing factors are independent of routes and token jitter, multiply compute-only durations, and leave running W fixed. Added duration changes background J and phase alignment; transfer bytes/J and stall construction are unchanged. The zero default preserves all original synthetic traces.
+- Expand the scenario factor grid to ±20% so it reaches beyond the lead's 5%-of-mean-time criterion even with blocking uploads; the grid points themselves are scenario inputs, not physical thresholds. Keep and print the full non-monotonic sweep, including the duplicate zero-factor anchor.
+- F4 fallback is explicit: marginal d_A and required r remain the supplied design, with provenance/flags. It cannot be read as timing-conditional design power. No new condition effect is inferred from these simulations.
+- F5 fallback is explicit: energy-only/forecast retain the true supplied running level, labelled unavailable on hardware. The strict increment and mean power retain baseline-offset invariance; no hardware analyst-baseline claim is made.
+- F6 fallback is explicit: no permutation/null calibration is added. Nominal negative-null Fisher intervals are disclosed next to the decision. A no is a scenario comparison, not measured absence; yes is not validated design power.
+- F8 bounds the complete Gaussian Fourier series by its geometric majorant and trivial q/2 cap continuously; the noise/rounding covariance uses Gaussian integration by parts plus an integral bound. Current strongly dithered worlds move only far below the rule-3 bound. The separate same-sign q*T alternative stays labelled.
+- Existing observed-coverage integration, 1.1 ms INA shunt slices, independent noise RNG, physical upload-stall truth, prefill cache guard and supply/throttle procedures remain. Dropped samples keep numeric features/flags; no new real-data eligibility rule is introduced.
+- The 34-test module changes a flag expectation and the residual-forecast oracle to the continuous bound; its .8 ideal test now sets both noise and quantum to zero. The four-test review module supplies Episode.condition to its capture. The round-2 baseline collector becomes asserted regressions and adds sweep/continuous-bound checks. These update changed criteria/worlds; no prior pass condition or numerical agreement bar was weakened.
+- Report/doc tables are generated from the exact CI-printed values, with decimal rounding for readability. Raw lines retain full precision. All named fix commits remain in the fast-forward ancestry (GitHub compare reports ahead for each named round-1 base; round-2 history is a straight fast-forward from 932719cfc). The inherited registry line is untouched and deferred as directed.
+- Original different-model oracle provenance is historical. The new pair-difference derivation is mathematically separate from production, and the external reviewer's independent sketch agrees; this seat does not claim that it constitutes the pipeline's future different-model/cold executing gate.
+- No subagents, optional packages, hardware operations, inference services, paid services, out-of-scope repository changes, merge or ready transition were used.
 
 ## CONTRACT-CHANGE
 
-No shared contract was modified. Desired future companion timing record: token ordinal, turn, phase, start/end brackets, microbatch identity and clock domain. The current lane works around the missing RouterLog timing with explicit TokenWindow inputs and flags. This proposal is not installed and changes no data eligibility.
+No shared file was modified. The existing shared RouterLog has no token/turn/
+microbatch timestamps. Desired future companion timing record: token ordinal,
+turn/phase, start/end brackets, microbatch identity and clock domain. The lane
+uses explicit TokenWindow inputs and flags as its local adapter. Explicit
+RoutingObservation.condition is lane-local and requires no shared schema change.
 
 ## OPEN ISSUES
 
-- Hardware bandwidth/J-per-byte, deployed shunts/cadence/phase, noise, voltage
-  skew, logger perturbation, supply events and Stage A effect require calibration.
-  No hardware, inference server or paid service was used.
-- Residualized recovery and mean-power recovery answer different questions.
-  The chosen nuisance fits can remove timing-correlated error as well as signal;
-  shared folds/paired conditions and fitted nuisance targets limit nominal Fisher
-  coverage. Positive synthetic residual recovery is not established hardware
-  design power. Use independent groups/repetitions before a physical claim.
-- The numerical oracle's original independent-model provenance is retained.
-  This seat maintained it and added the new projection comparison; that new work
-  is not claimed as an independent different-model derivation. No helpers were
-  started under this seat's delegation constraints. Independent executing review
-  and the cold final pass remain lead gates.
-- Exact upstream replay still needs cache group/slot/reset and microbatch timing
-  inventory; large-batch read-only cache reuse remains flagged as unmodelled.
-- No executor was available for literal local discovery or script execution.
-  The authorized CI fallback executed every pass condition and all 42 alignment
-  tests; this limitation is not presented as local execution.
-- Final-head CI is pending and is not awaited per the brief. Earlier CI was
-  superseded after focused MODULE PASS lines; no whole-suite green or merge-ready
-  claim is made. PR #526 remains draft and unmerged. Gate-ledger still reports
-  the uncompleted independent/merged-tree/final-head/cold-pass gates.
+- Hardware Stage A effects, timing-conditional effect, memory bandwidth/J-per-byte, deployed shunts/acquisition/cadence/phase, baseline estimator, noise/systematic uncertainty and logger perturbation need independent calibration before any physical interpretation.
+- Nominal cross-validated Fisher intervals need null/dependence calibration before a measured absence or design-power claim. The condition-offset stalled probe remains high but inconclusive; the F6 fallback applies to it too.
+- Conditional increment and descriptive mean-power recovery answer different scientific questions. This brief chooses the former; no alternative is selected after seeing the result.
+- Every no-stall world is counterfactual relative to the pinned blocking-upload backend. The stalled verdict depends on realistic between-episode timing spread; no universal sensor detectability conclusion follows.
+- Exact upstream replay still needs group/slot/reset and actual microbatch/token timing inventory; large-batch read-only cache reuse remains flagged as unmodelled.
+- The numerical reference and independent reviewer sketch agree, but lead-owned independent executing review, merged-tree verification and cold final gate remain unfilled. Gate-ledger failure is expected and is not waived.
+- F7 is deferred: the lead lands the registry line on the spine and drops it from this lane before merge.
+- No usable executor existed for literal local discovery, git checkout or isolated-script execution. CI fallback evidence is identified explicitly.
 
 ## NEEDS_RULING
 
-**F1 prospective criterion:** current code adopts grouped timing-residual power
-recovery, measuring the conditional increment. The permitted alternative is mean
-observed decode power, measuring power-level routing visibility. They change a
-printed verdict:
+none. The brief fixes the primary estimand and explicitly permits F4/F5/F6
+fallbacks; implementation is complete within that authority. Calibration,
+registration, measured-result interpretation and merge gates remain prospective
+lead work, not a request to choose a detector from these synthetic outcomes.
 
-| World | Adopted increment / verdict | Mean-power alternative / verdict |
-|---|---|---|
-| E2E stalled INA | 0.03878094817615853 [-0.16624431709872659, 0.24059214797596737] / no | 0.844028133904538 [0.7737286721887902, 0.8937942788319294] / yes |
-| Default stalled INA | 0.1734304799794651 [-0.2791638835042857, 0.5629748878035307] / no | 0.8478338120759732 [0.6633335569803914, 0.9351652157432788] / yes |
-| E2E no-stall shunt INA | 0.8938423135247563 [0.8437692437918409, 0.9284890626614218] / yes | 0.7235703428110349 [0.6104476360084228, 0.8077643915236326] / inconclusive |
-| E2E no-stall frame alternative | 0.9270878135830587 [0.891800255448484, 0.9511640036403203] / yes | 0.8083738802855257 [0.7244060763277498, 0.8687062918438864] / yes |
+## FIX ROUND 2
 
-Recommendation: retain the adopted increment for the strict additional-to-timing
-question, and retain mean-power visibility as a separate descriptive result.
-The lead must predeclare the scientific estimand and validate the conditional
-Stage A attenuation / nuisance-fitting uncertainty before registration. This
-prospective question does not block implementation or exclude any episode.
+Implemented/verified training-only condition fixed effects, explicit condition
+provenance, independent episode timing sensitivity and continuous rounding with
+covariance. Replaced the withdrawn affirmative default counterfactual decision
+with the executed inconclusive result. Printed both timing grids and the
+stalled-world transition, retained the permitted F4/F5/F6 fallbacks, and deferred
+F7. This continuation changes documentation/evidence only after reading the
+successful code-head CI; it does not redo the pushed implementation.
 
-F2 is determined by the brief's dithered simulation: q²/12 contrast SD
-0.0009114822446086623J versus labelled q*T 0.6917183744201088J at contrast
-0.5982422458787154J. The latter would fail a physical contrast test; it is not
-the adopted verdict. No ruling is needed to restore that rejected assumption.
-F4 follows the shunt sequence rather than departing from it; both alternatives
-are printed above. F3 admits the same 24 episodes with coverage flags, as
-explicitly directed; no new exclusion/eligibility choice is installed.
-No compute-duration estimate remains.
-
-## FIX ROUND 1
-
-Implemented F1--F6, F8--F10 and STAGEB-S; F7 is left for the lead exactly as
-directed. The original 34 tests remain, with assertions changed where the
-review changes their feature, bound or acquisition world:
-
-- Sensor cadence now checks the 1.1ms shunt slice rather than the 6.6ms frame.
-- The old stalled energy-positive test now checks the timing/increment ledger;
-  the separate blind-sensor regression enforces the required no-yes result.
-- The old no-stall q*T rejection is replaced by dithered-rounding and
-  shunt-model assertions. The synchronized-world negative interval/bar remains.
-- The stall fixture compares observed baseline-subtracted .03J rather than
-  adding .36J from truth. Its modeled physical .39J remains checked. The cooler
-  fixture uses -.15J above actual running baseline; sparse features are finite
-  with coverage flags rather than None.
-- Forecast/oracle agreement now passes the explicit n=50 condition-mean count.
-- The resident true-zero assertion uses float noise, with a separate apparent
-  sensor-bound assertion.
-- The review module adds the real p1--p5 paths, constant-sensor regression,
-  one-sample cohort retention, 32/33 cache readouts, disjoint INA averages,
-  pairwise projection oracle and legacy-noise ablation. All four tests passed.
-
-No test was weakened to hide a failure: these are the feature, bound and world
-corrections the brief requires. All lead-specified categorical pass conditions
-executed successfully. Numerical bars retain their physical/precision derivations.
+The baseline evidence commit e229ff9b9 retains the failures. The implementation
+commit is 49d2232f4; ac07bbbde extends the factor grid and a01f24374 asserts
+the lead's 5% reach. cc46dff46 completes the continuous covariance bound.
+0e5f17335 corrects the zero-noise forecast test's quantization allowance.
+The existing tests' changes are described under DECISIONS I MADE.
 
 ## HISTORY
 
-r0 CI 39708988879 passed 29 Stage B tests. r0c CI 39716151868 passed 34 in
-115.018s. The lead's ebba54833 review ran 38 alignment tests in 64.0s.
-Those are provenance, not current-head validation. The old stalled-world yes
-and no-stall q*T negative result are superseded by this round.
+Round 1's complete evidence remains at 932719cfc5f73c7029048f38696d17d08ec2833b.
+It removed simulator compute-reference leakage, fixed observed coverage and
+INA acquisition, separated the noise stream and preserved the upstream cache
+guard/hazard procedure. Its 42-test result is historical; the current 45-test
+alignment result supersedes it. Earlier affirmative counterfactual conclusions
+are superseded by the within-condition fit and the sensitivity sweep.
 
 ## FIX LOG
+
+### Round 1
 
 - F1 — fixed 43d19f6fd3b9b1f89e88627a44db7d504618bc2c: timing-controlled held-out power increment, timing/mean-power alternatives, blind-sensor regression and unavailable reference aliases.
 - F2 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: q²/12 random rounding propagated to condition means; q*T is a labelled alternative.
@@ -3142,3 +531,14 @@ and no-stall q*T negative result are superseded by this round.
 - F9 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: algebraic zero uses float noise; apparent resident energy has a separate sensor-derived bound.
 - F10 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: noise uses its own derived seed; a legacy-noise-seed ablation prints the numerical change.
 - STAGEB-S — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: per-episode supply/throttle flags, inclusive and labelled unflagged results, and electrical-hazard handling are in both hardware procedures.
+
+### Round 2
+
+- F1 — fixed 49d2232f41a7178da4c4b5d4cabff2424bf5798e: all nuisance/residual slopes and target centering use training-only condition fixed effects; constant timing flags, condition-only/random-covariate regressions and separate pair-difference reference pass.
+- F2 — fixed 49d2232f41a7178da4c4b5d4cabff2424bf5798e: RoutingObservation.condition is copied from Episode.condition; all condition reads use it, unknown labels flag, hash-ID results are bit-identical.
+- F3 — fixed 49d2232f41a7178da4c4b5d4cabff2424bf5798e, ac07bbbde0491db6278f706d4db574f02faf2644 and a01f2437442c34d322d0b728b6dc78a1e6c4f2c9; executed decision/tables ca1fc44890a777dcc54223a1c7fdd62dd740f821: independent episode compute factors, both sweeps reaching beyond 5% mean decode time, and counterfactual labels.
+- F4 — fallback 49d2232f41a7178da4c4b5d4cabff2424bf5798e: the marginal Stage A requirement is labelled beside the formula and in Decision; it cannot establish timing-conditional design power.
+- F5 — fallback 49d2232f41a7178da4c4b5d4cabff2424bf5798e: energy-only and forecast use simulator running truth, unavailable on hardware; labelled in provenance, Decision and outcome-column heading. const_off energy-only yes is disclosed.
+- F6 — fallback 49d2232f41a7178da4c4b5d4cabff2424bf5798e: no null calibration is shipped; Decision quotes the reviewer's negative-null examples and states that no is not a measured absence.
+- F7 — deferred: the lead lands the registry line on the spine and drops it from this lane before merge; tests/test_shard_tests.py is exactly unchanged from the round-2 starting branch.
+- F8 — fixed cc46dff463dde193cb675486395dd735fc9e8c41; oracle-test adjustment 0e5f1733553a3e4f7d8571e685ba39b4a0c9bafb: continuous Fourier rounding bias/second-moment plus Gaussian covariance bound, no sigma=q/2 switch; current-world changes stay below the rule-3 bar.
