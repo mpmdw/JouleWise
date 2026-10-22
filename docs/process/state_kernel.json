@@ -5129,13 +5129,13 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "The headless magistrate is launched with the project Codex MCP server, so every activation owns two idle `codex mcp-server` processes that the pre-arm census classifies as foreign (descendants of the session root outside the caller's ancestor chain); the ruled cure is a manual termination step before `check` (NIGHT_HANDBACK §Arm procedure via the tracked commands).",
+      "goal": "The headless magistrate is launched with the project Codex MCP server, so every activation owns idle Codex MCP processes that the pre-arm census classifies as foreign (descendants of the session root outside the caller's ancestor chain). Since PR #538 (merged 2026-10-21) these are the app-server MCP adapter `node scripts/codex-mcp-server.mjs` and the `codex app-server` it starts (with an npm-installed CLI, also that CLI's Node launcher process); before PR #538 they were two `codex mcp-server` processes. The ruled cure is a manual termination step before `check` (NIGHT_HANDBACK §Arm procedure via the tracked commands).",
       "id": "MAGISTRATE-LAUNCH-WITHOUT-MCP-01",
       "lane": "agent",
       "priority": "p3_tooling",
       "rank": 264,
       "status": "queued",
-      "status_note": "2026-09-21: registered in the kernel by activation ce7c57a9 (round 3 of RETAINED-ROOT-REFUSAL-CLASS-01, cold-gate Q6 A2-F1); the row text was first hand-written into the generated queue region by fix round 1 and had no kernel backing.",
+      "status_note": "2026-09-21: registered in the kernel by activation ce7c57a9 (round 3 of RETAINED-ROOT-REFUSAL-CLASS-01, cold-gate Q6 A2-F1); the row text was first hand-written into the generated queue region by fix round 1 and had no kernel backing. 2026-10-22: goal updated for the app-server MCP adapter of PR #538 (the census detects all three process shapes: tests/test_agent_identity.py CodexAppServerCensusTests).",
       "stop_card": null
     },
     "MET-WINDOW-C-01": {

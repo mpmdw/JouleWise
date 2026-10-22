@@ -16,9 +16,15 @@ runs; reserved for Phase 3 split orchestration).
 
 Rules:
 
-- Context is data, not capability: adapters receive paths and identity,
-  never the bundle writer. Write-order and immutability invariants stay
-  with the controller and `RunBundleWriter`.
+- Context is data plus one narrow capability, never the bundle writer:
+  adapters receive paths and identity, and may call
+  `RunContext.acknowledge_custody(token, artifact_paths)`
+  (`joulewise/interfaces.py`). It accepts only artifacts that already exist
+  inside the run bundle, fsyncs them, and atomically writes an
+  acknowledgement file `logs/custody/<token>.json` naming them; the returned
+  acknowledgement is the proof a caller requires before deleting a temporary
+  copy of that evidence (the powermetrics adapter does so). Write-order and
+  immutability invariants stay with the controller and `RunBundleWriter`.
 - The controller always passes the context. Out-of-run invocations - the
   D-014 cooldown gate's `measure_idle` between repetitions, direct adapter
   tests - pass `None`; adapters must tolerate a missing context by

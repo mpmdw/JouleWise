@@ -130,7 +130,7 @@ jobs:
           python -m joulewise validate-bundle --strict "$bundle"
 
   test:
-    needs: [changes, quick]
+    needs: [changes]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     env:
@@ -237,7 +237,7 @@ jobs:
           PY
 
   calibration-exits-exclusive:
-    needs: [changes, quick]
+    needs: [changes]
     if: needs.changes.outputs.code == 'true'
     # Exclusive by design: this module already runs sequentially internally;
     # colocating it with an ordinary shard only adds scheduler starvation.
@@ -263,7 +263,7 @@ jobs:
         run: python -m unittest -v tests.test_calibration_exits
 
   calibration-writer-crash-matrix-exclusive:
-    needs: [changes, quick]
+    needs: [changes]
     if: needs.changes.outputs.code == 'true'
     # Exclusive because fallback-weight shard placement is unsound for this
     # module: its hosted runtime is dominated by its own subprocess-heavy
