@@ -45,7 +45,15 @@ cd -- "$repo_root"
 layout=""
 if ! $check_only; then
   # Stdlib-only validation runs before inventory, venv creation or installation.
-  layout=$("$python_bin" -m joulewise.align.gpukit.session --validate-only ${session_args[@]+"${session_args[@]}"})
+  if layout=$("$python_bin" -m joulewise.align.gpukit.session --validate-only ${session_args[@]+"${session_args[@]}"}); then
+    :  # Keep successful layout JSON for the whole-GPU check.
+  else
+    validation_status=$?
+    if [[ -n "$layout" ]]; then
+      printf '%s\n' "$layout" >&2
+    fi
+    exit "$validation_status"
+  fi
 else
   [[ -n "$gpu_indices" ]] || argument_error "Select GPUs for --check-only"
 fi

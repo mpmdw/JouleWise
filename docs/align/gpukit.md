@@ -394,7 +394,9 @@ data_complete. Expected counts come from expanded coordinates.
 
 A session with no runner command started is failed with session_ran_no_model and
 exit 3, including readiness failures and adapter skips. Once any runner starts,
-the session exits 0 as completed/completed_with_flags; data_complete reports data
+the session exits 0 as completed/completed_with_flags unless an unexpected
+session_failed:* exception occurred, which stays failed with exit 3 and
+data_complete false even after earlier work ran; data_complete otherwise reports data
 failures and partial collection. Physical isolation or instrument readiness refusal
 takes precedence: status refused, exit 2. Argument errors exit 3 (no receipt,
 because output arguments may be absent). Help and --validate-only success exit 0.
@@ -406,7 +408,8 @@ every measured and monitor device before installation. It preserves --gpu-index
 and --gpu-indices exactly; JOULEWISE_GPU_INDICES applies only when neither is given.
 For --gpu-index N, a session checks N through N+T-1 for largest agent TP T.
 --check-only without session arguments checks only the explicitly selected indices
-(--gpu-index N checks N alone) plus any monitor index. Bootstrap exits 2 on MIG/vGPU,
+(--gpu-index N checks N alone) plus any monitor index. Bootstrap prints failed validation JSON to stderr before exiting 3.
+Bootstrap exits 2 on MIG/vGPU,
 3 on argument/matrix/layout failure, 0 on a successful check/session.
 
 ### CUDA/NVML device order (R9)

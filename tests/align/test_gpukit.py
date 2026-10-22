@@ -1276,6 +1276,7 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             "--runner-timeout-s", "30", "--poll-s", "0.01", "--monitor-placement", "none"],
             cwd=self.base, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("runner_measured_gpu_layout_invalid", result.stderr)
         self.assertFalse((self.base / "session-venv").exists())
         self.assertFalse((self.base / "short-layout-run").exists())
 
