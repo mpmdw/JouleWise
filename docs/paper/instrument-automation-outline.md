@@ -1,14 +1,14 @@
 # Outline: the instrumentation and automation paper
 
 **Status.** Section-by-section outline, written 2026-10-21 (PDT) by Opus 5.5 (an AI model session) for Ed, the
-project's owner. It was revised after five rounds of checks of its wording, each by AI model sessions that had no
-part in writing it (two separate checks of the whole file in the fourth round, and a fifth that confirmed their
-fixes), which ask whether every term is built before it is first used, and after a re-check of its numbers against
-their sources. On 22 October, §6 and §12 took in the battery reading's reporting delay (how long after the battery's
-energy flows its reading is recorded), measured for a later written decision (a *ruling*, BAT-2) on how to count the
-battery's energy in another experiment on this instrument (§0 item 18). It is not a draft of the paper's prose and
-has not been sent to anyone; whether any of it goes to the advisor (the academic supervising the work, to whom the
-paper would go) is Ed's decision.
+project's owner. It was revised after six rounds of checks of its wording, each by AI model sessions that had no part
+in writing it (two separate checks of the whole file in the fourth round; the fifth and sixth each confirmed the
+fixes before them and checked the changed lines), which ask whether every term is built before it is first used, and
+after a re-check of its numbers against their sources. On 22 October, §6 and §12 took in the battery reading's
+reporting delay (how long after the battery's energy flows its reading is recorded), measured for a later written
+decision (a *ruling*, BAT-2) on how to count the battery's energy in another experiment on this instrument (§0 item
+18). It is not a draft of the paper's prose and has not been sent to anyone; whether any of it goes to the advisor
+(the academic supervising the work, to whom the paper would go) is Ed's decision.
 
 **Why it exists.** Ed, 2026-10-20: "seems we're close to an instrument paper, whatever the first paper is i forget if
 joules per request matches up in disag inference as you'd expect by model size" (his mail, transcribed in
@@ -204,16 +204,17 @@ its first use.
     larger of the largest single deviation and a prediction t × s × √(1 + 1/n) (s the deviations' standard deviation,
     n their count, t the 95% Student-t multiplier), widened by letting each value move within its own timing
     uncertainty (§3) and multiplied by a *guard factor* g(n) that widens the floor when n is small: √(9 / (n − 1))
-    for n from 5 to 9, and 1 from n = 10 (registration `:933-958`; its synthetic example: n = 9 repeats, g = 1.0607,
-    give a floor of 0.5765 J). An *attribution floor* is the largest timing bound (§3: the energy a run's phase edges
-    can move under the session's timing error) over a cell's kept runs; it is printed beside the cell, because every
-    run is placed on the clock by the same method, so it does not shrink when runs are averaged (registration
-    `:215-217`). A *contrast* is GAMMA's 1.7B-versus-8B energy difference on the same workload; it is judged against
-    the larger of the two models' detection floors (the *floor gate*), each model's floor coming from its own pack's
-    session. An *outcome word* is the registered verdict on a contrast, one of four, tested in this order:
-    `not_estimable` (an input is missing or invalid); `not_resolvable` (chiefly: the difference is no larger than the
-    floor gate); `unresolved` (chiefly: its statistical interval contains zero); otherwise `direction_supported`,
-    whose direction is the difference's sign (the full conditions: registration `:990-993`).
+    for n from 5 to 9, and 1 from n = 10; below n = 5 it is undefined, so no floor is computed and the cell is not
+    printed (registration `:933-958`, `:579`; its synthetic example: n = 9 repeats, g = 1.0607, give a floor of
+    0.5765 J). An *attribution floor* is the largest timing bound (§3: the energy a run's phase edges can move under
+    the session's timing error) over a cell's kept runs; it is printed beside the cell, because every run is placed
+    on the clock by the same method, so it does not shrink when runs are averaged (registration `:215-217`). A
+    *contrast* is GAMMA's 1.7B-versus-8B energy difference on the same workload; it is judged against the larger of
+    the two models' detection floors (the *floor gate*), each model's floor coming from its own pack's session. An
+    *outcome word* is the registered verdict on a contrast, one of four, tested in this order: `not_estimable` (an
+    input is missing or invalid); `not_resolvable` (chiefly: the difference is no larger than the floor gate);
+    `unresolved` (chiefly: its statistical interval contains zero); otherwise `direction_supported`, whose direction
+    is the difference's sign (the full conditions: registration `:990-993`).
 28. **Blinding, release.** Until the *release*, no person or AI tool reads a block-5 or block-6 energy, power, phase
     duration, floor, contrast or outcome word; programs compute them into restricted files. *Structure* (verdicts,
     counts of flags and runs, hazard readings, stage timing that is not a phase duration) is not restricted
@@ -289,10 +290,13 @@ was built and checked (§10); the replication (§11).
   (memory, storage, fans, voltage regulators). One sensor cannot answer either question.
 - **Claim.** The instrument reads power at three places on one power path, each with its own clock and rate: the
   rails (`powermetrics`, one average about every 130.5 ms), the DC input (the USB-C meter, 50 samples a second) and
-  the battery current (the SMC, once a second). The rails are the quantity every result rests on; the DC input plus
-  the *battery term* (the energy the battery discharges into the machine: its current times its voltage, summed over
-  the request's time; §6) is a printed whole-machine line that never enters a result; the ratio of rail power to
-  whole-machine power is measured, not assumed, and depends on the workload.
+  the battery current (the SMC, once a second). The rails are the quantity every result rests on. A printed
+  *whole-machine line*, which never enters a result, gives the DC input energy over each phase; beside it, per
+  request, the *battery term* (the energy the battery discharges into the machine: its current times its voltage,
+  summed over the request's time). Block 6 keeps the battery term per request, not per phase, because the battery is
+  read only once a second and no reading falls inside 38% of prefill phases; a phase whose request shows the battery
+  helping is flagged (§6). The ratio of rail power to whole-machine power is measured, not assumed, and depends on
+  the workload.
 - **Evidence.** Registration `docs/registrations/block6_replication_DRAFT.md:104-110` (machine and sampler),
   `:824-837` (the meter excludes nothing; the cross-checks M14, known loads switched on and off, and M10, a fit over
   steady load levels, both in worked example 1), `:1030-1037` (whole-machine energy per phase and its *boundary
@@ -307,8 +311,7 @@ was built and checked (§10); the replication (§11).
   `delta_machine_energy`), the meter stream `.../custody/hazards/meter/stream-001.jsonl`, and each run's
   `.../runs-parent/runs_bytes_mac_check/*/summary_metrics.json` (`gross_energy_j`: item 6's gross phase energy summed
   over both phases; the runner also records an idle-subtracted value, which is not used here).
-- **Status.** Writable now from non-claim data. The whole-machine line per phase for blocks 5 and 6 waits for the
-  release.
+- **Status.** Writable now from non-claim data. The whole-machine lines of blocks 5 and 6 wait for the release.
 - **Worked example 1 (quiet-machine kit M14, real).** A known load is switched on between idle stretches and seen at
   both places. A GPU load busy for 20% of each short cycle (20% *duty*) raised the meter's reading over idle by 20.15
   W and the rails' by 7.65 W, so the rails see 0.380 of the step. One CPU core at 100% raised them by 9.41 W and 5.42
@@ -630,11 +633,13 @@ was built and checked (§10); the replication (§11).
   not a measurement). The opposite failure, losing the adapter, is a physical hazard: in block 5 the adapter's output
   lost voltage for 26 s during BETA's attempt 4 and the Mac then slept for 3,507 s, costing 4 runs, which is why the
   pre-session check and every run read the battery current directly. The whole-machine line adds the battery term
-  back (DC input energy + battery energy), and a phase whose request shows battery assist is flagged. Because a
-  battery reading is recorded up to 2.302 s after its energy flows (worked example, second bullet), the battery
-  energy recorded in the 2.302 s after a phase edge may belong to the phase before it; a per-phase battery term
-  carries it as uncertainty, the rule the BAT-2 ruling adopted for BYTES, the other experiment on this instrument (§0
-  item 18); in block 6 no run showed battery assist (Status, below).
+  back over each request (DC input energy + battery energy); block 6 keeps the battery term per request, not per
+  phase (§2), and flags a phase whose request shows battery assist. BYTES, the other experiment on this instrument
+  (§0 item 18), splits the battery term at the phase edges, and there a second problem appears: because a battery
+  reading is recorded up to 2.302 s after its energy flows (worked example, second bullet), the battery energy
+  recorded in the 2.302 s after a phase edge may belong to the phase before it. Its per-phase battery term carries
+  that energy as uncertainty, the rule the BAT-2 ruling adopted for BYTES. In block 6 no run showed battery assist
+  (Status, below).
 - **Evidence.** `RUN_STATE.md:36` and `docs/design/block6_collection_draft.md:72` (the block-5 drop in the adapter's
   output); `joulewise/external/km003c_parse.py:312` (`battery_watts`: −B0AC × B0AV / 10⁶ W at each poll), `:397-425`
   (`delta_machine_energy`: the machine term is the meter term plus the battery term); `joulewise/hazards/smc.py:1-12`
@@ -671,21 +676,22 @@ was built and checked (§10); the replication (§11).
   - The meter's 935,345 samples over the session never exceed 136.79 W; the largest current is 4.991 A, and every
     sample at 4.95 A or more reads a supply (USB-C bus) voltage of 27.38 to 27.43 V. In all 16 check and soak
     requests of the 70B model, the largest 50 Hz sample is 136.3 to 136.4 W.
-  - The battery reading arrives late. The whole-machine line is printed per phase (registration `:1030-1037`), so the
-    battery's energy is split at the phase edges like the rails' energy (§0 item 6); but a battery reading is not
-    stamped at the moment its energy flows. Three delays, which add, put it later. (1) The SMC refreshes the battery
-    current and voltage it reports about once a second (§2), and each refreshed value is the average over the second
-    before the refresh (it shows at the end of each discharge, where the last reading is a fraction of the one
-    before, as a partial average would be: on one 122B check request, −76 mA and then −14 mA), so energy that flowed
-    at the start of that second is first reported up to 1.0 s after it flowed. (2) The value then stands as the
-    reported value until the next refresh, a second later, and the battery energy is computed by the same rule as the
-    meter's (§2, `integrate`: the mean of the polls' values inside the window times the window's length), so the
-    value is charged at every poll that carries it, up to 1.0 s more. (3) The stream records a new value only at its
-    next poll, up to one gap between polls after the refresh; on session H the largest gap was 0.302 s. Battery
-    energy is therefore recorded up to 1.0 + 1.0 + 0.302 = 2.302 s after it flows, and never before. Check on session
-    H: the battery supplies power only while the DC input sits at the adapter's ceiling (the claim above), so once
-    the meter's power fell at the start of each 122B decode the battery had stopped, and every discharge reading
-    after that fall is a late one; those readings went on for up to 2.13 s, inside the bound.
+  - The battery reading arrives late. Block 6 keeps the battery term per request (registration `:1030-1037`); BYTES
+    splits the battery's energy at the phase edges like the rails' energy (§0 item 6; BAT-2 ruling, Evidence above),
+    but a battery reading is not stamped at the moment its energy flows. Three delays, which add, put it later. (1)
+    The SMC refreshes the battery current and voltage it reports about once a second (§2), and each refreshed value
+    is the average over the second before the refresh (it shows at the end of each discharge, where the last reading
+    is a fraction of the one before, as a partial average would be: on one 122B check request, −76 mA and then −14
+    mA), so energy that flowed at the start of that second is first reported up to 1.0 s after it flowed. (2) The
+    value then stands as the reported value until the next refresh, a second later, and the battery energy is
+    computed by the same rule as the meter's (§2, `integrate`: the mean of the polls' values inside the window times
+    the window's length), so the value is charged at every poll that carries it, up to 1.0 s more. (3) The stream
+    records a new value only at its next poll, up to one gap between polls after the refresh; on session H the
+    largest gap was 0.302 s. Battery energy is therefore recorded up to 1.0 + 1.0 + 0.302 = 2.302 s after it flows,
+    and never before. Check on session H: the battery supplies power only while the DC input sits at the adapter's
+    ceiling (the claim above), so once the meter's power fell at the start of each 122B decode the battery had
+    stopped, and every discharge reading after that fall is a late one; those readings went on for up to 2.13 s,
+    inside the bound.
   - Soak run r01 (2,048-token prompt, 512 output tokens, 82.573 s): DC input 9,017.1 J; battery 9.05 J; machine
     9,017.1 + 9.05 = 9,026.1 J; rails 3,124.0 J (0.346 of the machine). Three of the 83 reads of the monitor's
     once-a-second SMC journal inside the request, taken 2 to 4 s after the request started, showed the battery
@@ -961,8 +967,9 @@ was built and checked (§10); the replication (§11).
   workload-dependent (§2, worked example 2).
 - The meter's boundary is DC input at the adapter's USB-C socket; the adapter's AC-to-DC loss is outside every
   number, and the cable's loss between meter and laptop is inside the machine number (registration `:1035`).
-- The battery current is read once a second, and its energy is recorded up to 2.302 s after it flows (§6), so near a
-  phase edge it can fall on the wrong side of the edge.
+- The battery current is read once a second, so block 6 gives the battery term per request, not per phase; and its
+  energy is recorded up to 2.302 s after it flows (§6), so where it is split by phase (BYTES) it can fall on the
+  wrong side of an edge.
 - The capture's pulse-derived timing bound is measured on GPU pulses; applying it to sustained mixed inference is an
   assumption that M13 checks only at the pulse transitions it timed (`docs/paper/draft-v2-skeleton.md:159`).
 - The rules' cut-offs come partly from rehearsals during which an agent process was alive, drawing 0.02 to 0.03
