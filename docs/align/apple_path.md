@@ -1,9 +1,11 @@
 # Apple alignment path (internal, provisional)
 
 This is code and a prospective D1 plan for RQ-ALIGN-ENERGY-RESIDUAL.
-Nothing is registered, armed, installed or measured here. The cloud executor
-never became usable in the fix seat; all new checks remain NOT EXECUTED.
-The lane report distinguishes source changes from observed results.
+Nothing is registered, armed or installed by this lane. The lead ran the
+synthetic campaign and lane tests locally at 9162afd6d; the reviewer ran 19
+lane tests and H1–H4 at b7739911b (H2 used real MLX with mock telemetry).
+Round-2 source changes are NOT EXECUTED by this cloud seat: its executor
+remained unavailable. The lane report separates those runs from derived plans.
 
 Energy can count inference work omitted from a visible log. It cannot identify
 reasoning that fits inside the same forward passes.
@@ -22,13 +24,25 @@ MLX without a local model mirror return RUNTIME_UNAVAILABLE during prepare,
 before idle admission or warmup. The controller maps that reason to status
 "unsupported"; it does not create a fictional benign episode. These are
 unmeasurable configurations, not hazard refusals or discarded observations.
+Prepare also calls reset(seed), system_prompt and user_prompt before idle
+admission. Tasks must tolerate repeated reset(seed): warmup and the measured
+episode reset again. A measured episode with no model call returning generated
+tokens fails with AdapterFailure(UNKNOWN_ERROR); later faults after returned
+tokens remain recorded flags. A completion equal to max_tokens adds
+turn_token_budget_reached:<turn index>, including an unclosed reasoning span.
 
 MLX uses the existing in-process MlxRuntimeAdapter._generate helper, as current
 suite workloads do. This preserves model load, tokenizer, greedy sampler,
 stream generation, detokenizer and phase events. A separate mlx_lm.server
 would add another process and dispatch boundary. Identity records model,
 local source, revision, artifact identity, mlx and mlx-lm versions; the wrapper
-forwards the runtime's readiness identity projection. Heavy libraries remain
+projects the same model, sampler and fixed episode output policy at readiness
+and in the bundle. Model provenance forwards prepare's model_artifact_identity.
+Sampler provenance records actual greedy settings, the requested temperature
+and per-turn max_tokens; a nonzero request retains the mismatch flag and a
+distinct identity. The fixed policy contains the registered turn/token budgets
+and a stable stop rule. episode_outcome carries emitted_tokens and the actual
+stop_condition outside governed identity. Heavy libraries remain
 lazy optional imports. No implicit weight download is permitted.
 
 The model's chat template receives messages and tools; encoding adds no
@@ -124,11 +138,21 @@ of the supply, so battery assistance does not invalidate their energy.
 Charging above +200 mA, IsCharging, AC loss and missing evidence retain the
 existing exclusion rules. Arm-time idle admission is unchanged.
 
-The repository observed B0AC bursts to -865 mA during inference on the 140 W
-adapter (tests/hazards/test_battery.py, the minus-865 mA burst control;
-battery.py documents the ruling). Heavier models may raise the disclosure more
-often. Even a decode average below adapter capacity does not exclude transient
-assist, so do not predict the flag from the adapter label alone.
+The orchestrator's 2026-10-06 ruling corrects the -865 mA observation: it was
+at model load, not during decode (both seats). Source:
+~/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md.
+The synthetic battery test retains -865 mA because it exceeds the ruling's
+200 mA limit by 665 mA; it is not a claim about inference load.
+
+The measured overload validation, archived at
+~/night-archive/wallmeter-probe/verify/b0ac_validation.md (2026-10-06 22:12Z),
+used Qwen3-8B-4bit on MLX plus a 16-process CPU burner. System total (PSTR)
+peaked at 158.3 W against the 140 W adapter, B0AC fell to -5331 mA, and
+606.9 J was discharged during the 170 s load. When whole-machine draw
+exceeds the adapter's supply, the battery supplies the difference. The ruling
+reports unchanged 8B decode tokens/s under assist: 69.1–72.6 against 68.9–71.1.
+That overloaded validation does not assign a quiet-machine draw to a D1 model.
+Even a decode average below adapter capacity does not exclude transient assist.
 
 There is no matched decode whole-machine measurement for these D1 candidates
 in this lane. Expected draw is therefore an explicit pilot input for each:
@@ -144,9 +168,33 @@ These P values must include the whole machine at a supply-comparable boundary,
 including conversion losses where applicable, rather than just SoC rails.
 battery.py's archived evidence identifies SystemPowerIn as mW and
 SystemLoad = SystemPowerIn - BatteryPower; neither is silently assigned to a
-new model. Inspect those readings beside B0AC during the pilot. No current
-inclusion gap was found by source inspection; the real-bundle regression is
-still unexecuted.
+new model. Inspect those readings beside B0AC during the pilot.
+The lead's local lane tests at 9162afd6d and the reviewer's 19 passing tests at
+b7739911b exercised the real-bundle synthetic assist/charging regression;
+neither establishes any D1 candidate's whole-machine draw.
+
+D1 pilot battery checks (ruling item 6's evidence that would reopen it):
+
+- Reproducible power-mode or power-limit transitions associated with assist.
+- Lower rail power, frequency or tokens/s in assisted seconds against matched seconds.
+- Battery-temperature rise concentrated in assisted stages.
+
+Ruling item 5 requires each reported cell with and without battery.assist
+members; print both, with neither selected after seeing the result.
+Prepare, idle-baseline and warm-up reads are reported separately and decide
+nothing about measured-request membership.
+
+A model whose whole-machine draw stays above the adapter drains the battery
+member after member. Once charging begins inside a later member's request,
+that member is excluded under ruling item 2. Charging in prepare, idle or
+warm-up decides nothing under item 5. For every pilot member record the
+discharged energy already computed by battery.assist, registry state of charge
+before and after, and whether IsCharging turns Yes inside a later request.
+Battery capacity and the state of charge at which charging resumes under the
+charge limit are parameters read at the pilot; no value is assumed here.
+The lead owns whether cooldown should also wait for IsCharging = No.
+The stale "during inference" docstring in joulewise/hazards/battery.py is also
+outside this lane's write scope.
 
 ## Prospective D1 layout and capacity
 
@@ -194,40 +242,79 @@ count the cooldown shown here.
 
 ## Detection power and quiet time
 
-Let h be hidden tokens, e joules per hidden token, sigma_window the standard
-deviation of a paired window residual, B a non-averaging decision-bound charge,
-alpha the two-sided false-alarm probability and power the target probability:
+Let D_wi be the benign/sabotage pair's residual difference for pair i in
+window w. Model D_wi = delta + W_w + epsilon_wi, where sigma_pair is the
+standard deviation of one pair's residual difference conditional on its
+window (the epsilon term), and sigma_w is the standard deviation of the shared
+window effect W_w. Under independent pair errors within a window, independent
+of W_w, the mean over n pairs has variance
+
+    Var(mean_i D_wi) = sigma_w**2 + sigma_pair**2 / n
+    sigma_window = sqrt(sigma_w**2 + sigma_pair**2 / n)
+
+For independent windows with a fixed registered pair count n, N below counts
+windows per model and sigma = sigma_window. Shared window noise does not
+average down by adding pairs inside that window. N can instead count independent
+pairs only when sigma is the spread of those independent pair differences
+(for example one pair per independent window); pooling n pairs from one window
+does not make them n independent units. Register covariance and unequal-n
+handling rather than using the independent formula when those assumptions fail.
+
+With h hidden tokens, e joules per hidden token, non-averaging decision-bound
+charge B, two-sided false-alarm probability alpha and target power:
 
     delta = h * e
-    N = ceil(((z_(1-alpha/2) + z_power) * sigma_window / (delta-B))**2)
+    N = ceil(((z_(1-alpha/2) + z_power) * sigma / (delta-B))**2)
 
-This applies when delta > B. Otherwise retain the finding that repetition
-cannot clear the bound. Register fitting uncertainty and shared-window
-dependence; do not divide B by sqrt(N).
+This requires delta > B. Otherwise repetition cannot clear the bound.
+Fitting uncertainty joins the registered variance/bound model. B never divides
+by sqrt(N).
 
-Repo evidence provides approximately 0.0998 J/decode-token for Qwen2.5-1.5B
-on this Mac: docs/legacy/strategy/2026-08-07-paper-portfolio/
-SYNTHESIS-IMPACT-FIRST.md:5952 reconstructs (192.386 - 141.29) / 512.
-That is historical evidence, not a D1-model estimate. Print sensitivity at
-e = 0.05 and e = 0.1 J/token as explicit parameters. sigma_window is also
-unmeasured for D1; the following is the stated scenario sigma_window = 5 J,
-not an inferred noise figure.
+Historical design inputs (diagnostic/pre-genesis under D-117, not D1 claims):
 
-With h = 128, alpha = 0.05, power = 0.80 and illustrative B = 2 J
-(two approximately 1 J per-run attribution charges), the quantile sum
-z_0.975 + z_0.80 = 2.801585218 gives:
+- Qwen2.5-1.5B: (192.386 - 141.29) / 512 = 0.099796875 J/token,
+  rounded to e = 0.0998 J/token. The reconstruction is at
+  docs/legacy/strategy/2026-08-07-paper-portfolio/SYNTHESIS-IMPACT-FIRST.md:5952;
+  141.29 J is the registered 7B minus 1.5B phase_energy_j.decode contrast in
+  CLAIMS_STATUS.md. The 1.5B is smaller than every proposed D1 candidate.
+- Qwen2.5-7B: 192.38623252628366 J / 512 output tokens =
+  0.3757543604028978 J/token, rounded to e = 0.37575 J/token.
+  This is the **absolute-cell member mean, n=10**, from
+  window_7bfloor_20260729 (docs/decision_log.md:5445 and CLAIMS_STATUS.md's
+  "7B decode floors" row). It covers the decode-phase energy
+  (phase_energy_j.decode) of the 128-prompt/512-output-token df_ph_decode
+  workload, not whole-machine draw or tool energy; see also
+  docs/phase_2/splitwise_decode_campaign.md, floor plan.
+  The 7B is the nearest measured model size to the proposed 8B–70B candidates.
 
-| e (J/token), planning input | delta (J) | Science windows/model | Two models' science hours | Plus one 6 h pilot/model |
+The following **derived scenario** uses h = 128, alpha = 0.05, power = 0.80,
+B = 2 J (two approximately 1 J per-run attribution charges), and
+sigma = sigma_window = 5 J as a stated scenario parameter, not measured D1
+noise. z_0.975 + z_0.80 = 2.801585218. The table uses the rounded e values above:
+
+| Historical e (J/token) | delta (J) | Derived N windows/model | Two models' science windows / hours | Plus one 6 h pilot/model |
 |---|---:|---:|---:|---:|
-| 0.05 | 6.4 | 11 | 132 | 144 h / 24 windows |
-| 0.10 | 12.8 | 2 | 24 | 36 h / 6 windows |
+| 0.0998 (1.5B) | 12.7744 | 2 | 4 / 24 h | 6 windows / 36 h |
+| 0.37575 (7B) | 48.096 | 1 | 2 / 12 h | 4 windows / 24 h |
 
-These numbers follow the formula: ceil((2.801585218*5/4.4)^2) and
-ceil((2.801585218*5/10.8)^2). Replace B with the operative registered bound;
-replace sigma_window and e with pilot-supported inputs. A single pilot window
-per model is an allowance, not asserted sufficient evidence. At the capacity
-scenarios above, 24 windows provide 768–1632 episode slots; six provide
-192–408. Do not turn these conditional calculations into registered power.
+Arithmetic: 128 * 0.0998 = 12.7744 J;
+N = ceil((2.801585218 * 5 / (12.7744 - 2))**2)
+= ceil(1.6902910574) = 2. At 0.37575, delta = 128 * 0.37575 = 48.096 J;
+N = ceil((2.801585218 * 5 / 46.096)**2) = ceil(0.0923466619) = 1.
+Science time is 2 models * N * 6 h; the illustrative pilot adds 2 * 6 h.
+At 32–68 episode slots per window from the capacity scenarios, six windows
+provide 6 * (32–68) = 192–408 slots; four provide 4 * (32–68) = 128–272 slots.
+These slots include the pilot allowance, not just science episodes.
+
+N = 1 or 2 assumes a known sigma and normal z quantiles. In practice the
+pilot must estimate sigma_pair and sigma_w; the number of independent units
+needed for that estimate, with t quantiles and their degrees of freedom,
+sets the count rather than these small known-sigma answers. One pilot window
+per model is a time allowance, not sufficient evidence for sigma_w.
+Replace B with the operative registered bound and e/noise with pilot-supported
+inputs. Calibration, admission, charging exclusions and failed recovery can
+increase quiet time. These calculations are conditional planning, not
+registered detection power.
 
 ## Registration and synthetic checks
 
@@ -243,8 +330,15 @@ merge timing.
 The six-turn/five-tool synthetic world specifies 27,648 prompt and 4,608 base
 output tokens, plus 8.3 s in tools. D-019's 1 ms/prompt-token and
 10 ms/output-token mock parameters at 7.5 W predict 82.028 s / 615.21 J;
-256 hidden tokens predict +2.56 s / +19.2 J. These are analytic predictions,
-not results observed by this seat. The native-plist world exercises the real
-parser/anchor at 100 ms cadence; the HAZARD fixture tests an actual bundle
-span against the real battery judge. See the lane report for execution status
-and exact required test commands. Never run the whole suite from this brief.
+256 hidden tokens give derived +2.56 s / +19.2 J. The lead's local run at
+9162afd6d observed 82.028 s / 615.21 J and 84.588 s / 634.41 J through the
+campaign/controller/mock-runtime/mock-telemetry/bundle path. The reviewer at
+b7739911b ran the offset-clock H1 world at 100 Hz with phase-dependent power:
+worst-turn integration error was 0.02 J, and hidden tokens added
++63.999944957700336 J against derived 64.0 J, with FAILURES 0.
+Those are reviewer-measured at b7739911b, not this seat's observations.
+The native-plist world exercises the real parser/anchor at 100 ms cadence;
+the HAZARD fixture tests an actual bundle span against the real battery judge.
+This round's changed source/tests remain NOT EXECUTED by the cloud seat.
+See the lane report for attribution and exact rerun commands.
+Never run the whole suite from this brief.

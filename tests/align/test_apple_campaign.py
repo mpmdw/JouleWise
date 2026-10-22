@@ -387,7 +387,7 @@ class AppleCampaignTests(unittest.TestCase):
 
         base = episode_spec(hidden=False)
         at_turn_budget = list(base.mock_turns)
-        # Keep all model/tool work identical, but the last assistant asks for a
+        # Keep registered budgets identical, but the last assistant asks for a
         # sixth lookup. A no-tool last answer returns; this one exhausts six turns.
         at_turn_budget[-1] = {**at_turn_budget[-1], "content": at_turn_budget[0]["content"]}
         specs = (
@@ -506,8 +506,8 @@ class AppleCampaignTests(unittest.TestCase):
             tool = episode.turns[-2].tool_calls[0]
             late = math.ceil((tool.start_ns - rig.mono0) / 1e9)
             self.assertLess(rig.mono0 + late * 10**9, tool.end_ns)  # burst is inside the late wait
-            # The ruling's 200 mA limit is crossed by the observed -865 mA
-            # inference burst (665 mA beyond it); positive +865 tests charging.
+            # The ruling corrects the observed -865 mA burst to model load.
+            # It exceeds 200 mA by 665 mA; positive +865 tests charging.
             assisted = publications + rig.smc_lines(stop_s + 1, current={late: -865})
             found = battery.span_findings(assisted, span, request=span)
             self.assertEqual([item["code"] for item in found], ["battery.assist"])
