@@ -294,9 +294,9 @@ was built and checked (§10); the replication (§11).
   *whole-machine line*, which never enters a result, gives the DC input energy over each phase; beside it, per
   request, the *battery term* (the energy the battery discharges into the machine: its current times its voltage,
   summed over the request's time). Block 6 keeps the battery term per request, not per phase, because the battery is
-  read only once a second and no reading falls inside 38% of prefill phases; a phase whose request shows the battery
-  helping is flagged (§6). The ratio of rail power to whole-machine power is measured, not assumed, and depends on
-  the workload.
+  read only once a second, too seldom for a reading to fall inside every short prefill; a phase whose request shows
+  the battery helping is flagged (§6). The ratio of rail power to whole-machine power is measured, not assumed, and
+  depends on the workload.
 - **Evidence.** Registration `docs/registrations/block6_replication_DRAFT.md:104-110` (machine and sampler),
   `:824-837` (the meter excludes nothing; the cross-checks M14, known loads switched on and off, and M10, a fit over
   steady load levels, both in worked example 1), `:1030-1037` (the whole-machine line, the DC input energy per phase,
