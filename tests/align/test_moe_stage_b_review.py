@@ -263,11 +263,17 @@ class TestMoeStageBReview(unittest.TestCase):
         self.assertEqual(sensor.acquisition_slices_ns,
                          ((0, 1_100_000), (6_600_000, 7_700_000),
                           (13_200_000, 14_300_000), (19_800_000, 20_900_000)))
+        # The trailing exposure spans 3 cycles + one slice, while acquired
+        # time is 4 slices; PowerTrace must retain span and duty separately.
+        self.assertEqual(sensor.averaging_window_ns, 20_900_000)
         stamp = 26_400_000
         # A 4W load present only during the latest slice gives a 1W mean.
         trace = simulate_trace(TrafficResult((), ()), replace(sensor, phase_ns=0),
             start_ns=0, end_ns=2*stamp, clock_domain="fixture", baseline_w=0,
             loads=(PowerPulse(stamp-1_100_000, stamp, 4),)).trace
+        # Deterministic duty algebra has no uncertainty: brief rule 3's 1e-6 relative.
+        self.assertLessEqual(abs(trace.duty_fraction-4_400_000/26_400_000),
+                             1e-6*(4_400_000/26_400_000))
         index = trace.t_ns.index(stamp)
         # q/400 is below 1% of the displayed q/2 half-width and far above
         # 1e6 binary64 ulps at this one-watt scale.

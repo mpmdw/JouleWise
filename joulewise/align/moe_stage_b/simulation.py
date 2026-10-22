@@ -95,7 +95,7 @@ def ina3221_sensor(
     cycle = enabled_channels*(shunt_conversion_ns+bus_conversion_ns)
     slices = tuple((j*cycle, j*cycle+shunt_conversion_ns) for j in range(averages))
     return SensorModel("ina3221", "ina3221", "VDD_IN", max(frame, poll_interval_ns),
-                       averages*shunt_conversion_ns, quantum, noise_std_w, phase_ns,
+                       (averages-1)*cycle+shunt_conversion_ns, quantum, noise_std_w, phase_ns,
                        "shunt-slice current acquisition; constant bus voltage; noise is a scenario parameter",
                        slices if averages > 1 else ())
 
@@ -194,9 +194,10 @@ def simulate_trace(
         t_ns=tuple(times), values=tuple(values), unit="W",
         nominal_interval_ns=sensor.interval_ns,
         averaging_window_ns=sensor.averaging_window_ns,
-        duty_fraction=min(1.0, sensor.averaging_window_ns/sensor.interval_ns),
+        duty_fraction=min(1.0, acquisition_ns/sensor.interval_ns),
         resolution=sensor.quantum_w,
-        notes="; ".join((sensor.name, sensor.notes, *dict.fromkeys(flags))),
+        notes="; ".join((sensor.name, sensor.notes,
+                         f"acquisition_slices_ns={slices}", *dict.fromkeys(flags))),
     )
     return SimulatedTrace(trace, tuple(dict.fromkeys(flags)))
 
