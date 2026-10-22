@@ -132,9 +132,9 @@ class TestEnergyResidual(unittest.TestCase):
         # No printed moment uncertainty: contract gives 1e-6 relative agreement.
         self.assertTrue(math.isclose(q, dof, rel_tol=1e-6), (q, dof))
         self.assertEqual(m.flags, ())
-        # Variance estimator has approximate sd sigma2*sqrt(2/dof); a 95%
-        # normal bar is derived from that chi-square sampling uncertainty.
-        variance_se = _SIGMA**2 * math.sqrt(2/dof)
+        # Moment sampling sd includes extra plus mean measurement variance,
+        # times sqrt(2/dof); derive its 95% normal comparison bar.
+        variance_se = (_SIGMA**2 + sum(r.energy_half_width_j**2 for r in self.rows)/len(self.rows)) * math.sqrt(2/dof)
         self.assertLess(abs(m.sigma2_per_turn-_SIGMA**2),
                         _NORMAL.inv_cdf(.975)*variance_se)
 
@@ -151,6 +151,30 @@ class TestEnergyResidual(unittest.TestCase):
                       (model.sigma2_per_turn+r.energy_half_width_j**2) for r in rows)
         # No printed moment uncertainty: 1e-6 relative agreement.
         self.assertTrue(math.isclose(q, len(rows)-5, rel_tol=1e-6), q)
+
+    def test_all_zero_measurement_components_reduce_to_ols(self):
+        rows = [replace(r, energy_half_width_j=0) for r in self.rows]
+        model = fit_energy_model(rows)
+        residuals = [r.energy_j-_dot(design_row(r), model.coef) for r in rows]
+        expected = math.fsum(value*value for value in residuals)/(len(rows)-5)
+        # No printed variance uncertainty: 1e-6 relative agreement.
+        self.assertTrue(math.isclose(model.sigma2_per_turn, expected, rel_tol=1e-6))
+        self.assertEqual(model.flags, ())
+        for j in range(5):
+            scale = max(abs(design_row(r)[j]) for r in rows)
+            gradient = math.fsum(design_row(r)[j]/scale*e for r, e in zip(rows, residuals))/len(rows)
+            # This normalized gradient has units J. Its bar is 1% of
+            # the smallest printed turn half-width, 0.4 J.
+            self.assertLess(abs(gradient), .004)
+
+    def test_nonnegative_variance_boundary(self):
+        rows = [replace(r, energy_j=_dot(design_row(r), _COEF),
+                        energy_half_width_j=_EPISODE_H) for r in self.rows]
+        model = fit_energy_model(rows)
+        # Exact means and known 1 J measurement uncertainty: zero extra sd
+        # must lie within 1% of that printed uncertainty, or 0.01 J.
+        self.assertLess(math.sqrt(model.sigma2_per_turn), .01*_EPISODE_H)
+        self.assertEqual(model.flags, ())
 
     def test_episode_quadratic_form_and_score(self):
         rows, total, h = _adapt(self.data[0])
@@ -189,6 +213,12 @@ class TestEnergyResidual(unittest.TestCase):
             zero_cost, rows, alpha=.05, power=.8, measured_half_width_j=h)
         self.assertTrue(math.isinf(boundary))
         self.assertIn("nonpositive_hidden_decode_energy", boundary.flags)
+
+    def test_model_labels_do_not_change_the_prescribed_feature_order(self):
+        rows, _, _ = _adapt(self.data[0])
+        renamed = replace(self.model, names=("fixed", "pf", "dc", "ctx_dc", "ctx_pf"))
+        # Identical coefficients, covariance and design arithmetic: bit identity.
+        self.assertEqual(predict_episode(renamed, rows), predict_episode(self.model, rows))
 
     def test_flags_do_not_refuse_or_drop_data(self):
         empty = fit_energy_model([])

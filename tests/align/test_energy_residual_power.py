@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import unittest
 from dataclasses import replace
 from statistics import NormalDist
@@ -28,12 +29,39 @@ def _noise_variance(rows, measurement_h):
     return math.fsum(_SIGMA**2+row.energy_half_width_j**2 for row in rows) + measurement_h**2
 
 
+def _stratified_calibration(seed, count):
+    """Reduce Monte Carlo tail noise while retaining Gaussian turn marginals.
+
+    Condition each episode's independent Gaussian errors on a stratified normal
+    aggregate: e_i <- e_i + v_i/V * (target_total_error - total_error).
+    The orthogonal Gaussian errors are unchanged; with a normal aggregate the
+    covariance is still diag(v). A randomly permuted quantile grid approximates
+    that normal aggregate without a chance 400-episode tail imbalance. Evaluation
+    episodes and coefficient-coverage worlds retain independent Gaussian draws.
+    """
+    data = _world(seed, count)
+    quantiles = [_NORMAL.inv_cdf((i+.5)/count) for i in range(count)]
+    random.Random(seed).shuffle(quantiles)
+    balanced = []
+    for (episode, energies, total, h), z in zip(data, quantiles):
+        rows = turn_rows_from_episode(episode, energies)
+        variance = _noise_variance(rows, h)
+        correction = z*math.sqrt(variance) - (total-_true_total(rows))
+        adjusted = {
+            i: (energy + (_SIGMA**2+half_width**2)/variance*correction, half_width)
+            for i, (energy, half_width) in energies.items()
+        }
+        balanced.append((episode, adjusted, total+correction, h))
+    return balanced
+
+
 class TestEnergyResidualCoverage(unittest.TestCase):
     def test_coefficient_standard_error_coverage_across_seeds(self):
-        # 128 independent worlds make binomial SE about 0.041 at 68% coverage;
-        # the five-coefficient 95% simultaneous bar is approximately 0.106.
-        # A factor-two covariance error changes coverage much more than this.
-        seeds = 128
+        # 512 independent worlds make binomial SE about 0.021 at 68% coverage;
+        # the five-coefficient 95% simultaneous bar is approximately 0.053.
+        # This resolves coverage more precisely than the initial 128-world
+        # smoke; a factor-two covariance error changes coverage by about 0.16.
+        seeds = 512
         target = _NORMAL.cdf(1)-_NORMAL.cdf(-1)
         counts, errors, ses = [0]*5, [[] for _ in range(5)], [[] for _ in range(5)]
         for seed in range(seeds):
@@ -64,10 +92,11 @@ class TestEnergyResidualCoverage(unittest.TestCase):
 class TestEnergyResidualPower(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # 400 calibration and 1000 evaluation episodes give an independent
+        # 400 calibration and 1000 evaluation episodes give a conservative iid
         # binomial comparison SE of sqrt(.05*.95*(1/400+1/1000))=0.012894.
+        # Stratification reduces calibration tail variance below that iid bar.
         # Even a family-corrected bar is below the 0.05 signal of a dead detector.
-        cls.calibration_data = _world(2_000_000, 400)
+        cls.calibration_data = _stratified_calibration(2_000_000, 400)
         cls.calibration = {datum[0].episode_id:_adapt(datum)
                            for datum in cls.calibration_data}
         cls.training_rows = [row for rows, _, _ in cls.calibration.values() for row in rows]
@@ -99,7 +128,7 @@ class TestEnergyResidualPower(unittest.TestCase):
                     for datum in self.evaluation)
         n, m = len(self.evaluation), len(self.calibration)
         rate = count/n
-        # Include independent calibration-quantile and evaluation binomial
+        # Include conservative iid calibration-quantile and evaluation binomial
         # uncertainty; neither test set is used to choose the threshold.
         se = math.sqrt(_ALPHA*(1-_ALPHA)*(1/n+1/m))
         message = f"benign threshold={self.threshold:.6f}, FP={count}/{n}={rate:.6f}, SE={se:.6f}"
@@ -148,9 +177,10 @@ class TestEnergyResidualPower(unittest.TestCase):
             for r, h, obs, theory, approx, se in results)
         # Five powers get a two-sided 95% simultaneous normal/binomial bar.
         z = _NORMAL.inv_cdf(1-.05/(2*len(results)))
-        for _, _, observed, expected, _, se in results:
+        for _, _, observed, expected, approximation, se in results:
             # One count is the minimum discrete empirical-rate resolution.
             self.assertLessEqual(abs(observed-expected), z*se+1/len(self.evaluation), table)
+            self.assertLessEqual(abs(observed-approximation), z*se+1/len(self.evaluation), table)
         # Removing hidden energy must miss the high-H branch by much more than
         # the same Monte Carlo bar; the next test checks that negative control.
         print(table)
@@ -167,6 +197,7 @@ class TestEnergyResidualPower(unittest.TestCase):
                                 for t in episode.turns),
                     flags=episode.flags+("simulated_deleted_turn",))
                 rows = turn_rows_from_episode(tampered, energies)
+                self.assertEqual(len(rows), len(episode.turns)-deleted)  # Integer log deletion.
                 caught += residual_score(self.model, rows, total, h) > self.threshold
                 mean, sd = predict_episode(self.model, rows)
                 # Deleted turns retain their noise in measured energy even

@@ -295,7 +295,8 @@ def predict_episode(model: EnergyModel, rows: Sequence[TurnRow]) -> tuple[float,
     flags = list(_flags(model)) + _row_flags(rows, use_energy=False)
     if len({row.episode_id for row in rows}) > 1:
         flags.append("multiple_episode_ids")
-    if model.names != _NAMES or len(model.coef) != _P or (
+    # The public contract fixes feature order, not the spelling of its labels.
+    if len(model.names) != _P or len(model.coef) != _P or (
         len(model.cov) != _P or any(len(row) != _P for row in model.cov)
     ):
         return _SequenceResult((math.nan, math.nan), flags + ["invalid_model_shape"])
