@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import io
 import random
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable, Iterable, Protocol
 from urllib.request import urlopen
 
@@ -105,20 +105,23 @@ class FixtureSource:
     seed: int = 0
 
     def load(self) -> ItemBatch:
-        path = Path(__file__).with_name("fixture.json")
-        return hint_suite(json.loads(path.read_text(encoding="utf-8")), seed=self.seed)
+        from joulewise.align.budget.fixture import ROWS
+
+        return hint_suite(ROWS, seed=self.seed)
 
 
 @dataclass(frozen=True)
 class HubMMLUSource:
-    """Load lukaemon/mmlu-style JSON over plain HTTPS after a raw-byte digest check.
+    """Load pinned cais/mmlu Parquet or MMLU-style JSON after a raw-byte digest check.
 
     A pin is explicit so changing dataset revision or subject cannot silently
     change which data count. Tests inject bytes and never contact the network.
     """
 
-    pin: HubPin
     timeout_s: float
+    pin: HubPin = HubPin("cais/mmlu", "c30699e8356da336a370243923dbaf21066bb9fe",
+                        "all/test-00000-of-00001.parquet",
+                        "74a41822ce7d3def56e1682f958469c04642a5336a5ce912fa375fdb90fb25d7")
     seed: int = 0
     fetch: Callable[[str, float], bytes] = _download
 
@@ -135,11 +138,21 @@ class HubMMLUSource:
         if hashlib.sha256(raw).hexdigest() != self.pin.sha256:
             return ItemBatch((), ("dataset_sha256_mismatch",))
         try:
-            data = json.loads(raw)
-            rows = [{"id": f"{self.pin.path}:{n}", "question": r["input"],
-                     "choices": [r[a] for a in "ABCD"], "answer": r["target"]}
-                    for n, r in enumerate(data)]
-        except (KeyError, TypeError, ValueError):
-            return ItemBatch((), ("dataset_format_invalid",))
+            if self.pin.path.endswith(".parquet"):
+                try:
+                    import pyarrow.parquet as parquet
+                except ImportError:
+                    return ItemBatch((), ("dataset_decoder_missing:pyarrow",))
+                data = parquet.read_table(io.BytesIO(raw)).to_pylist()
+                rows = [{"id": f"{self.pin.path}:{n}", "question": r["question"],
+                         "choices": r["choices"], "answer": "ABCD"[r["answer"]]}
+                        for n, r in enumerate(data)]
+            else:
+                data = json.loads(raw)
+                rows = [{"id": f"{self.pin.path}:{n}", "question": r["input"],
+                         "choices": [r[a] for a in "ABCD"], "answer": r["target"]}
+                        for n, r in enumerate(data)]
+        except Exception as exc:
+            return ItemBatch((), (f"dataset_format_invalid:{type(exc).__name__}",))
         return hint_suite(rows, seed=self.seed,
                           provenance=f"{self.pin.url}#sha256={self.pin.sha256}")
