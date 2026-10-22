@@ -1,5 +1,15 @@
 ## PROGRESS
 
+- FINAL CHECKPOINT Part 2 slice 4: 103/113 required importer/native individual tests in the eight-module census definitively pass, zero failures, ten pending. Fully complete: native H 36/36; loop_round_desk 5/5; round2_review_fixes 8/8; s3_cold_fixes 6/6; b6_machine_test 29/29. Capture 5/9 (all four policy tests pass); cold_pass_fixes 9/14; desk_resume_finalize 5/6. /tmp/byc5f1/r2-status-slice4.log lists every pending test. No COMPLETE marker yet.
+- NEXT exact step: inspect r2-capture-final.log, r2-cold-final.log and r2-resume-final.log plus their final-<test.id>.log children before resuming. These three processes were active at checkpoint; do not duplicate an active test. Then run resume_final.py only for unfinished modules, regenerate status_final.py, and finish final report/COMPLETE cleanup. Director commits/pushes to PR #547; worker changed only the two report files. Suggested commit: BY-C5 fix1 slice 8: account for native H and importer passes; add R2 clause-map delta.
+
+- Part 2 slice 4 started at b063ba79e (descendant of 0a585bb8e), clean tree, 48 GiB free. Read all five prior split logs before resuming. No code edits needed at intake.
+- Done (Part 2 slice 4): native H module now fully accounted for: 32 prior individual test logs end in OK, plus four separately verified desk freshness tests = all 36 tests pass, no skips. The slow nonclaim-harvest integration definitively passed (181.836 s); no duplicate native run needed. /tmp/byc5f1/r2-session-final.log records every prior passing name.
+- Done (Part 2 slice 4): repeat audit matches all twelve operative P/table terms and all eleven director replay rows, 0/10 refusals. Heavy importer tests resumed only where their prior individual log lacked a final OK, using /tmp/byc5f1/resume_final.py.
+- NEXT: inspect r2-{capture,cold,resume,round,other,extra}-final.log and individual final-<test.id>.log in /tmp/byc5f1; continue only uncompleted tests. Each test has fresh physical TMPDIR. Do not infer success from a RUN line or dots. Finish importer evidence, final SUMMARY/FIX LOG/OPEN ISSUES cleanup and COMPLETE only once all required checks are accounted for.
+
+- Historical checkpoints below (superseded by slice-4 status above).
+
 - NEXT after Part 2 slice 3: read r2-session-split.log, r2-capture-split.log, r2-cold-split.log, r2-resume-split.log, r2-round-split.log under /tmp/byc5f1 before launching anything. All desk cases, precheck, loop, smoke and integration seams have definitive passes. Collect remaining final per-test logs; resume only uncompleted cases, then finalize SUMMARY/FIX LOG/OPEN ISSUES and COMPLETE. Director owns commit/push to PR #547. Proposed slice commit: BY-C5 fix1 slice 7: verify real desk freshness cases and precheck/importers; audit committed-fixed report and replay.
 
 - Done (Part 2 slice 3): all four individual real-desk R2-4 cases pass, each exit 0 (221.389/221.447/222.424/221.816 s), logs r2-desk-case1.log through case4.log. Actual status assertions include disk-independent c5_written and SHA-256; no stale output accepted. Remaining work is importer/native integration completion and final summary/COMPLETE cleanup.
@@ -117,7 +127,7 @@ Synthetic terms B=1,000,001 B, WAIT=7,200 B, fixed=19 B imply P=2,014,421 B exac
 
 Smoke decision: retained member bytes remain before full-session arm. Add ceil(c*B*m/n), with c=2, m from compose.registered_smoke_keep and n from the same real native-stage count used by the arm. No WAIT/fixed term is added again. The receipt records formula, B, c, m, n and integer result. Non-BYTES disk defaults are byte-identical.
 
-Reviewer probe command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/probe-step3.log /Users/edr/night-archive/forward-20261021/BY-C5/review-r1/precheck_probe.py /Users/edr/code/JouleWise-by-c5` (exit 0). It prints for each of s1–s6 p1, with and without smoke: `precheck bar 0 ... precheck at free=P: PASS | at free=P(committed fixed): PASS`. This is the missing-registration flag path: the repository has no registered pass P yet. It is not proof of registered real-H boundary values; those are still pending.
+Reviewer probe command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/probe-step3.log /Users/edr/night-archive/forward-20261021/BY-C5/review-r1/precheck_probe.py /Users/edr/code/JouleWise-by-c5` (exit 0). It prints for each of s1–s6 p1, with and without smoke: `precheck bar 0 ... precheck at free=P: PASS | at free=P(committed fixed): PASS`. This is the missing-registration flag path: the repository has no registered pass P yet. It is not proof of registered real-H boundary values; the later all12-step4.log and all12-r2.log tests supply that proof.
 
 ## P PER SUB-PACK (committed fixed)
 
@@ -232,7 +242,7 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 - Director disposition 2 supersedes old which-text-wins item 5: fixed comes solely from committed H sizing. --committed-sizing can override the file, with identical pointer/type validation; no measured fallback.
 - Missing/malformed committed fixed is disk.committed_fixed_missing, a desk flag; no new refusal site or harvested flag catalog entry.
 - Finding 7 exact measured_c equality is bit identity of the same integer division. WAIT imports the sealed constant; no sealed source edits.
-- Keep C5's member-wall form and maximum of two whole summed bases as instructed; report details still pending.
+- Keep C5's member-wall form and maximum of two whole summed bases as instructed; complete allowance details and sensitivity are recorded in BY-C5.md R6 DRAFT and A4 above.
 - Local-route prohibition on Git writes overrides commit/push rules. Director should commit this slice as `BY-C5 fix1 slice 1: committed fixed provenance and exact constants`, then push only lane/2026-10-22-bytes-c5-gates.
 
 - Finding 3: absent model sizing data is a recorded flag. No mean, maximum or allowance is invented; all dependent pass candidates stay null. Completeness retains exit 2 under the existing contract.
@@ -248,6 +258,13 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 | absent committed input is unavailable, no fallback | scripts/bytes_gates.py committed_fixed/calculate | same test, invalid input loop and main missing-file check | Fall back to measured fixed: disk statuses and CLI exit assertions fail. |
 | model without observations remains visible | scripts/bytes_gates.py calculate model loop and pass loop | test_model_never_ran_cli_writes_unavailable_dependent_packs | Remove the guard: main exits 1 without JSON; substitute zero allowances: unavailable/null assertions fail. |
 | measured c exact division | tests/test_bytes_gates.py ReplayTests | test_nine_plus_h_replay_and_integer_boundaries | Perturb measured_c by any representable amount: equality fails. |
+| R2-2, reference/margin/tree counts set P | scripts/bytes_gates.py disk_allowance/calculate | GatesTests.test_hand_computed_p_includes_margin_reference_and_tree_counts | Drop margin or replace tree counts with 50: exact hand-computed P fails (M4/M12); rename reference disclosure: reference-key assertion fails (M13). |
+| R2-3, absent registered P holds before plan | joulewise/b6/driver_lane.py prepare_session; plan_inputs.py encode_disk_budget | AdapterTests.test_bytes_missing_disk_derivation_holds_before_prepared_or_plan | Remove LaneMissing return: result and no-plan assertions fail (M8). |
+| R2-3, registration catches absent P | tests/b6/test_plan_inputs.py DiskBudgetTests.test_registered_bytes_rows_have_valid_disk_terms | every bytes-s sizing row passes valid_disk_terms | Add a bytes-s sizing row without disk_derivation: registry assertion fails. Currently zero rows. |
+| R2-4, no fresh C5 means program_fault | scripts/bytes_h_session.py desk freshness loop and status | SessionTests.test_desk_gates_exit_one_without_c5_is_program_fault; test_desk_stale_c5_does_not_hide_program_fault; test_desk_usage_exit_two_without_c5_is_program_fault | Remove unlink: stale-file case accepts old output; omit freshness status branch: exit-1/2 no-file status assertions fail. |
+| R2-4, fresh exit-1 output means unavailable and carries digest | scripts/bytes_h_session.py desk status receipt | SessionTests.test_desk_gates_exit_one_with_new_c5_is_unavailable | Map exit 1 to program_fault or omit digest: status/c5_written/digest assertions fail. |
+| R2-5, disclosure labels | scripts/bytes_gates.py calculate models/sessions | GatesTests.test_cli_runs_every_gate_from_native_nonclaim_harvest | Remove either sibling note: explicit label assertions fail. |
+| R2-6a, decimal beside exact fraction | scripts/bytes_gates.py main displayed | GatesTests.test_cli_runs_every_gate_from_native_nonclaim_harvest | Remove decimals or fraction text: exact formatted stdout assertion fails for each rate/allowance. |
 
 ## OPEN ISSUES
 
@@ -411,10 +428,61 @@ Other still-pending split commands use the exact same environment prefix and `re
 | tests.b6.test_desk_resume_finalize | /tmp/byc5f1/r2-resume-split.log |
 | tests.b6.test_loop_round_desk | /tmp/byc5f1/r2-round-split.log |
 
-The session split excludes only the four separately run new desk cases. All other split modules run every test individually. At checkpoint, session has 30 individually confirmed passes and pauses at the native-harvest integration; cold has nine passes and pauses at FullRoundTests; no failed summaries. No result inferred for unfinished tests.
+Historical slice-3 checkpoint: the session split excludes only the four separately run new desk cases. All other split modules run every test individually. At checkpoint, session has 30 individually confirmed passes and pauses at the native-harvest integration; cold has nine passes and pauses at FullRoundTests; no failed summaries. No result inferred for unfinished tests.
 
 Smoke command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-smoke.log -m unittest tests.b6.test_smoke`; 22 tests OK, exit 0, no skips (83.857 s).
 
 Sealed inventory command: synthetic-only `/opt/homebrew/bin/python3.13 -B` loads the 682 `files` keys and invokes `git diff --name-only bda481d5a -- <paths>`; exit 0, empty stdout saved in /tmp/byc5f1/sealed-r2-slice3.log. No real session paths opened; no Git writes, install, arm, launchctl or ops/stop operations.
 
 Slice-3 final checkpoint: all four desk cases, precheck 24, loop 55, smoke 22, integration 7 pass; static import checks 5 pass with the one declared sandbox integration failure. Heavy remaining importers continue with no final summary yet; pending tests are not attributed success. No COMPLETE marker. Both modified paths are report files in WRITE_SCOPE. Working head remains 4aa17a44ef5a23589fe75267fccae4b83f03f2f0, origin lane same; local branch by-c5 has no configured upstream. No Git mutation attempted.
+
+## PART 2 SLICE 4 VERIFICATION
+
+Started at b063ba79e812442d6fc8eacaab19bb01f501a533, local branch by-c5, origin/lane/2026-10-22-bytes-c5-gates identical. Intake 48 GiB free. No code changes, Git writes or real-session reads.
+
+`JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/audit_tables.py`: exit 0:
+
+```text
+12 P rows: exact C5 byte terms and 3*n*q+headroom=P
+11 replay rows: exact director replay bytes; 0/10 refusals
+```
+
+The full native H module is now definitively 36/36 passing: all 32 non-new-desk test logs end in OK, plus the four individually verified desk cases in r2-desk-case1.log through case4.log. The two slow native integrations have final summaries, including test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates (181.836 s, exit 0).
+
+Resume command for each MODULE below:
+
+`JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/resume_final.py MODULE > LOG 2>&1`
+
+resume_final.py discovers all module tests, skips only individual logs with a final OK, and invokes `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/final-<test.id>.log -m unittest <test.id>` for each unfinished test. run.py gives each child its own neutral /private/tmp TMPDIR and deletes it. Final per-test summaries, not wrapper exit status, determine results.
+
+| MODULE | LOG |
+|---|---|
+| tests.test_bytes_h_session | /tmp/byc5f1/r2-session-final.log |
+| tests.b6.test_capture_screen_reachability | /tmp/byc5f1/r2-capture-final.log |
+| tests.b6.test_cold_pass_fixes | /tmp/byc5f1/r2-cold-final.log |
+| tests.b6.test_desk_resume_finalize | /tmp/byc5f1/r2-resume-final.log |
+| tests.b6.test_loop_round_desk | /tmp/byc5f1/r2-round-final.log |
+| tests.b6.test_round2_review_fixes tests.b6.test_s3_cold_fixes tests.test_b6_machine_test | /tmp/byc5f1/r2-other-final.log |
+
+An extra command for s3_cold_fixes and b6_machine_test was launched while the last multi-module command had already reached those modules. This duplicated some fast synthetic tests, each with independent TMPDIR; no shared repository artifacts changed. Evidence /tmp/byc5f1/r2-extra-final.log. No additional duplicate runs are needed.
+
+Slice-4 fast importer completion: tests.b6.test_round2_review_fixes 8/8, tests.b6.test_s3_cold_fixes 6/6 and tests.test_b6_machine_test 29/29 individually PASS, no skips/failures. /tmp/byc5f1/r2-status-slice4.log enumerates the authoritative per-module census; /tmp/byc5f1/status_final.py can regenerate it. Full native H 36/36 also confirmed by this census.
+
+Sealed recheck: `/opt/homebrew/bin/python3.13 -B` (synthetic-only environment) reads inventory files and invokes `git diff --name-only bda481d5a -- <all 682 file keys>`: exit 0, stdout empty, stderr empty. /tmp/byc5f1/sealed-r2-slice4.log is empty. `git diff --check`: exit 0, empty output. Current free space 47 GiB (>25 GiB gate).
+
+Final slice-4 checkpoint (2026-10-22 17:06 UTC):
+
+| Importer/native module | Definitive passes | Pending | Failures |
+|---|---:|---:|---:|
+| tests.test_bytes_h_session | 36 | 0 | 0 |
+| tests.b6.test_capture_screen_reachability | 5 | 4 | 0 |
+| tests.b6.test_cold_pass_fixes | 9 | 5 | 0 |
+| tests.b6.test_desk_resume_finalize | 5 | 1 | 0 |
+| tests.b6.test_loop_round_desk | 5 | 0 | 0 |
+| tests.b6.test_round2_review_fixes | 8 | 0 | 0 |
+| tests.b6.test_s3_cold_fixes | 6 | 0 | 0 |
+| tests.test_b6_machine_test | 29 | 0 | 0 |
+
+No skips in these completed individual tests. Exact census command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/status_final.py > /tmp/byc5f1/r2-status-slice4.log` (exit 0); this is inspection of test logs, not a fresh suite run. The policy class command uses the same resume_final environment with MODULE=tests.b6.test_capture_screen_reachability.PolicyReadTests and LOG=/tmp/byc5f1/r2-policy-final.log; all four one-test child runs exit 0. The final loop-round test passes in 175.653 s, exit 0; its module is now 5/5. Resume's newly finished tests pass at 35.097, 34.708, 40.590 and 52.169 s; last pre-40ms case remains pending. No result is inferred for a running test.
+
+Final `git diff --check` exit 0; only .codex-report/BY-C5.md and .codex-report/BY-C5-fix1.md modified. Sealed stdout remains empty. No production source changed in this slice. Intake/head/upstream remain b063ba79e812442d6fc8eacaab19bb01f501a533. Disk available 46 GiB at final recheck (>25 GiB gate). No completion claim while ten importer tests lack summaries.

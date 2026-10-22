@@ -1,6 +1,6 @@
 ## PROGRESS
 
-Fix round findings 1–3, 6–7 implemented; finding 4 form retained and R6 corrected; finding 5 no change. Finding 8 committed-fixed tables and thermal/completeness text corrected. Twelve updated budgets pass real planner/arm/precheck boundary tests. Importer checks/final handoff remain; see BY-C5-fix1.md. No completion claim yet.
+Fix round findings 1–3, 6–7 implemented; finding 4 form retained and R6 corrected; finding 5 no change. Finding 8 committed-fixed tables and thermal/completeness text corrected. Twelve updated budgets pass real planner/arm/precheck boundary tests. Native H module is now 36/36 passing, including all four new desk cases. Remaining heavy importer checks/final handoff are tracked in BY-C5-fix1.md. No completion claim yet.
 
 ## SUMMARY
 
@@ -139,7 +139,7 @@ Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
 
-Current Part 2 slice 3 results supersede historical pending runs below: tests.test_b6_loop 55 pass; tests.b6.test_integration_seams 7 pass; tests.b6.test_smoke 22 pass; all 24 precheck tests pass individually in fresh TMPDIRs; all four real-desk freshness/status cases pass individually (exit 0). Import graph: 6 tests, 1 known sandbox GO/NULL failure, 5 static checks pass. Exact commands and pending native desk/importer runs are recorded in BY-C5-fix1.md. No success is inferred from partial dots.
+Current Part 2 slice 4 results supersede historical pending runs below: native H 36/36 pass (32 individual logs plus four desk cases); loop_round_desk 5/5, round2_review_fixes 8/8, s3_cold_fixes 6/6 and machine-test 29/29 pass. Capture 5/9, cold-pass 9/14 and desk-resume 5/6 are accounted for; ten individual tests remain pending in the slice-4 census; tests.test_b6_loop 55 pass; tests.b6.test_integration_seams 7 pass; tests.b6.test_smoke 22 pass; all 24 precheck tests pass individually in fresh TMPDIRs; all four real-desk freshness/status cases pass individually (exit 0). Import graph: 6 tests, 1 known sandbox GO/NULL failure, 5 static checks pass. Exact commands and pending native desk/importer runs are recorded in BY-C5-fix1.md. No success is inferred from partial dots.
 
 
 Slice 6 native module split: 31 tests PASS in 20.471 s, exit 0, no skips. Only test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates was excluded from this split because its full-module invocation remains running; all other native-module tests, including the real producer C5 integration, passed. Exact command:
@@ -305,10 +305,10 @@ The production/test map below records the governing numerical clauses. Counterfa
 
 ## OPEN ISSUES
 
-Reviewer free space 53,472,432,128 B is below all pass P values: correct arm refusal/PRECHECK WAIT until operator frees about 9.3–31.7 GB, plus up to 1.83 GB smoke retention. Current slice intake free space is 47 GiB. No arming or measurement was attempted.
+Reviewer free space 53,472,432,128 B is below all pass P values: correct arm refusal/PRECHECK WAIT until operator frees about 9.3–31.7 GB, plus up to 1.83 GB smoke retention. Part 2 slice 4 intake free space is 48 GiB; during tests 47 GiB. No arming or measurement was attempted.
 
 
-BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Current importer results and remaining long checks are tracked in BY-C5-fix1.md PROGRESS; historical pending invocations below do not establish results.
+BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Current importer results and remaining long checks are tracked in BY-C5-fix1.md PROGRESS; historical pending invocations do not establish results. Part 2 slice 4 definitively confirms native H 36/36, round2 review 8/8, s3 cold 6/6 and machine-test 29/29 individually passing.
 
 Native producer support is implemented and the fully observed native-export integration passes under the explicit slice-6 scope grant: raw-only POSIX st_blocks*512, independent per-run seen-set, null absent raw trees; retained_bytes unchanged. Synthetic full raw/archive copies assert retained_bytes == 2*raw_allocated_bytes. No BY-H2 producer blocker remains.
 
