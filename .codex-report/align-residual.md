@@ -10,7 +10,8 @@
 - Alignment checks: 21 pass with NumPy; 21 run with one optional-reference skip on stdlib only.
 - Synthetic benign and zero-energy-control false positives are 5.3% at alpha 0.05.
 - Near the 80% hidden-work boundary, detection is 81.3%; deletion agrees with theory.
-- Documents provisional M3 Max/NVML examples; broader repository checks are pending.
+- Documents provisional M3 Max/NVML examples; no hardware result is claimed.
+- Full Python 3.13 CI passes: 9891 tests, 146 skips; local VM differences are recorded.
 
 ## FILES
 
@@ -94,7 +95,17 @@ needed. Every local test command below used PYTHONDONTWRITEBYTECODE=1.
   rsync 3.4.1/libpopt packages were subsequently extracted under /tmp for the
   canonical run, since apt installation lacks privileges and sudo is absent.
 - python3 -m unittest discover -s tests
-  Pending.
+  The local Python 3.12.14 duplicate was interrupted (exit 130) only after the
+  completed Python 3.13 full CI suite passed. It had emitted failures/errors in
+  existing checks and no aggregate local unittest result; no local full-suite
+  pass or final count is claimed. The complete successful repository result is
+  the 9891-test CI run below. Local discovery found 9891 tests, 0 import errors.
+  Exact local command, including temporary public rsync/libpopt and the
+  documented worktree corpus override:
+
+  ```bash
+  PATH='/tmp/joulewise-align-residual-tools-53cthbxz/root/usr/bin':"$PATH" LD_LIBRARY_PATH='/tmp/joulewise-align-residual-tools-53cthbxz/root/usr/lib/x86_64-linux-gnu'${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} R7F_CORPUS_ROOT=/workspace/JouleWise PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests > /tmp/align-residual-canonical.log 2>&1
+  ```
 - git diff --check
   Passed.
 
@@ -108,6 +119,214 @@ python3 scripts/quick_suite.py --tier quick --workers 4:
 the runner's tests.align.* names. The permitted one-prefix inventory addition
 now passes locally. Main CI test shards were skipped following that quick failure.
 New detector modules had unknown timing weights and were excluded from quick.
+
+### Completed full CI evidence
+
+Python 3.13 CI run 39707410101 is SUCCESS at numerical code head
+658bc6b08704d2b1adf048b1249e8259a08ca6ef:
+https://github.com/mpmdw/JouleWise/actions/runs/39707410101
+All 20 jobs passed, including fences, build, installed-wheel, quick, the 12
+ordinary shards, calibration exits and both writer-crash-matrix partitions.
+The 15 complete-suite test jobs ran 9891 tests, 0 failures, 0 errors, 146 skips.
+This exactly matches the 9891 tests independently discovered locally.
+Quick also passed: 212 modules, 177 excluded, 0 failures, 288.989 s.
+
+| CI job | Tests | Skips |
+| --- | ---: | ---: |
+| calibration-writer-crash-matrix-exclusive (3.13, 2) | 19 | 0 |
+| calibration-writer-crash-matrix-exclusive (3.13, 1) | 1 | 0 |
+| calibration-exits-exclusive (3.13) | 48 | 0 |
+| test (3.13, 5) | 818 | 5 |
+| test (3.13, 2) | 504 | 6 |
+| test (3.13, 7) | 921 | 11 |
+| test (3.13, 9) | 922 | 20 |
+| test (3.13, 8) | 836 | 8 |
+| test (3.13, 1) | 563 | 3 |
+| test (3.13, 10) | 1178 | 20 |
+| test (3.13, 6) | 656 | 16 |
+| test (3.13, 11) | 931 | 6 |
+| test (3.13, 4) | 764 | 10 |
+| test (3.13, 3) | 715 | 16 |
+| test (3.13, 12) | 1015 | 25 |
+| Total | 9891 | 146 |
+
+Alignment module tails from that CI run:
+
+```text
+MODULE PASS tests.align.test_records tests=4 failures=0 errors=0 skipped=0 seconds=0.009
+MODULE PASS tests.align.test_energy_residual tests=11 failures=0 errors=0 skipped=1 seconds=0.255
+MODULE PASS tests.align.test_energy_residual_power tests=6 failures=0 errors=0 skipped=0 seconds=28.013
+```
+
+Exact ordinary-shard command (SHARD_COUNT=12; SHARD_INDEX=1 through 12):
+
+```bash
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+
+sys.path.insert(0, "scripts")
+import shard_tests
+
+overlay = json.loads(Path("scripts/test_timings.json").read_text())
+exclusive = frozenset(overlay["exclusive_modules"])
+discovered = shard_tests.discover_test_modules()
+assert exclusive <= set(discovered), (exclusive, discovered)
+timings = shard_tests.load_timing_map()
+ordinary = tuple(module for module in discovered if module not in exclusive)
+
+# UNIT-atomic, not module-atomic. Modules in split_modules (today
+# test_reduce and test_controller_g2b_attachment, each audited for
+# per-test independence) are spread across shards at test
+# granularity, so no single module floors the shard time. This edits no test file and
+# skips nothing: expand_units emits one unit per declared heavy
+# test plus ONE remainder unit holding every other test in that
+# module, and verify_split_declaration fails the build closed if
+# a declared id no longer exists.
+splits = {
+    module: declaration
+    for module, declaration in shard_tests.load_split_declarations().items()
+    if module in set(ordinary)
+}
+unknown = shard_tests.conservative_unknown_weight()
+units, weights = shard_tests.expand_units(
+    ordinary, timings, splits, unknown_weight=unknown
+)
+count = int(os.environ["SHARD_COUNT"])
+partitions = shard_tests.partition_modules(
+    units, weights, count, unknown_weight=unknown
+)
+totals = shard_tests.partition_totals(
+    partitions, weights, unknown_weight=unknown
+)
+print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
+index = int(os.environ["SHARD_INDEX"])
+raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
+PY
+```
+
+Exact exclusive writer command (SHARD_INDEX=1 and 2):
+
+```bash
+python - <<'PY'
+import os
+import sys
+
+sys.path.insert(0, "scripts")
+import shard_tests
+
+module = "tests.test_calibration_writer_crash_matrix"
+timings = shard_tests.load_timing_map()
+splits = shard_tests.load_split_declarations()
+unknown = shard_tests.conservative_unknown_weight()
+# expand_units runs verify_split_declaration, which fails closed if
+# the declared heavy test id no longer exists. That is the case a
+# computed remainder would otherwise absorb in silence, handing one
+# shard ~20 minutes of unaccounted work while the weights disagree.
+units, weights = shard_tests.expand_units(
+    (module,), timings, {module: splits[module]}, unknown_weight=unknown
+)
+partitions = shard_tests.partition_modules(
+    units, weights, 2, unknown_weight=unknown
+)
+totals = shard_tests.partition_totals(
+    partitions, weights, unknown_weight=unknown
+)
+print("CRASH-MATRIX SHARD ESTIMATES", ",".join(f"{v:.3f}" for v in totals))
+index = int(os.environ["SHARD_INDEX"])
+raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
+PY
+```
+
+Exact calibration-exits command:
+
+```bash
+python -m unittest -v tests.test_calibration_exits
+```
+
+The skip reasons below are unchanged repository conditions, not new lane rulings.
+They include one optional NumPy-reference skip; all mandatory A7 paths ran.
+
+| Count | Existing CI skip reason |
+| ---: | --- |
+| 1 | a desk run of the real read-only probes (macOS) |
+| 1 | ACCEPTANCE GATE SKIP: determinism gate requires the retained runs/ corpus |
+| 1 | ACCEPTANCE GATE SKIP: six frozen legacy corpus bundles require the retained runs/ corpus |
+| 10 | block-3 b3w1 archive is local to the measurement Mac |
+| 1 | clonefile(2) is an APFS call |
+| 1 | CommonCrypto is macOS only |
+| 1 | controlled runs corpus unavailable |
+| 1 | Darwin pgrep ancestor exclusion; Linux pgrep has no such rule |
+| 1 | design/2026-10-05-v5-claim-block-draft is not in this clone |
+| 6 | FLAG joulewise/arm_readiness.py:7621: committed GAMMA lacks freeze authority; writer/ARM cannot continue. No nonphysical semantic shortcut is allowed. |
+| 13 | full scored corpus (set JOULEWISE_FULL_CORPUS=1) |
+| 1 | full-fixture proof runs in d117-production-proof |
+| 1 | gate-prune inventory is not on this machine |
+| 1 | jsonschema not installed (optional) |
+| 2 | jsonschema not installed |
+| 1 | kern.bootsessionuuid is a Darwin kernel value |
+| 1 | kern.bootsessionuuid is Darwin-only |
+| 1 | lead-reviewed D-079 import custody inputs are unavailable |
+| 2 | lead-reviewed D-079 import inputs are unavailable |
+| 1 | live identity probes need macOS sysctl |
+| 2 | local Qwen3 tokenizer mirrors are absent |
+| 2 | lsof is not installed |
+| 2 | markdown-it-py not installed; the build cannot run here |
+| 9 | matplotlib ([analysis] extra) not installed |
+| 1 | measurement ledger not on this machine |
+| 2 | native QoS requires macOS |
+| 1 | NumPy optional WLS reference absent |
+| 2 | optional jsonschema dependency is absent |
+| 1 | pinned MATH source absent |
+| 1 | POWER-Z KM003C not on the USB bus |
+| 1 | reads the macOS kernel clock |
+| 2 | reads the real gauge (macOS) |
+| 1 | reads the real host CPU ticks (macOS) |
+| 1 | reads the real kernel clock (macOS) |
+| 2 | reads the real notify bus (macOS) |
+| 2 | reads the real process table (macOS) |
+| 2 | reads the real SMC (macOS) |
+| 1 | real campaign-log corpus is unavailable |
+| 1 | real collect subprocess runs the macOS census and power-policy probes (pmset, sysctl); on Linux every round errors and, since fix round 4, an all-error session exits 1 by design |
+| 1 | real launchctl required |
+| 1 | real Qwen3 tokenizer test requires the optional tokenizers library and local tokenizer.json |
+| 2 | real runs corpus unavailable |
+| 1 | real spawned worker uses native QoS; hosted Linux shards feed the runner via stdin, which spawn cannot re-import |
+| 1 | requires Darwin and explicit QG_LIVE_DARWIN=1 real-acquisition opt-in |
+| 18 | requires Darwin fchflags/st_flags |
+| 1 | retained capture 20260722T145535-e941c821 is not on this machine; run scripts/check_paper_replay_fence.py where the corpus lives |
+| 1 | retained runs corpus is absent |
+| 1 | retained XD/AQ corpora are not present; run the default R7F CLI where both corpora live |
+| 1 | runs_window corpus absent (clean checkout without bundles) |
+| 1 | runs/ corpus absent (clean checkout without bundles) |
+| 2 | source corpus unavailable: /Users/edr/code/JouleWise/runs_window_a5_20260723 |
+| 1 | split production proof requires a registered JOULEWISE_D117_PROOF_PARTITION |
+| 1 | stopped-after-exec probe requires Darwin POSIX_SPAWN_START_SUSPENDED |
+| 1 | STRUCTURAL-BLOCKED: generator targets uninstalled _v2 family while the registry installs _v5 |
+| 1 | STRUCTURAL-BLOCKED: synthetic _v5 fixture omits the family-publication marker required before self-predecessor validation |
+| 1 | successor member not minted yet; shape check is vacuous |
+| 1 | temporary filesystem is case-sensitive |
+| 3 | the 2026-09-22 harvest archives are not on this machine |
+| 1 | the block-5 design branch is not in this clone |
+| 1 | the gate-prune inventory is not on this machine |
+| 1 | the real kern.bootsessionuuid exists only on macOS |
+| 1 | the two pilot-night archives are not on this machine |
+| 1 | this file system gave the replacement lock the inode number of the lock just unlinked (4522116); the reclaimer tells the two apart by device and inode number only, so here it cannot (known limit of scripts/run_campaign.py _hazard_reclaim_stale_campaign_lock; APFS on the measurement Mac does not reuse numbers) |
+| 3 | U2 successor engine pending |
+| 1 | window-B quarantine custody path is absent |
+| 3 | local model mirrors absent (CI environment): ['qwen25_0p5b', 'qwen25_1p5b', 'qwen25_7b'] |
+| 1 | local model mirrors absent (CI environment): ['qwen3-1p7b', 'qwen3-8b'] |
+| 1 | NEEDS-RULING: config-authenticated mock telemetry is excluded by the production claim loader, so the existing canned fixture cannot satisfy D-158's DATA-only predicate without loosening a production gate or building a new corpus fixture |
+| 1 | requires Darwin's POSIX extended regular expressions |
+| 1 | requires Darwin's real boot-session sysctl command |
+| 1 | requires Darwin's real caffeinate process |
+| 2 | requires Darwin's real pgrep command semantics |
+| 1 | requires Darwin's real sysctl command |
+| 1 | successor mirrors are still absent/incomplete: ['qwen3-1p7b', 'qwen3-8b'] |
+| 1 | the block-3 reference archive and the measurement interpreter are on Ed's Mac only |
+
 
 ## END-TO-END
 
@@ -214,8 +433,9 @@ gives 30.755995 (ceil 31). These are explicit assumptions, not hardware findings
 - At zero h use a variance-scale ULP to represent limiting weights without
   false QR rank loss; do not add this numerical device to prediction noise.
 - Public feature order is fixed; label spellings are diagnostic and unrestricted.
-- Preserve input rows; undefined analyses return recorded flags and NaNs,
-  nonpositive hidden energy returns infinity with a flag.
+- Preserve input rows; undefined analyses return recorded flags and NaNs.
+  Nonpositive hidden energy returns infinity above the false-positive power;
+  targets at or below that power require zero hidden tokens.
 - Preserve exact public dataclass constructor fields through private flagged
   model/numeric/sequence subclasses; document flag persistence at the boundary.
 - Sum design rows before the covariance quadratic form; count independent
@@ -258,8 +478,13 @@ this lane's analysis conditions are returned as flags.
 
 ## OPEN ISSUES
 
-- Canonical repository check pending. Touched failures outside this lane are
-  recorded above; no out-of-scope production/test repair was attempted.
+- Local Python 3.12 VM process/custody checks differ from the successful
+  production Python 3.13 CI run; touched failures are recorded above. No
+  out-of-scope production/test repair was attempted. The duplicate local full
+  run was stopped after all 9891 CI tests completed successfully.
+- PR #525 remains a draft. Its merge gate ledger deliberately records missing
+  independent review, merged-tree/cold review and dispositions as NOT-RUN;
+  a green test workflow is not represented as completed merge authority.
 - Independent cross-model twin agreement belongs to the integration gate;
   NumPy linear algebra checks are not represented as that independent twin.
 - Hardware results and linear/normal/independent-error assumptions need a pilot.
