@@ -262,7 +262,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 |---|---|---|---|---|---|---|---|---|
 | tests.b5_analysis.test_dry_run | — | — | — | — | — | — | cloud: pending | — |
 | tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
-| tests.b5_analysis.test_chain_fixture | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
 | tests.b5_analysis.test_joined_probes | — | — | — | — | — | — | cloud: pending | — |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.871 | Codex Cloud | `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080` |
@@ -287,3 +287,10 @@ Completed cloud logs and test failures:
 - `tests.test_r4_acceptance_oracle` at `54da41a5e38d7045f120f946b083c6532613a595`: 10 tests, 0 failures, 0 errors, 0 skips, exit 0, 3.323 s. Log `/workspace/l9-1/checks-3/logs/tests_test_r4_acceptance_oracle.log`, SHA-256 `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71`.
 - `tests.b5_analysis.test_mint_kept_units` at `38ff2a7fe5c20b5fcfb92268d05aa4e5288cfce5`: 87 tests, 0 failures, 0 errors, 1 skips, exit 0, 492.383 s. Log `/workspace/l9-1/mint-1/logs/tests_b5_analysis_test_mint_kept_units.log`, SHA-256 `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892`.
   - skip_names: ['tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_s10_sealed_floor_packs_bootstrap_their_producer_contracts', 'chain extraction reports not built (ChainTests C4 with JW_B5_S10_CHAIN_CACHE)']
+- `tests.b5_analysis.test_chain_fixture` at `54da41a5e38d7045f120f946b083c6532613a595`: 32 tests, 0 failures, 0 errors, 0 skips, exit 0, 17779.392 s. Log `/workspace/l9-1/checks-3/logs/tests_b5_analysis_test_chain_fixture.log`, SHA-256 `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644`.
+
+Additional logs (not completed acceptance modules):
+
+- interrupted nohup dry-run attempt, no completed module result: `/tmp/l9-1/dry-1/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `2e42a4d7fc20e0071a5a25465409762de8ac5f48fcc5d758ec137546b6d43c97`.
+- interrupted tmpfs dry-run attempt, no completed module result: `/tmp/l9-1/dry-2/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `33e0f4f0f768f4094bae6f2496da4ff2a2f6cf0b80cc14b53e4f34204e35ae4d`.
+- fixture-lifetime mechanism probe, not a step-9b replay: `/workspace/l9-1/lifetime-probe/probe.log`, SHA-256 `ee7f85e8dd62de5e97fa78587061a1f500867ca7857823d4aa7214c9d887d58f`.
