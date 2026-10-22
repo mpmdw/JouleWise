@@ -187,6 +187,11 @@ conventions; the 72-seed zero-FA bound is derived, not observed this round.
 - Used connected GitHub to checkpoint while execution is unavailable, with
   fresh remote-head reads, expected-head checks and force=false. No merge
   was needed at the first checkpoint; remote was b1613dad6.
+- RUN_STATE.md item 8 explicitly requested a read-only docs-consistency agent.
+  Its review of b79659eb found stale pending-commit wording, a conversion-end
+  versus read-end wording conflict and an overstatement of simulator note keys;
+  corrected here. It also caught the optional noise stride's one-observation
+  edge case; guarded and covered without an executable pass claim.
 - Explicit bounded user work takes priority over unrelated generated queue
   entries. No live hardware, external message, paid service or main push.
   The open observed-evidence ruling remains; elapsed time is not an answer.
@@ -249,11 +254,11 @@ Full machine outputs remain in untracked .review2/before and .review2/verified.
 Before summaries are reviewer-measured at b1613dad6; no before or after command
 was executable in this seat.
 
-- JET3-B1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source; follow-up regression/uncertainty commit pending). Before: "1100/1000 us FA 11/12; 840/1000 us 8/12; 1500/1000 us 6/8"; after: "NOT RUN — executor unavailable". Every seed's FA, matching and prefill non-regression bar remains unverified, as does the appended study row.
+- JET3-B1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source); regressions and uncertainty bound in b79659ebf8195eacb9a6997e406ed29a41c54b97. Before: "1100/1000 us FA 11/12; 840/1000 us 8/12; 1500/1000 us 6/8"; after: "NOT RUN — executor unavailable". Every seed's FA, matching and prefill non-regression bar remains unverified, as does the appended study row.
 - JET3-M1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source). Before: "held inferred 71/72; mid hidden recall 67/72; with 1e-9 W dither 72/72"; after: "NOT RUN — executor unavailable". r4/r6/r9 equality and the full study are pending; no replacement scientific figures are asserted.
-- JET3-m1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (parameter/propagation source; protocol follow-up pending). Before: decay5 "FA episodes 2/6", recall "162/227"; decay10 "6/6", "79/227"; decay50 "11/12", "259/418"; after: "NOT RUN — executor unavailable". Both source and protocol require executable verification; no r1 script adaptation made yet.
+- JET3-m1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (parameter/propagation source); protocol in b79659ebf8195eacb9a6997e406ed29a41c54b97. Before: decay5 "FA episodes 2/6", recall "162/227"; decay10 "6/6", "79/227"; decay50 "11/12", "259/418"; after: "NOT RUN — executor unavailable". Both source and protocol require executable verification; no r1 script adaptation made yet.
 - JET3-m2 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source). Before cropped lines: "recall .545/.455 flags []"; after: "NOT RUN — executor unavailable". outside_trace_logged reports excluded calls; full/clock-control flag checks remain pending.
-- JET3-m3 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source; new regression pending commit). Before: "health_read_error ... FileNotFoundError" for absent alarms; after: "NOT RUN — executor unavailable". e12 and present-alarm read-failure checks remain pending.
+- JET3-m3 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source); regression in b79659ebf8195eacb9a6997e406ed29a41c54b97. Before: "health_read_error ... FileNotFoundError" for absent alarms; after: "NOT RUN — executor unavailable". e12 and present-alarm read-failure checks remain pending.
 - Authorized setup-only change: test_held_reads_with_estimated_and_supplied_noise declares each scenario's P and window; every hold scenario/assertion retained. Value-based inference is intentionally removed.
 - Authorized setup-only change: test_held_noninteger_ratio_noise_is_nonzero_and_calls_survive declares 1.5/1.9 ms P in notes; all assertions retained.
 - Authorized setup-only change: test_real_sysfs_path_through_detector_with_held_conversions runs characterize() under a changing load before episode sampling; driver still says 1 ms and episode converts every 4 ms. All assertions retained.

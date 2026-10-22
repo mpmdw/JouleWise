@@ -172,6 +172,12 @@ class PhaseReviewTwoTest(unittest.TestCase):
             results.append((result.matched_count, len(result.unlogged_candidates)))
         self.assertEqual(results[0], results[1])  # Counts cannot depend on sub-LSB dither.
 
+    def test_one_declared_conversion_has_no_difference_noise_evidence(self):
+        # Two 1 ms reads within one declared 4 ms conversion cannot supply
+        # an independent difference. The estimator reports zero evidence.
+        self.assertEqual(estimate_noise_sd((5.0, 5.0), hold_period_ns=4_000_000,
+                                           sample_interval_ns=1_000_000), 0.0)
+
     def test_hold_latency_is_used_without_repeated_readings_and_can_be_overridden(self):
         episode = world(7)
         trace = simulate(timeline_from_episode(episode, model()),
@@ -211,6 +217,46 @@ class PhaseReviewTwoTest(unittest.TestCase):
         self.assertIn("logged_call_outside_trace_coverage", result.flags)
         self.assertNotIn("logged_call_outside_trace_coverage",
                          match_tool_calls(detect_phases(trace), episode).flags)
+
+
+    def test_measured_settling_term_through_decaying_multiturn_world(self):
+        import math
+        episode = world(3, 500_000_000)
+        original = timeline_from_episode(episode, model())
+        tau = 10_000_000  # Scenario: measured 10 ms exponential fall.
+        quantum = .01  # Scenario INA output bin.
+        contrast = model().decode_w
+        # Settling to one output bin requires contrast*exp(-s/tau)<=q,
+        # hence s>=tau*log(contrast/q), not merely one time constant.
+        settling = math.ceil(tau * math.log(contrast / quantum))
+        intervals = []
+        top, off = None, None
+        for iv in original.intervals:
+            if iv.label in ("idle", "tool_wait") and top is not None:
+                cursor = iv.start_ns
+                stop = min(iv.end_ns, off + settling)
+                while cursor < stop:
+                    right = min(stop, cursor + 1_000_000)  # Scenario 1 ms physical discretization.
+                    mid = (cursor + right) / 2
+                    level = iv.mean_w + (top - iv.mean_w) * math.exp(-(mid - off) / tau)
+                    intervals.append(replace(iv, start_ns=cursor, end_ns=right, mean_w=level))
+                    cursor = right
+                if cursor < iv.end_ns:
+                    intervals.append(replace(iv, start_ns=cursor))
+            else:
+                intervals.append(iv)
+                if iv.label in ("decode", "prefill"):
+                    top, off = iv.mean_w, iv.end_ns
+        timeline = replace(original, intervals=tuple(intervals))
+        trace = simulate(timeline, SensorModel.ina3221(
+            cadence_ns=1_000_000, noise_sd_w=.05, quantum_w=quantum, seed=3))
+        phases = detect_phases(trace, settling_time_ns=settling)
+        self.assertTrue(all(s.settling_time_ns == settling for s in phases))
+        result = match_tool_calls(phases, episode)
+        self.assertEqual(result.matched_count, 3)
+        self.assertEqual(len(result.unlogged_candidates), 0)
+        self.assertGreaterEqual(result.tolerance_ns,
+                                trace.nominal_interval_ns + trace.averaging_window_ns + settling)
 
 
 if __name__ == '__main__':

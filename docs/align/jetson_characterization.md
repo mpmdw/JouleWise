@@ -81,8 +81,11 @@ bound in addition to register age/exposure, because workload power need not
 change instantly when generation stops. It also sets the shortest wait worth
 testing and the idle/decode dwell in subsequent characterization sequences.
 Missing characterization yields settling_time_uncharacterized per INA rail.
-A supplied negative term yields invalid_settling_time and uses zero with a flag;
-it never silently claims a measured zero. Re-run step response after changing
+The INA sampler flags a supplied negative term as invalid_settling_time
+and uses zero; detect_phases returns a flagged unknown segment for an invalid
+timing input. Both paths preserve the invalid-input flag. Re-run the
+measurement rather than treating either result as a characterized zero.
+Re-run step response after changing
 power/clock/serving policy. A large term is an analysis limitation to report,
 not a reason to discard an episode.
 
@@ -106,8 +109,9 @@ Supplied characterization can widen the exposure; disagreement with the
 driver beyond one poll is flagged. Without characterization or board shunt
 resistance the trace's current-resolution term is only integer-mA print
 precision, explicitly flagged, not a calibrated ADC resolution. A sample
-may average over a conversion/averaging window; timestamp it at the end and
-preserve that window. Do not invent a known window when it is unavailable.
+may average over a conversion window ending at conversion completion. INA
+records t_ns at read-end and notes carry the conversion's possible age.
+Preserve the window; do not invent a known window when it is unavailable.
 
 INA registers hold the last completed conversion. If a read ends at t and
 the refresh period is P, that conversion ended somewhere in (t-P,t].
@@ -131,8 +135,10 @@ detect_phases reads these lane-local keys; its hold_latency_ns,
 register_refresh_period_ns and settling_time_ns keywords override them.
 An undeclared trace retains records.py's exact meaning: window ends at t_ns,
 age is zero, and no thinning occurs. Sampler INA traces are the explicit
-exception represented by notes. A held simulator trace declares the same keys;
-ordinary simulate(), NVML and powermetrics traces have zero age.
+exception represented by notes. A held simulator trace declares period, source, print half-width and age
+plus its seeded conversion phase; characterization half-width and settling
+are implicitly zero when absent. Ordinary simulate(), NVML and powermetrics
+traces have zero age.
 
 The detector thins by declared P against poll interval only. Register age and
 measured settling widen observed-window uncertainty and the number of mixed

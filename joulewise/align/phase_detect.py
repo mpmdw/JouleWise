@@ -69,6 +69,8 @@ def estimate_noise_sd(values: tuple[float, ...], *, hold_period_ns: int = 0,
     stride = (max(1, math.ceil(hold_period_ns / sample_interval_ns))
               if sample_interval_ns > 0 else 1)
     observed = values[::stride]
+    if len(observed) < 2:
+        return 0.0  # One conversion supplies no difference/noise evidence.
     differences = [b - a for a, b in zip(observed, observed[1:])]
     center = statistics.median(differences)
     mad = statistics.median(abs(x - center) for x in differences)
