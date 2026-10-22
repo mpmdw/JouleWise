@@ -18,11 +18,20 @@ sidecar's ``pack_id`` (the registered per-pass sub-pack ``bytes-sN-pK``, Addendu
 A session with neither is flagged ``pass_identity_missing`` and ordered after the identified
 passes by session id.  ``run_start_utc`` and every other clock column are never read.
 
+Withheld rows (lead ruling of 2026-10-20, items 1 and 4; B6 ruling Q1): a grouped export keeps a
+held-out configuration's rows in the sidecar's ``blinding.withheld`` store, which the twin reads
+only at stage 2 or at ``--stage blinded --stage1-commit HASH`` (the post-commit blinded agreement
+run).  A missing store is the flag ``bytes.withheld_missing`` on that pass, never a refusal.
+
+Meter label offset (Addendum 9, NR1): beside every H2 coefficient at DC input and rest the twin
+prints the labelled alternative beta_j +/- (t SE_j + C_j), both zero/sign decisions, the
+sensitivity dbeta_j/ddelta per ms and the disclosure; rails has no C term.
+
 Usage::
 
     bytes_twin.py --export S1.runs.csv [--export ...] [--export-dir DIR]
                   --manifest bytes_manifest.json [--archive ARCHIVE_ROOT ...]
-                  [--key-dir BLINDING_DIR] --stage {blinded,1,2} --out twin.json
+                  [--key-dir BLINDING_DIR] --stage {blinded,1,2} [--stage1-commit HASH] --out twin.json
 """
 
 from __future__ import annotations
@@ -1606,6 +1615,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     "session_id": session_id, "status": "missing", "flags": [WITHHELD_MISSING],
                     "withheld_row_count": missing["row_count"], "withheld_config_row_count": missing["config_row_count"],
                     "boundaries": {b: {"status": "missing", "flags": [WITHHELD_MISSING],
+                                       "withheld_row_count": missing["row_count"],
+                                       "withheld_config_row_count": missing["config_row_count"],
                                        "quantities": missing_pass_quantities(missing)} for b in BOUNDARIES}}
                 continue
             srows = [r for r in sessions[session_id] if r["role"] == "science" and canon(r["model_name"]) == model]
@@ -1671,6 +1682,12 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                 rails_power[model] = qr["P_mean_w"] if qr else None
         return points, rails_power
 
+    def model_pass_status(model, boundary):
+        """The model's pass label and carried flags (Addendum 7 D9 (a): `one_pass` wherever the point
+        appears, the per-pass description rows of the surviving pass included; B6 ruling Q1: the flag)."""
+        q = point(model, "passes_mean", boundary) or {}
+        return {"label": q.get("label", "pass_mean"), "flags": q.get("flags") or [], "passes_computed": q.get("passes_computed")}
+
     def missing_models(pass_key):
         """Models whose point is `missing` (every pass's withheld file missing; B6 ruling Q1)."""
         return sorted(m for m in ROSTER if m in cells and pass_key in cells[m]
@@ -1699,8 +1716,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     if q:
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
-                                             "label": q.get("label", "pass_mean"), "flags": q.get("flags") or [],
-                                             "passes_computed": q.get("passes_computed")}
+                                             **model_pass_status(model, boundary)}
                 words = h1_words(lines, all_points, missing=missing_models(pass_key))
                 for model in HELD_OUT:
                     if model not in all_points and model in cells:
