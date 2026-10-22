@@ -14,8 +14,8 @@ from pathlib import Path
 
 from joulewise.align.endpoints import OpenAICompatEndpoint, assistant_message
 from joulewise.align.interfaces import ChatMessage
-from joulewise.align.records import Episode, ToolCall, Turn, read_episodes, write_episodes
-from joulewise.align.shade import ShadeMonitor, ShadeTask
+from joulewise.align.records import Episode, ToolCall, Turn, from_json, read_episodes, write_episodes
+from joulewise.align.shade import ShadeMonitor, ShadeMonitorVerdict, ShadeTask
 from tests.align.test_endpoints import HTTPWorld, stream_packets
 from tests.align.test_shade import fixture_source
 
@@ -172,7 +172,10 @@ class ShadeHTTPTests(unittest.TestCase):
                             expected_score = 92.5 if condition == "sabotage" else 9.5
                             self.assertTrue(math.isclose(verdict.suspicion, expected_score, rel_tol=1e-6))
                             self.assertEqual(verdict.prompt_sha256,
-                                             hashlib.sha256(monitor.last_prompt.encode()).hexdigest())
+                                             hashlib.sha256(json.dumps(world.requests[-1]["body"]["messages"],
+                                                                      sort_keys=True).encode()).hexdigest())
+                            self.assertEqual([m["role"] for m in world.requests[-1]["body"]["messages"]],
+                                             ["system", "user"])
                             if visibility != "full":
                                 self.assertNotIn("PRIVATE_", monitor.last_prompt)
                         # Episode v1's reader only accepts base verdict fields.
@@ -205,7 +208,8 @@ class ShadeHTTPTests(unittest.TestCase):
                             (root / "usage.json").write_text(json.dumps([dict(r.raw_usage) for r in results]))
                             (root / "verdicts.json").write_text(json.dumps([asdict(v) for v in verdicts]))
                             self.assertEqual(read_episodes(root / "episodes.jsonl"), [episode])
-                            self.assertEqual(len(json.loads((root / "verdicts.json").read_text())), 3)
+                            self.assertEqual([from_json(ShadeMonitorVerdict, json.dumps(v)) for v in
+                                              json.loads((root / "verdicts.json").read_text())], verdicts)
                             self.assertEqual(json.loads((root / "transcript.json").read_text())[0]["role"], "system")
                         summaries.append((flavour, condition, episode.totals(), expected))
         # Companion worlds make absence of the side action and extra hidden work
