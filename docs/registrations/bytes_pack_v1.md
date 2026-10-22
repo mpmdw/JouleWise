@@ -9,7 +9,7 @@
 - `⟦NEEDS_RULING: …⟧`: a question this text cannot settle from the governing texts.
 §18 lists every slot.
 
-**Authority.** In order: the ruling's Addendum 9 (2026-10-21, NR1; `docs/process_traces/2026-10-21-magistrate-a017b694/B2-NR1-RULING.md`), then Addendum 8, then 7, 6, 5, 4, 3, 2, 1, then R1 to R8; the block-6 replication registration (`docs/registrations/block6_replication_DRAFT.md` on `main`, "the block-6 registration") for anything that would change how the replication packs ALPHA, BETA and GAMMA behave (they must behave byte-identically); the block-6 design §14 to §17, whose §14 fixes the form of a pack registration; and block 5's registered arithmetic (`configs/campaigns/v5_claim_25g83/analysis_plan_block5.md`, "the block-5 plan", with its library), which wins on arithmetic (Addendum 1 item 1, Addendum 7 D8). The lead's ruling on BYTES blinding of 2026-10-20 (§11) is part of this text.
+**Authority.** In order: the BAT-2 ruling (2026-10-21; `docs/process_traces/2026-10-22-forward/BAT-RULING.md`) on the battery term, its edge term v and the decode-assisted marker (§6, §7, §9), where it amends Addendum 1 item 2, Addendum 4 item 11 and Addendum 9's C_j; then the ruling's Addendum 9 (2026-10-21, NR1; `docs/process_traces/2026-10-21-magistrate-a017b694/B2-NR1-RULING.md`), then Addendum 8, then 7, 6, 5, 4, 3, 2, 1, then R1 to R8; the block-6 replication registration (`docs/registrations/block6_replication_DRAFT.md` on `main`, "the block-6 registration") for anything that would change how the replication packs ALPHA, BETA and GAMMA behave (they must behave byte-identically); the block-6 design §14 to §17, whose §14 fixes the form of a pack registration; and block 5's registered arithmetic (`configs/campaigns/v5_claim_25g83/analysis_plan_block5.md`, "the block-5 plan", with its library), which wins on arithmetic (Addendum 1 item 1, Addendum 7 D8). The lead's ruling on BYTES blinding of 2026-10-20 (§11) is part of this text.
 
 ## 1. The question
 
@@ -121,6 +121,11 @@ with it, per stratum, are the count of decode-assisted runs and the count of run
 request-level `battery.assist`. Below 5 units the line prints its counts and "below the registered minimum of 5
 units".
 
+The marker is read from the meter stream, so only the stages that read that stream evaluate it. A stage that
+reads no meter stream (the blinded stage, §11) prints the count of decode-assisted runs and this line's numbers as
+null, labelled "not evaluated at the blinded stage", never as 0. The count of runs carrying `battery.assist`,
+which comes from the harvest's flags, is printed at every stage.
+
 *Expected, from the non-claim check session H (2026-10-21):*
 - Llama-3.3-70B: 1 decode-assisted run of 18 (0.40 J, a run the harvest excluded for an agent's presence).
 - Qwen3.5-122B: no decode-assisted run, but 0.56 to 1.15 J of battery energy in every full-length run, all of it
@@ -175,6 +180,11 @@ count of runs with a nonzero term, and the largest v.
 
 *Missing readings.* A run whose decode or idle span holds no poll with both readings has no DC-input value
 (`bytes.meter_decode_unavailable`, reason "battery reading missing").
+
+*Per-phase definitions registered elsewhere* (third dispatch). This amends the last sentence of Addendum 1 item 2.
+Block 5 or block 6 may later register a per-phase whole-machine energy (block-6 slot S-15). If one is registered
+before this registration, BYTES adopts its treatment of the meter's phase edges and clock, as that sentence says.
+BYTES' DC input and rest keep the battery term as defined here, whatever that definition says about the battery.
 
 **Drift allowance** (Addendum 3 items 1 and 2, Addendum 4 item 7). A_β is the session's **NEG-8 drift allowance** on boundary β, computed from that session's reference runs exactly as the block-6 registration §1.8 defines it: from the clean corpus (the first 12 valid corpus runs; at least 6 required) the count-adjusted bound bound(n_s, n_e) = max(envelope, t × s × √(1/n_s + 1/n_e)) (`joulewise.whole_window.neg8_count_adjusted_bound`, with block 5's three-decimal t table `aggregate.student_t_critical_95`, Addendum 7 D8), and A = max(bound, largest minus smallest of the start-triplet mean, midpoint energy and end-triplet mean). At least 2 surviving start and 2 surviving end references are required. Each run carries ½ × A, as in blocks 5 and 6 (block-5 plan §4 step 4; block-6 registration §1.8: "Each run carries half of it into its cell's bound B (§9.1), so a contrast carries it once"). Rails reference energies come from the export; DC-input and rest reference energies come from the references' released meter spans over the whole request. Each boundary and each basis (gross, idle-subtracted) has its own allowance.
 
@@ -385,7 +395,7 @@ In order: every slot of §18 filled; the whole test suite run on the laptop befo
 | Add. 8 items 1-6 | §12 (1, 3, 4, 5), §7 (2), §9 (6) |
 | Lead's blinding ruling of 2026-10-20, items 1-6 and the idle-power note | §11, §12 |
 | Add. 9 (NR1, meter label offset; lead a017b694 adopting the cold judge) | §9 |
-| BAT-2 ruling | §1, §6, §7, §9, §15, §16 |
+| BAT-2 ruling | Authority, §1, §6, §7, §9, §15, §16 |
 
 ## Appendix A. Excluding codes of block 6's flag catalog
 

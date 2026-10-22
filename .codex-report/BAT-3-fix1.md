@@ -1,4 +1,71 @@
-## PROGRESS
+## PROGRESS (round b, findings on a846ba997)
+
+- Slice 1 started from clean `115f9ac179795f4aedc232d5e87177708f44ba75`, branch `lane/2026-10-22-bytes-battery-term`; recent history matches the supplied baseline. No active stop card. This explicit delegated fix-round brief selects the work; queue/state files remain lead-owned and untouched.
+- Done: read the whole build brief and current BAT-2 ruling at `281b53370`, including §4 and §8 in full. Exported ruling: `/tmp/bat3f1r2/BAT-RULING.md`. No H data or forbidden night directories read.
+- Done: finding 1's three third-dispatch registration blocks inserted verbatim, with whitespace wrapping matching the registration, and the §20 row gains Authority. `regtext_check.py` against `281b53370`: ALL OK, exit 0. `tests.b6.test_bytes_packs`: 9 tests pass, exit 0, no skips. Registration diff has only the four authorized changes; `git diff --check` passes.
+- Next slice: implement findings 2–4 in small production/test hunks, starting with archive_records' failure branch at bytes_analysis.py:936 and reduce_models' hard-coded blinded reason at :1234. Then bounded class runs, M22–M24, three-world/all-stage identity against `115f9ac17`, agreement comparison and refusal census. No implementation or fixture change yet.
+- Open: findings 2–4 and prescribed verification; director owns commit/push and PR #544 CI; BY-MERGE owns conflict resolution and final cold passes. No scope expansion or science ruling needed.
+
+## FIX LOG (round b)
+
+1. Fixed in slice 1: three required §8 blocks from `281b53370` placed in Authority, §6 and §7; §20 gains Authority. Current-ruling checker reports ALL OK; `tests.b6.test_bytes_packs` passes all 9 tests, no skips.
+2. Pending: evaluate the decode marker on qualifying mapped streams after any meter failure; stage-correct null/reason when no stream qualifies; synthetic archive-join tests.
+3. Pending: retain SMC only inside selected spans extended forward by τ while retaining every poll time; exact filtered-stream test and default/instant/delayed three-stage identity.
+4. Pending: add bool `battery_end_window_complete` to meter results and marker-only rows, documentation sentence and full/cut stream tests.
+5. Rejected as directed: representation-only expansion is within the synthetic disk budget; trimming `meter_run_terms` would change fields seen by downstream readers. Leave full meter dictionaries intact.
+6. Handled by director before round b: round-a slice-4 report committed as `115f9ac17` and pushed to lane and CI branches, PR #544. Director pushes each new slice and final head; this worker performs no Git writes or network actions.
+7. Handed forward to BY-MERGE: merge no branch here. Preserve decode-marker selection and both callers' `h1_family` when resolving pass1 conflicts; both cold passes on merged tree must run BatteryCampaignTests and test_bytes_roster_drop. Round-b production/fixture hunks listed below as introduced.
+
+## DECISIONS I MADE (round b)
+
+- Slice 1 changes only finding 1's permitted registration lines and this report. The explicit local route replaces cloud setup, Git writes, push and CI actions. Required code/tests will be run in bounded slices, never the whole suite.
+- A scratch runner `/tmp/bat3f1r2/run_check.py` creates and deletes a separate `/tmp/jwtmp-bat3f1.*` directory per check, sets both required environment variables for its child and records exact argv/cwd/exit/time in `/tmp/bat3f1r2/checks.jsonl`. A shell cleanup command was rejected before execution; Python TemporaryDirectory provides permitted cleanup.
+
+## HUNKS FOR BY-MERGE (round b)
+
+- None in `joulewise/bytes_analysis.py` or `tests/fixtures/bytes/campaign.py` in slice 1.
+
+## REGISTRATION (round b)
+
+- Authority: current ruling's amendment of Addendum 1 item 2, Addendum 4 item 11 and Addendum 9's C_j inserted directly after "In order:".
+- §6: registered blinded-stage null paragraph inserted before the H expectations list.
+- §7: registered "Per-phase definitions registered elsewhere" paragraph inserted after "Missing readings".
+- §20: BAT-2 row now reads `Authority, §1, §6, §7, §9, §15, §16`. No other registration line changed.
+- Checker log `/tmp/bat3f1r2/regtext-check.log`: all 15 quoted paragraphs and seven inline checks OK; old §16 phrase absent; final line `ALL OK`; exit 0. The catalog SHA is unchanged (not in round-b scope).
+
+## TESTS RUN (round b)
+
+All checks use `/opt/homebrew/bin/python3.13 -B` (checker also `-I`), `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1` and a fresh disposable TMPDIR. Exact child commands, counts and results:
+
+- `/opt/homebrew/bin/python3.13 -I -B /Users/edr/night-archive/forward-20261021/BAT-3/regtext_check.py /tmp/bat3f1r2/BAT-RULING.md docs/registrations/bytes_pack_v1.md`: ALL OK, exit 0, 0.024 s. Log `/tmp/bat3f1r2/regtext-check.log`.
+- `/opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_bytes_packs`: 9 tests, OK, exit 0, no skips; 1.501 s unittest / 1.745 s process. Log `/tmp/bat3f1r2/bytes-packs.log`.
+- `git diff --check`: exit 0. Manual registration diff review: only the three additions and §20 cell permitted by finding 1.
+- Report-preservation check through the same scratch runner (`report-preservation`, Python stdin script comparing the round-a tail with `git show 115f9ac17:.codex-report/BAT-3-fix1.md`): exact equality after only the two required heading renames, exit 0. Log `/tmp/bat3f1r2/report-preservation.log`.
+
+Wrapper invocation for each: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/run_check.py <label> <child argv above>`; cwd is this clone. No environmental test failure so far. No measurements, launch/arm steps, commits, pushes or merges attempted.
+
+## MUTATION KILLS (round b)
+
+Pending M22, M23 and M24, in disposable copies only.
+
+## BIT-IDENTITY (round b)
+
+Pending default, assisted instant and assisted delayed campaigns, all three stages, against read-only archive of `115f9ac17`. Earlier round-a evidence remains below unchanged.
+
+Next-slice test inventory from grep: BatteryRulingWorkedExamples, MeterWorkedExamples, BatteryCampaignTests; archive/boundary classes BoundaryAndStagingTests and ProductionArchiveTests; Addendum4RegressionTests has direct meter_decode calls (lines 1249, 1253). Also inspect Addendum7RegressionTests, ReviewerProbeTests, Q1WithheldCensusTests, SubsetReleaseChainTests, Q1MissingFilesCLIChainTests and Q2CommitmentCLIChainTests for indirect join coverage. Do not run the long CampaignWordRates class as a single local slice. Each class/method gets its own disposable TMPDIR.
+
+## OPEN ISSUES (round b)
+
+- Findings 2–4 and remaining RUN list pending; complete before marking round b complete.
+- Residual finding-3 case: a released run's [d1, d1 + τ) window can still read a held-out run starting within τ of d1. This is the ruling §4 reopen condition; H's smallest gap was 45.0 s. The filter must preserve required selected-span windows, not alter the arithmetic.
+- Director re-runs H's real-data reductions and fault shapes, checks the final diff, commits/pushes lane and same head to CI PR #544. This worker reads no H data and claims no new live validation.
+- BY-TWIN-BAT owns parity; BY-MERGE owns conflicts and merged-tree cold passes. Finding 5 remains intentionally unchanged.
+
+## NEEDS_RULING (round b)
+
+none
+
+## PROGRESS (round a, findings on ddcbafc4d)
 
 - Done: findings 1, 4 and 5 implemented in 998d0dc05; findings 2 and 3 in 552561b3f. Finding 6 rejected as directed; finding 7 handed forward verbatim. All edits stay within the exhaustive allowlist.
 - Done: corrected-source battery/meter classes pass 20 tests; instant and delayed real CLI chains, charging, weighted columns, blinded nulls, exact receive sorting and printed bounds/floors are verified.
@@ -23,7 +90,7 @@ All nine mutants are killed, and exact comparisons against both baselines pass w
 All 85 bounded analysis methods pass locally; the long CampaignWordRates method and whole-module run belong to CI.
 Agreement has the expected 238-field twin defects failure; one unchanged local hazard test fails at both final and baseline.
 
-## FIX LOG
+## FIX LOG (round a)
 
 1. Fixed in 998d0dc05: delayed fixture/test passes in corrected-source three-class run. All 30 placements checked at 1e-6 J; exact markers/counts and printed maxima. Charging extension in 552561b3f.
 2. Fixed in 552561b3f: test_large_model_assist_cli_chain_all_four_placements_and_counts independently checks registered stratified means on every printed DC/rest cell and signed nonzero counts, including retained charging; margin 0.044056348856499616 J.
