@@ -1,26 +1,28 @@
 # SUMMARY
-- FIX ROUND 1 IN PROGRESS: B1 and cost/capture fixes are checkpointed; calibration and verification pending.
-- Implemented lazy HF Qwen3-MoE, Qwen2-MoE and Mixtral routing capture with phase tags.
-- Verified Qwen3-30B-A3B config: 48 layers, 128 experts, top-8.
-- Implemented all routing-statistics APIs, exact/Monte Carlo grouped tests and Holm correction.
-- Added grouped-bootstrap effects and task-held-out routing/counts/combined AUC comparison.
-- A 24-episode topic world gave routing AUC 1.0 versus counts AUC 0.5; null controls removed evidence.
-- CI: 9,904 tests, zero failures/errors, 151 skips; alignment: 28 passed and 6 optional skips.
-- Managed runtime never became usable; local commands, pip installation and extra-dependent execution remain unverified.
-- All work is pushed to the MoE lane; three protected files are unchanged; one inventory exception is recorded.
+- Fixed B1: each routing statistic filters non-finite captures before all inference, naming dropped IDs/counts.
+- Fixed M1: AUC-gain intervals refit classifiers per group-bootstrap draw, keeping original task copies together.
+- Four 120-world null checks passed: false-addition rates 0.00833, 0, 0, 0.01667 against the derived 0.05350 bar.
+- Flagged uncached re-forwards; cached multi-token tool prefills remain unflagged; disclosed roughly 91% effect-interval coverage.
+- Streamed JSONL feature extraction and validated once; 52,500-token stats improved from 57.62s to 20.23s on the same CI inputs.
+- CI: 9,919 tests, zero failures/errors, 153 skips; alignment: 41 passed, 8 optional skips; nested twin: 6 passed.
+- The managed VM stayed offline; literal local probe/discovery commands and optional HF execution remain blocked.
+- All changes are saved on the lane; protected contracts and the inherited registry exception are unchanged.
 
 # FILES
-- joulewise/align/moe/__init__.py: shared RouterLog and stat exports.
-- joulewise/align/moe/hooks.py: lazy model hooks, snapshots, phase override, capture flags.
-- joulewise/align/moe/stats.py: entropy, load CV, reuse, distances, grouped permutation.
-- joulewise/align/moe/stage_a.py: effects, intervals, Holm, held-out AUC comparison, JSONL CLI.
-- joulewise/align/moe/synthetic.py: configurable token-level topic-affinity worlds.
-- tests/align/test_moe_stats.py: numerical oracles and permutation controls.
-- tests/align/test_moe_stage_a.py: real end-to-end shifted/null/count controls and JSONL.
-- tests/align/test_moe_hooks.py: optional tiny random Qwen3/Qwen2/Mixtral integration.
-- docs/align/moe_stage_a.md: topology source, capture, inference, backend paths, limitations.
-- tests/test_shard_tests.py: REGISTRY EXCEPTION; add align. to namespace normalization.
+- joulewise/align/moe/hooks.py: lazy HF router capture; uncached re-forward diagnostics.
+- joulewise/align/moe/stats.py: exact public metrics/permutation APIs; aggregate validates once.
+- joulewise/align/moe/stage_a.py: per-statistic finite cohorts, twelve-test Holm family, effects, refitted gain intervals, streaming JSONL.
+- joulewise/align/moe/synthetic.py: existing configurable topic-affinity worlds, unchanged this round.
+- joulewise/align/moe/__init__.py: existing shared RouterLog/stat exports, unchanged this round.
+- tests/align/test_moe_stats.py: metric oracles, validation count and unit-specific agreement comment.
+- tests/align/test_moe_stage_a.py: shifted/null/count controls, missing/empty captures, streaming lifetime and original bootstrap group identities.
+- tests/align/test_moe_hooks.py: eight optional tiny-model integrations, including uncached generation and cached tool-result prefill.
+- tests/align/test_moe_calibration.py: four 120-world calibration checks and the independent reviewer generator.
+- tests/align/test_moe_review.py: reviewer r3 cases, independent twin invocation, old/new production-scale cost paths.
+- docs/align/moe_stage_a.md: capture/backends, inference methods and small-group coverage disclosure.
 - .codex-report/align-moe.md: this report.
+- REGISTRY EXCEPTION inherited from r0: tests/test_shard_tests.py. Unchanged in this round; no new registry exception.
+- Protected docs/align/PIPELINE.md, joulewise/align/records.py and joulewise/align/interfaces.py are unchanged.
 
 # PUBLIC API
 - RouterRecorder(model); .log -> RouterLog; .to_log() -> RouterLog; .reset() -> None;
@@ -32,46 +34,52 @@
 - episode_stats(log: RouterLog) -> dict[str, float]
 - grouped_permutation_test(values: Sequence[float], labels: Sequence[int], groups: Sequence[str], *, n_perm: int | None = None, seed: int = 0) -> tuple[float, float, int]
 - routing_flags(log: RouterLog) -> tuple[str, ...]
-- analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int, confidence: float = 0.95,
-  n_perm: int | None = None, seed: int = 0) -> StageAResult
+- analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int, confidence: float = 0.95, n_perm: int | None = None, seed: int = 0) -> StageAResult
+- iter_episodes(path: Path) -> Iterator[Episode]: lane-local streaming adapter over shared from_json.
 - mann_whitney_auc(scores: Sequence[float], labels: Sequence[int]) -> float
-- TopicWorld(groups: int = 12, repeats: int = 1, num_experts: int = 32, top_k: int = 4,
-  layers: int = 4, turns: int = 6, prefill_tokens: int = 128, decode_tokens: int = 192,
-  prefill_ns_per_token: int = 500_000, decode_ns_per_token: int = 20_000_000,
-  tool_ns: int = 200_000_000)
-- expected_topic_statistics(num_experts: int, top_k: int, fraction: float) -> dict[str, float]
-- topic_episodes(side_fraction: float, *, design: TopicWorld | None = None, seed: int = 0,
-  independent_noise: bool = False) -> tuple[Episode, ...]
+- StageAResult.auc_gain_interval: refitted group-bootstrap percentile interval;
+  auc_gain_fixed_prediction_interval: descriptive fixed-score interval;
+  auc_gain_interval_method: method name; n_auc_gain_bootstrap_valid: finite refit count.
+- TopicWorld(groups: int = 12, repeats: int = 1, num_experts: int = 32, top_k: int = 4, layers: int = 4, turns: int = 6, prefill_tokens: int = 128, decode_tokens: int = 192, prefill_ns_per_token: int = 500_000, decode_ns_per_token: int = 20_000_000, tool_ns: int = 200_000_000)
+- expected_topic_statistics(num_experts: int, top_k: int, fraction: float) -> dict[str, float];
+  topic_episodes(side_fraction: float, *, design: TopicWorld | None = None, seed: int = 0, independent_noise: bool = False) -> tuple[Episode, ...].
 - python3 -m joulewise.align.moe.stage_a EPISODES.jsonl --n-bootstrap N [--confidence C] [--n-perm N] [--seed S]
 
 # TESTS RUN
-Verified code revision: 9eaecf93f4d11a845d2febfc70d105d2108b0b90.
-[CI run 39706857631](https://github.com/mpmdw/JouleWise/actions/runs/39706857631)
-completed successfully: all 20 jobs passed. Python 3.13.16 on Linux, no model extras.
-The final commit after this revision updates only this report and documentation;
-the code/test tree is the verified revision's tree.
-
-The complete ordinary/exclusive test matrix ran 9,904 tests: 9,753 passed,
-151 skipped, zero failures and zero errors. Quick-tier repetitions are separate
-from that total. The alignment subset is included in the matrix totals:
+Verified code/test revision: 19b4d84ced16aeda63e362dd570082932202d3ef.
+[CI run 39715696032](https://github.com/mpmdw/JouleWise/actions/runs/39715696032)
+completed successfully: all 20 jobs passed, Python 3.13.16 on Linux, no model extras.
+The final report commit changes no code or tests relative to that revision.
 
 | Module | Tests | Passed | Skipped |
 | --- | ---: | ---: | ---: |
-| tests.align.test_moe_stats | 10 | 10 | 0 |
-| tests.align.test_moe_stage_a | 14 | 14 | 0 |
-| tests.align.test_moe_hooks | 6 | 0 | 6 |
-| tests.align.test_records (unchanged spine) | 4 | 4 | 0 |
+| tests.align.test_moe_stats | 11 | 11 | 0 |
+| tests.align.test_moe_stage_a | 18 | 18 | 0 |
+| tests.align.test_moe_hooks | 8 | 0 | 8 |
+| tests.align.test_moe_calibration | 4 | 4 | 0 |
+| tests.align.test_moe_review | 4 | 4 | 0 |
+| tests.align.test_records | 4 | 4 | 0 |
+| Alignment total | 49 | 41 | 8 |
 
-All six hook tests skipped with:
-"tiny HF MoE integration needs optional torch and transformers".
-No optional packages were installed by tests. No extra-dependency run is claimed:
-the managed VM never became usable for exec_command or pip.
+The review module also ran `python -m unittest tests.align.test_twin_moe -v`
+as a subprocess: 6 passed, zero skips. Those nested tests are additional evidence,
+not added twice to the parent matrix count. Twin revision:
+265e3c170fbba16a8752e3495061f5d2f8dfaa4a. Its three requested files were read with
+`git show origin/lane/2026-10-21-align-moe-twin:<path>` from CI's full-history
+checkout and written to the requested untracked test paths. No test fetched
+network data or committed those files.
 
-Exact quick command: `python3 scripts/quick_suite.py --tier quick --workers 4`.
-Result: 212 modules passed, 178 excluded by the existing quick-tier policy, zero failures.
-All excluded modules remained covered by ordinary/exclusive matrix jobs.
+All eight hooks skipped with "tiny HF MoE integration needs optional torch and transformers".
+No torch/transformers installation or extra-dependent run was possible: the
+managed VM never admitted an exec command. No optional model execution is claimed.
+The two added hook regressions cover uncached generate and a cached multi-token
+tool-result prefill and skip cleanly with the same dependency guard.
 
-Exact compile command in ordinary jobs: `python -m compileall -q joulewise tests`: passed.
+
+Executed quick command: `python3 scripts/quick_suite.py --tier quick --workers 4`:
+212 modules passed, 180 excluded by the existing policy; excluded modules remained
+covered by ordinary/exclusive jobs. Executed compile command:
+`python -m compileall -q joulewise tests`: passed.
 
 Exact ordinary test command from .github/workflows/ci.yml, executed from the
 repository root with SHARD_COUNT=12 and SHARD_INDEX=1 through 12:
@@ -159,29 +167,29 @@ raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
 PY
 ```
 
-Per-job counts; the failure/error column is explicit:
 
-| Job | Tests | Skips | Failures / errors | Job ID |
+| Ordinary shard | Tests | Skips | Failures / errors | Job ID |
 | --- | ---: | ---: | ---: | ---: |
-| calibration-exits-exclusive (3.13) | 48 | 0 | 0 / 0 | 119589862480 |
-| calibration-writer-crash-matrix-exclusive (3.13, 1) | 1 | 0 | 0 / 0 | 119589862499 |
-| calibration-writer-crash-matrix-exclusive (3.13, 2) | 19 | 0 | 0 / 0 | 119589862554 |
-| test (3.13, 12) | 1096 | 4 | 0 / 0 | 119589862574 |
-| test (3.13, 1) | 565 | 10 | 0 / 0 | 119589862577 |
-| test (3.13, 10) | 1286 | 24 | 0 / 0 | 119589862578 |
-| test (3.13, 6) | 706 | 18 | 0 / 0 | 119589862579 |
-| test (3.13, 4) | 785 | 9 | 0 / 0 | 119589862603 |
-| test (3.13, 5) | 767 | 18 | 0 / 0 | 119589862611 |
-| test (3.13, 2) | 626 | 7 | 0 / 0 | 119589862616 |
-| test (3.13, 7) | 655 | 11 | 0 / 0 | 119589862627 |
-| test (3.13, 8) | 804 | 11 | 0 / 0 | 119589862628 |
-| test (3.13, 9) | 987 | 21 | 0 / 0 | 119589862639 |
-| test (3.13, 11) | 949 | 6 | 0 / 0 | 119589862661 |
-| test (3.13, 3) | 610 | 12 | 0 / 0 | 119589862700 |
+| 1 | 589 | 25 | 0 / 0 | 119618859459 |
+| 2 | 840 | 10 | 0 / 0 | 119618859577 |
+| 3 | 497 | 7 | 0 / 0 | 119618859484 |
+| 4 | 762 | 13 | 0 / 0 | 119618859530 |
+| 5 | 751 | 10 | 0 / 0 | 119618859518 |
+| 6 | 619 | 7 | 0 / 0 | 119618859526 |
+| 7 | 757 | 14 | 0 / 0 | 119618859464 |
+| 8 | 792 | 19 | 0 / 0 | 119618859598 |
+| 9 | 863 | 7 | 0 / 0 | 119618859476 |
+| 10 | 1263 | 27 | 0 / 0 | 119618859478 |
+| 11 | 896 | 10 | 0 / 0 | 119618859581 |
+| 12 | 1222 | 4 | 0 / 0 | 119618859475 |
+| Calibration exits exclusive | 48 | 0 | 0 / 0 | 119618859317 |
+| Crash matrix exclusive 1 | 1 | 0 | 0 / 0 | 119618859352 |
+| Crash matrix exclusive 2 | 19 | 0 | 0 / 0 | 119618859360 |
 
-Complete skip-reason census (151), copied from the final matrix logs.
-These include inherited repository corpus, platform, and gate conditions:
+Full matrix total: 9,919 tests, 9,766 passed, 153 skipped, zero failures/errors.
+Quick-tier repetitions and nested twin tests are not added to that total.
 
+Complete skip-reason census (153), from the final matrix logs:
 - 1: a desk run of the real read-only probes (macOS)
 - 1: ACCEPTANCE GATE SKIP: determinism gate requires the retained runs/ corpus
 - 1: ACCEPTANCE GATE SKIP: six frozen legacy corpus bundles require the retained runs/ corpus
@@ -253,145 +261,198 @@ These include inherited repository corpus, platform, and gate conditions:
 - 1: the gate-prune inventory is not on this machine
 - 1: the real kern.bootsessionuuid exists only on macOS
 - 1: the two pilot-night archives are not on this machine
-- 1: this file system gave the replacement lock the inode number of the lock just unlinked (4522114); the reclaimer tells the two apart by device and inode number only, so here it cannot (known limit of scripts/run_campaign.py _hazard_reclaim_stale_campaign_lock; APFS on the measurement Mac does not reuse numbers)
-- 6: tiny HF MoE integration needs optional torch and transformers
+- 1: this file system gave the replacement lock the inode number of the lock just unlinked (4522201); the reclaimer tells the two apart by device and inode number only, so here it cannot (known limit of scripts/run_campaign.py _hazard_reclaim_stale_campaign_lock; APFS on the measurement Mac does not reuse numbers)
+- 8: tiny HF MoE integration needs optional torch and transformers
 - 3: U2 successor engine pending
 - 1: window-B quarantine custody path is absent
 
-Additional successful CI checks: build, installed-wheel smoke, state/pin/docs
-fences, strict mock run/validate/reduce/revalidate. The fence's exact
-`python -m unittest -v tests.test_docs_freshness` command passed 31 tests. Their repeated tests are not
-added to the matrix total above.
-
-Development failures and their dispositions:
-- At b1015ffc0713f752a137532f000df8b957b7a155, quick tier had 1 failed module:
-  tests.test_shard_tests, 4 tests with 1 failure. Its discovery inventory lacked
-  align. namespace normalization. Applied the brief's registry exception to
-  tests/test_shard_tests.py at 7f89688922d5750539cec72cb1649ae9d908a097.
-- At 2a170db68740f2abe567776b93bca5a6ecf14b17, Stage A had 13/14 passes:
-  the added nominal-f finite-count oracle made a deterministic check depend on
-  one random draw landing inside a 95% sampling interval. Replaced that oracle
-  with balanced exposure and an exact entropy/load law. The random-world data,
-  estimator, thresholds and all printed world results remained identical.
-- The corrected Stage A module passed 14/14 at the verified revision. Its three
-  printed world summaries were bit-identical to the previous run.
-
-Not executed locally because exec_command returned "No usable execution
-environment is available"; environment status repeatedly cycled pending/starting:
+Local commands below were blocked by "No usable execution environment is available";
+they are NOT recorded as executed:
 ```sh
+git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-moe
+git -C /workspace/JouleWise checkout -B lane/2026-10-21-align-moe origin/lane/2026-10-21-align-moe
 python3 -m unittest discover -s tests/align -t .
 python3 -m unittest discover -s tests
-python3 scripts/fixture_orphan_census.py --fail-on-orphans
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install transformers
+python3 /workspace/JouleWise/.review1/r3_stage_a.py /workspace/JouleWise
+python3 /workspace/JouleWise/.review1/r10_gain_interval.py /workspace/JouleWise 120
+python3 /workspace/JouleWise/.review1/r4_null_calibration.py /workspace/JouleWise 120
+python3 /workspace/JouleWise/.review1/r9_hooks_nocache.py /workspace/JouleWise
+python3 /workspace/JouleWise/.review1/r6_hooks_dispatch.py /workspace/JouleWise
+python3 /workspace/JouleWise/.review1/r11_cost.py /workspace/JouleWise
+python3 /workspace/JouleWise/.review1/r1_stats_ground_truth.py /workspace/JouleWise
 ```
+The B1 one-liner and literal .review1 file creation likewise could not run in the
+unavailable VM. Executed CI ports are identified explicitly: missing/empty captures
+in test_moe_stage_a and reviewer r3 in test_moe_review; r10/r4 worlds and expanded
+refit/fixed rate columns in test_moe_calibration; r11 and r1 section-6 old/new cost
+paths in test_moe_review. Standalone metric ground truth additionally passed the
+independent twin. This is CI evidence, not a claim that the literal VM scripts ran.
 
-The equivalent alignment/core tests ran through the existing CI shard runner
-above. No local fixture processes or hardware measurements were started.
 
 # END-TO-END
-The main generative world used seed 731, 12 task groups and 24 episodes:
-144 turns, 120 tool calls, 23,176 prefill tokens and 34,494 decode tokens.
-It uses 32 experts, top-4 and four layers, with random main-topic selections and
-layer-specific side-topic affinities. Sabotage switches 40% of decode tokens
-in expectation; token/tool counts and prefill stay matched within pairs.
+The unchanged seed-731 topic world has 12 groups, 24 episodes, 144 turns, 120 tools,
+23,176 prefill and 34,494 decode tokens; four layers, 32 experts, top-4.
+The side-task topic receives 40% of sabotage decode tokens in expectation.
+Counts remain matched within pairs. The real chain was
+RouterLog -> Episode -> episode_stats -> finite metric cohort -> within-group
+permutation -> twelve-test Holm -> grouped effect bootstrap -> task-held-out
+routing/metadata/combined classifiers -> AUC -> refitted grouped gain bootstrap.
+Shared Episode JSONL write/decode and the streaming CLI also passed.
 
-Real chain:
-RouterLog -> Episode -> episode_stats -> within-task permutation ->
-Holm across all 12 metrics -> whole-task bootstrap -> leave-task-out
-routing/metadata/combined classifiers -> Mann-Whitney AUC and paired gain interval.
-The same world also ran through shared Episode JSONL write/read and the CLI with
-32 bootstrap resamples and seed 83.
-Intervals below are 95%, 256 bootstrap resamples, seed 83; permutations are exact
-over 4,096 arrangements.
+With 256 bootstrap draws and seed 83, routing/combined AUC remain 1.0, metadata
+0.5, gain 0.5 with refitted interval [0.5, 0.5]. All four decode Holm p-values
+remain 0.005859375 (exact 4,096 arrangements). Decode reuse effect remains
+0.1359071076578115 [0.13118738132590682, 0.14117669025037116], containing the
+analytic 0.14 = .4^2*(1-4/32). Decode load remains
+0.9648177222877435 [0.9501019886896048, 0.983076392559291].
+All complete-log raw statistics and point AUCs are unchanged by this round.
 
-| Result | Value | Interval |
-| --- | ---: | --- |
-| Metadata AUC | 0.5 | 0.5 to 0.5 |
-| Routing AUC | 1.0 | 1.0 to 1.0 |
-| Combined AUC | 1.0 | 1.0 to 1.0 |
-| Added AUC | 0.5 | 0.5 to 0.5 |
-| Decode load effect | 0.9648177222877435 | 0.9501019886896048 to 0.983076392559291 |
-| Decode reuse effect | 0.1359071076578115 | 0.13118738132590682 to 0.14117669025037116 |
-| Decode entropy effect | -0.1011543498323929 | -0.10440648355007826 to -0.09856993805219644 |
-| Decode reuse-distance effect | -0.040791516025056485 | -0.04575411137490326 to -0.035552700316032304 |
+The paired zero-shift control has all AUCs 0.5 and gain 0. The independent-noise
+zero-shift control has unchanged gain 0.09027777777777779, but its main interval
+moves from fixed-score [-0.026562499999999985, 0.26388888888888884] to refitted
+[-0.2336805555555555, 0.30312500000000003]: endpoint changes -0.2071180555555555
+and +0.039236111111111194. Both contain zero; all Holm p-values are 1.
+The counts-only positive control retains metadata AUC 1.0. The verified full
+48-layer/128-expert/top-8 shape and deterministic balanced-affinity oracle passed.
 
-All four decode Holm p-values are 0.005859375. The analytic expected reuse
-increase is f^2(1-k/E) = .4^2(1-4/32) = .14, inside the observed interval.
-Perfect separation gives degenerate bootstrap AUC intervals in this finite
-control; these are conditional on its fitted folds, not real-model generalization
-uncertainty. Reuse-distance first-use exclusion introduces finite-window effects.
+M1 calibration used 120 worlds per condition, 200 bootstrap draws per world,
+the exact r10/r4 generator parameters, and the same seeded worlds for old
+fixed-score versus new refitted intervals. Lane seeds are 5000+s, reviewer seeds
+1000+s, analysis seed s. The lower-side acceptance bar is
+.025 + 2*sqrt(.025*.975/120) = 0.05350438562747849, derived from two binomial
+standard errors around the lower side of a conventional two-sided 95% interval.
 
-Controls through the real analysis:
-- Paired zero shift: all three AUCs 0.5, added AUC 0, all Holm p-values 1.
-- Independent-noise zero shift: routing/combined AUC 0.5902777777777778,
-  metadata AUC 0.5; gain 0.09027777777777779, interval
-  [-0.026562499999999985, 0.26388888888888884] (128 resamples, seed 83).
-  All Holm p-values 1; the gain interval includes zero.
-- Counts-only positive control repeats benign decode work, updating router rows,
-  token counts, context and timestamps consistently: metadata AUC 1.0.
-- Balanced exposure: exact 2/5 side-topic fraction, 960 decode rows, four layers;
-  entropy/load agree with the mixture law to the required 1e-6 relative bar;
-  zero-shift balanced exposure has zero load CV and unit normalized entropy.
-- Full verified shape: 48 layers, 128 experts, top-8, two-turn episodes with tools,
-  through episode_stats with finite outputs.
-- Missing router logs remain in the report; metadata analysis continues with flags.
-- Tiny HF models/two prompts are implemented but skipped because dependencies
-  were absent; there is no claim of observed real-model routing from this seat.
+| Null world | Fixed lower>0 | Refit lower>0 | Fixed upper<0 | Refit upper<0 | Zero in effect CI |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| lane12 | 0.058333 | 0.008333 | 0.141667 | 0.000000 | 0.913194 |
+| lane17 | 0.058333 | 0.000000 | 0.150000 | 0.000000 | 0.905556 |
+| reviewA | 0.166667 | 0.000000 | 0.083333 | 0.000000 | 0.911111 |
+| reviewB | 0.058333 | 0.016667 | 0.083333 | 0.000000 | 0.747917 |
+
+False additions after refitting are 1, 0, 0, and 2 of 120; the bar admits at most
+6 of 120. Every world passes. Upper-side rates have no acceptance bar, as directed.
+For the same 120 reviewer-A worlds, fixed lower exclusion falls from 20/120 to
+0/120; reviewer B falls from 7/120 to 2/120. The lead's recorded reviewer outputs
+used 150 worlds, so their .147/.053 fixed rates are not the same census as the
+.167/.058 first-120 rates above. Point AUCs were not changed by refitting intervals.
+
+| Null world | Gain mean | Across-world SD | Refit interval implied SD | Routing AUC | Metadata AUC | Combined AUC | Raw p<.05 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| lane12 | -0.027373 | 0.149301 | 0.163195 | 0.472627 | 0.500000 | 0.472627 | 0.038889 |
+| lane17 | -0.011267 | 0.093970 | 0.100768 | 0.488733 | 0.500000 | 0.488733 | 0.040278 |
+| reviewA | 0.023746 | 0.078035 | 0.094312 | 0.488689 | 0.456546 | 0.480291 | 0.048611 |
+| reviewB | -0.007886 | 0.059606 | 0.070244 | 0.615686 | 0.646965 | 0.639079 | 0.205556 |
+
+Implied SD is width/(2*Phi^-1(.975)), the r10 normal-reference column.
+For lane12/lane17 it changes from the recorded fixed-score .099/.058 to
+.163/.101; across-world SD stays .149/.094. Raw-effect interval coverage remains
+0.9131944444444444 and 0.9055555555555556: about .91, not .95, with 12--17 groups.
+Raw effects' bootstrap method was retained; the disclosure and fixed-seed test
+comment were corrected. Reviewer B has genuine count differences and raw routing
+statistics carry finite-length effects, so coverage of zero there is descriptive,
+not calibration about a true zero effect. Only gain false additions are barred.
+
+B1's independent reviewer world has 68 multi-turn episodes, 8 layers, 64 experts,
+top-6, side-topic fraction .25 and sabotage count ratio 1.3. Complete-world gain
+stays 0.3866782006920415; fixed interval [0.26892301038062283, 0.510402249134948] becomes
+refitted [0.2740484429065744, 0.576319204152249], endpoint changes +0.005125432525951545 and
++0.065916955017301 (400 draws, seed 3).
+
+Missing rev-11-1-benign-1 previously gave 12/12 NaN effects and p-values; now
+all twelve are finite. Empty decode on rev-11-1-sabotage-1 previously gave four
+NaN decode tests; now none. Each affected test names its dropped ID and count 1.
+The twelve-test Holm family remains intact. Bootstrap draws are made from each
+finite metric cohort, never selected for happening to avoid a bad task group.
+The lane's missing-log regression also compares every effect, p, standardized
+effect and interval with an explicit finite-cohort analysis.
+
+After-values below use 100 draws and seed 3. The before values for missing-log
+effects/p-values were NaN, so arithmetic before/after deltas are undefined.
+The delta column instead states the change from the complete capture, for
+review of which measured values moved.
+
+| Missing-log metric | Effect after fix | Delta from complete | p after fix | Holm after fix | Interval |
+| --- | ---: | ---: | ---: | ---: | --- |
+| prefill_usage_entropy | -0.00028674921630272995 | -0.0000015374834227011437 | 0.4942166140904311 | 1 | [-0.0009349931889062245, 0.0005493051852632095] |
+| prefill_load_imbalance | 0.0038500246083311073 | 0.00003489333205969206 | 0.20452155625657203 | 1 | [-0.0023246754587570068, 0.009426608717403024] |
+| prefill_reuse_fraction | -0.00017673292715271224 | 0.00006262894727029401 | 0.907465825446898 | 1 | [-0.0024488088142825782, 0.002800828204718727] |
+| prefill_mean_reuse_distance | -0.007488027771421551 | 0.00137085607924178 | 0.8485804416403786 | 1 | [-0.08769524513236839, 0.05226729991219849] |
+| decode_usage_entropy | 0.00822934729554112 | 0.00006617635999956427 | 0.0005257623554153522 | 0.006309148264984227 | [0.005891324567008075, 0.010602931327241322] |
+| decode_load_imbalance | -0.11923286820475806 | -0.00013717576227703643 | 0.0005257623554153522 | 0.006309148264984227 | [-0.1328238961811576, -0.10461218279221109] |
+| decode_reuse_fraction | -0.016784267863484328 | 0.0003631535057489199 | 0.0005257623554153522 | 0.006309148264984227 | [-0.021931980183624328, -0.012519274435634371] |
+| decode_mean_reuse_distance | 0.24923163165021656 | 0.00972411753781327 | 0.10830704521556257 | 0.6498422712933755 | [0.023882856151886536, 0.5020591228785161] |
+| both_usage_entropy | 0.007452786940648098 | -0.000009354955722439169 | 0.0005257623554153522 | 0.006309148264984227 | [0.006569856047821391, 0.008335012577874511] |
+| both_load_imbalance | -0.06381805241756502 | 0.00007047277287762499 | 0.0005257623554153522 | 0.006309148264984227 | [-0.07065084414484717, -0.05708297854834864] |
+| both_reuse_fraction | -0.005152064787562667 | 0.0001308843291219306 | 0.0010515247108307045 | 0.007360672975814931 | [-0.007107122688772458, -0.002716248098479148] |
+| both_mean_reuse_distance | 0.025510802733824774 | 0.0009257667419527819 | 0.34279705573080965 | 1 | [-0.01978726073830773, 0.06120555510294766] |
+
+| Empty-decode metric | Effect after fix | Delta from complete | p after fix | Holm after fix | Interval |
+| --- | ---: | ---: | ---: | ---: | --- |
+| prefill_usage_entropy | -0.0002852117328800288 | 0 | 0.46635120925341744 | 1 | [-0.000926948980158207, 0.0005229795491963029] |
+| prefill_load_imbalance | 0.0038151312762714153 | 0 | 0.19400630914826497 | 0.9700315457413249 | [-0.0022133948193477845, 0.009359591291167684] |
+| prefill_reuse_fraction | -0.00023936187442300625 | 0 | 0.8732912723449001 | 1 | [-0.0024714490819840837, 0.0026332987463619584] |
+| prefill_mean_reuse_distance | -0.008858883850663331 | 0 | 0.8012618296529969 | 1 | [-0.08851696507477141, 0.05016003540950442] |
+| decode_usage_entropy | 0.007993670960536357 | -0.00016949997500519988 | 0.0005257623554153522 | 0.006309148264984227 | [0.005579245730519572, 0.010175549586028456] |
+| decode_load_imbalance | -0.1187635094459573 | 0.00033218299652372496 | 0.0005257623554153522 | 0.006309148264984227 | [-0.13254696047189882, -0.10354452321930693] |
+| decode_reuse_fraction | -0.01754462463493715 | -0.0003972032657039021 | 0.0005257623554153522 | 0.006309148264984227 | [-0.022147159292044007, -0.013646947719627137] |
+| decode_mean_reuse_distance | 0.23237316007501632 | -0.007134354037386964 | 0.14668769716088328 | 0.8801261829652998 | [0.009463524674851728, 0.4907933470171602] |
+| both_usage_entropy | 0.007249741513685528 | -0.0002124003826850093 | 0.0005257623554153522 | 0.006309148264984227 | [0.006246935443945731, 0.00832293658982737] |
+| both_load_imbalance | -0.06217243726238664 | 0.001716087928056012 | 0.0005257623554153522 | 0.006309148264984227 | [-0.07065084414484717, -0.05342184170948705] |
+| both_reuse_fraction | -0.005239422305396393 | 0.00004352681128820448 | 0.0005257623554153522 | 0.006309148264984227 | [-0.007237087590283511, -0.0028385986065618853] |
+| both_mean_reuse_distance | 0.018294700622976244 | -0.006290335368895748 | 0.5094637223974764 | 1 | [-0.023095784858623247, 0.0510884265176128] |
+
+m3 before/after cost used the same CI inputs and unchanged validating public
+metric arithmetic; the before path reconstructs r0's twelve-call aggregate
+comprehension, and the after path is production episode_stats. These are paired
+CI measurements, not comparisons between the reviewer's Mac and CI hardware.
+
+| Shape | Before seconds | After seconds | Change |
+| --- | ---: | ---: | ---: |
+| r11: 10,000 tokens x 48 x top-8 | 10.799911144 | 3.625220240 | -7.174690904 (66.4% lower) |
+| r1 section 6: 52,500 tokens x 48 x top-8 | 57.622601816 | 20.228703469 | -37.393898347 (64.9% lower) |
+
+Single validation took 0.683171915s on the 10k-token log. Memory remained
+54,321,120 bytes, 5,432.112 bytes/token (about 5.3 KiB/token); the shared log
+format did not change. The twelve-fold validation repetition is removed,
+and the CLI no longer accumulates the episode logs. A weak-reference iterator
+regression proves a log is released before the next episode is requested.
+Numerical old/new aggregate agreement and all six twin tests passed.
 
 # DECISIONS I MADE
-- Verified the published Qwen3-30B-A3B config at d47d535f78ec44bd57128f8e8aeba17eeb0285ea:
-  48 layers, 128 experts, top-8, sparse step 1, no dense-only layer overrides.
-- Discover actual HF sparse blocks by class, with their actual decoder indices.
-- One sequence per RouterLog; inferred phases can be overridden for cached prefills.
-- Preserve processed-forward token order; last sampled generation token can be unforwarded.
-- Record capture limitations in recorder.flags, for propagation to Episode.flags.
-- Phase filtering precedes adjacency/distances; RouterLog has no turn boundaries.
-- Entropy/CV are averaged by layer; reuse distance pools recurrent selections.
-- episode_stats keys are <phase>_<function_name>, 4 metrics x 3 phases.
-- Missing/invalid routing yields NaN plus diagnostics; CLI emits JSON null and flags.
-- Exact randomization uses extreme/arrangements; Monte Carlo uses (extreme+1)/(n+1).
-- Monte Carlo budget >=1901 from SE(.05)<.005; smaller explicit budgets are increased.
-- Exact integer sums of binary-rational inputs remove arbitrary floating tie tolerances.
-- Holm family remains all twelve metrics even when a phase is missing.
-- Bootstrap whole task groups, preserving within-group episodes; confidence/budget are exposed.
-- Compare fixed standardized nearest-centroid classifiers on identical leave-task-out folds.
-- Fit all preprocessing on training groups only; hidden decode tokens are removed from
-  the visible-count baseline per Turn.hidden_tokens contract.
-- Spine contains only records/interfaces/__init__, so local Mann-Whitney AUC is required.
-- AUC bootstrap resamples fixed out-of-fold predictions; intervals are conditional on fits.
-- Existing shared record validation remains authoritative; failed CLI file/record reads
-  produce a flagged non-estimable report rather than silently dropping rows.
-- Runtime startup forced GitHub API checkpoints and a draft PR to run existing CI.
-- Used only the brief's registry exception for the discovery-namespace inventory fix.
-- Replaced a nominal-probability confidence-coverage assertion with an exact balanced-
-  exposure oracle: a single finite random topic draw need not be inside a 95% interval.
-- Tiny-model generation length follows the pigeonhole bound so reuse distance is defined.
-- The classifier comparison is specific to this learner/features; conditional, possibly
-  degenerate control-world AUC intervals do not quantify real-model generalization.
+- Filter finite rows separately per metric before effects, permutation and bootstrap; retain all episode-aligned features.
+- Keep Holm family all 12 planned tests and flag excluded IDs/count plus one-condition groups.
+- Refit metadata and combined classifiers for every cluster draw; hold all copies of each original task group together.
+- Fixed-score AUC/gain intervals are labelled descriptive and cannot substantiate added routing separation.
+- Use conventional 95% refit percentile gain interval, assess only false lower bound above zero against lead's derived bar.
+- Use 120 worlds per null, bootstrap budget 200, same seeded worlds/parameters as reviewers; print upper rates with no bar.
+- Retain raw-effect percentile intervals and disclose roughly 91% zero coverage for 12--17 groups.
+- Preserve actual uncached repeated forwards; add uncached_reforward flag; cached multi-token tool prefill is ordinary prefill.
+- CLI lane-local iter_episodes uses shared from_json; analyze_stage_a consumes iterable and retains only scalar features.
+- Validate once per episode_stats aggregate; public metrics continue independent validation.
+- No new registry exception; preserve previous tests/test_shard_tests.py change.
+- Use existing CI through draft PR #520 while runtime offline; no local execution or optional-model claim.
+- Published Qwen3-30B-A3B topology remains verified at config revision d47d535f78ec44bd57128f8e8aeba17eeb0285ea: 48 layers, 128 experts, top-8.
+- No shared-record/protocol changes and no main-branch push. Continued the exact existing lane head 384d37995 through GitHub commits because the managed VM remained unusable.
 
 # CONTRACT-CHANGE
 none
 
 # OPEN ISSUES
-- Managed runtime never became usable. The exact local discovery commands,
-  session-end live fixture census and optional pip/CPU-model run remain blocked.
-  The CI evidence above is the executed stdlib verification, not a local run.
-- HF hooks have source-level verification against transformers v4.57.6 and six
-  optional integration tests, but no observed model execution in this seat.
-- Draft PR #520 remains a build handoff. Independent twin comparison, executing
-  review, current-main integration and merge gates remain lead-owned. The
-  separate gate-ledger workflow intentionally has NOT-RUN review rows; no merge
-  or final-head review approval is claimed.
-- AUC intervals resample fixed out-of-fold scores. The comparison is specific to
-  this fixed classifier and four metadata features; it does not establish
-  independence from every possible function of counts.
-- Compiled/fused/distributed HF capture needs separate coverage validation.
-  vLLM and llama.cpp export paths are documented, as requested, rather than built.
-- Host synchronization from hooks must not be interpreted as Stage B power evidence.
+- The managed environment stayed offline in pending/starting. exec_command returned "No usable execution environment is available." Local checkout/fetch, literal .review1 script creation/execution, the exact local discovery commands, and optional-package installation/execution could not run. CI execution and in-scope reviewer-case ports are distinguished above; no local or HF execution is claimed.
+- Effect percentile intervals with 12--17 groups retain roughly 91% empirical zero coverage despite nominal 95%; documented rather than silently relabelled.
+- The AUC comparison is for this learner and these four count features, not universal conditional independence from every function of counts.
+- vLLM and llama.cpp capture are documented, as requested. Compiled/fused/distributed HF capture and Stage B power visibility need separate validation.
+- Recorder host synchronization is instrumentation overhead, not Stage B evidence.
+- Draft PR #520 remains a build handoff. The separate gate-ledger run 39715696010 failed because rows 1--5 are NOT-RUN; this is not merge readiness. Lead-owned delta review and main integration are not claimed.
 
 # NEEDS_RULING
 none
 
 # FIX LOG
-- B1: fixed in 6ad8e1bc76f5757c1ed1b5eb6d1e22e02f5b820e; regressions in 10a8dea6be7c213e130bbdee1c87c45e2ee91b9b (execution pending).
-- m2: fixed in 030f99db854988532becceb3f7526c2e4aa9d2c4 (execution pending).
-- m3: fixed in 3db851fa49c39e2a522925dc8b0690efba66fd61 and addbcd7ba519ea0864757130e850262995e53d0e (timings/twin pending).
+- B1: fixed in 6ad8e1bc76f5757c1ed1b5eb6d1e22e02f5b820e.
+- M1: fixed in 210aa1336095e1307cea93123bbf5781b97db09b.
+- m1: fixed in e4463cbaee04f67d8e704fdc0156ac36ae9ad7d1.
+- m2: fixed in 030f99db854988532becceb3f7526c2e4aa9d2c4.
+- m3: fixed in 3db851fa49c39e2a522925dc8b0690efba66fd61; addbcd7ba519ea0864757130e850262995e53d0e.
