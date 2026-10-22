@@ -49,6 +49,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from joulewise.authentication_io import read_authentication_input
+from joulewise.desk_compress import is_file as desk_is_file
 from joulewise.bundle_read import (
     BundleReader,
     BundleReadError,
@@ -1200,11 +1202,15 @@ def _verify_instrument_calibration(
             return None
         try:
             root = reader.path.resolve(strict=True)
-            candidate = (base / Path(*pure.parts)).resolve(strict=True)
+            candidate = (base / Path(*pure.parts)).resolve(strict=False)
             candidate.relative_to(root)
+            # A compressed sibling must meet the same containment check as
+            # the original, including rejection of symlinks outside the bundle.
+            physical = candidate if candidate.exists() else candidate.with_name(f"{candidate.name}.zst")
+            physical.resolve(strict=True).relative_to(root)
         except (OSError, ValueError):
             return None
-        return candidate if candidate.is_file() else None
+        return candidate if desk_is_file(candidate) else None
 
     # The controller records the calibration custody manifest, but claim-time
     # verification must independently authenticate it and every attached
@@ -1226,7 +1232,8 @@ def _verify_instrument_calibration(
         ):
             return None, "instrument_calibration_invalid"
         try:
-            manifest_raw = manifest_file.read_bytes()
+            manifest_raw = read_authentication_input(
+                manifest_file, grammar="json", label="instrument validation manifest")
             manifest = json.loads(manifest_raw)
         except (OSError, UnicodeDecodeError, ValueError):
             return None, "instrument_calibration_invalid"
@@ -1249,7 +1256,8 @@ def _verify_instrument_calibration(
             ):
                 return None, "instrument_calibration_invalid"
             try:
-                member_raw = member.read_bytes()
+                member_raw = read_authentication_input(
+                    member, grammar="raw", label="instrument validation member")
             except OSError:
                 return None, "instrument_calibration_invalid"
             if hashlib.sha256(member_raw).hexdigest() != expected_sha256:
@@ -1289,10 +1297,11 @@ def _verify_instrument_calibration(
         if artifact_path.startswith("/") or ".." in Path(artifact_path).parts:
             return None, "instrument_calibration_artifact_path_unsafe"
         artifact_file = reader.path / artifact_path
-        if not artifact_file.is_file():
+        if not desk_is_file(artifact_file):
             return None, "instrument_calibration_artifact_missing"
     try:
-        raw = artifact_file.read_bytes()
+        raw = read_authentication_input(
+            artifact_file, grammar="json", label="instrument calibration artifact")
     except OSError:
         return None, "instrument_calibration_artifact_unreadable"
     if hashlib.sha256(raw).hexdigest() != artifact_sha256:
@@ -1478,7 +1487,8 @@ def _verify_instrument_calibration(
     for relative in ("raw/powermetrics.plist", "events.jsonl"):
         referenced = artifact_dir / relative
         try:
-            referenced_raw = referenced.read_bytes()
+            referenced_raw = read_authentication_input(
+                referenced, grammar="raw", label="instrument calibration primary bytes")
         except OSError:
             return None, "instrument_calibration_invalid"
         if hashlib.sha256(referenced_raw).hexdigest() != artifact_hashes[relative]:
@@ -1780,7 +1790,7 @@ def _derive_anchor_context(
     except (KeyError, TypeError, ValueError):
         return _unresolved_anchor_context("clock_stamps_malformed")
     raw_path = reader.path / "raw" / RAW_POWERMETRICS_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return _unresolved_anchor_context("raw_capture_unavailable")
     # Imported lazily so the pure reducer only pays for the adapter parser on
     # the powermetrics path (and to keep the adapter package optional in
@@ -1791,7 +1801,8 @@ def _derive_anchor_context(
     )
 
     try:
-        raw_records = parse_powermetrics_records(raw_path.read_bytes())
+        raw_records = parse_powermetrics_records(read_authentication_input(
+            raw_path, grammar="raw", label=f"bundle {reader.path.name} clock anchor raw capture"))
     except (OSError, ValueError):
         return _unresolved_anchor_context("raw_capture_unparseable")
     try:
@@ -2754,7 +2765,7 @@ def _resolve_reducer_version(
 
     explicitly_requested = requested is not None
     summary = reader.raw_summary()
-    summary_exists = (reader.path / "summary_metrics.json").is_file()
+    summary_exists = desk_is_file(reader.path / "summary_metrics.json")
     recorded: Any = None
     if isinstance(summary, dict):
         provenance = summary.get("summary_provenance")

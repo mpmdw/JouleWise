@@ -96,18 +96,6 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     # bytes' integrity is the thing under repair.
     "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:4614:os.fdopen",
 }
-ISSUED_REDUCE_SHA256 = (
-    "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
-)
-ISSUED_REDUCE_DIRECT_READS = (
-    "_derive_anchor_context:1794:read_bytes",
-    "_verify_instrument_calibration:1229:read_bytes",
-    "_verify_instrument_calibration:1252:read_bytes",
-    "_verify_instrument_calibration:1295:read_bytes",
-    "_verify_instrument_calibration:1481:read_bytes",
-)
-
-
 class V2AuthenticationReadSessionTests(unittest.TestCase):
     def test_registration_is_complete_before_bytes_are_returned(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -384,10 +372,12 @@ class V2AuthenticationReadSessionTests(unittest.TestCase):
 
 
 class AuthenticationSurfaceGuardTests(unittest.TestCase):
-    def test_issued_reducer_sha_and_five_direct_reads_are_characterized(self) -> None:
+    def test_reducer_raw_reads_use_the_authentication_seam(self) -> None:
         path = REPO_ROOT / "joulewise" / "reduce.py"
         raw = path.read_bytes()
-        self.assertEqual(hashlib.sha256(raw).hexdigest(), ISSUED_REDUCE_SHA256)
+        # F4 routes the five formerly hash-exempt direct reads through the
+        # authentication seam. Require zero bypasses instead of repinning an
+        # exception to this implementation's new source digest.
         self.assertEqual(
             direct_read_violations(
                 raw.decode("utf-8"),
@@ -396,7 +386,7 @@ class AuthenticationSurfaceGuardTests(unittest.TestCase):
                     "_derive_anchor_context",
                 },
             ),
-            ISSUED_REDUCE_DIRECT_READS,
+            (),
         )
 
     def test_marked_v2_surface_has_no_direct_readable_io(self) -> None:
@@ -411,13 +401,6 @@ class AuthenticationSurfaceGuardTests(unittest.TestCase):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             } - NON_AUTHENTICATION_WRITERS
             direct = direct_read_violations(source, marked_functions=names)
-            source_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
-            if (relative, source_sha256) == (
-                "joulewise/reduce.py",
-                ISSUED_REDUCE_SHA256,
-            ):
-                self.assertEqual(direct, ISSUED_REDUCE_DIRECT_READS)
-                continue
             for item in direct:
                 finding = f"{relative}:{item}"
                 if finding in CLASSIFIED_NON_AUTHENTICATION_READS:

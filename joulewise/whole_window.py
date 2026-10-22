@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from joulewise.desk_compress import is_file as desk_is_file
 from joulewise.tolerances import CALIBRATION_TIME_ABS_TOL_S, NEG8_ENERGY_ABS_TOL_J
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -2760,7 +2761,7 @@ def ordinary_present_bundle_paths(runs_root: Path, bundle_id: str) -> list[Path]
         if path.name == bundle_id:
             result.append(path)
             continue
-        if not (path / "summary_metrics.json").is_file():
+        if not desk_is_file(path / "summary_metrics.json"):
             continue
         config = _read_json_object(path / "config.json")
         run_id = config.get("run_id") if isinstance(config, Mapping) else None

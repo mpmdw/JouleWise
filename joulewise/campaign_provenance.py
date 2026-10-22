@@ -1054,7 +1054,11 @@ def load_authenticated_campaign_catalog(
     if not manifest_dir.is_dir():
         return []
     catalog: list[AuthenticatedCampaignManifest] = []
-    for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
+    # Enumerate logical plain paths in both storage forms. Authentication
+    # binds the decompressed bytes to the same writer-minted path and digest.
+    paths = {path.with_suffix("") if path.suffix == ".zst" else path
+             for pattern in ("*.json", "*.json.zst") for path in manifest_dir.glob(pattern)}
+    for path in sorted(paths, key=lambda item: item.name):
         record = load_campaign_provenance_manifest(path)
         if record is None:
             return None

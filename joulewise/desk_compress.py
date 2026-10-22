@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import errno
 import hashlib
 import json
@@ -47,22 +48,52 @@ def _decompressed_hash(path: Path) -> str:
         return digest
 
 
-def read_bytes(path: Path) -> bytes:
-    """Read a plain file, or its compressed sibling when the plain file is absent."""
+@contextmanager
+def open_bytes(path: Path):
+    """Stream a logical plain file, falling back to its .zst sibling.
+
+    Consume the stream to EOF so the decompressor's exit status is checked.
+    The process is also reaped when a consumer fails before reaching EOF.
+    """
     path = Path(path)
     if path.exists():
-        return path.read_bytes()
+        with path.open("rb") as stream:
+            yield stream
+        return
     compressed = Path(str(path) + ".zst")
     if not compressed.exists():
         raise FileNotFoundError(errno.ENOENT, "file not found", str(compressed))
     try:
-        return subprocess.run([zstd_path(), "-d", "-q", "-c", str(compressed)],
-                              check=True, stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL).stdout
+        process = subprocess.Popen([zstd_path(), "-d", "-q", "-c", str(compressed)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as exc:
         raise OSError(exc.errno, "zstd_unavailable", str(compressed)) from None
-    except subprocess.CalledProcessError:
-        raise OSError(errno.EIO, "decompression_failed", str(compressed)) from None
+    with process:
+        try:
+            yield process.stdout
+            if process.wait() != 0:
+                raise OSError(errno.EIO, "decompression_failed", str(compressed))
+        finally:
+            if process.poll() is None:
+                process.kill()
+
+
+def read_bytes(path: Path) -> bytes:
+    """Read a plain file, or its compressed sibling when the plain file is absent."""
+    with open_bytes(path) as stream:
+        return stream.read()
+
+
+def is_file(path: Path) -> bool:
+    """Test the same logical file as read_bytes; an existing plain path wins."""
+    path = Path(path)
+    return path.is_file() if path.exists() else Path(str(path) + ".zst").is_file()
+
+
+def exists(path: Path) -> bool:
+    """Logical counterpart of Path.exists, including a .zst sibling."""
+    path = Path(path)
+    return path.exists() or Path(str(path) + ".zst").exists()
 
 
 def _free(path: Path) -> int:
@@ -101,9 +132,10 @@ def _protected(path: Path, protected_roots: list[Path]) -> bool:
     parts = real.parts
     if any(_under(real, root) for root in protected_roots):
         return True
-    if any(part in parts for part in ("instrument_validation", "derived", "withheld")):
+    if any(part in parts for part in (".git", "hazards", "instrument_validation", "derived", "withheld")):
         return True
-    if real.name in ("calibration_observation_ledger.jsonl", "calibration_ledger_head.json", "harvest.json"):
+    if real.name in ("campaign_log.jsonl", "calibration_observation_ledger.jsonl",
+                     "calibration_ledger_head.json", "harvest.json"):
         return True
     for index, part in enumerate(parts[:-1]):
         if part == "sources" and parts[index + 1] in ("ledger", "inputs", "repo", "SHA256SUMS"):

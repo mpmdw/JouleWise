@@ -24,6 +24,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO, Literal, Mapping, TextIO
 
+from joulewise import desk_compress
 
 AuthenticationGrammar = Literal["json", "jsonl", "raw"]
 V2_AUTHENTICATION_INPUT_CHANGED = "v2_authentication_input_changed"
@@ -411,8 +412,11 @@ class V2AuthenticationReadSession:
         normalized = str(Path(path).resolve(strict=False))
         effective = _forced_grammar(normalized, grammar)
         with self._lock:
-            with builtins.open(path, "rb") as handle:
-                raw = handle.read()
+            if Path(path).exists():
+                with builtins.open(path, "rb") as handle:
+                    raw = handle.read()
+            else:
+                raw = desk_compress.read_bytes(Path(path))
             _parse_strict(
                 raw,
                 effective,
@@ -529,7 +533,11 @@ class V2AuthenticationReadSession:
             ).hexdigest()
         with self._lock:
             digest = hashlib.sha256()
-            with builtins.open(path, "rb") as handle:
+            # Keep ordinary plain-file I/O unchanged. The registry identity
+            # and grammar above always refer to the logical, uncompressed path.
+            stream = (builtins.open(path, "rb") if Path(path).exists()
+                      else desk_compress.open_bytes(Path(path)))
+            with stream as handle:
                 while True:
                     chunk = handle.read(chunk_size)
                     if not chunk:
@@ -552,7 +560,7 @@ def read_authentication_input(
 ) -> bytes:
     session = _ACTIVE_SESSION.get()
     if session is None:
-        return Path(path).read_bytes()
+        return desk_compress.read_bytes(Path(path))
     return session.read(path, grammar=grammar, label=label)
 
 
@@ -571,7 +579,11 @@ def read_authentication_text(
             kwargs["encoding"] = encoding
         if errors is not None:
             kwargs["errors"] = errors
-        return Path(path).read_text(**kwargs)
+        if Path(path).exists():
+            return Path(path).read_text(**kwargs)
+        with open_authentication_input(path, grammar=grammar, label=label,
+                                       encoding=encoding, errors=errors) as handle:
+            return handle.read()
     raw = session.read(path, grammar=grammar, label=label)
     return raw.decode(encoding or "utf-8", errors or "strict")
 
@@ -591,18 +603,19 @@ def open_authentication_input(
     if any(flag in mode for flag in ("w", "a", "x", "+")):
         raise ValueError("open_authentication_input only supports read modes")
     session = _ACTIVE_SESSION.get()
-    if session is None:
+    if session is None and Path(path).exists():
         kwargs: dict[str, str | None] = {}
         if "b" not in mode:
             kwargs.update(encoding=encoding, errors=errors, newline=newline)
         return Path(path).open(mode, **kwargs)
-    raw = session.read(path, grammar=grammar, label=label)
+    raw = (desk_compress.read_bytes(Path(path)) if session is None
+           else session.read(path, grammar=grammar, label=label))
     buffer = io.BytesIO(raw)
     if "b" in mode:
         return buffer
     return io.TextIOWrapper(
         buffer,
-        encoding=encoding or "utf-8",
+        encoding=encoding if session is None else (encoding or "utf-8"),
         errors=errors or "strict",
         newline=newline,
     )
@@ -646,7 +659,9 @@ def sha256_authentication_input(
     session = _ACTIVE_SESSION.get()
     if session is None:
         digest = hashlib.sha256()
-        with Path(path).open("rb") as handle:
+        stream = (Path(path).open("rb") if Path(path).exists()
+                  else desk_compress.open_bytes(Path(path)))
+        with stream as handle:
             while True:
                 chunk = handle.read(1024 * 1024)
                 if not chunk:

@@ -42,6 +42,29 @@ class DeskCompressFixture(unittest.TestCase):
 
 @unittest.skipUnless(Path(ZSTD).is_file(), "zstd CLI required")
 class DeskCompressTests(DeskCompressFixture):
+    def test_git_hazards_and_campaign_logs_stay_plain_in_every_root(self):
+        protected = []
+        raw = []
+        for root in (self.runs, self.custody, self.archive / "sources"):
+            for relative in ("clone/.git/objects/pack/pack-fixture.pack", "worktree/.git",
+                             "nested/hazards/monitor/battery.jsonl",
+                             "hazards/meter/stream-001.jsonl", "nested/campaign_log.jsonl"):
+                protected.append(self.put(root / relative))
+            raw.append(self.put(root / "run/raw/powermetrics.plist"))
+        before = {path: path.read_bytes() for path in protected + raw}
+        rc, summary = self.compress()
+        self.assertEqual((rc, summary["files"]), (0, len(raw)))
+        self.assertGreaterEqual(summary["skipped_protected"], len(protected))
+        for path in protected:
+            self.assertEqual(path.read_bytes(), before[path])
+            self.assertFalse(Path(str(path) + ".zst").exists())
+        for path in raw:
+            self.assertFalse(path.exists())
+            self.assertEqual(desk.read_bytes(path), before[path])
+        # Protected files are counted in the summary, omitted from the journal:
+        # only successful transformations need a restorable custody record.
+        self.assertEqual({row["path"] for row in desk.status(self.records)}, {str(path) for path in raw})
+
     def test_round_trip_modes_times_reader_and_harvest_inventory(self):
         files = [self.put(self.runs / "random", random.Random(5).randbytes(1048576)),
                  self.put(self.runs / "repeat"), self.put(self.runs / "empty", b""),

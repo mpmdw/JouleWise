@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from joulewise.desk_compress import is_file as desk_is_file, read_bytes
 from joulewise.whole_window import neg8_count_adjusted_bound
 
 FAMILIES = ("gross", "idle_subtracted")
@@ -160,10 +161,10 @@ def archive_energy_of(archive_root: Path | str, bundle_roots: tuple[Path, ...] =
                       (root / "sources/claim-runs", root / "sources/bound-runs", *bundle_roots)]
         bundle = next((path for path in candidates if path.is_dir()), candidates[0])
         summary = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
-        if not summary.is_file():
+        if not desk_is_file(summary):
             summary = bundle / "summary_metrics.json"
         if helper is not None:
-            gross, idle = helper(json.loads(summary.read_text(encoding="utf-8")))
+            gross, idle = helper(json.loads(read_bytes(summary).decode("utf-8")))
             reader = "whole_window._neg8_writer_reference_energy"
         else:
             reader = "whole_window._reference_energy_evidence"

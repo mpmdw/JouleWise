@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from joulewise.desk_compress import exists as desk_exists, is_file as desk_is_file
 from joulewise.authentication_io import (
     open_authentication_input,
     read_authentication_input,
@@ -290,7 +291,7 @@ class BundleReader:
         """
         if "events" not in self._cache:
             path = self._path / "events.jsonl"
-            if not path.is_file():
+            if not desk_is_file(path):
                 self._cache["events"] = []
                 return self._cache["events"]
             events: list[dict[str, Any]] = []
@@ -334,7 +335,7 @@ class BundleReader:
         """Raw ``power_trace.csv`` rows (a missing file is an empty list)."""
         if "trace_rows" not in self._cache:
             path = self._path / "power_trace.csv"
-            if not path.is_file():
+            if not desk_is_file(path):
                 self._cache["trace_rows"] = []
                 return self._cache["trace_rows"]
             try:
@@ -389,7 +390,7 @@ class BundleReader:
         key = f"raw-bytes:{name}"
         if key not in self._cache:
             path = self._path / "raw" / name
-            if not path.is_file():
+            if not desk_is_file(path):
                 return None
             try:
                 self._cache[key] = read_authentication_input(
@@ -612,7 +613,7 @@ class BundleReader:
         that were present in the historical artifact.
         """
         if "suite_manifest" not in self._cache:
-            if not (self._path / "suite_manifest.json").is_file():
+            if not desk_is_file(self._path / "suite_manifest.json"):
                 self._cache["suite_manifest"] = None
             else:
                 raw = self._strict_json("suite_manifest.json")
@@ -763,7 +764,7 @@ class BundleReader:
 
         problems: list[str] = []
 
-        missing = [name for name in _REQUIRED_ARTIFACTS if not (path / name).is_file()]
+        missing = [name for name in _REQUIRED_ARTIFACTS if not desk_is_file(path / name)]
         for name in missing:
             problems.append(f"missing required artifact: {name}")
 
@@ -1404,7 +1405,7 @@ def axi_v2_validation_problems(
     response_mirror = reader.path / "outputs" / "response.txt"
     tokens_mirror = reader.path / "outputs" / "tokens.jsonl"
     if config.batch_policy.requested_batch_size > 1 and (
-        response_mirror.exists() or tokens_mirror.exists()
+        desk_exists(response_mirror) or desk_exists(tokens_mirror)
     ):
         problems.append(
             _axi_problem(
@@ -1413,7 +1414,7 @@ def axi_v2_validation_problems(
             )
         )
     elif config.batch_policy.requested_batch_size == 1:
-        if response_mirror.exists():
+        if desk_exists(response_mirror):
             expected_text = (
                 request_rows[0].get("response_text")
                 if len(request_rows) == 1
@@ -1443,7 +1444,7 @@ def axi_v2_validation_problems(
                             "outputs/response.txt compatibility mirror differs from requests.jsonl",
                         )
                     )
-        if tokens_mirror.exists():
+        if desk_exists(tokens_mirror):
             try:
                 mirror_rows = reader._strict_jsonl_objects(
                     "outputs/tokens.jsonl"
@@ -1941,7 +1942,7 @@ def _paired_group_windows(
 
 
 def _has_suite_contract(path: Path, raw_config: Any) -> bool:
-    if (path / "suite_manifest.json").is_file():
+    if desk_is_file(path / "suite_manifest.json"):
         return True
     if isinstance(raw_config, dict):
         workload = raw_config.get("workload_profile")
@@ -1956,7 +1957,7 @@ def _suite_problems(
     summary: Any,
 ) -> list[str]:
     problems: list[str] = []
-    artifact_exists = (reader.path / "suite_manifest.json").is_file()
+    artifact_exists = desk_is_file(reader.path / "suite_manifest.json")
     raw_status = summary.get("status") if isinstance(summary, dict) else None
     status_is_success = raw_status == RunStatus.SUCCEEDED.value
     events: list[dict[str, Any]] | None = None
@@ -2597,7 +2598,7 @@ def _status_count_key_problems(
 
 def _suite_item_records(path: Path) -> tuple[list[dict[str, Any]] | None, list[str]]:
     suite_items_path = path / "outputs" / "suite_items.jsonl"
-    if not suite_items_path.is_file():
+    if not desk_is_file(suite_items_path):
         return None, ["outputs/suite_items.jsonl is missing for suite bundle"]
     try:
         text = read_authentication_text(
@@ -2960,7 +2961,7 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
     trace_path = path / "power_trace.csv"
     status_value = summary.get("status") if isinstance(summary, dict) else None
     succeeded = status_value == RunStatus.SUCCEEDED.value
-    if not trace_path.is_file():
+    if not desk_is_file(trace_path):
         if succeeded:
             return ["power_trace.csv is required when status is succeeded but is missing"]
         return []

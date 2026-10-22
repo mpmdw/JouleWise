@@ -54,6 +54,7 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 from __future__ import annotations
 
 from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
+from joulewise.desk_compress import read_bytes
 
 import concurrent.futures
 import dataclasses
@@ -2446,7 +2447,7 @@ def parse_monitor_line(module: str, value: Any) -> Reading | None:
 def read_monitor_journal(path: Path, module: str) -> tuple[list[Reading], int]:
     """Every observation of one journal in ``finished`` order, and the malformed-line count."""
     readings, malformed = [], 0
-    for line in path.read_bytes().splitlines():
+    for line in read_bytes(path).splitlines():
         if not line.strip():
             continue
         try:
@@ -6070,7 +6071,7 @@ class _Harvest:
         journals: dict[str, list[Reading]] = {}
         for module in MONITOR_MODULES:
             path = directory / f"{module}.jsonl"
-            if not path.is_file():
+            if not path.is_file() and not Path(str(path) + ".zst").is_file():
                 self.emit("records.monitor_journal_absent", level="window", collector="monitor",
                           observed={"module": module})
                 self.hazards.setdefault(module, {})["continuous"] = {"phase": "continuous", "journal": None}
@@ -6082,7 +6083,7 @@ class _Harvest:
                           observed={"module": module, "lines": malformed})
             self.hazards.setdefault(module, {})["continuous"] = {
                 "phase": "continuous", "journal": {
-                    "path": f"{module}.jsonl", "sha256": sha256_file(path), "readings": len(readings),
+                    "path": f"{module}.jsonl", "sha256": sha256_bytes(read_bytes(path)), "readings": len(readings),
                     "failed_probes": sum(reading.status == "error" for reading in readings), "malformed": malformed}}
         self._journals = journals
         roster = {member["run_id"]: member for member in self.roster["members"]}
@@ -6296,7 +6297,12 @@ class _Harvest:
         """
         from joulewise.external import km003c_parse as kp
         directory = self.inputs.custody_root / METER_DIRECTORY
-        paths = sorted(directory.glob("stream-*.jsonl")) if directory.is_dir() else []
+        # Use logical plain names for discovery and output, including old
+        # archives compressed before hazards/ became protected. A plain
+        # sibling takes precedence in read_bytes, with no duplicate stream.
+        paths = sorted({path.with_suffix("") if path.suffix == ".zst" else path
+                        for pattern in ("stream-*.jsonl", "stream-*.jsonl.zst")
+                        for path in directory.glob(pattern)}) if directory.is_dir() else []
         if not paths:
             self.emit("meter.absent", level="window", collector="meter",
                       observed={"status": None, "reason": "no meter stream file", "streams": 0})

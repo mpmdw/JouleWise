@@ -22,6 +22,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from joulewise.desk_compress import is_file as desk_is_file
 from joulewise.authentication_io import (
     active_v2_authentication_session,
     read_authentication_input,
@@ -975,7 +976,7 @@ def _strict_suite_prompt_rollup(
     reader: BundleReader,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     path = reader.path / "outputs" / "suite_items.jsonl"
-    if not path.is_file():
+    if not desk_is_file(path):
         return None, ["strict: outputs/suite_items.jsonl is missing for suite rollup"]
     try:
         text = read_authentication_text(
@@ -1440,7 +1441,7 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         return problems
     pre_path = reader.path / "raw" / RAW_IDLE_NAME
     post_path = reader.path / "raw" / RAW_IDLE_POST_NAME
-    if post_path.is_file() and pre_path.is_file():
+    if desk_is_file(post_path) and desk_is_file(pre_path):
         try:
             pre_data = read_authentication_input(
                 pre_path,
@@ -1565,7 +1566,7 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
 
 def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
@@ -1663,7 +1664,7 @@ def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
         return []
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     rich_path = reader.path / RICH_TELEMETRY_NAME
-    if not rich_path.is_file():
+    if not desk_is_file(rich_path):
         device = metadata.get("device")
         if isinstance(device, dict) and device.get("rich_telemetry_error"):
             return []
@@ -1709,7 +1710,7 @@ def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
 
 def _verify_nvidia_smi_raw_to_trace(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / NVIDIA_SMI_RAW_SAMPLES_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return [
             "strict: raw-to-trace: nvidia_smi missing "
             f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}"
