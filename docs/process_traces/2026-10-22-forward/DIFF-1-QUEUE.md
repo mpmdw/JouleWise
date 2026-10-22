@@ -18,7 +18,7 @@ numbers below are for that file at origin/main `bfab7c950`, re-checked on 2026-1
 
 | Change | Clause | Governing source | Expected size on DIFFICULTY's models |
 |---|---|---|---|
-| 1. `wall` adds the battery term | §2, line 53 (and the adapter paragraph, line 55; §12) | `BAT-RULING.md` §6 (Q5) | 0 J per attempt on H for all three models at the registered weights |
+| 1. `wall` adds the battery term | §2, line 53 (and the adapter paragraph, line 55; §12) | `BAT-RULING.md` §6 (Q5) | 0 J per attempt on H for all three models at the registered weights. H read 0 J on every dense model up to 32B. The three models' largest 20 ms meter samples were 14.8 to 23.1 W below the adapter's ceiling of about 135 W, where H's assists came |
 | 2. No idle quantity visible before release | §9 "Blinding", line 384 (and §12) | 4b350f47 record | 0 J moved. It closes a path that reads the hidden configuration factor to about 0.007 in ln (meter idle), against the factor's own spread of 0.025 |
 
 ## Change 1: the battery term in `wall`
@@ -32,12 +32,13 @@ Lines that stay as they are: 214 (flag table: `battery_assist` is used and count
 decision family) and 371 (`wall` is printed as a labelled line).
 
 **Governing source.** `docs/process_traces/2026-10-22-forward/BAT-RULING.md` §6 (Q5), on
-`lane/2026-10-22-battery-assist-audit` (draft PR #536, not yet on main). §6 was ruled at `e6595ae13` and is
-unchanged at the branch head `fc7548a17`, which adds the lead's executed re-run of the worked example. That ruling
-came from two blind seats (Opus 5.5 and Sol 6.1 xhigh) and a cold Fable 5.1 judge, and all three agreed that
-DIFFICULTY's `wall` takes the correction. The evidence is `BAT-1-BATTERY-ASSIST.md` on the same branch (first at
-`7e59b54ab`), in its "Boundary by boundary" table, DIFFICULTY row; at `fc7548a17` that row reads "Ruled, queued,
-not built" and points to this file. The ruling's terms:
+`lane/2026-10-22-battery-assist-audit` (draft PR #536, not yet on main). §6 was ruled at `e6595ae13`. It is
+unchanged at `fc7548a17`, which adds the lead's executed re-run of the worked example, and at the branch head
+`367a0fa6d`, which changes only BAT-1's record (checked by diff). That ruling came from two blind seats (Opus 5.5
+and Sol 6.1 xhigh) and a cold Fable 5.1 judge, and all three agreed that DIFFICULTY's `wall` takes the correction.
+The evidence is `BAT-1-BATTERY-ASSIST.md` on the same branch (first at `7e59b54ab`), in its "Boundary by boundary"
+table, DIFFICULTY row. At `367a0fa6d` that row reads "Ruled, queued, not built" and points to this file at
+`c400061a3`. The ruling's terms:
 
 - `wall` energy is the meter energy plus E_b over the whole request, gross and signed.
 - It uses block 5's request-level rule: the two terms of `km003c_parse.delta_machine_energy`, without its baseline
@@ -99,32 +100,51 @@ configs). Each model had 5 full-length runs, each with a 2,048-token prompt and 
 |---|---|---|---|
 | Battery term per request, 0.2 s stream path / 1 s monitor path | 0.000 / 0.000 J (5 runs) | 0.000 / 0.000 J | 0.000 / 0.000 J |
 | Negative battery reads in the stage (1 s path) | 0 of 694 | 0 of 706 | 0 of 741 |
-| Peak SMC DC input in the stage | 89.7 W | 106.2 W | 109.0 W |
+| Largest 20 ms meter sample, member spans | 111.9 W | 114.9 W | 120.2 W |
+| Peak SMC DC input in the stage (1 s readings; hides short peaks) | 89.7 W | 106.2 W | 109.0 W |
 | Meter power over decode | 75.7 to 76.1 W | 84.7 to 85.0 W | 92.2 to 93.7 W |
 | Rails power over decode | 25.7 to 26.0 W | 28.8 to 29.0 W | 31.1 to 31.8 W |
 
+A member span runs from the member's preparation to its post-request sentinel, so it includes the warm-up generation
+before each measured run.
+
 What these numbers say:
 
-- **Where H's discharges happened.** The adapter delivered at most 134.9 W (meter, 1 s mean) and 130.8 W (SMC). H
-  read discharge only in stages whose peak input reached at least 108.7 W. The lowest such stage was
-  pre-calibration: it peaked at 108.7 W, its readings never went below −20 mA, and it discharged 8.9 J in all (BAT-1
-  stage table).
-- **DIFFICULTY's load is lighter where H's assists began.** H's 70B and 122B assists began in prefill (BAT-1;
-  BAT-2 ruling §4). DIFFICULTY's prompts are 33 to 454 tokens in the pilot, against H's 2,048, so its prefill is a
-  fraction of H's. Decode is DIFFICULTY's long phase: in the pilot, the median answer was 457 to 474 generated
-  tokens with thinking off (100 answers per model; each problem's run at the highest cap it was given) and 2,916 to
-  2,959 with thinking on for 4B and 8B, with caps of 4,096 and 16,384. On H, decode ran at the meter powers above,
-  at least 15 W below 108.7 W.
+- **What predicts a discharge.** BAT-1's third dispatch (`367a0fa6d`, `out/peaks_by_model.txt`) found that the
+  battery helps when the meter's 20 ms samples reach the adapter's ceiling of about 135 W. Every H run with a sample
+  at or above 135 W drew on the battery: 18 of 20 70B runs and 7 of 9 122B runs. The rest of those runs are the
+  short test-7 runs. One run below 135 W drew on it: a Qwen3-Next-80B run took 0.14 J, with a largest sample of
+  128.8 W. The SMC's DC input is read once a second and hides these short peaks: it read at most 130.8 W in the 70B
+  stages. Its row in the table is kept for reference and does not predict assist. This replaces the second dispatch's
+  argument from SMC stage peaks (8B's 109.0 W against 108.7 W).
+- **Dense models up to 32B took nothing.** Largest 20 ms sample in the member spans, 5 runs each: Qwen3-1.7B
+  111.9 W, Qwen3-4B 114.9 W, Qwen3-8B 120.2 W, Qwen3-14B 127.2 W, Qwen3-8B-8bit 127.6 W and Qwen3-32B 134.8 W. All 30
+  runs took 0 J, warm-up included, and none had a sample at or above 135 W. The mixture-of-experts Qwen3-30B-A3B also
+  took 0 J (largest sample 131.2 W). DIFFICULTY's three models peaked 14.8 to 23.1 W below 135 W, and 8.6 to 16.9 W
+  below the lowest peak with any assist (128.8 W).
+- **DIFFICULTY's prompts are shorter.** H's 70B and 122B assists began in prefill (BAT-1; BAT-2 ruling §4).
+  DIFFICULTY's prompts are 33 to 454 tokens in the pilot, against H's 2,048. A shorter prompt shortens the time
+  spent at prefill power but should not raise the peak. Decode is DIFFICULTY's long phase: in the pilot, the median
+  answer was 457 to 474 generated tokens with thinking off (100 answers per model; each problem's run at the highest
+  cap it was given) and 2,916 to 2,959 with thinking on for 4B and 8B, with caps of 4,096 and 16,384. On H, mean
+  decode power at the meter was 41 to 59 W below 135 W.
 - **What H did not cover.** H's decodes held at most 2,560 tokens of context (2,048 + 512). A thinking-on answer
   can run to 16,384, and decode power at that context was not measured.
 - **Expected term: 0 J per attempt** for all four measured configurations and the optional 8B thinking-on.
-- **Not a guarantee.** 8B's stage peak (109.0 W) is above the lowest peak at which H read a discharge (108.7 W).
-  A peak alone does not predict one: stages that peaked higher had no negative reading (Qwen3-32B 118.0 W,
-  Qwen3-8B-8bit 114.0 W). The 2026-10-06 probe also saw −5.3 A with 8B running beside a CPU burner (BAT-2 ruling
-  §6).
-- **Scale if a discharge did occur.** Where H's decodes did draw on the battery (all 7 full-length 122B runs), the
-  term was 0.063 to 0.129 % of the meter energy. Line 329 keeps `wall` out of the decision family, so no decision
-  moves by it.
+- **Not a guarantee.** Three things could change this:
+  - decode at thinking-on context lengths, as above;
+  - a process running beside an attempt: the 2026-10-06 probe saw −5.3 A with 8B running beside a CPU burner (BAT-2
+    ruling §6);
+  - a change of model.
+
+  Outside any model run, H's pre-calibration stage discharged 8.9 J, never below −20 mA (BAT-1). The term measures
+  the battery instead of assuming 0 J, so `wall` stays right in each case.
+- **Scale if a discharge did occur.** `wall` covers the whole request. Over that span, H's assists were 8.85 to
+  27.05 J per run on 70B (18 runs, 0.099 to 0.295 % of the meter's request energy) and 0.80 to 1.43 J on 122B
+  (7 runs, 0.060 to 0.106 %). These are 1 s path values from `h_battery_runs.csv`. On 122B almost all of it was drawn
+  in prefill. BAT-1 reads the 0.56 to 1.15 J recorded in its decode stretch as prefill discharge reported up to τ
+  late, because while writing tokens 122B drew about 80 W and never more than 92 W. Line 329 keeps `wall` out of the decision
+  family, so no decision moves by it.
 
 ## Change 2: the idle-power leak
 
@@ -210,9 +230,16 @@ Simulation (script below; 4,000 campaigns):
 
 - **No registered estimator hash changes.** `energy.csv` keeps its header, and the estimator and twin are
   unchanged. The changes are text, plus the behaviour of the unbuilt energy adapter and of the export.
-- **What the adapter build carries.** The battery term, reusing backlog item 9's BYTES code path
-  (`km003c_parse.Stream.battery_watts` and `integrate`); the `wall_battery.csv` side table; the battery column; and
-  the rule that idle columns go to the withheld store.
+- **What the adapter build carries.**
+  - The battery term. It reuses the two `km003c_parse` functions that BYTES's term calls: `Stream.battery_watts` and
+    `integrate`, on origin/main at lines 312 and 368.
+  - The `wall_battery.csv` side table and the battery column.
+  - The rule that idle columns go to the withheld store.
+- **BYTES's term is built.** It is BAT-3, `lane/2026-10-22-bytes-battery-term` at `ddcbafc4d`, not merged. On H it
+  gives the same battery term as BAT-1 in all 95 runs: the largest difference is 0.0 J
+  (`forward-20261021/BAT-1/out/bat3_crosscheck.txt`). Both sides call the same two functions, so this confirms
+  BAT-3's wiring, not the integration rule (BAT-1). BAT-3 integrates over BYTES's decode span and adds an edge term.
+  The DIFFICULTY adapter integrates over the whole request and adds no edge term (ruling §6).
 - **Tests.** Its synthetic worlds include a request with a battery burst of at least 1 J (the attribution limit, as
   BAT-2 ruling §12 sets for BYTES). This is claim-path code: an executing review and both cold passes.
 - **Draft header for the revision:** "Revision 2.4 (date, still before any DIFFICULTY energy). `wall` adds the
@@ -236,6 +263,25 @@ number in both tables and the simulation lines (exit 0). The stage table, the re
 4b350f47 record's lines, the twin's `read_table` and the `km003c_parse` and `b6` code cited above were re-checked at
 the anchors named. One correction came from the re-check: the pilot's thinking-off median answer length, first
 written as about 500 to 600 tokens, is 457 to 474.
+
+Third dispatch, 2026-10-22:
+
+- **Anchors re-checked.** The BAT-2 ruling branch had moved to `367a0fa6d`, and `BAT-RULING.md` is unchanged there
+  since `fc7548a17`. Main is still `bfab7c950`. The registration lines, the 4b350f47 record's lines and the
+  `km003c_parse` lines cited here were re-checked at that commit.
+- **First script below** (`diff1_numbers.py`). Re-run unchanged. Its output again matches both tables and the
+  simulation lines (exit 0).
+- **What changed and why.** BAT-1's third dispatch found that assist follows the meter's 20 ms peaks, not the SMC's
+  1 s reading. So change 1's expected-size argument was rewritten around the 20 ms peaks, and the scale of a
+  discharge is now given over the whole request, which is the span of `wall`.
+- **20 ms peaks.** Rows come from BAT-1's `scripts/peaks_by_model.py`, re-run here with byte-identical output:
+  `/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BAT-1/scripts/peaks_by_model.py
+  /Users/edr/night-bytes/h-20261021T185555Z <km003c_parse.py from origin/main>
+  /Users/edr/night-archive/forward-20261021/BAT-1/out/h_battery_runs.json`.
+- **Request-span shares.** Computed by the second script below, with BAT-1's `out/` directory as its argument.
+  Full-length runs are every run except test-7 r02 and r04. Its output:
+  `llama-70b: 18 runs, 8.85 to 27.05 J, 0.099 to 0.295 %` and `qwen35-122b: 7 runs, 0.80 to 1.43 J, 0.060 to
+  0.106 %`.
 
 ```python
 import csv, json, math, random, re, statistics as st, sys
@@ -274,4 +320,14 @@ for boundary, by in idle.items():
             hidden.append(math.log(fa / fb))
     print(f"{boundary} leak, n {n}: error mean {st.fmean(err):+.4f}, sd {st.stdev(err):.4f}, rms {math.sqrt(st.fmean(x * x for x in err)):.4f}")
 print(f"hidden ln(f_1.7B / f_4B): sd {st.stdev(hidden):.4f}, range {min(hidden):+.4f} to {max(hidden):+.4f}")
+```
+
+```python
+import csv, re, sys
+rows = list(csv.DictReader(open(sys.argv[1] + "/h_battery_runs.csv")))
+for m in ("llama-70b", "qwen35-122b"):
+    full = [r for r in rows if r["model"] == m and not re.search(r"test7-.*-r0[24]$", r["run_id"])]
+    j = [float(r["mon_request_j"]) for r in full]
+    s = [float(r["mon_request_j"]) / float(r["meter_request_j"]) * 100 for r in full]
+    print(f"{m}: {len(full)} runs, {min(j):.2f} to {max(j):.2f} J, {min(s):.3f} to {max(s):.3f} % of the meter's request energy")
 ```
