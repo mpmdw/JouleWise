@@ -5,6 +5,8 @@ it is practical for sub-ms traces without a quadratic dynamic-programming
 table. Its greedy splits can miss short balanced troughs; sensitivity must be
 reported by sensor/duration rather than presumed. Labels assume idle < decode
 < prefill and shorter prefill bursts, as in the synthetic timeline model.
+Read gaps widen boundary uncertainty. Held values are thinned by observed
+cadence; robust multiscale variance retains within-decode token modulation.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ class Segment:
     sample_interval_ns: int = 0
     averaging_window_ns: int = 0
     flags: tuple[str, ...] = ()
+    boundary_uncertainty_ns: int = 0
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ class ToolCallMatch:
     flags: tuple[str, ...] = ()
     matched_count: int = 0
     tolerance_ns: int = 0
+    indeterminate_candidates: tuple[Segment, ...] = ()
 
 
 def estimate_noise_sd(values: tuple[float, ...]) -> float:
@@ -49,7 +53,12 @@ def estimate_noise_sd(values: tuple[float, ...]) -> float:
     """
     if len(values) < 2:
         return 0.0
-    differences = [b - a for a, b in zip(values, values[1:])]
+    # Adjacent bit-identical repeats are held observations, not independent
+    # noise measurements. Any sensor can be polled faster than it converts.
+    distinct = [a for i, a in enumerate(values) if i == 0 or a != values[i - 1]]
+    if len(distinct) < 2:
+        return 0.0
+    differences = [b - a for a, b in zip(distinct, distinct[1:])]
     center = statistics.median(differences)
     mad = statistics.median(abs(x - center) for x in differences)
     return mad / (math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75))
@@ -82,9 +91,36 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
                         0.0, "unknown", trace.clock_domain, interval, window, tuple(flags))]
     if trace.averaging_window_ns is None:
         flags.append("averaging_window_unknown")
-    if any(b - a > interval for a, b in zip(trace.t_ns, trace.t_ns[1:])):
+    # A missing acquisition needs one whole extra nominal bin; ordinary
+    # sub-period scheduler jitter is not a lost sample.
+    gaps = [(a, b) for a, b in zip(trace.t_ns, trace.t_ns[1:]) if b - a >= 2 * interval]
+    if gaps:
         flags.append("sample_gaps")
-    sigma = estimate_noise_sd(trace.values) if noise_sd_w is None else noise_sd_w
+    # Infer held-register cadence only when changes are numerous enough to
+    # distinguish a conversion stream from a few real phase plateaus. The
+    # sqrt(n) count is the same local scale used for nuisance estimation;
+    # sparse step traces must retain their duration/sample likelihood weight.
+    changes = [i for i, value in enumerate(trace.values)
+               if i and value != trace.values[i - 1]]
+    change_times = [trace.t_ns[i] for i in changes]
+    observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
+    repeated = n - 1 - len(changes)
+    effective_interval = interval
+    if len(changes) >= math.isqrt(n) and observed_periods and repeated * 2 >= n - 1:
+        effective_interval = max(interval, round(statistics.median(observed_periods)))
+        flags.append("held_values_cadence_inferred")
+    # Thin by the observed cadence rather than removing entire constant
+    # plateaus. A 500 ms truly idle span still has 500/dt observations.
+    indices = list(range(n))
+    if effective_interval > interval:
+        indices = [0]
+        for i in range(1, n):
+            if trace.t_ns[i] - trace.t_ns[indices[-1]] >= effective_interval:
+                indices.append(i)
+    times = [trace.t_ns[i] for i in indices]
+    xs = tuple(trace.values[i] for i in indices)
+    n = len(xs)
+    sigma = estimate_noise_sd(xs) if noise_sd_w is None else noise_sd_w
     if noise_sd_w is None:
         flags.append("noise_estimated_from_differences")
     quantum = trace.resolution or 0.0
@@ -92,9 +128,24 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         flags.append("invalid_resolution")
         quantum = 0.0
     variance = max(sigma * sigma, quantum * quantum / 12)
-    # Center before prefix sums to reduce cancellation of a large idle floor.
-    center = statistics.mean(trace.values)
-    values = [x - center for x in trace.values]
+    # Token ripple is correlated work within decode, not a new phase. The
+    # maximum robust difference scale over dyadic lags through sqrt(n)
+    # estimates its within-phase envelope without assuming amplitude or TPS.
+    # sqrt(n) keeps each lag local as episodes grow; sparse steps are MAD
+    # outliers. Supplied sd is read noise, not a zero-ripple assertion.
+    lag = 1
+    modulation_variance = 0.0
+    normal_mad = math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75)
+    while lag <= math.isqrt(n):
+        ds = [xs[i + lag] - xs[i] for i in range(n - lag)]
+        if ds:
+            median = statistics.median(ds)
+            scale = statistics.median(abs(d - median) for d in ds) / normal_mad
+            modulation_variance = max(modulation_variance, scale * scale)
+            variance = max(variance, modulation_variance)
+        lag *= 2
+    center = statistics.fmean(xs)
+    values = [x - center for x in xs]
     sums, squares = [0.0], [0.0]
     for value in values:
         sums.append(sums[-1] + value)
@@ -106,9 +157,9 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
                    (sums[right] - sums[left]) ** 2 / size)
 
     penalty = 2 * variance * math.log(max(2, n))
-    # With truly noiseless input, SSE cancellation is bounded by accumulated
-    # squared-value ulps. This numerical floor prevents fictitious changes.
-    penalty = max(penalty, n * math.ulp(max(squares[-1], 1.0)))
+    # One rounding ulp per observation bounds accumulation error, at the
+    # accumulated squared signal itself; no arbitrary 1 W^2 floor.
+    penalty = max(penalty, n * math.ulp(squares[-1]))
     pending, leaves = [(0, n)], []
     while pending:
         left, right = pending.pop()
@@ -124,76 +175,133 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             pending.extend(((left, best), (best, right)))
     leaves.sort()
     means = [(sums[b] - sums[a]) / (b - a) + center for a, b in leaves]
-    # Distinct levels must clear the universal Gaussian noise excursion bound,
-    # sqrt(2 log n), applied to the standard error of two segment means.
-    order = sorted(range(len(leaves)), key=lambda i: means[i])
+    # At a step, mixed exposure can occupy ceil(window/dt) observations.
+    # These leaves cannot establish a sustained level; assign them using
+    # temporal neighbors, retaining every sample in the final means.
+    exposure_bins = max(1, math.ceil(window / effective_interval))
+    stable = [i for i, (a, b) in enumerate(leaves) if b - a > exposure_bins]
+    if not stable:
+        stable = list(range(len(leaves)))
+    order = sorted(stable, key=lambda i: means[i])
     groups = []
+    # Complete-span grouping never chains idle through intermediate mixed
+    # samples. The individual envelope includes correlated token modulation;
+    # SE(mean) alone would split a decode ripple as read noise tends to zero.
+    modulation_envelope = math.sqrt(2 * math.log(max(2, n)) * 2 * modulation_variance)
     for index in order:
-        if not groups:
-            groups.append([index])
-            continue
-        previous = groups[-1][-1]
-        a, b = leaves[index]
-        c, d = leaves[previous]
-        separation = math.sqrt(2 * math.log(max(2, n)) * variance *
-                               (1 / (b - a) + 1 / (d - c)))
-        if means[index] - means[previous] > separation:
+        separation = modulation_envelope
+        if groups:
+            a, b = leaves[index]
+            c, d = leaves[groups[-1][0]]
+            separation = max(separation, math.sqrt(
+                2 * math.log(max(2, n)) * variance * (1 / (b - a) + 1 / (d - c))))
+        if not groups or means[index] - means[groups[-1][0]] > separation:
             groups.append([index])
         else:
             groups[-1].append(index)
     labels = ["unknown"] * len(leaves)
     if len(groups) >= 2:
+        # Timeline ordering: idle < decode < prefill. Growing context can
+        # create several sustained prefill levels.
         for i in groups[0]:
-            labels[i] = "idle" if i in (0, len(leaves) - 1) else "tool_wait"
-        for group in groups[1:]:
+            labels[i] = "low"
+        for i in groups[1]:
+            labels[i] = "decode"
+        for group in groups[2:]:
             for i in group:
-                labels[i] = "decode"
-        if len(groups) >= 3:
-            def duration(group):
-                return statistics.median(leaves[i][1] - leaves[i][0] for i in group)
-
-            # Decode is the longest sustained nonidle level in the timeline.
-            # Growing context can create several distinct prefill levels;
-            # classify every higher/shorter group, not only the highest one.
-            decode_group = max(groups[1:], key=duration)
-            decode_level = statistics.mean(means[i] for i in decode_group)
-            for group in groups[1:]:
-                if statistics.mean(means[i] for i in group) > decode_level:
-                    if duration(group) < duration(decode_group):
-                        for i in group:
-                            labels[i] = "prefill"
-                    else:
-                        flags.append("level_duration_model_mismatch")
-            if "prefill" not in labels:
-                flags.append("level_duration_model_mismatch")
+                labels[i] = "prefill"
+        decode_duration = statistics.median(leaves[i][1] - leaves[i][0] for i in groups[1])
+        if any(statistics.median(leaves[i][1] - leaves[i][0] for i in group) >
+               decode_duration for group in groups[2:]):
+            flags.append("level_duration_model_mismatch")
+        for i in range(len(leaves)):
+            if i in stable:
+                continue
+            left = next((j for j in reversed(stable) if j < i), None)
+            right = next((j for j in stable if j > i), None)
+            neighbors = [j for j in (left, right) if j is not None]
+            # Nearest adjacent mean is the least-squares equal-variance choice.
+            closest = min(neighbors or stable, key=lambda j: abs(means[j] - means[i]))
+            labels[i] = labels[closest]
     else:
         flags.append("unidentified_single_level")
-    if len(groups) > 3:
-        flags.append("more_than_three_power_levels")
     result = []
     for (left, right), mean, label in zip(leaves, means, labels):
-        # Each end-stamped reading represents the preceding sampling bin.
-        start = trace.t_ns[left] - interval
-        end = trace.t_ns[right] - interval if right < n else trace.t_ns[-1]
-        result.append(Segment(start, end, mean, label, trace.clock_domain,
-                              interval, window, tuple(flags)))
-    return result
+        start = times[left] - effective_interval
+        end = times[right] - effective_interval if right < n else trace.t_ns[-1]
+        local_flags = list(flags)
+        boundary_uncertainty = 0
+        for a, b in gaps:
+            if a - effective_interval <= start <= b or a - effective_interval <= end <= b:
+                boundary_uncertainty = max(boundary_uncertainty, b - a)
+                local_flags.append("boundary_indeterminate_read_gap")
+        segment = Segment(start, end, mean, label, trace.clock_domain,
+                          effective_interval, window, tuple(sorted(set(local_flags))),
+                          boundary_uncertainty)
+        if result and result[-1].label == label:
+            previous = result.pop()
+            duration = max(0, previous.end_ns - previous.start_ns)
+            added = max(0, end - start)
+            mean = ((previous.mean_w * duration + mean * added) / (duration + added)
+                    if duration + added else mean)
+            segment = replace(
+                segment, start_ns=previous.start_ns, mean_w=mean,
+                flags=tuple(sorted(set(previous.flags) | set(segment.flags))),
+                boundary_uncertainty_ns=max(previous.boundary_uncertainty_ns, boundary_uncertainty))
+        result.append(segment)
+    return [replace(s, label=("idle" if i in (0, len(result) - 1) else "tool_wait"))
+            if s.label == "low" else s for i, s in enumerate(result)]
 
 
 def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch:
-    """One-to-one maximum-cardinality boundary matching after clock mapping.
+    """Match detected troughs to idle runs implied by the visible log.
 
-    Tolerance is dt + averaging window + clock-offset half-width. Both start
-    and end must match, so a broad trough cannot absorb several logged calls.
-    Unmatched candidates can be idle for reasons other than a tool call.
+    A run includes contiguous calls and the client/serving gap up to the next
+    logged generation activity. Every logged call in a matched run contributes
+    to recall; power supplies no individual boundary inside that run. Precision
+    counts matched troughs, not calls. A hidden call sharing a matched run is
+    unidentifiable by this measurement and is not claimed as detected.
     """
-    candidates = [s for s in segments if s.label == "tool_wait"]
     logged = [call for turn in episode.turns if turn.logged
               for call in turn.tool_calls if call.logged]
     flags = set(flag for segment in segments for flag in segment.flags)
-    transformed = []
+    # Visible generation envelopes, subtracting visible in-turn tool waits.
+    # No access to unlogged turn/call timing is used to construct idle runs.
+    active = []
+    for turn in episode.logged_turns():
+        cursor = turn.start_ns
+        for call in sorted(logged, key=lambda c: c.start_ns):
+            left, right = max(turn.start_ns, call.start_ns), min(turn.end_ns, call.end_ns)
+            if right <= left:
+                continue
+            if left > cursor:
+                active.append((cursor, left))
+            cursor = max(cursor, right)
+        if cursor < turn.end_ns:
+            active.append((cursor, turn.end_ns))
+    active.sort()
+    runs = {}
+    for index, call in enumerate(logged):
+        left = max([episode.start_ns] + [b for a, b in active if b <= call.start_ns])
+        right = min([episode.end_ns] + [a for a, b in active if a >= call.end_ns])
+        if any(a < call.end_ns and b > call.start_ns for a, b in active):
+            flags.add("tool_call_overlaps_logged_generation")
+            left, right = call.start_ns, call.end_ns
+        runs.setdefault((left, right), []).append(index)
+    run_items = sorted(runs.items())
+    if any(len(indices) > 1 for _, indices in run_items):
+        flags.add("back_to_back_calls_temporally_unresolved")
+    candidates = [s for s in segments if s.label == "tool_wait"]
+    # A final call can merge with the idle tail. Include such an edge only
+    # when a visible call overlaps it; generic head/tail idle is not a tool.
+    for s in segments:
+        if s.label != "idle":
+            continue
+        if s.clock_domain in ("", episode.clock_domain) and any(
+                s.start_ns < c.end_ns and s.end_ns > c.start_ns for c in logged):
+            candidates.append(s)
+    transformed, indeterminate = [], []
     tolerance = 0
-    unmappable = []
     for segment in candidates:
         domain = segment.clock_domain or episode.clock_domain
         offset, uncertainty = 0, 0
@@ -202,21 +310,22 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
                         m.trace_domain == domain and m.episode_domain == episode.clock_domain]
             if len(mappings) != 1:
                 flags.add("clock_mapping_unavailable_or_ambiguous")
-                unmappable.append(segment)
+                indeterminate.append(segment)
                 continue
             offset, uncertainty = mappings[0].offset_ns, mappings[0].uncertainty_ns
             if uncertainty < 0:
                 flags.add("invalid_clock_uncertainty")
-                unmappable.append(segment)
+                indeterminate.append(segment)
                 continue
-        bound = segment.sample_interval_ns + segment.averaging_window_ns + uncertainty
+        bound = (segment.sample_interval_ns + segment.averaging_window_ns +
+                 uncertainty + segment.boundary_uncertainty_ns)
         tolerance = max(tolerance, bound)
         transformed.append((replace(segment, start_ns=segment.start_ns + offset,
                                     end_ns=segment.end_ns + offset,
                                     clock_domain=episode.clock_domain), bound))
-    edges = [[j for j, call in enumerate(logged)
-              if abs(segment.start_ns - call.start_ns) <= bound and
-              abs(segment.end_ns - call.end_ns) <= bound]
+    edges = [[j for j, ((left, right), _) in enumerate(run_items)
+              if abs(segment.start_ns - left) <= bound and
+              abs(segment.end_ns - right) <= bound]
              for segment, bound in transformed]
     owner = {}
 
@@ -232,16 +341,25 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
 
     for i in range(len(transformed)):
         augment(i, set())
-    matched = set(owner.values())
-    count = len(owner)
+    matched_segments = set(owner.values())
+    matched_calls = {index for j in owner for index in run_items[j][1]}
+    unlogged = []
+    for i, (segment, _) in enumerate(transformed):
+        if i in matched_segments:
+            continue
+        if segment.boundary_uncertainty_ns:
+            indeterminate.append(segment)
+            flags.add("tool_wait_indeterminate_read_gap")
+        else:
+            unlogged.append(segment)
     if not logged:
         flags.add("recall_undefined_no_logged_calls")
-    if not candidates:
+    usable_candidates = len(candidates) - len(indeterminate)
+    if not usable_candidates:
         flags.add("precision_undefined_no_candidates")
-    # Vacuous empty-set rates are 1, always accompanied by explicit flags.
+    count = len(matched_calls)
     recall = count / len(logged) if logged else 1.0
-    precision = count / len(candidates) if candidates else 1.0
+    precision = len(matched_segments) / usable_candidates if usable_candidates else 1.0
     return ToolCallMatch(
-        recall, precision, tuple(c for j, c in enumerate(logged) if j not in owner),
-        tuple(s for i, (s, _) in enumerate(transformed) if i not in matched) + tuple(unmappable),
-        tuple(sorted(flags)), count, tolerance)
+        recall, precision, tuple(c for j, c in enumerate(logged) if j not in matched_calls),
+        tuple(unlogged), tuple(sorted(flags)), count, tolerance, tuple(indeterminate))
