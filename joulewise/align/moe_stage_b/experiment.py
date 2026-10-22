@@ -267,8 +267,29 @@ def run_world(
         traffic_energy_slope_j_per_token=slope, decode_tokens=decode_count,
         decode_duration_s=decode_count*config.decode_token_period_ns/NS_PER_SECOND,
         phase_bias_std_j=phase_bias, systematic_contrast_half_width_j=0.0)
+    flags.add("synthetic_finite_cohort_recoverability_check")
+    empirical_meets = {
+        name: (requirement.feasible and requirement.minimum_absolute_correlation is not None
+               and result["within_condition_held_out_correlation"] is not None
+               and result["within_condition_held_out_correlation"]
+               >= requirement.minimum_absolute_correlation)
+        for name, result in recovery.items()
+    }
+    # Energy is the predeclared primary decision. Variance/spectrum recovery
+    # remains reported separately; the linear noise forecast cannot substitute
+    # for held-out performance on the actual sampled traces.
+    energy_recovers = empirical_meets["energy_per_decode_token_j"]
+    contrast_clears = (forecast.contrast_energy_j is not None
+                       and forecast.contrast_half_width_j is not None
+                       and forecast.contrast_energy_j > forecast.contrast_half_width_j)
+    if not energy_recovers:
+        flags.add("held_out_energy_recovery_below_design_requirement")
+    if forecast.detectable_under_assumptions and not energy_recovers:
+        flags.add("forecast_empirical_disagreement")
     return {
         "sensor": asdict(sensor), "all_resident": all_resident,
+        "empirical_recovery_meets_requirement": empirical_meets,
+        "stage_b_detectable_under_assumptions": energy_recovers and contrast_clears,
         "episodes": len(observations), "groups": config.groups,
         "turns_per_episode": config.turns, "decode_tokens_per_episode": decode_count,
         "prefill_tokens_per_episode": config.turns*config.prefill_tokens_per_turn,

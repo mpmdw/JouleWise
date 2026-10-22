@@ -446,15 +446,22 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         cls.design = dict(stage_a_effect_sd=1.0, n_per_condition=50,
                           alpha=0.05, power=0.8, comparisons=3)
         ina, nvml = default_sensors()
-        cls.ina = run_world(cls.world, ina, all_resident=False, **cls.design)
+        # Positive control: sample at the complete INA conversion-frame cadence,
+        # so acquisition covers time continuously. The separately retained 10ms
+        # polling world deliberately has gaps after its 6.6ms acquisition windows.
+        full_coverage_ina = replace(ina, interval_ns=ina.averaging_window_ns)
+        cls.ina = run_world(cls.world, full_coverage_ina, all_resident=False, **cls.design)
+        cls.gapped_ina = run_world(cls.world, ina, all_resident=False, **cls.design)
         cls.resident = run_world(cls.world, ina, all_resident=True, **cls.design)
         cls.nvml = run_world(cls.world, nvml, all_resident=False, **cls.design)
         # Emit a compact reproducible evidence row for hosted CI, where there
         # may be no interactive shell to invoke the standalone experiment CLI.
         evidence = []
-        for result in (cls.ina, cls.resident, cls.nvml):
+        for result in (cls.ina, cls.gapped_ina, cls.resident, cls.nvml):
             evidence.append({
                 "sensor": result["sensor"]["name"], "resident": result["all_resident"],
+                "interval_ns": result["sensor"]["interval_ns"],
+                "window_ns": result["sensor"]["averaging_window_ns"],
                 "episodes": result["episodes"], "samples": result["total_samples"],
                 "decode_tokens_per_episode": result["decode_tokens_per_episode"],
                 "true_extra_j_per_token": result["true_extra_j_per_decode_token_range"],
@@ -463,7 +470,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                     "energy_per_decode_token_j"]["within_condition_held_out_correlation"],
                 "required_r": result["requirement"]["minimum_absolute_correlation"],
                 "phase_sweep_error_std_j": result["phase_sweep_energy_error_std_j"],
-                "conditional_detection": result["forecast"]["detectable_under_assumptions"],
+                "conditional_detection": result["stage_b_detectable_under_assumptions"],
+                "model_forecast_detection": result["forecast"]["detectable_under_assumptions"],
             })
         print("STAGEB_SYNTHETIC_EVIDENCE " + json.dumps(evidence, sort_keys=True, allow_nan=False))
 
@@ -474,9 +482,20 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         # supplied Stage A d=1, n=50 groups/condition, alpha=.05, power=.8,
         # with three predeclared features, not an arbitrary recovery threshold.
         self.assertGreater(correlation, result["requirement"]["minimum_absolute_correlation"])
-        self.assertTrue(result["forecast"]["detectable_under_assumptions"])
+        self.assertTrue(result["stage_b_detectable_under_assumptions"])
         self.assertEqual(result["episodes"], 2*self.world.groups)
         self.assertEqual(result["tool_calls_per_episode"], self.world.turns)
+
+    def test_gapped_ina_retains_failed_empirical_recovery_despite_optimistic_forecast(self):
+        result = self.gapped_ina
+        # Same routes, energy coefficients, target effect and design bar as the
+        # full-frame control. Only polling cadence changes. This exposes periodic
+        # acquisition bias that the simple linear/white-noise forecast misses.
+        self.assertLess(
+            result["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_correlation"],
+            result["requirement"]["minimum_absolute_correlation"])
+        self.assertFalse(result["stage_b_detectable_under_assumptions"])
+        self.assertIn("forecast_empirical_disagreement", result["flags"])
 
     def test_all_resident_control_has_no_modelled_routing_energy(self):
         result = self.resident
@@ -509,6 +528,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                 self.assertFalse(case["forecast"]["detectable_under_assumptions"])
             evidence.append({
                 "sensor": case["sensor"]["name"], "resident": case["all_resident"],
+                "interval_ns": case["sensor"]["interval_ns"],
+                "window_ns": case["sensor"]["averaging_window_ns"],
                 "episodes": case["episodes"], "samples": case["total_samples"],
                 "true_extra_j_per_token": case["true_extra_j_per_decode_token_range"],
                 "apparent_extra_j_per_token": case["apparent_extra_j_per_decode_token_range"],
@@ -516,7 +537,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                                        for name, recovery in case["recovery"].items()},
                 "required_r": case["requirement"]["minimum_absolute_correlation"],
                 "phase_sweep_error_std_j": case["phase_sweep_energy_error_std_j"],
-                "conditional_detection": case["forecast"]["detectable_under_assumptions"],
+                "conditional_detection": case["stage_b_detectable_under_assumptions"],
+                "model_forecast_detection": case["forecast"]["detectable_under_assumptions"],
             })
         print("STAGEB_CLI_COMMAND " + " ".join(command))
         print("STAGEB_CLI_EVIDENCE " + json.dumps(evidence, sort_keys=True, allow_nan=False))
