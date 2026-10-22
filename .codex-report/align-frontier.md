@@ -117,13 +117,14 @@ def joule_token_divergence(pairs: Sequence[tuple[float, float, float]], *, level
 - The reviewer's exact-CDF/integral/brute-force/Fraction checks must be rerun and their printed numbers recorded; no numerical result was fabricated in their absence.
 - Bootstrap degeneracy and fixed-token-cost questions below remain the prior lane's lead rulings, outside this round.
 - No local git status, process census or network-policy file could be inspected because no executor existed. Only remote branch/file state is confirmed.
+- Remote comparison against intake head confirmed exactly four changed paths: the module, two allowed test modules and this report. No protected file changed. A JavaScript whitespace inspection of the prepared three Python sources found zero trailing-whitespace lines and final newlines present; this is not Python execution or git diff --check.
 - No hardware validation or claim-bearing result; power remains blind to reasoning inside one forward pass.
 
 # FIX LOG
 F1 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — selective normalization, flagged exclusions/counts, integer-like inputs and retained negative net joules; regression cases added.
 F2 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — kill requires at least two valid model sizes and no excluded row.
 F3 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — uncomputed gates return None.
-F4 fixed (NOT EXECUTED) pending report checkpoint hash — report distinguishes reviewer-supplied prior 19/19 runs from this seat's zero executed tests and pending probes.
+F4 fixed (NOT EXECUTED) d70b5f55cc8bc6f3b3bbabaaef69867a4c906c71 — report distinguishes reviewer-supplied prior 19/19 runs from this seat's zero executed tests and pending probes.
 F5 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — independent Gaussian model streams and an 8 J source traverse Episode/PowerTrace; a positive null-count lower bound is unjustified because P(Binomial(40,.025)=0) is about .363.
 F6 fixed (NOT EXECUTED) 7ce523a7ec6cb5ef73899bf6682828348efc6cfd — threshold 50 is derived as the midpoint of suspicion scores 0 and 100.
 
