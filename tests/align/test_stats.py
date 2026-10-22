@@ -5,6 +5,9 @@ import math
 import random
 import unittest
 from statistics import NormalDist
+from unittest.mock import patch
+
+from joulewise.align import stats
 
 from joulewise.align.stats import (
     auc, cluster_bootstrap_auc_ci, delong_ci, fit_logistic, paired_auc_difference,
@@ -13,8 +16,11 @@ from joulewise.align.stats import (
 
 class StatisticsTests(unittest.TestCase):
     def close(self, actual, expected):
-        # No printed uncertainty: brief requires 1e-6 relative agreement.
-        self.assertLessEqual(abs(actual - expected), 1e-6 * max(1, abs(expected)))
+        # No uncertainty is printed: use the brief\'s 1e-6 relative bar.
+        # At zero, relative error is undefined; 1e6 binary64 ulps at unit
+        # scale resolves only arithmetic noise, well below 1e-6.
+        bar = 1e-6 * abs(expected) if expected else 1e6 * math.ulp(1.0)
+        self.assertLessEqual(abs(actual - expected), bar)
 
     def test_auc_ties_and_orientation(self):
         cases = [
@@ -165,6 +171,16 @@ class StatisticsTests(unittest.TestCase):
         self.close(constant[0], 0.5)
         self.close(constant[1], 0.5)
         self.assertIn("degenerate_bootstrap", constant.flags)
+
+    def test_automatic_budget_exhaustion_is_flagged(self):
+        # Four draws deliberately exhaust the configurable compute budget;
+        # this fixture tests the flag, not inferential precision.
+        with patch.object(stats, "AUTO_BOOTSTRAP_MAX_REPLICATES", 4):
+            result = cluster_bootstrap_auc_ci(
+                [0, 1, 0, 3, 2, 1, 0, 4, 3, 2], [0, 1] * 5,
+                [str(i // 2) for i in range(10)], seed=9)
+        self.assertEqual(result[2], 4)
+        self.assertIn("bootstrap_precision_target_not_met", result.flags)
 
     def test_automatic_bootstrap_precision(self):
         # Five mixed-class groups produce a discrete, production-shaped cluster
