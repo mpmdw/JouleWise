@@ -111,8 +111,8 @@ def _student_quantile(probability: float, df: float) -> float:
     while cdf(upper) < probability:
         upper *= 2
     while upper - lower > 1e-10 * max(1.0, upper):
-        # 1e-10 relative is below 1% of a printed 1e-6 uncertainty,
-        # and above a million double-precision ulps near unit scale.
+        # Four orders tighter than the required 1e-6 relative agreement
+        # leaves numerical error budget for the CDF evaluation.
         middle = (lower + upper) / 2
         if cdf(middle) < probability:
             lower = middle

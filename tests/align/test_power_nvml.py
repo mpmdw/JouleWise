@@ -418,6 +418,42 @@ class NvmlSamplerTests(unittest.TestCase):
         self.assertEqual(library.init_calls, 2)
         self.assertEqual(library.shutdown_calls, 2)
 
+    def test_restart_releases_reference_after_cleanup_thread_creation_failure(self) -> None:
+        class BlockingLibrary(FakeNvmlLibrary):
+            def __init__(self) -> None:
+                super().__init__()
+                self.entered, self.release = threading.Event(), threading.Event()
+
+            def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
+                if self.power_calls:
+                    self.entered.set()
+                    self.release.wait()
+                return super().nvmlDeviceGetPowerUsage(handle, output)
+
+        library = BlockingLibrary()
+        sampler = NvmlSampler(library=library, interval_ns=1_000_000, stop_timeout_s=0)
+        try:
+            sampler.start()
+            self.assertTrue(library.entered.wait(timeout=2))
+            with mock.patch.object(threading.Thread, "start", side_effect=RuntimeError(
+                    "synthetic cleanup owner creation failure")):
+                first = sampler.stop()
+            self.assertTrue(sampler._initialized)
+            self.assertEqual(library.shutdown_calls, 0)
+            self.assertTrue(any("stop_failed" in json.loads(trace.notes)["flags"]
+                                for trace in first))
+        finally:
+            library.release.set()
+            for device in sampler._devices:
+                device.thread.join(timeout=2)
+        sampler._stop_timeout_s = 2.0  # Operational join guard.
+        sampler.start()
+        second = sampler.stop()
+        self.assertTrue(any(trace.values for trace in second))
+        self.assertEqual(library.init_calls, 2)
+        self.assertEqual(library.shutdown_calls, 2)
+        self.assertIsNot(first, second)
+
     @unittest.skipUnless(importlib.util.find_spec("pynvml") is not None,
                          "optional nvidia-ml-py is not installed; ctypes path is tested")
     def test_optional_pynvml_uses_the_same_sampler_path(self) -> None:

@@ -328,6 +328,14 @@ class NvmlSampler:
                         "flags": ["restart_blocked_by_previous_workers"],
                         "reason": "previous sampling or deferred shutdown is still active"})),)
                 return
+            if self._initialized:
+                # A failed cleanup-thread creation can leave this cycle owning
+                # the native reference. All old workers are now quiescent.
+                try:
+                    self._nvml.nvmlShutdown()
+                except Exception as exc:
+                    self._flags.append(f"shutdown_failed: {exc}")
+                self._initialized = False
             previous_cleanup_flags = [
                 flag for flag in self._flags
                 if flag.startswith(("shutdown_failed:", "deferred_shutdown_failed:"))]
