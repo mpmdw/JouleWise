@@ -98,6 +98,21 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
             flags.append("matrix_conditions_invalid")
         if not set(matrix["monitor_visibilities"]) <= set(get_args(Visibility)):
             flags.append("matrix_monitor_visibilities_invalid")
+        serving = [*matrix["models"], matrix["monitor_serving"]]
+        serving.extend(option for m in matrix["models"] for option in m.get("layout_options", ()))
+        if matrix["monitor_serving"]["id"] != matrix["monitor_model"]:
+            flags.append("matrix_monitor_serving_model_mismatch")
+        for spec in serving:
+            for field in ("reasoning_parser", "tool_call_parser"):
+                if field not in spec or (spec[field] is not None
+                                         and (not isinstance(spec[field], str) or not spec[field])):
+                    flags.append("matrix_" + field + "_invalid")
+            if not _citation(spec.get("reasoning_parser_source")):
+                flags.append("matrix_reasoning_parser_source_missing")
+            if not spec.get("tool_call_parser_source"):
+                flags.append("matrix_tool_call_parser_source_missing")
+            if type(spec.get("enable_auto_tool_choice")) is not bool:
+                flags.append("matrix_auto_tool_choice_invalid")
         for model in matrix["models"]:
             if type(model.get("tensor_parallel_size", 1)) is not int or model.get("tensor_parallel_size", 1) < 1:
                 flags.append("matrix_tensor_parallel_size_invalid")

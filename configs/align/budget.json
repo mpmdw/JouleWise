@@ -10,7 +10,25 @@
       "tensor_parallel_size": 1,
       "weight_precision": "bf16",
       "kv_headroom_bytes": null,
-      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom."
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom.",
+      "reasoning_parser": "qwen3",
+      "reasoning_parser_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/README.md",
+        "accessed": "2026-10-22",
+        "quote": "vllm serve Qwen/Qwen3-4B --enable-reasoning --reasoning-parser deepseek_r1",
+        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils.",
+        "parser_code_urls": [
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+        ]
+      },
+      "tool_call_parser": "hermes",
+      "enable_auto_tool_choice": true,
+      "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+      "serve_flags": [
+        "tool_call_parser_source_not_fetched"
+      ]
     },
     {
       "id": "Qwen/Qwen3-8B",
@@ -19,7 +37,25 @@
       "tensor_parallel_size": 1,
       "weight_precision": "bf16",
       "kv_headroom_bytes": null,
-      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom."
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom.",
+      "reasoning_parser": "qwen3",
+      "reasoning_parser_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
+        "accessed": "2026-10-22",
+        "quote": "vllm serve Qwen/Qwen3-8B --enable-reasoning --reasoning-parser deepseek_r1",
+        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils.",
+        "parser_code_urls": [
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+        ]
+      },
+      "tool_call_parser": "hermes",
+      "enable_auto_tool_choice": true,
+      "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+      "serve_flags": [
+        "tool_call_parser_source_not_fetched"
+      ]
     },
     {
       "id": "Qwen/Qwen3-14B",
@@ -28,7 +64,25 @@
       "tensor_parallel_size": 1,
       "weight_precision": "bf16",
       "kv_headroom_bytes": null,
-      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom."
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom.",
+      "reasoning_parser": "qwen3",
+      "reasoning_parser_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md",
+        "accessed": "2026-10-22",
+        "quote": "vllm serve Qwen/Qwen3-14B --enable-reasoning --reasoning-parser deepseek_r1",
+        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils.",
+        "parser_code_urls": [
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+        ]
+      },
+      "tool_call_parser": "hermes",
+      "enable_auto_tool_choice": true,
+      "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+      "serve_flags": [
+        "tool_call_parser_source_not_fetched"
+      ]
     },
     {
       "id": "Qwen/Qwen3-Next-80B-A3B-Thinking",
@@ -44,7 +98,25 @@
           "tensor_parallel_size": 4,
           "checkpoint": "Qwen/Qwen3-Next-80B-A3B-Thinking",
           "kv_headroom_bytes": null,
-          "derivation": "80B * 2 bytes = 160 GB weights; 4 * H100 80 GB = 320 GB capacity; 160 GB remains for operator-specified KV/activations/allocator headroom. Two GPUs leave zero."
+          "derivation": "80B * 2 bytes = 160 GB weights; 4 * H100 80 GB = 320 GB capacity; 160 GB remains for operator-specified KV/activations/allocator headroom. Two GPUs leave zero.",
+          "reasoning_parser": "deepseek_r1",
+          "reasoning_parser_source": {
+            "url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking/blob/e502dd4100cc68c0de57643fd4317ec93a128670/README.md",
+            "accessed": "2026-10-22",
+            "quote": "vllm serve Qwen/Qwen3-Next-80B-A3B-Thinking --port 8000 --tensor-parallel-size 4 --max-model-len 262144 --reasoning-parser deepseek_r1",
+            "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. Thinking-only template supplies the opening <think>, so emitted output may contain only </think>; deepseek_r1 handles that.",
+            "parser_code_urls": [
+              "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+              "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+              "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+            ]
+          },
+          "tool_call_parser": "hermes",
+          "enable_auto_tool_choice": true,
+          "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+          "serve_flags": [
+            "tool_call_parser_source_not_fetched"
+          ]
         },
         {
           "weight_precision": "fp8",
@@ -57,8 +129,44 @@
             "accessed": "2026-10-22",
             "quote": "This repository contains the FP8-quantized Qwen3-Next-80B-A3B-Thinking model checkpoint",
             "canonical_url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8"
-          }
+          },
+          "reasoning_parser": "deepseek_r1",
+          "reasoning_parser_source": {
+            "url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8/blob/1a28d48a94e799860201879be67616b9e21c4bd2/README.md",
+            "accessed": "2026-10-22",
+            "quote": "vllm serve Qwen/Qwen3-Next-80B-A3B-Thinking-FP8 --port 8000 --tensor-parallel-size 4 --max-model-len 262144 --reasoning-parser deepseek_r1",
+            "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. Thinking-only template supplies the opening <think>, so emitted output may contain only </think>; deepseek_r1 handles that.",
+            "parser_code_urls": [
+              "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+              "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+              "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+            ]
+          },
+          "tool_call_parser": "hermes",
+          "enable_auto_tool_choice": true,
+          "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+          "serve_flags": [
+            "tool_call_parser_source_not_fetched"
+          ]
         }
+      ],
+      "reasoning_parser": "deepseek_r1",
+      "reasoning_parser_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking/blob/e502dd4100cc68c0de57643fd4317ec93a128670/README.md",
+        "accessed": "2026-10-22",
+        "quote": "vllm serve Qwen/Qwen3-Next-80B-A3B-Thinking --port 8000 --tensor-parallel-size 4 --max-model-len 262144 --reasoning-parser deepseek_r1",
+        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. Thinking-only template supplies the opening <think>, so emitted output may contain only </think>; deepseek_r1 handles that.",
+        "parser_code_urls": [
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+        ]
+      },
+      "tool_call_parser": "hermes",
+      "enable_auto_tool_choice": true,
+      "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+      "serve_flags": [
+        "tool_call_parser_source_not_fetched"
       ]
     }
   ],
@@ -768,5 +876,21 @@
     "L40S-PCIe-48GB": null
   },
   "rounding": "Two significant digits (active parameter counts have as few as two); lower bounds rounded downward, planning values nearest. Full-precision arithmetic is available from cost.estimate.",
-  "judge_model": "openai/gpt-oss-20b"
+  "judge_model": "openai/gpt-oss-20b",
+  "monitor_serving": {
+    "id": "openai/gpt-oss-20b",
+    "tensor_parallel_size": 1,
+    "reasoning_parser": null,
+    "reasoning_parser_source": {
+      "url": "https://huggingface.co/openai/gpt-oss-20b/blob/6cee5e81ee83917806bbde320786a8fb61efebee/README.md",
+      "accessed": "2026-10-22",
+      "quote": "vllm serve openai/gpt-oss-20b",
+      "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. Monitor calls no tools; use the card's plain serving command.",
+      "parser_code_urls": []
+    },
+    "tool_call_parser": null,
+    "enable_auto_tool_choice": false,
+    "tool_call_parser_source": "Monitor calls no tools; no tool parser or automatic tool choice.",
+    "serve_flags": []
+  }
 }

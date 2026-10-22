@@ -336,12 +336,15 @@ def _serve_argv(options: SessionOptions, model: dict[str, Any], port: int) -> li
             "--host", "127.0.0.1", "--port", str(port),
             "--served-model-name", model["id"],
             "--tensor-parallel-size", str(model.get("tensor_parallel_size", 1)),
-            "--dtype", "bfloat16", "--enable-auto-tool-choice",
-            "--tool-call-parser", "hermes"]
+            "--dtype", "bfloat16"]
+    if model["enable_auto_tool_choice"]:
+        argv += ["--enable-auto-tool-choice"]
+    if model["tool_call_parser"] is not None:
+        argv += ["--tool-call-parser", model["tool_call_parser"]]
     if model.get("weight_precision", "bf16") == "fp8":
         argv += ["--quantization", "fp8"]
-    if model["id"].startswith("Qwen/"):
-        argv += ["--reasoning-parser", "qwen3"]
+    if model["reasoning_parser"] is not None:
+        argv += ["--reasoning-parser", model["reasoning_parser"]]
     if model.get("revision"):
         argv += ["--revision", model["revision"]]
     return argv
@@ -403,7 +406,7 @@ def run_session(options: SessionOptions, *,
         monitor_endpoint = None
         judge_endpoint = None
         monitor_gpu = options.monitor_gpu_index
-        monitor_model = {"id": matrix.get("monitor_model", ""), "tensor_parallel_size": 1}
+        monitor_model = matrix["monitor_serving"]
         if placement == "external":
             monitor_endpoint = options.monitor_base_url
             judge_endpoint = options.judge_base_url or monitor_endpoint
@@ -486,6 +489,7 @@ def run_session(options: SessionOptions, *,
             monitor_log = (output / "monitor-server.log").open("wb")
             monitor_argv = _serve_argv(options, monitor_model, options.monitor_port)
             receipt["monitor_server"] = {"argv": monitor_argv, "gpu_index": monitor_gpu}
+            flags.extend(monitor_model.get("serve_flags", ()))
             try:
                 monitor_process = subprocess.Popen(
                     monitor_argv, stdout=monitor_log, stderr=subprocess.STDOUT,
@@ -513,7 +517,8 @@ def run_session(options: SessionOptions, *,
                 devices = measured[:model.get("tensor_parallel_size", 1)]
                 endpoint = f"http://127.0.0.1:{options.port}"
                 model_receipt: dict[str, Any] = {
-                    "model": model["id"], "flags": [], "measured_gpu_indices": devices}
+                    "model": model["id"], "flags": list(model.get("serve_flags", ())),
+                    "measured_gpu_indices": devices}
                 receipt["models"].append(model_receipt)
                 runner_path = model_dir / "runner-matrix.json"
                 if settings or not options.runner_command:

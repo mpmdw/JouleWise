@@ -26,7 +26,8 @@
     "example_prices",
     "model_parameters",
     "lower_bound_wall_seconds",
-    "rounding"
+    "rounding",
+    "monitor_serving"
   ],
   "properties": {
     "schema": {
@@ -51,7 +52,12 @@
         "required": [
           "id",
           "attention",
-          "revision"
+          "revision",
+          "reasoning_parser",
+          "reasoning_parser_source",
+          "tool_call_parser",
+          "tool_call_parser_source",
+          "enable_auto_tool_choice"
         ],
         "properties": {
           "id": {
@@ -80,6 +86,81 @@
           },
           "kv_headroom_bytes": {
             "$ref": "#/$defs/nullable_nonnegative"
+          },
+          "reasoning_parser": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "reasoning_parser_source": {
+            "$ref": "#/$defs/citation"
+          },
+          "tool_call_parser": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "tool_call_parser_source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enable_auto_tool_choice": {
+            "type": "boolean"
+          },
+          "serve_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "layout_options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "reasoning_parser",
+                "reasoning_parser_source",
+                "tool_call_parser",
+                "tool_call_parser_source",
+                "enable_auto_tool_choice"
+              ],
+              "properties": {
+                "reasoning_parser": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1
+                },
+                "reasoning_parser_source": {
+                  "$ref": "#/$defs/citation"
+                },
+                "tool_call_parser": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1
+                },
+                "tool_call_parser_source": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "enable_auto_tool_choice": {
+                  "type": "boolean"
+                },
+                "serve_flags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -428,6 +509,53 @@
     },
     "judge_model": {
       "type": "string"
+    },
+    "monitor_serving": {
+      "type": "object",
+      "required": [
+        "id",
+        "reasoning_parser",
+        "reasoning_parser_source",
+        "tool_call_parser",
+        "tool_call_parser_source",
+        "enable_auto_tool_choice"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reasoning_parser": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "reasoning_parser_source": {
+          "$ref": "#/$defs/citation"
+        },
+        "tool_call_parser": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "tool_call_parser_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enable_auto_tool_choice": {
+          "type": "boolean"
+        },
+        "serve_flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "allOf": [

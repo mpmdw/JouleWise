@@ -131,3 +131,50 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("episode_measured_device_power_missing:0", flags)
         empty = replace(self.trace(), t_ns=(), values=())
         self.assertIn("episode_power_missing", self.validate(self.episode([empty]))[1])
+
+
+class ServeTests(unittest.TestCase):
+    def test_argv_matches_every_model_and_monitor_in_each_config(self):
+        from joulewise.align.gpukit.session import _serve_argv, SessionOptions
+        root = Path(__file__).resolve().parents[2]
+        options = SessionOptions(Path("unused"), Path("unused"), (), 20, 0.2, 120, 500, "none")
+        for path in sorted((root / "configs/align").glob("*.json")):
+            matrix = json.loads(path.read_text())
+            specs = [*matrix["models"], matrix["monitor_serving"]]
+            specs.extend({**m, **option} for m in matrix["models"]
+                         for option in m.get("layout_options", ()))
+            for spec in specs:
+                argv = _serve_argv(options, spec, 18761)
+                for field, flag in (("reasoning_parser", "--reasoning-parser"),
+                                    ("tool_call_parser", "--tool-call-parser")):
+                    if spec[field] is None:
+                        self.assertNotIn(flag, argv)
+                    else:
+                        self.assertEqual(argv.count(flag), 1)
+                        self.assertEqual(argv[argv.index(flag) + 1], spec[field])
+                self.assertEqual("--enable-auto-tool-choice" in argv,
+                                 spec["enable_auto_tool_choice"])
+                self.assertNotIn("--enable-reasoning", argv)
+                if spec["id"] == "Qwen/Qwen3-Next-80B-A3B-Thinking":
+                    self.assertEqual(spec["reasoning_parser"], "deepseek_r1")
+            null = dict(matrix["models"][0], reasoning_parser=None)
+            self.assertNotIn("--reasoning-parser", _serve_argv(options, null, 18761))
+
+    def test_missing_parser_is_flagged_and_required_by_schema(self):
+        from joulewise.align.gpukit.matrix import validate
+        root = Path(__file__).resolve().parents[2]
+        matrix = json.loads((root / "configs/align/shade.json").read_text())
+        del matrix["models"][0]["reasoning_parser"]
+        self.assertIn("matrix_reasoning_parser_invalid", validate(matrix))
+        schema = json.loads((root / "joulewise/align/gpukit/matrix.schema.json").read_text())
+        self.assertIn("reasoning_parser", schema["properties"]["models"]["items"]["required"])
+
+    @unittest.skipUnless(__import__("importlib.util", fromlist=["find_spec"]).find_spec("jsonschema"),
+                         "optional jsonschema is not installed")
+    def test_jsonschema_rejects_missing_parser(self):
+        import jsonschema
+        root = Path(__file__).resolve().parents[2]
+        matrix = json.loads((root / "configs/align/shade.json").read_text())
+        schema = json.loads((root / "joulewise/align/gpukit/matrix.schema.json").read_text())
+        del matrix["models"][0]["reasoning_parser"]
+        self.assertGreaterEqual(len(list(jsonschema.Draft202012Validator(schema).iter_errors(matrix))), 1)

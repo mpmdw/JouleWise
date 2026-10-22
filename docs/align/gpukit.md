@@ -337,3 +337,19 @@ max_cycle_over_two_expected. The ratios include every supported trace; edge gaps
 subtract clock uncertainty. Inspect these margins on the first paid calibration
 slice before approving a full matrix. This is sampling coverage, not proof of
 sensor calibration, continuous waveform reconstruction or attribution precision.
+
+### Serving parser bindings (R6)
+
+Every agent model and monitor_serving entry declares reasoning_parser (including
+null) and its source; vLLM receives exactly that value. Qwen3 hybrid 4B/8B/14B/30B
+uses qwen3 rather than the cards' deepseek_r1 because thinking-off output has
+neither tag. Qwen3-Next Thinking/BF16 and FP8 use deepseek_r1 because the template
+supplies the opening tag. No --enable-reasoning option is passed in vLLM 0.10.2.
+Sources are pinned cards and parser code quoted from the lead's fix-2 brief,
+explicitly marked as fetched by the lead, not this seat.
+
+Tool parsers and automatic tool choice are also per model. Agents retain hermes
+with tool_call_parser_source_not_fetched; monitors call no tools and use null.
+Budget driver OPEN ISSUE: hybrid output truncated by max_tokens before </think>
+comes back as content beginning with <think> under qwen3; check content for that
+prefix before reporting reasoning counts.
