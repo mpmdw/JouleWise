@@ -429,23 +429,46 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
                 report["flags"].append(f"gpu{index}_clock_restore_failed")
         if initialized:
             cleanup = sampler._cleanup_thread if sampler is not None else None
-            if cleanup is not None and cleanup.is_alive():
-                report["flags"].append("preflight_shutdown_deferred_worker_active")
+            cleanup_active = cleanup is not None and cleanup.is_alive()
+            workers = ([device.thread for device in sampler._devices
+                        if device.thread is not None and device.thread.is_alive()]
+                       if sampler is not None else [])
+            # A sampler fallback can still own its init reference, including
+            # when creating its deferred cleanup thread failed. Transfer that
+            # reference together with preflight's own; never shut down under
+            # an outstanding native call merely because its owner did not start.
+            references = 1 + int(sampler is not None and sampler._initialized)
 
-                def finish_shutdown() -> None:
+            def finish_shutdown() -> None:
+                if cleanup_active:
                     cleanup.join()
+                for worker in workers:
+                    worker.join()
+                for _ in range(references):
                     try:
                         backend.nvmlShutdown()
                     except Exception as exc:
-                        report["flags"].append(f"deferred_nvml_shutdown_failed: {exc}")
+                        report["flags"].append(f"nvml_shutdown_failed: {exc}")
 
-                threading.Thread(target=finish_shutdown, daemon=True,
-                                 name="joulewise-preflight-nvml-cleanup").start()
-            else:
+            if workers or cleanup_active:
+                report["flags"].append("preflight_shutdown_deferred_worker_active")
                 try:
-                    backend.nvmlShutdown()
+                    owner = threading.Thread(
+                        target=finish_shutdown, daemon=True,
+                        name="joulewise-preflight-nvml-cleanup")
+                    owner.start()
                 except Exception as exc:
-                    report["flags"].append(f"nvml_shutdown_failed: {exc}")
+                    # Exhausted thread resources cannot justify racing a
+                    # blocked driver. Retain the native references and report
+                    # them; process exit remains the final resource owner.
+                    report["flags"].append(f"native_references_retained: {references}; {exc}")
+                else:
+                    if sampler is not None:
+                        sampler._initialized = False
+            else:
+                finish_shutdown()
+                if sampler is not None:
+                    sampler._initialized = False
         report["traces"] = to_jsonable(traces)
         report["capabilities"] = [{
             "channel": trace.channel, "source": trace.source,

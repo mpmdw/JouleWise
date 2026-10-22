@@ -11,6 +11,7 @@ import signal
 import statistics
 import subprocess
 import time
+import threading
 import types
 import sys
 import tempfile
@@ -19,7 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise.align.power import preflight
-from joulewise.align.power.nvml import CtypesNvml
+from joulewise.align.power.nvml import CtypesNvml, NvmlSampler
 from joulewise.align.records import PowerTrace
 from tests.align.test_power_nvml import FakeNvmlLibrary
 
@@ -323,6 +324,76 @@ class PreflightTests(unittest.TestCase):
                     except ChildProcessError:
                         break
             libc.prctl(36, old.value, 0, 0, 0)
+
+    def test_failed_sampler_cleanup_owner_never_shuts_down_under_native_call(self) -> None:
+        for fail_outer in (False, True):
+            with self.subTest(fail_outer=fail_outer), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp)
+                FakeExecutables(directory)
+
+                class BlockingLibrary(FakeNvmlLibrary):
+                    def __init__(self) -> None:
+                        super().__init__()
+                        self.entered, self.release = threading.Event(), threading.Event()
+
+                    def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
+                        if self.power_calls:
+                            self.entered.set()
+                            self.release.wait()
+                        return super().nvmlDeviceGetPowerUsage(handle, output)
+
+                library = BlockingLibrary()
+                binding = CtypesNvml(library)
+                samplers = []
+                owners = []
+                original_start = threading.Thread.start
+
+                def make_sampler(*args: object, **kwargs: object) -> NvmlSampler:
+                    sampler = NvmlSampler(*args, **kwargs, stop_timeout_s=0)
+                    samplers.append(sampler)
+                    return sampler
+
+                def start(thread: threading.Thread) -> None:
+                    if thread.name == "joulewise-nvml-cleanup" or (
+                            fail_outer and thread.name == "joulewise-preflight-nvml-cleanup"):
+                        raise RuntimeError("synthetic cleanup owner creation failure")
+                    if thread.name == "joulewise-preflight-nvml-cleanup":
+                        owners.append(thread)
+                    original_start(thread)
+
+                def idle_sleep(_: float) -> None:
+                    self.assertTrue(library.entered.wait(timeout=2))
+
+                try:
+                    with mock.patch.dict(os.environ, {
+                            "PATH": str(directory)+os.pathsep+os.defpath}), \
+                            mock.patch.object(preflight.importlib.util, "find_spec", return_value=None), \
+                            mock.patch.object(preflight, "NvmlSampler", side_effect=make_sampler), \
+                            mock.patch.object(threading.Thread, "start", new=start), \
+                            mock.patch.object(preflight, "time", types.SimpleNamespace(
+                                monotonic=time.monotonic, monotonic_ns=time.monotonic_ns,
+                                sleep=idle_sleep)):
+                        report = preflight.run_preflight(
+                            nvml=binding, idle_seconds=0, load_seconds=0,
+                            recovery_seconds=0, interval_ns=1_000_000)
+                    self.assertEqual(library.init_calls, 2)
+                    self.assertEqual(library.shutdown_calls, 0)
+                    self.assertIn("preflight_shutdown_deferred_worker_active", report["flags"])
+                    self.assertEqual(any(flag.startswith("native_references_retained:")
+                                         for flag in report["flags"]), fail_outer)
+                finally:
+                    library.release.set()
+                    for sampler in samplers:
+                        for device in sampler._devices:
+                            device.thread.join(timeout=2)
+                    for owner in owners:
+                        owner.join(timeout=2)
+                    if fail_outer:
+                        # Both owners failed to start. Explicit fixture teardown
+                        # occurs only after the blocked native call has returned.
+                        binding.nvmlShutdown()
+                        binding.nvmlShutdown()
+                self.assertEqual(library.shutdown_calls, 2)
 
     def test_predictive_criterion_has_its_stated_nominal_false_alarm_rate(self) -> None:
         seed_count, alpha = 1000, 0.05
