@@ -22,11 +22,20 @@ work; it cannot identify reasoning performed within a fixed forward pass.
   remains testable with independently randomized phases/repetitions; synchronized
   bursts can be entirely invisible. Polling faster does not repair that gap.
 
-The executed default synthetic worlds do **not** clear the required held-out
-recovery at the example design below: INA3221's gapped acquisition and NVML's
-duty cycle lose too much of the within-condition signal. A separate contiguous
-INA3221 acquisition case is the positive control; it changes sensor coverage,
-not routing, transfer coefficients or the statistical requirement.
+Gapped INA3221 visibility depends on whether real decode timing is locked to the
+poll clock. The previous negative 50 ms/token world synchronized every burst
+with the 10 ms polling clock; it is retained as the labelled **synchronized
+bursts** worst case. Default worlds now vary individual compute steps and add
+blocking decode uploads. Hardware must record token timestamps beside sensor
+samples and measure the phase distribution, rather than infer it from mean
+tokens/s. The executed results and approximate 95% intervals appear below.
+An interval containing the required correlation is **inconclusive at this cohort
+size**; a point estimate cannot decide the pilot. Recovery and the physical
+contrast floor are separate requirements. The retained transfer-only scenario
+recovers routing under variable timing yet fails the conservative q*T bound.
+The blocking-stall configuration adds running energy; its executed result is
+reported separately. NVML's default stalled cohort is inconclusive, rather than
+a sensor-wide negative conclusion.
 
 These are conditional design decisions, not findings that sabotage is detectable.
 Stage A effect size, within-condition routing spread, transfer energy, sensor noise,
@@ -44,15 +53,44 @@ For token t and layer l:
 
 ```text
 moved_bytes[t,l] = misses[t,l] * stored_bytes_per_expert[l]
-extra_energy[t] = sum_l(moved_bytes[t,l]) * joules_per_byte
+transfer_energy[t] = sum_l(moved_bytes[t,l]) * joules_per_byte
 transfer_duration[t] = sum_l(moved_bytes[t,l]) / bandwidth_bytes_s
+stall_duration_ns[t] = ceil(transfer_duration[t] * 1e9)  # decode, when enabled
+extra_energy[t] = transfer_energy[t] + running_power_w * stall_duration_ns[t]/1e9
 ```
 
-`model_traffic(router, config, windows=...)` returns per-token counts, bytes,
-joules and transfer time plus serialized `TransferPulse` intervals. A transfer
-that exceeds its token window queues; its energy is retained and
-`transfer_exceeds_token_window` is recorded. Such a trace is a timing-mismatch
-diagnostic, not a faithful throughput prediction.
+OffloadConfig.decode_miss_stalls enables the blocking decode scenario and
+running_power_w sets sensor-visible platform power during each upload.
+TokenTraffic.energy_j and TrafficResult.total_energy_j retain transfer-only J/B;
+stall_energy_j and incremental_energy_j report the added running term explicitly.
+Transfer duration rounds upward using exact rational arithmetic on the printed
+bandwidth input, so an exactly integral nanosecond is not rounded up twice.
+
+apply_decode_stalls(episode, config, windows=...) accepts a **compute-only**
+synthetic schedule, extends each decode token by its upload duration and shifts
+later tokens, turns and tool calls, preserving tool-gap lengths. Its actual
+windows pass unchanged through model_traffic, simulate_episode and
+extract_features. Prefill stall/overlap is a separate, flagged approximation.
+Never apply this adapter to observed timestamps that already include waits.
+simulate_episode applies it automatically for implicit compute-only timing;
+explicit windows mean actual timing. SimulatedEpisode exposes windows and the
+reference_decode_duration_ns needed for extraction.
+
+model_traffic returns serialized transfer pulses containing only J/B energy.
+The trace's extended running load supplies stall energy; an adjustment on decode
+upload intervals permits stalled power to differ from compute power. Extraction
+subtracts nominal compute energy using reference_decode_duration_ns rather than
+subtracting away the added running time. Incomplete coverage makes this total
+stall correction unavailable with a flag, preserving missing samples. Per-token
+variance remains a transfer/reconstruction diagnostic and is flagged
+variance_excludes_running_stall_energy when the correction is used. On hardware,
+nominal compute energy must come from independent resident/cache-hit controls;
+carry that reference uncertainty in attribution_floor_j. Never reconstruct the
+reference from held-out routing targets.
+
+Without the timing adapter, an overrun queues and records
+transfer_exceeds_token_window; that output is a timing-mismatch diagnostic,
+not a throughput prediction.
 
 Policies are streaming (`none`), LRU and SLRU. Each token/layer request touches
 hits in top-k order before sorted fills; selected experts cannot evict one another.
@@ -159,8 +197,9 @@ a diagnostic, not a full time-frequency routing estimator.
 `recover_routing(observations, feature_name=...)` fits a scalar inverse regression
 and predicts each task group only from other groups. It reports observed and
 held-out correlation, RMSE, predictions and missing/constant-feature flags.
-The synthetic world also centers held-out truth and predictions within condition
-before comparing correlation to the required attenuation r; a raw cross-condition
+Every raw held-out correlation carries its approximate 95% Fisher interval and
+episode count. The synthetic world also centers held-out truth and predictions
+within condition before comparing correlation to the required attenuation r; a raw cross-condition
 correlation can be inflated by the condition mean shift and is only a diagnostic.
 Predeclare features and groups; choosing the best feature on held-out data leaks
 information. Baseline calibration, feature choice and the independent correlation
@@ -187,25 +226,42 @@ finite-sample t-test or a registered scientific threshold.
 ```text
 signal_sd_J_per_token = |energy_slope_J_per_token_per_stat| * within_condition_stat_sd
 white_noise_J = noise_std_W * sqrt(decode_duration_s * effective_sample_interval_s)
-noise_sd_J_per_token = hypot(white_noise_J, phase_bias_std_J) / decode_tokens
+noise_sd_J_per_token = hypot(white_noise_J/decode_tokens,
+    phase_bias_std_J/decode_tokens, routing_energy_residual_std_J_per_token)
 model_r = signal_sd / hypot(signal_sd, noise_sd)
 contrast_J = |d_A| * signal_sd * decode_tokens
 systematic_contrast_bound_J = supplied_bound_J + quantum_W * decode_duration_s
 ```
 
 This analytic forecast requires both its modeled correlation and a contrast
-exceeding the systematic bound. It omits routing-to-energy residual variation:
-adjacent reuse does not uniquely determine cache traffic. Its fitted slope and
-noise summary can therefore be optimistic.
+exceeding the systematic bound. The synthetic forecast fits its slope within
+condition and includes the true routing-to-energy residual SD: adjacent reuse
+does not uniquely determine cache traffic. Sensor errors and mapping residuals
+are assumed uncorrelated with routing; synchronized aliasing and real DVFS can
+violate that approximation. Forecast/empirical agreement is reported, never
+substituted for held-out recovery.
 
-The synthetic world's final decision instead requires the predeclared primary
-energy feature's **within-condition held-out** correlation to clear the same
-required correlation, and its contrast to exceed the systematic bound. Variance
-and spectrum remain separately reported diagnostics. The analytic forecast never
-substitutes for this empirical recovery check; forecast optimism that fails the
-empirical test is flagged. Six or
-twelve synthetic task groups yield correlation point estimates, not validation
-of a proposed 50-group-per-condition power calculation.
+The predeclared primary energy feature's within-condition held-out r uses:
+
+```text
+n_eff = held_out_episode_count - 2  # two fitted condition means
+interval_95 = tanh(atanh(r) +/- 1.96/sqrt(n_eff-3))
+```
+
+The lead specifies 1.96. Raw r uses the full episode count; centered r removes two
+degrees of freedom. If n_eff<=3 or r is unavailable, the interval is unavailable.
+When the interval contains the required r, recovery and the final verdict print
+"inconclusive at this cohort size", nullable booleans, and
+held_out_recovery_inconclusive_at_cohort_size. A yes requires the whole interval
+above the positive requirement and a contrast above the systematic bound; a no
+requires its whole interval below the requirement (or a failed physical bound
+after conclusive recovery). Signed negative held-out recovery is not folded to
+positive. Variance/spectrum remain diagnostic features with their own intervals.
+
+These are nominal episode-level Fisher intervals, not demonstrated coverage
+under paired task conditions and overlapping cross-validation training fits.
+Real design validation needs independent groups/repetitions and dependence-aware
+uncertainty. A synthetic cohort does not establish 50-group design power.
 `phase_bias_std_j` must come from phase-swept repetitions, not duty fraction.
 Real thermal/DVFS effects, idle drift, CPU execution and compute energy correlated
 with route changes require measured nuisance bounds. All-resident routing gives
@@ -233,6 +289,24 @@ shares SLRU banks among compatible layers on each device, promotes hits before
 fills, sorts misses and reserves a guard slot plus alignment. Large batches
 bypass cache planning and can reuse existing cached data read-only. Capture the
 actual startup cache group/slot inventory; MiB alone does not determine slots.
+
+Blocking behavior is established at the same pin:
+[src/llama-moe-cache.cpp:584-614](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/src/llama-moe-cache.cpp#L584)
+reads selected IDs and synchronizes, queues missing-weight uploads at line 602,
+then queues the dependent slot-map write at line 614.
+[ggml-cuda.cu:2607-2614](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/ggml/src/ggml-cuda/ggml-cuda.cu#L2607)
+uses cudaMemcpyAsync on the backend stream;
+[getrows.cu:440-457](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/ggml/src/ggml-cuda/getrows.cu#L440)
+launches dependent reads on that stream. Uploads therefore block dependent
+expert work even though their host API is asynchronous. The model approximates
+their critical path by serialized bytes/bandwidth, adding constant running power;
+measure overlap, host synchronization and stalled power on hardware.
+
+For 128 missing OLMoE Q4_0 experts, bytes=452,984,832; at the supplied 32 GB/s this
+is 14.155776 ms. Transfer-only energy at 160 pJ/B is 0.07247757312 J; a supplied
+12 W running platform adds 0.169869312 J, total 0.24234688512 J for that token.
+Across decode tokens the same inputs multiply transfer-only energy by 3.34375,
+apart from nanosecond rounding. This is an illustrative bound, not calibration.
 
 CPU offload with cache disabled runs host-resident expert work and transfers
 activations as needed; it is **not** a full selected-expert PCIe upload per token.
@@ -311,7 +385,9 @@ tensors. The upstream dynamic cache implements per-expert locality.
 1. Record binary commit/build, GGUF/config hashes, memory inventories, cache
    groups/slots, clocks, power mode, temperature, actual token cadence and batch
    layout. Use one server slot, no speculative decoding, and fixed sampling/KV
-   settings. Warm-up and cache persistence/reset policy must be identical across
+   settings. Record each token's start/end in the sensor clock mapping and test
+   whether transfer bursts keep a fixed phase modulo the poll interval; report
+   step-time variation and cache-miss stalls. Warm-up and cache persistence/reset policy must be identical across
    conditions and explicitly logged.
 2. Calibrate memory-path bytes/s and sensor-visible J/B with repeatable traffic.
    Measure idle/compute controls and phase sweeps. On Jetson read INA rail names,
@@ -368,8 +444,11 @@ python3 -m joulewise.align.moe_stage_b.experiment
 
 The CLI runs both sensors and both resident/offloaded configurations. Each
 default world has 12 task groups x 2 conditions, four turns, 1024 prefill tokens,
-512 decode tokens and four tool calls per episode. At 50 ms/decode token, decode
-lasts 25.6 s; four 4 s prefills and four 0.8 s tool gaps make each episode 44.8 s.
+512 decode tokens and four tool calls per episode. Compute-only steps are 50 ms
+plus uniform +/-2 ms variation, an explicit uncalibrated scenario parameter.
+A separate RNG preserves identical routing under timing changes. Blocking uploads
+extend decode, followed by unchanged four 4 s prefills and four 0.8 s tool gaps.
+Actual duration ranges are reported in JSON.
 The synthetic cache uses 256 Q4_0 experts:
 `256*3,538,944 / 2**20 = 864 MiB`, with explicit 128-token prefill
 microbatches. This scenario is distinct from the runbook's 512 MiB hardware
@@ -383,23 +462,60 @@ r=0.647120 (rounded here; full precision is retained in JSON).
 These choices are supplied design parameters, not estimates from the synthetic
 condition labels.
 
-Executed E2E results (six task groups/condition, three turns and 384 decode
-tokens/episode):
+The enlarged E2E worlds have 48 groups/condition, three turns, 768 prefill and
+384 decode tokens, and three tool calls per episode. Each has 96 held-out
+episodes, n_eff=94. The jitter-only rows retain transfer-only energy; the stalled
+INA row enables the source-backed running-energy term. Both comparison bars
+remain fixed.
 
-| Sensor | Placement | Window / cadence (ms) | Episodes | Samples | Within-condition held-out energy r | Analytic forecast | Empirical verdict |
-|---|---|---:|---:|---:|---:|---|---|
-| ina3221 | offloaded | 6.6 / 6.6 | 12 | 61104 | 0.725190209 | yes | yes |
-| ina3221 | offloaded | 6.6 / 10 | 12 | 40332 | -0.005329643 | yes | no |
-| ina3221 | resident | 6.6 / 10 | 12 | 40332 | -0.436755449 | no | no |
-| nvml_100ms_25ms | offloaded | 25 / 100 | 12 | 4044 | 0.026436210 | no | no |
+| Configuration | Window / cadence ms | Samples | Held-out energy r [95% Fisher CI] | Forecast r | Contrast / bound J | Overall verdict |
+|---|---:|---:|---|---:|---:|---|
+| INA, variable timing + stalls | 6.6 / 10 | 342862 | 0.823237 [0.744863, 0.879203] | 0.833440 | 2.000373 / 0.767646 | yes |
+| INA, variable timing, no stalls | 6.6 / 10 | 322624 | 0.809315 [0.725697, 0.869372] | 0.811230 | 0.598242 / 0.691718 | no |
+| INA, resident | 6.6 / 10 | 322624 | -0.196926 [-0.384216, 0.005931] | 0.000000 | 0.000000 / 0.691718 | no |
+| NVML, variable timing, no stalls | 25 / 100 | 32342 | 0.164749 [-0.039179, 0.355502] | 0.097968 | 0.598242 / 0.019197 | no |
+| INA, synchronized bursts, no stalls | 6.6 / 10 | 322656 | 0.300520 [0.104247, 0.474262] | 0.439009 | 0.598242 / 0.691814 | no |
 
-For the default CLI's larger 12-group/condition, four-turn worlds, energy r was
-0.503039 for offloaded INA and 0.073316 for offloaded NVML; both empirical
-verdicts were negative. All-resident controls moved zero modelled bytes and had
-zero true incremental traffic energy. These are correlation point estimates
-from the synthetic cohorts, not hardware confidence intervals or proof of
-design power. The contiguous control changes sampling coverage while preserving
-the routes, transfer coefficients and required correlation.
+All five E2E analytic correlations lie inside the corresponding empirical
+intervals. The no-stall variable INA row clears recovery but fails the separate
+quantization contrast bound (0.598242 J < 0.691718 J); that negative physical
+result is retained. Blocking stalls lift the contrast to 2.000373 J above
+0.767646 J without changing the required r. Synchronized bursts retain failed
+recovery. This supports timing-dependent INA visibility, not a sensor-wide
+negative conclusion.
+
+Default CLI: 12 groups/condition, four turns, 1024 prefill and 512 decode tokens,
+four tool calls; N=24 and n_eff=22. Offloaded rows include blocking stalls.
+
+| Configuration | Samples | Held-out energy r [95% Fisher CI] | Forecast r | Contrast / bound J | Overall verdict |
+|---|---:|---|---:|---:|---|
+| INA, offloaded + stalls | 114259 | 0.807376 [0.584842, 0.916882] | 0.847007 | 2.886183 / 1.023290 | inconclusive at this cohort size |
+| INA, resident | 107546 | 0.116207 [-0.321143, 0.512702] | 0.000000 | 0.000000 / 0.922481 | no |
+| NVML, offloaded + stalls | 11446 | 0.665356 [0.338775, 0.848848] | 0.759429 | 2.886183 / 0.028399 | inconclusive at this cohort size |
+| NVML, resident | 10771 | 0.427928 [0.007702, 0.719695] | 0.000000 | 0.000000 / 0.025602 | inconclusive at this cohort size |
+
+The offloaded default INA and NVML forecasts lie inside their empirical
+intervals; both intervals contain required r, so neither point estimate decides
+the pilot. The resident NVML nominal interval happens to exclude the forecast's
+zero correlation while still containing the required r: finite-cohort noise is
+retained, not evidence of modeled coupling (its bytes and true energy are zero).
+Paired episodes/shared CV fits further limit nominal interval coverage.
+
+Default transfer-only extra energy is [0.00304238592, 0.05278224384] J/decode token;
+with running stalls it is [0.01017297792, 0.17649062784] J/token. Decode duration
+grows from [25.548059603, 25.654410814] s compute-only to
+[25.856373476, 30.914227554] s offloaded, preserving prefill/tool gaps.
+INA apparent extra is [0.010193455699749773, 0.17654024210091254] J/token;
+NVML is [0.01174969970150001, 0.17697168368906446] J/token.
+Default acquisition-error SD is 0.0866584442041829 J for INA and
+1.4877634899422347 J for NVML; resident values are 0.024937692923639846 J
+and 1.5612500592270946 J. In the E2E phase comparison INA error SD is
+0.17020184370230057 J with jitter versus 1.15849743485807 J synchronized.
+
+The CLI ran 96 episodes; the five enlarged E2E cases ran another 480.
+All raw and centered feature correlations/intervals, including variance and
+spectral diagnostics, are retained in the CI evidence JSON.
+
 
 The tests also include a transfer wholly missed by NVML's blind phase, visible
 under a shifted phase; an all-resident zero-traffic control; realistic router
