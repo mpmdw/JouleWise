@@ -64,6 +64,7 @@ measurement_id/configuration strata.
    not a precision guarantee. A completion at the ceiling stays flagged as
    censored. With no median, budget trials stay recorded and are excluded from
    budget summary numbers with a counted budget_uncalibrated_excluded flag.
+   A row with no measured trials leaves token means empty.
 4. Run thinking on/off, concise, and forcing fractions 1.0, 0.6, 0.4, 0.3 of
    that median. All fractions, ceilings, delimiters, sampling settings and concise
    text are parameters. Each hinted request has a same-seed no-hint pair.
@@ -114,9 +115,14 @@ terms conditional on piecewise-linear interior power. They are not sensor
 accuracy, arbitrary within-poll oscillation bounds or confidence intervals on
 the mean. Duty-cycle gaps leave uncertainty unresolved.
 
-The gap diagnostic's default bar is 1.5 nominal periods, the midpoint between
-one poll and two polls: modest positive wait/acquisition jitter is not a missed
-poll. energy.gap_factor can override it. Every Episode flag and structured
+The gap diagnostic uses the trace's median observed interval (at least the
+nominal wait), which includes acquisition overhead after event.wait. Its default
+bar is 1.5 observed cycles: the midpoint between a completed cycle and a missed
+cycle near twice that duration. Thus a 10 ms wait plus 10 ms acquisition has a
+20 ms cycle and a 30 ms gap bar; a 100 ms wait plus 10 ms acquisition has a
+110 ms cycle and a 165 ms bar. This assumes most cycles completed normally;
+uniformly missing polls cannot be distinguished from a slower sensor by this
+diagnostic alone. energy.gap_factor can override it. Every Episode flag and structured
 PowerTrace notes.flags entry reaches the summary with the number of trials
 carrying it, including battery discharge, power caps and throttling. A Mac
 partly powered by its battery must therefore remain visible as flagged data;
@@ -182,7 +188,11 @@ versus (614/1024)^2, about 0.360, for a real budget cut. Legacy token deletion
 has probability C(K,L)/C(N,L), near f^13. The false marker design probability
 is 0.05. Noise, throughput and power are design parameters, never hardware
 observations. Tests send these worlds through actual calibration, requests,
-controls, monitor, Episodes, summaries and integration.
+controls, monitor, Episodes, summaries and integration. The five-by-200 world
+checks its scripted rates against their Wilson intervals. A separate 2000-item
+world resolves budget-versus-deletion interval separation without requiring
+overlap-free marginal intervals from only 144 positives. Transcript-survival
+checks use independently seeded position and deletion streams.
 
 ## Pilot decision
 
