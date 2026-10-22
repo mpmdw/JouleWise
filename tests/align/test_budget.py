@@ -15,6 +15,7 @@ from pathlib import Path
 from statistics import NormalDist
 from unittest.mock import patch
 
+from joulewise.align.budget.__main__ import main
 from joulewise.align.budget.conditions import (
     Condition, LocalEndpoint, cap_tokens, default_conditions, delete_spans, thinking_options,
 )
@@ -240,6 +241,19 @@ class BudgetConditionTests(OfflineTest):
 
 
 class BudgetRunTests(OfflineTest):
+    def test_cli_synthetic_writes_complete_outputs_without_a_socket(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "pilot"
+            with patch("builtins.print"):
+                status = main(["--synthetic", "--count", "2", "--output", str(output)])
+            self.assertEqual(status, 0)
+            result = json.loads((output / "result.json").read_text())
+            self.assertEqual(len(result["trials"]), 10)
+            self.assertEqual(len((output / "episodes.jsonl").read_text().splitlines()), 10)
+            self.assertEqual(len((output / "paired_episodes.jsonl").read_text().splitlines()), 8)
+            self.assertTrue((output / "summary.md").read_text().startswith("| Model |"))
+            self.assertTrue((output / "calibration_episodes.jsonl").exists())
+
     def test_schema_roundtrip_and_unknown_schema(self):
         result, _ = self.world(count=1)
         for trial in result.trials:
