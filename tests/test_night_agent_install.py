@@ -892,8 +892,8 @@ class TransactionTests(unittest.TestCase):
                 self.fail("unknown file expectation")
         expected_plan = (fixture.plan.plan_id if fence_directory is not None or files == "published"
                          else "prior-install-night-agent-test" if fixture.prior else None)
-        self.assertEqual("; ".join(["installed_plan:" + expected_plan] * len(LABELS))
-                         if expected_plan else None, fence)
+        # Both plists name one plan; the fence lists each (plan id, plan path) once.
+        self.assertEqual("installed_plan:" + expected_plan if expected_plan else None, fence)
 
         options = fixture.options
         trace = json.loads((fixture.root / "trace.json").read_text())

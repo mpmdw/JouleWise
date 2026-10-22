@@ -990,7 +990,7 @@ class FenceTests(WatchdogTestCase):
                 with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
                     decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
                 self.assertEqual("FENCED", decision.state)
-                self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+                self.assertEqual("plan span active and census empty", decision.reason)
                 self.assertIsNone(wd.installed_agent_fence(
                     dt.datetime.fromtimestamp(wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S + 1),
                     self.harness.storage))
@@ -1057,7 +1057,7 @@ class FenceTests(WatchdogTestCase):
         with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
             decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
         self.assertEqual("FENCED", decision.state)
-        self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+        self.assertEqual("plan span active and census empty", decision.reason)
 
     def test_armed_deadline_includes_exactly_deadman_plus_900(self) -> None:
         plan = self.make_plan(t0=1800000000, window_max_s=9000, authored_epoch_s=1799990000)
