@@ -13,7 +13,8 @@ written with blinding not applied.
 **Status: queued, not applied.** This file does not edit the registration. DIFFICULTY stays December-January
 (RUN_STATE item 53). When that lane resumes, both changes go into one revision (2.4) of
 `docs/registrations/difficulty_pack_v2.md`, which takes its own cold gate before any DIFFICULTY energy exists. Line
-numbers below are for that file at origin/main `4d49364ca` (last changed by `fe6d61b4f`, revision 2.3).
+numbers below are for that file at origin/main `bfab7c950`, re-checked on 2026-10-22. The file last changed at
+`fe6d61b4f` (revision 2.3), so the lines are the same at `4d49364ca`, where this record was first written.
 
 | Change | Clause | Governing source | Expected size on DIFFICULTY's models |
 |---|---|---|---|
@@ -31,10 +32,12 @@ Lines that stay as they are: 214 (flag table: `battery_assist` is used and count
 decision family) and 371 (`wall` is printed as a labelled line).
 
 **Governing source.** `docs/process_traces/2026-10-22-forward/BAT-RULING.md` §6 (Q5), on
-`lane/2026-10-22-battery-assist-audit` at `e6595ae13` (not yet on main). That ruling came from two blind seats
-(Opus 5.5 and Sol 6.1 xhigh) and a cold Fable 5.1 judge, and all three agreed that DIFFICULTY's `wall` takes the
-correction. The evidence is `BAT-1-BATTERY-ASSIST.md` on the same branch (`7e59b54ab`), in its "Boundary by
-boundary" table, DIFFICULTY row. The ruling's terms:
+`lane/2026-10-22-battery-assist-audit` (draft PR #536, not yet on main). §6 was ruled at `e6595ae13` and is
+unchanged at the branch head `fc7548a17`, which adds the lead's executed re-run of the worked example. That ruling
+came from two blind seats (Opus 5.5 and Sol 6.1 xhigh) and a cold Fable 5.1 judge, and all three agreed that
+DIFFICULTY's `wall` takes the correction. The evidence is `BAT-1-BATTERY-ASSIST.md` on the same branch (first at
+`7e59b54ab`), in its "Boundary by boundary" table, DIFFICULTY row; at `fc7548a17` that row reads "Ruled, queued,
+not built" and points to this file. The ruling's terms:
 
 - `wall` energy is the meter energy plus E_b over the whole request, gross and signed.
 - It uses block 5's request-level rule: the two terms of `km003c_parse.delta_machine_energy`, without its baseline
@@ -108,9 +111,12 @@ What these numbers say:
   stage table).
 - **DIFFICULTY's load is lighter where H's assists began.** H's 70B and 122B assists began in prefill (BAT-1;
   BAT-2 ruling §4). DIFFICULTY's prompts are 33 to 454 tokens in the pilot, against H's 2,048, so its prefill is a
-  fraction of H's. Decode is DIFFICULTY's long phase: the pilot's median is about 500 to 600 generated tokens with
-  thinking off and about 3,000 with thinking on, with caps of 4,096 and 16,384. On H, decode ran at the meter powers
-  above, at least 15 W below 108.7 W.
+  fraction of H's. Decode is DIFFICULTY's long phase: in the pilot, the median answer was 457 to 474 generated
+  tokens with thinking off (100 answers per model; each problem's run at the highest cap it was given) and 2,916 to
+  2,959 with thinking on for 4B and 8B, with caps of 4,096 and 16,384. On H, decode ran at the meter powers above,
+  at least 15 W below 108.7 W.
+- **What H did not cover.** H's decodes held at most 2,560 tokens of context (2,048 + 512). A thinking-on answer
+  can run to 16,384, and decode power at that context was not measured.
 - **Expected term: 0 J per attempt** for all four measured configurations and the optional 8B thinking-on.
 - **Not a guarantee.** 8B's stage peak (109.0 W) is above the lowest peak at which H read a discharge (108.7 W).
   A peak alone does not predict one: stages that peaked higher had no negative reading (Qwen3-32B 118.0 W,
@@ -222,7 +228,14 @@ Inputs: H's root, and BAT-1's per-run battery table (`h_battery_runs.csv`, in
 Run it as `/opt/homebrew/bin/python3.13 -I diff1_numbers.py /Users/edr/night-bytes/h-20261021T185555Z
 /Users/edr/night-archive/forward-20261021/BAT-1/out`. It prints the per-run rows behind both tables and the
 simulation lines quoted above. The stage counts and SMC peaks come from BAT-1's `out/batt_by_stage.txt`, and the
-pilot's prompt lengths from `/Users/edr/night-archive/pilots/difficulty/results*.jsonl`.
+pilot's prompt lengths and answer lengths from `/Users/edr/night-archive/pilots/difficulty/results*.jsonl` (633
+rows; prompt tokens 33 to 454; for answer lengths, each model, mode and problem keeps its row at the highest cap).
+
+Second dispatch, 2026-10-22: the embedded script was re-run unchanged on the same inputs. Its output matches every
+number in both tables and the simulation lines (exit 0). The stage table, the registration's line numbers, the
+4b350f47 record's lines, the twin's `read_table` and the `km003c_parse` and `b6` code cited above were re-checked at
+the anchors named. One correction came from the re-check: the pilot's thinking-off median answer length, first
+written as about 500 to 600 tokens, is 457 to 474.
 
 ```python
 import csv, json, math, random, re, statistics as st, sys
