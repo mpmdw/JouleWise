@@ -177,28 +177,44 @@ Source: [P3767 device tree, public L4T mirror](https://github.com/OE4T/t23x-publ
 Verify the borrowed board's running device tree before adopting that shunt.
 
 Binary segmentation retains the 2 variance log(n) BIC-style SSE penalty.
-For held readings it infers a change cadence and thins to independent
-conversion-sized observations while retaining the duration of constant
-plateaus. Noise estimation first removes bit-identical repeats. A robust
+For held readings it infers a change cadence only when numerous completed
+change-to-change runs all span more than one poll, with a majority of repeated
+differences. Consecutive changing polls demonstrate native-rate information:
+a flat quantized plateau alone must not cause thinning. Ambiguous streams
+retain their observations. Noise estimation removes bit-identical repeats
+only under the same evidence rule, so zero-variance quantized phases do not
+leave only large transition differences in the noise estimate. A robust
 difference-variance envelope at local dyadic lags through one exposure
 plus one sample includes
 correlated token ripple as within-phase variation. This avoids treating
 every ripple half-cycle as a prefill. Persistent levels use complete-span
-grouping; mixed-exposure leaves borrow adjacent sustained labels, and
-adjacent equal labels merge. Read gaps need at least two nominal periods;
+grouping. Short leaves closer to the established idle level than to decode
+remain low; this equal-variance least-squares decision retains a one-clean-
+exposure trough between mixed samples. Other mixed-exposure leaves borrow
+adjacent sustained labels, and adjacent equal labels merge. Read gaps need at least two nominal periods;
 touching boundaries carry uncertainty widened by the gap and unmatched
-troughs there are indeterminate, not unlogged-call candidates.
+troughs there are indeterminate, not unlogged-call candidates. An edge-low run
+admitted because it overlaps a visible call is also indeterminate if its
+full-run timing cannot be matched: the trace may start or end inside a wait.
 
 Matching uses idle runs implied by visible generation and tool intervals.
 All logged calls in a matched run count toward recall; individual call
 timing inside a shared run is unresolved. Precision counts matched runs,
 so it remains a probability when a run contains several calls.
 
-FIX ROUND 1 EXECUTION STATUS: the cloud executor is still unavailable.
-Source fixes and regression tests are saved, but none of the required
-commands, reviewer probes or the new production study has run in this seat.
-There are no measured sensitivity curves, detected/true-prefill counts,
-concealment rates or shortest passing durations to report yet. The old
-reviewer results at 08b493a1e describe the pre-fix tree only. Restore an
-executor and run the report's exact validation checklist before interpreting
-any synthetic sensitivity result. Hardware status remains PROVISIONAL.
+FIX1C EXECUTION STATUS: the cloud executor is still unavailable. The lead
+ran 37 alignment tests successfully at 13b86db3f and supplied passing B1/B2,
+M2/M3/M4 and m1/m2/m3/energy repro results. At that head, e7 had zero false
+alarms and time-weighted label accuracy 0.984 (powermetrics), 0.983 (NVML)
+and 1.000 (INA). The 16-seed long-world slow-sensor run had zero false
+candidates and 29–30 detected prefills for 30 true, but lost short-call
+recall; the noise-free quantized powermetrics row also lost all three calls.
+Those are supplied lead results, not tests run by this seat or on the
+fix1c changes.
+
+The two source fixes and regressions are pushed for re-verification. No
+current-head Python test, reviewer probe or production study has executed
+here. Sensitivity curves, concealment fractions and both shortest-duration
+answers remain unavailable; do not substitute the old four-turn study's
+results. Restore an executor and run the report's exact validation checklist
+before interpreting sensitivity. Hardware status remains PROVISIONAL.
