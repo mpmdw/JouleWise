@@ -1,41 +1,49 @@
 # Realsmoke: execution blocked
 
-Status on 2026-10-22: **NOT EXECUTED**.
-The managed environment did not become usable during this attempt. Shell commands
-were rejected before a process could start, including the align suite attempt at
-14:16 UTC. See [the lane report](../../.codex-report/align-realsmoke.md) for the
-command counts and handoff.
+Status after the continuation attempt on 2026-10-22: **NOT EXECUTED**.
+The newly selected VM also failed to become usable. The last shell retries at
+14:30:17 UTC were rejected before process creation. The requested real-server
+run remains incomplete. See [the lane report](../../.codex-report/align-realsmoke.md)
+for exact attempted commands and counts.
 
 ## What ran
 
-Only connected GitHub reads and lane-only documentation commits completed.
-No CPU model, model server, tokenizer request, SHADE episode, power sampler,
-attribution calculation, residual detector or metadata baseline has run.
+Connected GitHub reads and documentation commits on
+`lane/2026-10-21-align-realsmoke` completed. This continuation preserved the
+previous lane head, `dcf5db2d393db69dcb2b7990b2f094ba6a218a79`, and did not
+recreate the lane from integration. The integration ancestor remains
+`4c60dd5aef072e039e3bdcb1c48946bd525d980d`.
 
-The starting integration commit is
-`4c60dd5aef072e039e3bdcb1c48946bd525d980d`. The lane is
-`lane/2026-10-21-align-realsmoke`. The protected files
-`docs/align/PIPELINE.md`, `joulewise/align/records.py` and
-`joulewise/align/interfaces.py` were read through GitHub and remain unchanged.
+No CPU model, model server, tokenizer request, SHADE episode, power sampler,
+attribution calculation, residual detector or metadata baseline executed.
+No energy, measured or synthetic, was produced.
 
 ## Execution blocker
 
-The shell tool returns:
+The selected environment was
+`ccarenv_b64_Y2NhcmVudl9kNTRmOGJhOTI1ZjQ4MTkxOGY0ODg3MDFlMDE2YTRlZA`.
+The shell tool returned this for every attempt:
 
 > No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-The managed runtime repeatedly reported desired_phase=running and
-connectivity=offline, alternating observed_phase between pending and starting.
-The startup wait did not yield a usable executor; shell retries continued through
-14:17 UTC.
-The diagnostic index returns history_status=not_found with no retained records.
-These observations do not establish the cause of the startup failure.
+A `wait_for_environment` call remained pending across repeated waits and shell
+retries, and was terminated after the final rejection. Runtime observations
+alternated between pending and starting, always offline with failure=null.
+The final observation at 14:30:17 UTC was pending/offline. The diagnostic index
+returned history_status=not_found, records=[], omitted_records=0 and
+legacy_snapshot_available=false. These observations do not establish a startup
+root cause.
 
-The runtime's policy snapshot is restricted and does not list Hugging Face.
-Its state is unknown, and the executor policy file cannot yet be read. No
-download was attempted; an actual destination denial has not been observed.
-The supported network configuration would need checking when execution becomes
-available. No credential is needed or requested for the public weights.
+In this continuation, seven `pwd` probes, two Git-status attempts and two align
+suite attempts were rejected. No command created a process. The previous
+seat's separate attempt is recorded in the report at the preserved starting
+commit; its counts are not included here.
+
+The runtime policy snapshot was restricted, with state unknown, and did not
+list Hugging Face. The executor's `/etc/codex/network-policy.json` could not be
+read. No download was attempted and no HTTP destination denial was observed.
+Check supported network configuration when an executor becomes available;
+public weights require no credential.
 
 ## Missing evidence
 
@@ -56,24 +64,36 @@ available. No credential is needed or requested for the public weights.
 | Captured-response replay tests | None authored |
 | Align suite and extra-dependency suite results | Not executed |
 
-No substitute fixtures or unexecuted implementation changes are offered as
-real-server evidence. The registry, tokenizer and sampler integration gaps in
-the brief still require execution and captured-response regressions before fixes
-are justified in this lane.
+## Source inspection, awaiting execution
+
+The protected plan, records and interfaces were read and remain unchanged.
+Source inspection confirms that `registry_defaults.py` registers no SHADE
+monitor or endpoint-tokenizer factory, and that `SyntheticPowerSampler` expects
+a mock clock's work ledger. These are the integration targets named in the
+brief. No real matrix executed to establish their runtime failures, so no
+implementation fix or fabricated response capture was substituted.
+
+There are no observed real-server differences to label as fixed or
+"no fix needed." Streaming usage, reasoning, tool deltas, tokenizer shapes,
+context overflow and rejected tools all remain untested.
 
 ## Resume
 
-Read the lane report first, fetch this lane from origin, and preserve its head.
-Once a shell can run in `/workspace/JouleWise`, inspect local Git state and the
-executor's non-secret network policy, then follow the build brief's server,
-model, matrix, analysis and capture/replay sequence. The server budgets must be
-chosen from the actual context window and CPU speed; none have been selected
-or represented as tested here.
+Make a shell command succeed, inspect local Git state, then fetch and continue
+the current `origin/lane/2026-10-21-align-realsmoke` head. Preserve unrelated
+work. Read the lane report and the three protected contracts before writes.
 
-Run `python3 -m unittest discover -s tests/align -t .` on the final code, with
-stdlib-only and extra-dependency runs distinguished. Every energy value from
-this lane must be labelled synthetic.
+Inspect the executor's non-secret network policy. Follow the build brief's
+server installation/build attempts, model provenance checks, health polling,
+parsed/unparsed reasoning captures, fixture and optional upstream matrices,
+analysis, fixes and captured-response replays. Choose serving budgets from the
+actual context window and CPU decode speed. Commit only matrices actually run.
 
-Even a completed CPU smoke run would not validate a rented GPU server, real
-power, GPU batch effects, or the ability of a task-capable larger model. This
-blocked attempt establishes none of those.
+Run `python3 -m unittest discover -s tests/align -t .` on the final code.
+Distinguish the stdlib and installed-extra runs. Label every energy value
+synthetic.
+
+A completed CPU smoke would still not validate GPU serving, real power,
+batch effects, or a model large enough to perform the task pair well.
+Power can count hidden or omitted work; it cannot reveal reasoning that fits
+inside one forward pass.
