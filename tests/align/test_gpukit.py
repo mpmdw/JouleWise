@@ -619,6 +619,8 @@ raise SystemExit(1)
         options = self._options("not-ready", ready_command=(sys.executable, "-c", "raise SystemExit(1)"))
         receipt = run_session(options)
         self.assertIn("endpoint_exited_before_ready", receipt["flags"])
+        self.assertEqual(receipt["status"], "failed")
+        self.assertIn("session_ran_no_model", receipt["flags"])
         self.assertEqual(verify_manifest(options.output), ())
 
     def test_shell_installation_uses_pinned_vllm_and_repository(self):
@@ -1003,11 +1005,23 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
 
     def test_budget_adapter_skip_is_failed_when_no_runner_started(self):
         result = run_session(self._options("budget-skips", matrix=CONFIG / "budget.json",
-                                           runner_command=()))
+                                           runner_command=(), runner_settings=self._record_settings()))
         self.assertEqual(result["status"], "failed")
         self.assertIn("budget_runner_adapter_required", result["flags"])
         self.assertIn("session_ran_no_model", result["flags"])
         self.assertFalse(any("runner_returncode" in m for m in result["models"]))
+        self.assertEqual(len(result["models"]), 4)  # Four configured agents, all adapter-skipped.
+        cli = subprocess.run([
+            sys.executable, "-m", "joulewise.align.gpukit.session", str(CONFIG / "budget.json"),
+            "--output", str(self.base / "budget-skips-cli"),
+            "--runner-settings", str(self._record_settings()),
+            "--preflight-command", json.dumps(["fixture-python", "-m", "joulewise.align.power.preflight"]),
+            "--ready-timeout-s", "30", "--command-timeout-s", "30",
+            "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--stop-grace-s", "5",
+            "--runner-timeout-s", "30", "--poll-s", "0.01", "--monitor-placement", "none"],
+            cwd=ROOT, capture_output=True, text=True, timeout=60)
+        self.assertEqual(cli.returncode, 3, cli.stderr)
+        self.assertIn("session_ran_no_model", json.loads(cli.stdout)["flags"])
 
     def test_argument_error_exits_three(self):
         from joulewise.align.gpukit.session import main
