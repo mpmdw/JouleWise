@@ -77,6 +77,7 @@ class FakeNvmlLibrary:
         return 0
 
     def nvmlDeviceGetHandleByIndex_v2(self, index: int, output: object) -> int:
+        index = int(getattr(index, "value", index))  # Real pynvml passes c_uint.
         if not 0 <= index < self.count:
             return 2  # NVML_ERROR_INVALID_ARGUMENT.
         self._put(output, ctypes.c_void_p, index + 1)
@@ -148,6 +149,7 @@ class FakeNvmlLibrary:
         return 0
 
     def nvmlDeviceGetFieldValues(self, handle: object, count: int, values: object) -> int:
+        count = int(getattr(count, "value", count))  # Real pynvml passes c_int.
         with self._lock:
             self.field_calls += 1
             for index in range(count):
@@ -530,6 +532,8 @@ class NvmlSamplerTests(unittest.TestCase):
                 return lambda flags: library.nvmlInit_v2()
             if name == "nvmlDeviceGetName_v2":
                 return library.nvmlDeviceGetName
+            if name == "nvmlSystemGetCudaDriverVersion":
+                return library.nvmlSystemGetCudaDriverVersion_v2
             return getattr(library, name)
 
         with mock.patch.object(pynvml, "_nvmlGetFunctionPointer", side_effect=resolve):
@@ -545,7 +549,7 @@ class NvmlSamplerTests(unittest.TestCase):
                 output = Path(directory)/"preflight.json"
                 # A zero-span CLI world checks native scalar serialization;
                 # the load/no-load worlds separately test movement physics.
-                with mock.patch.object(preflight, "open_nvml", return_value=pynvml), \\
+                with mock.patch.object(preflight, "open_nvml", return_value=pynvml), \
                         mock.patch.object(preflight.importlib.util, "find_spec", return_value=None):
                     self.assertEqual(preflight.main([
                         "--out", str(output), "--idle-seconds", "0",

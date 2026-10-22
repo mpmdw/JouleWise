@@ -372,7 +372,8 @@ class DutyIndependentTwinTests(unittest.TestCase):
         self.assertAlmostEqual(actual.joules, expected.joules, delta=tolerance)
         self.assertAlmostEqual(
             actual.coverage_fraction, expected.coverage_fraction,
-            delta=1e-6 * max(abs(expected.coverage_fraction), 1.0)  # N4: below 1, 1e-6 absolute.,
+            # N4: below 1, use 1e-6 absolute; otherwise 1e-6 relative.
+            delta=1e-6 * max(abs(expected.coverage_fraction), 1.0),
         )
         if math.isinf(expected.half_width_j):
             self.assertEqual(actual.half_width_j, math.inf)

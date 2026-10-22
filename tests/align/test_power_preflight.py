@@ -153,9 +153,9 @@ class PreflightTests(unittest.TestCase):
                         process.wait = wait
                     return process
 
-                with mock.patch.dict(os.environ, {"PATH": str(directory) + os.pathsep + os.defpath}), \\
-                        mock.patch.object(preflight, "NvmlSampler", side_effect=make_sampler), \\
-                        mock.patch.object(preflight.subprocess, "Popen", side_effect=popen), \\
+                with mock.patch.dict(os.environ, {"PATH": str(directory) + os.pathsep + os.defpath}), \
+                        mock.patch.object(preflight, "NvmlSampler", side_effect=make_sampler), \
+                        mock.patch.object(preflight.subprocess, "Popen", side_effect=popen), \
                         mock.patch.object(preflight, "time", types.SimpleNamespace(
                             monotonic=time.monotonic, monotonic_ns=library.mono, sleep=phase_sleep)):
                     report = preflight.run_preflight(
@@ -417,7 +417,7 @@ class PreflightTests(unittest.TestCase):
                     raise PermissionError("synthetic zombie-group EPERM")
                 original_killpg(group, sig)
 
-            with mock.patch.dict(os.environ, {"PATH": str(directory)+os.pathsep+os.defpath}), \\
+            with mock.patch.dict(os.environ, {"PATH": str(directory)+os.pathsep+os.defpath}), \
                     mock.patch.object(preflight.os, "killpg", side_effect=killpg):
                 report = preflight.run_preflight(
                     library=FakeNvmlLibrary(), idle_seconds=0, load_seconds=1,
