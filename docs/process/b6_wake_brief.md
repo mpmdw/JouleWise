@@ -34,18 +34,18 @@ structure (flags, counts, stage exit codes), never for energies or per-run numbe
 | Reason | What to do |
 |---|---|
 | `physics_wait_2h` (mail only) | A physical hazard (clock, battery, thermal, contention, sampler, disk) has kept the loop waiting 2 h. Find the cause from `state.json` `wait` and the pre-check's `precheck-*.json`. Fix it if it is fixable without sudo (disk: move or offload earlier archives to iCloud, never delete evidence); otherwise email Ed what you measured. |
-| `certain_exclusion` | The pre-check found a condition that would remove the session before it starts (for example the model files differ from the pinned ones). Fix the cause, then `b6_loop.py resume --pack <pack>`. |
+| `certain_exclusion` | The pre-check found a condition that would remove the session before it starts (for example the model files differ from the pinned ones). Fix the cause, then `b6_loop.py resume --loop-root <loop_root> --pack <pack>`. |
 | `smoke_hold` | A pack's smoke failed on something that is not physics. Read `<staging>/<session>-smoke-*/smoke-result.json`. Fix the code on a branch, review it per doctrine, and leave the pack held until the fix is pinned. The same failure on two packs holds the whole loop. |
-| `structure_defect` | A session's collection was structurally broken (design 13.1: fix before the next pack arms). Read the session line's `structure_defects`. Fix, then `resume`. |
-| `harvest_fault` | The session harvest failed as a program. The raw bytes are kept. Fix the harvest, then `b6_loop.py reharvested <session_id>`. |
+| `structure_defect` | A session's collection was structurally broken (design 13.1: fix before the next pack arms). Read the session line's `structure_defects`. Fix, then `b6_loop.py resume --loop-root <loop_root>`. |
+| `harvest_fault` | The session harvest failed as a program. The raw bytes are kept. Fix the harvest, then `b6_loop.py reharvested --loop-root <loop_root> <session_id>`. |
 | `overrun` | A collection ran past its deadline plus an hour with no terminal record. Never kill it. Find out why from its custody records; email Ed if a process must be stopped. |
 | `lane_missing:*` | A lane adapter is missing on the pinned commit. That is a build defect: fix on the integration branch. |
-| `exception:*` | The loop itself raised. `state.json` `last_exception` names it. Fix, then `resume`. |
-| `pack_paused`, `close`, `pack_not_open` | A pack reached its attempt limit, the campaign closed, or a registration is missing or invalid. Decide per the registration (§5); `close` means start the release work. |
+| `exception:*` | The loop itself raised. `state.json` `last_exception` names it. Fix, then `b6_loop.py resume --loop-root <loop_root>`. |
+| `pack_paused`, `close`, `pack_not_open` | A pack reached its attempt limit, the campaign closed, or a registration is missing or invalid. Decide per the registration (§5); `close` means start the release work; on the BYTES root every registered pack is done. If pass-2 packs register after close, run `b6_loop.py resume --loop-root <loop_root> --pack <pack>`. |
 
 ## Before you exit
 
 - Record what you found and did in one line of the session record (RUN_STATE, per doctrine) and, if state changed,
   email Ed once (only on a change of state, a question he must answer, or a fault).
-- Run `b6_loop.py resume` only when the cause is fixed or the hold was wrong. A hold you leave in place is fine.
+- Run `b6_loop.py resume --loop-root <loop_root>` only when the cause is fixed or the hold was wrong. A hold you leave in place is fine.
 - Exit. The loop's next tick sees that no agent is alive and goes on.

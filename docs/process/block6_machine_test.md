@@ -217,10 +217,10 @@ Every argument:
   once `acceptance.json` exists. Any exit other than 0 and 6 is a harvest fault, `pending_harvest`, never a
   judged session. A lost chain (job gone or ended with no terminal record, process group gone) has its ledger
   bracket aborted and is flagged `records.terminal_record_absent`.
-- *Wake:* on a hold the loop bootstraps `com.joulewise.b6wake.<n>`, which runs `$M/scripts/b6_wake.zsh` → `claude
+- *Wake:* on a hold the loop bootstraps `com.joulewise.b6wake.<root-basename>-<root-digest>.<n>`, which runs `$M/scripts/b6_wake.zsh` → `claude
   -p` with `docs/process/b6_wake_brief.md` from `/Users/edr/code/JouleWise` (deferred while a collection is live);
-  output in `/Users/edr/night-b6/loop/wake/com.joulewise.b6wake.<n>.out/.err`. A woken agent makes the next
-  pre-check wait until it has exited.
+  output in `/Users/edr/night-b6/loop/wake/com.joulewise.b6wake.<root-basename>-<root-digest>.<n>.out/.err`. A woken agent makes the next
+  pre-check wait until it has exited. Wake JSON records job_label and bootstrap_rc; nonzero bootstrap is a recorded flag, and mail still goes out.
 
 **What must be true first, or the loop holds and starts nothing** (it says why in `state.json` and by one mail):
 

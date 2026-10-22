@@ -13,7 +13,7 @@
 
 ## SUMMARY
 
-- Items 1–6 implemented or given their authorized record-only disposition.
+- Items 1–6 implemented or given their authorized record-only disposition. Rehearsal stubs DriverLane.launch; real launch remains blocked by BY-SLOTS/BY-PIN launch bindings.
 - Dedicated BYTES root preserves replication DONE history; guard-shaped CLI selects its twelve-pack config.
 - DONE with delivered-outbox marker exits in native zsh before Python; nested DONE values cannot suppress resumed work.
 - Anchor-fallback-only rc 1 is explained with negative-case coverage; all other failures remain failures.
@@ -73,6 +73,8 @@ Director live before: SIGINT/SIGTERM each left one hazards-test-real-monitor ppi
 This is a manual orchestration-instruction duplication, so changing the shared mailer would affect the existing loop delivery rather than removing the magistrate's instruction. The historical prose is evidence, not a second executable mailer. No in-scope magistrate sender was identified. The lead should carry loop-wake ownership into the external activation instructions; the requested record-only disposition is used here. No message was sent by this seat.
 
 ## REHEARSAL
+
+The rehearsal replaces DriverLane.launch with a stub; its fake-launchctl argv is emitted by that stub. It does not run plan.write_window_plan or install_night_agent.sh for BYTES. No BYTES pack can launch until BY-SLOTS/BY-PIN supplies arm_attachments.launch = joulewise.stage_launch_bindings.v1. Before any BYTES arm, repeat with real DriverLane.launch, HOME redirected to scratch, and fake launchctl (reviewer rehearsal_real_launch.py shape). This is a blocking dependency, not live launch evidence.
 
 Slice-5 standalone PASS at /private/tmp/jwtmp-byloop.ZhKeYM, exit 0; CI test PASS (1 / 15.226s, no skips). Exact replay from repository cwd:
 
@@ -173,6 +175,10 @@ shell).
 - Install step (arm-time, not done here): render configs/launchd/com.joulewise.b6loop.plist.template with __LOOP_ROOT__=/Users/edr/night-b6/loop-bytes; the CLI now selects configs/b6/loop_bytes.json from that root. Same label as the replication job, which is DONE. Install only after the BYTES packs are registered: until then a fresh BYTES root sits in NEXT and each 300 s tick starts Python (NEXT with no open pack is not dormant by design, so a later registration is discovered).
 - Production BYTES C5 sizing remains external; fixture values are synthetic.
 - SIGKILL cannot execute cleanup; production parent-death supervision requires a separate sealed-code decision.
+- FIX ROUND 1 resolves verification 2's replication-root resume hazard: loop.json now filters alpha/beta/gamma, the wake session exports its resolved root, and every wake-brief control command names that root. Regression rejects BYTES resume against a scratch DONE replication root and still permits alpha.
+- Wake labels now include root identity; lead may boot out stale com.joulewise.b6wake.1/.2 at BYTES install (machine-test precondition 5).
+- BYTES launch remains blocked on BY-SLOTS/BY-PIN launch bindings and a passing real-launch rehearsal with scratch HOME/fake launchctl before arm.
+- BYTES closure covers registered packs; if pass 2 registers after close, resume explicitly with the BYTES loop root and pack.
 
 ## NEEDS_RULING
 
@@ -250,3 +256,12 @@ lanes' Sol seats (load average 30-38).
   registered for reaping, not its timing. Environmental, not chased.
 - Sealed inventory on the lead commit: `git diff --name-only bda481d5a HEAD` (13 paths, the same 13 as at
   ceac3ad86) intersect 682 sealed paths = []. `git diff --check` clean.
+- All six tests.b6.test_loop_round_desk tests under the same runner-like git config (three parallel processes):
+  6 OK (bytes_guard_shaped_rehearsal, alpha_smoke_session_desk_and_beta_rotation, physics_refusal_wait_reprepare_then_retry,
+  stops_close_bracket_advance_pin_and_reach_next_smoke, lost_session_reaches_desk_and_holds_before_beta,
+  resume_after_hold_continues_real_round).
+- CI: ci/2026-10-22-bytes-loop fast-forwarded (no force) to 7c37fb5c2 = merge of fba44874a and lane 5e562859f;
+  its tree differs from fba44874a only in tests/b6/round_support.py and this report. Run 39811233131: 20 of 20
+  jobs green, including shard 7, whose log shows test_bytes_guard_shaped_rehearsal ok on Linux (the cloud
+  rehearsal). gate-ledger 39811233416 red (draft PR, expected). The later report-only lane commit was not
+  pushed to the CI branch.

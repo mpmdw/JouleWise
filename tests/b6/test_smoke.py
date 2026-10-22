@@ -412,7 +412,7 @@ class SmokeTests(DeskCase):
         from joulewise.b6 import acceptance
         from tests.test_b6_machine_test import put, append
 
-        for case in ('anchor', 'anchor_mixed_failure', 'anchor_other_flag', 'anchor_nonzero', 'anchor_other_member',
+        for case in ('anchor', 'anchor_ok_companion', 'anchor_nonproduction_status', 'anchor_mixed_failure', 'anchor_other_flag', 'anchor_nonzero', 'anchor_other_member',
                      'cap', 'budget', 'mixed', 'reason_absent', 'flag_absent',
                      'budget_reason_absent', 'budget_flag_absent', 'budget_wrong_reason', 'cap_wrong_reason',
                      'wrong_member', 'wrong_dispatch', 'other_exit', 'other_crash', 'missing_dispatch'):
@@ -422,7 +422,7 @@ class SmokeTests(DeskCase):
                 archive = base / 'archive'
                 reduced = s.reduce_tree(tree('alpha'), json.loads(s.KEEP_PATH.read_text())[PACKS['alpha']])
                 cap_stage = 'alpha-science-absolute'
-                if case in ('mixed', 'anchor_other_member'):
+                if case in ('mixed', 'anchor_other_member', 'anchor_ok_companion', 'anchor_nonproduction_status'):
                     next(st for st in reduced['stage_graph'] if st['stage_id'] == cap_stage)['expected_count'] = 2
                     reduced['smoke_reduction']['keep'][cap_stage] = 2
                 pack_rel = Path('configs/campaigns') / PACKS['alpha']
@@ -440,7 +440,7 @@ class SmokeTests(DeskCase):
                 members = []
                 skips = []
                 for dispatch in dispatches:
-                    selected = (dispatch.run_ids[:2] if case in ('mixed', 'anchor_other_member') else (cap_id,)
+                    selected = (dispatch.run_ids[:2] if case in ('mixed', 'anchor_other_member', 'anchor_ok_companion', 'anchor_nonproduction_status') else (cap_id,)
                                 ) if dispatch.stage_id == cap_stage else dispatch.run_ids[:1]
                     for rid in selected:
                         members.append({'run_id': rid, 'stage_id': dispatch.stage_id})
@@ -473,12 +473,13 @@ class SmokeTests(DeskCase):
                            {'run_id': cap_id, 'status': 'failed',
                             'exit_code': 2 if case == 'anchor_nonzero' else 0,
                             'members': [evaluation]})
-                    if case == 'anchor_other_member':
+                    if case in ('anchor_other_member', 'anchor_ok_companion', 'anchor_nonproduction_status'):
                         other = next(d.run_ids[1] for d in dispatches if d.stage_id == cap_stage)
                         append(archive / 'sources/claim-runs/campaign_log.jsonl',
-                               {'run_id': other, 'status': 'failed', 'exit_code': 0,
-                                'members': [{**evaluation, 'bundle_id': other,
-                                             'collection_integrity_flags': ['other_failure']}]})
+                               {'run_id': other, 'status': 'succeeded' if case == 'anchor_nonproduction_status' else 'ok',
+                                'exit_code': 0, 'members': [{**evaluation, 'bundle_id': other,
+                                    'collection_integrity_flags': ['other_failure'] if case == 'anchor_other_member' else [],
+                                    'rerun_required': False}]})
                 put(archive / 'derived/roster.json', {'pack_id': PACKS['alpha'], 'members': members})
                 catalog = support.prepared(base / 'acceptance').catalog
                 for rid, skip_code in skips:
@@ -508,7 +509,7 @@ class SmokeTests(DeskCase):
                 result = s.desk(prepared, driver_exit=0, advance_pin=lambda *a, **kw: None,
                                 run=lambda *a, **kw: SimpleNamespace(returncode=0))
                 self.assertEqual(result['errors'], [])
-                self.assertEqual(result['status'], 'pass' if case == 'anchor' else
+                self.assertEqual(result['status'], 'pass' if case in ('anchor', 'anchor_ok_companion') else
                                  'physics' if case in ('cap', 'budget', 'mixed') else 'fail')
 
     def test_structural_acceptance_is_not_excused_by_incidental_physics(self):

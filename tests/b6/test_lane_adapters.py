@@ -157,7 +157,8 @@ class AdapterTests(DeskCase):
     def test_waker_binds_record_path_without_starting_a_job(self):
         run = Mock(return_value=SimpleNamespace(returncode=0))
         waker = Waker(self.loop, wake_argv=['/synthetic/wake', str(self.loop), '{wake_record}'], run=run)
-        waker.wake('reason', {})
+        record = waker.wake('reason', {})
+        self.assertEqual(record['bootstrap_rc'], 0)
         plist = plistlib.loads(next((self.loop / 'wake').glob('*.plist')).read_bytes())
         self.assertEqual(plist['ProgramArguments'][-1], str(self.loop / 'wake/000001.json'))
         self.assertEqual(run.call_count, 1)

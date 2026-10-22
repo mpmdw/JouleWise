@@ -683,6 +683,9 @@ def bytes_rehearsal(root):
         loop = real_loop(repo, loop_root, **kwargs)
         loop.lanes.precheck.run = lambda *args: PrecheckResult(fingerprint={'synthetic': True})
         loop.lanes.driver.launchctl_bin = str(fake)
+        # This stub proves preparation only. BY-SLOTS/BY-PIN must supply
+        # arm_attachments.launch = joulewise.stage_launch_bindings.v1;
+        # real DriverLane.launch with scratch HOME/fake launchctl must pass before any BYTES arm.
         def launch(prepared):
             runner([str(fake), 'rehearsal-only', prepared.session_id], check=True)
             return Running('synthetic-no-job')

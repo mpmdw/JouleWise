@@ -387,7 +387,7 @@ def _campaign_member_results(archive, window_plan):
                 anchor = (acquired and row.get("status") == "failed"
                           and flags == ["anchor_fallback_member_unusable"]
                           and member.get("rerun_required") is True)
-                usable = (acquired and row.get("status") in ("succeeded", "failed", "skipped")
+                usable = (acquired and row.get("status") in ("ok", "failed", "skipped")
                           and flags == [] and member.get("rerun_required") is False)
                 losses[member["bundle_id"]] = "anchor" if anchor else "usable" if usable else "failed"
     return losses

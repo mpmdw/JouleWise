@@ -1,7 +1,9 @@
 """Small lane contracts and their production adapters."""
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import plistlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -224,7 +226,10 @@ class Waker:
                 return
             import os
             seq = record["seq"]
-            label = f"com.joulewise.b6wake.{seq}"
+            loop_root = self.root.parent.resolve()
+            basename = re.sub(r"[^a-zA-Z0-9_-]+", "-", loop_root.name).strip("-")[:40] or "root"
+            digest = hashlib.sha256(str(loop_root).encode()).hexdigest()[:16]
+            label = f"com.joulewise.b6wake.{basename}-{digest}.{seq}"
             path = self.root / f"{label}.plist"
             argv = [arg.replace("{wake_record}", str(record_path.resolve())) for arg in self.argv]
             # The woken session's output stays beside its wake record.
@@ -232,6 +237,8 @@ class Waker:
                                              "RunAtLoad": True, "ProcessType": "Background",
                                              "StandardOutPath": str(self.root / f"{label}.out"),
                                              "StandardErrorPath": str(self.root / f"{label}.err")}))
-            record.update(bootstrap_attempted=True, job_deferred=False)
+            record.update(bootstrap_attempted=True, job_deferred=False, job_label=label)
             record_path.write_text(json.dumps(record) + "\n")
-            self.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)])
+            result = self.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)])
+            record["bootstrap_rc"] = getattr(result, "returncode", None)
+            record_path.write_text(json.dumps(record) + "\n")
