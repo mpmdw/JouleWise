@@ -52,9 +52,9 @@ scripts (`worked_example.py`, `ruling_table.py`, `lead/`) are on the same branch
 
 Was it a problem? Yes, but a small one, and only for the whole-machine boundaries. On H, no 70B decode had battery
 help except soak-r11 (0.40 J, a run the harvest already excludes). Every full-length Qwen3.5-122B decode read
-0.56 to 1.15 J of battery energy, 0.063 to 0.129 % of its meter energy. Nearly all of that falls in the first 2.1 s of
-decode, as the prefill's discharge is reported late. The processor rails, which carry the claims, never depended on
-the source of the power (2026-10-06 ruling; BAT-1's reopen tests).
+0.56 to 1.15 J of battery energy, 0.063 to 0.129 % of its meter energy. All of it comes from polls received in the
+first 1.93 s of decode: it is the prefill's discharge, reported late. The processor rails, which carry the claims,
+never depended on the source of the power (2026-10-06 ruling; BAT-1's reopen tests).
 
 ## 0. A correction to the item brief
 
@@ -305,8 +305,8 @@ Base text: `91b20d7c2`. The registration's editor places these and adds a §20 r
 >
 > *Expected, from the non-claim check session H (2026-10-21):*
 > - Llama-3.3-70B: 1 decode-assisted run of 18 (0.40 J, a run the harvest excluded for an agent's presence).
-> - Qwen3.5-122B: no decode-assisted run, but 0.56 to 1.15 J of battery energy in every full-length run, all of it in
->   the first 2.2 s of decode and within its edge term v.
+> - Qwen3.5-122B: no decode-assisted run, but 0.56 to 1.15 J of battery energy in every full-length run, all of it
+>   from meter polls received in the first 1.93 s of decode, and within its edge term v.
 > - Every model at or below 32B: 0 J.
 
 **§7, the bound table's "phase-edge timing" row:** the DC-input cell becomes "u + v, the meter and battery edge terms
@@ -427,6 +427,9 @@ All three other councillors' scripts were re-run there too, and each reproduces 
 the Opus seat's `bat2_opus.py` (stdout), Sol's `analyse.py` (`analysis.json`) and the judge's `judge.py` (stdout).
 Every per-run value in this file agrees across the four programs to the printed digit.
 
+A second lead re-run at 22:31 PDT re-derived these worked examples and §4's counts from H's raw meter stream, without
+the extract, through the real `km003c_parse` and `meter_decode` functions ("Executed evidence" below).
+
 ## 10. Dissent and what was dropped
 
 **Agreed by both seats and the judge.**
@@ -510,3 +513,61 @@ the real `meter_decode` at `0743a7b90`.
   The prefill-only burst checks that a prefill burst moves neither the term nor the marker beyond v.
 - The flag catalog gains `bytes.decode_battery_assist`.
 - This is claim-path code: an executing review and both cold passes, as for any BYTES analysis change.
+
+## Executed evidence
+
+Lead re-run of the worked example, 2026-10-21 22:31 PDT, on the Mac (`/opt/homebrew/bin/python3.13`, flags `-I -B`),
+after BAT-2 was re-dispatched. Inputs:
+
+- `$P`: JouleWise-data `analysis/bat-council-20261022` @ `c17fdca`, exported with `git archive`. It holds the packet,
+  the extract and the ruling scripts; `$P/../battery-assist-20261022` holds BAT-1's tables from `0cb3eb6`.
+- `$K`: `km003c_parse.py` from origin/main `bfab7c950`, byte-identical to the copy at `0743a7b90`.
+- `$J`: `joulewise/` at `0743a7b90`.
+- `$H`: `/Users/edr/night-bytes/h-20261021T185555Z`, H's session root, read only.
+- `$L`: `/Users/edr/night-archive/forward-20261021/BAT-2/lead-rerun`, which holds the two new lead scripts
+  (`lead_rerun.py`, sha256 `c5c39696…`; `lead_counts.py`, `56527848…`) and every output below.
+
+```text
+$ python3.13 -I -B $P/worked_example.py $P/data/h_decode_extract.json
+exit 0
+$ python3.13 -I -B $P/ruling_table.py $P/data/h_decode_extract.json
+exit 0
+$ python3.13 -I -B $P/lead/lead_check2.py $P/data/h_decode_extract.json
+exit 0
+$ python3.13 -I -B $P/lead/lead_table.py $P/data/h_decode_extract.json $P/../battery-assist-20261022/tables/h_battery_runs.json $K/km003c_parse.py
+exit 0
+$ python3.13 -I -B $L/lead_rerun.py $H $J
+exit 0
+$ python3.13 -I -B $L/lead_counts.py $H $J
+exit 0
+```
+
+What the runs show:
+
+1. `worked_example.py` prints every number in §9's three worked examples, to the printed digit. The output of
+   `ruling_table.py` is identical to §9's per-run table (empty diff).
+2. `lead_check2.py`: τ = 2.302440875 s; the marker marks 1 run of 95 (soak-llama-70b-r11); the 122B tails are 1.41,
+   2.13, 1.20, 1.79, 2.05, 1.87 and 1.84 s; v ≥ |E_b| in every unmarked run. `lead_table.py`: check 1's largest
+   difference is 0.0 J over 73 runs (bar 1e-6 J); check 2 has no failures.
+3. `lead_rerun.py` is new and does not read the extract. It parses H's whole meter stream (`stream-001.jsonl`, 93,533
+   polls, each with both battery values) with the real `km003c_parse.parse`. P_b comes from `Stream.battery_watts`,
+   the integral from `km003c_parse.integrate`, the spans from `bytes_analysis._event_span`, the meter values from
+   `meter_decode` at `0743a7b90`, and the rails from H's export CSV (`phase_decode_j`). On check-llama-70b-r01,
+   check-qwen35-122b-r01 and soak-llama-70b-r11 it reproduces every value §9 prints: T, n, the meter's gross and
+   idle-subtracted energy, E_b, DC input on both bases, rails, rest, u, v_start, v_end, u + v, the C_j term and the
+   marker. The largest difference is 4.6e-7 J, the print rounding. Bar 1e-5 J: above 10⁶ × the float64 noise on the
+   largest value compared (6,424 J × 2.2e-16 × 10⁶ = 1.4e-6 J) and above the 6-decimal rounding (5e-7 J), and below
+   1 % of the smallest printed bound entry (v = 0.115 J, so 1.1e-3 J).
+4. `lead_counts.py` is new and also reads the raw stream. Over all 95 runs the ruled marker marks 1
+   (soak-llama-70b-r11), the harvest's `battery.assist` marks 26, and the held-into-decode marker marks 9. By model
+   (harvest / ruled / held): 70B 18 / 1 / 1, 122B 7 / 0 / 7, Next-80B 1 / 0 / 1, as in §4's table. The 122B tails
+   are as above: 7 exceed 1.0 s, 6 exceed 1.302 s, none exceeds τ. The 35 runs of models at or below 32B read 0 J.
+   These are integer counts, compared by equality.
+
+Acceptance checks made at the same time:
+
+- Both seat reports answer the clause question first: the Opus report's §2 is headed "Does Addendum 1 item 2's last
+  sentence decide Q1 and Q4? No."; the Sol report's first section is "Clause: does not decide Q1/Q4".
+- The packet's copy of `RULING_battery_assist_2026-10-06.md` is byte-identical to
+  `/Users/edr/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md`. It holds no block-5 or
+  block-6 claim value; its only measured numbers are the 10-06 probe's 8B tokens/s and battery currents.
