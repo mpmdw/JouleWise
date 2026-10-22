@@ -125,6 +125,10 @@ def resolve_runtime(
         turn_config = replace(config, workload_profile=replace(
             config.workload_profile, name="align_turn"
         ))
+        # Unsupported episode backends fail at prepare without constructing
+        # a remote client or entering the MLX endpoint path.
+        if config.hardware_target.runtime_backend not in (RuntimeBackend.MOCK, RuntimeBackend.MLX):
+            return EpisodeRuntimeAdapter(None, clock), None
         runtime, failure = resolve_runtime(turn_config, clock)
         return (EpisodeRuntimeAdapter(runtime, clock), None) if runtime is not None else (None, failure)
     backend = config.hardware_target.runtime_backend

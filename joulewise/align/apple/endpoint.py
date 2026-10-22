@@ -157,7 +157,7 @@ class MlxEndpoint:
                 provenance["prompt_token_ids"] = actual_ids
                 self.tokenizer_provenance = dict(provenance.get("tokenizer", self.tokenizer_provenance))
                 flags.append("synthetic_mock_runtime")
-            else:
+            elif self.config.hardware_target.runtime_backend == RuntimeBackend.MLX:
                 from joulewise.adapters.mlx_runtime import _encode, _tokenizer_identity
 
                 tokenizer = self.runtime._tokenizer
@@ -206,11 +206,15 @@ class MlxEndpoint:
                         completion_tokens, len(_encode(tokenizer, hidden, add_special_tokens=False))
                     )
                     flags.append("reasoning_tokens_retokenized")
+            else:
+                raise ValueError("align_episode supports only mock and mlx backends")
             for event in new_events:
                 self.events.append(replace(
                     event, metadata={**event.metadata, "align_turn_index": turn_index}
                 ))
-                if first_epoch is None and event.event_type == "token":
+                # records.Turn.first_token_ns means prefill end, before the
+                # first decode step (10 ms later in the D-019 mock world).
+                if first_epoch is None and event.event_type == "phase_end" and event.phase == "prefill":
                     first_epoch = event.timestamp_s
         except Exception as exc:
             flags.append(f"endpoint_error:{type(exc).__name__}:{exc}")

@@ -20,7 +20,7 @@ from joulewise.bundle_read import BundleReader
 from joulewise.clock import Clock, FakeClock
 from joulewise.controller import run_benchmark
 from joulewise.reduce import _integrate
-from joulewise.schemas import BenchmarkConfig, RuntimeBackend
+from joulewise.schemas import BenchmarkConfig, FailureReason, RuntimeBackend
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = (2048, 3072, 4096, 5120, 6144, 7168)
@@ -145,8 +145,9 @@ class AppleCampaignTests(unittest.TestCase):
             )
             self.assertEqual(before, [path.read_bytes() for path in members])  # exact config identity
             policy = json.loads((ROOT / "configs/campaign_policies/quiet_mac_exploratory.json").read_text())
-            # Tests have no physical host to admit. Keep the real idle and
-            # cooldown policy, disabling only host hardware predicates.
+            # Like tests.test_window_lineage.run_member, mock workloads have
+            # no display/idle host evidence. Production admission is unchanged.
+            policy["idle_admission"]["enabled"] = False
             policy["environment_guard"] = {
                 key: False for key in policy["environment_guard"]
             }
@@ -164,6 +165,10 @@ class AppleCampaignTests(unittest.TestCase):
             for member in members:
                 config = BenchmarkConfig.from_mapping(json.loads(member.read_text()))
                 bundle = root / "runs" / config.run_id
+                summary = json.loads((bundle / "summary.json").read_text())
+                self.assertEqual(summary["status"], "succeeded", summary)
+                self.assertIsNotNone(summary["gross_energy_j"])
+                self.assertIsNotNone(summary["phase_energy_j"])
                 reader = BundleReader(bundle)
                 episode = read_episode_bundle(bundle)
                 episodes.append(episode)
@@ -175,8 +180,10 @@ class AppleCampaignTests(unittest.TestCase):
                 self.assertEqual(from_json(Episode, to_json(episode)), episode)  # record identity
                 self.assertEqual(len(reader.phase_windows()["prefill"]), len(PROMPTS))
                 self.assertEqual(len(reader.phase_windows()["decode"]), len(PROMPTS))
-                for index in range(len(PROMPTS)):
-                    self.assertEqual(len(reader.phase_windows()[f"align_turn_{index}"]), 1)
+                self.assertFalse(any(name.startswith("align_turn_") for name in reader.phase_windows()))
+                for turn, prefill in zip(episode.turns, reader.phase_windows()["prefill"]):
+                    # Identical event-to-ns conversions must give bit identity.
+                    self.assertEqual(turn.first_token_ns, round(prefill.end_s * 1e9))
                 window = reader.measured_window()
                 self.assertIsNotNone(window)
                 energies.append(_integrate(reader.summed_curve(), window.start_s, window.end_s))
@@ -213,15 +220,37 @@ class AppleCampaignTests(unittest.TestCase):
                 as_config(episode_spec(hidden=False, fail_step=2), "apple-tool-fault"),
                 Path(directory), FakeClock(),
             )
+            self.assertEqual(summary.status.value, "succeeded", summary)
+            self.assertIsNotNone(summary.gross_energy_j)
+            self.assertIsNotNone(summary.phase_energy_j)
             episode = read_episode_bundle(bundle)
             self.assertEqual(len(episode.turns), len(PROMPTS))
             self.assertEqual(episode.totals()["tool_calls"], len(TOOL_SECONDS))
             self.assertIn("tool_error:2:0", episode.flags)
 
-    def test_missing_task_keeps_a_complete_flagged_record(self) -> None:
-        spec = replace(episode_spec(hidden=False), task_factory="missing_apple_task:factory")
-        with tempfile.TemporaryDirectory() as directory:
-            bundle, _ = run_benchmark(as_config(spec, "apple-missing-task"), Path(directory), FakeClock())
-            episode = read_episode_bundle(bundle)
-            self.assertTrue(any(flag.startswith("task_unavailable:") for flag in episode.flags))
-            self.assertEqual(len(episode.turns), 0)
+    def test_prepare_failures_are_structured_before_measurement(self) -> None:
+        base = episode_spec(hidden=False)
+        missing = as_config(replace(base, task_factory="missing_apple_task:factory"), "apple-missing-task")
+        bad = as_config(base, "apple-bad-spec")
+        bad = replace(bad, workload_profile=replace(bad.workload_profile, prompt_text='{"schema":"nope"}'))
+        mlx = as_config(base, "apple-no-model")
+        mlx = replace(mlx, model=replace(mlx.model, source=None), hardware_target=replace(
+            mlx.hardware_target, runtime_backend=RuntimeBackend.MLX
+        ))
+        unsupported = as_config(base, "apple-vllm")
+        unsupported = replace(unsupported, hardware_target=replace(
+            unsupported.hardware_target, runtime_backend=RuntimeBackend.VLLM
+        ))
+        for config in (missing, bad, mlx, unsupported):
+            with self.subTest(run_id=config.run_id), tempfile.TemporaryDirectory() as directory:
+                clock = FakeClock()
+                bundle, summary = run_benchmark(config, Path(directory), clock)
+                self.assertEqual(summary.status.value, "failed", summary)
+                self.assertEqual(summary.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
+                self.assertTrue(summary.failure_message)
+                self.assertIsNone(summary.gross_energy_j)
+                self.assertFalse((bundle / "outputs/align_episode.json").exists())
+                self.assertFalse(any(
+                    event.get("phase") == "measured_run"
+                    for event in (json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines())
+                ))

@@ -26,8 +26,8 @@ from joulewise.align.records import (
 )
 from joulewise.bundle_read import BundleReader
 from joulewise.clock import Clock, ClockStamp
-from joulewise.interfaces import AdapterResult, PowerSample, RunContext, RuntimeEvent, RuntimeResult
-from joulewise.schemas import BenchmarkConfig, RuntimeBackend
+from joulewise.interfaces import AdapterFailure, AdapterResult, PowerSample, RunContext, RuntimeEvent, RuntimeResult
+from joulewise.schemas import BenchmarkConfig, FailureReason, RuntimeBackend
 from joulewise.provenance import prompt_provenance
 
 WORKLOAD_KIND = "align_episode"
@@ -77,7 +77,7 @@ class EpisodeRuntimeAdapter:
     """RuntimeAdapter wrapping the registry-selected MLX or mock implementation."""
 
     def __init__(self, runtime: Any, clock: Clock) -> None:
-        self.name = runtime.name
+        self.name = runtime.name if runtime is not None else WORKLOAD_KIND
         self.runtime = runtime
         self.clock = clock
         self.spec: EpisodeSpec | None = None
@@ -90,9 +90,15 @@ class EpisodeRuntimeAdapter:
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
         self.flags = []
+        self.prepared = {}
         self.spec = None
         self.task = None
         self._runtime_ready = False
+        if config.hardware_target.runtime_backend not in (RuntimeBackend.MOCK, RuntimeBackend.MLX):
+            return AdapterResult(
+                ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message="align_episode supports only mock and mlx backends",
+            )
         try:
             self.spec = EpisodeSpec.from_text(config.workload_profile.prompt_text or "")
             module_name, factory_name = self.spec.task_factory.split(":", 1)
@@ -105,22 +111,29 @@ class EpisodeRuntimeAdapter:
                 raise TypeError("task factory must return AgentTask")
         except Exception as exc:
             self.flags.append(f"task_unavailable:{type(exc).__name__}:{exc}")
+            return AdapterResult(
+                ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=self.flags[-1], metadata={"align_episode_flags": list(self.flags)},
+            )
         try:
             if config.hardware_target.runtime_backend == RuntimeBackend.MLX:
                 source = Path(config.model.source or "").expanduser()
                 if not config.model.source or not source.is_dir():
-                    self.flags.append("runtime_unavailable:local_model_mirror_required")
-                    return AdapterResult(ok=True, metadata={"align_episode_flags": list(self.flags)})
+                    raise ValueError("local_model_mirror_required")
             result = self.runtime.prepare(config, context)
             self._runtime_ready = result.ok
             self.prepared = dict(result.metadata)
-            if not result.ok:
-                self.flags.append(f"runtime_unavailable:{result.message}")
+            return result
         except Exception as exc:
             self.flags.append(f"runtime_unavailable:{type(exc).__name__}:{exc}")
-        return AdapterResult(
-            ok=True, metadata={**self.prepared, "align_episode_flags": list(self.flags)}
-        )
+            return AdapterResult(
+                ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=self.flags[-1], metadata={"align_episode_flags": list(self.flags)},
+            )
+
+    def identity_projection_metadata(self, config: BenchmarkConfig) -> dict[str, Any]:
+        """Forward the runtime-owned probe used by identity_pins at readiness."""
+        return self.runtime.identity_projection_metadata(config)
 
     def warmup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
@@ -145,6 +158,11 @@ class EpisodeRuntimeAdapter:
     def run_workload(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> RuntimeResult:
+        if self.spec is None or self.task is None or not self._runtime_ready:
+            # A prepare failure has no measurable episode or condition label.
+            raise AdapterFailure(
+                FailureReason.RUNTIME_UNAVAILABLE, "align_episode was not prepared"
+            )
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"
         domain = f"joulewise.monotonic:{episode_id}"
@@ -166,21 +184,12 @@ class EpisodeRuntimeAdapter:
                     ChatMessage("user", task.user_prompt()),
                 ]
                 for index in range(spec.max_turns):
-                    before = self.clock.now()
-                    events.append(RuntimeEvent(
-                        before, "phase_start", f"align_turn_{index}", "agent model call",
-                        {"align_turn_index": index},
-                    ))
                     event_start = len(endpoint.events)
                     result = endpoint.chat(
                         transcript, tools=task.tool_schemas(), max_tokens=spec.max_tokens,
                         temperature=spec.temperature, seed=spec.seed,
                     )
                     events.extend(endpoint.events[event_start:])
-                    events.append(RuntimeEvent(
-                        self.clock.now(), "phase_end", f"align_turn_{index}",
-                        "agent model call completed", {"align_turn_index": index},
-                    ))
                     transcript.append(ChatMessage(
                         "assistant", str(result.raw_usage.get("raw_text", result.content))
                     ))
@@ -242,12 +251,13 @@ class EpisodeRuntimeAdapter:
                 side_success = task.score_side(transcript)
             except Exception as exc:
                 flags.append(f"task_scoring_error:{type(exc).__name__}:{exc}")
+        flags.append("single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j")
         flags.append("power_trace_join_in_run_bundle")
         flags.append("episode_interval_excludes_scoring_and_serialization_tail")
         episode = Episode(
             episode_id=episode_id,
             task_pair=task.task_pair if task is not None else "unavailable",
-            condition=spec.condition if spec is not None else "benign",
+            condition=spec.condition,
             agent_model=config.model.name, endpoint=endpoint.identity,
             seed=spec.seed if spec else 0, clock_domain=domain,
             start_ns=monotonic_ns(start), end_ns=max(monotonic_ns(start), monotonic_ns(end)),
@@ -309,6 +319,8 @@ class EpisodeRuntimeAdapter:
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
+        if self.runtime is None:
+            return AdapterResult(ok=True)
         return self.runtime.cleanup(config, context)
 
 
