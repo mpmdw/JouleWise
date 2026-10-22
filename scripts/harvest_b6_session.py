@@ -43,7 +43,9 @@ def main(argv=None) -> int:
             "catalog_path": ROOT / (reg or registration.DEFAULTS)["catalog"],
             "identity_pins_path": args.registration_dir / "identity_pins.json"})
         harvested = harvest(inputs, args.archive_root, seams=Seams(workers=args.workers),
-                            prepare_desk=True, allow_missing_terminal=args.allow_missing_terminal)
+                            prepare_desk=True, allow_missing_terminal=args.allow_missing_terminal,
+                            registration_paths=[args.registration_dir / "acceptance.json",
+                                                args.registration_dir / "identity_pins.json"])
         if harvested.get("verdict") == "HARVEST_FAULT":
             return 3
         phase = 4

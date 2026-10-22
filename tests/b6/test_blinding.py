@@ -1,10 +1,10 @@
 import contextlib
 import io
 import json
+import math
 import multiprocessing
 import secrets
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -33,6 +33,7 @@ class BlindingTests(unittest.TestCase):
                     blinding.key_directory(records, "pack", {"blinding_group": group})
 
     def test_ranges_over_ten_thousand_draws(self):
+        # Distribution support is the registered blinding range, not an agreement tolerance.
         for bounds in (blinding.PACK_RANGE, blinding.CONFIG_RANGE):
             self.assertTrue(all(bounds[0] <= blinding._draw(bounds) <= bounds[1] for _ in range(10000)),
                             "a synthetic draw was outside its distribution")
@@ -41,15 +42,18 @@ class BlindingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()) as output:
             directory = Path(tmp) / "pack" / "blinding"
             first = blinding.factor(directory, "synthetic-key", session_id="desk")
+            # Exact: identical stored key bytes must reproduce the identical factor.
             self.assertTrue(first == blinding.factor(directory, "synthetic-key"), "stored draw changed")
             self.assertEqual(output.getvalue(), "")
             stored = json.loads((directory / "pack.json").read_text())
             self.assertEqual(stored["pack_id"], "pack")
             self.assertEqual(stored["drawn_by_session"], "desk")
+            # Registered support bounds, rather than an agreement tolerance.
             self.assertTrue(blinding.PACK_RANGE[0] <= stored["factor"] <= blinding.PACK_RANGE[1])
             configs = list(directory.glob("config-*.json"))
             self.assertEqual(len(configs), 1)
             config = json.loads(configs[0].read_text())
+            # Registered support bounds, rather than an agreement tolerance.
             self.assertTrue(blinding.CONFIG_RANGE[0] <= config["factor"] <= blinding.CONFIG_RANGE[1])
 
     def test_stored_factor_reads_only_and_names_missing_files(self):
@@ -73,14 +77,18 @@ class BlindingTests(unittest.TestCase):
             self.assertNotIn("SECRET_VALUE", str(raised.exception))
 
     def test_corrupt_key_decode_retry_is_bounded_and_names_file(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(blinding, "DECODE_RETRY_TIMEOUT_S", .01):
+        with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "pack.json"
             for content in ("", "{broken"):
                 path.write_text(content)
-                started = time.monotonic()
-                with self.assertRaises(ValueError) as raised:
-                    blinding.pack_factor(tmp)
-                self.assertLess(time.monotonic() - started, .5)
+                # Exact policy boundary on a controlled clock: one retry before
+                # the configured deadline, then stop at that deadline. No wall-time bar.
+                with patch.object(blinding, "time") as clock:
+                    clock.monotonic.side_effect = [0, 0, blinding.DECODE_RETRY_TIMEOUT_S]
+                    with self.assertRaises(ValueError) as raised:
+                        blinding.pack_factor(tmp)
+                    self.assertEqual(clock.monotonic.call_count, 3)
+                    clock.sleep.assert_called_once()
                 self.assertIn(str(path), str(raised.exception))
                 self.assertEqual(path.read_text(), content)
 
@@ -102,6 +110,7 @@ class BlindingTests(unittest.TestCase):
                     process.join(15)
                     self.assertEqual(process.exitcode, 0)
                 first, second = queue.get(timeout=2), queue.get(timeout=2)
+                # Exact: both processes must use the single persisted key.
                 self.assertTrue(first == second, "racing draws did not converge")
                 self.assertEqual(len(list(directory.glob("pack.json"))), 1)
                 self.assertEqual(len(list(directory.glob("config-*.json"))), 1)
@@ -118,12 +127,17 @@ class BlindingTests(unittest.TestCase):
                "dur_decode_s": 2, "emitted_tokens": 7, "failed_energy_j": "", "absent_energy_j": None}
         scale = 1.117
         applied = blinding.apply(row, scale)
-        # P2: 1e-9 relative exceeds 1e6 times degree-2 roundoff (4.4e-10)
-        # and at 1e4 J is 1e-5 J, below 1% of the 0.013 J half-width.
-        self.assertTrue(abs(applied["variance_j2"] / (row["variance_j2"] * scale * scale) - 1) <= 1e-9)
-        self.assertTrue(abs(applied["idle_variance_of_mean_w2"] / (row["idle_variance_of_mean_w2"] * scale * scale) - 1) <= 1e-9)
+        # No printed half-width: COMMON 1e-6 relative / absolute J2 or W2
+        # near zero, above 1e6 x double noise (2.2e-16 -> 2.2e-10 relative).
+        self.assertTrue(math.isclose(applied["variance_j2"], row["variance_j2"] * scale * scale,
+                                     rel_tol=1e-6, abs_tol=1e-6))
+        self.assertTrue(math.isclose(applied["idle_variance_of_mean_w2"], row["idle_variance_of_mean_w2"] * scale * scale,
+                                     rel_tol=1e-6, abs_tol=1e-6))
         recovered = blinding.unblind(applied, scale)
-        self.assertTrue(all(abs(recovered[k] / v - 1) <= 1e-9 for k, v in row.items() if isinstance(v, float)),
+        # Roundtrip has no printed half-width: 1e-6 relative / absolute in the
+        # field's unit near zero, above 1e6 x 2.2e-16 = 2.2e-10 relative noise.
+        self.assertTrue(all(math.isclose(recovered[k], v, rel_tol=1e-6, abs_tol=1e-6)
+                            for k, v in row.items() if isinstance(v, float)),
                         "synthetic offset roundtrip failed")
         for key in ("dur_decode_s", "emitted_tokens", "failed_energy_j", "absent_energy_j"):
             self.assertEqual(applied[key], row[key])

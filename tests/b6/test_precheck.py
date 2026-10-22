@@ -3,6 +3,7 @@ import io
 from contextlib import redirect_stdout
 from fractions import Fraction
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -70,8 +71,9 @@ class PrecheckTests(DeskCase):
                                (15, ['clock.rate'])):
             reading, codes = p.clock_rate(series(rate), 'boot', 'boot', limits)
             self.assertEqual(codes, expected)
-            # 0.001 ppm resolves 0.335 us over 335 s, below the 125 us anchor reads.
-            self.assertAlmostEqual(reading['rate_ppm'], float(rate), delta=1e-3)
+            # No printed half-width: COMMON 1e-6 relative / absolute ppm near
+            # zero, above 1e6 x double noise (2.2e-16 -> 2.2e-10 relative).
+            self.assertTrue(math.isclose(reading['rate_ppm'], float(rate), rel_tol=1e-6, abs_tol=1e-6))
         self.assertIn('clock.step', p.clock_rate(series(2, step=2_000_000), 'boot', 'boot', limits)[1])
         self.assertIn('clock.boot_changed', p.clock_rate(series(2), 'boot', 'other', limits)[1])
         self.assertIn('clock.unmeasured', p.clock_rate(series(2, count=41, spacing=1), 'boot', 'boot', limits)[1])
@@ -113,8 +115,10 @@ class PrecheckTests(DeskCase):
     def test_05_contention_dwell_no_wall_sleep(self):
         result, ctx = self.check(busy=True)
         self.assertIn('contention.dwell', [item['code'] for item in result['would_refuse']])
+        # Registered dwell cap is 600 s; this tests the stopping rule, not agreement.
         self.assertGreaterEqual(result['readings']['contention']['measurement']['values']['elapsed_s'], 600)
         clean, _ = self.check()
+        # Registered clean dwell is 180 s, polled every 1 s: [180, 181) s.
         self.assertGreaterEqual(clean['readings']['contention']['measurement']['values']['clean_run_s'], 180)
         self.assertLess(clean['readings']['contention']['measurement']['values']['elapsed_s'], 181)
         self.assertTrue(ctx.clocks.sleeps)
@@ -241,7 +245,9 @@ class PrecheckTests(DeskCase):
         for pack, count in (('alpha', 125), ('beta', 125), ('gamma', 107)):
             evidence = p.synthetic_session(ROOT / 'configs/campaigns' / PACKS[pack], ROOT, rows, {})
             self.assertEqual(sum(len(s.members) for s in evidence.stages), count)
-            self.assertEqual(evidence.captures[0].bound_ms, 15)
+            # Synthetic stored-bound re-derivation, no printed half-width:
+            # 1e-6 relative / absolute ms near zero, above 1e6 x 2.2e-16 = 2.2e-10 noise.
+            self.assertTrue(math.isclose(evidence.captures[0].bound_ms, 15, rel_tol=1e-6, abs_tol=1e-6))
             self.assertTrue(all(c.synthetic for c in evidence.captures))
         empty = p.synthetic_session(ROOT / 'configs/campaigns' / PACKS['alpha'], ROOT, [], {})
         self.assertIsNone(empty.captures[0].bound_ms)

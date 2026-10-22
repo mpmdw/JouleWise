@@ -15,7 +15,8 @@ from typing import Mapping
 
 from joulewise.b6 import blinding
 from joulewise.b6.acceptance import evidence_from_archive
-from joulewise.b6.archive import bundle_of, ordered_roster, read_json
+from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, ordered_roster, read_json,
+                                unresolved_clock_anchor)
 
 PHASES = ("tokenize", "generation_setup", "prefill", "decode")
 BOUND_TERMS = ("E_clock_anchor_shift_bound", "E_drift_bound",
@@ -157,7 +158,12 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         idle = summary.get("idle_baseline") or {}
         row["idle_baseline_s"] = idle.get("duration_s")
         row.update(dict.fromkeys(ENERGIES))
-        if member["status"] == "succeeded":
+        unresolved = (summary.get("energy_status") == CLOCK_ANCHOR_STATUS
+                      or unresolved_clock_anchor(read_json(bundle / "metadata.json", {}) if bundle else {},
+                                                 summary, codes[run_id]))
+        if unresolved:
+            row["status"] = CLOCK_ANCHOR_STATUS
+        if member["status"] == "succeeded" and not unresolved:
             row.update({"phase_" + phase + "_j": (summary.get("phase_energy_j") or {}).get(phase) for phase in PHASES})
             row.update({key: summary.get(key) for key in ("gross_energy_j", "idle_subtracted_energy_j", "energy_request_j")})
             row.update({"bound_" + term + "_j": (summary.get("energy_bound_terms_j") or {}).get(term + "_j")

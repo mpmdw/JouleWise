@@ -93,3 +93,62 @@ def executed_porcelain(root: Path, plan: Mapping, plan_path: Path | None = None)
             value = _inventory_checkout(inventory).get("status_porcelain")
             return value if isinstance(value, str) else None
     return None
+
+
+CLOCK_ANCHOR_STATUS = "member.anchor_not_bounded"
+
+
+def unresolved_clock_anchor(metadata: Mapping, summary: Mapping, codes=()) -> bool:
+    """Recognize the recorded anchor failure, without re-estimating any time."""
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    uncertainty = metadata.get("uncertainty_evidence")
+    anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
+    anchor = anchor if isinstance(anchor, Mapping) else {}
+    precheck = summary.get("window_evidence_precheck")
+    phases = precheck.get("phase") if isinstance(precheck, Mapping) else None
+    phases = phases if isinstance(phases, Mapping) else {}
+    return (CLOCK_ANCHOR_STATUS in codes
+            or anchor.get("detail") == "effective_clock_anchor_bound_exceeded"
+            or (anchor.get("trace_fallback_method") == "legacy_spawn_bracket_midpoint_v1"
+                and anchor.get("status") != "bounded")
+            or bool(phases) and all(isinstance(phase, Mapping)
+                                    and "clock_anchor_unresolved" in (phase.get("reasons") or [])
+                                    for phase in phases.values()))
+
+
+def summary_with_clock_status(summary: Mapping, metadata: Mapping, codes=()) -> dict:
+    """Mark the derived block-six summary; source bundles and eligibility stay intact."""
+    from copy import deepcopy
+    result = deepcopy(dict(summary))
+    if not unresolved_clock_anchor(metadata, summary, codes):
+        return result
+
+    def null_numbers(value):
+        if isinstance(value, Mapping):
+            # Retain the clock bounds and method evidence inside energy envelopes.
+            return {key: child if key.endswith(("_s", "_ns")) else null_numbers(child)
+                    for key, child in value.items()}
+        if isinstance(value, list):
+            return [null_numbers(child) for child in value]
+        return None if isinstance(value, (int, float)) and not isinstance(value, bool) else value
+
+    # The precheck remains the recorded exclusion evidence. Only the energy
+    # outputs are withheld; status/counting and the raw source bytes are untouched.
+    for key, value in result.items():
+        if "energy" in key and key != "energy_uncertainty_status":
+            result[key] = null_numbers(value)
+    result["energy_status"] = CLOCK_ANCHOR_STATUS
+    return result
+
+
+def registration_digests(paths) -> dict:
+    """Digest named registration inputs; unavailable bytes are recorded, never refused."""
+    import hashlib
+    result = {}
+    for path in paths:
+        path = Path(path)
+        try:
+            result[str(path)] = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        except OSError as exc:
+            result[str(path)] = {"sha256": None, "error": type(exc).__name__}
+    return result

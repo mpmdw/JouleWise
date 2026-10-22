@@ -29,12 +29,14 @@ class WrapperTests(unittest.TestCase):
 
     def test_success_runs_archive_screen_acceptance_export_one_stdout_line(self):
         (self.archive / "derived/b6-acceptance.json").unlink()
-        with patch.object(wrapper, "resolve_inputs") as resolve, patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}), \
+        with patch.object(wrapper, "resolve_inputs") as resolve, patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}) as harvester, \
              contextlib.redirect_stdout(io.StringIO()) as out:
             self.assertEqual(wrapper.main(self.argv), 0)
         overrides = resolve.call_args.kwargs["overrides"]
         self.assertEqual(overrides["identity_pins_path"], self.reg / "identity_pins.json")
         self.assertEqual(overrides["catalog_path"], wrapper.ROOT / "configs/b6/flag_catalog_b6.json")
+        self.assertEqual(harvester.call_args.kwargs["registration_paths"],
+                         [self.reg / "acceptance.json", self.reg / "identity_pins.json"])
         self.assertEqual(len(out.getvalue().splitlines()), 1)
         result = json.loads(out.getvalue())
         self.assertEqual(result["session_id"], "desk-session")

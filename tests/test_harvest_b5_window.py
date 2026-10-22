@@ -64,6 +64,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Proposed block-6 collection vocabulary belongs to its future pack catalog,
 # never to the immutable block-5 seal. Shared block-5 entries still match exactly.
 B6_COLLECTION_CODES = frozenset({
+    # F11 is a block-six desk disclosure, outside block five's sealed vocabulary.
+    "records.claim_usable_counting_disagreement",
     "clock.rate_above_budget", "instrument.single_interval_above_screen",
     "agent.presence", "agent.presence_overlap", "agent.capture_overlap", "agent.pause_marker_stale",
     "sleep.in_run", "sleep.between_runs", "sleep.in_chain", "sleep.reading_unmeasured",

@@ -2254,10 +2254,24 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
         payload = reduce_bundle(bundle, reducer_version=provenance.get("reducer_version"),
                                 _instrument_calibration_physics_cache=cache).to_dict()
         raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+        # Compare the original re-derivation; the archive-only status projection
+        # must not introduce a reduction-mismatch exclusion or alter admissibility.
+        original_raw = raw
+        admissible = bool(is_admissible_succeeded_summary(payload))
+        if task.get("block_six"):
+            from joulewise.b6.archive import summary_with_clock_status
+            payload = summary_with_clock_status(payload, metadata)
+            raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
         target = Path(task["withheld_dir"]) / "reductions" / f"{run_id}.summary_metrics.rereduced.json"
         digest = write_once(target, raw)
-        return {"sha256": digest, "path": str(target), "identical_to_stored": raw == summary_raw,
-                "admissible": bool(is_admissible_succeeded_summary(payload))}
+        assessment = {"sha256": digest, "path": str(target),
+                      "identical_to_stored": original_raw == summary_raw, "admissible": admissible}
+        if raw != original_raw:
+            # Name the projection explicitly: the archived bytes now contain
+            # null energies, while the comparison above concerns the re-derivation.
+            assessment.update(archived_identical_to_stored=raw == summary_raw,
+                              energy_status=payload["energy_status"])
+        return assessment
 
     result["rereduced"] = guarded("rereduce", rereduce)
     result["spans"] = guarded("spans", lambda: member_spans(metadata, events)) or {"member": None, "request": None}
@@ -3637,13 +3651,68 @@ def l4_exclusion_inputs(roster: Mapping[str, Any], spans: Mapping[str, Mapping[s
 
 
 def _l4_exclusions(flags: list[dict[str, Any]], roster: Mapping[str, Any], spans: Mapping[str, Any],
-                   catalog: Catalog) -> Any:
+                   catalog: Catalog, *, pack_scoped: bool = True) -> Any:
     """L4's ``joulewise.flags.exclusions.compute`` over the catalog read by L4's own loader."""
     if catalog.path is None or catalog.sha256 is None:
         raise HarvestFault("flag_catalog_absent")
     exclusions = importlib.import_module("joulewise.flags.exclusions")
     load_catalog = importlib.import_module("joulewise.flags.catalog").load_catalog
-    return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)))
+    return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)), pack_scoped=pack_scoped)
+
+
+HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
+# The harvest program's own files.  Registration section 11 item 4: an
+# addendum to the seal record pins the harvest program before the first
+# window's harvest, by these files' SHA-256s and the commit of the checkout
+# the harvest runs from (a desk checkout, never the measurement checkout).
+HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
+
+
+def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
+    """The checkout this harvest program runs from (seal gate K-7): a record, never a flag.
+
+    The harvest decides which members and windows are claim-usable, and it
+    runs from a checkout other than the one that collected the window.  So
+    which program decided must be on record: ``head`` is that checkout's
+    commit (``git rev-parse HEAD`` in the directory that holds this file's
+    package), ``status_clean`` whether ``git status --porcelain`` printed
+    nothing there (no tracked edit and no untracked file), ``status_lines``
+    how many paths it printed, and ``files`` the SHA-256 of each harvest
+    program file as it is on disk.  With a clean checkout the commit fixes
+    every byte of the program; with a dirty one the three digests still say
+    whether the pinned files are the pinned bytes.  A value git or the disk
+    cannot give is None and named in ``errors``; nothing here stops or
+    excludes anything.
+    """
+    root = Path(__file__).resolve().parents[2]
+    record: dict[str, Any] = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": str(root), "head": None,
+                              "status_clean": None, "status_lines": None, "files": {}, "errors": []}
+    for name, arguments in (("head", ["rev-parse", "HEAD"]),
+                            ("status", ["status", "--porcelain=v1", "--untracked-files=all"])):
+        try:
+            result = runner(["git", "-C", str(root), *arguments], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", check=False, timeout=60)
+        except (OSError, subprocess.SubprocessError) as exc:
+            record["errors"].append(f"{name}:{type(exc).__name__}")
+            continue
+        if result.returncode != 0:
+            record["errors"].append(f"{name}:git_exit_{result.returncode}")
+        elif name == "head":
+            head = result.stdout.strip()
+            if re.fullmatch(r"[0-9a-f]{40}([0-9a-f]{24})?", head):
+                record["head"] = head
+            else:
+                record["errors"].append("head:not_a_commit_name")
+        else:
+            lines = [line for line in result.stdout.splitlines() if line.strip()]
+            record["status_clean"], record["status_lines"] = not lines, len(lines)
+    for relative in HARVEST_PROGRAM_FILES:
+        try:
+            record["files"][relative] = sha256_file(root / relative)
+        except OSError as exc:
+            record["files"][relative] = None
+            record["errors"].append(f"file:{relative}:{type(exc).__name__}")
+    return record
 
 
 @dataclasses.dataclass
@@ -3667,6 +3736,7 @@ class Seams:
     desk_gone_wait_s: float = DESK_GONE_WAIT_S
     killpg: Callable[[int, int], None] = os.killpg
     observe_identity: Callable[[int], Any] = _observe_identity
+    harvest_checkout: Callable[[], Mapping[str, Any]] = harvest_checkout
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -3694,6 +3764,20 @@ class _Harvest:
         self.inputs, self.archive, self.seams = inputs, archive_root, seams
         self.prepare_desk, self.run_g3 = prepare_desk, run_g3
         self.derived, self.withheld = archive_root / "derived", archive_root / "withheld"
+        from joulewise.b6.courier import block_six_plan
+        self.block_six = block_six_plan(inputs.plan)
+        # The plan declares the lane; the lane declares its exclusion capability.
+        # Block 5 retains L4's existing default and seam calling convention.
+        self.exclusion_options = {}
+        if self.block_six:
+            from joulewise.b6.analysis_lane import HarvestLane
+            self.exclusion_options["pack_scoped"] = HarvestLane().capabilities().pack_scoped_flags
+        try:
+            self.harvest_checkout = dict(seams.harvest_checkout())
+        except Exception as exc:
+            self.harvest_checkout = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": None, "head": None,
+                                     "status_clean": None, "status_lines": None, "files": {},
+                                     "errors": [f"record:{type(exc).__name__}"]}
         self.catalog = Catalog.load(inputs.catalog_path)
         self.flags = FlagLedger(plan_id=inputs.plan_id, attempt=inputs.attempt, catalog=self.catalog,
                                 boot_session_uuid=seams.boot_session_uuid(), now=seams.now,
@@ -3910,7 +3994,7 @@ class _Harvest:
             # A discarded early result already wrote its re-reduction under withheld/.
             withheld = self.withheld / "reassessed" if member["run_id"] in (getattr(self, "_early", None) or {}) \
                 else self.withheld
-            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld)})
+            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld), "block_six": self.block_six})
         if discarded:
             self.emit("records.source_changed_during_harvest", level="window", collector="members",
                       observed={"early_assessments_discarded": sorted(discarded)[:16],
@@ -5325,7 +5409,7 @@ class _Harvest:
             found = [root / member["run_id"] for root in self._runs_roots() if (root / member["run_id"]).is_dir()]
             if len(found) == 1 and _same_path(found[0].parent, runs):
                 tasks.append({"run_id": member["run_id"], "bundle_path": str(found[0]),
-                              "withheld_dir": str(self.withheld)})
+                              "withheld_dir": str(self.withheld), "block_six": self.block_six})
         results = assess_members(tasks, workers=self.seams.workers)
         self._early = {result["run_id"]: result for result in results}
 
@@ -7442,7 +7526,7 @@ class _Harvest:
                 if self.exclusion_roster is None:
                     raise HarvestFault("exclusion_inputs_unavailable")
                 exclusions = self.seams.exclusions_compute(flags, self.exclusion_roster, self.exclusion_spans,
-                                                           self.catalog)
+                                                           self.catalog, **self.exclusion_options)
             except Exception as exc:
                 # Absent or failing L4 function: numbers and flags still stand;
                 # the window is simply not claim-usable until it is computed.
@@ -7452,6 +7536,7 @@ class _Harvest:
                 flags = ordered()
         self.outputs["derived/flags.jsonl"] = write_jsonl_once(self.derived / "flags.jsonl", flags)
         exclusions = dict(exclusions) if isinstance(exclusions, Mapping) else {"value": exclusions}
+        exclusions["harvest_checkout"] = dict(self.harvest_checkout)
         self.outputs["derived/exclusions.json"] = write_json_once(self.derived / "exclusions.json", exclusions)
         write_json_once(self.withheld / "collector-errors.json",
                         {"schema": "joulewise.b5_collector_errors.v1", "errors": self.error_details})
@@ -7491,7 +7576,10 @@ class _Harvest:
                   "yield": getattr(self, "yield_block", None),
                   "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
                   "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
+                  "harvest_checkout": dict(self.harvest_checkout),
                   "outputs": dict(sorted(self.outputs.items()))}
+        if self.block_six:
+            record["registration_files"] = getattr(self, "registration_files", {})
         write_json_once(self.archive / "harvest.json", record)
         return record
 
@@ -7647,7 +7735,8 @@ def _common_root(paths: Sequence[Path]) -> Path:
 
 
 def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
-            prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False) -> dict[str, Any]:
+            prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False,
+            registration_paths: Sequence[Path | str] = ()) -> dict[str, Any]:
     """Harvest one window.  Raises NotReady before the chain group is gone."""
     seams = seams or Seams()
     archive = Path(archive_root).absolute()
@@ -7659,6 +7748,13 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
             raise HarvestFault("archive_overlaps_source")
     archive.mkdir(parents=True)
     run = _Harvest(inputs, archive, seams, prepare_desk=prepare_desk, run_g3=run_g3)
+    if run.block_six:
+        from joulewise.b6.archive import registration_digests
+        # Explicit paths from the block-six caller, plus the shared harvester's
+        # own registered inputs. No discovery or inference from a pack name.
+        run.registration_files = registration_digests([
+            *registration_paths, *(path for path in (inputs.registration_path,
+                inputs.catalog_path, inputs.identity_pins_path) if path is not None)])
     if not state["terminal_record"]:
         run.emit("records.terminal_record_absent", level="window", collector="readiness", observed={"result_json": None})
     if not state["chain_started"]:

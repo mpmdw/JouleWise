@@ -1414,6 +1414,13 @@
       "klass": "REPRESENTATION",
       "note": "Untracked files in the measurement checkout outside the executed roots."
     },
+    "records.claim_usable_counting_disagreement": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Audit F11: harvest usability and block-six acceptance counting disagree; acceptance counting governs; disclose only."
+    },
     "records.collector_failed": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

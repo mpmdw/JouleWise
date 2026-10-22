@@ -13,8 +13,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-# At 10 J, rel 1e-6 is 10 uJ: above float noise and below 1% of
-# the smallest printed half-width (0.013 J). Variance scales quadratically.
 from joulewise.b6 import blinding, export_runs
 from scripts import b6_export_runs, b6_unblind
 from tests.b6.support import registration_dir, write_json
@@ -135,9 +133,9 @@ class ExportTests(unittest.TestCase):
             self.assertNotIn("run_start_utc", row)
             if row["status"] == "succeeded":
                 factor = blinding.stored_factor(self.root / "packs/bytes/blinding", row["config_key"])
-                # P2: 1e-9 relative lies above 1e6 x degree-2 float noise and
-                # below 1% of the smallest printed energy half-width (0.013 J).
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]) / factor, 10, rel_tol=1e-9))
+                # No printed half-width: COMMON's 1e-6 relative (absolute J near zero),
+                # above 1e6 x double noise: 2.2e-16 x 1e6 = 2.2e-10 relative.
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]) / factor, 10, rel_tol=1e-6, abs_tol=1e-6))
         # Re-export uses the same keys and row bytes, rather than a fresh draw.
         before = store.read_bytes()
         self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
@@ -158,9 +156,9 @@ class ExportTests(unittest.TestCase):
         from joulewise.bytes_analysis import _released_rows
         released = _released_rows(rows, self.root / "packs/bytes/blinding", blinded=False)
         for row in released:
-            # P2: degree-2 roundoff x 1e6 < 1e-9 relative < 1% of the
-            # smallest printed uncertainty at the campaign's 1e4 J scale.
-            self.assertTrue(math.isclose(row["phase_decode_j"], 10, rel_tol=1e-9))
+            # No printed half-width: 1e-6 relative / absolute J near zero;
+            # above 1e6 x 2.2e-16 = 2.2e-10 relative double noise.
+            self.assertTrue(math.isclose(row["phase_decode_j"], 10, rel_tol=1e-6, abs_tol=1e-6))
 
     def test_group_unblind_uses_registered_order_and_flags_missing_store(self):
         result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
@@ -180,9 +178,9 @@ class ExportTests(unittest.TestCase):
         self.assertEqual([r["run_id"] for r in rows], ["corpus", "ref", "q0", "q1", "q2", "q3", "gamma-a", "gamma-b", "failed"])
         for row in rows:
             if row["status"] == "succeeded":
-                # P2: 1e-9 relative exceeds 1e6 x degree-2 roundoff and at
-                # 1e4 J remains below 1% of the 0.013 J printed half-width.
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-9))
+                # No printed half-width: 1e-6 relative / absolute J near zero;
+                # above 1e6 x 2.2e-16 = 2.2e-10 relative double noise.
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6, abs_tol=1e-6))
         info = json.loads(result.sidecar_path.read_text())["blinding"]["withheld"]
         (result.csv_path.parent / info["path"]).unlink()
         with contextlib.redirect_stdout(io.StringIO()) as stdout:
@@ -208,8 +206,10 @@ class ExportTests(unittest.TestCase):
                 self.assertTrue(all(row[key] == "" for key in export_runs.ENERGIES))
                 self.assertEqual(row["excluded"], "True")
             else:
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10 * 1.1 * .99, rel_tol=1e-6))
-                self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2 * (1.1 * .99) ** 2, rel_tol=1e-6))
+                # No printed half-width: COMMON 1e-6 relative / absolute J or W2
+                # near zero, above 1e6 x 2.2e-16 = 2.2e-10 relative double noise.
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10 * 1.1 * .99, rel_tol=1e-6, abs_tol=1e-6))
+                self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2 * (1.1 * .99) ** 2, rel_tol=1e-6, abs_tol=1e-6))
 
     def test_null_quads_and_references_share_offsets_gamma_models_do_not(self):
         draws = iter([1.1, .99, .98, 1.02, 1.01])
@@ -232,6 +232,7 @@ class ExportTests(unittest.TestCase):
         refs = [row for row in first + second if row["run_id"] == "ref"]
         self.assertEqual(len(refs), 2)
         self.assertEqual({row["config_key"] for row in refs}, {export_runs.REFERENCE_KEY})
+        # Exact serialization: identical energies and the identical stored reference factor.
         self.assertEqual(refs[0]["gross_energy_j"], refs[1]["gross_energy_j"])
         self.assertEqual(next(row for row in second if row["run_id"] == "corpus")["config_key"], export_runs.REFERENCE_KEY)
 
@@ -287,8 +288,10 @@ class ExportTests(unittest.TestCase):
         with unblinded.open() as stream:
             for row in csv.DictReader(stream):
                 if row["status"] == "succeeded":
-                    self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6))
-                    self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2, rel_tol=1e-6))
+                    # No printed half-width: 1e-6 relative / absolute J or W2 near
+                    # zero; above 1e6 x 2.2e-16 = 2.2e-10 relative double noise.
+                    self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6, abs_tol=1e-6))
+                    self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2, rel_tol=1e-6, abs_tol=1e-6))
         sidecar = json.loads(Path(result["session"]).read_text())
         self.assertEqual(sidecar["blinding"]["applied"], True)
         self.assertFalse(Path(sidecar["blinding"]["key_dir"]).is_absolute())
