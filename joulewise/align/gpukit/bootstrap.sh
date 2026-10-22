@@ -10,6 +10,7 @@ monitor_index=""
 gpu_selected=false
 skip_install=false
 check_only=false
+# Bash 3.2 treats empty arrays as unset under set -u; use guarded expansions below.
 session_args=()
 argument_error() { echo "$*" >&2; exit 3; }
 # Wrapper flags may occur anywhere; device flags reach the session unchanged.
@@ -33,7 +34,7 @@ done
 [[ -n "$probe_timeout" ]] || argument_error "Set JOULEWISE_PROBE_TIMEOUT_S or --probe-timeout-s"
 if ! $gpu_selected && [[ -n "${JOULEWISE_GPU_INDICES:-}" ]]; then
   gpu_indices="$JOULEWISE_GPU_INDICES"
-  session_args=(--gpu-indices "$gpu_indices" "${session_args[@]}")
+  session_args=(--gpu-indices "$gpu_indices" ${session_args[@]+"${session_args[@]}"})
 fi
 if $skip_install && [[ -x "$venv_dir/bin/python" ]]; then
   python_bin="$venv_dir/bin/python"
@@ -44,7 +45,7 @@ cd -- "$repo_root"
 layout=""
 if ! $check_only; then
   # Stdlib-only validation runs before inventory, venv creation or installation.
-  layout=$("$python_bin" -m joulewise.align.gpukit.session --validate-only "${session_args[@]}")
+  layout=$("$python_bin" -m joulewise.align.gpukit.session --validate-only ${session_args[@]+"${session_args[@]}"})
 else
   [[ -n "$gpu_indices" ]] || argument_error "Select GPUs for --check-only"
 fi
@@ -83,4 +84,4 @@ if ! $skip_install; then
   "$python_bin" -m pip install --no-deps "$repo_root"
   export PATH="$venv_dir/bin:$PATH"
 fi
-exec "$python_bin" -m joulewise.align.gpukit.session "${session_args[@]}"
+exec "$python_bin" -m joulewise.align.gpukit.session ${session_args[@]+"${session_args[@]}"}
