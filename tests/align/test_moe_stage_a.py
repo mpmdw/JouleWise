@@ -27,6 +27,22 @@ class StageAWorldTests(unittest.TestCase):
         cls.world = topic_episodes(cls.shift, design=cls.design, seed=731)
         # Bootstrap budget is an exposed analysis parameter, not an agreement bar.
         cls.result = analyze_stage_a(cls.world, n_bootstrap=256, seed=83)
+        print("MOE_STAGE_A_SHIFT", json.dumps({
+            "episodes": len(cls.world),
+            "groups": cls.design.groups,
+            "turns_per_episode": cls.design.turns,
+            "decode_tokens": sum(e.totals()["decode_tokens"] for e in cls.world),
+            "prefill_tokens": sum(e.totals()["prefill_tokens"] for e in cls.world),
+            "tool_calls": sum(e.totals()["tool_calls"] for e in cls.world),
+            "side_fraction": cls.shift,
+            "aucs": cls.result.aucs,
+            "auc_gain": cls.result.auc_gain,
+            "auc_gain_interval": cls.result.auc_gain_interval,
+            "decode_effects": {name: {"effect": stat.effect, "interval": stat.interval,
+                                     "p_holm": stat.p_holm}
+                               for name, stat in cls.result.statistics.items()
+                               if name.startswith("decode_")},
+        }, sort_keys=True))
 
     def test_world_is_multiturn_and_round_trips_exactly(self):
         episode = self.world[0]
@@ -88,6 +104,10 @@ class StageAWorldTests(unittest.TestCase):
     def test_zero_shift_removes_separation(self):
         null = topic_episodes(0.0, design=self.design, seed=731)
         result = analyze_stage_a(null, n_bootstrap=128, seed=83)
+        print("MOE_STAGE_A_PAIRED_NULL", json.dumps(
+            {"aucs": result.aucs, "auc_gain": result.auc_gain,
+             "minimum_holm_p": min(s.p_holm for s in result.statistics.values())},
+            sort_keys=True))
         for statistic in result.statistics.values():
             assert_close(self, statistic.effect, 0.0)
             assert_close(self, statistic.p_holm, 1.0)
@@ -98,6 +118,11 @@ class StageAWorldTests(unittest.TestCase):
     def test_independent_noise_zero_shift_is_exchangeable(self):
         null = topic_episodes(0.0, design=self.design, seed=731, independent_noise=True)
         result = analyze_stage_a(null, n_bootstrap=128, seed=83)
+        print("MOE_STAGE_A_INDEPENDENT_NULL", json.dumps(
+            {"aucs": result.aucs, "auc_gain": result.auc_gain,
+             "auc_gain_interval": result.auc_gain_interval,
+             "minimum_holm_p": min(s.p_holm for s in result.statistics.values())},
+            sort_keys=True))
         # No-shift data must not cross the brief's conventional .05 Holm level.
         self.assertTrue(all(statistic.p_holm >= 0.05 for statistic in result.statistics.values()))
         self.assertLessEqual(result.auc_gain_interval[0], 0.0)
