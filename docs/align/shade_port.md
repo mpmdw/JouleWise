@@ -175,8 +175,10 @@ message content sent. last_prompt and responses expose the audit text.
   flag must accompany the verdict so it cannot be counted as a model judgment.
 
 Task/monitor flags and endpoint diagnostics must be copied into Episode.flags
-by the runner. The immutable protocols do not currently require these
-attributes, so protocol-only code must explicitly collect them.
+by the runner. Discovery returns a tuple-compatible TaskPairList with a flags
+attribute, so even list_task_pairs() retains source failure diagnostics. The
+immutable protocols do not currently require these attributes, so protocol-only
+code must explicitly collect them.
 
 ## Offline verification to run
 

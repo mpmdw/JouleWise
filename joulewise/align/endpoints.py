@@ -341,7 +341,8 @@ class OpenAICompatEndpoint:
             try:
                 with self._open(root + "/tokenize", body, flags, retries) as response:
                     value = json.load(response)
-                if isinstance(value.get("count"), int) and value["count"] >= 0:
+                if (isinstance(value.get("count"), int) and not isinstance(value["count"], bool)
+                        and value["count"] >= 0):
                     result = value["count"]
                 elif isinstance(value.get("tokens"), list):
                     result = len(value["tokens"])

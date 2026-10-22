@@ -97,6 +97,9 @@ class UpstreamTests(unittest.TestCase):
             missing = PinnedUpstream(directory, allow_fetch=False)
             self.assertIsNone(missing.prepare())
             self.assertIn("upstream_cache_missing", missing.flags)
+            discovered = list_task_pairs(missing)
+            self.assertEqual(discovered, ())
+            self.assertIn("upstream_cache_missing", discovered.flags)
         # Hex lengths are structural properties of the named hash algorithms.
         self.assertEqual(len(UPSTREAM_COMMIT), 40)
         self.assertEqual(len(FILE_LIST_SHA256), 64)

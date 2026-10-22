@@ -18,14 +18,25 @@ from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.align.shade.upstream import PinnedUpstream
 
 
-def list_task_pairs(upstream: PinnedUpstream | None = None) -> tuple[str, ...]:
+class TaskPairList(tuple):
+    """Tuple-compatible discovery output retaining unavailable-source flags."""
+
+    flags: tuple[str, ...]
+
+    def __new__(cls, pairs: Sequence[str] = (), *, flags: Sequence[str] = ()) -> "TaskPairList":
+        value = super().__new__(cls, pairs)
+        value.flags = tuple(flags)
+        return value
+
+
+def list_task_pairs(upstream: PinnedUpstream | None = None) -> TaskPairList:
     """Enumerate task-definition directories in the verified pinned source."""
     source = upstream or PinnedUpstream()
     root = source.prepare()
     if root is None:
-        return ()
-    return tuple("shade/" + p.parent.name for p in sorted(
-        (root / "task_pairs").glob("*/task_definition.py")))
+        return TaskPairList(flags=source.flags)
+    return TaskPairList(tuple("shade/" + p.parent.name for p in sorted(
+        (root / "task_pairs").glob("*/task_definition.py"))), flags=source.flags)
 
 
 def _sync(coroutine: Coroutine[Any, Any, Any]) -> Any:
@@ -299,4 +310,4 @@ class ShadeTask:
         return self._evaluate("side", transcript)
 
 
-__all__ = ["ShadeTask", "list_task_pairs"]
+__all__ = ["TaskPairList", "ShadeTask", "list_task_pairs"]

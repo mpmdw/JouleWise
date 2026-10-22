@@ -210,6 +210,19 @@ class EndpointTests(unittest.TestCase):
         self.assertIn("invalid_base_url", self.chat(client).raw_usage["joulewise"]["flags"])
         self.assertEqual(client.count_tokens("anything"), 0)
 
+    def test_llamacpp_timings_fallback_preserves_accounting(self) -> None:
+        timings = {"prompt_n": 1024, "cache_n": 3072, "predicted_n": 768}
+        with HTTPWorld([{"chunks": [
+            {"choices": [{"index": 0, "delta": {"content": "Complete."}}]},
+            {"choices": [], "timings": timings},
+        ]}]) as world:
+            result = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5))
+            # Exact integer record: total prompt = processed + cached positions.
+            self.assertEqual((result.prompt_tokens, result.cached_prompt_tokens,
+                              result.completion_tokens), (4096, 3072, 768))
+            self.assertEqual(result.raw_usage["timings"], timings)
+            self.assertIn("prompt_tokens_from_timings", result.raw_usage["joulewise"]["flags"])
+
     def test_assistant_extension_and_mock_are_deterministic(self) -> None:
         script = [{"content": "read", "reasoning_text": "plan", "prompt_tokens": 2048,
                    "completion_tokens": 256, "reasoning_tokens": 128,
