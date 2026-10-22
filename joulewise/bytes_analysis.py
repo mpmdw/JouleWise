@@ -21,7 +21,10 @@ BOUNDARIES = ("rails", "DC input", "rest")
 HYPOTHESES = ("bytes", "resident", "time")
 DECODE_STEPS = 512
 OUTPUT_LABEL = "512 decode forward passes, one of which yields no returned token"
+DC_BOUNDARY_DESCRIPTION = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
+                           "the adapter's AC-to-DC loss is not included")
 H1_CHECKS = 21
+T_SMC_S = 1.0  # BAT-2 §3; km003c_parse's published SMC cadence.
 # Addendum 4: separate primary families on each boundary.
 H2_INTERVALS = {"rails": 9, "DC input": 9, "rest": 11}
 REGISTERED_MODELS = frozenset((
@@ -433,8 +436,28 @@ def _event_span(events, phase, metadata):
     return span
 
 
-def meter_decode(stream, decode_span, idle_span):
-    """R3 DC input integration and the 2026-10-15 phase-edge ruling.
+def _battery_stream_data(stream):
+    times, watts = stream.battery_watts()
+    interval = max((b - a for a, b in zip(stream.poll_ns, stream.poll_ns[1:])), default=0) / 1e9
+    return times, watts, interval
+
+
+def _battery_delay_s(poll_interval):
+    # One second averaged, one held, then the stream's largest poll interval.
+    return 2 * T_SMC_S + poll_interval
+
+
+def _decode_battery_marker(stream, raw_span, tau):
+    # BAT-2 §4 defines the marker by current, independently of whether a
+    # voltage was available to calculate energy at that poll.
+    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
+    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
+    return any(values.get("B0AC") is not None and values["B0AC"] < 0
+               for values in stream.smc[lo:hi])
+
+
+def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
+    """R3 DC input, including BAT-2's signed SMC battery term and edge v.
 
     Each edge takes the larger of its two adjacent sample powers, including
     the in-phase sample at an exactly aligned end. The bound covers both bases.
@@ -455,6 +478,26 @@ def meter_decode(stream, decode_span, idle_span):
     base, nb = kp.integrate(stream.host_ns, stream.watts, *spans[1])
     if gross is None or base is None:
         raise AnalysisError("meter span has no samples")
+    battery_times, battery_watts, poll_interval = (_battery_stream_data(stream)
+        if battery_readings is None else battery_readings)
+    battery, battery_n = kp.integrate(battery_times, battery_watts, *spans[0])
+    battery_base, battery_nb = kp.integrate(battery_times, battery_watts, *spans[1])
+    if battery is None or battery_base is None:
+        # The archive join records this through its existing boundary-only
+        # unavailable flag; rails survive and no refusal is introduced.
+        raise AnalysisError("battery reading missing")
+    battery_idle = battery_base / idle_duration
+    battery_secondary = battery - battery_idle * duration
+    # BAT-2 §3: one averaged second, one held second, then the stream's own
+    # largest poll interval, over ALL polls (including incomplete SMC reads).
+    tau = _battery_delay_s(poll_interval)
+    battery_edges = []
+    for edge in spans[0]:
+        lo = bisect.bisect_left(battery_times, edge)
+        hi = bisect.bisect_left(battery_times, edge + tau * 1e9)
+        battery_edges.append(duration / battery_n * sum(abs(w) for w in battery_watts[lo:hi]))
+    v = sum(battery_edges)
+    assisted = _decode_battery_marker(stream, spans[0], tau)
     stats = stream.fit.stats
     residual = max(abs(number(stats[key], key)) for key in
                    ("excess_latency_ms_min", "excess_latency_ms_max")) / 1000
@@ -466,12 +509,23 @@ def meter_decode(stream, decode_span, idle_span):
         powers.append(max(number(stream.watts[i], "meter edge power", nonnegative=True) for i in adjacent))
         before.append(stream.watts[max(0, right - 1)])
     u = math.fsum(powers) * (residual + interval)
-    return {"gross_j": gross, "secondary_j": gross - base / idle_duration * duration,
-            "idle_power_w": base / idle_duration, "phase_edge_j": u,
+    meter_secondary = gross - base / idle_duration * duration
+    return {"gross_j": gross + battery, "secondary_j": meter_secondary + battery_secondary,
+            "idle_power_w": base / idle_duration + battery_idle, "phase_edge_j": u + v,
+            "meter_gross_j": gross, "meter_secondary_j": meter_secondary,
+            "meter_idle_power_w": base / idle_duration, "meter_phase_edge_j": u,
+            "battery_gross_j": battery, "battery_secondary_j": battery_secondary,
+            "battery_idle_power_w": battery_idle, "battery_phase_edge_j": v,
+            "battery_v_start_j": battery_edges[0], "battery_v_end_j": battery_edges[1],
+            "battery_tau_s": tau, "battery_poll_interval_max_s": poll_interval,
+            "battery_end_window_complete": bool(stream.poll_ns and
+                stream.poll_ns[-1] >= spans[0][1] + tau * 1e9),
+            "battery_n": battery_n, "battery_n_idle": battery_nb,
+            "decode_battery_assist": assisted,
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
             # One slice is swapped under a coherent offset, hence max, not
             # the sum in u. NR1 adopts the existing (r_max + interval) factor.
-            "offset_bound_j": max(powers) * (residual + interval),
+            "offset_bound_j": max(powers) * (residual + interval) + max(battery_edges),
             "offset_sensitivity_w": before[0] - before[1],
             "adjacent_before_edge_powers_w": before,
             "n": n, "n_idle": nb, "clock_fit": stats}
@@ -514,16 +568,25 @@ def _filtered_stream(path, spans):
     The JSONL transport must be scanned, but payloads outside these spans are
     never unpacked into power samples or retained. Batch endpoint *sequence
     numbers* alone provide the same clock-fit points as the native parser.
-    One sample on either side is retained for the ruled edge bound.
+    One sample on either side is retained for the ruled meter edge bound.
+    All poll receive times are retained for BAT-2's largest poll interval.
+    SMC readings are retained only in selected raw-clock [start, end + tau)
+    windows using the header/trailer raw/monotonic mapping, independently of
+    the meter clock fit, including its early failure paths. Without that
+    mapping, none are retained. No unselected meter power is decoded.
     """
     from joulewise.external import km003c_parse as kp
     header = trailer = None
-    batches, newest, positions = [], [], []
+    polls, batches, newest, positions = [], [], [], []
     previous_seq = previous_rx = None
     current = 0
     payload_re = re.compile(r'"p"\s*:\s*"([0-9a-fA-F]*)"')
     with Path(path).open() as handle:
-        for raw in handle:
+        while True:
+            location = handle.tell()
+            raw = handle.readline()
+            if not raw:
+                break
             match = payload_re.search(raw)
             # Parse transport/timing without materializing the payload as JSON.
             item = json.loads(raw[:match.start(1)] + raw[match.end(1):] if match else raw)
@@ -531,7 +594,28 @@ def _filtered_stream(path, spans):
                 header = item
             elif item.get("k") == "t":
                 trailer = item
-            elif item.get("k") == "b" and item.get("n") and match:
+            elif item.get("k") == "b":
+                polls.append((item, location))
+    # Match km003c_parse.parse: transport line order is not receive order.
+    polls.sort(key=lambda row: row[0]["rx"])
+    poll_ns = [item["rx"] for item, _ in polls]
+    smc = [{} for _ in polls]
+    shell = kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
+    offset = kp.raw_offset_ns(shell)
+    if offset is not None:
+        tau = _battery_delay_s(_battery_stream_data(shell)[2])
+        for a, b in spans:
+            lo = bisect.bisect_left(poll_ns, a + offset)
+            hi = bisect.bisect_left(poll_ns, b + offset + tau * 1e9)
+            for i in range(lo, hi):
+                smc[i] = dict(polls[i][0].get("smc") or {})
+    with Path(path).open() as handle:
+        for item, location in polls:
+            if item.get("n"):
+                handle.seek(location)
+                match = payload_re.search(handle.readline())
+                if match is None:
+                    continue
                 payload = match.group(1)
                 seq = int.from_bytes(bytes.fromhex(payload[-kp.SAMPLE.size * 2:][:4]), "little")
                 if previous_seq is None:
@@ -545,18 +629,17 @@ def _filtered_stream(path, spans):
                     current += delta
                 previous_seq, previous_rx = seq, item["rx"]
                 newest.append(current)
-                positions.append((seq, current))
+                positions.append((seq, current, location))
                 batches.append(item)
     if header is None or header.get("status", "streaming") != "streaming" or not batches:
-        return kp.Stream(header, trailer, [], [], None, None, [], [], [], [])
+        return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
     step = kp.STEP_MS[header["rate_idx"]]
     clock_samples = kp.Samples(newest, [], [], list(range(len(batches))), 0, step)
     try:
         fit = kp.clock_fit(clock_samples, batches)
     except ValueError as exc:
-        return kp.Stream(header, trailer, [], [], None, None, [], [], [], [], str(exc))
-    shell = kp.Stream(header, trailer, [], [], None, fit, [], [], [], [])
-    offset = kp.raw_offset_ns(shell)
+        return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc, str(exc))
+    shell = kp.Stream(header, trailer, [], [], None, fit, [], [], poll_ns, smc)
     if offset is None:
         return shell
     # Sorted disjoint time ranges permit O(log n) selection per sample.
@@ -572,20 +655,10 @@ def _filtered_stream(path, spans):
         i = bisect.bisect_right(starts, t) - 1
         return i >= 0 and t <= merged[i][1]
     host, watts, devs = [], [], []
-    index = 0
     with Path(path).open() as handle:
-        for raw in handle:
-            match = payload_re.search(raw)
-            if not match:
-                continue
-            # First pass already established batch metadata and clock position.
-            if index >= len(batches):
-                break
-            meta = json.loads(raw[:match.start(1)] + raw[match.end(1):])
-            if meta.get("k") != "b" or not meta.get("n"):
-                continue
-            seq_last, dev_last = positions[index]
-            index += 1
+        for seq_last, dev_last, location in positions:
+            handle.seek(location)
+            match = payload_re.search(handle.readline())
             payload = match.group(1)
             for pos in range(0, len(payload), kp.SAMPLE.size * 2):
                 word = payload[pos:pos + kp.SAMPLE.size * 2]
@@ -599,7 +672,7 @@ def _filtered_stream(path, spans):
                 watts.append(fields[2] / 1e6 * fields[3] / 1e6)
                 devs.append(dev)
     samples = kp.Samples(devs, [], [], [], 0, step)
-    return kp.Stream(header, trailer, [], [], samples, fit, host, watts, [], [])
+    return kp.Stream(header, trailer, [], [], samples, fit, host, watts, poll_ns, smc)
 
 
 def _session_streams(root, spans):
@@ -873,17 +946,44 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
     streams = _session_streams(root, [span for pair in spans.values() for span in pair]) if spans else []
     refs = neg8_inputs(released, streams=streams, spans=spans,
                        test7_passed=session.get("test7_passed", False), blinded=stage == "blinded")
+    # Prepare immutable stream inputs once for this reduction, not once per
+    # run. Direct meter_decode callers always see their stream's current data.
+    prepared_streams = [(name, stream, _battery_stream_data(stream)) for name, stream in streams]
     for row in records:
         errors = []
         if row["status"] == "succeeded" and stage != "blinded":
-            for name, stream in streams:
+            for name, stream, battery_readings in prepared_streams:
                 try:
-                    row["meter"] = {**meter_decode(stream, *spans[row["run_id"]]), "stream": name}
+                    row["meter"] = {**meter_decode(stream, *spans[row["run_id"]],
+                                                  battery_readings=battery_readings), "stream": name}
+                    if row["meter"]["decode_battery_assist"]:
+                        row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
                     break
                 except AnalysisError as exc:
                     errors.append(str(exc))
             if row["meter"] is None:
                 row["flags"] = sorted(set(row["flags"]) | {"bytes.meter_decode_unavailable"})
+                from joulewise.external import km003c_parse as kp
+                marker_windows = []
+                for name, stream, battery_readings in prepared_streams:
+                    offset = kp.raw_offset_ns(stream)
+                    if offset is None:
+                        continue
+                    raw_span = [edge + offset for edge in spans[row["run_id"]][0]]
+                    tau = _battery_delay_s(battery_readings[2])
+                    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
+                    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
+                    if lo == hi:
+                        continue
+                    marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau * 1e9)
+                    if _decode_battery_marker(stream, raw_span, tau):
+                        row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
+                row["decode_assist_evaluated"] = bool(marker_windows)
+                row["battery_end_window_complete"] = any(marker_windows)
+                if not marker_windows:
+                    row["decode_assist_evaluated_reason"] = (
+                        "decode marker not evaluated: no mapped meter stream has polls in the marker window"
+                        f" (run {row['run_id']})")
         row["meter_unavailable_reason"] = "; ".join(errors) or "no raw KM003C streams" if row["meter"] is None else None
         row["neg8_inputs"] = refs
         yield row
@@ -954,6 +1054,7 @@ def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
                 except (ValueError, KeyError, TypeError):
                     row.update(status="unusable", invalid_energy_record=True)
                 row["neg8_inputs"] = refs
+                row["decode_assist_evaluated"] = False
                 records.append(row)
         else:
             records.extend(archive_records(Path(session["archive"]), manifest, session, stage=stage,
@@ -1078,10 +1179,18 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5, 
             (r["meter"]["phase_edge_j"] if boundary != "rails" else 0.0) for r in kept]
     bounds = [dict(zip(BOUND_KINDS, (u, r.get("rails_interpolation_j", 0.0)
                  if boundary != "DC input" else 0.0, drift))) for u, r in zip(edge, kept)]
+    battery_column = {}
+    if boundary != "rails":
+        terms = [r["meter"]["battery_secondary_j" if secondary else "battery_gross_j"] for r in kept]
+        battery_column = {"boundary_description": DC_BOUNDARY_DESCRIPTION,
+            "battery_term_mean_j": _weighted(kept, terms), "battery_term_max_j": max(terms),
+            "battery_nonzero_run_count": sum(value != 0 for value in terms),
+            "battery_phase_edge_max_j": max(r["meter"]["battery_phase_edge_j"] for r in kept),
+            "meter_run_terms": [{"run_id": r["run_id"], **r["meter"]} for r in kept]}
     n_r = sum(r["stratum"] == "repeat" for r in kept)
     n_b = len({r["unit_id"] for r in kept if r["stratum"] == "quad"})
     if min(n_r, n_b) < 2:
-        return {"status": "undefined_interval", "n_r": n_r, "n_b": n_b,
+        return {"status": "undefined_interval", **battery_column, "n_r": n_r, "n_b": n_b,
                 "mean_j": _weighted(kept, energies), "h_j": None, "B_j": math.fsum(_weighted(kept, [b[kind] for b in bounds]) for kind in BOUND_KINDS),
                 "duration_s": duration, "lower_j": None, "upper_j": None,
                 "reason": "sample variance requires at least two units per stratum"}
@@ -1107,7 +1216,7 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5, 
             offset["meter_offset_" + field] = None if reasons else _weighted(kept, values)
             if reasons:
                 offset[flag] = "; ".join(reasons)
-    return {"status": "computed", **offset, "mean_j": mean,
+    return {"status": "computed", **offset, **battery_column, "mean_j": mean,
                  "lower_j": mean - h - bound, "upper_j": mean + h + bound,
                  "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
                  "meter_phase_edge_mean_j": _weighted(kept, [r["meter"]["phase_edge_j"] for r in kept]) if boundary != "rails" else 0.0,
@@ -1139,6 +1248,8 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                     "selection": "flagged-inclusive" if inclusive else "primary",
                     "bytes": (spec["W_bytes"] + spec["KV_bytes"]) / 1e9,
                     "resident": spec["R_bytes"] / 1e9, "role": spec["role"], "moe": spec["moe"], "tier": spec["tier"]}
+            if boundary != "rails":
+                base["boundary_description"] = DC_BOUNDARY_DESCRIPTION
             # §2.2: loss of one member removes its whole unit. Missing DC never
             # changes rails selection. Inclusive restores catalog exclusions, not invalid records.
             candidate = [dict(r, status="meter_unavailable") if boundary != "rails" and r["meter"] is None
@@ -1158,8 +1269,22 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
             cell = _phase_cell(kept, removed, module, boundary, secondary, h1_family=h1_checks(manifest))
-            assisted = [r for r in kept if "battery.assist" in r["flags"]]
-            if assisted:
+            assisted = [r for r in kept if "bytes.decode_battery_assist" in r["flags"]]
+            cell.update(decode_assisted_member_counts={stratum: sum(r["stratum"] == stratum for r in assisted)
+                                                       for stratum in ("repeat", "quad")},
+                        harvest_assisted_member_counts={stratum: sum(r["stratum"] == stratum and
+                            "battery.assist" in r["flags"] for r in kept) for stratum in ("repeat", "quad")})
+            if any(r.get("decode_assist_evaluated") is False for r in kept):
+                reason = "; ".join(sorted({r.get("decode_assist_evaluated_reason",
+                    "not evaluated at the blinded stage") for r in kept
+                    if r.get("decode_assist_evaluated") is False}))
+                cell.update(decode_assisted_member_counts=None,
+                    decode_assisted_member_counts_reason=reason,
+                    with_assisted_label="with assisted members",
+                    without_assisted={"status": "not_evaluated", "reason": reason,
+                        "description_only": True, "label": "without assisted members; " + reason,
+                        **dict.fromkeys(("n_r", "n_b", "mean_j", "h_j", "B_j", "lower_j", "upper_j"))})
+            elif assisted:
                 units = {(r["stratum"], r["unit_id"]) for r in assisted}
                 without = [r for r in kept if (r["stratum"], r["unit_id"]) not in units]
                 n_r = sum(r["stratum"] == "repeat" for r in without)
@@ -1224,6 +1349,11 @@ def combine_passes(rows):
                      time=duration / DECODE_STEPS, power=mean / duration,
                      BW=point["bytes"] * DECODE_STEPS / duration)
         if point["boundary"] != "rails":
+            point.update(boundary_description=DC_BOUNDARY_DESCRIPTION,
+                battery_term_mean_j=statistics.fmean(r["battery_term_mean_j"] for r in group),
+                battery_term_max_j=max(r["battery_term_max_j"] for r in group),
+                battery_nonzero_run_count=sum(r["battery_nonzero_run_count"] for r in group),
+                battery_phase_edge_max_j=max(r["battery_phase_edge_max_j"] for r in group))
             # Average available per-pass terms just as B; no sqrt(n) or t.
             for field, flag in (("meter_offset_bound_j", "systematics_flag"),
                                 ("meter_offset_sensitivity_w", "sensitivity_flag")):
@@ -1255,6 +1385,10 @@ def combine_passes(rows):
                 "printed_j_per_output_token": diagnostic_mean / 512 if diagnostic_mean is not None else None,
                 "output_label": OUTPUT_LABEL,
                 "passes": [{"pass_id": r["pass_id"], **d} for r, d in zip(group, diagnostics)]}
+            if any(d.get("status") == "not_evaluated" for d in diagnostics):
+                point["without_assisted"].update(status="not_evaluated",
+                    reason="not evaluated at the blinded stage",
+                    label="without assisted members; not evaluated at the blinded stage")
         points.append(point)
     return points
 

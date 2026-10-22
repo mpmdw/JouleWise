@@ -48,6 +48,7 @@ def _entry(family: str, klass: str, effect: str, note: str) -> dict:
 
 
 NEW_CODES = {
+    "bytes.decode_battery_assist": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "BAT-2 sections 3-4: a negative battery current received in [decode_start + tau, decode_end + tau) marks decode assistance; only the labelled description omits its whole unit; the harvest's battery.assist is counted only."),
     "bytes.withheld_missing": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q1: an expected withheld export file is missing; disclose the pass and sidecar row counts, retain any surviving pass under Addendum 7 D9."),
     "bytes.module_changed_after_commitment": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q2: the analysis module evaluating the held-out stage differs from the module that wrote the stage-1 commitment; the second commitment prints beside the registered result as the post-agreement fix."),
     "bytes.commitment_not_rebuilt": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q2: under a module changed after the stage-1 commitment, the committed content does not rebuild; the committed content is evaluated as committed and the differing fields are listed."),
