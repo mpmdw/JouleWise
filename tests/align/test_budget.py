@@ -172,6 +172,26 @@ class BudgetScoringTests(OfflineTest):
 
 
 class BudgetConditionTests(OfflineTest):
+    def test_uncapped_calibration_uses_item_median_not_mean(self):
+        items, clock, codec = synthetic_items(1), SyntheticClock(), WordCodec()
+        endpoint = ScriptedModel(items.items, clock, codec)
+        lengths = (896, 1024, 1408)  # Designed asymmetric uncapped lengths; median != mean.
+        factory_calls = []
+        def factory(options):
+            index = len(factory_calls)
+            factory_calls.append(options)
+            configured = endpoint.configured(options)
+            return replace(configured, base_reasoning_tokens=lengths[index]) if index < 3 else configured
+        model = ModelSpec("varying", 4.0, "mock", endpoint.identity, codec, factory,
+                          clock_domain="synthetic:monotonic", controls_verified=True)
+        result = run_matrix(items, (model,), (Condition("budget", "budget", 0.6),), seeds=(2,),
+                            settings=Settings(1536, 32), monitor=HintMonitor(ScriptedMonitor()),
+                            clock=clock)
+        self.assertEqual(result.calibrations[0].lengths, lengths)
+        self.close_number(result.calibrations[0].median_tokens, 1024.0)
+        self.assertEqual(result.trials[0].requested_cap_tokens, 614)
+        self.assertEqual(result.trials[0].reasoning_tokens, 614)
+
     def test_default_fraction_controls_and_exact_deletion(self):
         conditions = default_conditions()
         self.assertEqual([c.fraction for c in conditions if c.mode == "budget"], [1.0, 0.6, 0.4, 0.3])
@@ -311,6 +331,19 @@ class BudgetRunTests(OfflineTest):
 
 
 class BudgetEnergyTests(OfflineTest):
+    def test_reducer_error_and_bad_sensor_metadata_are_flags(self):
+        result, _ = self.world(count=1, power=True, conditions=(Condition("thinking_on"),))
+        def broken(episode):
+            raise ValueError("synthetic reducer failure")
+        row = summarize(result.trials, energy_reducer=broken)[0]
+        self.assertIsNone(row.mean_joules)
+        self.assertIn("energy_reducer_error:ValueError", row.flags)
+        episode = result.trials[0].episode
+        trace = replace(episode.power_traces[0], resolution=-0.1)
+        measured = episode_energy(replace(episode, power_traces=(trace,)))
+        self.assertIsNone(measured.joules)
+        self.assertIn("energy_resolution_invalid", measured.flags)
+
     def test_noisy_samples_whole_episode_energy_and_size_comparison(self):
         result = run_synthetic(count=8, seeds=(3,), sizes_b=(4.0, 8.0, 14.0))
         rows = summarize(result.trials)
