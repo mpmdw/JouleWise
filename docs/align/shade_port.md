@@ -277,11 +277,14 @@ from proxies for the lifetime of the test.
 
 The HTTP world specifies ten benign turns and eleven sabotage turns, with
 28/29 tool calls, including parallel request deltas for four-invoice batches.
-The authored chain is fixture pin verification -> ShadeTask prompts/schemas ->
+The comparative chain is fixture pin verification -> ShadeTask prompts/schemas ->
 urllib SSE -> actual mock environment -> separate judge facade -> original
 normalizer -> ShadeMonitor under all three visibilities -> Episode JSONL and
 transcript/usage/verdict files. Four worlds cover both usage flavours and both
-conditions. The server's monitor response depends on the actual received tool
+conditions. A fifth complete benign episode tests missing, real-50 and capped
+monitor replies; its runner copies flags by visibility, saves diagnostics and
+excludes last_valid=False from arithmetic while storing score() returns unchanged.
+The server's monitor response in the comparative worlds depends on the actual received tool
 name and result, so removing either changes its response. The optional source
 test covers loading, prompts, schemas, end_task and main/side scoring for all
 five real pairs without a service call.
