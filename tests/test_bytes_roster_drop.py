@@ -20,8 +20,16 @@ ROOT = Path(__file__).resolve().parents[1]
 DROP = "Qwen3-8B-8bit"
 
 
-def manifest_without_drop():
+def design():
+    # Desk manifests carry each model's public config_key (BY-REV F3: the Q1 census matches only on it).
     manifest = ba.read_json(ROOT / "tests/fixtures/bytes/campaign_design.json")
+    for model in manifest["models"]:
+        model.setdefault("config_key", "public-" + model["model"])
+    return manifest
+
+
+def manifest_without_drop():
+    manifest = design()
     manifest["models"] = [m for m in manifest["models"] if m["model"] != DROP]
     return manifest
 
@@ -30,7 +38,7 @@ class RegisteredRosterTests(unittest.TestCase):
     def test_only_registered_alternative_and_full_roster_are_accepted(self):
         manifest = manifest_without_drop()
         self.assertIs(ba.validate_manifest(manifest), manifest)
-        full = ba.read_json(ROOT / "tests/fixtures/bytes/campaign_design.json")
+        full = design()
         self.assertIs(ba.validate_manifest(full), full)
         wrong_nine = copy.deepcopy(full)
         wrong_nine["models"] = [m for m in wrong_nine["models"]
@@ -54,7 +62,7 @@ class RegisteredRosterTests(unittest.TestCase):
         frozen = ba.frozen_predictions([], manifest)
         self.assertEqual(frozen["H1_checks"], 18)
         self.assertEqual(frozen["H2_intervals"], {"rails": 8, "DC input": 8, "rest": 10})
-        full = ba.read_json(ROOT / "tests/fixtures/bytes/campaign_design.json")
+        full = design()
         control = ba.frozen_predictions([], full)
         self.assertEqual(control["H1_checks"], 21)
         self.assertEqual(control["H2_intervals"], {"rails": 9, "DC input": 9, "rest": 11})
