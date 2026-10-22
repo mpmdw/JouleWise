@@ -135,13 +135,13 @@ class LocalEndpoint:
              tools: Sequence[Mapping[str, Any]] = (), max_tokens: int,
              temperature: float, seed: int | None) -> ChatResult:
         payload: dict[str, Any] = {
+            **self.options,
             "model": self.model,
             "messages": [{"role": m.role, "content": m.content,
                           **({"name": m.name} if m.name else {}),
                           **({"tool_call_id": m.tool_call_id} if m.tool_call_id else {})}
                          for m in messages],
             "max_tokens": max_tokens, "temperature": temperature, "stream": False,
-            **self.options,
         }
         if seed is not None:
             payload["seed"] = seed
