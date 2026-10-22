@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import random
 import statistics
 import shutil
@@ -666,7 +667,13 @@ class ProductionArchiveTests(NumericTestCase):
             missing_all = ba.combine_passes(missing_passes)
             evaluated = ba.evaluate(missing_all, frozen_missing)
             self.assertEqual(len(evaluated["unavailable"]), 8)
-            self.assertTrue(all(r["boundary"]=="rails" for r in evaluated["h1"]))
+            words = [r for r in evaluated["h1"] if "word" in r]
+            self.assertTrue(words)
+            self.assertTrue(all(r["boundary"] == "rails" for r in words))
+            # Q1 item 4: no-point cells retain a missing row, never an H1 word.
+            missing = [r for r in evaluated["h1"] if r["boundary"] != "rails"]
+            self.assertEqual(len(missing), 8 * 10)  # eight DC/rest groups, ten models
+            self.assertTrue(all(r["status"] == "missing" and "word" not in r for r in missing))
             # Read actual harvest exclusions (thermal and a second physical cause)
             # plus an acceptance-emitted flag, rather than only handmade records.
             session = manifest["sessions"][0]
@@ -1340,7 +1347,9 @@ class Addendum7RegressionTests(NumericTestCase):
         _, points, _, result = self.assess(records)
         self.assertTrue(all(p["status"] == "unavailable" and p["pass_status"] == "no_pass"
                             for p in points if p["model"] == target))
-        self.assertFalse(any(r["model"] == target for r in result["h1"]))
+        absent = [r for r in result["h1"] if r["model"] == target]
+        self.assertEqual(len(absent), 12)
+        self.assertTrue(all(r["status"] == "missing" and "word" not in r for r in absent))
         self.assertEqual(len(result["unavailable"]), 12)
         self.assertTrue(all(r["refusals"][0]["model"] == target for r in result["unavailable"]))
         for row in result["h2"]:
@@ -1351,12 +1360,38 @@ class Addendum7RegressionTests(NumericTestCase):
                 for fit in (row["two_term"], row["resident_extended"], row["tier"]):
                     self.assertEqual(fit["family_size"], row["k"])
 
+    def test_q1_missing_moe_has_explicit_h1_and_active_or_resident_rows(self):
+        target = "Qwen3-30B-A3B-4bit"
+        records = copy.deepcopy(self.records)
+        self.refuse(records, [target])
+        for row in records:
+            if row["model"] == target:
+                row["flags"] = sorted(set(row["flags"]) | {"bytes.withheld_missing"})
+                row.update(withheld_row_count=50, withheld_config_row_count=50)
+        _, points, frozen, _ = self.assess(records)
+        bytes_analyze._missing_labels(points)
+        result = ba.evaluate(points, frozen)
+        absent = [r for r in result["h1"] if r["model"] == target]
+        self.assertEqual(len(absent), 12)
+        for row in absent:
+            self.assertEqual(row["status"], "missing")
+            self.assertNotIn("word", row)
+            self.assertIn("bytes.withheld_missing", row["flags"])
+        self.assertEqual(len(result["moe"]), 12)
+        for row in result["moe"]:
+            self.assertEqual((row["status"], row["answer"]), ("missing", "missing"))
+            self.assertEqual([m["model"] for m in row["missing_models"]], [target])
+            self.assertIn("bytes.withheld_missing", row["flags"])
+        self.assertTrue(all(r["n"] == 9 for r in result["h2"]))
+
     def test_a7_09_each_fit_refused_below_two_df_h2_survives_missing_fit_model(self):
         # Missing fit models prevent H1, while H2 still fits the remaining points.
         records = copy.deepcopy(self.records)
         self.refuse(records, ["Qwen3-4B-4bit", "Qwen3-14B-4bit"])
         _, _, _, result = self.assess(records)
-        self.assertEqual(result["h1"], [])
+        self.assertEqual(len(result["h1"]), 24)
+        self.assertTrue(all(r["status"] == "missing" and "word" not in r for r in result["h1"]))
+        self.assertTrue(all(r["status"] == "missing" and r["answer"] == "missing" for r in result["moe"]))
         self.assertEqual(len(result["h2"]), 24)
         for row in result["h2"]:
             self.assertEqual(row["n"], 8)
@@ -1567,6 +1602,400 @@ class ReviewerProbeTests(NumericTestCase):
                     if script == "p06_word_sensitivity.py":
                         self.assertIn("differ: 0 of 801",report)
                     print("BYTES_REVIEW_PROBE="+script+"\n"+report,flush=True)
+
+
+class Q1WithheldCensusTests(unittest.TestCase):
+    def test_absent_csv_is_censused_from_collected_session_sidecar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_json(root / "collected.session.json", {})
+            manifest = {"models": [], "sessions": [{"session_id": "collected", "pass_id": 1,
+                                                       "archive": str(root / "archive")}]}
+            with patch.object(ba, "archive_records", return_value=[]) as read:
+                self.assertEqual(ba.load_records(root, manifest, stage="heldout"), [])
+            self.assertEqual(read.call_args.kwargs["export_path"], root / "collected.runs.csv")
+            self.assertEqual(read.call_args.args[2]["session_id"], "collected")
+
+    def test_blinded_postcommit_keeps_missing_store_and_absent_csv_placeholders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = {**ba.read_json(FIXTURES / "campaign_design.json")["models"][3],
+                     "config_key": "registered|workload|512"}
+            session = {"session_id": "collected", "pass_id": 2}
+            manifest = {"models": [model], "sessions": [session]}
+            info = {"path": "absent-store.csv", "row_count": 50, "config_key_sha256": {
+                hashlib.sha256(model["config_key"].encode()).hexdigest(): 50}}
+            _write_json(root / "collected.session.json", {"blinding": {"withheld": info}})
+            public = root / "collected.runs.csv"
+            public.write_text("run_id,cell_ids\n")
+            for csv_present in (True, False):
+                with self.subTest(csv_present=csv_present):
+                    if not csv_present:
+                        public.unlink()
+                    with patch.object(ba, "archive_records", side_effect=AssertionError("archive read")):
+                        self.assertEqual(ba.load_records(root, manifest, stage="blinded"), [])
+                        records = ba.load_records(root, manifest, stage="blinded", stage1_commit="a" * 40)
+                    self.assertEqual(len(records), 50)
+                    passes = ba.reduce_models(records, manifest, boundaries=("rails",))
+                    self.assertEqual({r["status"] for r in passes}, {"missing"})
+                    self.assertTrue(all(r["withheld_row_count"] == 50 for r in passes))
+                    points = ba.combine_passes(passes)
+                    bytes_analyze._missing_labels(points)
+                    self.assertEqual({p["status"] for p in points}, {"missing"})
+                    self.assertEqual({p["pass_status"] for p in points}, {"no_pass"})
+
+    def test_missing_labels_unions_existing_and_pass_flags_on_survivors(self):
+        for status in ("computed", "unavailable"):
+            with self.subTest(status=status):
+                point = {"status": status, "flags": ["existing.disclosure"], "passes": [
+                    {"flags": ["battery.assist"]}, {"flags": ["bytes.withheld_missing"]}]}
+                bytes_analyze._missing_labels([point])
+                self.assertEqual(point["flags"], ["battery.assist", "bytes.withheld_missing", "existing.disclosure"])
+                self.assertEqual(point["status"], "computed" if status == "computed" else "missing")
+        optional = {"status": "computed", "pass_status": "one_pass", "passes": [{"flags": []}]}
+        bytes_analyze._missing_labels([optional])
+        self.assertNotIn("bytes.withheld_missing", optional.get("flags", []))
+
+    def test_missing_file_placeholders_keep_sidecar_counts_and_no_energy(self):
+        model = {"model": "heldout", "config_key": "heldout|registered|512"}
+        info = {"row_count": 100, "config_key_sha256": {
+            hashlib.sha256(model["config_key"].encode()).hexdigest(): 50,
+            hashlib.sha256(b"other|registered|512").hexdigest(): 50}}
+        rows = list(ba._missing_withheld_records(info, {"models": [model]},
+                    {"session_id": "s2-p2", "pass_id": 2}))
+        self.assertEqual(len(rows), 50)
+        self.assertEqual(len({r["run_id"] for r in rows}), 50)
+        self.assertEqual(sum(r["stratum"] == "repeat" for r in rows), 10)
+        self.assertEqual(len({r["unit_id"] for r in rows if r["stratum"] == "quad"}), 10)
+        for row in rows:
+            self.assertEqual(row["withheld_row_count"], 100)
+            self.assertEqual(row["withheld_config_row_count"], 50)
+            self.assertEqual(row["flags"], ["bytes.withheld_missing"])
+            self.assertTrue(row["invalid_energy_record"])
+            self.assertNotIn("rails_j", row)
+
+
+class SubsetReleaseChainTests(unittest.TestCase):
+    def command(self, *args, expected=0, cwd=ROOT):
+        result = subprocess.run(list(map(str, args)), cwd=cwd, capture_output=True, text=True,
+                                env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"}, check=False)
+        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        return result.stdout
+
+    def test_export_traversal_uses_registered_pass_not_clock_named_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # Filename order deliberately disagrees with the registered passes.
+            for name in ("early-clock-pass2", "late-clock-pass1"):
+                (root / (name + ".runs.csv")).write_text("unused")
+            manifest = {"models": [], "sessions": [
+                {"session_id": "early-clock-pass2", "pass_id": 2},
+                {"session_id": "late-clock-pass1", "pass_id": 1}]}
+            with patch.object(ba, "_export_rows", return_value=[]) as read:
+                self.assertEqual(ba.load_records(root, manifest, stage="blinded"), [])
+            self.assertEqual([call.args[0].name for call in read.call_args_list],
+                             ["late-clock-pass1.runs.csv", "early-clock-pass2.runs.csv"])
+
+    def test_three_worlds_full_synthetic_cli_chain_and_clock_removal(self):
+        from joulewise.b6 import blinding
+        # Generate full harvest-shaped campaigns in a separate process. The
+        # fixture calls the real export boundary; every analysis and release is
+        # another CLI process, with native keys and 10 Hz meter streams.
+        for world in ("bytes", "resident", "time"):
+            with self.subTest(world=world), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                generate = '''
+import importlib.util, json, sys
+from pathlib import Path
+from unittest.mock import patch
+from joulewise.b6 import export_runs
+spec = importlib.util.spec_from_file_location("campaign", "tests/fixtures/bytes/campaign.py")
+fixture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fixture)
+root = Path(sys.argv[1])
+original = export_runs.export
+def grouped(*args, **kwargs):
+    # Retain an actual pre-change full export using the very same drawn keys.
+    original(*args[:4], root / "legacy-export", **kwargs)
+    return original(*args, **kwargs, pack_registration={"blinding_group": "bytes", "bytes_pass": int(args[0].name[-1])})
+with patch.object(export_runs, "export", side_effect=grouped):
+    manifest = fixture.archive_campaign(root, world=sys.argv[2], non_claim=False, release="none",
+        pass_duration_scales=(1, 2), clock_latency_ms=(-8, 3))
+(root / "manifest.json").write_text(json.dumps(manifest))
+'''
+                self.command(sys.executable, "-B", "-c", generate, root, world)
+                manifest = json.loads((root / "manifest.json").read_text())
+                # Register the synthetic configurations using the native module
+                # schema; the release tool reads these files, not the manifest.
+                archive = Path(manifest["sessions"][0]["archive"])
+                config_dirs = []
+                for model in manifest["models"]:
+                    rid = (model["model"] + "-0").lower().replace(".", "-")
+                    dest = root / "synthetic-configs" / model["model"]
+                    dest.mkdir(parents=True)
+                    shutil.copyfile(archive / "sources/claim-runs" / rid / "config.json", dest / "member.json")
+                    config_dirs.append(str(dest.relative_to(root)))
+                _write_json(root / "registrations/bytes/registration.json", {
+                    "pack_id": "bytes", "blinding_group": "bytes", "modules": [{"config_dirs": config_dirs}]})
+                fit_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512"
+                            for m in manifest["models"] if m["role"] == "fit")}
+                all_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"])}
+                stores = []
+                for session in manifest["sessions"]:
+                    path = root / "export/bytes" / (session["session_id"] + ".runs.csv")
+                    with path.open() as stream:
+                        rows = list(csv.DictReader(stream))
+                    # R5: 3 fit models x 50 runs; A4.7: 6+3+1+3 references.
+                    self.assertEqual(len(rows), 150 + 13)
+                    self.assertEqual({r["config_key"] for r in rows}, fit_keys)
+                    self.assertNotIn("run_start_utc", rows[0])
+                    self.assertEqual([int(r["order_index"]) for r in rows], sorted(int(r["order_index"]) for r in rows))
+                    info = json.loads(path.with_name(session["session_id"] + ".session.json").read_text())["blinding"]["withheld"]
+                    self.assertEqual(info["row_count"], 7 * 50)  # seven held-out full modules
+                    stores.append(path.parent / info["path"])
+
+                def analyze(stage, out, *, legacy=False, keys=None, predictions=None, commit=None, expected=0):
+                    args = [sys.executable, ROOT / "scripts/bytes_analyze.py", "--export",
+                            root / ("legacy-export" if legacy else "export"), "--manifest", root / "manifest.json",
+                            "--stage", stage, "--out", root / out]
+                    if keys:
+                        args += ["--key-dir", root / keys]
+                    if predictions:
+                        args += ["--predictions", root / predictions]
+                    if commit:
+                        args += ["--stage1-commit", commit]
+                    return self.command(*args, expected=expected)
+
+                def release(stage, keys, out, commit=None, expected=0):
+                    args = [sys.executable, ROOT / "scripts/b6_release_subset.py", "--pack-records-root", root / "private-keys",
+                        "--blinding-group", "bytes", "--registrations-root", root / "registrations", "--project-root", root,
+                        "--stage", stage, "--out", root / out, "--keys", *sorted(keys)]
+                    if commit:
+                        args += ["--stage1-commit", commit]
+                    return self.command(*args, expected=expected)
+
+                analyze("blinded", "blind-fit")
+                points = json.loads((root / "blind-fit/model_estimates.json").read_text())
+                self.assertEqual({p["model"] for p in points}, {m["model"] for m in manifest["models"] if m["role"] == "fit"})
+                self.assertEqual(json.loads((root / "blind-fit/h1.json").read_text()), [])
+                analyze("fit", "before-release", expected=1)
+                release("fit", fit_keys, "stage1-keys")
+                self.assertEqual({p.name for p in (root / "stage1-keys").iterdir()},
+                                 {"pack.json", "release.json", *(blinding._config_filename(k) for k in fit_keys)})
+                analyze("fit", "stage1", keys="stage1-keys")
+                analyze("fit", "legacy-fit", legacy=True, keys="stage1-keys")
+                for name in ("predictions.json", "fit_pass_estimates.json"):
+                    self.assertEqual((root / "stage1" / name).read_bytes(), (root / "legacy-fit" / name).read_bytes())
+                commitment = (root / "stage1/predictions.json").read_bytes()
+                release("heldout", all_keys, "uncommitted-keys", expected=1)
+                self.command("git", "init", "-q", root / "stage1")
+                self.command("git", "add", ".", cwd=root / "stage1")
+                self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
+                             "commit", "-qm", "Freeze synthetic stage-1 predictions", cwd=root / "stage1")
+                commit = self.command("git", "rev-parse", "HEAD", cwd=root / "stage1").strip()
+                # Before releasing held-out factors, run the blinded held-out
+                # agreement ingress. It reads no raw archives or meter values.
+                analyze("blinded", "blind-postcommit", commit=commit)
+                analyze("blinded", "legacy-blind", legacy=True)
+                for name in ("model_estimates.json", "h1.json", "h2.json", "moe.json"):
+                    # Exact JSON bytes here test identical inputs and arithmetic:
+                    # removing unused clocks must not change a printed number.
+                    self.assertEqual((root / "blind-postcommit" / name).read_bytes(), (root / "legacy-blind" / name).read_bytes())
+                analyze("heldout", "before-heldout-release", keys="stage1-keys", predictions="stage1/predictions.json", expected=1)
+                # Stage 2 explicitly lists all keys so its directory is complete
+                # for unchanged _released_rows, including NEG-8 references.
+                release("heldout", all_keys, "stage2-keys", commit)
+                analyze("heldout", "stage2", keys="stage2-keys", predictions="stage1/predictions.json")
+                analyze("heldout", "legacy-heldout", legacy=True, keys="stage2-keys", predictions="stage1/predictions.json")
+                for name in ("model_estimates.json", "h1.json", "h2.json", "moe.json", "unavailable.json"):
+                    self.assertEqual((root / "stage2" / name).read_bytes(), (root / "legacy-heldout" / name).read_bytes())
+                self.assertEqual((root / "stage1/predictions.json").read_bytes(), commitment)
+                # 2 selections x 2 bases x 3 boundaries = 12 H2 groups;
+                # H1 prints 10 models x (2 passes + mean) x 12 = 360 rows.
+                self.assertEqual(len(json.loads((root / "stage2/h1.json").read_text())), 360)
+                self.assertEqual(len(json.loads((root / "stage2/h2.json").read_text())), 12)
+                for path in stores:
+                    path.unlink()
+                analyze("heldout", "missing-store", keys="stage2-keys", predictions="stage1/predictions.json")
+                missing = json.loads((root / "missing-store/model_estimates.json").read_text())
+                heldout = [p for p in missing if p["role"] == "heldout"]
+                self.assertTrue(heldout)
+                self.assertEqual({p["status"] for p in heldout}, {"missing"})
+                self.assertTrue(all("bytes.withheld_missing" in p["flags"] for p in heldout))
+
+class Q1MissingFilesCLIChainTests(unittest.TestCase):
+    target = "Qwen3-30B-A3B-4bit"
+
+    def command(self, *args, cwd=ROOT):
+        result = subprocess.run(list(map(str, args)), cwd=cwd, capture_output=True, text=True,
+            env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"}, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout
+
+    def test_one_withheld_file_missing_cli_chain(self):
+        self.chain("one")
+
+    def test_both_withheld_files_missing_cli_chain(self):
+        self.chain("both")
+
+    def test_genuinely_uncollected_optional_pass_cli_chain(self):
+        self.chain("optional")
+
+    def chain(self, case):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generate = '''
+import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("campaign", "tests/fixtures/bytes/campaign.py")
+f = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(f)
+root = Path(sys.argv[1])
+manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_sessions=True,
+    uncollected_sessions=("bytes-s2-p2",) if sys.argv[2] == "optional" else (),
+    pass_duration_scales=(1, 2), clock_latency_ms=(-8, 3))
+(root / "manifest.json").write_text(json.dumps(manifest))
+'''
+            self.command(sys.executable, "-B", "-c", generate, root, case)
+            manifest = ba.read_json(root / "manifest.json")
+            expected_sessions = [f"bytes-s{s}-p1" for s in range(1, 7)] + [
+                f"bytes-s{s}-p2" for s in range(6, 0, -1) if case != "optional" or s != 2]
+            self.assertEqual([s["session_id"] for s in manifest["sessions"]], expected_sessions)
+            self.assertEqual(len(manifest["sessions"]), 11 if case == "optional" else 12)
+            paths = {p.name.removesuffix(".runs.csv"): p for p in (root / "export").rglob("*.runs.csv")}
+            self.assertEqual(set(paths), set(expected_sessions))
+            # Release membership is read from native registered run configs.
+            config_dirs = []
+            for model in manifest["models"]:
+                run_id = (model["model"] + "-0").lower().replace(".", "-")
+                source = next(Path(s["archive"]) / "sources/claim-runs" / run_id / "config.json"
+                              for s in manifest["sessions"] if (
+                                  Path(s["archive"]) / "sources/claim-runs" / run_id / "config.json").is_file())
+                dest = root / "configs" / model["model"]
+                dest.mkdir(parents=True)
+                shutil.copyfile(source, dest / "run.json")
+                config_dirs.append(str(dest.relative_to(root)))
+            _write_json(root / "registrations/bytes/registration.json", {
+                "pack_id": "bytes", "blinding_group": "bytes", "modules": [{"config_dirs": config_dirs}]})
+            for pass_id in ((2,) if case == "one" else (1, 2) if case == "both" else ()):
+                path = paths[f"bytes-s2-p{pass_id}"]
+                info = ba.read_json(path.with_name(f"bytes-s2-p{pass_id}.session.json"))["blinding"]["withheld"]
+                self.assertEqual(info["row_count"], 50)
+                self.assertEqual(info["config_key_sha256"], {
+                    hashlib.sha256(next(m["config_key"] for m in manifest["models"]
+                                        if m["model"] == self.target).encode()).hexdigest(): 50})
+                (path.parent / info["path"]).unlink()
+            fit_keys = {"neg8_reference", *(m["config_key"] for m in manifest["models"] if m["role"] == "fit")}
+            all_keys = {"neg8_reference", *(m["config_key"] for m in manifest["models"])}
+            evidence = []
+
+            def summarize(stage, out=None, stdout=""):
+                def read(name):
+                    path = root / out / (name + ".json") if out else None
+                    return ba.read_json(path) if path and path.is_file() else []
+                def primary(row):
+                    return row["boundary"] == "rails" and row["basis"] == "gross primary" and row["selection"] == "primary"
+                passes = read("blinded_pass_estimates") or read("heldout_pass_estimates") or read("fit_pass_estimates")
+                points = [p for p in read("model_estimates") if p["model"] == self.target and primary(p)]
+                evidence.append({"stage": stage, "exit": 0,
+                    "passes": [{k: p[k] for k in ("pass_id", "status", "flags", "withheld_row_count", "withheld_config_row_count") if k in p}
+                               for p in passes if p["model"] == self.target and primary(p)],
+                    "point": [{k: p[k] for k in ("status", "pass_status", "n_passes", "flags") if k in p} for p in points],
+                    "h1": [{k: p[k] for k in ("pass_id", "status", "word", "flags") if k in p}
+                           for p in read("h1") if p["model"] == self.target and primary(p)],
+                    "moe": [{k: p[k] for k in ("status", "answer", "flags") if k in p} for p in read("moe") if primary(p)],
+                    "h2": [{k: p[k] for k in ("analysis", "n", "k")} for p in read("h2") if primary(p)],
+                    "stdout": stdout.strip()})
+
+            def analyze(stage, out, *, keys=None, predictions=None, commit=None):
+                args = [sys.executable, "-B", ROOT / "scripts/bytes_analyze.py", "--export", root / "export",
+                        "--manifest", root / "manifest.json", "--stage", stage, "--out", root / out]
+                if keys:
+                    args += ["--key-dir", root / keys]
+                if predictions:
+                    args += ["--predictions", root / predictions]
+                if commit:
+                    args += ["--stage1-commit", commit]
+                stdout = self.command(*args)
+                summarize(out, out, stdout)
+
+            def release(stage, keys, out, commit=None):
+                args = [sys.executable, "-B", ROOT / "scripts/b6_release_subset.py", "--pack-records-root", root / "private-keys",
+                        "--blinding-group", "bytes", "--registrations-root", root / "registrations", "--project-root", root,
+                        "--stage", stage, "--out", root / out, "--keys", *sorted(keys)]
+                if commit:
+                    args += ["--stage1-commit", commit]
+                summarize(out, stdout=self.command(*args))
+
+            analyze("blinded", "blinded-before-commit")
+            pre = root / "blinded-before-commit"
+            self.assertEqual({p["model"] for p in ba.read_json(pre / "model_estimates.json")},
+                             {m["model"] for m in manifest["models"] if m["role"] == "fit"})
+            for name in ("h1", "moe", "h2"):
+                self.assertEqual(ba.read_json(pre / (name + ".json")), [])
+            release("fit", fit_keys, "fit-keys")
+            analyze("fit", "fit", keys="fit-keys")
+            predictions = root / "fit/predictions.json"
+            frozen_bytes = predictions.read_bytes()
+            self.command("git", "init", "-q", root / "fit")
+            self.command("git", "add", ".", cwd=root / "fit")
+            self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
+                         "commit", "-qm", "Commit synthetic Q1 predictions", cwd=root / "fit")
+            commit = self.command("git", "rev-parse", "HEAD", cwd=root / "fit").strip()
+            summarize("stage1-git-commit", stdout=commit)
+            analyze("blinded", "blinded-post-commit", commit=commit)
+            release("heldout", all_keys, "heldout-keys", commit)
+            analyze("heldout", "heldout", keys="heldout-keys", predictions="fit/predictions.json")
+            self.assertEqual(predictions.read_bytes(), frozen_bytes)  # immutable identity/hash input
+            for out in ("blinded-post-commit", "heldout"):
+                points = [p for p in ba.read_json(root / out / "model_estimates.json") if p["model"] == self.target]
+                self.assertEqual(len(points), 4 if out.startswith("blinded") else 12)
+                for point in points:
+                    self.assertEqual(point["pass_status"], "no_pass" if case == "both" else "one_pass")
+                    self.assertEqual(point["n_passes"], 0 if case == "both" else 1)
+                    self.assertEqual(point["status"], "missing" if case == "both" else "computed")
+                    self.assertEqual("bytes.withheld_missing" in point.get("flags", []), case != "optional")
+                    missing = [p for p in point["passes"] if p["status"] == "missing"]
+                    self.assertEqual(len(missing), 2 if case == "both" else 1 if case == "one" else 0)
+                    self.assertEqual({p["pass_id"] for p in point["passes"]}, {1} if case == "optional" else {1, 2})
+                    for row in missing:
+                        self.assertEqual(row["withheld_row_count"], 50)
+                        self.assertEqual(row["withheld_config_row_count"], 50)
+                        self.assertIn("bytes.withheld_missing", row["flags"])
+                    if case == "both":
+                        self.assertNotIn("e", point)
+                h1 = [r for r in ba.read_json(root / out / "h1.json") if r["model"] == self.target]
+                self.assertTrue(h1)
+                for row in h1:
+                    if case == "both":
+                        self.assertEqual(row["status"], "missing")
+                        self.assertNotIn("word", row)
+                    else:
+                        self.assertEqual(row["pass_status"], "one_pass")
+                        self.assertIn(row["word"], {"bytes", "resident", "time", "unresolved", "neither"})
+                        if case == "one" and row["pass_id"] == "mean":
+                            self.assertIn("bytes.withheld_missing", row["flags"])
+                moe = ba.read_json(root / out / "moe.json")
+                self.assertEqual(len(moe), 4 if out.startswith("blinded") else 12)
+                for row in moe:
+                    self.assertEqual(row.get("status") == "missing", case == "both")
+                    if case == "both":
+                        self.assertEqual(row["answer"], "missing")
+                        self.assertEqual([m["model"] for m in row["missing_models"]], [self.target])
+                for row in ba.read_json(root / out / "h2.json"):
+                    primary = row["analysis"] == "primary"
+                    self.assertEqual(row["n"], (9 if case == "both" else 10) if primary else (8 if case == "optional" else 9))
+                    self.assertEqual(row["k"], 11 if row["boundary"] == "rest" else 9)
+                    self.assertEqual(row["description_only"], not primary)
+            path = paths["bytes-s2-p1" if case == "optional" else "bytes-s2-p2"]
+            stdout = self.command(sys.executable, "-B", ROOT / "scripts/b6_unblind.py", "--export", path,
+                "--key-dir", root / "heldout-keys", "--stage1-commit", commit, "--out", root / "unblinded.csv")
+            unblind = json.loads(stdout)
+            self.assertEqual(unblind.get("flags", []), [] if case == "optional" else ["bytes.withheld_missing"])
+            self.assertEqual(unblind["rows"], 113 if case == "optional" else 63)
+            summarize("unblind", stdout=stdout)
+            print("BYTES_Q1_CHAIN=" + json.dumps({"case": case, "sessions": len(manifest["sessions"]),
+                  "evidence": evidence}, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":

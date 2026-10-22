@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -20,8 +21,8 @@ def _write(out, name, payload):
     path.write_text(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n")
 
 
-def _reduce(source, manifest, stage, key_dir=None):
-    records = ba.load_records(source, manifest, stage=stage, key_dir=key_dir)
+def _reduce(source, manifest, stage, key_dir=None, stage1_commit=None):
+    records = ba.load_records(source, manifest, stage=stage, key_dir=key_dir, stage1_commit=stage1_commit)
     boundaries = ("rails",) if stage == "blinded" else ba.BOUNDARIES
     passes = ba.reduce_models(records, manifest, boundaries=boundaries) + ba.reduce_models(
         records, manifest, inclusive=True, boundaries=boundaries)
@@ -33,6 +34,17 @@ def _reduce(source, manifest, stage, key_dir=None):
     return passes, points
 
 
+def _missing_labels(points):
+    """Disclose pass flags on survivors and label models with no point."""
+    for point in points:
+        flags = set(point.get("flags", [])) | {
+            flag for row in point.get("passes", []) for flag in row.get("flags", [])}
+        if "bytes.withheld_missing" in flags:
+            point["flags"] = sorted(flags)
+            if point.get("status") == "unavailable":
+                point.update(status="missing", reason="withheld rows missing")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
@@ -41,6 +53,7 @@ def main(argv=None):
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--stage", required=True, choices=("blinded", "fit", "heldout", "all"))
     parser.add_argument("--key-dir", type=Path, help="directory of released pack/config keys (read only)")
+    parser.add_argument("--stage1-commit", help="recorded stage-1 commit; permits blinded held-out agreement")
     parser.add_argument("--predictions", type=Path, help="fit-stage predictions.json, with predictions.sha256 beside it")
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -49,12 +62,18 @@ def main(argv=None):
         source = args.export or args.records
         if args.stage == "heldout" and args.predictions is None:
             raise ba.AnalysisError("heldout requires --predictions and its SHA-256 sidecar")
+        if args.stage1_commit and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", args.stage1_commit):
+            raise ba.AnalysisError("stage-1 commit must be a Git commit hash")
         if args.stage == "blinded":
             if args.export is None:
                 raise ba.AnalysisError("blinded stage requires --export")
-            passes, points = _reduce(source, manifest, "blinded")
+            passes, points = _reduce(source, manifest, "blinded", stage1_commit=args.stage1_commit)
             frozen = ba.frozen_predictions([p for p in points if p["role"] == "fit"], manifest)
-            result = ba.evaluate(points, frozen)
+            # Pre-commit grouped exports contain only fit configurations. Their
+            # estimates and NEG-8 inputs remain reviewable without H1/H2 words.
+            _missing_labels(points)
+            result = ba.evaluate(points, frozen) if any(p["role"] == "heldout" for p in points) else {
+                name: [] for name in ("h1", "moe", "h2", "unavailable")}
             args.out.mkdir(parents=True, exist_ok=True)
             _write(args.out, "blinded_pass_estimates", passes)
             _write(args.out, "model_estimates", points)
@@ -70,6 +89,9 @@ def main(argv=None):
             refs = {r["session_id"]: r["neg8_inputs"] for r in fit_passes if "neg8_inputs" in r}
             frozen = ba.frozen_predictions(fit_points, manifest, refs)
             sha = ba.write_predictions(args.out, frozen)
+            digest = frozen["bytes_analysis_sha256"]
+            commitment = {"bytes_analysis_sha256": {"committed": digest, "evaluating": digest},
+                          "flags": [], "fields_not_rebuilt": []}
             _write(args.out, "fit_pass_estimates", fit_passes)
             if args.stage == "fit":
                 print(json.dumps({"stage": "fit", "predictions_sha256": sha, "out": str(args.out)}))
@@ -78,10 +100,24 @@ def main(argv=None):
             # Validate the commitment before opening any held-out archive.
             frozen, sha = ba.read_predictions(args.predictions, manifest)
             fit_points = frozen["fit_points"]
-            if ba.frozen_predictions(fit_points, manifest, frozen["neg8_inputs"]) != frozen:
+            rebuilt = ba.frozen_predictions(fit_points, manifest, frozen["neg8_inputs"])
+            # The committed content (fit points, rival lines, NEG-8 inputs, tier inputs,
+            # sizes, manifest digest) is data; the module digest is provenance. Under the
+            # committing module the content must rebuild exactly. Under a module changed
+            # after the commitment (registration section 11, held-out agreement) the
+            # rebuild is reported and flagged, and the committed content is evaluated as
+            # committed; the corrected lines live in the second commitment.
+            module = {"committed": frozen["bytes_analysis_sha256"], "evaluating": rebuilt["bytes_analysis_sha256"]}
+            not_rebuilt = sorted(k for k in set(frozen) | set(rebuilt)
+                                 if k != "bytes_analysis_sha256" and frozen.get(k) != rebuilt.get(k))
+            if module["committed"] == module["evaluating"] and not_rebuilt:
                 raise ba.AnalysisError("frozen line/fit-point mismatch")
+            flags = [] if module["committed"] == module["evaluating"] else (
+                ["bytes.module_changed_after_commitment"] + (["bytes.commitment_not_rebuilt"] if not_rebuilt else []))
+            commitment = {"bytes_analysis_sha256": module, "flags": flags, "fields_not_rebuilt": not_rebuilt}
         held_passes, held_points = _reduce(source, manifest, "heldout", args.key_dir)
         points = fit_points + held_points
+        _missing_labels(points)
         result = ba.evaluate(points, frozen)
         args.out.mkdir(parents=True, exist_ok=True)
         _write(args.out, "heldout_pass_estimates", held_passes)
@@ -89,6 +125,7 @@ def main(argv=None):
         for name, rows in result.items():
             _write(args.out, name, rows)
         _write(args.out, "analysis_record", {"stage": args.stage, "predictions_sha256": sha,
+                **commitment,
                 "manifest_sha256": ba.digest(manifest), "H1_checks": ba.H1_CHECKS,
                 "H2_intervals": [{k: row[k] for k in ("selection", "basis", "boundary", "n", "k")}
                                  for row in result["h2"] if not row["description_only"]],

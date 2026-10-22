@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import tempfile
@@ -91,14 +92,24 @@ def _event_fields(events: list[dict]) -> dict:
 
 def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str,
            pack_records_root: Path | str, export_dir: Path | str, *, non_claim: bool = False,
-           evidence=None, acceptance_record: Mapping | None = None) -> ExportResult:
+           evidence=None, acceptance_record: Mapping | None = None,
+           pack_registration: Mapping | None = None) -> ExportResult:
     root = Path(archive_root)
     evidence = evidence or evidence_from_archive(root, plan, registration_dir)
     record = acceptance_record or read_json(root / "derived/b6-acceptance.json")
     roster = ordered_roster(read_json(root / "derived/roster.json", {}), evidence)
     pack_id = record["pack_id"]
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
-    key_dir = Path(pack_records_root) / pack_id / "blinding"
+    if pack_registration is None:
+        # Prefer the harvested registration to the desk checkout. The explicit
+        # argument is for synthetic/seam callers; normal harvest needs no flag.
+        candidates = (root / "sources/pack/registration.json",
+                      root / "sources/repo/configs/b6/packs" / pack_id / "registration.json",
+                      Path(registration_dir) / "registration.json",
+                      Path(__file__).resolve().parents[2] / "configs/b6/packs" / pack_id / "registration.json")
+        pack_registration = next((doc for path in candidates
+                                  if (doc := read_json(path)) is not None), {})
+    key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
     for item in record.get("excluding", []):
         if item.get("scope") == "member":
@@ -108,7 +119,15 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         run_id = flag["scope"].get("run_id")
         if run_id:
             codes[run_id].add(flag["code"])
-    rows = []
+    rows, withheld = [], []
+    group = pack_registration.get("blinding_group")
+    grouped_blind = bool(group)
+    # Every grouped table is offset, including non-claim smoke sessions. The
+    # legacy row-level non_claim bit means "offsets not applied" to the existing
+    # release reader, so grouped tables keep session provenance in the sidecar
+    # and omit that bit. This lets _released_rows remain unchanged.
+    columns = (tuple(c for c in COLUMNS if c not in ("run_start_utc", "non_claim")) + ("pass_id",)
+               if grouped_blind else COLUMNS)
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
@@ -145,23 +164,49 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                         for term in BOUND_TERMS})
             row["idle_power_w"] = idle.get("power_w_mean")
             row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
-        if not non_claim:
+        if not non_claim or grouped_blind:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
-        rows.append(row)
+        if grouped_blind:
+            # The registered stage walk supplies order_index; no wall/monotonic
+            # clock enters the pre-commit table. Durations remain observables.
+            row.pop("run_start_utc", None)
+            row.pop("non_claim", None)
+            row["pass_id"] = pack_registration.get("bytes_pass")
+            (rows if key == REFERENCE_KEY or blinding.configuration_stage(config) == "fit"
+             else withheld).append(row)
+        else:
+            rows.append(row)
     destination = Path(export_dir) / pack_id
     csv_path = destination / (session_id + ".runs.csv")
     sidecar = destination / (session_id + ".session.json")
 
     def write_csv(stream):
-        writer = csv.DictWriter(stream, fieldnames=COLUMNS)
+        writer = csv.DictWriter(stream, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
 
+    withheld_record = None
+    if grouped_blind:
+        store = blinding.withheld_path(key_dir, pack_id, session_id)
+        def write_withheld(stream):
+            writer = csv.DictWriter(stream, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(withheld)
+        # Persist already offset rows before publishing their count-only locator.
+        atomic_write(store, write_withheld)
+        counts = defaultdict(int)
+        for row in withheld:
+            counts[hashlib.sha256(row["config_key"].encode("utf-8")).hexdigest()] += 1
+        withheld_record = {"path": os.path.relpath(store, destination), "row_count": len(withheld),
+                           "config_key_sha256": dict(sorted(counts.items()))}
     atomic_write(csv_path, write_csv)
     session = {"schema": "joulewise.b6_export_session.v1", "pack_id": pack_id, "session_id": session_id,
                **{key: record.get(key) for key in ("verdict", "counting", "flag_counts")},
                "operative_bound_s": record.get("calibration", {}).get("operative_bound_s"),
                "neg8": record.get("neg8"), "non_claim": non_claim,
-               "blinding": {"applied": not non_claim, "key_dir": os.path.relpath(key_dir, destination)}}
+               "blinding": {"applied": not non_claim or grouped_blind, "key_dir": os.path.relpath(key_dir, destination)}}
+    if grouped_blind:
+        session["blinding"].update(group=group, pass_id=pack_registration.get("bytes_pass"),
+                                    withheld=withheld_record)
     atomic_write(sidecar, lambda stream: stream.write(json.dumps(session, sort_keys=True, indent=2) + "\n"))
     return ExportResult(csv_path, sidecar, len(rows))

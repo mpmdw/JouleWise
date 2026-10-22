@@ -18,6 +18,20 @@ def factor_child(directory, gate, queue):
 
 
 class BlindingTests(unittest.TestCase):
+    def test_twelve_bytes_drafts_share_custody_replication_paths_unchanged(self):
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            records = Path(tmp)
+            paths = {blinding.key_directory(records, doc["pack_id"], doc)
+                     for path in sorted((root / "configs/b6/packs").glob("bytes-*/registration.json"))
+                     for doc in [json.loads(path.read_text())]}
+            self.assertEqual(paths, {records / "bytes/blinding"})
+            for pack in ("alpha", "beta", "gamma"):
+                self.assertEqual(blinding.key_directory(records, pack, {}), records / pack / "blinding")
+            for group in ("../escape", "/outside", ".", ".."):
+                with self.assertRaises(ValueError):
+                    blinding.key_directory(records, "pack", {"blinding_group": group})
+
     def test_ranges_over_ten_thousand_draws(self):
         for bounds in (blinding.PACK_RANGE, blinding.CONFIG_RANGE):
             self.assertTrue(all(bounds[0] <= blinding._draw(bounds) <= bounds[1] for _ in range(10000)),
@@ -104,10 +118,12 @@ class BlindingTests(unittest.TestCase):
                "dur_decode_s": 2, "emitted_tokens": 7, "failed_energy_j": "", "absent_energy_j": None}
         scale = 1.117
         applied = blinding.apply(row, scale)
-        self.assertTrue(abs(applied["variance_j2"] / (row["variance_j2"] * scale * scale) - 1) < 1e-12)
-        self.assertTrue(abs(applied["idle_variance_of_mean_w2"] / (row["idle_variance_of_mean_w2"] * scale * scale) - 1) < 1e-12)
+        # P2: 1e-9 relative exceeds 1e6 times degree-2 roundoff (4.4e-10)
+        # and at 1e4 J is 1e-5 J, below 1% of the 0.013 J half-width.
+        self.assertTrue(abs(applied["variance_j2"] / (row["variance_j2"] * scale * scale) - 1) <= 1e-9)
+        self.assertTrue(abs(applied["idle_variance_of_mean_w2"] / (row["idle_variance_of_mean_w2"] * scale * scale) - 1) <= 1e-9)
         recovered = blinding.unblind(applied, scale)
-        self.assertTrue(all(abs(recovered[k] / v - 1) < 1e-12 for k, v in row.items() if isinstance(v, float)),
+        self.assertTrue(all(abs(recovered[k] / v - 1) <= 1e-9 for k, v in row.items() if isinstance(v, float)),
                         "synthetic offset roundtrip failed")
         for key in ("dur_decode_s", "emitted_tokens", "failed_energy_j", "absent_energy_j"):
             self.assertEqual(applied[key], row[key])

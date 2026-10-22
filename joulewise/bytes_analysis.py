@@ -226,7 +226,7 @@ def deviation(fit, predictors, observed, measured_half_w=0.0):
 
 
 def _point_label(point):
-    return {k: point[k] for k in ("model", "pass_status", "n_passes") if k in point}
+    return {k: point[k] for k in ("model", "pass_status", "n_passes", "flags") if k in point}
 
 
 def h2(points, rails_power, *, boundary=None, family_size=None):
@@ -612,6 +612,52 @@ def _export_rows(path):
         return list(csv.DictReader(handle))
 
 
+def _stage_export_rows(path, *, include_withheld=False):
+    """Only a post-commit stage opens the group's already blinded store.
+
+    A missing store is a recorded flag. Never recover its science rows from
+    reductions or bundles: absence must remain visible to the model reducer.
+    """
+    path = Path(path)
+    rows = _export_rows(path) if path.is_file() else []
+    if not include_withheld:
+        return rows, False
+    sidecar = path.with_name(path.name.removesuffix(".runs.csv") + ".session.json")
+    if not sidecar.is_file():
+        return rows, False  # legacy exports contain all their science rows
+    info = read_json(sidecar).get("blinding", {}).get("withheld")
+    if info is None:
+        return rows, False
+    if not path.is_file():
+        return rows, info
+    try:
+        merged = rows + _export_rows(path.parent / info["path"])
+        return sorted(merged, key=lambda row: int(row["order_index"])), False
+    except FileNotFoundError:
+        return rows, info
+
+
+def _withheld_counts(info, model):
+    key_digest = hashlib.sha256(model.get("config_key", "").encode("utf-8")).hexdigest()
+    count = info["config_key_sha256"].get(key_digest, 0) if info else 0
+    return {"withheld_row_count": info["row_count"], "withheld_config_row_count": count} if count else {}
+
+
+def _missing_withheld_records(info, manifest, session):
+    """Census-only placeholders; no archive, key, energy or substitute reduction."""
+    for model in manifest["models"]:
+        counts = _withheld_counts(info, model)
+        for index in range(counts.get("withheld_config_row_count", 0)):
+            yield {"model": model["model"], "pass_id": session["pass_id"],
+                "session_id": session["session_id"],
+                "run_id": "withheld-missing:" + model["config_key"] + ":" + str(index),
+                "stratum": "repeat" if index < 10 else "quad",
+                "unit_id": str(index if index < 10 else (index - 10) // 4),
+                "status": "unusable", "invalid_energy_record": True,
+                "excluded": False, "harvest_excluded": False, "meter": None,
+                "flags": ["bytes.withheld_missing"], **counts}
+
+
 def _released_rows(rows, key_dir, *, blinded):
     from joulewise.b6 import blinding
     result = []
@@ -735,7 +781,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         else:
             window_flags.add(flag["code"])
     export_path = export_path or root.parent / "export" / "bytes" / (acceptance["session_id"] + ".runs.csv")
-    exports = _export_rows(export_path)
+    exports, withheld_missing = _stage_export_rows(export_path, include_withheld=stage in ("heldout", "all"))
     wanted_ids = {m["run_id"] for m in roster["members"]
                   if any(u["cell_id"] in selected for u in m.get("units", []))}
     selected_exports = [r for r in exports if r["run_id"] in wanted_ids or r["role"] in REFERENCE_ROLES]
@@ -756,6 +802,10 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         model = selected[units[0]["cell_id"]]
         row = _record_base(model, session, acceptance["session_id"], member, exclusions, flags, window_flags)
         run_id = row["run_id"]
+        counts = _withheld_counts(withheld_missing, model)
+        if counts and run_id not in by_id:
+            row.update(counts)
+            row["flags"] = sorted(set(row["flags"]) | {"bytes.withheld_missing"})
         try:
             if run_id not in by_id:
                 raise AnalysisError("planned run absent from export")
@@ -823,10 +873,10 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         yield row
 
 
-def load_records(source, manifest, *, stage, key_dir=None):
+def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
     """Read the export (including references); archive joins require released keys."""
     if isinstance(source, (list, tuple)):
-        records = [r for item in source for r in load_records(item, manifest, stage=stage, key_dir=key_dir)]
+        records = [r for item in source for r in load_records(item, manifest, stage=stage, key_dir=key_dir, stage1_commit=stage1_commit)]
         identities = [(r["session_id"], r["run_id"]) for r in records]
         if len(identities) != len(set(identities)):
             raise AnalysisError("duplicate records across inputs")
@@ -838,7 +888,16 @@ def load_records(source, manifest, *, stage, key_dir=None):
     if (source / "derived/roster.json").is_file():
         session_id = read_json(source / "derived/b6-acceptance.json")["session_id"]
         return list(archive_records(source, manifest, by_session[session_id], stage=stage, key_dir=key_dir))
-    paths = sorted(source.rglob("*.runs.csv"))
+    # Session names can contain collection clocks. Traversal follows registered
+    # pass identity and the manifest's plan-tree position instead.
+    session_order = {s["session_id"]: index for index, s in enumerate(manifest["sessions"])}
+    # Sidecars retain the collected-session census even if its CSV vanished.
+    expected = set(source.rglob("*.runs.csv")) | {
+        p.with_name(p.name.removesuffix(".session.json") + ".runs.csv")
+        for p in source.rglob("*.session.json")}
+    paths = sorted(expected, key=lambda p: (
+        by_session.get(p.name.removesuffix(".runs.csv"), {}).get("pass_id", 0),
+        session_order.get(p.name.removesuffix(".runs.csv"), len(session_order))))
     if not paths:
         raise AnalysisError("expected harvest archive or Block-6 export directory")
     records = []
@@ -849,7 +908,8 @@ def load_records(source, manifest, *, stage, key_dir=None):
         session = by_session[session_id]
         if stage == "blinded":
             # No archive reads whatsoever; roles, units and blinded rails are CSV inputs.
-            exports = _export_rows(path)
+            exports, withheld_missing = _stage_export_rows(path, include_withheld=bool(stage1_commit))
+            records.extend(_missing_withheld_records(withheld_missing, manifest, session))
             refs = neg8_inputs(exports, blinded=True, test7_passed=session.get("test7_passed", False))
             specs = {cell: m for m in manifest["models"] for cell in m["cell_ids"]}
             for exported in exports:
@@ -1070,7 +1130,10 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
             try:
                 kept, removed = _kept(candidate, inclusive)
             except AnalysisError as exc:
-                rows.append({**base, "status": "unavailable", "reason": str(exc),
+                missing = next((r for r in module if "bytes.withheld_missing" in r["flags"]), None)
+                rows.append({**base, "status": "missing" if missing else "unavailable",
+                             "reason": "withheld rows missing" if missing else str(exc),
+                             **({k: missing[k] for k in ("withheld_row_count", "withheld_config_row_count")} if missing else {}),
                              "unavailable_runs": [r["run_id"] for r in module if r["meter"] is None],
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
@@ -1115,7 +1178,7 @@ def combine_passes(rows):
             raise AnalysisError("one or two distinct passes per model required")
         group.sort(key=lambda r: r["pass_id"])
         planned = group
-        group = [r for r in planned if r.get("status") != "unavailable"]
+        group = [r for r in planned if r.get("status") == "computed"]
         n = len(group)
         pass_status = "two_pass" if n == 2 else "one_pass" if n == 1 else "no_pass"
         planned = [dict(r, pass_status=pass_status, n_passes=n) for r in planned]
@@ -1207,14 +1270,20 @@ def evaluate(points, frozen):
         subset = [p for p in points if tuple(p[k] for k in labels) == key]
         if len(subset) != 10:
             raise AnalysisError("held-out analysis requires all ten model records, including refusals")
-        missing = [p for p in subset if p.get("status") == "unavailable"]
+        missing = [p for p in subset if p.get("status") != "computed"]
         if group["lines"] is None or missing:
             unavailable.append({**labels, "models": [p["model"] for p in missing],
                 "reason": "H1 requires complete fit cells" if group["lines"] is None else "models without a primary point",
                 "refusals": [{**_point_label(p), "reason": p["reason"], "passes": p.get("passes", [])} for p in missing]})
         results = []
         for point in subset:
-            if point.get("status") == "unavailable" or group["lines"] is None:
+            if point.get("status") != "computed":
+                h1_rows.append({**_point_label(point), "role": point["role"], **labels,
+                    "pass_id": "mean", "description_only": False, "status": "missing",
+                    "reason": point["reason"], "flags": sorted(set(point.get("flags", [])) | {
+                        flag for row in point.get("passes", []) for flag in row.get("flags", [])})})
+                continue
+            if group["lines"] is None:
                 continue
             result = h1_point(group["lines"], point)
             h1_rows.append({**_point_label(point), "role": point["role"], **labels,
@@ -1239,8 +1308,15 @@ def evaluate(points, frozen):
             for row in result["misses"]:
                 row.update(_point_label(next(p for p in subset if p["model"] == row["model"])))
             moe_rows.append({**labels, **result})
-        available = [p for p in subset if p.get("status") != "unavailable"]
-        rails = {p["model"]: p["power"] for p in points if p.get("status") != "unavailable"
+        else:
+            moe_rows.append({**labels, "status": "missing", "answer": "missing",
+                "reason": "H1 requires complete fit cells" if group["lines"] is None else
+                          "active or resident requires all three MoE points",
+                "missing_models": [_point_label(p) for p in missing if p["moe"] or group["lines"] is None],
+                "flags": sorted({flag for p in missing for row in p.get("passes", [])
+                                 for flag in row.get("flags", [])})})
+        available = [p for p in subset if p.get("status") == "computed"]
+        rails = {p["model"]: p["power"] for p in points if p.get("status") == "computed"
                  and (p["selection"], p["basis"], p["boundary"]) == (*key[:2], "rails")}
         result = h2(available, rails, boundary=key[2])
         h2_rows.append({**labels, "analysis": "primary", "description_only": False, **result})
