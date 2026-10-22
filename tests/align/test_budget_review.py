@@ -112,7 +112,8 @@ class BudgetReviewTests(OfflineTest):
         other = next(i for i, t in enumerate(trials) if i != index and t.condition.name == "budget_0.6")
         trial = trials[other]
         trace = replace(trial.episode.power_traces[0], notes=json.dumps({
-            "flags": ["power_cap", "throttled"], "power_bound_w": 82.0}))
+            "flags": ["power_cap", "throttled"],
+            "power_bound_w": 82.0}))  # Scripted 80 W plus its bounded 2 W fluctuation.
         trials[other] = replace(trial, episode=replace(trial.episode, power_traces=(trace,)))
         row = next(r for r in summarize(trials) if r.condition == "budget_0.6")
         values = [episode_energy(t.episode).joules for t in trials if t.condition.name == row.condition]
@@ -288,7 +289,12 @@ class BudgetReviewTests(OfflineTest):
     def test_compact_storage_roundtrip_and_unique_trace_records(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "result.json"
-            result = run_synthetic(count=4, with_power=True)
+            checkpoint = Path(directory) / "checkpoint.jsonl"
+            result = run_synthetic(count=4, with_power=True, checkpoint=checkpoint)
+            with patch.object(ScriptedModel, "chat", side_effect=AssertionError("resume must not generate")):
+                replay = run_synthetic(count=4, with_power=True, checkpoint=checkpoint)
+            self.assertEqual(to_json(replay), to_json(result))
+            self.assertNotIn('"t_ns"', checkpoint.read_text())
             write_result(path, result)
             hydrated = read_result(path)
             self.assertEqual(to_json(hydrated), to_json(result))  # Shared bit-identity contract.

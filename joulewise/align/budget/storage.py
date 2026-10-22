@@ -11,7 +11,10 @@ import hashlib
 import json
 from dataclasses import fields, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator, TextIO, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from joulewise.align.budget.run import MatrixResult
 
 from joulewise.align.records import Episode, PowerTrace, from_json, to_json
 
@@ -25,16 +28,19 @@ class TraceStore:
         self.flags: list[str] = []
         self.references: dict[int, tuple[PowerTrace, str]] = {}
         if path is not None and path.exists():
-            with path.open(encoding="utf-8") as handle:
-                for line in handle:
-                    try:
-                        entry = json.loads(line)
-                        trace = from_json(PowerTrace, json.dumps(entry["trace"]))
-                        if hashlib.sha256(to_json(trace).encode()).hexdigest() != entry["id"]:
-                            raise ValueError("trace digest mismatch")
-                        self.traces[entry["id"]] = trace
-                    except (KeyError, ValueError, TypeError):
-                        self.flags.append("trace_store_line_invalid")
+            try:
+                with path.open(encoding="utf-8") as handle:
+                    for line in handle:
+                        try:
+                            entry = json.loads(line)
+                            trace = from_json(PowerTrace, json.dumps(entry["trace"]))
+                            if hashlib.sha256(to_json(trace).encode()).hexdigest() != entry["id"]:
+                                raise ValueError("trace digest mismatch")
+                            self.traces[entry["id"]] = trace
+                        except (KeyError, ValueError, TypeError):
+                            self.flags.append("trace_store_line_invalid")
+            except OSError as exc:
+                self.flags.append(f"trace_store_read_error:{type(exc).__name__}")
 
     def default(self, value: Any) -> Any:
         if isinstance(value, PowerTrace):
@@ -75,12 +81,12 @@ class TraceStore:
             return [self.expand(v) for v in value]
         return value
 
-    def dump(self, value: Any, handle: Any) -> None:
+    def dump(self, value: Any, handle: TextIO) -> None:
         json.dump(value, handle, default=self.default, sort_keys=True,
                   separators=(",", ":"), allow_nan=False)
 
 
-def write_result(path: Path, result: Any) -> None:
+def write_result(path: Path, result: MatrixResult) -> None:
     """Stream result.json; referenced traces live beside it in result.traces.jsonl."""
     path = Path(path)
     trace_path = path.with_suffix(".traces.jsonl")
@@ -92,7 +98,7 @@ def write_result(path: Path, result: Any) -> None:
         handle.write("\n")
 
 
-def read_result(path: Path) -> Any:
+def read_result(path: Path) -> MatrixResult:
     """Hydrate a compact export or a legacy fully materialized MatrixResult."""
     from joulewise.align.budget.run import MatrixResult
 
@@ -113,7 +119,7 @@ def read_trial_episode(path: Path, trial_id: str) -> Episode:
     return next(t.episode for t in read_result(path).trials if t.trial_id == trial_id)
 
 
-def write_episode_views(path: Path, episodes: Any, *,
+def write_episode_views(path: Path, episodes: Iterable[Episode], *,
                         trace_file: str = "result.traces.jsonl") -> None:
     """Stream Episode views referencing the result's shared trace sidecar."""
     path = Path(path)
@@ -124,7 +130,7 @@ def write_episode_views(path: Path, episodes: Any, *,
             handle.write("\n")
 
 
-def read_episode_views(path: Path) -> Any:
+def read_episode_views(path: Path) -> Iterator[Episode]:
     """Yield hydrated shared Episodes from compact JSONL, one record at a time."""
     path = Path(path)
     stores: dict[str, TraceStore] = {}
