@@ -19,7 +19,6 @@ from joulewise.align.moe_stage_b import apply_decode_stalls, extract_features, s
 from joulewise.align.records import RouterLog
 
 DESIGN = dict(stage_a_effect_sd=1.0, n_per_condition=50, alpha=.05, power=.8, comparisons=3)
-FIXED = True  # Baseline capture preceded this fix; all review pass conditions now bind.
 
 
 def feature_summary(value):
@@ -174,39 +173,38 @@ class TestMoeStageBReview(unittest.TestCase):
                 result = ex.run_world(ex.WorldConfig(), sensor, all_resident=False, **DESIGN)
                 emit("p10 legacy_noise_seed "+sensor.name, compact(result))
         emit("elapsed", dict(seconds=time.perf_counter()-started))
-        if FIXED:
-            for (mode, _), result in results.items():
-                self.assertIn("decode_seconds_per_token", result["recovery"])
-                self.assertIn("mean_decode_power_w", result["recovery"])
-                self.assertIn("power_increment_over_timing", result)
-                if mode.endswith("blind"):
-                    self.assertNotEqual(result["stage_b_verdict"], "yes")
-                    self.assertIn("constant_training_power_feature",
-                                  result["recovery"]["mean_decode_power_w"]["flags"])
-            self.assertEqual(quant["q"][0]["stage_b_verdict"], quant["fine"][0]["stage_b_verdict"])
-            for feature in dropped_features:
-                self.assertTrue(math.isfinite(feature.energy_per_decode_token_j))
-                self.assertIn("incomplete_decode_coverage", feature.flags)
-            for result in drop_results:
-                self.assertEqual(result.get("status", "ok"), "ok")
-                self.assertEqual(result["episodes"], 24)  # Two conditions x the specified 12 groups.
-                self.assertIsInstance(result["recovery"]["energy_per_decode_token_j"][
-                    "within_condition_held_out_correlation"], float)
-                self.assertIn(result["stage_b_verdict"], ("yes", "no", "inconclusive at this cohort size"))
-                self.assertIn("incomplete_decode_coverage", result["episode_outcomes"][0]["features"]["flags"])
+        for (mode, _), result in results.items():
+            self.assertIn("decode_seconds_per_token", result["recovery"])
+            self.assertIn("mean_decode_power_w", result["recovery"])
+            self.assertIn("power_increment_over_timing", result)
+            if mode.endswith("blind"):
+                self.assertNotEqual(result["stage_b_verdict"], "yes")
+                self.assertIn("constant_training_power_feature",
+                              result["recovery"]["mean_decode_power_w"]["flags"])
+        self.assertEqual(quant["q"][0]["stage_b_verdict"], quant["fine"][0]["stage_b_verdict"])
+        for feature in dropped_features:
+            self.assertTrue(math.isfinite(feature.energy_per_decode_token_j))
+            self.assertIn("incomplete_decode_coverage", feature.flags)
+        for result in drop_results:
+            self.assertEqual(result.get("status", "ok"), "ok")
+            self.assertEqual(result["episodes"], 24)  # Two conditions x the specified 12 groups.
+            self.assertIsInstance(result["recovery"]["energy_per_decode_token_j"][
+                "within_condition_held_out_correlation"], float)
+            self.assertIn(result["stage_b_verdict"], ("yes", "no", "inconclusive at this cohort size"))
+            self.assertIn("incomplete_decode_coverage", result["episode_outcomes"][0]["features"]["flags"])
 
     def test_prefill_32_updates_cache_and_33_preserves_it(self):
         world = ex.WorldConfig(groups=1, turns=1)
-        base = replace(ex.world_offload(world), expert_bytes={0: 10}, cache_capacity_bytes=10,
+        base = replace(ex.world_offload(world), expert_bytes={0: 10}, cache_capacity_bytes=320,
                        prefill_mode="bypass", prefill_batch_tokens=128)
         for count in (32, 33):
             for probe in (0, 1):
-                # Prime expert 1; short prefill expert 0 must evict it, while
-                # large prefill must preserve it. Independent final readouts
+                # Prime 32 slots (including oldest expert 1); prefill expert 0
+                # evicts 1 only for the short batch. Independent final readouts
                 # detect both warmth and preservation without an intervening fill.
                 log = RouterLog("prefill-boundary", 64, 1, (0,),
-                    ("decode",)+("prefill",)*count+("decode",),
-                    (((1,),),)+(((0,),),)*count+(((probe,),),))
+                    ("decode",)*32+("prefill",)*count+("decode",),
+                    tuple(((expert,),) for expert in range(1, 33))+(((0,),),)*count+(((probe,),),))
                 result = model_traffic(log, base)
                 self.assertEqual(result.tokens[-1].bytes_moved,
                                  (0 if probe == 0 else 10) if count == 32

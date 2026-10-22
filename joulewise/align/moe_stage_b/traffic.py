@@ -335,7 +335,13 @@ def model_traffic(
                             for expert in batch_row[layer_index]
                             if (layer, expert) not in config.resident))
                         before = set(cache.probation) | set(cache.protected)
-                        _, _, bypass = cache.request(union)
+                        # Same :503 guard also needs slots for min(batch*top_k,
+                        # num_experts), even when this batch's actual union is small.
+                        needs_slots = min((batch_end-batch_start+1)*router.top_k, router.num_experts)
+                        if needs_slots*config.expert_bytes[layer] > config.cache_capacity_bytes:
+                            bypass = True
+                        else:
+                            _, _, bypass = cache.request(union)
                         if bypass:
                             flags.append("request_exceeds_cache_capacity")
                         if not bypass and config.cache_policy != "none" and config.cache_capacity_bytes:

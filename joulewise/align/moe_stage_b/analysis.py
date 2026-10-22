@@ -336,7 +336,7 @@ def recover_power_increment(observations: Sequence[RoutingObservation]) -> Routi
     predictions = []
     truth, predicted, labels = [], [], []
 
-    def line(xs, ys):
+    def line(xs: Sequence[float], ys: Sequence[float]) -> tuple[float, float, float]:
         mx, my = statistics.fmean(xs), statistics.fmean(ys)
         xx = math.fsum((v-mx)**2 for v in xs)
         slope = math.fsum((x-mx)*(y-my) for x, y in zip(xs, ys))/xx if xx else 0.0

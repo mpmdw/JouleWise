@@ -157,7 +157,11 @@ def reference_transfers(
             ordered = list(dict.fromkeys(
                 (layer, expert) for row in log.experts[position:end] for expert in row[column]
                 if (layer, expert) not in config.resident))
-            missing = request(ordered, update)
+            layer_updates = update
+            if phase == "prefill" and config.prefill_mode == "bypass":
+                layer_updates = layer_updates and (
+                    min((end-position)*log.top_k, log.num_experts)*sizes[layer] <= capacity)
+            missing = request(ordered, layer_updates)
             seen = set()
             for token in range(position, end):
                 selected = {(layer, expert) for expert in log.experts[token][column]}

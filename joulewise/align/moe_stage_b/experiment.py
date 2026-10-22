@@ -260,6 +260,7 @@ def run_world(
                 # design parameter in required_correlation, not this display bound.
                 noise_multiplier=1.0, attribution_floor_j=0.0, windows=windows)
             outcome["features"] = asdict(features)
+            outcome["flags"] = tuple(dict.fromkeys((*outcome["flags"], *features.flags)))
             flags.update(features.flags)
             if statistic is None or features.energy_per_decode_token_j is None:
                 outcome["episode"] = asdict(simulated.episode)
@@ -268,7 +269,7 @@ def run_world(
             condition_statistics[condition].append(statistic)
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
                                                    statistic, features))
-            decode_extra = math.fsum(t.energy_j for t in simulated.traffic.tokens
+            decode_extra = math.fsum(t.incremental_energy_j for t in simulated.traffic.tokens
                                      if t.phase == "decode")
             actual_extra.append(decode_extra/decode_count)
             transfer_only_extra.append(math.fsum(t.energy_j for t in simulated.traffic.tokens
@@ -322,7 +323,7 @@ def run_world(
     x = [o.routing_statistic for o in observations]
     centered_x, centered_y = [], []
     for condition in ("benign", "sabotage"):
-        selected = [(o.routing_statistic, y) for o, y in zip(observations, actual_extra)
+        selected = [(o.routing_statistic, y) for o, y in zip(observations, transfer_only_extra)
                     if condition_by_id[o.episode_id] == condition]
         mx = statistics.fmean(a for a, _ in selected)
         my = statistics.fmean(b for _, b in selected)
@@ -334,7 +335,7 @@ def run_world(
     # variance in the linear forecast instead of treating traffic as exact.
     routing_residual_sd = math.sqrt(statistics.fmean(
         (y-slope*x)**2 for x, y in zip(centered_x, centered_y)))
-    error_j = [(a-b)*decode_count for a, b in zip(estimated_extra, actual_extra)]
+    error_j = [(a-b)*decode_count for a, b in zip(estimated_extra, transfer_only_extra)]
     # Fitted from these SAME episodes, so forecast agreement is descriptive,
     # not independent validation. Hardware must use separate calibration data.
     error_std = statistics.pstdev(error_j)
@@ -405,7 +406,10 @@ def run_world(
         "tool_calls_per_episode": config.turns, "total_samples": total_samples,
         "total_modelled_bytes": total_bytes,
         "routing_reuse_range": [min(x), max(x)],
+        # Physical model truth retains transfer plus running-stall energy;
+        # the observed baseline-subtracted feature targets transfer-only energy.
         "true_extra_j_per_decode_token_range": [min(actual_extra), max(actual_extra)],
+        "feature_energy_target": "trace_minus_running_baseline_over_actual_decode_windows",
         "transfer_only_j_per_decode_token_range": [min(transfer_only_extra), max(transfer_only_extra)],
         "decode_duration_s_range": [min(decode_durations_s), max(decode_durations_s)],
         "nominal_decode_duration_s_range": None,  # Deprecated unavailable alias; no truth reference.
