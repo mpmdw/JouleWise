@@ -6,7 +6,7 @@ import statistics
 import shutil
 import tempfile
 import unittest
-from .support import recompute as r, full_pack, remove_member, dump, run_cli
+from .support import (assert_values_agree, archive_available, recompute as r, full_pack, remove_member, dump, run_cli)
 from .test_rehearsals import R18
 
 S10 = Path('/Users/edr/night-archive/independent-recompute/xcheck/synthetic')
@@ -91,7 +91,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertIsNone(registered.neg8['allowance_j'])
         self.assertIsNone(registered.neg8['allowance_recorded_j'])
         self.assertEqual(diagnostic.neg8['corpus_n'], 18)
-        self.assertEqual(diagnostic.neg8['allowance_recorded_j'], .3)
+        assert_values_agree(self, diagnostic.neg8['allowance_recorded_j'], .3)
 
     def test_binding_capture_identity_and_name_fallback(self):
         a, w, flags = self.window()
@@ -145,7 +145,7 @@ class ReconcileTests(unittest.TestCase):
                     return r.student_p(t, len(data) - 1)
                 p0, p1 = pvalue(left[1:]), pvalue(right[1:])
                 expected = min(1., 2 * p0) if p0 <= p1 else min(1., max(2 * p1, p0))
-                self.assertAlmostEqual(row['holm_p'], expected, delta=1e-14)
+                assert_values_agree(self, row['holm_p'], expected)
                 self.assertEqual(row['partner_n'], 5)
                 self.assertEqual(len(out['loo']), 6)
                 self.assertEqual(len(other['loo']), 5 if lost else 6)
@@ -153,7 +153,7 @@ class ReconcileTests(unittest.TestCase):
                     self.assertNotIn(1, [x['block_number'] for x in other['loo']])
                 else:
                     self.assertEqual(other['loo'][0]['partner_n'], 5)
-                    self.assertAlmostEqual(other['loo'][0]['partner_p'], p0, delta=1e-14)
+                    assert_values_agree(self, other['loo'][0]['partner_p'], p0)
 
     def test_allowance_flips_all_four_floor_consumers(self):
         from types import SimpleNamespace
@@ -162,7 +162,7 @@ class ReconcileTests(unittest.TestCase):
         # The actual J5 composition is used to supply every consumer's floor.
         with patch.object(r, 'floor_estimate', return_value={'n': 0, 'status': 'computed', 'guarded_floor_j': 1.}):
             _, cell = r.make_floors(w, 'decode', {'repeat': [], 'quad': []}, {'removed_units': []})
-        self.assertEqual(cell['floor_gate_j'], 2.)
+        assert_values_agree(self, cell['floor_gate_j'], 2.)
         old, minted = 1., cell['floor_gate_j']
         with self.subTest(consumer='effect_not_above_floor'):
             row = r.contrast_stats([1.6] * 6)
@@ -225,10 +225,10 @@ class ReconcileTests(unittest.TestCase):
         dump(beta / 'withheld/bracket-evaluation.json', {'assessment': {'b_fiducial_s': .07}})
         _, out, _ = run_cli(archives, self.root / 'sensitivity.json')
         line = out['disclosures']['sensitivity_bound']
-        self.assertEqual((line['B_max_s'], line['attaining_sequence'], line['T']), (.06, 401, 405))
-        self.assertAlmostEqual(line['windows']['BETA']['b_sens_s'], .07, delta=1e-15)
-        self.assertEqual(line['windows']['ALPHA']['b_sens_s'], .06)
-        self.assertEqual(line['windows']['GAMMA']['b_sens_s'], .06)
+        assert_values_agree(self, (line['B_max_s'], line['attaining_sequence'], line['T']), (.06, 401, 405))
+        assert_values_agree(self, line['windows']['BETA']['b_sens_s'], .07)
+        assert_values_agree(self, line['windows']['ALPHA']['b_sens_s'], .06)
+        assert_values_agree(self, line['windows']['GAMMA']['b_sens_s'], .06)
         self.assertEqual(line['windows']['BETA']['note'], 'sensitivity values equal primary')
         for cid, primary in out['reported_cells'].items():
             sens = line['reported_cells'][cid]
@@ -252,7 +252,7 @@ class ReconcileTests(unittest.TestCase):
             else: self.assertGreater(sens['drift_widened_guarded_floor_j'], primary['drift_widened_guarded_floor_j'])
 
 
-@unittest.skipUnless((S10 / 'alpha/archive').exists(), 'S10 synthetic archives unavailable')
+@unittest.skipUnless(archive_available((S10 / 'alpha/archive')), 'S10 synthetic archives unavailable')
 class ArchivedSyntheticTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -276,9 +276,8 @@ class ArchivedSyntheticTests(unittest.TestCase):
                 model = r.MODELS[pack.upper()]
                 ours = self.out['floors'][model + '/' + phase + '/' + cell['kind']]
                 with self.subTest(pack=pack, cell=cell['cell_id']):
-                    self.assertAlmostEqual(ours['drift_widened_guarded_floor_j'], cell['operative_floor_j'],
-                                           delta=abs(cell['operative_floor_j']) * 1e-12)
-                    self.assertAlmostEqual(ours['allowance_j'], cell['whole_window_drift_allowance']['allowance_j'], delta=1e-12)
+                    assert_values_agree(self, ours['drift_widened_guarded_floor_j'], cell['operative_floor_j'])
+                    assert_values_agree(self, ours['allowance_j'], cell['whole_window_drift_allowance']['allowance_j'])
                     self.assertTrue({'guarded_floor_j', 'allowance_j', 'allowance_source',
                                      'drift_widened_guarded_floor_j'} <= set(ours))
                 count += 1
@@ -299,19 +298,19 @@ class ArchivedSyntheticTests(unittest.TestCase):
     def test_three_binding_captures(self):
         expected = {'ALPHA': .03824698449914623, 'BETA': .039254064620926975, 'GAMMA': .040261144699051975}
         for pack, value in expected.items():
-            with self.subTest(pack=pack): self.assertAlmostEqual(self.out['windows'][pack]['b_op_s'], value, delta=1e-15)
+            with self.subTest(pack=pack): assert_values_agree(self, self.out['windows'][pack]['b_op_s'], value)
         self.assertFalse(any(f['code'] in ('b_op_from_record', 'calibration_capture_name_fallback') for f in self.out['flags']))
 
 
-@unittest.skipUnless(R18.exists(), 'R18 rehearsal unavailable')
+@unittest.skipUnless(archive_available(R18), 'R18 rehearsal unavailable')
 class RegisteredRehearsalTests(unittest.TestCase):
     def test_R18_clean_checkout_plan_survivors_bop_and_all_meter_requests(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp)
         _, out, _ = run_cli({'ALPHA': R18}, Path(tmp) / 'r18.json')
         window = out['windows']['ALPHA']
-        self.assertAlmostEqual(window['neg8']['allowance_j'], 1.153521798393328, delta=1e-12)
-        self.assertAlmostEqual(window['b_op_s'], .045030653137666625, delta=1e-15)
+        assert_values_agree(self, window['neg8']['allowance_j'], 1.153521798393328)
+        assert_values_agree(self, window['b_op_s'], .045030653137666625)
         self.assertEqual(window['neg8']['source'], 'survivor_rescreen')
         self.assertEqual(window['plan_tree_binding']['sizing_source'], 'analysis_checkout')
         self.assertEqual(window['plan_tree_binding']['sha256'], window['plan_tree_binding']['sealed_sha256'])
@@ -334,10 +333,11 @@ class RegisteredRehearsalTests(unittest.TestCase):
                     self.assertTrue(ours['recorded_comparison']['matches'], ours['recorded_comparison'])
                 for keys in (('delta_J',), ('meter', 'energy_J'), ('meter', 'baseline_W')):
                     value = r.get(expected, *keys)
-                    self.assertAlmostEqual(r.get(ours, *keys), value, delta=max(.5, abs(value) * .005))
-                self.assertLessEqual(abs(ours['meter']['n'] - expected['meter']['n']), 2)
+                    assert_values_agree(self, r.get(ours, *keys), value)
+                # Counts and controller windows use the identical integer-ns inputs.
+                self.assertEqual(ours['meter']['n'], expected['meter']['n'])
                 self.assertEqual(ours['battery']['n'], expected['battery']['n'])
-                self.assertLessEqual(abs(ours['window_ns'][0] - expected['window_ns'][0]), 1e6)
+                self.assertEqual(ours['window_ns'], expected['window_ns'])
         mismatches = [f for f in out['flags'] if f['code'] == 'meter_request_mismatch']
         self.assertEqual(len(mismatches), 1)
         self.assertEqual(mismatches[0]['scope'], 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1')

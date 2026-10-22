@@ -12,7 +12,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 
-from .support import recompute as r, bundle, dump, full_pack, run_cli
+from .support import (assert_values_agree, assert_printed, archive_available, recompute as r, bundle, dump, full_pack, run_cli)
 from .test_meter import member, stream_file
 from .test_rehearsals import R18
 from .test_reconcile import S10
@@ -71,13 +71,13 @@ class Round3ArithmeticTests(unittest.TestCase):
         self.assertFalse(summary['outside_hard_band'][0]['removed_by_this_check'])
         self.assertEqual(summary['outside_hard_band'][0]['meter_flags'], [line['meter_flags'][1], flag])
         self.assertEqual(summary['plausible_n'], 10)
-        self.assertAlmostEqual(summary['within_model_spread'], .075, delta=1e-15)
+        assert_values_agree(self, summary['within_model_spread'], .075)
         self.assertEqual(summary['consistency'], 'consistent')
         clean = r.request_cross_check({'ALPHA': request_line('clean', 1., values)})
         summary = clean['windows']['ALPHA']['models']['model']
-        self.assertEqual(summary['rho_median'], .80)
-        self.assertEqual((summary['rho_min'], summary['rho_max']), (.77, .83))
-        self.assertEqual(summary['rho_iqr'], [.7925, .81])
+        assert_values_agree(self, summary['rho_median'], .80)
+        assert_values_agree(self, (summary['rho_min'], summary['rho_max']), (.77, .83))
+        assert_values_agree(self, summary['rho_iqr'], [.7925, .81])
         self.assertEqual(clean['boundary'], r.MACHINE_BOUNDARY)
 
     def test_first_clean_is_chronological_later_k_of_n_and_no_clean(self):
@@ -100,7 +100,7 @@ class Round3ArithmeticTests(unittest.TestCase):
         (self.root / 'rich_telemetry_idle.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in (
             {'elapsed_ns': 1_000_000_000, 'rail_sum_power_w': .1},
             {'elapsed_ns': 3_000_000_000, 'rail_sum_power_w': .3})))
-        self.assertEqual(r.rail_idle_power(m), .25)
+        assert_values_agree(self, r.rail_idle_power(m), .25)
         self.assertEqual(flags, [])
 
     def test_gross_meter_100_samples_and_request_B0AC_activity(self):
@@ -116,11 +116,11 @@ class Round3ArithmeticTests(unittest.TestCase):
                 m.edges['request'] = (19., 22.)
                 row = r.machine_member(m, 'decode', [stream], [], .045)
                 self.assertEqual(row['meter']['n'], 100)
-                self.assertEqual(row['energy_J'], 50. * 2.)
+                assert_values_agree(self, row['energy_J'], 50. * 2.)
                 self.assertNotIn('battery', row)
                 self.assertNotIn('delta_J', row)
                 self.assertEqual(row['share_label'], 'gross share')
-                self.assertEqual(row['gross_share'], .6)
+                assert_values_agree(self, row['gross_share'], .6)
                 self.assertEqual(row['battery_activity']['active'], current != 0)
                 self.assertEqual(any(f['code'] == 'meter_battery_activity' for f in flags), current != 0)
                 self.assertEqual(stream.fit['bin_origin'], 'device time 0 at the first kept sample')
@@ -133,11 +133,11 @@ class Round3ArithmeticTests(unittest.TestCase):
         m = member(reader)
         m.events = []
         row = r.machine_member(m, 'decode', [stream], [], .045)
-        self.assertEqual(row['energy_J'], 100.)
+        assert_values_agree(self, row['energy_J'], 100.)
         for corner in itertools.product((-1, 1), repeat=2):
             with self.subTest(corner=corner):
                 shifted = r.machine_member(m, 'decode', [stream], [], .045, corner)
-                self.assertAlmostEqual(shifted['energy_J'], 50. * (2. + .045 * (corner[1] - corner[0])), delta=1e-12)
+                assert_values_agree(self, shifted['energy_J'], 50. * (2. + .045 * (corner[1] - corner[0])))
 
     def test_nonzero_B0AC_flag_does_not_require_a_B0AV_value(self):
         reader = r.Reader('ALPHA', [])
@@ -195,22 +195,22 @@ class Round3ArithmeticTests(unittest.TestCase):
 
     def test_single_step_known_edge_and_record_energy_conservation(self):
         edge = r.step_edge([(0., 1., 30.)], .3, 0., 40.)
-        self.assertEqual(edge['step_fraction'], .25)
-        self.assertAlmostEqual(21. - edge['right_bias_j'], 28., delta=1e-12)
-        self.assertAlmostEqual(edge['left_model_j'] + edge['right_model_j'], 30., delta=1e-12)
+        assert_values_agree(self, edge['step_fraction'], .25)
+        assert_values_agree(self, 21. - edge['right_bias_j'], 28.)
+        assert_values_agree(self, edge['left_model_j'] + edge['right_model_j'], 30.)
         # An observed average outside the two plateaus is clamped and rescaled.
         edge = r.step_edge([(0., 1., 60.)], .3, 0., 40.)
-        self.assertEqual(edge['step_fraction'], 0.)
-        self.assertAlmostEqual(edge['left_model_j'] + edge['right_model_j'], 60., delta=1e-12)
+        assert_values_agree(self, edge['step_fraction'], 0.)
+        assert_values_agree(self, edge['left_model_j'] + edge['right_model_j'], 60.)
 
     def test_single_step_plateaus_summed_supports_and_phase_biases(self):
         for duplicate in (False, True):
             with self.subTest(duplicate_support=duplicate):
                 row = r.single_step_member(reconstruction_member(duplicate_support=duplicate))
-                self.assertEqual(row['plateau_w'], {'idle_before': 0., 'idle_after': 0., 'prefill': 40., 'decode': 20.})
-                self.assertAlmostEqual(row['energy_j']['prefill'], 288., delta=1e-12)
-                self.assertAlmostEqual(row['energy_j']['decode'], 218., delta=1e-12)
-                self.assertAlmostEqual(row['bias_j']['request'], row['bias_j']['prefill'] + row['bias_j']['decode'], delta=1e-12)
+                assert_values_agree(self, row['plateau_w'], {'idle_before': 0., 'idle_after': 0., 'prefill': 40., 'decode': 20.})
+                assert_values_agree(self, row['energy_j']['prefill'], 288.)
+                assert_values_agree(self, row['energy_j']['decode'], 218.)
+                assert_values_agree(self, row['bias_j']['request'], row['bias_j']['prefill'] + row['bias_j']['decode'])
                 self.assertEqual(set(row['edges']), {'prefill_start', 'decode_start', 'decode_end'})
 
     def test_short_prompt_decode_after_its_stamp_same_and_different_records(self):
@@ -222,9 +222,8 @@ class Round3ArithmeticTests(unittest.TestCase):
                 self.assertEqual(row['onset_records'], 'different' if different else 'same')
                 self.assertNotIn('prefill', row['energy_j'])
                 self.assertIn('prefill-p42', row['prefill']['reason'])
-                self.assertAlmostEqual(row['edges']['decode_start']['right_model_j'], 10. if different else 4., delta=1e-12)
-                self.assertAlmostEqual(row['bias_j']['decode'],
-                    row['edges']['decode_start']['right_bias_j'] + row['edges']['decode_end']['left_bias_j'], delta=1e-12)
+                assert_values_agree(self, row['edges']['decode_start']['right_model_j'], 10. if different else 4.)
+                assert_values_agree(self, row['bias_j']['decode'], row['edges']['decode_start']['right_bias_j'] + row['edges']['decode_end']['left_bias_j'])
 
     def test_reconstructed_cell_same_units_m_h_shift_SD_ratio_and_no_B(self):
         repeats, quads = [], []
@@ -250,11 +249,11 @@ class Round3ArithmeticTests(unittest.TestCase):
         expected = r.reported_estimate([288. * (1. + i * .01) for i in range(6)],
                                       [288. * (1. + i * .01 + .0025) for i in range(5)])
         self.assertEqual((row['n_r'], row['n_b']), (6, 5))
-        self.assertAlmostEqual(row['mean_j'], expected['mean_j'], delta=1e-12)
-        self.assertAlmostEqual(row['h_j'], expected['interval']['h_j'], delta=1e-12)
-        self.assertAlmostEqual(row['shift_j'], expected['mean_j'] - original['mean_j'], delta=1e-12)
-        self.assertAlmostEqual(row['stratified_sd_ratio'], math.sqrt(
-            expected['interval']['variance'] / original['interval']['variance']), delta=1e-12)
+        assert_values_agree(self, row['mean_j'], expected['mean_j'])
+        assert_values_agree(self, row['h_j'], expected['interval']['h_j'])
+        assert_values_agree(self, row['shift_j'], expected['mean_j'] - original['mean_j'])
+        assert_values_agree(self, row['stratified_sd_ratio'], math.sqrt(
+            expected['interval']['variance'] / original['interval']['variance']))
         self.assertNotIn('B_j', row['interval'])
 
     def test_scaled_GAMMA_D_and_outcome_acceptance_8(self):
@@ -305,28 +304,28 @@ class Round3ArithmeticTests(unittest.TestCase):
                 line = output['disclosures']['scaled_allowance']
                 row = line['contrasts'][cid]
                 self.assertEqual((row['E_a_j'], row['E_b_j']), (E_a, E_b))
-                self.assertAlmostEqual(row['T_a_s'], .5, delta=1e-15)
-                self.assertAlmostEqual(row['T_b_s'], T_b, delta=1e-15)
+                assert_values_agree(self, row['T_a_s'], .5)
+                assert_values_agree(self, row['T_b_s'], T_b)
                 self.assertEqual(row['factor'], factor)
                 self.assertEqual(row['D_terms_j'][2], stats['D_terms_j'][2] * factor)
-                self.assertEqual(row['scaled_allowance_j'], 2. * factor)
+                assert_values_agree(self, row['scaled_allowance_j'], 2. * factor)
                 self.assertEqual(row['D_terms_j'][:2], stats['D_terms_j'][:2])
-                self.assertAlmostEqual(row['D_j'], .4 + 2. * factor, delta=1e-15)
+                assert_values_agree(self, row['D_j'], .4 + 2. * factor)
                 self.assertEqual(row['outcome'], expected_outcome)
                 self.assertEqual(row['registered_outcome'], registered['outcome'])
                 self.assertEqual(row['outcome_equals_primary'], factor == 1.)
                 self.assertEqual(row['metrology_interval_j'], registered['metrology_interval_j'])
-                self.assertEqual(row['decision_interval_j'], r.contrast_stats(
+                assert_values_agree(self, row['decision_interval_j'], r.contrast_stats(
                     [E_b - E_a] * 5, .4 + 2. * factor)['decision_interval_j'])
                 self.assertEqual(line['decision_vs_floor'][cid], factor == 1.)
                 for key in ('p', 'holm_p', 'holm_reject'):
                     self.assertEqual(row[key], registered[key])
                 self.assertEqual(row['floor']['attained_by'], ['ALPHA', 'BETA'])
-                self.assertEqual(row['floor_gate_j'], .5)
+                assert_values_agree(self, row['floor_gate_j'], .5)
                 for side, energy, duration in (('a', E_a, .5), ('b', E_b, T_b)):
                     own_factor = max(1., energy / 10., duration)
                     self.assertEqual(row['sides'][side]['factor'], own_factor)
-                    self.assertEqual(row['sides'][side]['scaled_allowance_j'], 2. * own_factor)
+                    assert_values_agree(self, row['sides'][side]['scaled_allowance_j'], 2. * own_factor)
                 if factor == 1.:
                     self.assertEqual(row['D_j'], registered['D_j'])
                     self.assertEqual(row['decision_interval_j'], registered['decision_interval_j'])
@@ -338,11 +337,11 @@ class Round3ArithmeticTests(unittest.TestCase):
             with self.subTest(E=E, T=T):
                 self.assertEqual(r.allowance_factor(E, T, basis), factor)
                 row = r.scaled_reported(primary, factor, 4.)
-                self.assertEqual(row['interval']['kind_averages_j'][2], 2. * factor)
-                self.assertEqual(row['interval']['B_j'], 1. + 2. * factor)
+                assert_values_agree(self, row['interval']['kind_averages_j'][2], 2. * factor)
+                assert_values_agree(self, row['interval']['B_j'], 1. + 2. * factor)
                 self.assertEqual(row['mean_j'], primary['mean_j'])
                 floor = r.scaled_floor({'allowance_j': 4., 'guarded_floor_j': 3., 'drift_widened_guarded_floor_j': 7.}, factor)
-                self.assertEqual(floor['drift_widened_guarded_floor_j'], 3. + 4. * factor)
+                assert_values_agree(self, floor['drift_widened_guarded_floor_j'], 3. + 4. * factor)
         self.assertEqual(r.scaled_reported(primary, 1., 4.)['interval'], primary['interval'])
         with self.subTest(unavailable_registered_anchor_bound=True):
             unavailable = r.reported_estimate([20.] * 5, [20.] * 5, (None, 0., 2.))
@@ -356,11 +355,11 @@ class Round3ArithmeticTests(unittest.TestCase):
         _, out, _ = run_cli({'ALPHA': archive}, self.root / 'out.json')
         alternative = out['disclosures']['excluded_reference_allowance']['windows']['ALPHA']
         self.assertEqual(alternative['note'], 'no excluded reference in the screen')
-        self.assertEqual(alternative['difference_j'], 0.)
+        assert_values_agree(self, alternative['difference_j'], 0.)
         self.assertEqual(alternative['allowance_j'], out['windows']['ALPHA']['neg8']['allowance_j'])
         basis = out['disclosures']['scaled_allowance']['windows']['ALPHA']
-        self.assertEqual(basis['E_ref_j'], 10.)
-        self.assertEqual(basis['T_ref_s'], 2.)
+        assert_values_agree(self, basis['E_ref_j'], 10.)
+        assert_values_agree(self, basis['T_ref_s'], 2.)
         for row in out['disclosures']['scaled_allowance']['reported_cells'].values():
             self.assertGreaterEqual(row['factor'], 1.)
 
@@ -377,15 +376,14 @@ class Round3ArithmeticTests(unittest.TestCase):
         line = out['disclosures']['scaled_allowance']
         allowance = out['windows']['ALPHA']['neg8']['allowance_j']
         for cid, row in line['reported_cells'].items():
-            self.assertEqual(row['factor'], 2.)
-            self.assertEqual(row['scaled_allowance_j'], 2. * allowance)
+            assert_values_agree(self, row['factor'], 2.)
+            assert_values_agree(self, row['scaled_allowance_j'], 2. * allowance)
             original = out['reported_cells'][cid]
-            self.assertAlmostEqual(row['interval']['B_j'], original['interval']['B_j'] + allowance / 2., delta=1e-12)
+            assert_values_agree(self, row['interval']['B_j'], original['interval']['B_j'] + allowance / 2.)
         for key, floor in line['floors'].items():
-            self.assertAlmostEqual(floor['drift_widened_guarded_floor_j'],
-                                   out['floors'][key]['drift_widened_guarded_floor_j'] + allowance, delta=1e-12)
+            assert_values_agree(self, floor['drift_widened_guarded_floor_j'], out['floors'][key]['drift_widened_guarded_floor_j'] + allowance)
         for key, cell in line['floor_cells'].items():
-            self.assertAlmostEqual(cell['floor_gate_j'], out['floor_cells'][key]['floor_gate_j'] + allowance, delta=1e-12)
+            assert_values_agree(self, cell['floor_gate_j'], out['floor_cells'][key]['floor_gate_j'] + allowance)
 
     def test_member_bound_missing_and_finite_mismatch_closed_flags(self):
         archive = full_pack(self.root, 'ALPHA', 5)
@@ -406,7 +404,7 @@ class Round3ArithmeticTests(unittest.TestCase):
             self.assertNotIn(code, r.STOP_FLAG_CODES)
 
 
-@unittest.skipUnless(R18.exists() and (R2 / 'r18-registered.json').exists(), 'R18 / round-2 baseline unavailable')
+@unittest.skipUnless(archive_available(R18) and archive_available((R2 / 'r18-registered.json')), 'R18 / round-2 baseline unavailable')
 class Round3RehearsalTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -422,23 +420,23 @@ class Round3RehearsalTests(unittest.TestCase):
         line = self.out['disclosures']['whole_machine']['windows']['ALPHA']
         rid = 'd117fq31p7-df-cmp-abba-ph-decode-b01-a1'
         row = line['members'][rid]['phases']['request']
-        self.assertAlmostEqual(row['rail_idle_baseline_W'], .04690475515109604, delta=.04690475515109604 * 1e-12)
-        self.assertAlmostEqual(row['rail_idle_baseline_W'], row['metadata_idle_baseline_power_w_mean'], delta=1e-12)
-        self.assertAlmostEqual(row['rail_delta_J'], 52.395579790360834, delta=1e-6)
+        assert_values_agree(self, row['rail_idle_baseline_W'], .04690475515109604)
+        assert_values_agree(self, row['rail_idle_baseline_W'], row['metadata_idle_baseline_power_w_mean'])
+        assert_values_agree(self, row['rail_delta_J'], 52.395579790360834)
         archived = json.loads((R18 / 'withheld/meter.json').read_text())['members']
         mismatches = {f['scope']: f for f in self.out['flags'] if f['code'] == 'meter_request_mismatch'}
         self.assertEqual(set(mismatches), {'d117fq31p7-df-cmp-abba-ph-decode-b01-b1'})
         self.assertIn('anchor unknown', next(iter(mismatches.values()))['detail']['cause'])
         # The cross-check's +9.88 J used round 2's trace-idle baseline.
         # REG 5.8's corrected rich-idle baseline adds another .40633 J.
-        self.assertAlmostEqual(next(iter(mismatches.values()))['detail']['rail_difference_J'], 10.286329575567528, delta=1e-6)
+        assert_values_agree(self, next(iter(mismatches.values()))['detail']['rail_difference_J'], 10.286329575567528)
         self.assertEqual(len(line['members']), 53)
         for run_id, record in archived.items():
             for field in ('rail_delta_J', 'rho'):
                 with self.subTest(member=run_id, field=field):
                     own = line['members'][run_id]['phases']['request'][field]
                     if run_id not in mismatches:
-                        self.assertAlmostEqual(own, record[field], delta=max(.5, .005 * abs(record[field])))
+                        assert_values_agree(self, own, record[field], ratio=field == 'rho')
         summary = self.out['disclosures']['whole_machine']['request_cross_check']['windows']['ALPHA']['models']
         self.assertEqual(set(summary), {'Qwen3-1.7B-4bit', 'Qwen2.5-1.5B-Instruct-4bit'})
         self.assertEqual(sum(m['n_members'] for m in summary.values()), 53)
@@ -446,7 +444,7 @@ class Round3RehearsalTests(unittest.TestCase):
     def test_R18_gross_meter_phase_and_edge_corners(self):
         line = self.out['disclosures']['whole_machine']['windows']['ALPHA']
         row = line['members']['d117fq31p7-df-cmp-abba-ph-decode-b01-a1']['phases']['decode']
-        self.assertAlmostEqual(row['energy_J'], 150.1952218065738, delta=150.1952218065738 * 1e-6)
+        assert_values_agree(self, row['energy_J'], 150.1952218065738)
         self.assertEqual(row['meter']['n'], 100)
         self.assertEqual(row['share_label'], 'gross share')
         for cell in line['cells'].values():
@@ -461,17 +459,17 @@ class Round3RehearsalTests(unittest.TestCase):
             values = [m['single_step_reconstruction']['bias_j'][phase] for m in members]
             for statistic, target in zip((min(values), statistics.fmean(values), max(values)), expected):
                 with self.subTest(phase=phase, statistic=statistic):
-                    self.assertAlmostEqual(statistic, target, delta=.0005)
+                    assert_printed(self, statistic, target, 3)
         corrected = [m['single_step_reconstruction']['energy_j']['prefill'] for m in members]
-        self.assertAlmostEqual(statistics.stdev(corrected), .083, delta=.0005)
-        self.assertAlmostEqual(statistics.fmean(corrected), 26.774, delta=.0005)
+        assert_printed(self, statistics.stdev(corrected), .083, 3)
+        assert_printed(self, statistics.fmean(corrected), 26.774, 3)
         line = self.out['disclosures']['single_step_reconstruction']
         self.assertTrue(all(row['label'] == r.RECONSTRUCTION_LABEL for row in line['cells'].values()))
         self.assertTrue(all(row['status'] == 'not_computed' and row['reason'] for row in line['p42'].values()))
 
     def test_R18_alternative_allowance_reduced_counts_bound_and_difference(self):
         line = self.out['disclosures']['excluded_reference_allowance']['windows']['ALPHA']
-        self.assertEqual(line['registered_allowance_j'], 1.153521798393328)
+        assert_values_agree(self, line['registered_allowance_j'], 1.153521798393328)
         self.assertEqual((line['n_start'], line['n_mid'], line['n_end']), (1, 1, 2))
         self.assertEqual(line['excluded_reference_ids'], ['neg8-window-end-r2', 'neg8-window-start-r1'])
         self.assertTrue(r.finite(line['bound_j']))
@@ -482,7 +480,7 @@ class Round3RehearsalTests(unittest.TestCase):
         self.assertTrue(r.finite(basis['E_ref_j']) and r.finite(basis['T_ref_s']))
 
 
-@unittest.skipUnless((S10 / 'alpha/archive').exists() and (R2 / 'indep-all-detail.json').exists(),
+@unittest.skipUnless(archive_available((S10 / 'alpha/archive')) and archive_available((R2 / 'indep-all-detail.json')),
                      'S10 / round-2 baseline unavailable')
 class Round3SyntheticArchiveTests(unittest.TestCase):
     @classmethod
@@ -583,8 +581,7 @@ class Round3SyntheticArchiveTests(unittest.TestCase):
         self.assertIn('stored_energy_mismatch', inclusive['sessions'][1]['script_flag_counts'])
         changed_energy = next(f['detail']['own_j'] for f in inclusive['sessions'][1]['script_flags']
                               if f['code'] == 'stored_energy_mismatch' and f['scope'] == changed_rid + '/decode')
-        self.assertAlmostEqual(changed_energy - self.out['members']['BETA'][changed_rid]['E_j']['decode'],
-                               expected_energy_change, delta=1e-9)
+        assert_values_agree(self, changed_energy - self.out['members']['BETA'][changed_rid]['E_j']['decode'], expected_energy_change)
         self.assertNotEqual(inclusive['sessions'][0]['floors'], inclusive['sessions'][1]['floors'])
         self.assertEqual(inclusive['pooled']['allowance_j'], max(s['allowance_j'] for s in inclusive['pooled']['session_allowances']))
         for floor in inclusive['pooled']['floors'].values():
@@ -627,7 +624,7 @@ class Round3PoolTests(unittest.TestCase):
                         self.assertIsNone(registered['guarded_floor_j'])
                         self.assertEqual(pooled['corner_method'], 'triangle_inequality_upper_bound')
                         self.assertEqual(pooled['status'], 'computed')
-                        self.assertEqual(pooled['guard'], 1.)
+                        assert_values_agree(self, pooled['guard'], 1.)
                         self.assertTrue(math.isfinite(pooled['guarded_floor_j']))
         invalid = r.pooled_floor_estimate([1.] * 17, [None] * 17, 'absolute')
         self.assertEqual(invalid['status'], 'not_computed')
@@ -642,7 +639,7 @@ class Round3PoolTests(unittest.TestCase):
         out = {'disclosures': {}}
         r.add_beta_inclusive(out, windows[0], windows[1:])
         pooled = out['disclosures']['beta_including_removed_sessions']['pooled']
-        self.assertEqual(pooled['allowance_j'], 4.)
+        assert_values_agree(self, pooled['allowance_j'], 4.)
         self.assertEqual(len(pooled['floors']), 4)
         for floor in pooled['floors'].values():
             self.assertEqual(floor['n'], 20)
@@ -650,7 +647,7 @@ class Round3PoolTests(unittest.TestCase):
             self.assertEqual(floor['corner_method'], 'triangle_inequality_upper_bound')
             self.assertTrue(math.isfinite(floor['minted_floor_j']))
             self.assertGreaterEqual(floor['guarded_floor_j'], floor['point_unguarded_floor_j'])
-            self.assertEqual(floor['minted_floor_j'], floor['guarded_floor_j'] + 4.)
+            assert_values_agree(self, floor['minted_floor_j'], floor['guarded_floor_j'] + 4.)
 
     def test_small_pooled_BETA_floor_hand_corner_and_own_bounds_largest_allowance(self):
         tmp = tempfile.mkdtemp()
@@ -672,7 +669,7 @@ class Round3PoolTests(unittest.TestCase):
         out = {'disclosures': {}}
         r.add_beta_inclusive(out, windows[0], windows[1:])
         pooled = out['disclosures']['beta_including_removed_sessions']['pooled']
-        self.assertEqual(pooled['allowance_j'], 3.)
+        assert_values_agree(self, pooled['allowance_j'], 3.)
         values, widths = [], []
         cid = 'df-ph-decode-qwen3-8b'
         for w in windows:
@@ -689,7 +686,7 @@ class Round3PoolTests(unittest.TestCase):
         floor = pooled['floors'][r.MODELS['BETA'] + '/decode/absolute']
         self.assertEqual(floor['n'], 15)
         self.assertEqual(floor['corner_method'], 'exact_enumeration')
-        self.assertAlmostEqual(floor['guarded_floor_j'], expected, delta=1e-12)
-        self.assertAlmostEqual(floor['minted_floor_j'], expected + 3., delta=1e-12)
+        assert_values_agree(self, floor['guarded_floor_j'], expected)
+        assert_values_agree(self, floor['minted_floor_j'], expected + 3.)
         self.assertEqual(floor['widths_j'], widths)
         self.assertEqual(len({u['b_op_s'] for u in floor['units']}), 2)

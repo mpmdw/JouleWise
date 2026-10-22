@@ -41,11 +41,11 @@ reference_slot_disagrees roster_pack_not_archived roster_plan_tree_not_sealed
 loo_kept_n_equals_minimum sensitivity_inputs_unavailable meter_stream_malformed
 meter_no_fit meter_span_uncovered meter_offset_from_journal meter_offset_unavailable
 meter_battery_unavailable meter_request_mismatch meter_baseline_unavailable
-member_pre_bound_missing meter_battery_activity""".split())
+member_pre_bound_missing meter_battery_activity meter_absent""".split())
 STOP_FLAG_CODES = frozenset({"excluded_reference_in_screen", "kept_member_outside_verdict_membership",
                             "neg8_source_not_rescreen", "harvest_checkout_not_clean",
                             "reference_slot_disagrees", "roster_pack_not_archived",
-                            "roster_plan_tree_not_sealed", "kept_units_disagree"})
+                            "roster_plan_tree_not_sealed", "kept_units_disagree", "trace_plist_missing"})
 STRUCTURE_FLAG_CODES = STOP_FLAG_CODES | {"loo_kept_n_equals_minimum", "calibration_capture_name_fallback"}
 MACHINE_BOUNDARY = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
                     "the adapter's AC-to-DC loss is not included.")
@@ -61,6 +61,17 @@ BETA_INCLUSIVE_LABEL = ("including three BETA sessions removed by rules later re
 
 def finite(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def agrees(actual, expected, *, ratio=False):
+    """Agreement for unrounded quantities without a cell's printed half-width."""
+    if not all(finite(v) for v in (actual, expected)):
+        return False
+    # COMMON: 1e-6 relative, 1e-6 column units near zero; both exceed
+    # 1e6 x double noise (2.2e-16 = 2.2e-10 relative). Rho's 1e-6 absolute
+    # is 1% of its four-decimal printed resolution, 1e-4.
+    bar = 1e-6 if ratio else max(1e-6, 1e-6 * abs(expected))
+    return abs(actual - expected) <= bar
 
 
 def get(obj, *keys, default=None):
@@ -89,6 +100,7 @@ def positive_int(value):
 
 def beta_fraction(a, b, x):
     """Lentz continued fraction for the regularized incomplete beta."""
+    # Lentz denominator underflow guard, far below any printed digit; not an agreement bar.
     tiny = 1e-300
     qab, qap, qam = a + b, a + 1, a - 1
     c = 1.0
@@ -118,6 +130,7 @@ def beta_fraction(a, b, x):
         d = 1 / d
         delta = d * c
         h *= delta
+        # Continued-fraction convergence near 9 double epsilons; far below printed precision.
         if abs(delta - 1) <= 2e-15:
             return h
     raise ArithmeticError("incomplete beta did not converge")
@@ -163,6 +176,7 @@ def student_quantile(df, probability=0.975):
         hi *= 2
     for _ in range(200):
         mid = (lo + hi) / 2
+        # Root-bracket stop at double resolution, far below any printed t digit.
         if mid == lo or mid == hi or hi - lo <= 1e-15:
             break
         if student_p(mid, df) > target:
@@ -327,6 +341,9 @@ def plist_records(data, anchor, reader=None, scope=""):
             raise ValueError("invalid plist record")
         records.append((start, end, power))
         label = doc["timestamp"].replace(tzinfo=datetime.timezone.utc).timestamp()
+        # D-078 label sanity: 250 us affine residual + 50 ppm elapsed drift
+        # + 1 us numeric padding (four epoch double ulps <954 ns). Whole-second
+        # plist labels span [end-1, end]; this is not an agreement bar.
         pad = 0.00025 + 50e-6 * (end - anchor) + 1e-6
         if reader and not -pad <= end - label <= 1 + pad:
             reader.flag("anchor_label_inconsistent", scope,
@@ -352,6 +369,7 @@ class Member:
         self.usable = (self.summary.get("status") == "succeeded" and anchor.get("status") == "bounded")
         self.records, self.edges, self.energies, self.counts = [], {}, {}, {}
         self.pre, self.op, self.residual = {}, {}, {}
+        self.comparison = {"status": "not_compared", "reason": "independent_trace_unavailable"}
         self.config_tags = None
         if member_role == "science" and "sw-" in run_id:
             config = reader.json(path / "config.json", run_id + "/config.json")
@@ -370,24 +388,38 @@ class Member:
                 reader.flag("archive_file_missing", run_id + "/power_trace.csv", "malformed trace")
         placed = None
         if raw is None:
-            reader.flag("trace_plist_missing", run_id, "using CSV fallback when available")
-            placed = csv_data
+            compressed = path / "raw/powermetrics.plist.zst"
+            is_compressed = compressed.is_file()
+            self.comparison = {"status": "not_compared", "reason": "trace_plist_missing",
+                               "input": "raw/powermetrics.plist",
+                               "input_status": "compressed" if is_compressed else "missing_or_unreadable"}
+            if is_compressed:
+                self.comparison.update(compressed_input="raw/powermetrics.plist.zst",
+                                       restore_tool="scripts/restore_run_to_scratch.py")
+            reader.flag("trace_plist_missing", run_id, self.comparison.copy())
         elif finite(endpoint):
             try:
                 placed = plist_records(raw, endpoint, reader, run_id)
             except (ValueError, KeyError, TypeError, OverflowError, AttributeError, ExpatError):
                 reader.flag("archive_file_missing", run_id + "/raw/powermetrics.plist", "malformed trace")
+                self.comparison["reason"] = "archive_file_missing"
         else:
             reader.flag("kept_member_unusable", run_id, "record placement anchor missing or nonfinite")
+            self.comparison["reason"] = "kept_member_unusable"
         if placed and csv_data:
+            # Compare elapsed seconds (never epoch magnitude) and watts with
+            # COMMON's unrounded 1e-6 bars, above 2.2e-10 relative double noise.
+            origin = placed[0][0]
             match = len(placed) == len(csv_data) and all(
-                abs(a[0] - b[0]) <= 1e-9 and abs(a[1] - b[1]) <= 1e-9 and abs(a[2] - b[2]) <= 1e-12
+                agrees(a[0] - origin, b[0] - origin) and agrees(a[1] - origin, b[1] - origin)
+                and agrees(a[2], b[2])
                 for a, b in zip(placed, csv_data))
             if not match:
                 reader.flag("trace_csv_plist_mismatch", run_id, "plist is primary")
         if not placed:
             self.usable = False
         else:
+            self.comparison = {"status": "compared", "reason": None}
             origin = placed[0][0]
             self.origin = origin
             self.records = [(a - origin, b - origin, p) for a, b, p in placed]
@@ -415,14 +447,18 @@ class Member:
                             target[phase] = shift_envelope(self.records, onset, offset, b, self.s, self.m)
                 stored = (self.summary.get("gross_energy_j") if phase == "request" else
                           get(self.summary, "phase_energy_j", phase))
-                if finite(stored) and abs(stored - self.energies[phase]) > 1e-9:
+                # Unrounded stored joules: COMMON's 1e-6 relative / absolute near zero.
+                if finite(stored) and not agrees(self.energies[phase], stored):
                     reader.flag("stored_energy_mismatch", run_id + "/" + phase,
                                 {"own_j": self.energies[phase], "stored_j": stored})
                 envelope_key = "/gross_energy_j" if phase == "request" else "/phase_energy_j/" + phase
                 stored_a = get(self.summary, "energy_anchor_shift_envelopes", envelope_key, "max_abs_delta_j")
-                if phase in self.pre and finite(stored_a) and abs(stored_a - self.pre[phase]["max_abs_delta_j"]) > 1e-9:
+                # Same unrounded-joule agreement bar for the stored allowance.
+                if phase in self.pre and finite(stored_a) and not agrees(self.pre[phase]["max_abs_delta_j"], stored_a):
                     reader.flag("stored_envelope_mismatch", run_id + "/" + phase,
                                 {"own_j": self.pre[phase]["max_abs_delta_j"], "stored_j": stored_a})
+        if placed and not self.energies:
+            self.comparison = {"status": "not_compared", "reason": "phase_events_ambiguous"}
         self.tokens = self.token_surfaces()
 
     def token_surfaces(self):
@@ -444,7 +480,8 @@ class Member:
         for phase in ("prefill", "decode", "request"):
             key = "/gross_energy_j" if phase == "request" else "/phase_energy_j/" + phase
             stored_a[phase] = get(self.summary, "energy_anchor_shift_envelopes", key, "max_abs_delta_j")
-        return {"model": self.model, "role": self.role, "E_j": self.energies, "n_overlap": self.counts,
+        return {"model": self.model, "role": self.role, "comparison": self.comparison,
+                "E_j": self.energies, "n_overlap": self.counts,
                 "a_bop_j": {k: v["max_abs_delta_j"] for k, v in self.op.items()},
                 "a_bpre_j": {k: v["max_abs_delta_j"] for k, v in self.pre.items()},
                 "stored_E_j": {**mapping(get(self.summary, "phase_energy_j")),
@@ -608,8 +645,12 @@ class Window:
             r.flag("b_op_from_record", "window", "capture missing; recorded operative bound used if available")
         else:
             drift = abs(post - pre)
+            # Frozen bracket arithmetic: 14.531 ms allowance and the registered
+            # 15.50217418713139 ms drift budget, not numerical agreement bars.
+            # From calibration_acceptance_d079_v2_n24_25g83_r2.json:
+            # quantized_range_s and prediction_99_within_window_two_draw_s.
             bop = max(pre, post) + max(drift, 0.014531)
-            if finite(recorded) and abs(bop - recorded) > 1e-12:
+            if finite(recorded) and not agrees(bop, recorded):  # COMMON, unrounded seconds.
                 r.flag("b_op_mismatch", "window", {"own_s": bop, "recorded_s": recorded})
             if drift > 0.01550217418713139:
                 r.flag("bracket_drift_over_budget", "window", {"drift_s": drift})
@@ -623,7 +664,7 @@ class Window:
             pre = self.b["b_pre_s"]
             if member_role == "science" and not finite(m.bpre):
                 self.reader.flag("member_pre_bound_missing", run_id, {"window_s": pre, "member_s": m.bpre})
-            elif member_role == "science" and finite(pre) and m.bpre != pre:
+            elif member_role == "science" and finite(pre) and not agrees(m.bpre, pre):  # COMMON, stored seconds.
                 self.reader.flag("member_pre_bound_mismatch", run_id, {"window_s": pre, "member_s": m.bpre})
         return self.members[run_id]
 
@@ -716,7 +757,8 @@ class Window:
         result["allowance_recorded_j"] = recorded
         if not finite(recorded):
             r.flag("neg8_allowance_unrecorded", "window", "no recorded gross allowance")
-        elif finite(result["allowance_j"]) and abs(result["allowance_j"] - recorded) > 1e-9:
+        # COMMON, unrounded joules; no printed cell half-width on the allowance.
+        elif finite(result["allowance_j"]) and not agrees(result["allowance_j"], recorded):
             r.flag("neg8_allowance_mismatch", "window", {"own_j": result["allowance_j"], "recorded_j": recorded})
         return result
 
@@ -1073,6 +1115,7 @@ def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, mi
     if row["n"] < minimum or missing or not finite(row["dbar_j"]):
         row["p"] = 1.0
     row.update(floor_gate_j=floor, holm_p=holm([row["p"], other_p])[0])
+    # PLAN 7.2 fixes familywise alpha=0.05; not a numerical agreement bar.
     row["holm_reject"] = row["holm_p"] <= 0.05
     row["direction"] = "positive" if finite(row["dbar_j"]) and row["dbar_j"] > 0 else (
         "negative" if finite(row["dbar_j"]) and row["dbar_j"] < 0 else None)
@@ -1093,6 +1136,7 @@ def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, mi
                 if paired["n"] == partner_row["n"] and paired["n"] < minimum:
                     partner_p = 1.0
             adjusted = holm([1.0 if missing else reduced["p"], partner_p])[0]
+            # Same PLAN 7.2 familywise alpha for the leave-one-out replay.
             reject = adjusted <= 0.05
             outcome = evaluate_outcome(reduced, floor, reject, 2, missing)
             sign = "positive" if reduced["dbar_j"] > 0 else ("negative" if reduced["dbar_j"] < 0 else None)
@@ -1100,6 +1144,7 @@ def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, mi
             full_above = finite(floor) and abs(row["dbar_j"]) > floor
             verdict_influential |= (sign != row["direction"] or above != full_above
                                     or reject != row["holm_reject"] or outcome != row["outcome"])
+            # PLAN 7.3 fixes magnitude influence at one quarter of the floor.
             magnitude_influential |= finite(floor) and abs(reduced["dbar_j"] - row["dbar_j"]) > 0.25 * floor
             loo.append({**reduced, "dropped": unit_id, "block_number": omitted, "partner_n": partner_n,
                         "partner_p": partner_p, "holm_p": adjusted,
@@ -1277,6 +1322,8 @@ class MeterStream:
                 powers.append((voltage / 1e6) * (current_ua / 1e6))
             if payload:
                 previous_rx = rx
+            # Meter fit contract: an uncapped (<63) batch and RTT <3 ms
+            # identify a drained queue's earliest arrival, not agreement slack.
             if newest is not None and 0 < n < 63 and 0 <= rx - tx < 3e6:
                 points.append((newest, rx))
             ac, av = get(row, "smc", "B0AC"), get(row, "smc", "B0AV")
@@ -1286,6 +1333,8 @@ class MeterStream:
             if finite(ac) and finite(av):
                 self.battery_times.append(rx)
                 self.battery_powers.append(-ac * av / 1e6)
+        # RECONCILE-r2 section 3 fixes at least 20 eligible polls and 10 s
+        # bins from device zero; two bin minima are needed to fit a line.
         initial = fit_line(points) if len(points) >= 20 else None
         minima = {}
         if initial:
@@ -1304,7 +1353,8 @@ class MeterStream:
                     "minimum_bins": len(minima), "duplicates_dropped": duplicates,
                     "bin_origin": "device time 0 at the first kept sample", "bin_width_device_ms": 10000}
         self.r_max_s = max(0.0, max(y - (a + b * x) for x, y in points) / 1e9)
-        self.times = [a + b * x for x in device]
+        # Meter clock contract: publish integer host ns before sample selection.
+        self.times = [round(a + b * x) for x in device]
         self.powers = powers
         ordered = sorted(zip(self.battery_times, self.battery_powers))
         self.battery_times = [t for t, _ in ordered]
@@ -1318,6 +1368,8 @@ class MeterStream:
         end = (self.trailer.get("end_raw_ns"), self.trailer.get("end_mono_ns"))
         if all(finite(v) for v in start + end):
             offset = start[0] - start[1]
+            # Meter contract's 1 ms RAW-minus-MONO stability check detects
+            # sleep; it grants no slack to move an agreement window.
             if abs((end[0] - end[1]) - offset) <= 1e6:
                 return offset, "stream"
         candidates = []
@@ -1357,6 +1409,31 @@ def idle_span(member):
     return (max(starts), end) if starts else None
 
 
+def controller_request_spans(member):
+    """Re-derive the meter's controller spans from raw stamps and idle events."""
+    stamps = mapping(get(member.metadata, "uncertainty_evidence", "clock_anchor", "clock_stamps"))
+    start, stop = mapping(stamps.get("sampling_started")), mapping(stamps.get("sampling_stopped"))
+    before, after, epoch = start.get("monotonic_before_s"), stop.get("monotonic_after_s"), start.get("epoch_s")
+    if not all(finite(v) and v >= 0 for v in (before, after, epoch)) or after <= before:
+        return None
+    # Meter boundary: start's before stamp to stop's after stamp, floored to
+    # integer ns as recorded. Quantization is a method, not an agreement bar.
+    request = [math.floor(before * 1e9), math.floor(after * 1e9)]
+    idle_start = idle_end = None
+    for event in member.events:
+        if event.get("phase") != "idle_baseline":
+            continue
+        wall = event.get("timestamp_s")
+        mapped = math.floor((before + (wall - epoch)) * 1e9) if finite(wall) else None
+        if event.get("event_type") == "stage_started" and idle_start is None:
+            own_ns = get(event, "metadata", "monotonic_ns")
+            idle_start = own_ns if type(own_ns) is int else mapped
+        elif event.get("event_type") == "stage_completed":
+            idle_end = mapped
+    baseline = [idle_start, idle_end] if all(finite(v) for v in (idle_start, idle_end)) and idle_start < idle_end else None
+    return request, baseline
+
+
 def rail_idle_power(member):
     """REG 5.8: elapsed_ns-weighted rich idle telemetry, never the trace's idle overlap."""
     if not hasattr(member, "_rail_idle_power"):
@@ -1382,7 +1459,9 @@ def sampled_gross(times, powers, span):
 def request_battery_activity(member, stream, wall, offset, flag):
     if "request" not in member.edges:
         return {"available": False, "active": False, "n": 0}
-    span = [(member.origin + edge - wall) * 1e9 + offset for edge in member.edges["request"]]
+    controller = controller_request_spans(member)
+    mono = controller[0] if controller else [(member.origin + edge - wall) * 1e9 for edge in member.edges["request"]]
+    span = [edge + offset for edge in mono]
     lo, hi = (bisect.bisect_left(stream.battery_current_times, edge) for edge in span)
     active = any(c != 0 for c in stream.battery_currents[lo:hi])
     if active and flag:
@@ -1401,14 +1480,21 @@ def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag
     unavailable = {"delta_J": None, "boundary": MACHINE_BOUNDARY} if request else {
         "energy_J": None, "label": PHASE_MACHINE_LABEL, "basis": "gross meter term only; adapter loss excluded",
         "boundary": PHASE_MACHINE_BOUNDARY}
-    if (request and baseline is None) or phase not in member.edges or not all(finite(v) for v in (lower, upper)):
+    comparison = getattr(member, "comparison", {})
+    if comparison.get("status") == "not_compared":
+        return {**unavailable, "status": "not_compared", "reason": comparison["reason"]}
+    controller = controller_request_spans(member) if request else None
+    if (request and (controller[1] if controller else baseline) is None) or phase not in member.edges or (
+            controller is None and not all(finite(v) for v in (lower, upper))):
         if flag:
             member.reader.flag("meter_baseline_unavailable", scope, "idle edges or wall/monotonic anchor unavailable")
         return unavailable
-    wall = (lower + upper) / 2
+    wall = (lower + upper) / 2 if all(finite(v) for v in (lower, upper)) else 0.0
     phase_wall = [member.origin + edge for edge in member.edges[phase]]
     phase_mono = [(edge - wall) * 1e9 for edge in phase_wall]
-    baseline_mono = [(edge - wall) * 1e9 for edge in baseline] if request else []
+    baseline_mono = [(edge - wall) * 1e9 for edge in baseline] if request and baseline else []
+    if controller:
+        phase_mono, baseline_mono = controller
     for stream in streams:
         if not stream.times:
             continue
@@ -1444,12 +1530,16 @@ def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag
             member.reader.flag("meter_battery_unavailable", scope, {"stream": stream.name})
         machine = meter["delta_J"] + (battery["delta_J"] if battery else 0.0)
         idle = rail_idle_power(member)
-        rail = gross_rail - idle * length if finite(idle) else None
+        # REG 5.8's rail delta is the reducer's event-window gross energy less
+        # idle over that same event duration. Controller before/after brackets
+        # define the meter span, not the duration of the rail subtraction.
+        rail = gross_rail - idle * (rail_phase[1] - rail_phase[0]) if finite(idle) else None
         return {"delta_J": machine, "rail_delta_J": rail,
                 "rho": rail / machine if machine > 0 and finite(rail) else None,
                 "meter": meter, "battery": battery, "battery_term_available": battery is not None,
                 "rail_idle_baseline_W": idle, "battery_activity": activity,
                 "duration_s": length, "window_ns": phase_raw, "baseline_ns": base_raw,
+                "window_basis": "controller_stamps" if controller else "wall_anchor",
                 "offset_source": source, "stream": stream.name, "edge_delta_s": delta,
                 "metadata_idle_baseline_power_w_mean": get(member.metadata, "idle_baseline", "power_w_mean"),
                 "boundary": MACHINE_BOUNDARY}
@@ -1699,6 +1789,8 @@ def request_cross_check(lines):
                             if f.get("code") == "meter.battery_activity" and get(f, "scope", "run_id") == rid],
                         "raw_battery_activity": row.get("battery_activity"), "removed_by_this_check": False}
                        for rid, row in members if not plausible_machine(row)]
+            # PLAN 8.2 fixes descriptive "consistent" at spread <=0.2; this
+            # registered label excludes nothing and is not an agreement bar.
             summary = {"n_members": len(members), "rho_n": len(rhos), "rho_median": statistics.median(rhos) if rhos else None,
                        "rail_delta_median_J": statistics.median(row["rail_delta_J"] for _, row in members),
                        "machine_delta_median_J": statistics.median(row["delta_J"] for _, row in members),
@@ -1706,6 +1798,7 @@ def request_cross_check(lines):
                        "rho_iqr": [percentile(rhos, 25), percentile(rhos, 75)],
                        "outside_hard_band": outside, "plausible_n": len(plausible),
                        "within_model_spread": spread,
+                       # PLAN 8.2's 20% descriptive spread threshold.
                        "consistency": "consistent" if spread is not None and spread <= .2 else (
                            "not consistent" if spread is not None else "not computed"), "boundary": MACHINE_BOUNDARY}
             if clean and plausible and model not in result["central_bands"]:
@@ -1732,7 +1825,14 @@ def add_machine(output, selections, windows, meter_dir=None):
         directory = Path(meter_dir) if meter_dir else w.archive / "sources/night-custody/hazards/meter"
         paths = sorted(directory.glob("stream-*.jsonl"))
         if not paths:
+            compressed = [p.name for p in sorted(directory.glob("stream-*.jsonl.zst"))]
+            detail = {"reason": "meter_stream_compressed" if compressed else "meter_absent",
+                      "compressed_inputs": compressed}
+            if compressed:
+                detail["restore_tool"] = "scripts/restore_run_to_scratch.py"
+            w.reader.flag("meter_absent", "whole_machine", detail)
             disclosure["windows"][pack] = {"status": "not_computed", "reason": "meter_absent", "boundary": MACHINE_BOUNDARY,
+                                           "input_detail": detail,
                                            "identifier": w.harvest.get("plan_id", w.archive.name)}
             continue
         streams = [MeterStream(p, w.reader) for p in paths]
@@ -1773,25 +1873,42 @@ def add_machine(output, selections, windows, meter_dir=None):
             stored = get(recorded, "members", rid, "machine")
             if isinstance(stored, dict):
                 own = values["request"]
+                if own.get("status") == "not_compared":
+                    own["recorded_comparison"] = {"status": "not_compared", "matches": None, "reason": own["reason"]}
+                    continue
                 mismatch = []
                 for keys in (("delta_J",), ("meter", "energy_J"), ("meter", "baseline_W")):
                     actual, expected = get(own, *keys), get(stored, *keys)
-                    if not all(finite(v) for v in (actual, expected)) or abs(actual - expected) > max(.5, .005 * abs(expected)):
+                    # COMMON: unrounded J/W, 1e-6 relative / absolute near zero.
+                    if not agrees(actual, expected):
                         mismatch.append("/".join(keys))
                 for field in ("rail_delta_J", "rho"):
                     actual, expected = own.get(field), get(recorded, "members", rid, field)
-                    if actual != expected and (not all(finite(v) for v in (actual, expected))
-                            or abs(actual - expected) > max(.5, .005 * abs(expected))):
+                    # Rho: 1e-6 absolute, 1% of four-decimal resolution; rail: J.
+                    if not (actual is None and expected is None) and not agrees(actual, expected, ratio=field == "rho"):
                         mismatch.append(field)
-                for keys, tolerance in ((("meter", "n"), 2), (("battery", "n"), 0)):
+                # Counts exact: +/-2 samples at 50 Hz spans 40 ms and cannot
+                # guarantee COMMON's energy bar. Fit uncertainty is carried by
+                # edge sensitivity, never by accepting a changed sample set.
+                for keys in (("meter", "n"), ("battery", "n")):
                     actual, expected = get(own, *keys), get(stored, *keys)
-                    if actual != expected and (not all(finite(v) for v in (actual, expected)) or abs(actual - expected) > tolerance):
+                    if actual != expected:
                         mismatch.append("/".join(keys))
-                actual_start = own.get("window_ns", [None])[0]
-                expected_start = stored.get("window_ns", [None])[0]
-                if not all(finite(v) for v in (actual_start, expected_start)) or abs(actual_start - expected_start) > 1e6:
-                    mismatch.append("window_start_ns")
-                values["request"]["recorded_comparison"] = {"matches": not mismatch, "mismatched_fields": mismatch}
+                for index, name in enumerate(("window_start_ns", "window_end_ns")):
+                    own_window, stored_window = own.get("window_ns"), stored.get("window_ns")
+                    actual = own_window[index] if isinstance(own_window, (list, tuple)) and len(own_window) > index else None
+                    expected = stored_window[index] if isinstance(stored_window, (list, tuple)) and len(stored_window) > index else None
+                    # Controller stamps are identical quantized integer-ns
+                    # inputs. Legacy wall placement instead compares the edge
+                    # difference in seconds at COMMON's 1e-6 absolute near zero.
+                    # Neither grants energy/count slack from the fit bound or
+                    # the 20 ms meter period: those strict checks still apply.
+                    same = (actual == expected if own.get("window_basis") == "controller_stamps" else
+                            all(finite(v) for v in (actual, expected)) and agrees((actual - expected) / 1e9, 0.0))
+                    if not same:
+                        mismatch.append(name)
+                values["request"]["recorded_comparison"] = {"status": "compared", "matches": not mismatch,
+                                                             "mismatched_fields": mismatch}
                 if mismatch:
                     cause = "anchor unknown: independently placed rail energy differs" if not member.usable else "raw recomputation differs from withheld record"
                     w.reader.flag("meter_request_mismatch", rid, {"fields": mismatch, "cause": cause,
@@ -2135,6 +2252,19 @@ def beta_floor_quantities(window, selections):
     return result
 
 
+def member_comparison_report(windows):
+    comparisons = {key: {rid: m.comparison for rid, m in sorted(window.members.items())}
+                   for key, window in windows.items()}
+    rows = [row for members in comparisons.values() for row in members.values()]
+    reasons = {}
+    for row in rows:
+        if row["status"] == "not_compared":
+            reasons[row["reason"]] = reasons.get(row["reason"], 0) + 1
+    return {"members": comparisons, "summary": {
+        "compared_runs": sum(row["status"] == "compared" for row in rows),
+        "not_compared_runs": sum(reasons.values()), "not_compared_by_reason": reasons}}
+
+
 def add_beta_inclusive(output, registered, extras):
     """Extras have isolated readers/flags and cannot mutate any registered output or selection."""
     line = {"label": BETA_INCLUSIVE_LABEL, "sessions": [], "pooled": {"floors": {}, "floor_cells": {}},
@@ -2244,6 +2374,7 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
                 flags.append({"code": "dominance_ratio_zero_denominator", "pack": "", "scope": key,
                               "detail": "point floor is zero"})
             ratio = floor["R"]
+            # PLAN 6 fixes branch dominance at R>=2 (a doubled point floor).
             ratios[key] = {"numerator_j": floor["corner_widened_unguarded_floor_j"], "denominator_j": denominator,
                            "R": ratio, "pass": finite(ratio) and ratio >= 2, "n": floor["n"],
                            "R_cm": "not_applicable" if key.endswith("absolute") else floor["R_cm"]}
@@ -2252,6 +2383,7 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
             if key.endswith("comparative"):
                 cmkey = key.rsplit("/", 1)[0]
                 ratio = floor["R_cm"]
+                # PLAN 6 applies the same registered factor two to common mode.
                 common[cmkey] = {"numerator_j": floor.get("common_mode_numerator_j"), "denominator_j": denominator,
                                  "R_cm": ratio, "pass": finite(ratio) and ratio >= 2, "n": floor["n"]}
                 if not common[cmkey]["pass"]:
@@ -2384,6 +2516,7 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
                                   "attempt": window.exclusions.get("attempt"),
                                   "pack_id": window.roster.get("pack_id", window.harvest.get("pack_id")),
                                   "files_read": len(window.reader.files)}
+    output["comparison"] = member_comparison_report(windows)
     output["flags"] = flags
     return output
 
@@ -2440,6 +2573,17 @@ def main(argv=None) -> int:
             extras.append(Window("BETA", archive, [], claim_root=claim if claim != "-" else None,
                                  bound_root=bound if bound != "-" else None))
         add_beta_inclusive(output, windows.get("BETA"), extras)
+        report = member_comparison_report({str(i): w for i, w in enumerate(extras)})
+        report["comparison_stopped"] = any(f["code"] in STOP_FLAG_CODES for w in extras for f in w.reader.flags)
+        output["comparison"]["extra_beta"] = report
+        # Count extra-session runs too, while keeping their stops isolated from
+        # the registered primary comparisons, as the inclusive disclosure requires.
+        summary = output["comparison"]["summary"]
+        for key in ("compared_runs", "not_compared_runs"):
+            summary[key] += report["summary"][key]
+        for reason, count in report["summary"]["not_compared_by_reason"].items():
+            reasons = summary["not_compared_by_reason"]
+            reasons[reason] = reasons.get(reason, 0) + count
     clean = sanitize(output, flags)
     clean["flags"] = sorted((sanitize(f, [], "flag") for f in flags),
                             key=lambda f: (f["code"], f["pack"], f["scope"], json.dumps(f["detail"], sort_keys=True)))
@@ -2455,7 +2599,8 @@ def main(argv=None) -> int:
     counts = {}
     for flag in clean["flags"]:
         counts[flag["code"]] = counts.get(flag["code"], 0) + 1
-    print("sha256=" + hashlib.sha256(data).hexdigest() + " flags=" + json.dumps(counts, sort_keys=True, separators=(",", ":")))
+    print("sha256=" + hashlib.sha256(data).hexdigest() + " flags=" + json.dumps(counts, sort_keys=True, separators=(",", ":"))
+          + " comparison=" + json.dumps(clean["comparison"]["summary"], sort_keys=True, separators=(",", ":")))
     return 0
 
 

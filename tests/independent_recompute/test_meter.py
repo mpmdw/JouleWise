@@ -5,7 +5,7 @@ import struct
 import tempfile
 from types import SimpleNamespace
 import unittest
-from .support import recompute as r, full_pack, run_cli, dump
+from .support import (assert_values_agree, recompute as r, full_pack, run_cli, dump)
 
 
 def stream_file(path, power, battery=lambda t: 0., count=2251, end_offset=0, duplicate=False):
@@ -59,16 +59,16 @@ class MeterTests(unittest.TestCase):
                 stream = r.MeterStream(path, self.reader)
                 row = r.machine_member(member(self.reader), 'request', [stream], [], .045)
                 self.assertEqual(row['meter']['n'], 100)
-                self.assertEqual(row['duration_s'], 2.)
-                self.assertEqual(row['meter']['baseline_W'], 10.)
-                self.assertEqual(row['delta_J'], 80.)
+                assert_values_agree(self, row['duration_s'], 2.)
+                assert_values_agree(self, row['meter']['baseline_W'], 10.)
+                assert_values_agree(self, row['delta_J'], 80.)
                 self.assertEqual(row['battery_term_available'], available)
                 if not available:
                     self.assertIsNone(row['battery'])
                     self.assertTrue(any(f['code'] == 'meter_battery_unavailable' for f in self.flags))
                 self.assertEqual(row['boundary'], r.MACHINE_BOUNDARY)
                 self.assertEqual(row['metadata_idle_baseline_power_w_mean'], .047)
-                self.assertEqual(row['baseline_ns'], [1_001_000_000_000., 1_003_000_000_000.])
+                assert_values_agree(self, row['baseline_ns'], [1_001_000_000_000., 1_003_000_000_000.])
 
     def test_offset_disagreement_over_one_ms_uses_nearest_journal(self):
         path = self.root / 'stream-001.jsonl'
@@ -106,7 +106,7 @@ class MeterTests(unittest.TestCase):
                 row = r.machine_member(m, 'request', [stream], [], .062, corner)
                 self.assertGreater(sign * (row['delta_J'] - primary['delta_J']), 0.)
                 self.assertEqual(row['baseline_ns'], primary['baseline_ns'])
-                self.assertAlmostEqual(row['duration_s'], 2. + (corner[1] - corner[0]) * .062, delta=1e-12)
+                assert_values_agree(self, row['duration_s'], 2. + (corner[1] - corner[0]) * .062)
 
     def test_reconcile_worked_example_and_battery_length_correction(self):
         path = self.root / 'stream-001.jsonl'
@@ -117,18 +117,18 @@ class MeterTests(unittest.TestCase):
         stream.r_max_s = .017
         m = member(self.reader)
         row = r.machine_member(m, 'request', [stream], [], .045)
-        self.assertEqual(row['meter']['energy_J'], 144.)
-        self.assertEqual(row['meter']['delta_J'], 126.)
-        self.assertEqual(row['battery']['delta_J'], 1.)
-        self.assertEqual(row['delta_J'], 127.)
-        self.assertAlmostEqual(row['rail_delta_J'], 59.906, delta=1e-12)
-        self.assertAlmostEqual(row['rho'], .4717, delta=.00005)
+        assert_values_agree(self, row['meter']['energy_J'], 144.)
+        assert_values_agree(self, row['meter']['delta_J'], 126.)
+        assert_values_agree(self, row['battery']['delta_J'], 1.)
+        assert_values_agree(self, row['delta_J'], 127.)
+        assert_values_agree(self, row['rail_delta_J'], 59.906)
+        assert_values_agree(self, row['rho'], 59.906 / 127., ratio=True)
         corner = r.machine_member(m, 'request', [stream], [], .045, (-1, 1))
-        self.assertEqual(corner['duration_s'], 2.124)
-        self.assertAlmostEqual(corner['meter']['delta_J'] - row['meter']['delta_J'], 7.812, delta=1e-12)
+        assert_values_agree(self, corner['duration_s'], 2.124)
+        assert_values_agree(self, corner['meter']['delta_J'] - row['meter']['delta_J'], 7.812)
         # REG 3523-3527: battery energy uses changed T too. The example's
         # 7.81 J is the meter-only change; the machine change also adds .062 J.
-        self.assertAlmostEqual(corner['delta_J'] - row['delta_J'], 7.874, delta=1e-12)
+        assert_values_agree(self, corner['delta_J'] - row['delta_J'], 7.874)
 
     def test_duplicates_signed_unwrap_and_long_poll_gap(self):
         path = self.root / 'stream-001.jsonl'
@@ -136,13 +136,13 @@ class MeterTests(unittest.TestCase):
         stream = r.MeterStream(path, self.reader)
         self.assertEqual(stream.fit['duplicates_dropped'], 1)
         self.assertEqual(len(stream.times), 4000)
-        self.assertAlmostEqual(stream.times[-1] - stream.times[0], 79.98e9, delta=.001)
+        assert_values_agree(self, stream.times[-1] - stream.times[0], 79.98e9)
         rows = [json.loads(x) for x in path.read_text().splitlines()]
         # Retain polls around a 40-second gap, including the 16-bit wrap.
         rows = [x for x in rows if x.get('k') != 'b' or x['rx'] < 10**12 + 20e9 or x['rx'] >= 10**12 + 60e9]
         path.write_text(''.join(json.dumps(x) + '\n' for x in rows))
         stream = r.MeterStream(path, self.reader)
-        self.assertAlmostEqual(stream.times[-1] - stream.times[0], 79.98e9, delta=.001)
+        assert_values_agree(self, stream.times[-1] - stream.times[0], 79.98e9)
 
     def test_bin_minima_fit_and_residual_are_rederived(self):
         path = self.root / 'stream-001.jsonl'
@@ -157,9 +157,9 @@ class MeterTests(unittest.TestCase):
         path.write_text(''.join(json.dumps(x) + '\n' for x in rows))
         stream = r.MeterStream(path, self.reader)
         self.assertEqual(stream.fit['intercept_ns'], 10**12)
-        self.assertEqual(stream.fit['slope_ns_per_ms'], 1_000_000.)
+        assert_values_agree(self, stream.fit['slope_ns_per_ms'], 1_000_000.)
         self.assertEqual(stream.fit['minimum_bins'], 5)
-        self.assertAlmostEqual(stream.r_max_s, .017, delta=1e-15)
+        assert_values_agree(self, stream.r_max_s, .017)
 
     def test_machine_weighting_missing_unit_and_gamma_side_exact_t(self):
         def m(rid): return SimpleNamespace(run_id=rid)
@@ -174,19 +174,19 @@ class MeterTests(unittest.TestCase):
         line = r.machine_mean(repeats, quads, values)
         self.assertEqual((line['n_r'], line['n_b']), (6, 5))
         self.assertEqual(line['missing_units_by_stratum'], {'repeat': 0, 'quad': 1})
-        self.assertAlmostEqual(line['mean_j'], .2 * 3.5 + .8 * 5., delta=1e-12)
+        assert_values_agree(self, line['mean_j'], .2 * 3.5 + .8 * 5.)
         self.assertEqual(line['battery_unavailable_members'], 20)
         self.assertEqual(line['rho_n'], 26)
         side = r.machine_mean([], quads, values, 'a')
         self.assertEqual(side['n'], 5)
-        self.assertEqual(side['mean_j'], 5.)
-        self.assertAlmostEqual(side['h_j'], 2.7764451051977987 * (2.5 / 5.) ** .5, delta=1e-12)
+        assert_values_agree(self, side['mean_j'], 5.)
+        assert_values_agree(self, side['h_j'], 2.7764451051977987 * (2.5 / 5.) ** .5)
         self.assertEqual(side['rho_n'], 10)
         values['r0']['delta_J'] = None; values['r1']['delta_J'] = None
         low = r.machine_mean(repeats, quads, values)
         self.assertEqual(low['note'], 'below the registered minimum')
         one = r.machine_mean(repeats[2:3], quads[1:2], values)
-        self.assertAlmostEqual(one['mean_j'], 3.)
+        assert_values_agree(self, one['mean_j'], 3.)
         self.assertIsNone(one['h_j'])
         self.assertEqual(one['note'], 'below the registered minimum')
 
