@@ -38,6 +38,9 @@ and QR avoids squaring the design condition number in normal equations.
 Coefficients and (X'WX)^-1 covariance return in original feature units; covariance
 does not get another reduced-chi-square multiplier. It conditions on the
 estimated extra variance, so small-sample normal approximations remain limited.
+When h=0 at the variance boundary, limiting weights use one ULP of the
+variance scale, keeping whitening near 1/sqrt(epsilon) instead of 1/epsilon.
+This numerical device is flagged and is not added to predictive turn noise.
 Rank failure, nonfinite inputs and insufficient degrees of freedom return flags
 and undefined numerical results; they do not silently remove data.
 

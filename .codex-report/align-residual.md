@@ -84,6 +84,8 @@ These are conditional planning calculations, not hardware findings.
 - Interpret supplied half-widths as standard uncertainties, as required.
 - Use Paule-Mandel moments Q=n-5, nonnegative variance, safeguarded
   Newton/bisection, and sqrt(binary64 epsilon) relative moment convergence.
+- Represent zero-half-width limiting weights with one ULP of the variance
+  scale, avoiding false QR rank loss from squaring an energy ULP.
 - Use max-magnitude column scaling and Householder QR, avoiding condition
   squaring from normal equations.
 - Use (X'WX)^-1 covariance without a second variance multiplier.

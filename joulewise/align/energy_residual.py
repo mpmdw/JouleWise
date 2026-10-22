@@ -228,9 +228,12 @@ def fit_energy_model(rows: Sequence[TurnRow]) -> EnergyModel:
         return _ModelResult(_NAMES, tuple(coef), tuple(map(tuple, cov)),
                             upper, n, tuple(flags))
 
-    # At sigma2=0 a zero h is exact. Evaluate its limiting weight using one
-    # ULP of the energy scale. This numerical floor is NOT prediction noise.
-    floor = math.ulp(max(abs(value) for value in y)) ** 2
+    # At sigma2=0 a zero h is exact. Represent its limiting weight with one
+    # ULP of the variance scale. Squaring one energy ULP would whiten at a
+    # condition number near 1/epsilon and falsely lose rank; a variance ULP
+    # keeps that ratio near 1/sqrt(epsilon), suitable for scaled QR. This
+    # numerical limiting-weight device is NOT added to prediction noise.
+    floor = math.ulp(max(upper, max(h2)))
     if floor == 0:
         floor = sys.float_info.min
     if any(value == 0 for value in h2):

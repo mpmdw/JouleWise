@@ -138,6 +138,20 @@ class TestEnergyResidual(unittest.TestCase):
         self.assertLess(abs(m.sigma2_per_turn-_SIGMA**2),
                         _NORMAL.inv_cdf(.975)*variance_se)
 
+    def test_mixed_exact_and_uncertain_turns_keep_full_rank(self):
+        # A zero turn measurement component is valid when episode-level
+        # attribution carries that uncertainty. Extra turn variation remains.
+        rows = [replace(r, energy_half_width_j=0) if i % 3 == 0 else r
+                for i, r in enumerate(self.rows)]
+        model = fit_energy_model(rows)
+        self.assertIn("zero_half_width_limit", model.flags)
+        self.assertNotIn("rank_deficient_weighted_design", model.flags)
+        self.assertTrue(math.isfinite(model.sigma2_per_turn))
+        q = math.fsum((r.energy_j-_dot(design_row(r), model.coef))**2 /
+                      (model.sigma2_per_turn+r.energy_half_width_j**2) for r in rows)
+        # No printed moment uncertainty: 1e-6 relative agreement.
+        self.assertTrue(math.isclose(q, len(rows)-5, rel_tol=1e-6), q)
+
     def test_episode_quadratic_form_and_score(self):
         rows, total, h = _adapt(self.data[0])
         mean, sd = predict_episode(self.model, rows)
