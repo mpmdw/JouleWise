@@ -1,0 +1,330 @@
+"""Exercise the real ctypes binding and sampler against a driver-shaped stub."""
+
+from __future__ import annotations
+
+import ctypes
+import importlib.util
+import json
+import math
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from joulewise.align.interfaces import PowerSampler
+from joulewise.align.power.nvml import (
+    CtypesNvml, NvmlSampler, POWER_AVERAGE_FIELD, POWER_INSTANT_FIELD, open_nvml,
+)
+from joulewise.align.records import PowerTrace, from_json, to_json
+
+
+class FakeNvmlLibrary:
+    """C ABI-shaped fake: output pointers, status codes and field structs.
+
+    Default idle/load levels (50/250 W) model a whole accelerator. The 200 W
+    load contrast dwarfs the 0.2 W idle ripple and the 0.001 W API quantum.
+    It is intentionally absent in the no-movement control.
+    """
+
+    def __init__(self, *, count: int = 1, architecture: int = 7,
+                 name: str = "NVIDIA A100-SXM4-40GB",
+                 state_file: Path | None = None, moves: bool = True) -> None:
+        self.count = count
+        self.architecture = architecture
+        self.name = name
+        self.state_file = state_file
+        self.moves = moves
+        self.virtualization = 0
+        self.mig_slice = 0
+        self.mig_mode = (0, 0)
+        self.init_status = 0
+        self.shutdown_status = 0
+        self.unsupported_fields: set[int] = set()
+        self.energy_supported = True
+        self.constant_field_timestamp: int | None = None
+        self.energy_sequence: list[int] | None = None
+        self.power_calls = 0
+        self.energy_calls = 0
+        self.field_calls = 0
+        self.init_calls = 0
+        self.shutdown_calls = 0
+        self.seen_devices: set[int] = set()
+        self.sampled = threading.Event()
+        self._lock = threading.Lock()
+        self._started = time.monotonic_ns()
+
+    @staticmethod
+    def _put(pointer: object, scalar: type, value: int) -> None:
+        ctypes.cast(pointer, ctypes.POINTER(scalar))[0] = value
+
+    @staticmethod
+    def _string(buffer: object, text: str) -> int:
+        buffer.value = text.encode()
+        return 0
+
+    def nvmlInit_v2(self) -> int:
+        self.init_calls += 1
+        return self.init_status
+
+    def nvmlShutdown(self) -> int:
+        self.shutdown_calls += 1
+        return self.shutdown_status
+
+    def nvmlDeviceGetCount_v2(self, output: object) -> int:
+        self._put(output, ctypes.c_uint, self.count)
+        return 0
+
+    def nvmlDeviceGetHandleByIndex_v2(self, index: int, output: object) -> int:
+        if not 0 <= index < self.count:
+            return 2  # NVML_ERROR_INVALID_ARGUMENT.
+        self._put(output, ctypes.c_void_p, index + 1)
+        return 0
+
+    def nvmlSystemGetDriverVersion(self, buffer: object, length: int) -> int:
+        return self._string(buffer, "550.54.15")
+
+    def nvmlSystemGetNVMLVersion(self, buffer: object, length: int) -> int:
+        return self._string(buffer, "12.550.54")
+
+    def nvmlSystemGetCudaDriverVersion_v2(self, output: object) -> int:
+        self._put(output, ctypes.c_int, 12040)  # NVML encoding: CUDA driver API 12.4.
+        return 0
+
+    def nvmlDeviceGetName(self, handle: object, buffer: object, length: int) -> int:
+        return self._string(buffer, self.name)
+
+    def nvmlDeviceGetUUID(self, handle: object, buffer: object, length: int) -> int:
+        prefix = "MIG-" if self.mig_slice else "GPU-"
+        return self._string(buffer, prefix + f"synthetic-{handle.value}")
+
+    def nvmlDeviceGetVbiosVersion(self, handle: object, buffer: object, length: int) -> int:
+        return self._string(buffer, "92.00.45.00.03")
+
+    def nvmlDeviceGetArchitecture(self, handle: object, output: object) -> int:
+        self._put(output, ctypes.c_uint, self.architecture)
+        return 0
+
+    def nvmlDeviceGetVirtualizationMode(self, handle: object, output: object) -> int:
+        self._put(output, ctypes.c_uint, self.virtualization)
+        return 0
+
+    def nvmlDeviceIsMigDeviceHandle(self, handle: object, output: object) -> int:
+        self._put(output, ctypes.c_uint, self.mig_slice)
+        return 0
+
+    def nvmlDeviceGetMigMode(self, handle: object, current: object, pending: object) -> int:
+        self._put(current, ctypes.c_uint, self.mig_mode[0])
+        self._put(pending, ctypes.c_uint, self.mig_mode[1])
+        return 0
+
+    def _power_mw(self, count: int) -> int:
+        active = self.state_file is not None and self.state_file.exists()
+        baseline = 250_000 if active and self.moves else 50_000
+        return baseline + (-200 if count % 2 else 200)
+
+    def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
+        with self._lock:
+            self.power_calls += 1
+            self.seen_devices.add(handle.value - 1)
+            value = self._power_mw(self.power_calls)
+            self._put(output, ctypes.c_uint, value)
+            self.sampled.set()
+        return 0
+
+    def nvmlDeviceGetTotalEnergyConsumption(self, handle: object, output: object) -> int:
+        with self._lock:
+            if not self.energy_supported:
+                return 3  # NVML_ERROR_NOT_SUPPORTED.
+            index = self.energy_calls
+            self.energy_calls += 1
+            if self.energy_sequence:
+                value = self.energy_sequence[min(index, len(self.energy_sequence)-1)]
+            else:
+                elapsed_s = (time.monotonic_ns() - self._started) / 1_000_000_000
+                value = 100_000 + int(50_000 * elapsed_s)  # mW*s = mJ.
+            self._put(output, ctypes.c_ulonglong, value)
+        return 0
+
+    def nvmlDeviceGetFieldValues(self, handle: object, count: int, values: object) -> int:
+        with self._lock:
+            self.field_calls += 1
+            for index in range(count):
+                value = values[index]
+                value.nvmlReturn = 3 if value.fieldId in self.unsupported_fields else 0
+                value.valueType = 1  # NVML_VALUE_TYPE_UNSIGNED_INT.
+                value.value.uiVal = self._power_mw(self.field_calls)
+                value.timestamp = (self.constant_field_timestamp if
+                    self.constant_field_timestamp is not None else time.time_ns() // 1000)
+                value.latencyUsec = 10
+        return 0
+
+
+def collect(library: FakeNvmlLibrary, *, samples: int = 4, **kwargs: object) -> tuple[PowerTrace, ...]:
+    sampler = NvmlSampler(library=library, interval_ns=1_000_000, **kwargs)
+    sampler.start()
+    # A deadline is an operational deadlock guard. The test waits for an
+    # integer number of actual driver observations, not a timing tolerance.
+    deadline = time.monotonic() + 2.0
+    while library.power_calls < samples and time.monotonic() < deadline:
+        library.sampled.wait(timeout=0.01)
+        library.sampled.clear()
+    return sampler.stop()
+
+
+class NvmlSamplerTests(unittest.TestCase):
+    def test_ctypes_binding_inventory_and_si_conversion(self) -> None:
+        library = FakeNvmlLibrary()
+        binding = CtypesNvml(library)
+        binding.nvmlInit()
+        handle = binding.nvmlDeviceGetHandleByIndex(0)
+        self.assertEqual(binding.nvmlDeviceGetName(handle), library.name)
+        self.assertEqual(binding.nvmlSystemGetCudaDriverVersion(), 12040)
+        self.assertEqual(binding.nvmlDeviceGetArchitecture(handle), 7)
+        self.assertEqual(binding.nvmlDeviceGetMigMode(handle), (0, 0))
+        fields = binding.nvmlDeviceGetFieldValues(handle, [POWER_INSTANT_FIELD, POWER_AVERAGE_FIELD])
+        self.assertEqual([value.fieldId for value in fields], [186, 185])
+        traces = collect(library)
+        self.assertEqual(len(traces), 4)
+        power = next(trace for trace in traces if trace.channel.endswith(":power_usage"))
+        self.assertTrue(power.values)
+        # Half an mW is the rounded-power quantum; a 1e-6 relative
+        # conversion bar is smaller and is the brief's no-uncertainty bar.
+        self.assertTrue(math.isclose(power.values[0], 49.8, rel_tol=1e-6))
+        self.assertEqual(power.averaging_window_ns, 25_000_000)
+        self.assertEqual(power.duty_fraction, 0.25)
+        self.assertEqual(json.loads(power.notes)["sensor_facts"]["period_ns"], 100_000_000)
+        self.assertEqual(from_json(PowerTrace, to_json(power)), power)
+        energy = next(trace for trace in traces if trace.unit == "J_cumulative")
+        metadata = json.loads(energy.notes)
+        for raw, value in zip(metadata["raw_energy_mj"], energy.values):
+            self.assertTrue(math.isclose(value, raw / 1000, rel_tol=1e-6))
+
+    def test_protocol_thread_per_device_and_stop_idempotence(self) -> None:
+        library = FakeNvmlLibrary(count=2)
+        sampler = NvmlSampler(library=library, interval_ns=1_000_000)
+        self.assertIsInstance(sampler, PowerSampler)
+        sampler.start()
+        traces = sampler.stop()
+        self.assertEqual(library.seen_devices, {0, 1})
+        self.assertEqual(len(sampler._devices), 2)
+        self.assertTrue(all(device.thread is not None for device in sampler._devices))
+        self.assertTrue(all(not device.thread.is_alive() for device in sampler._devices))
+        self.assertEqual(len(traces), 8)
+        self.assertIs(sampler.stop(), traces)  # Cached result identity is the property.
+        self.assertEqual(library.shutdown_calls, 1)
+
+    def test_call_midpoints_and_odd_bracket_rounding(self) -> None:
+        lock = threading.Lock()
+        ticks = 0
+
+        def clock() -> int:
+            nonlocal ticks
+            with lock:
+                ticks += 2001
+                return ticks
+
+        traces = collect(FakeNvmlLibrary(), clock_ns=clock)
+        for trace in traces:
+            metadata = json.loads(trace.notes)
+            # Integer midpoint ceil(2001/2)=1001 ns exactly bounds the call.
+            self.assertTrue(all(value == 1001 for value in metadata["timing_half_width_ns"]))
+            self.assertTrue(all(b > a for a, b in zip(trace.t_ns, trace.t_ns[1:])))
+
+    def test_capability_failures_are_empty_explanatory_traces(self) -> None:
+        library = FakeNvmlLibrary()
+        library.unsupported_fields = {POWER_AVERAGE_FIELD}
+        library.energy_supported = False
+        traces = collect(library)
+        unsupported = [trace for trace in traces if trace.channel.endswith((":power_average", ":energy"))]
+        self.assertEqual(len(unsupported), 2)
+        for trace in unsupported:
+            self.assertFalse(trace.values)
+            self.assertFalse(json.loads(trace.notes)["supported"])
+            self.assertTrue(json.loads(trace.notes)["failures"])
+        self.assertTrue(next(trace for trace in traces if trace.channel.endswith(":power_usage")).values)
+
+    def test_unknown_architecture_has_no_guessed_sensor_facts(self) -> None:
+        traces = collect(FakeNvmlLibrary(architecture=0xffffffff, name="Synthetic future GPU"))
+        for trace in traces:
+            self.assertIsNone(trace.averaging_window_ns)
+            self.assertIsNone(trace.duty_fraction)
+            self.assertIn("sensor_averaging_unknown", json.loads(trace.notes)["flags"])
+
+    def test_hopper_legacy_and_average_are_not_single_windows(self) -> None:
+        traces = collect(FakeNvmlLibrary(architecture=9, name="NVIDIA H100 80GB HBM3"))
+        instant = next(trace for trace in traces if trace.channel.endswith(":power_instant"))
+        self.assertEqual(instant.averaging_window_ns, 25_000_000)
+        self.assertNotIn("output_average_not_single_window", json.loads(instant.notes)["flags"])
+        for trace in traces:
+            if trace.channel.endswith((":power_usage", ":power_average")):
+                notes = json.loads(trace.notes)
+                self.assertIn("output_average_not_single_window", notes["flags"])
+                self.assertEqual(notes["output_averaging_window_ns"], 1_000_000_000)
+
+    def test_cached_field_values_do_not_fabricate_new_measurements(self) -> None:
+        library = FakeNvmlLibrary()
+        library.constant_field_timestamp = 1_000_000
+        traces = collect(library)
+        for trace in traces:
+            if trace.channel.endswith((":power_instant", ":power_average")):
+                self.assertEqual(len(trace.values), 1)
+                self.assertGreater(json.loads(trace.notes)["duplicate_field_reads"], 0)
+
+    def test_counter_reset_and_wrap_candidates_preserve_raw_readings(self) -> None:
+        for sequence, flag in (
+            ([100_000, 100_050, 4, 50], "counter_reset_or_driver_reload"),
+            ([2**64 - 100, 2**64 - 50, 4, 50], "counter_wrap_candidate"),
+        ):
+            with self.subTest(flag=flag):
+                library = FakeNvmlLibrary()
+                library.energy_sequence = sequence
+                traces = collect(library)
+                trace = next(value for value in traces if value.unit == "J_cumulative")
+                notes = json.loads(trace.notes)
+                self.assertIn(flag, notes["flags"])
+                self.assertEqual(notes["raw_energy_mj"][:4], sequence)
+                self.assertEqual(notes["counter_discontinuities"][0]["index"], 2)
+                # uint64 mJ near wrap cannot retain every mJ in a float J;
+                # the exact raw integers above are the required evidence.
+                self.assertGreater(trace.values[1], trace.values[2])
+
+    def test_start_stop_failures_do_not_raise(self) -> None:
+        for started in (False, True):
+            library = FakeNvmlLibrary()
+            library.init_status = 9
+            sampler = NvmlSampler(library=library)
+            if started:
+                sampler.start()
+            traces = sampler.stop()
+            self.assertTrue(traces)
+            self.assertTrue(all(not trace.values for trace in traces))
+            self.assertTrue(all(json.loads(trace.notes)["flags"] for trace in traces))
+        library = FakeNvmlLibrary()
+        library.shutdown_status = 9
+        self.assertTrue(any("shutdown_failed" in flag for trace in collect(library)
+                            for flag in json.loads(trace.notes)["flags"]))
+
+    def test_nonincreasing_clock_is_flagged_without_invented_timestamps(self) -> None:
+        traces = collect(FakeNvmlLibrary(), clock_ns=lambda: 100)
+        for trace in traces:
+            self.assertEqual(trace.t_ns, (100,))
+            self.assertIn("nonincreasing_call_clock", json.loads(trace.notes)["flags"])
+
+    @unittest.skipUnless(importlib.util.find_spec("pynvml") is not None,
+                         "optional nvidia-ml-py is not installed; ctypes path is tested")
+    def test_optional_pynvml_uses_the_same_sampler_path(self) -> None:
+        import pynvml
+        binding = CtypesNvml(FakeNvmlLibrary())
+        methods = [name for name in dir(binding) if name.startswith("nvml")]
+        with mock.patch.multiple(pynvml, **{name: getattr(binding, name) for name in methods}):
+            self.assertIs(open_nvml(prefer_pynvml=True), pynvml)
+            sampler = NvmlSampler(nvml=pynvml)
+            sampler.start()
+            traces = sampler.stop()
+        self.assertEqual(len(traces), 4)
+        self.assertTrue(all(trace.values for trace in traces))
+
+
+if __name__ == "__main__":
+    unittest.main()
