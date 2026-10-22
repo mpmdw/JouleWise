@@ -1,17 +1,19 @@
 # Outline: the instrumentation and automation paper
 
 **Status.** Section-by-section outline, written 2026-10-21 (PDT) by Opus 5.5 (an AI model session) for Ed, the
-project's owner. It is not a draft of the paper's prose and has not been sent to anyone; whether any of it goes to
-the advisor (the academic supervising the work, to whom the paper would go) is Ed's decision.
+project's owner, and revised the same night after a separate first-use check of its wording and a re-check of its
+numbers against their sources. It is not a draft of the paper's prose and has not been sent to anyone; whether any of
+it goes to the advisor (the academic supervising the work, to whom the paper would go) is Ed's decision.
 
-**Why it exists.** Ed, 2026-10-20: "seems we're close to an instrument paper, whatever the first paper is i forget"
-(his mail, transcribed in `docs/process_traces/2026-10-20-magistrate-c634f6f3/RECORD.md:21-22`). The plan of
-2026-10-14 names the first paper: *Paper A by mid-November: method plus replication*
-(`docs/design/block6_collection_draft.md:576` on `integration/2026-10-14-b6-stage1`). This outline is that paper,
-built around what the instrument and its automation have already shown. The numbers of the replication (block 6, the
-re-run of the three measurement plans on later days; §0 item 16) are blinded (read by no person or AI tool) until
-their release (a dated, written entry after which they may be read), so every section below says whether it can be
-written now or waits for the release.
+**Why it exists.** Ed, 2026-10-20: "seems we're close to an instrument paper, whatever the first paper is i forget if
+joules per request matches up in disag inference as you'd expect by model size" (his mail, transcribed in
+`docs/process_traces/2026-10-20-magistrate-c634f6f3/RECORD.md:21-23`; his question about model size is one of the
+results that wait for the release described below). The plan of 2026-10-14 names the first paper: *Paper A by
+mid-November: method plus replication* (`docs/design/block6_collection_draft.md:576` on
+`integration/2026-10-14-b6-stage1`). This outline is that paper, built around what the instrument and its automation
+have already shown. The numbers of the replication (block 6, the re-run of the three measurement plans on later days;
+§0 item 16) are blinded (read by no person or AI tool) until their release (a dated, written entry after which they
+may be read), so every section below says whether it can be written now or waits for the release.
 
 **What this outline never contains.** No energy, power, phase duration, floor, contrast or outcome word (each built
 in §0) from the two data collections whose numbers the paper's results rest on (the *claim collections*): 8-12
@@ -19,7 +21,8 @@ October (block 5) and 17-21 October (block 6). Every joule and watt printed here
 session whose numbers never enter the paper's results): the quiet-machine measurements of 16-17 October, the
 rehearsals of 6 and 9 October, or the check session of 21 October (the three kinds are built in §0 item 18). Each is
 labelled where it appears. This outline sets no threshold (no level at which a check passes or fails); every such
-cut-off it quotes carries its derivation at the cited place.
+cut-off it quotes is cited to the place that records its derivation or its size in joules, and where no record gives
+one, the outline says so (open decision 5).
 
 **How to read a section.** Each paper section below has the same parts: the *forcing problem* (why the mechanism must
 exist), the *claim* the section makes, the *evidence* (file and line; repository paths are at `origin/main`
@@ -35,7 +38,8 @@ Each term is built here before any section uses it. A term used in only one sect
 its first use.
 
 1. **The machine.** One Apple MacBook Pro with an M3 Max chip (model identifier Mac15,9), dedicated to this work. Its
-   140 W power adapter connects to it through a USB-C cable.
+   140 W Apple power adapter plugs into the mains and feeds it through a cable from the adapter's USB-C socket to the
+   laptop's MagSafe charging port.
 2. **Rails.** The chip's own power sensors report the electrical power of three on-chip parts: the general-purpose
    processor cores (CPU), the graphics processor (GPU) and the neural engine (ANE, a block for neural-network
    arithmetic). Their sum, *rail power*, is the quantity every result of the paper measures.
@@ -83,10 +87,12 @@ its first use.
 11. **Calibration capture.** A short run at a session's start and another at its end in which the GPU is switched on
     and off on command, so that the timing between the sampler's records and the model program's stamps can be
     measured (§3 builds it).
-12. **Wall meter and DC input.** A USB-C power meter (ChargerLab POWER-Z KM003C) sits between the adapter's cable and
-    the laptop and reads voltage and current 50 times a second. Their product is the *DC input*: the power the
-    machine takes from the adapter. The adapter's own loss in turning mains AC into DC happens before the meter and
-    is in no number.
+12. **Wall meter and DC input.** A USB-C power meter (ChargerLab POWER-Z KM003C) is plugged into the adapter's USB-C
+    socket and the cable to the laptop is plugged into the meter, so every watt the adapter delivers passes through
+    it; a second USB-C cable carries its readings to the Mac. It reads voltage and current 50 times a second. Their
+    product is the *DC input*: the power the machine takes from the adapter. The adapter's own loss in turning mains
+    AC into DC happens before the meter and is in no number; the cable's own small loss happens after the meter and
+    is counted as machine power.
 13. **Battery current.** The laptop's System Management Controller (SMC, the chip that runs the charger and the power
     sensors) reports the battery's current once a second; a negative value means the battery is discharging into the
     machine.
@@ -103,7 +109,7 @@ its first use.
 18. **Non-claim sessions used here.** A *non-claim* session is one whose numbers never enter the paper's results. The
     *quiet-machine kit*: 11 measurements, each carrying an M-number from M1 to M15 (the numbering has gaps; only the
     numbers used below are cited), taken 16-17 October with no agent alive, over 51,524 s of wall time, to measure
-    the quantities the levels at which the rules' checks pass or fail (their *cut-offs*) are drawn from
+    the quantities from which the rules' *cut-offs* (the levels at which their checks pass or fail) are drawn
     (`docs/process_traces/2026-10-17-magistrate-1a1261a5/RECORD.md:6`). The *rehearsals*: four non-claim sessions of
     6 and 9 October, run with the collection code but outside any result; their 77 runs (53 of them on 9 October) are
     the replay set of §5. *Session H*: a check session of 21 October that ran models up to 122 billion parameters on
@@ -135,9 +141,10 @@ its first use.
 24. **Pinned commit.** The one version of the collection code, named by its git commit hash, that every block-6
     session runs from, in a separate copy of the repository used for nothing else.
 25. **Pre-session check, smoke, machine test.** The *pre-session check* measures the physical hazards directly (no
-    model runs) before a session may start. A *smoke* is a short real collection (4 to 6 runs) of the same pack by
-    the same code, started the same way the session will be (its *launch route*: by the same macOS job-scheduler
-    (`launchd`) job, with the same declared job type, not by hand), and judged by the desk programs before the
+    model runs) before a session may start. A program's *launch route* is how it is started: by hand, or by a job of
+    macOS's job scheduler (`launchd`) whose declared job type (`ProcessType`) sets the priority of everything it
+    starts. A *smoke* is a short real collection (4 to 6 runs) of the same pack by the same code, on the same launch
+    route as the session (the same `launchd` job and job type, not by hand), judged by the desk programs before the
     session. A *machine test* is a 40-minute live test of the pinned commit that injects faults (an agent appearing,
     a disturbed idle baseline, the meter unplugged) and checks that each leaves its expected record.
 26. **Loop, orchestrator, arming, hold.** The *loop* is a set of plain programs that macOS's job scheduler
@@ -227,44 +234,54 @@ recompute (§9); a record of how the software was built and checked (§10); the 
 - **Evidence.** Registration `docs/registrations/block6_replication_DRAFT.md:104-110` (machine and sampler),
   `:824-837` (the meter excludes nothing; cross-checks M14 and M10), `:1030-1037` (whole-machine energy per phase,
   its boundary sentence); `joulewise/hazards/smc.py:17-27` (SMC keys: `B0AC` battery current, `B0AV` battery voltage,
-  `PDTR` DC-in power, `PSTR` system total power); `joulewise/external/km003c_parse.py:79` (the 28 V band of the USB-C
-  power contract, §6), `:368` (`integrate`), `:397` (`delta_machine_energy`). Session H raw files (local):
-  `/Users/edr/night-bytes/h-20261021T185555Z/custody/hazards/meter/stream-001.jsonl`,
-  `.../runs-parent/runs_bytes_mac_check/*/summary_metrics.json` and `events.jsonl`.
+  `PDTR` DC-in power, `PSTR` system total power); `joulewise/external/km003c_parse.py:79` (the accepted band around
+  28 V, the supply voltage the adapter and laptop agree on over USB-C; §6), `:368` (`integrate`), `:397`
+  (`delta_machine_energy`); `docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md:100` (the
+  meter placed inline on the adapter's output, its data cable to the Mac). Session H files (local): the harvest's
+  meter record `/Users/edr/night-bytes/h-20261021T185555Z/archive/withheld/meter.json` (per run: request window,
+  meter and battery energy from `delta_machine_energy`), the meter stream
+  `.../custody/hazards/meter/stream-001.jsonl`, and each run's
+  `.../runs-parent/runs_bytes_mac_check/*/summary_metrics.json` (`gross_energy_j`, the rail energy of the request
+  with no idle subtraction).
 - **Status.** Writable now from non-claim data. The whole-machine line per phase for blocks 5 and 6 waits for the
   release.
 - **Worked example 1 (quiet-machine kit M14, real).** A known load is switched on between idle stretches and seen at
-  both places. GPU load at 20% duty: meter 20.15 W, rails 7.65 W, so the rails see 0.380 of the step. One CPU core at
-  100%: meter 9.41 W, rails 5.42 W, 0.576. Over steady levels (M10) the fit is meter = 2.650 × rails + 1.632 W. So a
-  load the rails see as 1 W shows as about 1.7 to 2.8 W at the meter, and the meter sees every tested load the rails
-  see (registration lines 830-837).
-- **Worked example 2 (session H, real; computed for this outline).** Request window: from the program's prefill start
-  stamp to its decode end stamp. The program stamps on the wall clock; the meter's samples are placed on the Mac's
-  hardware counter that nothing adjusts (`CLOCK_MONOTONIC_RAW`); the meter stream records the offset between those
-  two Mac clocks at its start, so a wall-clock stamp becomes a counter time by subtracting that offset (§3 measures
-  the two clocks' relative rate as −4.67 × 10⁻⁷ ppm, so the offset stays constant). Meter energy: `integrate`, the
-  mean of the 50 Hz samples inside the window times its length; rail energy: the run's recorded request energy
-  (prefill plus decode phase energy).
-  - Qwen3.5-122B-A10B (4-bit), 2,048-token prompt and 512 output tokens, run r01: 15.732 s; rails 507.0 J, a mean of
-    32.23 W; meter 1,340.0 J, 85.18 W. M10 predicts 2.650 × 32.23 + 1.632 = 87.03 W, 2.2% above the measured 85.18 W.
-  - Llama-3.3-70B-Instruct (4-bit), same workload, soak-stage run r01: 82.570 s; rails 3,117.1 J, 37.75 W; meter
-    9,016.8 J, 109.20 W. M10 predicts 101.67 W, 6.9% below the measured value; over the 11 soak runs the shortfall is
-    5.3% to 11.0%.
-  - Reading: the rails' share of the machine is workload-dependent (0.377 to 0.378 for the five 122B requests, 0.330
-    to 0.351 for the eleven 70B soak requests), so the paper prints the measured DC-input line and never converts
-    rails into machine power with M10.
+  both places. A GPU load busy for 20% of each short cycle (20% *duty*): meter 20.15 W, rails 7.65 W, so the rails
+  see 0.380 of the step. One CPU core at 100%: meter 9.41 W, rails 5.42 W, 0.576. Over steady levels (M10) the fit is
+  meter = 2.650 × rails + 1.632 W. So a load the rails see as 1 W shows as about 1.7 to 2.8 W at the meter, and the
+  meter sees every tested load the rails see (registration lines 830-837).
+- **Worked example 2 (session H, real; recomputed for this outline from the harvest's records).** Three clocks are
+  involved. The program running the model stamps its prefill start and decode end on the Mac's monotonic clock
+  (Python's `time.monotonic_ns`, which never jumps when the time of day is corrected); those two stamps bound the
+  *request window*. The meter stamps its samples with its own device clock, and the parser fits that clock to the
+  Mac's hardware counter (`CLOCK_MONOTONIC_RAW`) using the times at which the Mac received each batch of samples
+  (`clock_fit`). The meter stream records the difference between the Mac's two counters at its start and at its end;
+  the two readings must agree within 1 ms (they differ only across a sleep), and a program stamp plus that difference
+  is a hardware-counter time (`raw_offset_ns`). Meter energy (`integrate`): the mean of the samples inside the window
+  times the window's length. Rail energy: the run's gross request energy (`gross_energy_j`: prefill plus decode phase
+  energy as item 6 defines it, with no idle power subtracted), so both sides are whole powers, as were the steady
+  levels M10 was fitted on.
+  - Qwen3.5-122B-A10B (4-bit), 2,048-token prompt and 512 output tokens, run r01: 15.734 s; rails 507.7 J, a mean of
+    32.269 W; meter 1,340.2 J, 85.18 W. M10 predicts 2.650 × 32.269 + 1.632 = 87.14 W, 2.3% above the measured 85.18
+    W.
+  - Llama-3.3-70B-Instruct (4-bit), same workload, soak-stage run r01: 82.573 s; rails 3,124.0 J, 37.833 W; meter
+    9,017.1 J, 109.20 W. M10 predicts 101.89 W, 6.7% below the measured value; over the 11 soak runs the shortfall is
+    5.1% to 10.9%.
+  - Reading: the rails' share of the machine (rails over DC input plus battery) is workload-dependent (0.377 to 0.379
+    for the five 122B requests, 0.330 to 0.352 for the eleven 70B soak requests), so the paper prints the measured
+    DC-input line and never converts rails into machine power with M10.
 - **Figures.** *Figure 2: the power path and the three taps.* A left-to-right block diagram. Boxes, in order: "mains
-  socket"; "140 W adapter (AC to DC; its loss is upstream of every printed number)"; "USB-C cable"; "KM003C meter,
-  tap M: DC input voltage × current, 50 samples a second"; "laptop power input"; a branch to "battery, tap B: SMC
-  battery current × voltage, once a second, negative = discharging"; then "system-on-chip, tap R: CPU, GPU and ANE
-  rails, one average every ~130.5 ms" and "rest of the machine: memory, storage, fans, regulators, display circuitry
-  (seen only at M)". Solid arrows are power flow, labelled "adapter power" and "battery power"; dashed arrows from
-  each tap to a box "recorded streams", each dashed arrow labelled with its clock (meter device clock fitted to the
-  Mac's raw clock; SMC reads stamped on the Mac's clocks; power records stamped by the sampler). *Figure 3: rails
-  against DC input.* Scatter with rail power (W) on x and meter power (W) on y; filled circles are the M14 load steps
-  (labelled "GPU 5%", "GPU 20%", "one core"), the solid line is the M10 fit with its equation printed on it, open
-  squares are session H's request means (labelled with model and run). A note under the plot says every point is
-  non-claim.
+  socket"; "140 W adapter (AC to DC; its loss is upstream of every printed number)"; "KM003C meter in the adapter's
+  USB-C socket, tap M: DC input voltage × current, 50 samples a second"; "USB-C-to-MagSafe cable (its loss is counted
+  as machine power)"; "laptop power input"; a branch to "battery, tap B: SMC battery current × voltage, once a
+  second, negative = discharging"; then "system-on-chip, tap R: CPU, GPU and ANE rails, one average every ~130.5 ms"
+  and "rest of the machine: memory, storage, fans, regulators, display circuitry (seen only at M)". Solid arrows are
+  power flow, labelled "adapter power" and "battery power"; dashed arrows from each tap to a box "recorded streams",
+  each dashed arrow labelled with its clock (meter device clock fitted to the Mac's raw clock; SMC reads stamped on
+  the Mac's clocks; power records stamped by the sampler). *Figure 3: rails against DC input.* Scatter with rail
+  power (W) on x and meter power (W) on y; filled circles are the M14 load steps (labelled "GPU 5%", "GPU 20%", "one
+  core"), the solid line is the M10 fit with its equation printed on it, open squares are session H's request means
+  (labelled with model and run). A note under the plot says every point is non-claim.
 
 ## 3. Placing power records on the request's clock
 
@@ -297,7 +314,9 @@ recompute (§9); a record of how the software was built and checked (§10); the 
     from 27.38 to 37.05 ms; their range is 9.675 ms, below the 10.818 ms minimum fixed earlier (a minimum allowance,
     not a detection floor), so s_bracket = 10.818 ms. The largest value, 37.05 ms, became the alignment reference: a
     capture above it is flagged, never refused.
-  - *b_op on real sessions.* Over the non-claim rehearsals, the block-6 rule gives b_op of 41.3, 41.4 and 51.0 ms.
+  - *b_op on real sessions.* Over the four non-claim rehearsal sessions, the block-6 rule gives b_op of 41.3, 41.4
+    and 51.0 ms; the fourth stopped at its opening capture, where the bound so far plus s_bracket is 58.8 ms
+    (registration `:386-389`).
   - *A check that shares nothing with the capture.* M13 timed the same commanded edges at the wall meter: the meter's
     edges lag the commands by 31.2 ms on average and lag the sampler's edges by 25.2 ms (standard deviation 4.7 ms
     over 354 edges), so the sampler's own edges lag the commands by about 6.0 ms (standard deviation 11.4 ms), inside
@@ -329,10 +348,13 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   outside process above 5% of one core; no agent alive; free disk at least the largest session's measured writes plus
   20 GiB (43 + 20 = 63 GiB); the sampler's median interval at most 150 ms over 300 records; model files equal to
   their pinned hashes. A failed reading waits and is measured again; it never becomes a guess.
-- **Evidence.** `joulewise/hazards/monitor.py:17-41` (cadence table); registration `:860-873` (pre-t0 lines; the two
-  readings that are flags, with derivations), `:338-345` (agent pause, no sleep); `RUN_STATE.md:133-134` and
+- **Evidence.** `joulewise/hazards/monitor.py:17-41` (cadence table); registration `:860-873` (pre-t0 lines, taken
+  from block 5 and the design; the two readings that are flags, with derivations); the sizes of the taken-over
+  cut-offs in `docs/design/next_block_threshold_proportion.md:137` (5% of one core: 0.19 J on a 0.62 s prefill),
+  `:141` (thermal level 0), `:142` (200 mA: 2.4 W at the battery, outside the rails) and `:149` (disk: no energy);
+  registration `:338-345` (agent pause, no sleep); `RUN_STATE.md:133-134` and
   `docs/process_traces/2026-10-17-magistrate-6789ef94/RECORD.md:5-19` (the media daemon); `RUN_STATE.md:138-139` and
-  `docs/process_traces/2026-10-17-magistrate-f4db0072/RECORD.md:9-26` (the launch context);
+  `docs/process_traces/2026-10-17-magistrate-f4db0072/RECORD.md:9-26` (the launch route);
   `docs/design/block6_collection_draft.md:90-94` (block 5's rehearsals overrode the census).
 - **Status.** Writable now. Hazard readings are structure, not restricted.
 - **Worked example 1: a daemon that would have contaminated every run (17 October, pre-checks of the first block-6
@@ -343,7 +365,7 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   exactly the loop's own condition). The polite stop signal (SIGTERM) was ignored for 30 s; the forced kill (SIGKILL)
   made `launchd` restart it within 5 s at 178-199% CPU; the pause signal (SIGSTOP) held it at 0.0% CPU, after which
   the busiest process was the loop itself at 1.4%.
-- **Worked example 2: a launch context that slowed the sampler (17 October, real).** The sampler check refused on all
+- **Worked example 2: a launch route that slowed the sampler (17 October, real).** The sampler check refused on all
   five pre-checks, including the three after the media daemon was stopped: 237, 178, 197, 183 and 180 records of the
   300 required within 55 s, median intervals 218, 298, 259, 290 and 299 ms against the 150 ms cut-off. The same probe
   gave 300 records at a 131 ms median in both machine tests that day. The cause: the loop's `launchd` job was
@@ -352,9 +374,9 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   affected.
 - **Worked example 3: why one slow interval is only a flag (real, non-claim).** In 101 non-overlapping 300-record
   windows of quiet idle baselines, none holds an interval above 200 ms (the largest is 166.8 ms); the 150 ms median
-  cut-off already refuses the slow launch context, and the pre-check's sampler probe (its 300 records) carries no
+  cut-off already refuses the slow launch route, and the pre-check's sampler probe (its 300 records) carries no
   joules.
-- **Figures.** *Figure 6: the sampler under two launch contexts.* Strip plot, x axis "pre-check" (000001 to 000007,
+- **Figures.** *Figure 6: the sampler under two launch routes.* Strip plot, x axis "pre-check" (000001 to 000007,
   with their clock times), y axis "median interval between power records (ms)"; filled circles for the five
   Background checks, an open circle for the first Interactive check; a horizontal dashed line "refusal cut-off 150
   ms" and a dotted line "nominal 130.5 ms"; each circle labelled with its record count out of 300. *Figure 7: the
@@ -387,10 +409,13 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   own workload may have added: another process, another program on the GPU, a long disturbed wait before the run.)
   - *The size every exclusion is drawn at.* F_min, the smallest floor the paper prints, estimated from the non-claim
     rehearsal of 9 October, is 1.9 J; a contamination flag excludes a run when the energy it can have added reaches
-    F_min / 4 = 0.475 J. The registration states this quarter but records no derivation for the factor; for scale, a
-    5-unit mean's statistical half-width (half the width of its 95% interval) on the same rehearsal is 0.47 J
-    (threshold note `docs/design/next_block_threshold_proportion.md:292-304`). The paper needs one sentence of
-    derivation (open decision 5).
+    F_min / 4 = 0.475 J. The registration states this quarter but records no derivation for the factor. What it does
+    record is the size of the choice: no registered decision changes for any F_min from 0.73 to 2.6 J, that is for a
+    cut-off anywhere from 0.18 to 0.65 J (registration `:704`; the registration ruling
+    `docs/process_traces/2026-10-17-magistrate-52d50d1f/reg-ruling-opus.md:83-90`). For scale, a 5-unit mean's
+    statistical half-width (half the width of its 95% interval) on the same rehearsal is 0.47 J (threshold note
+    `docs/design/next_block_threshold_proportion.md:292-304`). The paper needs one sentence of derivation (open
+    decision 5).
   - *A rule that passes.* An agent at its lowest measured draw, 8 W, over a 0.62 s prefill (rehearsal size) adds 8 ×
     0.62 = 4.96 J, ten times 0.475 J: excluded, so the whole unit an agent overlaps is removed.
   - *A rule that fails its replay and stays a flag.* Outside processor work: M4 measured w = 5.432 J per CPU-second
@@ -408,9 +433,10 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   "exclude run or session, and print the flagged-inclusive line" and "no" to "disclose only". A side panel lists the
   five requirements as five ticked boxes beside the "named as excluding" diamond. *Figure 9: a replay table as a
   figure.* For each candidate rule (rows: agent overlap, outside processor at w = 5.432, outside processor at
-  background-priority w, another program on the GPU, a run's own clock fit, the placement of its records on wall
-  time, with a bound above 5 ms), bars of "known-good runs removed" out of 53 (the quiet 9 October rehearsal) and 77
-  (all rehearsal runs), and a column "size in J at the cut-off"; rows that fail are marked "kept as flag".
+  background-priority w, another program on the GPU, and a run's own *clock fit* (the placement of its records on
+  wall time, from its own clock readings) with a bound above 5 ms), bars of "known-good runs removed" out of 53 (the
+  quiet 9 October rehearsal) and 77 (all rehearsal runs), and a column "size in J at the cut-off"; rows that fail are
+  marked "kept as flag".
 
 ## 6. The battery and the adapter's ceiling
 
@@ -419,13 +445,14 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   effect on this machine, and if so, how large?
 - **Claim.** Yes, on the heaviest workload. With Llama-3.3-70B the DC input reached a hard ceiling of about 136.5 W,
   consistent with a 5 A current limit at the 28 V supply voltage the adapter and laptop negotiate over USB-C (their
-  *power contract*), and the battery covered the excess for a few seconds per request. The battery's share of each
-  request's energy was 0.10% to 0.29%. The rails, the quantity every result rests on, are not affected: they are the
-  chip's own sensors and report on-chip power whatever its source (a physical argument, not a measurement). The
-  opposite failure, losing the adapter, is a physical hazard: in block 5 the charger lost voltage for 26 s during
-  BETA's attempt 4 and the Mac then slept for 3,507 s, costing 4 runs, which is why the pre-session check and every
-  run read the battery current directly. The whole-machine line adds the battery term back (DC input energy + battery
-  energy), and a phase whose request shows battery assist is flagged.
+  *power contract*), and the battery covered the excess for a few seconds per request, almost all of it while the
+  model read the prompt (prefill) and during the unmeasured warm-up request. The battery's share of each 70B
+  request's energy was 0.09% to 0.29% over all 16 such requests. The rails, the quantity every result rests on, are
+  not affected: they are the chip's own sensors and report on-chip power whatever its source (a physical argument,
+  not a measurement). The opposite failure, losing the adapter, is a physical hazard: in block 5 the charger lost
+  voltage for 26 s during BETA's attempt 4 and the Mac then slept for 3,507 s, costing 4 runs, which is why the
+  pre-session check and every run read the battery current directly. The whole-machine line adds the battery term
+  back (DC input energy + battery energy), and a phase whose request shows battery assist is flagged.
 - **Evidence.** `RUN_STATE.md:36` and `docs/design/block6_collection_draft.md:72` (the block-5 charger drop);
   `joulewise/external/km003c_parse.py:312` (`battery_watts`: −B0AC × B0AV / 10⁶ W at each poll), `:397-425`
   (`delta_machine_energy`: the machine term is the meter term plus the battery term); `joulewise/hazards/smc.py:1-12`
@@ -434,23 +461,31 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   `battery.assist`, is disclosed), `:860-861` (pre-t0: battery current within 200 mA, not charging), `:1016` (the
   battery-assist labelled line: each estimate also over the units with no battery-assisted run), `:1030-1037`
   (whole-machine line; boundary sentence "DC input at the USB-C port; the adapter's AC-to-DC loss is not included").
-  Session H raw files (local): `.../custody/hazards/meter/stream-001.jsonl` (93,535 lines),
+  Session H files (local): the harvest's meter record `.../archive/withheld/meter.json` (per run: request window,
+  meter and battery energy from `delta_machine_energy`), `.../custody/hazards/meter/stream-001.jsonl` (93,535 lines),
   `.../custody/hazards/monitor/battery.jsonl` (19,023 lines), and the run folders
-  `bytes-mac-check-soak-llama-70b-r01` to `-r11`, `bytes-mac-check-check-qwen35-122b-r01` to `-r05`. Computation done
-  for this outline with the two functions above; a tracked script for the paper is still to be written.
-- **Status.** Writable now from session H (non-claim). Block 6's count of battery-assisted runs is structure and is
-  printed at release with the battery-assist line.
+  `bytes-mac-check-soak-llama-70b-r01` to `-r11`, `bytes-mac-check-check-llama-70b-r01` to `-r05` and
+  `bytes-mac-check-check-qwen35-122b-r01` to `-r05`. The values below were recomputed for this outline from those
+  files; a tracked script for the paper is still to be written. The battery-assist audit (BAT-1) on branch
+  `lane/2026-10-22-battery-assist-audit` (`7e59b54ab`),
+  `docs/process_traces/2026-10-22-forward/BAT-1-BATTERY-ASSIST.md:19-21` (where in the request the battery helped)
+  and `:26` (no block-6 run had any battery help); it integrates the once-a-second SMC journal instead of the reads
+  embedded in the meter stream, so its per-run joules differ from those below by up to 0.85 J, inside its own
+  agreement bar for the two paths (one second of the run's largest discharge power, 5.0 to 6.4 J on 70B).
+- **Status.** Writable now from session H (non-claim). Block 6's count of battery-assisted runs is a flag count,
+  which the registration releases as structure (`:1130`): zero in all nine sessions (BAT-1 record).
 - **Worked example (session H, 21 October, real).**
-  - The meter's 935,345 samples over the session never exceed 136.79 W; the largest current is 4.991 A at a bus
-    voltage of 27.38 to 27.63 V. In all 16 check and soak requests of the 70B model, the largest 50 Hz sample is
-    136.3 to 136.4 W.
-  - Soak run r01 (2,048-token prompt, 512 output tokens, 82.570 s): DC input 9,016.8 J; battery 9.08 J; machine
-    9,016.8 + 9.08 = 9,025.9 J; rails 3,117.1 J (0.345 of the machine). In 3 of its 84 once-a-second SMC reads the
-    battery was discharging; the deepest read was −395 mA at 12.758 V, 0.395 × 12.758 = 5.04 W from the battery,
-    while the SMC's own DC-in reading was 129.6 W and its system total 134.2 W.
-  - Over the 11 soak requests (81.6 to 84.3 s each): battery 9.08 to 26.90 J per request, 0.101% to 0.292% of 8,876.3
-    to 9,361.0 J. Over five Qwen3.5-122B requests (15.7 s each): 1.07 to 1.49 J, 0.080% to 0.110%. In the Qwen3-1.7B
-    check requests of the same session the battery never discharged.
+  - The meter's 935,345 samples over the session never exceed 136.79 W; the largest current is 4.991 A, and every
+    sample at 4.95 A or more reads a bus voltage of 27.38 to 27.43 V. In all 16 check and soak requests of the 70B
+    model, the largest 50 Hz sample is 136.3 to 136.4 W.
+  - Soak run r01 (2,048-token prompt, 512 output tokens, 82.573 s): DC input 9,017.1 J; battery 9.05 J; machine
+    9,017.1 + 9.05 = 9,026.1 J; rails 3,124.0 J (0.346 of the machine). In 3 of the 83 once-a-second SMC reads inside
+    the request the battery was discharging, at 2 to 4 s after the request started, in its prefill; the deepest read
+    was −395 mA at 12.758 V, 0.395 × 12.758 = 5.04 W from the battery, while the SMC's own DC-in reading was 129.6 W
+    and its system total 134.2 W.
+  - Over the 11 soak requests (81.6 to 84.3 s each): battery 9.05 to 26.90 J per request, 0.100% to 0.292% of the
+    request's machine energy (8,874.5 to 9,361.2 J). Over the five Qwen3.5-122B check requests (15.7 s each): 1.07 to
+    1.49 J, 0.080% to 0.110%. In the Qwen3-1.7B check requests of the same session the battery never discharged.
   - So the meter alone would have under-read the 70B requests by at most 0.29%; adding the battery term removes that.
     The term's own resolution is one SMC reading per second, which the paper states as a limit.
 - **Figures.** *Figure 10: one 70B request at the ceiling.* x axis time within the request (s), with a vertical
@@ -467,9 +502,10 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   harvests, decisions) must happen without anyone on the machine while it measures.
 - **Claim.** A loop of plain programs under `launchd` runs the whole cycle: pre-check, a notice to Ed that a session
   is about to start (arming it, §0 item 26) with a 30-minute window to answer NO (the smoke runs inside that window),
-  smoke and its desk check, the session, its desk step, then the next pack in a rotating order. A physical hazard
-  makes it wait and re-measure every 240 s; a failed smoke holds only that pack, any other non-physical problem holds
-  the loop, and both wake the orchestrator. Block 6 ran 9 sessions with 9 counting and no physical stop.
+  smoke and its desk check, the session, its desk step, then the next pack in a rotating order (each round starts one
+  pack later in the order ALPHA, BETA, GAMMA than the round before). A physical hazard makes it wait and re-measure
+  every 240 s; a failed smoke holds only that pack, any other non-physical problem holds the loop, and both wake the
+  orchestrator. Block 6 ran 9 sessions with 9 counting and no physical stop.
 - **Evidence.** `joulewise/b6/loop.py` at the pinned commit `f31aca19f`: `:285` (`_precheck`), `:308` (the 1,800 s
   notice window), `:314-316` (wait and re-measure every 240 s), `:423` (`_smoke_desk`), `:471` (`_arm_wait`),
   `:195-199` (`DONE`); `configs/b6/loop.json` at `f31aca19f` (base order ALPHA, BETA, GAMMA); registration `:186-189`
@@ -536,19 +572,21 @@ recompute (§9); a record of how the software was built and checked (§10); the 
     were excluded. In round 1 this would have silently dropped every such run and reference run, changing which
     references survive and so the allowed difference the drift screen judges against.
   - *Machine test 3 (17 October, passed).* An injected agent process (alive 15:40:39 to 15:41:25) paused the chain
-    for 630 s and the overlapping run was excluded by the agent flag; an injected busy load pushed one run's idle
-    wait to the cap (the longest a run may wait for a quiet idle baseline, 1,500 s), and it was skipped after 1,360 s
-    and 18 admission attempts, as registered.
+    for 630 s and the overlapping run was excluded by the agent flag; an injected busy load kept one run's idle
+    baseline from passing, and the run was skipped after 18 admission attempts over 1,360 s and flagged
+    `idle.wait_cap_skip`, under the 1,500 s *cap* on that wait (the longest a run may wait for a quiet idle
+    baseline), as registered.
   - *The smoke hold (19 October).* ALPHA's round-2 smoke had one run that exited cleanly but whose clock fit (the
-    placement of its records on wall time, from its own clock readings) gave no bounded result, so the run had to be
-    repeated, which full sessions already handle (the same event appeared in r1-alpha in 2 stages, r1-beta in 1 and
-    r2-beta in 3, and each of those sessions finished with every run succeeded and counted). The smoke rule read the
-    stage's exit code 1 as a failure and held the pack (stopped arming it until the orchestrator looked). The
-    orchestrator, woken by the loop, judged the hold wrong and resumed the pack within its 11-minute wake; the loop
-    had already moved to the next pack.
+    placement of its records on wall time, from its own clock readings) could not be used (the runner's own words:
+    "anchor fallback rerun required"), so the run had to be repeated, which full sessions already handle: the same
+    event appeared in r1-alpha in 2 stages, r1-beta in 1 and r2-beta in 3, and in each of those sessions the affected
+    run was repeated, every planned run ended present and succeeded, and the session counted
+    (`RUN_STATE.md:160-161`). The smoke rule read the stage's exit code 1 as a failure and held the pack (stopped
+    arming it until the orchestrator looked). The orchestrator, woken by the loop, judged the hold wrong and resumed
+    the pack within its 11-minute wake; the loop had already moved to the next pack.
 - **Figures.** *Figure 13: what each test catches.* A matrix: rows are defect classes found in October (stale plan
   digest, flag schema, busy-fraction veto, a run skipped at the wait cap read as a missing stage, smoke exit code,
-  launch context, media daemon), columns are "unit tests", "machine test", "smoke", "pre-check", "full session"; a
+  launch route, media daemon), columns are "unit tests", "machine test", "smoke", "pre-check", "full session"; a
   filled cell means "this test caught it", an open cell "it would have", a dash "it cannot". A legend names the three
   cell marks.
 
@@ -582,9 +620,10 @@ recompute (§9); a record of how the software was built and checked (§10); the 
 - **Forcing problem.** The collection and analysis code was written mostly by AI coding agents. A builder's own green
   tests do not show that a number is right: in the block-6 build, the defects that changed which data count were
   found by live tests and by reviewers running the code, not by the builder's tests (records below).
-- **Claim.** A review procedure in which a second model, not the author, runs the code on production-shaped inputs
-  (an *executing review*), and, for code that touches measurement or the counting decision, two further reviewers of
-  different model families do the same without seeing each other's report (*blind cold passes*), caught defects that
+- **Claim.** A review procedure in which a second model, not the author, runs the code on inputs built in the shape
+  and size of real session files (*production-shaped* inputs; an *executing review*), and, for code that touches
+  measurement or the counting decision, two further reviewers of different model families, each starting with no part
+  in the work (*cold*), do the same without seeing each other's report (*blind cold passes*), caught defects that
   each single reviewer missed. The paper reports this as engineering evidence with its catch record, not as a claim
   about AI.
 - **Evidence.** `docs/process_traces/2026-10-17-magistrate-d34bf254/RECORD.md:72-75` (the machine test caught three
@@ -593,18 +632,17 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   wrong number or lost run found, both original defects confirmed fixed on the real paths);
   `docs/process_traces/2026-10-21-magistrate-283e9802/RECORD.md:21-24` (both cold passes found the same formula error
   in a written fix instruction drafted by the orchestrator); `docs/orchestration.md:76-137` (when reviews and cold
-  gates run, and what each protects); `docs/process_prune_2026-09-29.md` (the six conditions a merge must meet).
+  sign-offs run, and what each protects); `docs/process_prune_2026-09-29.md` (the six conditions a merge must meet).
 - **Status.** Writable now. Open question for Ed: whether this belongs in the paper or in a separate report.
 - **Worked example (real).** The second machine-test fix: one blind pass (by the AI model Fable 5.1) found that the
   verdict writer still vetoed busy-only runs; the other (by the AI model Opus 5.5) found a defect in how a run
-  skipped by the exhausted wait budget was treated. Both defects change which data count; neither reviewer found
-  both.
+  skipped at the wait cap (§8) was treated. Both defects change which data count; neither reviewer found both.
 - **Figures.** *Figure 15: the merge path of one change to code that computes or selects a number.* A left-to-right
   flow: "builder (one model session given the job) writes code and its tests" → "executing review by a non-author
   (runs the code on production-shaped data)" → two parallel boxes "blind cold pass, model A" and "blind cold pass,
   model B" → "each finding fixed, deferred to a named later piece of work, or rejected with a reason" → "whole test
-  suite on the merged tree and CI green" → "merge, then record the new pinned commit". Each arrow labelled with what
-  is handed over (code, report, findings).
+  suite run on the code as it will be after the merge, and the project's automatic test service (CI) passing" →
+  "merge, then record the new pinned commit". Each arrow labelled with what is handed over (code, report, findings).
 
 ## 11. Results: the replication (waits for the release)
 
@@ -612,10 +650,11 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   day, another reboot or another time of day.
 - **Claim (to be filled at release).** Block 5 and block 6 printed side by side under block 5's unchanged arithmetic,
   with their difference per printed quantity; a between-session summary per quantity (each counting session's value,
-  their mean and standard deviation, no pooled interval); a GAMMA contrast called *replicated* only if every counting
-  block-6 session gives the same outcome word and the same sign of the estimate; the flagged-inclusive line (the
-  sessions that do not count, added back where computable); the whole-machine line per phase with its boundary
-  sentence; the battery-assist line; and the independent recompute's observed agreement.
+  their mean and standard deviation, and no interval that pools the sessions' runs as if they were one session); a
+  GAMMA contrast called *replicated* only if every counting block-6 session gives the same outcome word and the same
+  sign of the estimate; the flagged-inclusive line (the sessions that do not count, added back where computable); the
+  whole-machine line per phase with its boundary sentence; the battery-assist line; and the independent recompute's
+  observed agreement.
 - **Evidence.** Registration `:1058-1120` (§§10-11: summary, side-by-side reporting, the replication word, what may
   be said, the flagged-inclusive line), `:1007-1056` (§9.5: disclosures and labelled lines), `:1146-1166` (release).
 - **Status.** Waits for the release. Available now, as structure: 9 of 9 sessions counting; 3 per pack; all runs
@@ -635,8 +674,8 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   - The numbers themselves wait for the release; the registration's synthetic examples (block 5's analysis plan's
     own, re-executed with the repository functions; registration `:899-1006`) show each statistical estimator's
     arithmetic.
-- **Figures.** *Figure 16: one printed quantity across sessions.* For each target cell (model × phase), a dot plot: x
-  axis "session" (block 5's session, then block 6's three in collection order), y axis the cell's energy (J), each
+- **Figures.** *Figure 16: one printed quantity across sessions.* For each reported cell (model × phase), a dot plot:
+  x axis "session" (block 5's session, then block 6's three in collection order), y axis the cell's energy (J), each
   dot with its registered interval as a vertical bar and its timing bound as a lighter outer bar; a horizontal line
   at the block-6 mean. *Figure 17: GAMMA's replication.* Per contrast, the estimate and interval for each session,
   coloured by outcome word, with the floor gate drawn as a shaded band around zero. Both figures are drawn blank
@@ -648,7 +687,7 @@ recompute (§9); a record of how the software was built and checked (§10); the 
 - **Claim.** Each limit below is stated with its size where it has one; none is hidden in a footnote.
 - **Status.** Writable now.
 - **Worked example (real, non-claim).** The rails-to-machine limit in numbers: on session H the rails were 0.377 to
-  0.378 of the whole machine for a 122B model and 0.330 to 0.351 for a 70B model (§2), so no single factor turns a
+  0.379 of the whole machine for a 122B model and 0.330 to 0.352 for a 70B model (§2), so no single factor turns a
   rail number into a machine number.
 - **Figures.** None.
 - **Evidence and the limits, one paragraph each in the paper:**
@@ -657,8 +696,8 @@ recompute (§9); a record of how the software was built and checked (§10); the 
   machines (registration `:86-95`).
 - The rails are three on-chip sensors; power elsewhere is seen only at the meter, and the rails-to-machine ratio is
   workload-dependent (§2, worked example 2).
-- The meter's boundary is DC input at the USB-C port; the adapter's AC-to-DC loss is outside every number
-  (registration `:1035`).
+- The meter's boundary is DC input at the adapter's USB-C socket; the adapter's AC-to-DC loss is outside every
+  number, and the cable's loss between meter and laptop is inside the machine number (registration `:1035`).
 - The battery term is read once a second (§6).
 - The capture's pulse-derived timing bound is measured on GPU pulses; applying it to sustained mixed inference is an
   assumption that M13 checks only at the edges it timed (`docs/paper/draft-v2-skeleton.md:159`).
@@ -700,15 +739,23 @@ and adds the instrument chain, the hazard measurements, the rule set, the automa
 3. Whether the paper prints session H's 70B and 122B examples (non-claim) or only the quiet-machine kit's.
 4. The venue; its deadline sets whether the replication's release must happen before the first full draft.
 5. The derivation of the factor one quarter in F_min / 4 (§5): the registration states the cut-off but records no
-   reason for the factor, and the paper must give one.
+   reason for the factor, and the paper must give one. What is recorded is that no registered decision changes for a
+   cut-off anywhere from 0.18 to 0.65 J, so the derivation can be one sentence and changes no number.
+6. A photograph of the meter in place, for Figure 2. The tracked record says only that the meter is "inline on the
+   charger path"; the order adapter, meter, USB-C-to-MagSafe cable, laptop comes from the session notes and from Ed's
+   own words ("the magsafe power supply", BAT-1 record line 4), and needs his confirmation at the machine.
 
 ## Check run before delivery
 
 - Every J and W value in this file was compared against its source: the quiet-machine kit of 16-17 October (M4's
   5.432 J per CPU-second, M10's fit, M14's load steps); the rehearsals of 6 and 9 October (F_min 1.9 J and its
-  quarter 0.475 J, the 0.62 s prefill and the 4.96 J agent example, the −0.09 ± 0.09 J per CPU-second regression, the
+  quarter 0.475 J, the 0.73 to 2.6 J range of F_min over which no registered decision changes and its quarters 0.18
+  to 0.65 J, the 0.62 s prefill and the 4.96 J agent example, the −0.09 ± 0.09 J per CPU-second regression, the
   11.11, 11.44 and 11.26 ± 0.38 J reference runs and the rule's predicted 104 and 107 J, the 0.47 J half-width, 0.047
-  J per ms, 3.4 to 5.5 J per dropped record, 42 W, 7 × 10⁻¹⁵ J); session H of 21 October (every value in §2 worked
-  example 2 and in §6); the agent draw (8 to 47 W); the adapter (140 W); or a synthetic registration example (7.20 J
-  and its parts). None comes from a block-5 or block-6 session. Block-6 values that appear are structure only:
-  verdicts, run counts, stage and session timing, and hazard readings taken before t0.
+  J per ms, 3.4 to 5.5 J per dropped record, 42 W, 7 × 10⁻¹⁵ J, and the threshold note's sizes 0.19 J and 2.4 W);
+  session H of 21 October (every value in §2 worked example 2 and in §6, recomputed from the session's harvest
+  records and raw files with the repository's `km003c_parse` functions; BAT-1's 0.85 J and 5.0 to 6.4 J); the agent
+  draw (8 to 47 W); the adapter (140 W); or a synthetic registration example (7.20 J and its parts; b_op 50.818 ms).
+  None comes from a block-5 or block-6 session. Block-5 and block-6 values that appear are structure only: verdicts,
+  run counts, one flag count (battery assist, zero), stage and session timing, and hazard readings (the block-5
+  charger drop and sleep, the block-6 pre-checks before t0).
