@@ -162,3 +162,167 @@ Branch is lane/2026-10-22-bytes-pass1, current HEAD b253a8a09e62c3a5fd694ca26e00
 ## NEEDS_RULING
 
 none. The slice-1 provenance question was resolved by director note 1; applied as recorded above.
+
+
+## ROUND B (review of ad145c044)
+
+### PROGRESS (round b)
+
+BY-INT-fix1 ROUND B COMPLETE
+
+- All after/before checks and evidence complete. Round a byte-preserved; only this report changed. Scratch exports, helpers and module TMPDIRs cleaned after recording evidence.
+- Branch lane/2026-10-22-bytes-pass1; HEAD da27be7b965088b7d2e6697ca48c98512a9b442b. Next: director reviews/commits report; BY-MERGE integrates 478873066.
+
+### SUMMARY
+
+Finding 1 is verified by execution at merged tree ca623e0f3345b6fb60b3b7b15a1d828bb042b65f (review-fixes 478873066 plus main abd9f1597).
+The manifest reproduces byte for byte; all ten config_key values match the reviewer regeneration and registered_config_key(model_name).
+The Q1 probe returns both disclosure counts; deleting one key raises AnalysisError at validation.
+All required after modules and named Q1 end-to-end checks pass; all five refusal-census arrays are empty.
+At da27be7b9, copied FrozenManifestTests fails and the analysis-shaped baseline silently loses the withheld disclosure.
+Finding 2 goes to the CI-timings owner; finding 3 requires no repository edit; finding 4 goes to BY-SLOTS/BY-REG.
+Only this report changed; round a is unchanged. No code/config/test or repository Git metadata write, push or PR action occurred.
+The director commits this report; BY-MERGE carries the existing review-fixes next.
+
+### FIX LOG
+
+| Finding | Severity | Disposition | Commit / branch | Evidence / hand-forward |
+| --- | --- | --- | --- | --- |
+| 1 | minor | fixed | bd4a5603c5dbe5d6e095e81122d3db60a576f933; follow-up 4788730660b8a9b9342890a75d69c36b36057b88 on lane/2026-10-22-bytes-pass1-review-fixes | Verified here at ca623e0f3: byte reproduction, ten exact key matches, manifest/roster/Q1 tests pass, both disclosure counts, missing key rejected. Baseline regression fails and silent path reproduces. BY-MERGE carries it next. |
+| 2 | minor | deferred to CI-timings owner | CI-timings lane | Director routes missing tests.test_bytes_* timings and shard imbalance. scripts/test_timings.json is outside scope. |
+| 3 | nit | rejected as a repository change | Director ledger correction; existing .codex-report/BY-INT.md retained | Literal rg search finds no erroneous re-dispatch sentence in repository reports/docs. Existing report remains authoritative; director records correction. No claim that BY-TWIN's pending fields are complete. |
+| 4 | nit | deferred to BY-SLOTS/BY-REG | BY-SLOTS/BY-REG | docs/contracts/bytes_tables.md line 13 still says ten distinct models at 478873066; Arithmetic and output schema permits nine. Hand-forward: align Inputs and release with that alternative. |
+
+### TESTS RUN
+
+Synthetic desk execution only. Every Python command used `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B`. Each invocation received a separate fresh cleaned TMPDIR under `/tmp/jwtmp-byintf1b.*`, via `TemporaryDirectory(prefix='jwtmp-byintf1b.', dir='/tmp')`. Children inherit those variables. Commands use `subprocess.run(command, cwd=export_path, env=..., ...)`; no compound cd. No whole analysis module or whole repository suite ran.
+
+Scratch root `S=/tmp/jwtmp-byintf1b.ij6h27_1`, resolved spelling `/private/tmp/jwtmp-byintf1b.ij6h27_1`. Exports, exit 0 each:
+
+```sh
+git -C /Users/edr/code/JouleWise-by-int archive ca623e0f3345b6fb60b3b7b15a1d828bb042b65f | tar -x -C /tmp/jwtmp-byintf1b.ij6h27_1/after
+git -C /Users/edr/code/JouleWise-by-int archive da27be7b965088b7d2e6697ca48c98512a9b442b | tar -x -C /tmp/jwtmp-byintf1b.ij6h27_1/before
+```
+
+Read `scripts/bytes_manifest.py merge --help` in after, exit 0. Options: --headers, --kv, --pilot, --out. --pilot is optional, default docs/design/bytes_pilot/summary_rows.json; supplied explicitly. Generator command in after, following the common environment/interpreter prefix, exit 0:
+
+```sh
+scripts/bytes_manifest.py merge --headers configs/bytes/records/*.headers.json --kv configs/bytes/records/*.kv.json --pilot docs/design/bytes_pilot/summary_rows.json --out /tmp/jwtmp-byintf1b.ij6h27_1/regenerated.json
+```
+
+The helper expands both globs into lexically sorted paths before subprocess execution. Raw bytes satisfy `assert committed == regenerated`; no normalization. SHA-256:
+
+- Committed configs/bytes/bytes_manifest.json: `76452108c1a10b1f63b48fc95b306b6c4aa936a0d2e94244be65dc067c356264`.
+- Regenerated scratch output: `76452108c1a10b1f63b48fc95b306b6c4aa936a0d2e94244be65dc067c356264`.
+
+Reviewer input was read only: `/private/tmp/claude-501/-Users-edr-code-JouleWise/2dc9c377-4ec4-4750-b44d-4d8cd5ae9354/scratchpad/byint/manifest_regen.json`, SHA-256 `642f260bfd5638fc435f08041359f4fdc009f8f7edf1fb783e6642c417ea8d79`. Compared keys by exact model_name, since BY-REV adds analysis metadata absent from reviewer file. Every key below equals both reviewer[model_name].config_key and registered_config_key(model_name):
+
+| Model | config_key |
+| --- | --- |
+| Llama-3.3-70B-Instruct-4bit | `Llama-3.3-70B-Instruct-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-1.7B-4bit | `Qwen3-1.7B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-14B-4bit | `Qwen3-14B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-30B-A3B-4bit | `Qwen3-30B-A3B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-32B-4bit | `Qwen3-32B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-4B-4bit | `Qwen3-4B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-8B-4bit | `Qwen3-8B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-8B-8bit | `Qwen3-8B-8bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3-Next-80B-A3B-Instruct-4bit | `Qwen3-Next-80B-A3B-Instruct-4bit\|bytes_synthetic_2048_decode_512\|512` |
+| Qwen3.5-122B-A10B-4bit | `Qwen3.5-122B-A10B-4bit\|bytes_synthetic_2048_decode_512\|512` |
+
+Separate test processes: exact arguments after the common environment/interpreter prefix above. Cwd S/after unless marked before. Counts include the skip.
+
+| Label / cwd | Arguments | Tests | Exit | Skips / wall seconds |
+| --- | --- | ---: | ---: | --- |
+| after-manifest / after | `-m unittest -v tests.test_bytes_manifest` | 17 | 0 | none; 1.28 |
+| after-roster / after | `-m unittest -v tests.test_bytes_roster_drop` | 3 | 0 | none; 14.853 |
+| q1-census / after | `-m unittest -v tests.test_bytes_analysis.Q1WithheldCensusTests` | 4 | 0 | none; 0.839 |
+| q1-cli / after | `-m unittest -v tests.test_bytes_analysis.Q1MissingFilesCLIChainTests.test_one_withheld_file_missing_cli_chain tests.test_bytes_analysis.Q1MissingFilesCLIChainTests.test_both_withheld_files_missing_cli_chain tests.test_bytes_analysis.Q1MissingFilesCLIChainTests.test_genuinely_uncollected_optional_pass_cli_chain` | 3 | 0 | none; 35.925 |
+| before-frozen / before | `-m unittest -v tests.test_bytes_manifest.FrozenManifestTests` | 1 | 1 | none; 1.098 |
+| refusal-tests / after | `-m unittest -v tests.hazards.test_refusal_allowlist` | 23 | 0 | 1: historical block-5 design branch unavailable in archive; 14.715 |
+| q1-extra / after | `-m unittest -v tests.test_bytes_analysis.SubsetReleaseChainTests.test_three_worlds_full_synthetic_cli_chain_and_clock_removal tests.test_bytes_analysis.Addendum7RegressionTests.test_q1_missing_moe_has_explicit_h1_and_active_or_resident_rows tests.test_bytes_analysis.ReviewInputTests.test_manifest_requires_public_config_key tests.test_bytes_analysis.ReviewInputTests.test_missing_store_records_and_pass_rows_disclose_checked_path` | 4 | 0 | none; 56.953 |
+
+Before run copied only S/after/tests/test_bytes_manifest.py into S/before/tests/test_bytes_manifest.py with shutil.copyfile. Baseline production/config files unchanged. FrozenManifestTests ran one test and failed at line 346, the raw-byte assertion: committed bytes have config_sha256 where regenerated bytes introduce config_key. Exit 1 is the expected negative control. The same test passes in the 17-test after module.
+
+Found Q1 names with `rg -n 'withheld_missing|^class Q1|^    def test_' tests/test_bytes_analysis.py`, then ran explicit names above. One-file, both-file and genuinely uncollected optional-pass chains pass, retain missing-versus-uncollected labels and assert bytes.withheld_missing on relevant pass/point/H1/MoE rows. Subset-release three-world chain and MoE missing-label regression pass. Nine-model native analysis/twin chain compares 8,033 fields, zero above existing bars.
+
+Probe commands, common environment/interpreter prefix and fresh TMPDIR each: `S/probe.py after S`, cwd S/after, exit 0; `S/probe.py before S`, cwd S/before, exit 0. Exact source preserved because scratch is deleted:
+
+```python
+import copy,hashlib,json,sys
+from pathlib import Path
+sys.path.insert(0,str(Path.cwd()))
+from joulewise import bytes_analysis as ba
+from scripts.bytes_manifest import registered_config_key
+mode=sys.argv[1]
+s=Path(sys.argv[2])
+frozen=json.loads(Path('configs/bytes/bytes_manifest.json').read_bytes())
+if mode=='after':
+    reviewer=json.loads(Path('/private/tmp/claude-501/-Users-edr-code-JouleWise/2dc9c377-4ec4-4750-b44d-4d8cd5ae9354/scratchpad/byint/manifest_regen.json').read_bytes())
+    review={m['model_name']:m['config_key'] for m in reviewer['models']}
+    assert len(frozen['models'])==10
+    checks=[]
+    for m in frozen['models']:
+        key=m['config_key']
+        assert key==review[m['model_name']]==registered_config_key(m['model_name'])
+        checks.append({'model':m['model_name'],'config_key':key,'sha256':hashlib.sha256(key.encode()).hexdigest()})
+    (s/'keys.json').write_text(json.dumps(checks,indent=2))
+    m=frozen['models'][0]
+    info={'row_count':3,'config_key_sha256':{hashlib.sha256(m['config_key'].encode()).hexdigest():2}}
+    counts=ba._withheld_counts(info,m)
+    assert counts=={'withheld_row_count':3,'withheld_config_row_count':2}
+    ba.validate_manifest(frozen)
+    invalid=copy.deepcopy(frozen)
+    del invalid['models'][0]['config_key']
+    try:ba.validate_manifest(invalid)
+    except ba.AnalysisError as exc: error=str(exc)
+    else:raise AssertionError('missing config_key accepted')
+    print(json.dumps({'models_checked':len(checks),'counts':counts,'validation_error':error},sort_keys=True))
+else:
+    assert all('config_key' not in m for m in frozen['models'])
+    # Baseline raw frozen rows lack the analysis-only metadata as well as config_key.
+    # Supply the registered metadata only; preserve every baseline row field and omit config_key.
+    after=json.loads((s/'after/configs/bytes/bytes_manifest.json').read_bytes())
+    metadata={m['model_name']:{k:m[k] for k in ('model','role','moe','tier','cell_ids')} for m in after['models']}
+    manifest=copy.deepcopy(frozen)
+    for m in manifest['models']:m.update(metadata[m['model_name']])
+    assert ba.validate_manifest(manifest) is manifest
+    model=manifest['models'][0]
+    key=registered_config_key(model['model_name'])
+    info={'row_count':3,'config_key_sha256':{hashlib.sha256(key.encode()).hexdigest():2}}
+    counts=ba._withheld_counts(info,model)
+    assert counts=={}
+    print(json.dumps({'raw_models_without_key':len(frozen['models']),'analysis_metadata_added':list(metadata[model['model_name']]),'validation_accepted':True,'counts':counts,'registered_config_key':key},sort_keys=True))
+```
+
+After output: `{"counts":{"withheld_config_row_count":2,"withheld_row_count":3},"models_checked":10,"validation_error":"manifest model requires non-empty string config_key"}`. Integer fixture counts distinguish two matching rows from three total rows; these are not comparison bars.
+
+Before output: all ten frozen rows lack config_key; validation accepts the analysis-shaped copy; _withheld_counts returns `{}` despite withheld rows indexed by sha256(registered_config_key(model_name)). Raw baseline rows also lack model/role/moe/tier/cell_ids and are not themselves valid analysis inputs. Probe supplies only those registered metadata fields from fixed rows, preserves every existing baseline field and inserts no config_key. This demonstrates the silent unavailable path without claiming raw baseline JSON validates.
+
+Refusal census command in after: common prefix plus `-m tests.hazards.refusal_census`, exit 0:
+
+```json
+{"unlisted": [], "stale": [], "miscounted": [], "guard_changed": [], "scope_gaps": []}
+```
+
+Fixed export allowlist has no joulewise/bytes_analysis.py in scan.modules and no site listing the config_key error. AnalysisError is analysis-input validation following validate_manifest's invalid-model-role pattern, not a collection refusal. No registry update. Refusal module: 23 tests run, 22 passed and one skip because historical design branch is unavailable in Git archive. No other skips or environmental failures.
+
+### DECISIONS I MADE
+
+- Applied report-only route and BRANCH DISCIPLINE: verified BY-REV's fix instead of generating a competing pass-1 config. No estimator, acceptance bar or printed number changed.
+- Compared exact bytes and key/digest strings; no new tolerance. Existing agreement bars unchanged.
+- Supplied only required analysis metadata for baseline validation, never config_key. Census digest comes from a frozen model's actual registered key.
+- Rejected finding 3 as a repository edit; director owns return-message ledger correction.
+- No implementation clause-map delta: only report changed. Final merge/CI/hardware verification remain lead-owned.
+
+### OPEN ISSUES
+
+- No unresolved in-scope work. Director reviews/commits report; BY-MERGE carries review-fixes 478873066 into pass 1.
+- CI-timings owner receives finding 2; BY-SLOTS/BY-REG receives finding 4; director records finding 3 correction.
+- Existing BY-TWIN hand-forward remains governed by .codex-report/BY-INT.md: coefficient_C, offset_intervals, meter_offset_bound_j, d_beta_d_delta_per_ms, withheld_row_count and fields_not_rebuilt. This round does not declare them complete.
+- No new PR/CI action under local report-only route. Supplied #560 result is historical reviewer evidence, not this seat's observation.
+- Two report-writer preparation attempts had Python quoting SyntaxErrors before execution, with no file writes. Replaced by successful direct writer; test outcomes unaffected.
+
+### NEEDS_RULING
+
+none.
