@@ -273,6 +273,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="one slot name declared by the session's open receipt",
     )
     resume.add_argument("--plan", type=Path, required=True)
+    resume.add_argument("--window-plan", type=Path,
+        help="existing window plan selecting the block-6 capture screen")
     abort = commands.add_parser(
         "abort-session", help="abort an open session while preserving custody"
     )
@@ -562,6 +564,9 @@ def main(argv: list[str] | None = None) -> int:
             # threshold, so the screen is withheld and the disposition
             # collapses to valid / ordinary-invalid.
             systematic_screen_s = None if derivation else PREFLIGHT_SYSTEMATIC_SCREEN_S
+            # The desk also supplies its existing window plan: after frozen
+            # reservation authentication, resume-finalize uses its block-6
+            # capture_screen binding to make this comparator diagnostic only.
 
             output = resume_finalize_bracket_session(
                 args.ledger,
@@ -570,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
                 slot=args.slot,
                 plan_path=args.plan,
                 systematic_screen_s=systematic_screen_s,
+                **({"window_plan_path": args.window_plan} if args.window_plan is not None else {}),
                 require_committed_pin=True,
                 repo_root=REPO_ROOT,
             )

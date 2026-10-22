@@ -138,10 +138,10 @@ class JudgeBoundTests(unittest.TestCase):
     def test_the_baseline_passes(self):
         self.assertEqual(self.judge().status, base.PASS)
 
-    def test_one_250_ms_gap_at_a_120_ms_median_refuses(self):
+    def test_one_250_ms_gap_at_a_120_ms_median_flags(self):
         verdict = self.judge(max_ms=250.0)
-        self.assertEqual(verdict.status, base.REFUSE)
-        self.assertEqual(verdict.reasons, ("maximum interval 250.0 ms > 200.0 ms",))
+        self.assertEqual(verdict.status, base.PASS)
+        self.assertEqual(verdict.observed["flags"][0]["code"], "instrument.single_interval_above_screen")
 
     def test_200_ms_is_inside_the_bound(self):
         self.assertEqual(self.judge(max_ms=200.0).status, base.PASS)

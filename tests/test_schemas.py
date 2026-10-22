@@ -179,6 +179,20 @@ def exported_summary_semantics_accept(data: Any) -> bool:
     return _fragment_matches(data, schema, schema)
 
 
+class B6WaitPolicyTests(unittest.TestCase):
+    def test_wait_keys_and_bounds(self):
+        for cap in (0.1, 1500, 1800):
+            self.assertEqual(IdleAdmissionPolicy.from_mapping({"wait_cap_s": cap}).wait_cap_s, cap)
+        for budget in (0, 7200, 86400):
+            self.assertEqual(IdleAdmissionPolicy.from_mapping({"session_wait_budget_s": budget}).session_wait_budget_s, budget)
+        for key, values in (("wait_cap_s", (0, -1, 1801, True, None, float("nan"))),
+                            ("session_wait_budget_s", (-1, 86401, True, None, float("inf")))):
+            for value in values:
+                with self.subTest(key=key, value=value), self.assertRaises(SchemaError):
+                    IdleAdmissionPolicy.from_mapping({key: value})
+        self.assertIsNone(IdleAdmissionPolicy.from_mapping({}).wait_cap_s)
+
+
 class BenchmarkConfigTests(unittest.TestCase):
     def test_idle_admission_retry_backoff_defaults_and_bounds(self) -> None:
         self.assertEqual(IdleAdmissionPolicy.from_mapping({}).retry_backoff_s, 0)

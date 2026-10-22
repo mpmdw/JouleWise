@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from joulewise.tolerances import CALIBRATION_TIME_ABS_TOL_S, NEG8_ENERGY_ABS_TOL_J
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
     read_authentication_input,
@@ -46,6 +47,7 @@ from joulewise.idle_admission import (
 from joulewise.bundle import sanitize_id_component
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.environment_admission import (
+    busy_fraction_admission_admitted,
     current_environment_refusals,
     environment_admission_refusals,
 )
@@ -821,7 +823,7 @@ class AuthenticatedConsumptionSession:
                 isinstance(metadata_scalar, bool)
                 or not isinstance(metadata_scalar, int | float)
                 or not math.isfinite(float(metadata_scalar))
-                or abs(float(metadata_scalar) - authenticated) > 1e-9
+                or abs(float(metadata_scalar) - authenticated) > CALIBRATION_TIME_ABS_TOL_S
             ):
                 # Preserve the existing provenance taxonomy: widening never
                 # cures a stored scalar that disagrees with primary evidence.
@@ -4130,7 +4132,7 @@ def _reference_energy_evidence_detail(
         return None, None, "provenance", cause
     if stored_gross is None or any(
         not math.isclose(
-            stored_gross[field], fresh_gross[field], rel_tol=1e-9, abs_tol=1e-9
+            stored_gross[field], fresh_gross[field], rel_tol=0, abs_tol=NEG8_ENERGY_ABS_TOL_J
         )
         for field in ("point_j", "lower_j", "upper_j")
     ) or (
@@ -4139,7 +4141,7 @@ def _reference_energy_evidence_detail(
             stored_idle is None
             or fresh_idle is None
             or not math.isclose(
-                stored_idle, fresh_idle, rel_tol=1e-9, abs_tol=1e-9
+                stored_idle, fresh_idle, rel_tol=0, abs_tol=NEG8_ENERGY_ABS_TOL_J
             )
         )
     ):
@@ -5506,7 +5508,7 @@ def _current_core_rederivation_reasons(
                     isinstance(metadata_scalar, bool)
                     or not isinstance(metadata_scalar, int | float)
                     or not math.isfinite(float(metadata_scalar))
-                    or abs(float(metadata_scalar) - authenticated) > 1e-9
+                    or abs(float(metadata_scalar) - authenticated) > CALIBRATION_TIME_ABS_TOL_S
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")
                 if float(bracket_bound) > authenticated + 1e-12:
@@ -6944,13 +6946,20 @@ def _validate_row_uncached(
                 reasons.add("whole_window_verdict_provenance_invalid")
             if not referenced.issubset(member_ids):
                 reasons.add("whole_window_verdict_coverage_incomplete")
-            if any(
-                not isinstance(member, Mapping)
-                or not isinstance(member.get("cpu_admission"), Mapping)
-                or member["cpu_admission"].get("decision") != "admitted"
-                for member in members
-            ):
-                reasons.add("cpu_admission_core_failed")
+            paths: dict[str, Path] | None = None
+            for member in members:
+                cpu = member.get("cpu_admission") if isinstance(member, Mapping) else None
+                if isinstance(cpu, Mapping) and cpu.get("decision") == "admitted":
+                    continue
+                if paths is None:
+                    paths = _manifest_bundle_paths(verified_source_manifests, runs_root) or {}
+                path = paths.get(member.get("bundle_id")) if isinstance(member, Mapping) else None
+                metadata = _read_json_object(path / "metadata.json") if path is not None else None
+                admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
+                attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+                final = attempts[-1] if isinstance(attempts, list) and attempts else None
+                if not isinstance(cpu, Mapping) or not busy_fraction_admission_admitted(final, cpu):
+                    reasons.add("cpu_admission_core_failed")
     return not reasons, tuple(sorted(reasons))
 
 
