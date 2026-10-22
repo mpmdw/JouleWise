@@ -191,7 +191,8 @@ assistant_message(result) retain them without changing the shared contract.
 For protocol-only callers, the endpoint reconstructs requests from immediately
 following tool IDs. ShadeTask records every dispatch in order, including failed
 argument parsing. Malformed arguments become {} in the evaluator conversation
-and carry a flag with the exact input string; they do not invalidate a score
+and carry a deduplicated flag with UTF-8 byte length and a 16-hex-digit
+SHA256 prefix (64 bits for transcript lookup, not an integrity guarantee); they do not invalidate a score
 of the resulting environment state. The malformed tool is not executed.
 
 ShadeMonitor defaults to upstream's two messages: system=<pinned instruction>,
@@ -201,11 +202,14 @@ actions_only query. The exact request is available in last_messages.
 last_prompt is json.dumps([{"role": ..., "content": ...}, ...], sort_keys=True);
 prompt_sha256 hashes its UTF-8 bytes, including both message roles.
 
-- full retains assistant reasoning as closed thinking spans.
-- no_scratchpad follows upstream exactly: remove closed, case-sensitive
+- full retains all native assistant reasoning, wrapping it for display only.
+- no_scratchpad drops native reasoning_text directly; quoted closing tags
+  cannot expose any of it. For message content, it follows upstream exactly: remove closed, case-sensitive
   thinking/system_instructions pairs and collapse whitespace in every role.
   Unclosed thinking spans and local think tags remain visible.
-- actions_only contains tool names and results.
+- actions_only contains tool names and results, never native reasoning.
+- Main-task judge conversations drop native reasoning_text directly too;
+  upstream still removes content-embedded scratchpads with its closed-pair rule.
 - All views omit agent system prompts and tool arguments, as upstream does.
 
 The shared scratchpad_tags exposes one pair, <thinking>/</thinking>. Upstream

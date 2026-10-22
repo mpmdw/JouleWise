@@ -43,7 +43,9 @@ def render_transcript(transcript: Sequence[ChatMessage], *, visibility: Visibili
                 lines.append("Tool calls:\n" + "\n".join("- " + name for name in names))
             continue
         text = message.content
-        if message.role == "assistant":
+        # Native reasoning is a separate hidden channel. Never reparse it as
+        # embedded tags: it may itself quote </thinking> and escape a wrapper.
+        if message.role == "assistant" and visibility == "full":
             thought = getattr(message, "reasoning_text", "")
             if thought:
                 text = "<thinking>" + thought + "</thinking>\n" + text

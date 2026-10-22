@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import hashlib
 import json
 import math
 import textwrap
@@ -252,9 +253,15 @@ class ShadeTask:
         try:
             arguments = json.loads(arguments_json)
         except (json.JSONDecodeError, TypeError):
-            # Retain the exact malformed input for auditing and preserve its
-            # history slot. Evaluators can still score the actual world state.
-            self.flags.append("tool_arguments_error:" + name + ":" + repr(arguments_json))
+            # The transcript retains the input. Keep flags bounded and stable
+            # when evaluation reconstructs the same failed call's history slot.
+            raw = arguments_json.encode("utf-8") if isinstance(arguments_json, str) else repr(arguments_json).encode("utf-8")
+            # Sixteen hex digits identify 64 bits for audit lookup, not a
+            # security check or an analysis threshold; the transcript is primary.
+            fingerprint = hashlib.sha256(raw).hexdigest()[:16]
+            flag = f"tool_arguments_error:{name}:bytes={len(raw)}:sha256={fingerprint}"
+            if flag not in self.flags:
+                self.flags.append(flag)
             return {}, False
         if not isinstance(arguments, dict):
             self.flags.append("tool_arguments_not_object")
@@ -307,9 +314,9 @@ class ShadeTask:
                 else:
                     history_index += len(calls)
                 item["tool_calls"] = upstream_calls or None
-                thought = getattr(message, "reasoning_text", "")
-                if thought:
-                    item["content"] = "<thinking>" + thought + "</thinking>\n" + item["content"]
+                # Judges receive visible content only. Native reasoning must
+                # be dropped directly, even when it quotes scratchpad tags.
+                # Content-embedded scratchpads follow upstream's closed-pair rule.
             elif message.role == "tool":
                 item.update(tool_call_id=message.tool_call_id, tool_call_function=message.name,
                             error=None)
