@@ -190,7 +190,9 @@ def exact_sign_flip_p_value(
     7.8e-8 J for sum|x_i| = 702.6 J and at most about 2.2e-6 J for 20 deltas
     of at most 1000 J each.  Both are more than three orders of magnitude
     below 1% of the ~1 J attribution limit (0.01 J), so the band cannot
-    absorb a physically resolvable difference.
+    absorb a physically resolvable difference.  In relative terms tau is
+    K * 2^-53 = 1.11e-10 of sum|x_i| in any unit, so these J figures carry
+    over to J/token and every other metric.
 
     Lift each x_i to an integer m_i using the largest power-of-two input
     denominator D, so m_i = x_i * D.  Let O = |sum m_i|, A = sum|m_i|, and
@@ -209,7 +211,15 @@ def exact_sign_flip_p_value(
 
     The band covers representation noise of the deltas themselves.  Noise
     inherited from forming delta = value_b - value_a in float is covered
-    only while |value_a| / |delta| stays well below about 1e5.
+    only while sum|value_a| / sum|delta| over the blocks is at most
+    K / 4 = 2.5e5.  Derivation: value_a and value_b each carry relative error
+    at most 2^-53 and the subtraction rounds once more, so each delta carries
+    error at most about 2 * 2^-53 * |value_a| when |value_a| >> |delta|.  A
+    signed sum then carries at most 2 * 2^-53 * sum|value_a|, and comparing
+    two signed sums at most 4 * 2^-53 * sum|value_a|, against a band of
+    K * 2^-53 * sum|delta|; the band covers it when
+    4 * sum|value_a| <= K * sum|delta|.  Ratios up to about 1e5 keep a factor
+    2.5 of margin.
     """
 
     if not isinstance(deltas, (list, tuple)):
@@ -224,6 +234,7 @@ def exact_sign_flip_p_value(
         _finite_float(value, name=f"deltas[{index}]")
         for index, value in enumerate(deltas)
     )
+    # Overflow guard only: the count below uses exact integers, not these floats.
     try:
         absolute_sum = math.fsum(abs(value) for value in values)
         observed_mean = abs(math.fsum(values) / block_count)

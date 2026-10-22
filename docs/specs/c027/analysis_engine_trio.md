@@ -780,7 +780,9 @@ applicable.
   `sum|x_i| = 702.6 J` and at most about `2.2e-6 J` for 20 deltas of at
   most `1000 J` each. Both are more than three orders of magnitude below
   1% of the ~1 J attribution limit (`0.01 J`), so the band cannot absorb a
-  physically resolvable difference.
+  physically resolvable difference. In relative terms `tau` is
+  `K * 2^-53 = 1.11e-10` of `sum|x_i|` in any unit, so these J figures
+  carry over to J/token and every other metric.
 
   Use exact integer arithmetic for counting. Let `D` be the largest
   power-of-two denominator among the inputs, and lift each input to the
@@ -804,7 +806,15 @@ applicable.
 
   The band covers representation noise of the deltas themselves. Noise
   inherited from forming `delta = value_b - value_a` in float is covered
-  only while `|value_a| / |delta|` stays well below about `1e5`.
+  only while `sum|value_a| / sum|delta|` over the blocks is at most
+  `K / 4 = 2.5e5`. Derivation: `value_a` and `value_b` each carry relative
+  error at most `2^-53` and the subtraction rounds once more, so each delta
+  carries error at most about `2 * 2^-53 * |value_a|` when
+  `|value_a| >> |delta|`. A signed sum then carries at most
+  `2 * 2^-53 * sum|value_a|`, and comparing two signed sums at most
+  `4 * 2^-53 * sum|value_a|`, against a band of `K * 2^-53 * sum|delta|`;
+  the band covers it when `4 * sum|value_a| <= K * sum|delta|`. Ratios up
+  to about `1e5` keep a factor 2.5 of margin.
 - fewer than six exchangeable blocks: status `not_run`, reason
   `randomization_check_insufficient_blocks`; the t interval remains primary
   and the artifact carries the required caveat.
