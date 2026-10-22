@@ -90,6 +90,8 @@ class BudgetTrial:
     size_b: float
     attention_design: str
     condition: Condition
+    settings: Settings
+    monitor_configuration: Mapping[str, Any]
     item_id: str
     hint_kind: str
     seed: int
@@ -132,6 +134,7 @@ class Summary:
     size_b: float
     attention_design: str
     condition: str
+    configuration_id: str
     trials: int
     labeled_trials: int
     scored_trials: int
@@ -427,6 +430,10 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                                             and t.condition.name == cut_name), None)
                             if cut_key is not None:
                                 removed_target = max(0, base.reasoning_tokens - cut_key.reasoning_tokens)
+                                if cut_key.reasoning_tokens > base.reasoning_tokens:
+                                    trial_flags.append("budget_cut_longer_than_source")
+                                if cut_key.hint_use.uses_hint is None:
+                                    trial_flags.append("deletion_matched_cut_unresolved")
                             else:
                                 if cap is None:
                                     removed_target = 0
@@ -434,6 +441,8 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                                 else:
                                     removed_target = max(0, base.reasoning_tokens - cap)
                                     trial_flags.append("deletion_nominal_cut_only")
+                            if len(model.codec.encode(generation.reasoning)) != base.reasoning_tokens:
+                                trial_flags.append("deletion_usage_tokenization_mismatch")
                             deletion = delete_spans(generation.reasoning, remove_tokens=removed_target,
                                                     codec=model.codec, seed=_seed(seed, key, "delete"))
                             visible, visible_count = deletion.text, deletion.visible_tokens
@@ -470,12 +479,15 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                         trial_flags.extend("paired:" + f for f in paired.episode.flags)
                         trial_flags.extend(label.flags)
                         trial_flags.extend(assessment.flags)
-                        episode = replace(episode, monitor_verdicts=(assessment.verdict,)
+                        episode = replace(episode,
+                                          monitor_verdicts=(assessment.verdict,)
                                           if assessment.verdict else (),
                                           main_task_score=float(label.correct) if label.correct is not None else None,
                                           flags=tuple(sorted(set(trial_flags))))
                         trial = BudgetTrial(
-                            key, model.model, model.size_b, model.attention_design, condition,
+                            key, model.model, model.size_b, model.attention_design, condition, settings,
+                            {"model": monitor.model, "revision": monitor.revision, "seed": monitor.seed,
+                             "max_tokens": monitor.max_tokens, "prompt_sha256": _digest(MONITOR_PROMPT)},
                             item.item_id, item.hint_kind, seed, generation.reasoning_tokens,
                             generation.answer_tokens, visible_count, calibration.median_tokens, cap,
                             episode.start_ns, episode.end_ns, assessment.verdict, assessment.flagged,
@@ -493,12 +505,15 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
 def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
               energy_reducer: Callable[[Episode], Energy] = episode_energy) -> tuple[Summary, ...]:
     """One row per size/model/condition; unresolved labels and verdicts remain visible counts."""
-    groups: dict[tuple[str, float, str, str], list[BudgetTrial]] = {}
+    groups: dict[tuple[str, float, str, str, str], list[BudgetTrial]] = {}
     for trial in trials:
+        configuration_id = _digest({"endpoint": trial.episode.endpoint,
+                                    "hardware": trial.episode.hardware, "settings": trial.settings,
+                                    "monitor": trial.monitor_configuration, "condition": trial.condition})
         groups.setdefault((trial.model, trial.size_b, trial.attention_design,
-                           trial.condition.name), []).append(trial)
+                           trial.condition.name, configuration_id), []).append(trial)
     rows = []
-    for (model, size, attention, condition), group in sorted(groups.items()):
+    for (model, size, attention, condition, configuration_id), group in sorted(groups.items()):
         positive = [t for t in group if t.hint_use.uses_hint is True]
         negative = [t for t in group if t.hint_use.uses_hint is False]
         catch = wilson(sum(t.monitor_flagged is True for t in positive), len(positive), confidence=confidence)
@@ -521,7 +536,7 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
         if not complete:
             flags.append("energy_incomplete")
         rows.append(Summary(
-            model, size, attention, condition, len(group),
+            model, size, attention, condition, configuration_id, len(group),
             sum(t.hint_use.uses_hint is not None for t in group),
             sum(t.hint_use.uses_hint is not None and t.monitor_flagged is not None for t in group),
             accuracy,
