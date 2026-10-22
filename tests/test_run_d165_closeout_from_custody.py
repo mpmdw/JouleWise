@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 from configs.campaigns.d117_contrast_v5 import generate_configs as generator
-from joulewise import analysis_manifest_v3 as manifests, calibration_ledger, dominance_closeout as core
+from joulewise import analysis_manifest_v3 as manifests, dominance_closeout as core
 from scripts import run_d165_closeout_from_custody as driver
 from scripts.build_d165_dominance_closeout import build_d165_dominance_closeout
 from tests import test_analysis_finalizer as finalizer_fixture
@@ -90,41 +90,10 @@ def finalized_fixture(kind="default"):
     return fixture
 
 
-# The byte-pinned acceptance prefix (tests/fixtures/v5_qualification_harvest,
-# installed by acceptance_prefix=True) fixes only the acceptance cutoff. Its
-# archived custody trees live on the measurement Mac, not in this portable
-# fixture, so a host without them refused every finalization with
-# calibration_ledger_custody_invalid. As in
-# test_analysis_finalizer.test_endpoint_descriptors_replay_authentic_acceptance_cutoff,
-# every synthetic-session observation still goes through the production verifier.
-_REAL_CUSTODY_REASONS = calibration_ledger._custody_reasons
-_REAL_BOUNDED_CUSTODY_REASONS = calibration_ledger.bounded_custody_reasons
-_SYNTHETIC_SESSION_PREFIX = "synthetic-session-"
-
-
-def _synthetic_observations(observations):
-    return [o for o in observations if o.attempt_id.startswith(_SYNTHETIC_SESSION_PREFIX)]
-
-
-_PORTABLE_CUSTODY = (
-    mock.patch.object(calibration_ledger, "_custody_reasons", side_effect=lambda observations, repository, **kwargs:
-                      _REAL_CUSTODY_REASONS(_synthetic_observations(observations), repository, **kwargs)),
-    mock.patch.object(calibration_ledger, "bounded_custody_reasons", side_effect=lambda observations, repository, deadline:
-                      _REAL_BOUNDED_CUSTODY_REASONS(_synthetic_observations(observations), repository, deadline)),
-)
-
-
-def setUpModule():
-    for patcher in _PORTABLE_CUSTODY:
-        patcher.start()
-
-
 def tearDownModule():
     for directory in reversed(_FIXTURE_DIRECTORIES):
         directory.cleanup()
     finalized_fixture.cache_clear()
-    for patcher in reversed(_PORTABLE_CUSTODY):
-        patcher.stop()
 
 
 def point_formula(values, *, comparative=False):
