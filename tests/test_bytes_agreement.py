@@ -20,7 +20,7 @@ Addendum 9 (NR1, the meter label-offset alternative) and B4 (the withheld store,
 C_j and the offset interval's endpoints at 1% of that alternative's own half-width, t SE_j + C_j
 (``bar_offset_interval``; the labelled OLS alternative at 1% of its own); the per-point bound at the
 energy bar (J) and the power bar (W); the sensitivities at the no-half-width bar; the zero/sign
-decisions under both intervals as labels with the usual slack; units, flag presence, scope and
+decisions under both intervals as exact labels (registration §12); units, flag presence, scope and
 disclosure presence (and the 22 and 25 ms the disclosure states), `missing` statuses, pass labels
 and withheld row counts exactly.  Two campaigns join the five: the edge-locked meter of Addendum
 9.1 (every run flips a whole sample) and a withholding campaign on R6's six sub-packs with one
@@ -76,6 +76,8 @@ DEFECTS = [
     (1, "Qwen3-8B-4bit", 20, "cooldown"),             # quad unit 2: member.cooldown_cap_hit (NUMBER class)
 ]
 DEFECTS_MINIMUM = [(1, "Qwen3-32B-4bit", i, "strict_validation") for i in range(6)]
+ANCHOR_DEFECTS = [(1, "Qwen3-1.7B-4bit", 0, "member.anchor_not_bounded"),
+                  (1, "Qwen3-4B-4bit", 10, "member.target_phase_precheck_failed")]
 # Addendum 9 item 1: the generator's NR1 knobs (samples 50 ms into the interval, science-run edges
 # at a uniform phase, a 10 ms minimum receive latency) are its defaults, so every campaign below is
 # the ruled fixture in which a constant label offset flips a whole sample with probability
@@ -98,17 +100,19 @@ WITHHELD_KNOBS = {"subpack_sessions": True, "uncollected_sessions": ("bytes-s4-p
 MISSING_STORES = ("bytes-s2-p2", "bytes-s6-p1", "bytes-s6-p2")
 # name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
-    "bytes": ("bytes", 1100, [], NR1_KNOBS, ()),
+    "bytes": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True, "battery_publication": "delayed"}, ()),
     "resident": ("resident", 3100, [], NR1_KNOBS, ()),
     "time": ("time", 2100, [], NR1_KNOBS, ()),
     "defects": ("bytes", 1100, DEFECTS, NR1_KNOBS, ()),
     "minimum": ("bytes", 1100, DEFECTS_MINIMUM, NR1_KNOBS, ()),
     "edge_locked": ("resident", 3100, [], EDGE_LOCKED_KNOBS, ()),
     "withheld": ("bytes", 1100, [], {**NR1_KNOBS, **WITHHELD_KNOBS}, MISSING_STORES),
+    "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
-        ("gross primary", "flagged-inclusive"): "flagged_inclusive"}
+        ("gross primary", "flagged-inclusive"): "flagged_inclusive",
+        ("idle-subtracted secondary", "flagged-inclusive"): "idle_flagged_inclusive"}
 ANCHOR, INTERP, DRIFT, METER = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                                 "E_whole_window_drift_allowance_j", "E_meter_edge_bound_j")
 FAMILY_KEY = {"gross": "gross", "idle_subtracted": "idle"}
@@ -133,35 +137,6 @@ def bar_coefficient(half_width):
     """1% of the coefficient's HC3 half-width (or of the labelled OLS half-width for the OLS line
     printed beside it): Addendum 8.5."""
     return 0.01 * half_width
-
-
-FLOAT_EPS = 2.2e-16     # double precision relative float noise (the brief, section 5)
-
-
-def bar_float_noise_coefficient(vif, scale):
-    """The lower edge of the bar window (the brief, section 5: a bar sits above 1e6 x float noise),
-    for a coefficient of a two-regressor fit whose VIF is printed (the rest model, Addendum 3 item 9).
-    An input perturbation of relative size d (float noise on the fitted powers, 1e6 x eps at the
-    window's edge) moves a least-squares coefficient by about kappa(X'X) x d x its natural scale, the
-    response's size over its regressor's size (1 for the intercept).  For the centred two-regressor
-    Gram matrix kappa = (1 + |r|)/(1 - |r|) and 1 - r^2 = 1/VIF, so kappa is about 4 x VIF.  The floor
-    is therefore 1e6 x eps x 4 VIF x scale.  It matters only where the design is near-singular
-    (Addendum 8.6: with VIF 3.4e6, input noise of 3e-10 moves the rest model's c by 6%, so c is not
-    identified and no word is drawn from it); elsewhere 1% of the HC3 half-width is far above it.  A
-    VIF the analysis prints as infinite (|r| = 1) makes every coefficient of that fit pure float
-    noise, so the floor is unbounded there."""
-    if vif is None or not math.isfinite(vif):
-        return math.inf
-    return 1e6 * FLOAT_EPS * 4 * vif * scale
-
-
-def coefficient_scales(points):
-    """Natural scales of (c, epsilon_rest, lambda) for the rest model P_rest = c + e BW + l P_rails:
-    the RMS response over 1, over the RMS of BW and over the RMS of P_rails."""
-    def rms(values):
-        return math.sqrt(math.fsum(v * v for v in values) / len(values))
-    y = rms([p[0] for p in points])
-    return [y, y / rms([p[1] for p in points]), y / rms([p[2] for p in points])]
 
 
 # Durations compare to 1 ms: Addendum 8.5 (the printed precision F13 asks B6 to fix; 1 ms is the
@@ -243,16 +218,6 @@ class Recorder:
         self.rows.append(row)
         return row
 
-    def label_with_slack(self, stage, group, key, a, t, under_bar):
-        """A label (sign, 'adds nothing') drawn from a number: exact, unless the number it rests on
-        is itself within its bar of the decision boundary (then the difference is under the bar)."""
-        if a == t:
-            return self.exact(stage, group, key, a, t)
-        row = self.exact(stage, group, key, a, t)
-        if under_bar:
-            row["status"] = "under_bar"
-            row["note"] = "the deciding number is within its bar of the boundary"
-        return row
 
     def counts(self):
         out = {"compared": len(self.rows), "equal": 0, "under_bar": 0, "above_bar": 0}
@@ -316,11 +281,40 @@ def compare_cell_numbers(R, stage, g, row, est):
     for kind in ("anchor", "interp", "drift", "meter_edge"):
         R.number(stage, g, "B_kind:" + kind, ak[kind], tk[kind], bar_energy(hb))
     if row["boundary"] != "rails":
+        compare_battery_columns(R, stage, g, row, est, hb)
         # Addendum 9: the pass's coherent-offset bound (J, at the cell's energy bar) and signed
         # sensitivity (W, no half-width); rails has neither (checked in compare_cells).
         offset = est.get("meter_offset") or {}
         R.number(stage, g, "meter_offset_bound_j", row.get("meter_offset_bound_j"), offset.get("bound_j"), bar_energy(hb))
         R.number(stage, g, "meter_offset_sensitivity_w", row.get("meter_offset_sensitivity_w"), offset.get("sensitivity_w"), None)
+
+
+def compare_battery_columns(R, stage, g, row, est, half):
+    """BAT-2: diagnostic energies use the same cell half-width; counts and boundary words are exact."""
+    for key in ("battery_term_mean_j", "battery_term_max_j", "battery_phase_edge_max_j"):
+        R.number(stage, g, key, row.get(key), est.get(key), bar_energy(half))
+    for key in ("battery_nonzero_run_count", "boundary_description"):
+        R.exact(stage, g, key, row.get(key), est.get(key))
+    # Run terms use their enclosing cell's energy bar. Missing polls remove DC/rest only.
+    tm = {r["run_id"]: r for r in est.get("meter_run_terms", [])}
+    for run in row.get("meter_run_terms", []):
+        other = tm.get(run["run_id"], {})
+        rg = g + "/meter/" + run["run_id"]
+        for key in ("meter_gross_j", "meter_secondary_j", "battery_gross_j", "battery_secondary_j",
+                    "battery_v_start_j", "battery_v_end_j", "battery_phase_edge_j", "offset_bound_j",
+                    "gross_j", "secondary_j", "phase_edge_j", "meter_phase_edge_j"):
+            R.number(stage, rg, key, run.get(key), other.get(key), bar_energy(half))
+        for key in ("battery_tau_s", "battery_poll_interval_max_s", "sample_interval_s", "r_max_s"):
+            R.number(stage, rg, key, run.get(key), other.get(key), DURATION_BAR_S)
+        for key in ("battery_idle_power_w", "meter_idle_power_w", "idle_power_w", "offset_sensitivity_w"):
+            R.number(stage, rg, key, run.get(key), other.get(key), None)
+        for key in ("edge_powers_w", "adjacent_before_edge_powers_w"):
+            for i, value in enumerate(run.get(key, [])):
+                R.number(stage, rg, key + f"[{i}]", value, (other.get(key) or [None, None])[i], None)
+        for key in ("battery_n", "battery_n_idle", "n", "n_idle", "decode_battery_assist"):
+            R.exact(stage, rg, key, run.get(key), other.get(key))
+        R.exact(stage, rg, "battery_end_window_complete", run.get("battery_end_window_complete"),
+                other.get("battery_end_window_complete"))
 
 
 def compare_missing(R, stage, g, row, est):
@@ -359,10 +353,12 @@ def compare_cells(R, stage, a_rows, t):
         if not (a_ok and t_ok):
             continue
         compare_cell_numbers(R, stage, g, row, est)
+        for key in ("decode_assisted_member_counts", "harvest_assisted_member_counts"):
+            R.exact(stage, g, key, row.get(key), est.get(key))
         R.exact(stage, g, "kept_runs", sorted(row.get("kept_runs", [])), t_kept(est))
-        if variant == "gross":
+        if variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive"):
             da = cell.get("drift_allowance") or {}
-            R.number(stage, g, "drift_scale", row.get("drift_scale"), da.get("scale"), None)
+            R.number(stage, g, "drift_scale", row.get("drift_scale"), est.get("drift_scale", da.get("scale")), None)
             hb = row["h_j"] + row["B_j"]
             if b == "rails":
                 R.number(stage, g, "attribution_floor_j", row.get("rails_attribution_floor_j"),
@@ -371,7 +367,7 @@ def compare_cells(R, stage, a_rows, t):
                 R.number(stage, g, "meter_attribution_floor_j", row.get("meter_attribution_floor_j"),
                          (cell.get("meter_attribution_floor") or {}).get("value_j"), bar_energy(hb))
             # Addendum 7 D10: block 5's without-assisted line wherever a cell holds an assist member.
-            wa, wt = row.get("without_assisted"), cell.get("without_assisted")
+            wa, wt = row.get("without_assisted"), est.get("without_assisted")
             if wa is not None or wt is not None:
                 gw = g + "/without_assisted"
                 a_ok = wa is not None and wa.get("status") == "computed"
@@ -411,7 +407,7 @@ def compare_neg8(R, stage, a_rows, t):
 def compare_points(R, stage, a_points, t):
     for p in a_points:
         variant = VMAP.get((p["basis"], p["selection"]))
-        if variant not in ("gross", "idle_subtracted"):
+        if variant is None:
             continue
         model, b = canon(p["model"]), BMAP[p["boundary"]]
         g = f"point/{model}/mean/{b}/{variant}"
@@ -438,6 +434,7 @@ def compare_points(R, stage, a_points, t):
         hb = p["h_j"] + p["B_j"]
         T = p["duration_s"]
         if b != "rails":
+            compare_battery_columns(R, stage, g, p, q, hb)
             # Addendum 9 (cold disposition M1): the point's bound in J (pass-averaged, the energy bar),
             # in W (over the point's mean decode time, the power bar), and the sensitivity in W.
             R.number(stage, g, "meter_offset_bound_j", p.get("meter_offset_bound_j"), q.get("meter_offset_bound_j"), bar_energy(hb))
@@ -465,6 +462,15 @@ def compare_points(R, stage, a_points, t):
         for i, (va, vt) in enumerate(zip(p.get("pass_values_j", []), q.get("pass_values_E_dec_j", []))):
             R.number(stage, g, f"pass_values_j[{i}]", va, vt, bar_energy(hb))
         R.number(stage, g, "pass_difference_j", p.get("pass_difference_j"), q.get("pass_difference_E_dec_j"), bar_energy(hb))
+        if "without_assisted" in p:
+            wa, wt = p["without_assisted"], q.get("without_assisted", {})
+            R.exact(stage, g + "/without_assisted", "evaluated", wa.get("mean_j") is not None, wt.get("status") == "ok")
+            if wa.get("mean_j") is not None and wt.get("status") == "ok":
+                # This descriptive line has its own (h+B) half-width, exactly as the primary.
+                half = wa["h_j"] + wa["B_j"]
+                for ak, tk in (("mean_j", "E_dec_j"), ("h_j", "h_j"), ("B_j", "B_j"),
+                               ("lower_j", "E_dec_lower_j"), ("upper_j", "E_dec_upper_j")):
+                    R.number(stage, g + "/without_assisted", ak, wa.get(ak), wt.get(tk), bar_energy(half))
 
 
 def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
@@ -538,37 +544,34 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
                 R.number(stage, g, f"corner[{i}].slope", x[1], y[1], None)
 
 
-def _interval(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0, offset=False):
+def _interval(R, stage, g, name, a_fit, idx, t_iv, *, offset=False):
     """One coefficient: estimate and HC3 interval at 1% of the HC3 half-width; the labelled OLS
-    interval beside it at 1% of its own half-width.  floor: the float-noise floor of the bar (the
-    rest model only, from its printed VIF); 0 for a fit that prints no VIF.  offset: Addendum 9's
+    interval beside it at 1% of its own half-width, without a VIF multiplier. offset: Addendum 9's
     labelled alternative beside the coefficient (DC input and rest)."""
     half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
-    bar = max(bar_coefficient(half), floor)
+    bar = bar_coefficient(half)
     R.number(stage, g, name + ":estimate", a_fit["coefficients"][idx], t_iv["value"], bar)
     R.number(stage, g, name + ":lower[HC3]", a_fit["intervals"][idx][0], t_iv["lower"], bar)
     R.number(stage, g, name + ":upper[HC3]", a_fit["intervals"][idx][1], t_iv["upper"], bar)
     half_ols = (a_fit["ols_intervals"][idx][1] - a_fit["ols_intervals"][idx][0]) / 2
     t_ols = t_iv.get("ols") or {}
-    bar_ols = max(bar_coefficient(half_ols), floor)
+    bar_ols = bar_coefficient(half_ols)
     R.number(stage, g, name + ":lower[OLS label]", a_fit["ols_intervals"][idx][0], t_ols.get("lower"), bar_ols)
     R.number(stage, g, name + ":upper[OLS label]", a_fit["ols_intervals"][idx][1], t_ols.get("upper"), bar_ols)
+    # A standard error is its coefficient half-width divided by the same critical t.
+    R.number(stage, g, name + ":SE[HC3]", a_fit["standard_errors"][idx], t_iv["half_width"] / a_fit["critical"], bar / a_fit["critical"])
+    R.number(stage, g, name + ":SE[OLS]", a_fit["ols_standard_errors"][idx], t_ols["half_width"] / a_fit["critical"], bar_ols / a_fit["critical"])
     if offset:
-        _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, floor=floor)
+        _offset_alternative(R, stage, g, name, a_fit, idx, t_iv)
     elif "coefficient_C" in a_fit or "offset" in t_iv:
         R.exact(stage, g, name + ":no offset alternative on rails (Addendum 9)", "coefficient_C" in a_fit, "offset" in t_iv)
 
 
-def _decision_near(lower, upper, bar):
-    """A zero/sign decision rests on the endpoint nearest zero: slack when it is within the bar of 0."""
-    return lower is not None and upper is not None and min(abs(lower), abs(upper)) <= bar
-
-
-def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
+def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv):
     """Addendum 9 items 3 and 4 beside one coefficient at DC input or rest.  C_j and the offset
     interval's endpoints at 1% of the alternative's own half-width (bar_offset_interval); the labelled
     OLS alternative at 1% of its own; dbeta/ddelta at the no-half-width bar; units exact; the
-    zero/sign decisions under both intervals as labels with the usual slack."""
+    zero/sign decisions under both intervals as exact labels (registration §12)."""
     o = t_iv.get("offset") or {}
     a_flag, t_flag = a_fit.get("systematics_flag"), o.get("systematics_flag")
     R.exact(stage, g, name + ":systematics_flag", a_flag is not None, t_flag is not None,
@@ -578,23 +581,18 @@ def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
             None if (a_sflag is None) == (t_sflag is None) else f"analysis: {a_sflag}; twin: {t_sflag}")
     R.exact(stage, g, name + ":sensitivity_units", (a_fit.get("sensitivity_units") or [None] * (idx + 1))[idx],
             o.get("sensitivity_units"))
-    # The registered decision rests on the HC3 endpoint nearest zero, at the HC3 bar.
-    half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
-    bar = max(bar_coefficient(half), floor)
-    R.label_with_slack(stage, g, name + ":coefficient_decision", a_fit["coefficient_decisions"][idx], o.get("coefficient_decision"),
-                       _decision_near(a_fit["intervals"][idx][0], a_fit["intervals"][idx][1], bar))
+    R.exact(stage, g, name + ":coefficient_decision", a_fit["coefficient_decisions"][idx], o.get("coefficient_decision"))
     if a_flag is None and t_flag is None:
         lo, hi = a_fit["offset_intervals"][idx]
-        bar_off = max(bar_offset_interval(lo, hi), floor)
+        bar_off = bar_offset_interval(lo, hi)
         R.number(stage, g, name + ":coefficient_C", a_fit["coefficient_C"][idx], o.get("coefficient_C"), bar_off)
         R.number(stage, g, name + ":offset_lower", lo, o.get("offset_lower"), bar_off)
         R.number(stage, g, name + ":offset_upper", hi, o.get("offset_upper"), bar_off)
         lo_ols, hi_ols = a_fit["offset_ols_intervals"][idx]
-        bar_ols = max(bar_offset_interval(lo_ols, hi_ols), floor)
+        bar_ols = bar_offset_interval(lo_ols, hi_ols)
         R.number(stage, g, name + ":offset_ols_lower", lo_ols, o.get("offset_ols_lower"), bar_ols)
         R.number(stage, g, name + ":offset_ols_upper", hi_ols, o.get("offset_ols_upper"), bar_ols)
-        R.label_with_slack(stage, g, name + ":offset_decision", a_fit["offset_decisions"][idx], o.get("offset_decision"),
-                           _decision_near(lo, hi, bar_off))
+        R.exact(stage, g, name + ":offset_decision", a_fit["offset_decisions"][idx], o.get("offset_decision"))
     if a_sflag is None and t_sflag is None:
         R.number(stage, g, name + ":d_beta_d_delta_per_ms", a_fit["d_beta_d_delta_per_ms"][idx], o.get("d_beta_d_delta_per_ms"), None)
 
@@ -634,13 +632,10 @@ def compare_offset_rows(R, stage, g, row, th):
         t_iv = twin_terms[term]
         o = t_iv.get("offset") or {}
         half = (item["upper"] - item["lower"]) / 2
-        R.label_with_slack(stage, g + "/primary", term + ":coefficient_decision", item["coefficient_decision"],
-                           o.get("coefficient_decision") if offset else t_iv.get("decision"),
-                           _decision_near(item["lower"], item["upper"], bar_coefficient(half)))
+        R.exact(stage, g + "/primary", term + ":coefficient_decision", item["coefficient_decision"], o.get("coefficient_decision") if offset else t_iv.get("decision"))
         if offset and item.get("offset_intervals") and o.get("coefficient_C") is not None:
             lo, hi = item["offset_intervals"]
-            R.label_with_slack(stage, g + "/primary", term + ":offset_decision", item["offset_decision"], o.get("offset_decision"),
-                               _decision_near(lo, hi, bar_offset_interval(lo, hi)))
+            R.exact(stage, g + "/primary", term + ":offset_decision", item["offset_decision"], o.get("offset_decision"))
             R.number(stage, g + "/primary", term + ":coefficient_C", item["coefficient_C"], o.get("coefficient_C"), bar_offset_interval(lo, hi))
 
 
@@ -649,6 +644,22 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
     BW, P_rails)} of the analysis's points, for the rest model's coefficient scales."""
     R.exact(stage, g, "n", row["n"], th.get("n"))
     compare_offset_rows(R, stage, g, row, th)
+    for ak, tk in (("two_term", "simple"), ("resident_extended", "resident_extended"), ("tier", "tier"), ("rest", "rest_model")):
+        af, tf = row.get(ak) or {}, (th.get(tk) or {}).get("details") or {}
+        if af.get("status") != "computed" or not tf:
+            continue
+        for key in ("n", "p", "df", "se_method", "family_size"):
+            R.exact(stage, g + "/" + ak, key, af.get(key), tf.get(key))
+        for key in ("critical", "mse"):
+            R.number(stage, g + "/" + ak, key, af.get(key), tf.get(key), None)
+        R.exact(stage, g + "/" + ak, "point_models", sorted(canon(p["model"]) for p in af["point_labels"]), sorted(tf["models"]))
+        for key, se in (("covariance", "standard_errors"), ("ols_covariance", "ols_standard_errors")):
+            for i, values in enumerate(af[key]):
+                for j, value in enumerate(values):
+                    # Cov_ij has coefficient_i * coefficient_j units. Propagate 1% of
+                    # each SE: d(SE_i SE_j) = 2% SE_i SE_j, including near-zero off-diagonals.
+                    bar = .02 * af[se][i] * af[se][j]
+                    R.number(stage, g + "/" + ak, f"{key}[{i},{j}]", value, tf[key][i][j], bar)
     if row["two_term"]["status"] != "computed" or th.get("status") != "ok":
         R.exact(stage, g, "status", row["two_term"]["status"], th.get("status"))
         return
@@ -663,17 +674,10 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
         _interval(R, stage, g, "extended:P0", ext_a, 0, _p0(ext_t, "P0", ext_a, 0), offset=offset)
         _interval(R, stage, g, "extended:epsilon", ext_a, 1, ext_t["epsilon_j_per_GB"], offset=offset)
         _interval(R, stage, g, "extended:rho", ext_a, 2, ext_t["rho_j_per_GB"], offset=offset)
-        lo, hi = ext_a["intervals"][2]
-        slack = bar_coefficient((hi - lo) / 2)
-        near = min(abs(lo), abs(hi), abs(ext_a["coefficients"][2])) <= slack
-        R.label_with_slack(stage, g, "resident_adds_nothing", row["resident_adds_nothing"], ext_t["resident_adds_nothing"], near)
+        R.exact(stage, g, "resident_adds_nothing", row["resident_adds_nothing"], ext_t["resident_adds_nothing"])
         if offset and ext_a.get("systematics_flag") is None and "resident_adds_nothing_offset" in row:
-            # Addendum 9 item 3: "resident adds nothing" under the offset interval, with slack when
-            # the offset endpoint nearest zero is within its bar of zero.
-            lo, hi = ext_a["offset_intervals"][2]
-            near = min(abs(lo), abs(hi), abs(ext_a["coefficients"][2])) <= bar_offset_interval(lo, hi)
-            R.label_with_slack(stage, g, "resident_adds_nothing_offset", row["resident_adds_nothing_offset"],
-                               ext_t.get("resident_adds_nothing_offset"), near)
+            # Registration §12 requires exact words under the offset alternative too.
+            R.exact(stage, g, "resident_adds_nothing_offset", row["resident_adds_nothing_offset"], ext_t.get("resident_adds_nothing_offset"))
     tier_a, tier_t = row["tier"], th.get("tier")
     R.exact(stage, g, "tier:status", tier_a["status"], "computed" if tier_t else "refused")
     if tier_a["status"] == "computed" and tier_t:
@@ -697,21 +701,20 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
                      td["half_width_w"] - td["measured_half_width_w"], bar_power(dev["prediction_half_w"]))
             R.number(stage, gd, "lower_w", dev["lower_w"], td["lower_w"], bar_power(half))
             R.number(stage, gd, "upper_w", dev["upper_w"], td["upper_w"], bar_power(half))
-            near = abs(dev["deviation_w"]) <= bar_power(half) or abs(td["deviation_w"]) <= bar_power(half)
-            R.label_with_slack(stage, gd, "sign", "+" if dev["deviation_w"] > 0 else "-" if dev["deviation_w"] < 0 else "0",
-                               td["sign"], near)
+            R.exact(stage, gd, "sign", "+" if dev["deviation_w"] > 0 else "-" if dev["deviation_w"] < 0 else "0", td["sign"])
     if b == "rest":
         rm, tr = row["rest"], th.get("rest_model")
         R.exact(stage, g, "rest:status", rm["status"], "computed" if tr else "refused")
         if rm["status"] == "computed" and tr:
             vif_a, vif_t = rm.get("vif"), tr.get("vif_BW_and_P_rails")
-            fitted = [rest_inputs[canon(p["model"])] for p in rm["point_labels"]]
-            floors = [bar_float_noise_coefficient(vif_a, scale) for scale in coefficient_scales(fitted)]
-            _interval(R, stage, g, "rest:c", rm, 0, _p0(tr, "c", rm, 0), floor=floors[0], offset=True)
-            _interval(R, stage, g, "rest:epsilon_rest", rm, 1, tr["epsilon_rest_j_per_GB"], floor=floors[1], offset=True)
-            _interval(R, stage, g, "rest:lambda", rm, 2, tr["lambda"], floor=floors[2], offset=True)
+            _interval(R, stage, g, "rest:c", rm, 0, _p0(tr, "c", rm, 0), offset=True)
+            _interval(R, stage, g, "rest:epsilon_rest", rm, 1, tr["epsilon_rest_j_per_GB"], offset=True)
+            _interval(R, stage, g, "rest:lambda", rm, 2, tr["lambda"], offset=True)
             vif_bar = bar_two_significant_figures(vif_a, vif_t) if vif_a is not None and vif_t is not None else None
             R.number(stage, g, "rest:vif", vif_a, vif_t, vif_bar)
+            # Registration §14 prints r to 9 decimals: one last digit, 1e-9,
+            # above 1e6 * 2.2e-16 = 2.2e-10 roundoff on this dimensionless quantity.
+            R.number(stage, g, "rest:correlation_r", rm.get("correlation"), tr.get("correlation_r"), 1e-9)
     for item in row["loo_description"]:
         m = canon(item["model"])
         tl = (th.get("leave_one_out") or {}).get(m) or {}
@@ -909,6 +912,8 @@ def plant(archive, acceptance, models, pass_id, defects, log):
             codes = ["thermal.os_level_nonzero"]
         elif kind == "strict_validation":
             codes = ["member.strict_validation_failed"]
+        elif kind in ("member.anchor_not_bounded", "member.target_phase_precheck_failed"):
+            codes = [kind]
         elif kind == "cooldown":
             codes = ["member.cooldown_cap_hit"]
         elif kind == "battery_assist":
@@ -1135,6 +1140,41 @@ class AgreementTests(unittest.TestCase):
         # 7 held-out models x 3 boundaries x (2 passes + their mean) = 63 primary-and-description words.
         self.check("bytes", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                  "h2/rest/passes_mean": (11, 11)})
+        root = WORK["root"] / "bytes"
+        rows = load(root / "out/a-held/heldout_pass_estimates.json")
+        terms = [t for r in rows if r["boundary"] == "DC input" and r["selection"] == "primary"
+                 and r["basis"] == "gross primary" for t in r.get("meter_run_terms", [])]
+        # Fixture discharges at 12.774 W for 0.8--1 s: at least 10 J, above the
+        # registered approximately 1 J per-run attribution limit, both in decode and at its edges.
+        self.assertTrue(any(t["battery_gross_j"] > 1 for t in terms))
+        self.assertTrue(any(t["battery_v_start_j"] > 1 for t in terms))
+        self.assertTrue(any(t["battery_v_end_j"] > 1 for t in terms))
+
+    def test_unresolved_anchors_are_unusable_in_both_selections(self):
+        R = self.check("invalid_anchor", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
+                                              "h2/rest/passes_mean": (11, 11)})
+        root = WORK["root"] / "invalid_anchor"
+        planted = load(root / "build.json")["defects"]
+        manifest = ba.read_json(root / "manifest.json")
+        # This generator reuses run IDs across passes; session + run is the identity.
+        unusable = {(s["session_id"], d["run_id"]) for d in planted for s in manifest["sessions"]
+                    if s["pass_id"] == d["pass"]}
+        primary = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        bad = [r for r in primary if (r["session_id"], r["run_id"]) in unusable]
+        self.assertEqual(len(bad), len(unusable))
+        self.assertTrue(all(r["status"] == "unusable" and r["invalid_energy_record"] for r in bad))
+        twin = load(root / "out/t-2.json")
+        removed = [(cell["session_id"], r) for model in twin["cells"].values() for key, cell in model.items() if key != "passes_mean"
+                   for boundary in cell["boundaries"].values() for r in boundary.get("removed_members", [])
+                   if (cell["session_id"], r["run_id"]) in unusable]
+        self.assertEqual({(session, r["run_id"]) for session, r in removed}, unusable)
+        self.assertTrue(all(r["status"] == "unusable" and not r["restorable"] for _, r in removed))
+        passes = {f"pass{d['pass']}" for d in planted}
+        kept = [r for r in R.rows if r["stage"] == "heldout" and r["key"] == "kept_runs"
+                and r["group"].split("/")[2] in passes]
+        self.assertTrue(kept)
+        ids = {run_id for _, run_id in unusable}
+        self.assertTrue(all(not (ids & set(r[side])) for r in kept for side in ("a", "t")))
 
     def test_resident_world(self):
         # The NR1 regression's world (Addendum 9 item 1): about delta / dt = 10% of the runs take or
@@ -1218,7 +1258,8 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/gross"]["a"], 9)
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive"]["a"], 10)
         self.assertEqual(kept["cell/qwen3-14b-4bit/pass1/rails/flagged_inclusive"]["a"], 9)
-        without = [r for r in R.rows if "/without_assisted" in r["group"] and r["key"] == "status"]
+        without = [r for r in R.rows if "/without_assisted" in r["group"] and r["key"] == "status"
+                   and r["stage"] in ("fit", "heldout")]
         self.assertTrue(without and all(r["a"] == r["t"] == "computed" for r in without))
 
     def test_minimum_campaign_one_pass_refused(self):
@@ -1232,8 +1273,26 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(labels["point/qwen3-8b-4bit/mean/rails/gross"]["a"], "pass_mean")
         statuses = {r["group"]: r for r in R.rows if r["key"] == "status" and r["stage"] == "heldout"}
         self.assertEqual(statuses["cell/qwen3-32b-4bit/pass1/rails/gross"]["a"], "unavailable")
-        sensitivity = [r for r in R.rows if "two_pass_sensitivity" in r["group"] and r["key"] == "n"]
+        sensitivity = [r for r in R.rows if r["group"].endswith("two_pass_sensitivity") and r["key"] == "n"]
         self.assertEqual({(r["a"], r["t"]) for r in sensitivity}, {(9, 9)})
+
+
+class WordRuleTests(unittest.TestCase):
+    def test_near_zero_endpoint_never_excuses_unequal_decision_words(self):
+        # Planted edge case: the lower endpoints differ by 2e-10, far inside
+        # 1% of this 5e-5 half-width (5e-7), but lie on opposite sides of zero.
+        # This is a fixture placement, not a smaller numerical agreement bar.
+        fit = {"intervals": [[-1e-10, 1e-4]], "coefficient_decisions": ["contains zero"],
+               "systematics_flag": "fixture has no bound", "sensitivity_flag": "fixture has no sensitivity",
+               "sensitivity_units": ["J/GB per ms"]}
+        twin = {"offset": {"coefficient_decision": "positive", "systematics_flag": fit["systematics_flag"],
+                           "sensitivity_flag": fit["sensitivity_flag"], "sensitivity_units": "J/GB per ms"}}
+        recorder = Recorder()
+        half = (fit["intervals"][0][1] - fit["intervals"][0][0]) / 2
+        numeric = recorder.number("fixture", "edge", "lower", -1e-10, 1e-10, bar_coefficient(half))
+        _offset_alternative(recorder, "fixture", "edge", "epsilon", fit, 0, twin)
+        self.assertEqual(numeric["status"], "under_bar")
+        self.assertEqual([row["key"] for row in recorder.above()], ["epsilon:coefficient_decision"])
 
 
 class FenceTests(unittest.TestCase):

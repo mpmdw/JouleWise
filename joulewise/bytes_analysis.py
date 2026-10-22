@@ -692,7 +692,9 @@ def _session_streams(root, spans):
 # Other catalog exclusions, including NUMBER cooldown/idle/envelope flags,
 # can be restored if the record itself passes the checks below.
 INVALID_RECORD_CODES = frozenset({"member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
-    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch"})
+    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch",
+    # Catalog codes for an unresolved clock anchor / unplaceable target phase (audit F15).
+    "member.anchor_not_bounded", "member.target_phase_precheck_failed"})
 REFERENCE_ROLES = ("corpus", "start", "midpoint", "end")
 
 
