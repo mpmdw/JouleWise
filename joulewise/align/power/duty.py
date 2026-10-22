@@ -160,13 +160,18 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     * Coverage: (M-C)*R. Extrapolation error is missing time times the
       difference of missing and covered mean powers. Assumption: power over
       uncovered time stays in the observed range.
-    * Boundary: sum(|d_i|*(1-l_i/w_i)*R), w_i the original window width
+    * Boundary: sum(|d_i|*(1-l_i/w_i)*R_b), w_i the original window width
       and l_i its inside length. A whole-window mean differs from its
-      inside mean by outside_fraction*(outside_mean-inside_mean).
+      inside mean by outside_fraction*(outside_mean-inside_mean). R_b is
+      the range across each run's nearest fully inside and fully outside
+      readings at that boundary. This assumes the boundary contrast stays
+      within that observed LOCAL range. If any run lacks either bracketing
+      window, use global R. A window straddling both edges uses max(R_b).
+      Selection uses actual endpoints, with no fixed neighborhood radius.
     * Known timing: sum(|d_i|*min(h_i/w_i,1)*R), since translating a
       w_i-wide mean by at most h_i replaces at most min(h_i,w_i) of it.
-      Boundary/timing assume the underlying inside/outside power contrast
-      stays within R; window averages cannot establish that assumption.
+      Timing assumes the underlying displaced-window contrast stays within
+      global R; window averages cannot establish these range assumptions.
     * An unreplicated phase cannot identify its variance. Its group mass
       times R is a finite center-error envelope under the additional
       unreplicated_phase_observed_range_assumed assumption. It is flagged,
@@ -200,6 +205,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     clocks: set[str] = set()
     invalid_samples = 0
     observed: list[float] = []
+    boundary_readings: list[list[float]] = [[], []]
+    boundary_bracketed = [True, True]
     for run_index, item in enumerate(runs):
         try:
             trace, start, end = item
@@ -278,6 +285,24 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
             else:
                 bounds.append(math.inf)
             observed.extend(value for value, valid in zip(trace.values, valid_readings) if valid)
+            all_windows = [(timestamp-start-trace.averaging_window_ns,
+                            timestamp-start, value)
+                           for timestamp, value, valid in zip(endpoints, trace.values, valid_readings)
+                           if valid]
+            inside = [item for item in all_windows if item[0] >= 0 and item[1] <= run_duration]
+            outside = ([item for item in all_windows if item[1] <= 0],
+                       [item for item in all_windows if item[0] >= run_duration])
+            # Nearest observed full windows bracket each edge. No arbitrary
+            # neighborhood radius: actual window endpoints select the data.
+            for edge in (0, 1):
+                if not inside or not outside[edge]:
+                    boundary_bracketed[edge] = False
+                    continue
+                inner = (min(inside, key=lambda item: item[0]) if edge == 0 else
+                         max(inside, key=lambda item: item[1]))
+                outer = (max(outside[edge], key=lambda item: item[1]) if edge == 0 else
+                         min(outside[edge], key=lambda item: item[0]))
+                boundary_readings[edge].extend((inner[2], outer[2]))
             durations[run_index] = run_duration
             duration = max(durations.values())
             unknown_resolution |= run_unknown_resolution
@@ -427,9 +452,18 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     reading_range = max(observed)-min(observed)
     flags.add(f"observed_reading_range_w={reading_range!r}")
     coverage_bound = float((mean_duration-covered)/_NS_PER_S)*reading_range
+    boundary_ranges = [max(readings)-min(readings) if complete else reading_range
+                       for readings, complete in zip(boundary_readings, boundary_bracketed)]
+    flags.add("boundary_observed_range_assumed")
+    if not all(boundary_bracketed):
+        flags.add("boundary_range_fallback_global")
+    flags.add(f"boundary_start_range_w={boundary_ranges[0]!r}")
+    flags.add(f"boundary_end_range_w={boundary_ranges[1]!r}")
     boundary_bound = math.fsum(
         weight * (1-Fraction(min(window.right, durations[window.run])-max(window.left, 0),
-                            window.right-window.left)) * reading_range
+                            window.right-window.left)) * max(
+                                boundary_ranges[0] if window.left < 0 else 0.0,
+                                boundary_ranges[1] if window.right > durations[window.run] else 0.0)
         for weight, window in zip(interval_seconds, windows))
     timing_bound = float(timing_area/_NS_PER_S)*reading_range
     unreplicated_bound = 0.0

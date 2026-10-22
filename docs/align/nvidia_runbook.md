@@ -231,7 +231,12 @@ run shifts with equal shift scale within each declared phase.
 Let R be the largest minus smallest valid reading in retained traces, including
 pre/post-roll, M the mean duration and C the active-run-weighted covered time.
 Coverage contributes (M-C)*R. A clipped window contributes its coefficient
-times its outside fraction times R. A known endpoint uncertainty h contributes
+times its outside fraction times the local boundary range. For each run,
+select the nearest fully inside and fully outside sensor windows at that
+edge, pool their readings, and use their range. If any run lacks either
+bracketing window, fall back to R. This assumes the underlying boundary
+contrast stays inside that local range; an unrelated prefill peak must not
+set the uncertainty of a tool-wait-to-idle boundary. A known endpoint uncertainty h contributes
 its coefficient times min(h/window,1)*R. These are bounds and add linearly,
 conditional on underlying unobserved power and inside/outside contrasts staying
 within the observed reading range. Averaged readings cannot prove this range
@@ -241,7 +246,10 @@ this combined interval. It is conservative on deterministic edge-error worlds;
 the Gaussian component's calibration is tested separately on spread-dominated
 worlds.
 
-Numeric flags expose observed_reading_range_w, coverage_bound_j, boundary_bound_j,
+Preserve boundary_observed_range_assumed; boundary_range_fallback_global
+records an incomplete local bracket. No arbitrary time radius selects these
+readings: measured sensor-window endpoints determine the nearest ones.
+Numeric flags expose observed_reading_range_w, coverage_bound_j, boundary_bound_j, boundary_start_range_w, boundary_end_range_w,
 timing_bound_j, unreplicated_phase_bound_j, repeatability_half_width_j,
 resolution_bound_j and auxiliary_center_bound_j (each followed by =<value>).
 Preserve them beside the result. A supplied instantaneous power_bound_w is

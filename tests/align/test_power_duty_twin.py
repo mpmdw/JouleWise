@@ -119,6 +119,7 @@ def twin_estimate_energy(
     declared_groups: dict[int, str] = {}
     power_bounds: list[float | None] = []
     observed: list[float] = []
+    raw_rows = []
     flags = ["constant_workload_assumed"]
     duration: int | None = None
 
@@ -177,6 +178,8 @@ def twin_estimate_energy(
             flags.append("run_without_coverage")
             continue
         observed.extend(trace.values)
+        raw_rows.append([(t-start-width, t-start, value)
+                         for t, value in zip(trace.t_ns, trace.values)])
         readings.extend(this_run)
         signatures[run_id] = tuple((item.left, item.right) for item in this_run)
         label = notes.get("repeat_group")
@@ -330,7 +333,27 @@ def twin_estimate_energy(
                           (min(item.right, duration)-max(item.left, 0)),
                           item.right-item.left)
         for weight, item in zip(auxiliary, readings)), Fraction(0))
-    boundary_bound = float(outside_mass)*reading_range
+    edge_ranges = []
+    for edge in (0, duration):
+        selected = []
+        for row in raw_rows:
+            within = [(a, b, v) for a, b, v in row if a >= 0 and b <= duration]
+            beyond = [(a, b, v) for a, b, v in row
+                      if (b <= 0 if edge == 0 else a >= duration)]
+            if not within or not beyond:
+                selected = []
+                break
+            within.sort()
+            beyond.sort()
+            selected.extend((within[0 if edge == 0 else -1][2],
+                             beyond[-1 if edge == 0 else 0][2]))
+        edge_ranges.append(max(selected)-min(selected) if selected else reading_range)
+    boundary_bound = math.fsum(
+        float(weight) * ((item.right-item.left) -
+                         (min(item.right, duration)-max(item.left, 0))) /
+        (item.right-item.left) * max(edge_ranges[0] if item.left < 0 else 0.0,
+                                    edge_ranges[1] if item.right > duration else 0.0)
+        for weight, item in zip(auxiliary, readings))
     timing_bound = timing_area*reading_range
     return TwinEstimate(
         energy, spread + quantum + center_shift + coverage_bound + boundary_bound
@@ -463,6 +486,27 @@ class DutyIndependentTwinTests(unittest.TestCase):
         # F5: bias=250 W*10 ms=2.5 J is a separate receipt. The nominal
         # width here is quantization=0.2 W/2*20 ms=.002 J, with no run spread.
         self.assertAlmostEqual(estimate.half_width_j, .002, delta=.002e-6)
+
+    def test_local_boundary_range_excludes_unrelated_prefill(self):
+        ms = 1_000_000
+        ends = list(range(0, 226 * ms, 25 * ms))
+        # 100 ms prefill at 350 W, 90 ms tool wait at 75 W, idle 55 W.
+        def integral(left, right):
+            cuts = sorted({left, right, *(t for t in (0, 100*ms, 190*ms)
+                                         if left < t < right)})
+            return sum((b-a)*(55 if a < 0 or a >= 190*ms else
+                              350 if a < 100*ms else 75)
+                       for a, b in zip(cuts, cuts[1:]))
+        values = [integral(t-25*ms, t)/(25*ms) for t in ends]
+        runs = [_run(ends, values, width=25*ms, duration=190*ms,
+                     resolution=.001, timing=[0]*len(ends)) for _ in range(3)]
+        estimate = self.assert_matches_twin(runs)
+        # The end window reads 67 W: 15 ms inside at 75 W, 10 outside at
+        # 55 W. Error/bound=.015*(10/25)*20=.120 J; q/2*D=.000095 J.
+        expected_width = .120+.001/2*.190
+        self.assertAlmostEqual(estimate.half_width_j, expected_width,
+                               delta=1e-6*expected_width)  # Width has no own uncertainty.
+        self.assertLessEqual(abs(estimate.joules-(350*.100+75*.090)), estimate.half_width_j)
 
     def test_interleaved_overlapping_phases_and_welch_spread(self):
         ms = 1_000_000

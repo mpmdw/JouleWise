@@ -225,6 +225,17 @@ preflight counts are historical; no fresh counts are claimed.
 
 ## DECISIONS I MADE
 
+### Round 2 execution resumed
+
+The executor became usable (Python 3.12.14). The local boundary candidate's
+unchanged F5 test passes all four 400-seed cases: 17/400 aligned, 11/400 at
+100 us, 10/400 at 2 ms, 4/400 at 2 ms plus duration jitter. The independent
+direct-grid oracle passes 13 tests (0.301 s), including the exact .120 J
+local-boundary witness. The locally corrected external twin suite passes
+36 tests (24.754 s), with all numeric bars preserved. Full required runs
+and reviewer calibrations are in progress; the final report will replace
+the old blocked-execution sections below.
+
 ### Round 2 boundary refinement, derived before implementation
 
 The global-range candidate passes the aligned F5 case (7/400 misses) but
