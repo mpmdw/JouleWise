@@ -401,6 +401,10 @@ class TwinAgreement(unittest.TestCase):
                 from tests.align.test_twin_attribution import knot_interpolation_bound
                 expected = (te.half_width_j + knot_interpolation_bound(trace,mapping,a,b) + twin_interpolation(trace, mapping, a, b)
                             + c2_terms(trace, mapping, a, b) + reset_term(trace, mapping, a, b))
+                if trace.source == "powermetrics":
+                    # D-078 clause 11: attribution limit about 1 J; apply the minimum
+                    # after summing, as the lane and budget.energy do.
+                    expected = max(1.0, expected)
                 if math.isinf(expected):
                     self.assertTrue(math.isinf(le.half_width_j), f"{label} lane half-width finite")
                 else:

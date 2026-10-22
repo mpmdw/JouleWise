@@ -360,7 +360,12 @@ def lane_reading_half_width(trace: PowerTrace, mapping: ClockMapping | None,
                     near = values[max(0, k - 1):k + 2]
                     inside = min(b, times[k]) - max(a, times[k] - w)
                     extra.append((max(near) - min(near)) * min(w / 4, inside) / NS)
-    return base.half_width_j + math.fsum(extra) + knot_interpolation_bound(trace,mapping,t0,t1)
+    expected = base.half_width_j + math.fsum(extra) + knot_interpolation_bound(trace,mapping,t0,t1)
+    if trace.source == "powermetrics":
+        # D-078 clause 11: attribution limit about 1 J; apply the minimum
+        # after summing, as the lane and budget.energy do.
+        expected = max(1.0, expected)
+    return expected
 
 
 def knot_interpolation_bound(trace, mapping, t0, t1):
