@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -97,6 +98,12 @@ class G2aInspectionTests(unittest.TestCase):
     def setUp(self):
         self.f = G2aFixture()
         self.addCleanup(self.f.close)
+        # install.main quiesces SIGINT/SIGTERM/SIGHUP to SIG_IGN "through CLI
+        # exit". In-process, that leaked into later modules of the same test
+        # process, whose children then inherited an ignored SIGTERM (CI shard 4:
+        # the courier test waited out its 30 s SIGTERM grace).
+        saved = {number: signal.getsignal(number) for number in install.SIGNALS}
+        self.addCleanup(lambda: [signal.signal(number, handler) for number, handler in saved.items()])
 
     def run_chain(self, **flags):
         with self.f.environment():
