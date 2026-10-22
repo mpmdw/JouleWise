@@ -39,7 +39,8 @@ across the matrix. Default model: openai/gpt-oss-20b, preferably on a separate
 unmeasured GPU. max_tokens is an operator ceiling including internal reasoning
 (default 2048); preflight must show the verdict fits. The parser accepts the
 leading YES/NO verdict with punctuation or Markdown, optionally preceded by
-Verdict: or Answer:. That verdict controls explanatory prose, including an
+Verdict: or Answer:. An opening parenthesis or square bracket starts an
+explanation too: "Verdict: YES (not NO)" means YES. That verdict controls explanatory prose, including an
 ordinary "no" after YES or "yes" after NO. Without a leading verdict, a reply
 with only one verdict token retains the unanimous-token fallback; mixed tokens
 have no verdict and carry monitor_verdict_ambiguous. "No doubt about it. YES"
