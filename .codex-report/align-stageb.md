@@ -95,7 +95,20 @@ Fixed-code execution and numeric evidence are pending this checkpoint. Hardware 
 The provisional primary is grouped timing-residual energy recovery. Mean decode power is printed as an alternative for the lead's prospective scientific criterion choice; results will be filled from execution. No data are excluded and no ruling blocks implementation.
 
 ## FIX ROUND 1
-Removed timing-reference leakage and nonphysical missing-sample refusal; corrected dithered rounding, INA shunt acquisition, prefill cache policy and noise seeding. Updated the old feature/sensor/bound assertions and added the no-shell reviewer port. Full FIX LOG will cite the executed code after validation.
+Removed timing-reference leakage and nonphysical missing-sample refusal; corrected dithered rounding, INA shunt acquisition, prefill cache policy and noise seeding. Updated the old feature/sensor/bound assertions and added the no-shell reviewer port. FIX LOG below records implementation commits; the fixed-code execution and final evidence are pending this checkpoint.
 
 ## HISTORY
 r0 CI 39708988879 passed 29 Stage B tests. r0c CI 39716151868 passed 34 in 115.018s. The lead's ebba54833 review ran 38 alignment tests in 64.0s. These are history; the former stalled-world positive verdict is superseded by this fix round.
+
+## FIX LOG
+F1 — fixed 43d19f6fd3b9b1f89e88627a44db7d504618bc2c: timing-controlled held-out power increment, timing/mean-power alternatives, blind-sensor regression and unavailable reference aliases.
+F2 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: q²/12 random rounding propagated to condition means; q*T is a labelled alternative.
+F3 — fixed 5da157ca79e586045925db30dd1d7ec7820b9b9b: integrate existing coverage, retain every episode, flag gaps and print the default dropped-feature delta.
+F4 — fixed e535c1d2e7d79e6415be4df66b7a5d7edd6aba81: default shunt-slice acquisition, disjoint averages and separate span/duty; the CI port explicitly retains the original 6.6 ms and 1.1 ms worlds.
+F5 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: forecast phase bias is labelled as fitted on the same evaluated episodes.
+F6 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: INA 0.04 W noise is explicitly a scenario parameter.
+F7 — rejected: lead lands it on the spine; the inherited tests/test_shard_tests.py line is unchanged this round, as the brief directs.
+F8 — fixed 7a05e30eab947478c563c6649c81654d5f12522a: short prefill batches update cache under the pinned size/slot guard; 32/33-token regressions check warming, eviction and preservation.
+F9 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: algebraic zero uses float noise; apparent resident energy has a separate sensor-derived bound.
+F10 — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: noise uses its own derived seed; a legacy-noise-seed ablation prints the numerical change.
+STAGEB-S — fixed c8cc1cd01f85c01e08a0bb7a667e8b962dd59b15: per-episode supply/throttle flags, inclusive and labelled unflagged results, and electrical-hazard handling are in both hardware procedures.
