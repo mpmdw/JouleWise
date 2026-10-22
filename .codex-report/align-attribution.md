@@ -13,7 +13,7 @@
 ## FILES
 - `joulewise/align/attribution.py`: reconstruction, uncertainty, reset handling, mapping selection and episode-wide tool overlay.
 - `tests/align/test_attribution.py`: 28 authored closed-form/record tests, including runner tools, reset, window-edge ambiguity, short intervals and cwd-independent import.
-- `tests/align/test_attribution_worlds.py`: seven authored production-shaped tests, including two explicitly expected coverage failures and a twenty-turn runner convention world.
+- `tests/align/test_attribution_worlds.py`: eight authored production-shaped tests, including two explicitly expected coverage failures a twenty-turn runner convention world and a mid-episode NVML reset world.
 - `.codex-report/align-attribution.md`: report and per-finding fix log.
 - No registry, workflow, inventory or shared-contract file was changed. In particular, `tests/test_shard_tests.py` remains untouched.
 - The independent twin and probe scripts have not been written into the unavailable workspace and have not been committed.
@@ -96,6 +96,10 @@ uses integer-ns phase draws, a parameterized 37%-of-poll grid phase, and up to
 2 ms poll jitter capped at a quarter period. Whole-window samples remain
 back-to-back, because fixed-width windows cannot describe jittered contiguous
 support. The regular worlds have 20 tools and 101 segments; tools span 0.2–30 s.
+A further twenty-turn world derives a cumulative mJ counter from the same
+true timeline, resets it halfway through a poll, and checks true episode
+energy against its printed width plus absence of negative segments and
+reset-driven peak inflation. Its outcomes are also pending execution.
 The runner-convention world ends each model turn before its tool and has 20
 tools and 81 segments. Hidden tokens and logged=False turns/calls remain present.
 

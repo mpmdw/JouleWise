@@ -284,6 +284,48 @@ class ProductionWorldsTest(unittest.TestCase):
                                                        s.end_ns - ORIGIN) for s in tools)),
                     sort_keys=True))
 
+    def test_counter_reset_in_twenty_turn_episode(self):
+        record, truth = world(0, SENSORS[0])
+        old = record.power_traces[0]
+        offset = record.clock_mappings[0].offset_ns
+        times = tuple(t + offset - ORIGIN for t in old.t_ns)
+        reset_index = len(times) // 2
+        reset_time = (times[reset_index - 1] + times[reset_index]) // 2
+        quantum = 0.001  # NVML integer mJ reporting quantum.
+        values = []
+        for k, t in enumerate(times):
+            # A driver running for hours has a large positive baseline;
+            # restart halfway through a polling interval loses pre-reset work.
+            value = (5_000_000 + truth.integral(times[0], t) if k < reset_index
+                     else truth.integral(reset_time, t))
+            values.append(math.floor(value / quantum) * quantum)
+        counter = replace(old, source="nvml_energy", unit="J_cumulative",
+                          values=tuple(values), averaging_window_ns=None,
+                          duty_fraction=None, resolution=quantum)
+        record = from_json(Episode, to_json(replace(record, power_traces=(counter,))))
+        result = attribute_episode(record, source="nvml_energy", channel="gpu0")
+        exact = truth.integral(0, record.end_ns - ORIGIN)
+        self.assertEqual(sum(s.kind == "tool" for s in result.segments), 20)
+        self.assertIn("counter.reset", result.flags)
+        self.assertIn("counter.reset_interval", result.flags)
+        self.assertLessEqual(abs(result.total.joules - exact), result.total.half_width_j)
+        self.assertTrue(all(s.energy.joules >= 0 for s in result.segments))
+        # Nonnegative true phase powers bound any observed counter slope by
+        # max true W plus two endpoint quanta divided by the shortest poll.
+        peak = max(truth.levels.values()) + 2 * quantum / (min(
+            b - a for a, b in zip(times, times[1:])) / NS)
+        before = trace_energy(counter, record.start_ns - NS, record.start_ns,
+                              mapping=record.clock_mappings[0])
+        # Requested duration is 1 s. Missing coverage is at most 1 s at peak;
+        # the stop's partial-counter term is at most half one longest poll.
+        longest_poll_s = max(b - a for a, b in zip(times, times[1:])) / NS
+        limit = peak * (1 + longest_poll_s / 2) + 2 * quantum
+        self.assertLessEqual(before.half_width_j, limit)
+        print("attribution reset world: " + json.dumps(dict(
+            joules=result.total.joules, true_joules=exact,
+            half_width_j=result.total.half_width_j, before_half_width_j=before.half_width_j),
+            sort_keys=True))
+
     def test_idle_subtraction_reaches_every_segment(self):
         record, truth = world(0, SENSORS[0])
         idle = truth.levels["gap"]

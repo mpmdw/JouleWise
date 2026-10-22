@@ -15,6 +15,7 @@ NS = 1_000_000_000  # Nanoseconds in a second by definition.
 
 
 def trace(values=(100.0, 100.0, 100.0), *, times=(0, NS, 2 * NS), **overrides):
+    # Mock readings print one decimal W, defining their 0.1 W quantum.
     fields = dict(source="mock", channel="package", clock_domain="meter",
                   t_ns=times, values=values, unit="W", nominal_interval_ns=NS, resolution=0.1)
     fields.update(overrides)
