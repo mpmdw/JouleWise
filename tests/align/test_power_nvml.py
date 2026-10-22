@@ -8,6 +8,7 @@ import json
 import math
 import threading
 import time
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -96,7 +97,7 @@ class FakeNvmlLibrary:
 
     def nvmlDeviceGetUUID(self, handle: object, buffer: object, length: int) -> int:
         prefix = "MIG-" if self.mig_slice else "GPU-"
-        return self._string(buffer, prefix + f"synthetic-{handle.value}")
+        return self._string(buffer, prefix + f"synthetic-{ctypes.cast(handle, ctypes.c_void_p).value}")
 
     def nvmlDeviceGetVbiosVersion(self, handle: object, buffer: object, length: int) -> int:
         return self._string(buffer, "92.00.45.00.03")
@@ -126,7 +127,7 @@ class FakeNvmlLibrary:
     def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
         with self._lock:
             self.power_calls += 1
-            self.seen_devices.add(handle.value - 1)
+            self.seen_devices.add(ctypes.cast(handle, ctypes.c_void_p).value - 1)
             value = self._power_mw(self.power_calls)
             self._put(output, ctypes.c_uint, value)
             self.sampled.set()
@@ -463,15 +464,39 @@ class NvmlSamplerTests(unittest.TestCase):
                          "optional nvidia-ml-py is not installed; ctypes path is tested")
     def test_optional_pynvml_uses_the_same_sampler_path(self) -> None:
         import pynvml
-        binding = CtypesNvml(FakeNvmlLibrary())
-        methods = [name for name in dir(binding) if name.startswith("nvml")]
-        with mock.patch.multiple(pynvml, **{name: getattr(binding, name) for name in methods}):
+        from joulewise.align.power import preflight
+        library = FakeNvmlLibrary()
+
+        def resolve(name: str) -> object:
+            # Only the C ABI is replaced. All pynvml Python function bodies,
+            # including its c_uint MIG return, run without replacements.
+            if name == "nvmlInitWithFlags":
+                return lambda flags: library.nvmlInit_v2()
+            if name == "nvmlDeviceGetName_v2":
+                return library.nvmlDeviceGetName
+            return getattr(library, name)
+
+        with mock.patch.object(pynvml, "_nvmlGetFunctionPointer", side_effect=resolve):
             self.assertIs(open_nvml(prefer_pynvml=True), pynvml)
             sampler = NvmlSampler(nvml=pynvml)
             sampler.start()
             traces = sampler.stop()
-        self.assertEqual(len(traces), 4)
-        self.assertTrue(all(trace.values for trace in traces))
+            self.assertEqual(len(traces), 4)
+            self.assertTrue(all(trace.values for trace in traces))
+            self.assertTrue(all("stop_failed" not in json.loads(trace.notes)["flags"]
+                                for trace in traces))
+            with tempfile.TemporaryDirectory() as directory:
+                output = Path(directory)/"preflight.json"
+                # A zero-span CLI world checks native scalar serialization;
+                # the load/no-load worlds separately test movement physics.
+                with mock.patch.object(preflight, "open_nvml", return_value=pynvml), \\
+                        mock.patch.object(preflight.importlib.util, "find_spec", return_value=None):
+                    self.assertEqual(preflight.main([
+                        "--out", str(output), "--idle-seconds", "0",
+                        "--load-seconds", "0", "--recovery-seconds", "0"]), 0)
+                report = json.loads(output.read_text())
+                self.assertIs(type(report["devices"][0]["is_mig_slice"]), int)
+                self.assertTrue(all(row["sample_count"] > 0 for row in report["capabilities"]))
 
 
 if __name__ == "__main__":

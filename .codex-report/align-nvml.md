@@ -155,3 +155,14 @@ Request structured per-sample timing/flags/sensor-support metadata and separate 
 ## NEEDS_RULING
 
 none
+
+## FIX ROUND 1 IN PROGRESS
+
+The managed Cloud shell is still starting and unavailable. Read the lane report,
+shared contracts and NVIDIA parser through the connected GitHub plugin; changes
+are fast-forward GitHub commits on the existing lane. Local checkout, reviewer
+probes and optional package installation remain pending runtime availability.
+
+First scoped fix normalizes ctypes scalar results and replaces the optional
+pynvml test's high-level mocks with a C-ABI resolver, exercising real pynvml
+function bodies through sampler and preflight CLI JSON serialization.

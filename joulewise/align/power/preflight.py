@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from joulewise.align.power.duty import _student_quantile
-from joulewise.align.power.nvml import NvmlSampler, device_inventory, open_nvml
+from joulewise.align.power.nvml import NvmlSampler, _decoded, _scalar_int, device_inventory, open_nvml
 from joulewise.align.records import PowerTrace, to_jsonable
 
 
@@ -312,12 +312,12 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
             ("cuda_driver_version", "nvmlSystemGetCudaDriverVersion")):
             try:
                 value = getattr(backend, method)()
-                report[key] = value.decode() if isinstance(value, bytes) else value
+                report[key] = _decoded(value)
             except Exception as exc:
                 report[key] = None
                 report["flags"].append(f"{key}_unavailable: {exc}")
         indices = tuple(device_indices) if device_indices is not None else tuple(
-            range(backend.nvmlDeviceGetCount()))
+            range(_scalar_int(backend.nvmlDeviceGetCount())))
         for index in indices:
             device = device_inventory(backend, index)
             smi = _smi_inventory(index, command_timeout_s)

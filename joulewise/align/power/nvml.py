@@ -202,8 +202,19 @@ def open_nvml(*, library: Any | None = None, prefer_pynvml: bool = False) -> Any
         return pynvml
 
 
+def _scalar_int(value: Any) -> int:
+    """Normalize Python and ctypes integral results before JSON or arithmetic."""
+    return int(getattr(value, "value", value))
+
+
 def _decoded(value: Any) -> Any:
-    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, (tuple, list)):
+        return [_decoded(item) for item in value]
+    if hasattr(value, "value"):
+        return _scalar_int(value)
+    return value
 
 
 def device_inventory(nvml: Any, index: int) -> dict[str, Any]:
@@ -364,7 +375,7 @@ class NvmlSampler:
             self._initialized = True
             indices = self.device_indices
             if indices is None:
-                indices = tuple(range(self._nvml.nvmlDeviceGetCount()))
+                indices = tuple(range(_scalar_int(self._nvml.nvmlDeviceGetCount())))
             if not indices:
                 self._flags.append("no_devices")
             for index in dict.fromkeys(indices):
@@ -389,14 +400,14 @@ class NvmlSampler:
 
     def _read(self, device: _Device, channel: _Channel) -> tuple[int, int | None]:
         if channel.kind == "energy":
-            return int(self._nvml.nvmlDeviceGetTotalEnergyConsumption(device.handle)), None
+            return _scalar_int(self._nvml.nvmlDeviceGetTotalEnergyConsumption(device.handle)), None
         if channel.kind == "power_usage":
-            return int(self._nvml.nvmlDeviceGetPowerUsage(device.handle)), None
+            return _scalar_int(self._nvml.nvmlDeviceGetPowerUsage(device.handle)), None
         field_id = POWER_INSTANT_FIELD if channel.kind == "power_instant" else POWER_AVERAGE_FIELD
         value = self._nvml.nvmlDeviceGetFieldValues(device.handle, [field_id])[0]
         if value.nvmlReturn != 0:
             raise NvmlError(f"field {field_id} returned NVML status {value.nvmlReturn}")
-        return _field_number(value), int(value.timestamp)
+        return _field_number(value), _scalar_int(value.timestamp)
 
     def _sample(self, device: _Device, *, probe: bool = False) -> None:
         for channel in device.channels:
