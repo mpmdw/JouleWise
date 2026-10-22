@@ -61,6 +61,15 @@ class BudgetReviewTests(OfflineTest):
                 energy = episode_energy(trial.episode)
                 self.assertIsNotNone(energy.joules)
                 self.assertNotIn("energy_sample_gap", energy.flags)
+                # Remove an interior poll: the resulting 2*(wait+acquisition)
+                # interval exceeds the midpoint bar of 1.5 observed cycles.
+                # Most intervals remain normal, so the median is unchanged.
+                index = len(trace.t_ns) // 2
+                missed = replace(trace, t_ns=trace.t_ns[:index] + trace.t_ns[index + 1:],
+                                 values=trace.values[:index] + trace.values[index + 1:])
+                reduced = episode_energy(replace(trial.episode, power_traces=(missed,)))
+                self.assertIsNotNone(reduced.joules)
+                self.assertIn("energy_sample_gap", reduced.flags)
             bad = run(0)
             self.assertTrue(any("energy_trace_unbracketed" in episode_energy(t.episode).flags
                                 for t in bad.trials))
@@ -149,11 +158,14 @@ class BudgetReviewTests(OfflineTest):
         self.assertIn("energy_power_max_missing", unknown.flags)
 
     def test_deletion_retains_a_whole_disclosure_with_contiguous_spans(self):
-        total, removed, trials = 1024, 410, 2000
+        total, removed, trials = 1024, 410, 4000
         phrase = DISCLOSURE.split()
         observed = {None: 0, 1: 0, 4: 0}
         for seed in range(trials):
-            position = random.Random(seed).randrange(total - len(phrase) + 1)
+            # Position and deletion must use independent streams: reusing the
+            # seed for both correlates the span layout with the phrase location.
+            position = random.Random(f"disclosure-position:{seed}").randrange(
+                total - len(phrase) + 1)
             words = ["step"] * total
             words[position:position + len(phrase)] = phrase
             codec = WordCodec()
@@ -170,7 +182,10 @@ class BudgetReviewTests(OfflineTest):
         # 13 tokens has probability ~f**13; a few spans preserve whole sentences.
         self.assertGreater(intervals[4][0], intervals[None][1])
         self.assertGreater(intervals[1][0], intervals[None][1])
-        print("DELETION intact disclosure / 2000:", observed)
+        print("DELETION intact disclosure / 4000 (independent position stream):", observed)
+        print("DELETION design survival:",
+              {k: deletion_survival_probability(total, removed, len(phrase), k)
+               for k in observed})
 
     def test_deletion_readings_print_both_fractions_on_multitoken_world(self):
         outcomes = {}
@@ -260,6 +275,10 @@ class BudgetReviewTests(OfflineTest):
         row = summarize(result.trials)[0]
         self.assertEqual(row.trials, 0)
         self.assertEqual(row.excluded_trials, 4)
+        for name in ("mean_reasoning_tokens", "mean_answer_tokens",
+                     "mean_visible_reasoning_tokens", "mean_decode_tokens"):
+            self.assertIsNone(getattr(row, name))  # No observations imply no measured mean.
+        self.assertIn("| 0/0 |  |  |  |  |", summary_table((row,)))
         self.assertEqual(row.flag_counts["budget_uncalibrated_excluded"], 4)
 
     def test_null_json_and_tagless_forced_continuation(self):
