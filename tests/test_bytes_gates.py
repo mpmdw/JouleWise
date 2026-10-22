@@ -64,7 +64,7 @@ def synthetic_harvest(root):
             write(archive / "withheld/reductions" / (rid + ".summary_metrics.rereduced.json"),
                   {"phase_energy_j": {"decode": duration * 20}})
             measured["runs"][rid] = {"request_s": request, "member_wall_s": request + 80,
-                                      "stream_s": request + 60, "retained_bytes": 1024**2,
+                                      "stream_s": request + 60, "retained_bytes": 2 * 1024**2, "raw_allocated_bytes": 1024**2,
                                       "thermal_level": 0, "outside_cpu_s": "1.08", "census_quanta": 2}
             if mid != "reference":
                 measured["regimes"][mid] = {"F_min_j": 4, "census_resolution_w": .01,
@@ -189,17 +189,63 @@ class GatesTests(World):
         self.assertEqual(gates.clock_line("x", Decimal(200), clock)["status"], "pass")
         self.assertEqual(gates.clock_line("x", Decimal(201), clock)["status"], "fail")
 
-    def test_disk_reserve_and_thermal_counterexamples_reach_fail_lines(self):
+    def test_disk_p_and_thermal_counterexamples_reach_fail_lines(self):
         measured = deepcopy(self.measured)
         result = self.result(measured)
         disk = next(g for g in result["gates"] if g["gate"] == "disk:kit")
         measured["disk"]["pre_arm_free_bytes"] = disk["required_free_bytes"]
         self.assertEqual(next(g for g in self.result(measured)["gates"] if g["gate"] == "disk:kit")["status"], "pass")
-        measured["disk"]["pre_arm_free_bytes"] -= 1  # One integer byte below operational reserve.
+        measured["disk"]["pre_arm_free_bytes"] -= 1  # One integer byte below P (no reserve).
         measured["runs"][next(iter(measured["runs"]))]["thermal_level"] = 1  # Catalog excludes OS level > 0.
         lines = {g["gate"]: g for g in self.result(measured)["gates"]}
         self.assertEqual(lines["disk:kit"]["status"], "fail")
         self.assertEqual(lines["thermal"]["status"], "fail")
+
+    def test_measured_copy_factor_is_disclosure_only(self):
+        original = self.result()
+        measured = deepcopy(self.measured)
+        measured["disk"]["measured_c"] = Decimal("0.8020750916018277")
+        disclosed = self.result(measured)
+        for pack, sized in original["sessions"].items():
+            other = disclosed["sessions"][pack]
+            self.assertEqual(sized["required_free_bytes"], other["required_free_bytes"])
+            self.assertEqual(other["disk_derivation"]["peak_copies"], 2)
+            self.assertEqual(other["disk_derivation"]["measured_c"], measured["disk"]["measured_c"])
+
+    def test_disk_missing_raw_bytes_is_unavailable_and_flagged(self):
+        measured = deepcopy(self.measured)
+        for receipt in measured["runs"].values():
+            receipt.pop("raw_allocated_bytes")
+        result = self.result(measured)
+        self.assertEqual({g["status"] for g in result["gates"] if g["gate"].startswith("disk:")}, {"unavailable"})
+        self.assertEqual(result["flags"][0]["code"], "disk.raw_bytes_missing")
+        self.assertEqual(result["flags"][0]["count"], len(measured["runs"]))
+        self.assertEqual(result["status"], "unavailable")
+
+    def test_disk_terms_round_whole_bases_once_and_ignore_retained_copies(self):
+        from fractions import Fraction as F
+        terms = gates.disk_terms(F(1, 3), F(1, 2), {
+            "a": {"count": 2, "stream_allowance_s": F(1), "member_allowance_s": F(1)},
+            "b": {"count": 1, "stream_allowance_s": F(2), "member_allowance_s": F(1)}}, 7)
+        # ceil(4/3)=2, ceil(3/2)=2; WAIT=7200/3; P=2*(2+2400)+7.
+        self.assertEqual((terms["stream_basis_bytes"], terms["wall_basis_bytes"], terms["required_free_bytes"]), (2, 2, 4811))
+        crossed = gates.disk_terms(F(1), F(1), {
+            "a": {"count": 1, "stream_allowance_s": F(9), "member_allowance_s": F(1)},
+            "b": {"count": 1, "stream_allowance_s": F(1), "member_allowance_s": F(9)}}, 0)
+        # max(sum(9,1),sum(1,9))=10, unlike sum(max(9,1),max(1,9))=18.
+        self.assertEqual(crossed["B_bytes"], 10)
+        first = self.result()
+        measured = deepcopy(self.measured)
+        for receipt in measured["runs"].values():
+            receipt["retained_bytes"] *= 3
+        second = self.result(measured)
+        for pack, sized in first["sessions"].items():
+            self.assertEqual(sized["disk_derivation"], second["sessions"][pack]["disk_derivation"])
+            # Free is an integer byte count: equality passes, P-1 fails.
+            measured["disk"]["pre_arm_free_bytes"] = sized["required_free_bytes"]
+            self.assertEqual(next(g for g in self.result(measured)["gates"] if g["gate"] == "disk:" + pack)["status"], "pass")
+            measured["disk"]["pre_arm_free_bytes"] -= 1
+            self.assertEqual(next(g for g in self.result(measured)["gates"] if g["gate"] == "disk:" + pack)["status"], "fail")
 
     def test_cpu_contention_uses_registered_quanta_subtraction_and_flags_alternative(self):
         measured = deepcopy(self.measured)
@@ -279,7 +325,7 @@ class StoppedSessionTests(World):
             if row["run_id"] in dropped:
                 row["status"] = "failed"
                 row.update({k: "" for k in numeric})
-                measured["runs"][row["run_id"]] = {**{f: None for f in gates.TIMING_FIELDS}, "retained_bytes": 0}
+                measured["runs"][row["run_id"]] = {**{f: None for f in gates.TIMING_FIELDS}, "retained_bytes": 0, "raw_allocated_bytes": None}
         if receipts_absent:
             measured["cpu_contention"] = {"w_j_per_cpu_s": None, "c_q_cpu_s": None}
             for regime in measured["regimes"].values():

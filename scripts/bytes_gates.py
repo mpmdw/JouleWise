@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import csv
 from decimal import Decimal
+from fractions import Fraction
+import math
 import hashlib
 import json
 from pathlib import Path
@@ -20,10 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.b5.chain import SETTLE_S
+from joulewise.b5.plan import SESSION_WAIT_BUDGET_S
 
 KIT = ROOT / "configs/campaigns/bytes_mac_check/collection_plan.json"
-# Operational reserve from block-6 design §15 / BYTES R6, not a physics bound.
-RESERVE_BYTES = 150 * 1024**3
 # Registration §8.6 / D8: the 5 ms per-run clock budget is retained;
 # h=0 for the pre-arm HOLD and the registered frequency margin is 0.25 ppm.
 CLOCK_LIMIT_MS = Decimal("5")
@@ -78,6 +79,39 @@ def clock_line(name, stream_s, clock):
                 frequency_word_clears_gate=abs(word) <= limit,
                 frequency_word_status="diagnostic",
                 formula="abs(measured rate) <= 5000/T_stream_max_s - 0.25 ppm")
+
+
+def ratio(value):
+    return {"numerator": value.numerator, "denominator": value.denominator}
+
+
+def disk_terms(stream_rate, wall_rate, allowances, fixed_bytes, *, measured_c=None):
+    """H-DISK-RULING: ceil each whole basis once, using exact rationals."""
+    stream_seconds = sum(v["count"] * v["stream_allowance_s"] for v in allowances.values())
+    wall_seconds = sum(v["count"] * v["member_allowance_s"] for v in allowances.values())
+    stream = math.ceil(stream_rate * stream_seconds)
+    wall = math.ceil(wall_rate * wall_seconds)
+    wait = math.ceil(stream_rate * SESSION_WAIT_BUDGET_S)
+    return {"stream_rate_bytes_per_s": ratio(stream_rate), "wall_rate_bytes_per_s": ratio(wall_rate),
+            "allowances_by_model": {k: {"count": v["count"],
+                "stream_allowance_s": ratio(v["stream_allowance_s"]),
+                "member_allowance_s": ratio(v["member_allowance_s"])} for k, v in allowances.items()},
+            "stream_seconds": ratio(stream_seconds), "wall_seconds": ratio(wall_seconds),
+            "stream_basis_bytes": stream, "wall_basis_bytes": wall, "B_bytes": max(stream, wall),
+            "extra_wait_raw_bytes": wait, "session_wait_budget_s": SESSION_WAIT_BUDGET_S,
+            "fixed_retained_bytes": fixed_bytes, "peak_copies": 2, "measured_c": measured_c,
+            "required_free_bytes": 2 * (max(stream, wall) + wait) + fixed_bytes,
+            "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+            "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve"}
+
+
+def disk_allowance(receipts, count, margin):
+    # Preserve decimal lexemes through all number-bearing products and means.
+    request = average([Fraction(r["request_s"]) for r in receipts])
+    overhead = max(Fraction(r["stream_s"]) - Fraction(r["request_s"]) for r in receipts)
+    wall = average([Fraction(r["member_wall_s"]) for r in receipts])
+    return {"count": count, "stream_allowance_s": (request + overhead) * (1 + margin),
+            "member_allowance_s": wall * (1 + margin)}
 
 
 def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
@@ -153,6 +187,15 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
                                   "spread": max(times) / min(times) - 1 if len(times) >= 2 else None})
     margin = max(g["spread"] for g in spread_groups if g["spread"] is not None)
     margin_complete = all(g["complete"] for g in spread_groups)
+    exact_spreads = []
+    for ids in groups.values():
+        for purpose in ("check", "soak"):
+            times = [Fraction(receipts[r]["request_s"]) for r in ids
+                     if planned[r]["purpose"] == purpose and r in measured_ids
+                     and exported[r]["status"] == "succeeded"]
+            if len(times) >= 2:
+                exact_spreads.append(max(times) / min(times) - 1)
+    disk_margin = max(exact_spreads)
     models, cpu_alternative = {}, []
     reference_ids = (set(exported) - {r for r, m in planned.items() if m["model_id"] != "reference"}) & measured_ids
     if not reference_ids:
@@ -248,9 +291,24 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
     fixed_bytes = integer(disk["fixed_retained_bytes"], "fixed retained bytes")
     footprint = fixed_bytes + sum(r["retained_bytes"] for r in receipts.values())
     free = integer(disk["pre_arm_free_bytes"], "pre-arm free bytes")
-    gates.append(line("disk:kit", "pass" if free >= footprint + RESERVE_BYTES else "fail",
-                      measured_footprint_bytes=footprint, reserve_bytes=RESERVE_BYTES,
-                      required_free_bytes=footprint + RESERVE_BYTES, pre_arm_free_bytes=free))
+    raw_missing = sorted(r for r in measured_ids if receipts[r].get("raw_allocated_bytes") is None)
+    raw_runs = [receipts[r] for r in sorted(measured_ids) if r not in raw_missing]
+    for receipt in raw_runs:
+        integer(receipt["raw_allocated_bytes"], "raw_allocated_bytes")
+    flags = ([{"code": "disk.raw_bytes_missing", "count": len(raw_missing), "run_ids": raw_missing}]
+             if raw_missing else [])
+    rates = None if not raw_runs else (
+        max(Fraction(r["raw_allocated_bytes"]) / Fraction(r["stream_s"]) for r in raw_runs),
+        max(Fraction(r["raw_allocated_bytes"]) / Fraction(r["member_wall_s"]) for r in raw_runs))
+    kit_terms = None if rates is None else disk_terms(*rates,
+        {"measured_members": {"count": 1,
+            "stream_allowance_s": sum(Fraction(r["stream_s"]) for r in ran),
+            "member_allowance_s": sum(Fraction(r["member_wall_s"]) for r in ran)}}, fixed_bytes,
+        measured_c=disk.get("measured_c"))
+    gates.append(line("disk:kit", "unavailable" if kit_terms is None else
+                      "pass" if free >= kit_terms["required_free_bytes"] else "fail",
+                      measured_footprint_bytes=footprint, pre_arm_free_bytes=free,
+                      **({"required_free_bytes": None, "reason": "disk.raw_bytes_missing"} if kit_terms is None else kit_terms)))
     sizing = measured["sizing"]
     # Explicitly measured desk/stage overheads, never block-5 pilot proxies.
     fixed_s = optional(sizing["fixed_desk_s"], "fixed desk seconds")
@@ -274,16 +332,24 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
                  + reference_count * ref_mean_wall) * (1 + margin)
                 + (len(collections) + 1) * SETTLE_S + len(collections) * stage_s + fixed_s)
             projected_bytes = fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
+            allowances = {m: disk_allowance([receipts[r] for r in groups[m] if r in measured_ids],
+                           sum(row["module_id"] == "bytes-" + m for row in tree["science"]), disk_margin)
+                          for m in mids}
+            allowances["reference"] = disk_allowance([receipts[r] for r in sorted(reference_ids)], reference_count, disk_margin)
+            terms = None if rates is None else disk_terms(*rates, allowances, fixed_bytes,
+                                                          measured_c=disk.get("measured_c"))
             sessions[pack_id] = {"programmed_span_s": seconds, "est_minutes": None if seconds is None else seconds / 60,
                                  "T_stream_max_s": max(models[m]["T_stream_max_s"] for m in mids),
                                  "measured_margin": margin, "projected_footprint_bytes": projected_bytes,
-                                 "required_free_bytes": projected_bytes + RESERVE_BYTES,
+                                 "required_free_bytes": None if terms is None else terms["required_free_bytes"],
+                                 "disk_derivation": terms,
                                  "modules": {m: models[m] for m in mids}, "non_claim": True}
             if not margin_complete:
                 sessions[pack_id]["measured_margin_complete"] = False
-            gates.append(line("disk:" + pack_id, "pass" if free >= projected_bytes + RESERVE_BYTES else "fail",
-                              **{k: sessions[pack_id][k] for k in ("projected_footprint_bytes", "required_free_bytes")},
-                              pre_arm_free_bytes=free))
+            gates.append(line("disk:" + pack_id, "unavailable" if terms is None else
+                              "pass" if free >= terms["required_free_bytes"] else "fail",
+                              pre_arm_free_bytes=free,
+                              **({"required_free_bytes": None, "reason": "disk.raw_bytes_missing"} if terms is None else terms)))
             if sizing_absent:
                 gates.append(line("sizing:" + pack_id, "unavailable", est_minutes=None,
                                   reason="sizing receipt absent: " + ",".join(sizing_absent)))
@@ -296,7 +362,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT):
     statuses = {g["status"] for g in gates}
     return {"schema_version": "joulewise.bytes_c5.v1", "non_claim": True, "session_id": session,
             "measured_margin": margin, "spread_groups": spread_groups,
-            "models": models, "sessions": sessions, "gates": gates,
+            "models": models, "sessions": sessions, "gates": gates, "flags": flags,
             "cpu_contention_alternative": cpu_alternative,
             "status": "fail" if "fail" in statuses else "unavailable" if "unavailable" in statuses else "pass",
             "unmeasured_members": unmeasured,
@@ -319,22 +385,31 @@ def main(argv=None):
     parser.add_argument("--runs", type=Path, required=True)
     parser.add_argument("--measurements", type=Path, required=True)
     parser.add_argument("--kit-plan", type=Path, default=KIT)
+    parser.add_argument("--disk-evidence", type=Path, help="BY-0 disk_h.json; measured c disclosure only")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     sidecar_path = args.runs.with_name(args.runs.name.removesuffix(".runs.csv") + ".session.json")
     try:
         with args.runs.open(newline="") as stream:
             rows = list(csv.DictReader(stream))
-        result = calculate(rows, read(sidecar_path), read(args.measurements), read(args.kit_plan))
-        result["inputs"] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-                            for p in (args.runs, sidecar_path, args.measurements, args.kit_plan)}
+        measured = read(args.measurements)
+        if args.disk_evidence:
+            measured["disk"]["measured_c"] = optional(read(args.disk_evidence).get("c_implied_alloc"), "measured c")
+        result = calculate(rows, read(sidecar_path), measured, read(args.kit_plan))
+        sources = [args.runs, sidecar_path, args.measurements, args.kit_plan]
+        if args.disk_evidence:
+            sources.append(args.disk_evidence)
+        result["inputs"] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
         print("bytes_gates: " + str(exc), file=sys.stderr)
         return 1
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True, default=json_default, allow_nan=False) + "\n")
     for gate in result["gates"]:
-        print(gate["gate"] + ": " + gate["status"].replace("_", " "))
+        detail = ""
+        if gate["gate"].startswith("disk:") and "B_bytes" in gate:
+            detail = " " + json.dumps({k: v for k, v in gate.items() if k not in ("gate", "status")}, default=json_default, sort_keys=True)
+        print(gate["gate"] + ": " + gate["status"].replace("_", " ") + detail)
     # 1 also covers a written C5 whose lines are "unavailable" (receipt absent).
     return 2 if result["status"] == "fail" else 1 if result["status"] == "unavailable" else 0
 
