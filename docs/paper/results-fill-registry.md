@@ -1093,7 +1093,10 @@ two explanatory `[[NEEDS-VALUE:...]]` notes are outside the result-marker
 family and are counted separately.
 
 - Frozen draft SHA-256:
-  `939dfa23730a22d35e02154d7aa7904f396364d55c128e6715c72b849eaf39ab`;
+  `939dfa23730a22d35e02154d7aa7904f396364d55c128e6715c72b849eaf39ab`
+  (2026-10-22: five text corrections, PR docs/2026-10-22-paper-doc-fixes, give
+  `0872dd73af21fb111b0e5aa6de90b5a0f5918d6d9342061951f80cf8fa4d287b`; they
+  change no marker, citation or line count, so the counts below hold for both);
   **34 literal `[PENDING...]` sites / 36 semantic slots**, **37 complete-family
   result-marker sites / 39 semantic slots**, and **2 `[[NEEDS-VALUE:...]]`
   notes**. These are measured against the current 672-line source, not

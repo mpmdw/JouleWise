@@ -1,8 +1,15 @@
 # Claims Ladder
 
 Status: binding for reader-facing claims from Slice 2M onward. Decision
-D-037 records adoption. Per-claim IDs and mechanical enforcement arrive with
-the Phase 4 claims index; until then, authors apply this ladder during review.
+D-037 records adoption. Per-claim IDs and structural enforcement exist:
+`scripts/claims_lint.py` (its `claim-index` mode, included by default and in
+`all`) validates every row of the canonical claims index
+`analysis/rpt001-v2/claims_index.jsonl`, including unique claim IDs, the
+linked claim-verdict artifact, and each row's ladder level against that
+verdict (an L2 or L3 row needs a claim-ready verdict), and reports a
+structural defect as an error. Wording outside the index is checked only by
+the warning-only prose scan below, so authors still apply this ladder during
+review.
 
 This contract governs wording in reports, slides, README/status prose, figure
 captions, and tables that a reader could treat as a result. Dated run reports,

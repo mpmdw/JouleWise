@@ -1127,7 +1127,7 @@ so *B_anchor* = 0.0011349971959968978 s (1.135 ms). The sum is exact in decimal;
 
 #### A.3.4 Placing the trace on the wall clock, trimming warm-ups, and authenticating the schedule
 
-**Anchoring.** With the point anchor *A* (seconds), record *i*'s end time *t_i* is produced by floating-point accumulation as the records are read: *t_0* = *A* exactly, and each later record adds its own *e_i*/10⁹ to a running binary64 sum. That accumulation is the normative definition; *t_i* = *A* + *q_i*/10⁹ is its exact-arithmetic equivalent. Its trace interval is *I_i* = [*t_i* − *e_i*/10⁹, *t_i*) with *y_i* = the record's `gpu_power` in watts. The whole trace therefore moves rigidly with *A*, at rate 1 — the reason the span term exists.
+**Anchoring.** With the point anchor *A* (seconds), record *i*'s end time *t_i* is computed in two binary64 steps as the records are read. First, a running offset from record 0's end is accumulated from zero: *c_0* = 0 and *c_i* = *c_{i−1}* + *e_i*/10⁹ for *i* ≥ 1, the division and the addition each rounded to binary64. Then *t_i* = *A* + *c_i*, rounded once more. That order is the normative definition; *t_i* = *A* + *q_i*/10⁹ is its exact-arithmetic equivalent. The order decides the last bits of each end time. On the example capture *c_i* stays below 256 s, where one binary64 spacing is at most 2.8·10⁻¹⁴ s, while *A* is near 1.78·10⁹ s, where the spacing is 2.4·10⁻⁷ s; adding each *e_i*/10⁹ directly onto a running end time (*t_0* = *A*, *t_i* = *t_{i−1}* + *e_i*/10⁹) would instead round at the coarser spacing on every record. On that capture the alternative moves 1652 of the 1665 record ends, by at most 3.3·10⁻⁶ s; it leaves *B_fiducial* unchanged but changes the accepted regions of 7 of the 59 pulses and the evaluated-rectangle count from the 122,859 printed in the diagnostic reconstruction to 122,769. Record *i*'s trace interval is *I_i* = [*t_i* − *e_i*/10⁹, *t_i*) with *y_i* = the record's `gpu_power` in watts. The whole trace therefore moves rigidly with *A*, at rate 1 — the reason the span term exists.
 
 **Reading the pulses.** Scan `events.jsonl` for `warmup_command_on`,
 `warmup_command_off`, `pulse_command_on`, and `pulse_command_off`. An on-event
@@ -1229,7 +1229,7 @@ The evidence file is marked `valid` only if all of the following hold: every one
 
 #### A.3.7 The work budget and the 120 s work clock
 
-The branch-and-bound of A.3.5 shares one limit of 165,000 evaluated cells and
+The branch-and-bound of A.3.5 shares one limit of 1,710,000 evaluated cells and
 one supplementary 120.0-s monotonic-clock deadline across all 59 pulses.
 Before each cell's lower-bound evaluation, test the cell count first, then
 the deadline, and consume one cell unit. The deadline is checked only before
