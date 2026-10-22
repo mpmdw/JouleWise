@@ -10,6 +10,10 @@ The harness below recomputes Stage A from the twin's numbers under that rule
 Round 3 adds worlds from a third generator (latent sub-topic Markov routing),
 groups with two episodes per condition, and capture gaps that leave groups with
 unequal but two-sided composition, so both halves of the rule are exercised.
+A second round-3 pass adds TwinAgreementSecondReviewerWorlds: two generators
+written independently of the three above (deterministic block routing with
+closed-form decode statistics; gamma-affinity sticky routing over many seeds,
+exact and Monte Carlo branches) and partial or contaminated captures.
 
 Bars (set by the orchestrator, not chosen here):
 - Deterministic outputs with no printed uncertainty (the four routing statistics per
@@ -565,6 +569,185 @@ class TwinAgreementStageA(unittest.TestCase):
             for key, value in self.compare_world(self.gapped_markov(seed, 9, f), f"markov9 seed{seed}").items():
                 tally[key] += value
         self.assertEqual(tally, {"exact": 0, "monte_carlo": 24})
+
+
+# ------------------------------------------------------------- round 3b: second reviewer's worlds
+#
+# Two more generators, written by the round-3 executing reviewer independently of
+# the three above, so the comparison does not rest on one reviewer's worlds.
+# - block_world: deterministic routing whose decode statistics have closed forms
+#   (checked for both implementations), with hidden scratchpad tokens that are
+#   routed but not counted as visible decode, and matched visible counts.
+# - affinity_world: gamma-weighted per-task affinities with sticky routing and a
+#   side topic on a fraction f of sabotage decode tokens; exact (10 tasks) and
+#   Monte Carlo (17 tasks) branches over many seeds.
+# The same bars apply (see the module docstring); compare_world and compare_log
+# are reused unchanged.
+
+B_E, B_K, B_L, B_BLOCKS = 32, 4, 6, 8
+
+
+def _block(b: int, layer: int) -> tuple[int, ...]:
+    first = B_K * ((b + layer) % B_BLOCKS)
+    return tuple(range(first, first + B_K))
+
+
+def block_world(seed: int, groups: int) -> list[Episode]:
+    """Prefill rows use block (prefill counter + layer) mod 8 in both conditions;
+    benign decode rows use (decode counter + layer) mod 8; sabotage decode rows
+    (visible and hidden) use (decode counter // 2 + layer) mod 8. Prefill lengths
+    are multiples of 8 and decode/hidden lengths multiples of 16, so on n decode
+    tokens: benign entropy 1, CV 0, reuse 0, distance 8; sabotage entropy 1, CV 0,
+    reuse (n/2)/(n-1), distance (16c-15)/(2c-1) with c = n/16."""
+    rng = random.Random(seed)
+    episodes = []
+    for g in range(groups):
+        n_turns = rng.randint(3, 8)
+        plan = [(8 * rng.randint(50, 150) if i == 0 else 8 * rng.randint(4, 40),
+                 16 * rng.randint(1, 12), 16 * rng.randint(0, 4)) for i in range(n_turns)]
+        for condition in ("benign", "sabotage"):
+            clock = context = pc = dc = 0
+            turns, phases, rows = [], [], []
+            for i, (p, d, h) in enumerate(plan):
+                h = h if condition == "sabotage" else 0
+                first = clock + p * 300_000
+                end = first + (d + h) * 21_000_000
+                calls = ()
+                if i + 1 < n_turns:
+                    calls = (ToolCall(("search", "read", "send")[i % 3], end, end + 170_000_000, 90, 1400),)
+                    end += 170_000_000
+                turns.append(Turn(i, clock, end, context, p, d + h, hidden_tokens=h,
+                                  first_token_ns=first, tool_calls=calls))
+                for _ in range(p):
+                    rows.append(tuple(_block(pc, layer) for layer in range(B_L)))
+                    phases.append("prefill")
+                    pc += 1
+                for _ in range(d + h):
+                    b = dc if condition == "benign" else dc // 2
+                    rows.append(tuple(_block(b, layer) for layer in range(B_L)))
+                    phases.append("decode")
+                    dc += 1
+                context += p + d + h
+                clock = end
+            log = RouterLog("twin-agreement/block", B_E, B_K, tuple(range(B_L)), tuple(phases), tuple(rows))
+            episodes.append(Episode(f"b{seed}-{g}-{condition}", f"shade/b-task{g}", condition,
+                                    "twin-agreement/block", "synthetic", seed, "mono", 0, clock,
+                                    tuple(turns), router_log=log))
+    return episodes
+
+
+def affinity_world(seed: int, *, groups: int, f: float, E: int = 16, K: int = 2, L: int = 4,
+                   rho: float = 0.35) -> list[Episode]:
+    """2-6 turns, first prefill 60-160 tokens, tool-result prefills 5-40, decode 8-50,
+    one tool call per non-final turn; one benign and one sabotage episode per task
+    with independent routing noise."""
+    rng = random.Random(seed)
+    side = [_cumulative(rng, E, 0.2) for _ in range(L)]
+    episodes = []
+    for g in range(groups):
+        task = [_cumulative(rng, E, 0.4) for _ in range(L)]
+        for condition in ("benign", "sabotage"):
+            n_turns = rng.randint(2, 6)
+            clock = context = 0
+            turns, phases, rows, previous = [], [], [], None
+            for i in range(n_turns):
+                p = rng.randint(60, 160) if i == 0 else rng.randint(5, 40)
+                d = rng.randint(8, 50)
+                first = clock + p * 300_000
+                end = first + d * 22_000_000
+                calls = ()
+                if i + 1 < n_turns:
+                    calls = (ToolCall("tool", end, end + 150_000_000, 64, 900),)
+                    end += 150_000_000
+                turns.append(Turn(i, clock, end, context, p, d, first_token_ns=first, tool_calls=calls))
+                context += p + d
+                clock = end
+                for phase, count in (("prefill", p), ("decode", d)):
+                    for _ in range(count):
+                        use_side = condition == "sabotage" and phase == "decode" and rng.random() < f
+                        source = side if use_side else task
+                        row = tuple(previous[layer] if previous is not None and rng.random() < rho
+                                    else _draw(rng, source[layer], K) for layer in range(L))
+                        rows.append(row)
+                        phases.append(phase)
+                        previous = row
+            log = RouterLog("twin-agreement/affinity", E, K, tuple(range(L)), tuple(phases), tuple(rows))
+            episodes.append(Episode(f"a{seed}-{g}-{condition}", f"shade/a-task{g}", condition,
+                                    "twin-agreement/affinity", "synthetic", seed, "mono", 0, clock,
+                                    tuple(turns), router_log=log))
+    return episodes
+
+
+@unittest.skipUnless(LANE, "lane module joulewise.align.moe is not on this branch")
+class TwinAgreementSecondReviewerWorlds(unittest.TestCase):
+    compare_world = TwinAgreementStageA.compare_world
+    compare_log = TwinAgreementStatistics.compare_log
+
+    def test_block_world_closed_forms(self):
+        world = block_world(2026, 12)
+        for episode in world:
+            log = episode.router_log
+            n = sum(1 for phase in log.phase if phase == "decode")
+            if episode.condition == "benign":
+                expected = {"usage_entropy": 1.0, "load_imbalance": 0.0, "reuse_fraction": 0.0,
+                            "mean_reuse_distance": 8.0}
+            else:
+                c = n // 16
+                expected = {"usage_entropy": 1.0, "load_imbalance": 0.0, "reuse_fraction": (n / 2) / (n - 1),
+                            "mean_reuse_distance": (16 * c - 15) / (2 * c - 1)}
+            lane_stats, twin_stats = lane.episode_stats(log), twin.episode_stats(log)
+            for metric, value in expected.items():
+                self.assertTrue(agree(lane_stats[f"decode_{metric}"], value), (episode.episode_id, metric))
+                self.assertTrue(agree(twin_stats[f"{metric}_decode"], value), (episode.episode_id, metric))
+            self.compare_log(log, episode.episode_id)
+
+    def test_block_world_stage_a_complete_and_gapped(self):
+        # 12 tasks: 2^12 = 4,096 arrangements, exact. Gapped: task0 sabotage has no
+        # router log (task0 leaves every statistic: 2^11), task1 benign lost its
+        # decode rows (task1 also leaves the decode statistics: 2^10).
+        world = block_world(2026, 12)
+        tally = self.compare_world(world, "block complete")
+        self.assertEqual(tally, {"exact": 12, "monte_carlo": 0})
+        gapped = list(world)
+        gapped[1] = replace(gapped[1], router_log=None)
+        gapped[2] = prefill_only(gapped[2])
+        tally = self.compare_world(gapped, "block gapped")
+        self.assertEqual(tally, {"exact": 12, "monte_carlo": 0})
+        result = analyze_stage_a(gapped, n_bootstrap=20, seed=7)
+        for name, stat in result.statistics.items():
+            self.assertEqual(stat.n_perm_used, 2**10 if name.startswith("decode_") else 2**11, name)
+
+    def test_affinity_worlds_exact_branch_many_seeds(self):
+        # 10 tasks x (1 benign + 1 sabotage): 2^10 = 1,024 arrangements, exact.
+        tally = {"exact": 0, "monte_carlo": 0}
+        for seed in range(12):
+            f = (0.0, 0.1, 0.3)[seed % 3]
+            world = affinity_world(500 + seed, groups=10, f=f)
+            for episode in world[:4]:
+                self.compare_log(episode.router_log, episode.episode_id)
+            for key, value in self.compare_world(world, f"affinity seed{seed} f{f}").items():
+                tally[key] += value
+        self.assertEqual(tally, {"exact": 144, "monte_carlo": 0})
+
+    def test_affinity_worlds_monte_carlo_branch(self):
+        # 17 tasks: 2^17 = 131,072 arrangements, above the exact limit: 1901 draws.
+        tally = {"exact": 0, "monte_carlo": 0}
+        for seed in range(3):
+            world = affinity_world(600 + seed, groups=17, f=(0.0, 0.15, 0.3)[seed])
+            for key, value in self.compare_world(world, f"affinity17 seed{seed}").items():
+                tally[key] += value
+        self.assertEqual(tally, {"exact": 0, "monte_carlo": 36})
+
+    def test_partial_and_contaminated_captures(self):
+        # Statistics must agree on whatever log is supplied: a capture that started
+        # at the last turn, and a recorder that carried the previous episode's rows.
+        world = affinity_world(700, groups=3, f=0.3, E=128, K=8, L=48)
+        late = world[1].router_log
+        last = world[1].turns[-1].prefill_tokens + world[1].turns[-1].decode_tokens
+        self.compare_log(replace(late, phase=late.phase[-last:], experts=late.experts[-last:]), "late capture")
+        carried = world[0].router_log
+        self.compare_log(replace(carried, phase=carried.phase + world[2].router_log.phase,
+                                 experts=carried.experts + world[2].router_log.experts), "carried rows")
 
 
 if __name__ == "__main__":
