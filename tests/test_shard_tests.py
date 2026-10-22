@@ -27,10 +27,7 @@ def _suite_modules(suite) -> set[str]:
             stack.extend(item)
             continue
         module = item.__class__.__module__
-        # ``discover -s tests`` names modules relative to tests/, including
-        # packages such as align.test_records. The shard manifest names all
-        # of them relative to ROOT, not just the top-level test_* modules.
-        if not module.startswith("tests."):
+        if module.startswith(("test_", "align.")):
             module = f"tests.{module}"
         modules.add(module)
     return modules
@@ -47,7 +44,13 @@ def _unittest_discover_module_set() -> set[str]:
         sys.path[:] = old_path
     if loader.errors:
         raise AssertionError(f"unittest discovery errors: {loader.errors}")
-    return _suite_modules(suite)
+    return _qualified(_suite_modules(suite))
+
+
+def _qualified(modules) -> set[str]:
+    """``discover -s tests`` names modules relative to tests/, including any
+    nested package; the shard manifest names all of them relative to ROOT."""
+    return {m if m.startswith("tests.") else f"tests.{m}" for m in modules}
 
 
 class ShardPartitionInvariantTests(unittest.TestCase):
@@ -147,7 +150,7 @@ class NestedPackageDiscoveryTests(unittest.TestCase):
                 suite = loader.discover(os.fspath(tests_dir))
                 self.assertEqual(loader.errors, [])
                 self.assertEqual(suite.countTestCases(), len(expected_modules))
-                self.assertEqual(_suite_modules(suite), expected_modules)
+                self.assertEqual(_qualified(_suite_modules(suite)), expected_modules)
                 modules = shard_tests.discover_test_modules(tests_dir, root=root)
                 self.assertEqual(set(modules), expected_modules)
                 self.assertEqual(len(modules), len(expected_modules))
