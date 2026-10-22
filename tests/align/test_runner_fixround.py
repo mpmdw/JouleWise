@@ -200,7 +200,12 @@ class RunnerFixroundTests(unittest.TestCase):
                 "content": "Finished", "prompt_tokens": 128, "completion_tokens": 16,
                 "start_ns": 0, "end_ns": 0, "first_token_ns": None}]))
         self.assertIn("task.upstream_cache_missing", record.flags)
-        expected = list(dict.fromkeys("task." + flag for flag in task.flags))
+        # ShadeTask.reset raises when its pinned source cannot load (shade
+        # review-3 R3-F2 stopgap): the runner records its own setup error,
+        # measures no turns, and still lifts every task diagnostic after it.
+        self.assertEqual(record.turns, ())
+        expected = ["task.setup_error.RuntimeError",
+                    *dict.fromkeys("task." + flag for flag in task.flags)]
         self.assertEqual([flag for flag in record.flags if flag.startswith("task.")], expected)
 
     def test_real_shade_monitor_diagnostics_keep_each_snapshot_and_failure(self):

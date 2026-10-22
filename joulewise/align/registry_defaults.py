@@ -54,10 +54,13 @@ class _OpenAICompatTokenCounter:
         self.identity = endpoint.identity + "/tokenize"
 
     def count_tokens(self, text: str) -> int:
-        previous = len(self.endpoint.flags)
         count = self.endpoint.count_tokens(text)
-        if any(flag in {"tokenize_unavailable", "tokenize_invalid_base_url"}
-               for flag in self.endpoint.flags[previous:]):
+        # count_tokens ends every failed request with one of these flags and
+        # every success with tokenize_shape:*. Read the LAST flag: the endpoint
+        # clears its flag list per operation, so a length-based slice taken
+        # before the call can miss a failure that produced fewer flags.
+        flags = self.endpoint.flags
+        if flags and flags[-1] in {"tokenize_unavailable", "tokenize_invalid_base_url"}:
             raise RuntimeError("server tokenizer unavailable")
         return count
 
