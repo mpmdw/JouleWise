@@ -105,7 +105,10 @@ def wilson(successes: int, trials: int, *, confidence: float = 0.95) -> Rate:
         return Rate(successes, trials, None, None, confidence, ("rate_inputs_invalid",))
     if trials == 0:
         return Rate(0, 0, None, None, confidence, ("rate_denominator_empty",))
-    z = NormalDist().inv_cdf((1.0 + confidence) / 2.0)
+    quantile = (1.0 + confidence) / 2.0
+    if not 0.0 < quantile < 1.0:
+        return Rate(successes, trials, None, None, confidence, ("rate_quantile_unrepresentable",))
+    z = NormalDist().inv_cdf(quantile)
     p = successes / trials
     denominator = 1.0 + z * z / trials
     center = (p + z * z / (2.0 * trials)) / denominator
