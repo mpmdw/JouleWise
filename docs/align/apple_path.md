@@ -6,10 +6,10 @@ synthetic campaign and lane tests locally at 9162afd6d; the reviewer ran 19
 lane tests and H1–H4 at b7739911b (H2 used real MLX with mock telemetry).
 The lead's local run at 10352c24b ran 23 lane tests: 22 passed; the campaign
 test failed strict validation because output_policy.emitted_tokens was absent.
-The lead also ran H1/H3/H4/id_probe and real-MLX H2 at that head. Fix2c
-restores the count; that correction is NOT EXECUTED by this cloud seat,
-whose executor remained unavailable. All reported measurements below are
-attributed; planning calculations remain derived.
+The lead also ran H1/H3/H4/id_probe and real-MLX H2 at that head. The lead's
+later local run at 86f441c93 executed the fix2c correction: all 23 lane tests
+passed, including strict campaign validation; the MLX harness printed strict [].
+Those results belong to the lead. Planning calculations remain derived.
 
 Energy can count inference work omitted from a visible log. It cannot identify
 reasoning that fits inside the same forward passes.
@@ -121,8 +121,12 @@ joulewise/clock.py is unchanged.
 powermetrics_fiducial.py, kernel_clock.py and load_transition_alignment.py own
 the existing calibration, dispatch/fence, frequency-residual and provisional
 transition evidence. The bridge replaces none of them. The approximately 1 J
-attribution limit is distinct from approximately 0.3 J repeatability noise;
-common attribution bounds do not average away.
+attribution limit is distinct from the measured 0.29–0.49 J repeatability on
+about 50 J points in windows a9/a10: [D-078 clause 11, 2026-07-25](../decision_log.md#d-078).
+That entry contrasts repeatability with a per-member clock-anchor-shift envelope
+of about 0.7–1.0 J. It also retains later provenance caveats on the old windows;
+these are historical instrument diagnostics, not D1 calibration or claim authority.
+Common attribution bounds do not average away.
 
 Native readings are interval averages. PowerTrace has a single averaging
 width, so variable supports remain as integer intervals in trace.notes with a
@@ -370,7 +374,9 @@ the HAZARD fixture tests an actual bundle span against the real battery judge.
 The lead's 23-test lane run at that head had one strict campaign failure:
 the bundle's output_policy lacked emitted_tokens. Fix2c restores that
 realized count and checks equality with the observed member, retaining
-identity/readiness equality checks. The correction is NOT EXECUTED here:
-this cloud seat could not launch Python and ran 0 tests or harnesses.
-See the lane report for exact commands, attribution and remaining checks.
+identity/readiness equality checks. The lead executed the correction locally
+at 86f441c93: all 23 lane tests passed, the campaign passed strict validation,
+and the MLX normal/truncate/think harnesses printed strict []. This is the
+lead's evidence, not a cloud-seat execution. See the lane report for exact
+commands, attribution and remaining checks.
 Never run the whole suite from this brief.
