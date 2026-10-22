@@ -1,0 +1,763 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [
+      {
+        "basenames": [
+          "claude",
+          "codex",
+          "node",
+          "npm"
+        ],
+        "end": {
+          "monotonic_ns": 612696831877000,
+          "monotonic_raw_ns": 612696831876541,
+          "wall_s": 1792628359.848093
+        },
+        "last_sighting": {
+          "monotonic_ns": 612690753902583,
+          "monotonic_raw_ns": 612690753901708,
+          "wall_s": 1792628353.770119
+        },
+        "pause_end": {
+          "monotonic_ns": 612696831877000,
+          "monotonic_raw_ns": 612696831876541,
+          "wall_s": 1792628359.848093
+        },
+        "pause_s": 66.117813084,
+        "since": {
+          "monotonic_ns": 612630714063916,
+          "monotonic_raw_ns": 612630714063125,
+          "wall_s": 1792628293.73028
+        },
+        "start": {
+          "exit_code": 1,
+          "monotonic_ns": 612600709791333,
+          "stdout": "",
+          "wall_s": 1792628263.7260072
+        }
+      }
+    ],
+    "stopped_by_limit": false,
+    "total_pause_s": 66.117813084
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-bytes/h-20261021T185555Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": -15,
+    "matches_sidecar": true,
+    "sha256": "6ac0066e75858df71820d365fa10a9c0a4f1d47b85b03dc8a39ec0205e2f035c",
+    "sidecar_sha256": "6ac0066e75858df71820d365fa10a9c0a4f1d47b85b03dc8a39ec0205e2f035c",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-bound-collection"
+      },
+      {
+        "kind": "neg8_corpus_retry_decision",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-bound-collection.retry-decision"
+      },
+      {
+        "kind": "neg8_corpus_collected",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-bound-derivation.corpus"
+      },
+      {
+        "kind": "bound_derivation",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-bound-derivation"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-test7-llama-70b-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-test7-qwen35-122b-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-1p7b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-4b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-8b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-30b-a3b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-14b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-next-80b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-32b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen3-8b-8bit"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-llama-70b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-check-qwen35-122b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-reference-midpoint"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 612702403183500,
+    "monotonic_raw_ns": 612702403183000,
+    "wall_s": 1792628365.4194
+  },
+  "faults": {
+    "bound_derivation_failed": false,
+    "post_bracket_failed": "not_run",
+    "reasons": [
+      "yield_low"
+    ]
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output",
+    "agent.presence_overlap",
+    "agent.presence"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 377,
+    "head": "c10b6895fab0894b23b42ad439cf900c37d07c0b",
+    "path": "/Users/edr/night-bytes/h-20261021T185555Z/custody/night/executed_inventory.json",
+    "sha256": "a9aafdbd619fb64e211e998673915f6855f90f103d57c1e1a6fd76bf48c457c7",
+    "status_clean": false
+  },
+  "keep_awake": {
+    "pid": 5166,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-bytes/h-20261021T185555Z/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 612702161769250,
+        "monotonic_raw_ns": 612702161768458,
+        "wall_s": 1792628365.177985
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "009d0e688678cb4c887f42e5007dbb671772ce78b5607b011014d23db3417389",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-bytes/h-20261021T185555Z/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 612701837027041,
+        "monotonic_raw_ns": 612701837026333,
+        "wall_s": 1792628364.8532429
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 593994113853583,
+          "monotonic_raw_ns": 593994113853250,
+          "wall_s": 1792609657.13007
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 1.054
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 612696831877000,
+      "monotonic_raw_ns": 612696831876541,
+      "wall_s": 1792628359.848093
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 612701837027041,
+      "monotonic_raw_ns": 612701837026333,
+      "wall_s": 1792628364.8532429
+    },
+    "released": {
+      "monotonic_ns": 612701836947875,
+      "monotonic_raw_ns": 612701836946291,
+      "wall_s": 1792628364.853164
+    },
+    "released_after_chain_s": 5.005
+  },
+  "neg8_corpus": {
+    "collected_manifest": {
+      "path": "/Users/edr/night-bytes/h-20261021T185555Z/custody/night/transcript/neg8-settled-corpus.collected.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "committed_manifest": {
+      "path": "/Users/edr/night-bytes/h-20261021T185555Z/measurement/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "errors": [],
+    "members_kept": 18,
+    "members_listed": 18,
+    "pruned": false,
+    "summary": {
+      "path": "/Users/edr/night-bytes/h-20261021T185555Z/custody/night/transcript/neg8-settled-corpus.collected.summary.json",
+      "sha256": "11829acc15605c4759ea6b92ad5d0671102ac52351794cbedbb7f47e8cc0b032"
+    }
+  },
+  "pack_id": "bytes-mac-check",
+  "plan_id": "bytes-h-20261021T185555335572Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -125,
+    "end": {
+      "monotonic_ns": 612696831895250,
+      "monotonic_raw_ns": 612696831891958,
+      "read_skew_ns": 250,
+      "sleep_offset_ns": -42,
+      "uptime_raw_ns": 612696831892000,
+      "wall_s": 1792628359.848112
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 593995214920250,
+      "monotonic_raw_ns": 593995214918791,
+      "read_skew_ns": 334,
+      "sleep_offset_ns": 83,
+      "uptime_raw_ns": 593995214918708,
+      "wall_s": 1792609658.231137
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 593717197583208,
+    "monotonic_raw_ns": 593717197579583,
+    "wall_s": 1792609380.213799
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 95,
+    "failed": 0,
+    "logged": 95,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 18,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 18,
+        "present": 18,
+        "rc": 0,
+        "role": "corpus",
+        "stage_id": "bytes-mac-check-bound-collection",
+        "status": "OK",
+        "succeeded": 18
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-mac-check-reference-start",
+        "status": "OK",
+        "succeeded": 3
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 4,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 4,
+        "present": 4,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-llama-70b-start",
+        "status": "OK",
+        "succeeded": 4
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 4,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 4,
+        "present": 4,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen35-122b-start",
+        "status": "OK",
+        "succeeded": 4
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 4,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 4,
+        "present": 4,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start",
+        "status": "OK",
+        "succeeded": 4
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-1p7b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 10,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-4b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 11,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-8b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 12,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-30b-a3b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 13,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-14b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 14,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-next-80b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 15,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-32b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 16,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-8b-8bit",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 17,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-llama-70b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 5,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 18,
+        "planned": 5,
+        "present": 5,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen35-122b",
+        "status": "OK",
+        "succeeded": 5
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 19,
+        "planned": 1,
+        "present": 1,
+        "rc": 0,
+        "role": "reference_midpoint",
+        "stage_id": "bytes-mac-check-reference-midpoint",
+        "status": "OK",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 11,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 20,
+        "planned": 12,
+        "present": 11,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-soak-llama-70b",
+        "status": "OK",
+        "succeeded": 11
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 21,
+        "planned": 12,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-soak-qwen35-122b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 22,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-llama-70b-end",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 23,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen35-122b-end",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 24,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 25,
+        "planned": 3,
+        "present": 0,
+        "rc": null,
+        "role": "reference",
+        "stage_id": "bytes-mac-check-reference-end",
+        "status": "ZERO",
+        "succeeded": 0
+      }
+    ],
+    "planned": 123,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 95,
+    "yield_status": "LOW"
+  },
+  "yield_plan": {
+    "planned": 123,
+    "source": [
+      "driver"
+    ],
+    "stages": 22
+  },
+  "yield_tripwire": {
+    "attempted_seen": 95,
+    "counted_in_settle": 16,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 16,
+    "stalled": false
+  }
+}
