@@ -361,7 +361,7 @@ def run_session(options: SessionOptions, *,
                 probe: Callable[[str, float], bool] = _healthy) -> dict[str, Any]:
     """Run serial agent models with an explicitly placed, unsampled monitor.
 
-    MIG/vGPU and absent/refused NVML preflight refuse before any model starts.
+    MIG/vGPU and absent/refused/unready NVML preflight refuse before any model starts.
     Other unavailable integration is recorded and raw results are still sealed.
     """
     output = options.output.resolve()
@@ -480,7 +480,13 @@ def run_session(options: SessionOptions, *,
                 if report["refused"]:
                     flags.append("nvml_preflight_refused")
                     receipt["status"] = "refused"
-                elif code:
+                # Only the JSON boolean true demonstrates that power moved
+                # under load on every measured GPU. Missing/non-boolean readiness
+                # cannot establish a working instrument for a paid campaign.
+                if report.get("measurement_ready") is not True:
+                    flags.append("nvml_measurement_not_ready")
+                    receipt["status"] = "refused"
+                elif code and not report["refused"]:
                     flags.append("nvml_preflight_command_failed_with_report")
             except (OSError, ValueError, TypeError):
                 flags.append("nvml_preflight_unavailable")

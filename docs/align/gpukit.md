@@ -1,9 +1,10 @@
 # Whole-GPU campaign kit (internal, PROVISIONAL)
 
 This kit builds the rented-server workflow. It does not rent hardware or authorize
-paid APIs. Ed approves provider and spend before any paid session. The fix-round
-code has not executed in its build seat: shell startup never became usable.
-PR #521 remains draft. Integrated offline rehearsal is required before rental.
+paid APIs. Ed approves provider and spend before any paid session. The director
+executed bed93a095 and supplied the evidence recorded in the lane report; this
+continuation seat has no working executor and claims no test run of its own.
+PR #521 remains draft. Final-head integrated offline rehearsal is required before rental.
 
 Power can count extra work; it cannot distinguish computations within one forward
 pass. This lane measures server GPUs; Mac MagSafe/battery behavior is outside it.
@@ -232,10 +233,19 @@ The default command is:
 There is one --device per measured physical index, and none for the monitor GPU.
 The report is bundled; its refused, measurement_ready and flags enter the receipt.
 refused=true refuses with CLI exit 2, no model directories, and a sealed bundle.
-No readable report also refuses with nvml_preflight_unavailable. A usage-error exit
-is not a verdict. A readable refused=false report proceeds, even when readiness is
-false; all flags remain. Custom preflight commands receive the same --out/--device
-arguments and must write that report; stdout alone is insufficient.
+No readable report also refuses with nvml_preflight_unavailable. Under the amended
+R4/C2 ruling, measurement_ready must be the JSON boolean true: false, missing, null
+or another type refuses with nvml_measurement_not_ready. That field demonstrates
+that power moved under load on every measured GPU. Without that demonstration the
+campaign would spend paid time without a working instrument. All report fields
+and flags remain in the sealed evidence. A usage-error exit is not a verdict;
+refused=false and measurement_ready=true permit proceeding, with a nonzero exit
+recorded as a flag.
+
+A custom --preflight-command receives --out <output>/preflight.json and one
+--device <index> per measured GPU. It must write the NVML report format to --out,
+including boolean refused, boolean measurement_ready and a flags list. Stdout
+alone is insufficient; a fixture must write that same format too.
 
 Supply and power-limit throttling are physical hazards on rented boxes. A software
 power cap reduces clocks under load; a platform/board power brake or hardware
@@ -298,6 +308,7 @@ JW_B5_SYNTHETIC_ONLY=1 and run:
     python3 -m unittest discover -s tests/align -t .
 
 Repeat in a throwaway venv with jsonschema, then run the supplied reviewer repros
-and integrated runner/NVML tree cases. None ran in this seat. The report lists
-exact pending commands and the reviewer-stub incompatibility with R4. Never rent
+and integrated runner/NVML tree cases. None ran in this continuation seat. The
+report separates the director's bed93a095 results from the final-head commands
+still NOT RUN here and lists the authorized harness wiring changes. Never rent
 on the strength of the authored test inventory alone.

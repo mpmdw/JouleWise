@@ -298,9 +298,17 @@ if sys.argv[1:3] == ["-m", "joulewise.align.power.preflight"]:
     if mode == "missing":
         raise SystemExit(2)
     refused = mode == "refused"
-    Path(sys.argv[sys.argv.index("--out") + 1]).write_text(json.dumps({
-        "refused": refused, "measurement_ready": mode == "ready",
-        "flags": ["fixture_not_ready"] if mode == "unready" else []}))
+    report = {"refused": refused, "measurement_ready": mode == "ready",
+              "flags": ["fixture_not_ready"] if mode == "unready" else []}
+    if mode == "no-readiness":
+        report.pop("measurement_ready")
+    elif mode == "string-readiness":
+        report["measurement_ready"] = "true"
+    elif mode == "numeric-readiness":
+        report["measurement_ready"] = 1
+    elif mode == "null-readiness":
+        report["measurement_ready"] = None
+    Path(sys.argv[sys.argv.index("--out") + 1]).write_text(json.dumps(report))
     raise SystemExit(2 if refused else 0)
 raise SystemExit(1)
 """)
@@ -646,8 +654,14 @@ raise SystemExit(1)
 
     def test_preflight_report_verdicts_and_no_runner_on_refusal(self):
         marker = self.base / "runner-marker"
+        # C2 amends R4: false, absent and non-boolean readiness now refuse.
         for mode, flag in (("refused", "nvml_preflight_refused"),
-                           ("missing", "nvml_preflight_unavailable")):
+                           ("missing", "nvml_preflight_unavailable"),
+                           ("no-readiness", "nvml_measurement_not_ready"),
+                           ("string-readiness", "nvml_measurement_not_ready"),
+                           ("numeric-readiness", "nvml_measurement_not_ready"),
+                           ("null-readiness", "nvml_measurement_not_ready"),
+                           ("unready", "nvml_measurement_not_ready")):
             os.environ["GK_PREFLIGHT"] = mode
             options = self._options("preflight-" + mode, runner_command=(
                 sys.executable, "-c", f"from pathlib import Path; Path({str(marker)!r}).touch()"))
@@ -658,29 +672,30 @@ raise SystemExit(1)
             self.assertFalse(marker.exists())
             self.assertEqual(list(options.output.glob("model-*")), [])
             self.assertEqual(verify_manifest(options.output), ())
-        os.environ["GK_PREFLIGHT"] = "unready"
-        result = run_session(self._options("preflight-unready"))
-        self.assertTrue(result["data_complete"])
+        self.assertFalse(result["preflight"]["refused"])
         self.assertFalse(result["preflight"]["measurement_ready"])
         self.assertIn("fixture_not_ready", result["flags"])
+        self.assertTrue((options.output / "preflight.json").is_file())
+        self.assertTrue(options.output.with_name(options.output.name + ".tar.gz").is_file())
 
     def test_preflight_refusal_cli_exit_two(self):
         import contextlib
         import io
         from joulewise.align.gpukit.session import main
-        os.environ["GK_PREFLIGHT"] = "refused"
-        options = self._options("preflight-cli")
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            code = main([str(options.matrix), "--output", str(options.output),
-                         "--ready-timeout-s", "30", "--command-timeout-s", "30",
-                         "--runner-timeout-s", "30", "--poll-s", "0.01",
-                         "--monitor-placement", "none",
-                         "--preflight-command", json.dumps(options.preflight_command),
-                         "--runner-command", json.dumps(options.runner_command)])
-        self.assertEqual(code, 2)
-        self.assertEqual(json.loads(stdout.getvalue())["status"], "refused")
-        self.assertEqual(verify_manifest(options.output), ())
+        for mode in ("refused", "unready"):
+            os.environ["GK_PREFLIGHT"] = mode
+            options = self._options("preflight-cli-" + mode)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = main([str(options.matrix), "--output", str(options.output),
+                             "--ready-timeout-s", "30", "--command-timeout-s", "30",
+                             "--runner-timeout-s", "30", "--poll-s", "0.01",
+                             "--monitor-placement", "none",
+                             "--preflight-command", json.dumps(options.preflight_command),
+                             "--runner-command", json.dumps(options.runner_command)])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(stdout.getvalue())["status"], "refused")
+            self.assertEqual(verify_manifest(options.output), ())
 
     def test_endpoint_identity_model_and_different_model(self):
         os.environ["GK_EP_MODE"] = "identity"
