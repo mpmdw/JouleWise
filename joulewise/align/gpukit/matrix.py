@@ -71,16 +71,20 @@ def numeric_provenance(matrix: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(flags)
 
 
-def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
-    """Return format and arithmetic flags without excluding requested rows."""
+def structural_flags(matrix: Mapping[str, Any]) -> tuple[str, ...]:
+    """Inspect only fields needed for serving and runner coordinates (R11)."""
+    if not isinstance(matrix, Mapping):
+        return ("matrix_not_object",)
     flags: list[str] = []
     if matrix.get("schema") != SCHEMA:
         flags.append("matrix_schema_unknown")
-    for field in ("models", "tasks", "conditions", "seeds"):
-        values = matrix.get(field)
-        if not isinstance(values, list) or not values:
-            flags.append(f"matrix_{field}_empty_or_invalid")
+    for key in ("models", "tasks", "conditions", "seeds"):
+        if not isinstance(matrix.get(key), list) or not matrix[key]:
+            flags.append(f"matrix_{key}_empty_or_invalid")
     try:
+        for key in ("tasks", "conditions"):
+            if any(not isinstance(v, str) or not v for v in matrix[key]):
+                flags.append("matrix_required_field_invalid")
         if len({m["id"] for m in matrix["models"]}) != len(matrix["models"]):
             flags.append("matrix_duplicate_models")
         for key in ("tasks", "conditions", "seeds"):
@@ -88,36 +92,88 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
                 flags.append(f"matrix_duplicate_{key}")
         if any(type(s) is not int for s in matrix["seeds"]):
             flags.append("matrix_seed_invalid")
-        count = len(expand(matrix))
-        if type(matrix.get("episode_count")) is not int or count != matrix["episode_count"]:
-            flags.append("matrix_episode_count_mismatch")
-        if matrix["kind"] not in ("shade", "moe_stage_a", "budget"):
+        kind = matrix["kind"]
+        if kind not in ("shade", "moe_stage_a", "budget"):
             flags.append("matrix_kind_unknown")
-        allowed = BUDGET_CONDITIONS if matrix["kind"] == "budget" else get_args(Condition)
+        allowed = BUDGET_CONDITIONS if kind == "budget" else get_args(Condition)
         if not set(matrix["conditions"]) <= set(allowed):
             flags.append("matrix_conditions_invalid")
-        if not set(matrix["monitor_visibilities"]) <= set(get_args(Visibility)):
+        visibility = matrix["monitor_visibilities"]
+        if not isinstance(visibility, list) or not set(visibility) <= set(get_args(Visibility)):
             flags.append("matrix_monitor_visibilities_invalid")
-        serving = [*matrix["models"], matrix["monitor_serving"]]
-        serving.extend(option for m in matrix["models"] for option in m.get("layout_options", ()))
+        if not isinstance(matrix["monitor_model"], str) or not matrix["monitor_model"]:
+            flags.append("matrix_required_field_invalid")
         if matrix["monitor_serving"]["id"] != matrix["monitor_model"]:
             flags.append("matrix_monitor_serving_model_mismatch")
-        for spec in serving:
-            for field in ("reasoning_parser", "tool_call_parser"):
-                if field not in spec or (spec[field] is not None
-                                         and (not isinstance(spec[field], str) or not spec[field])):
-                    flags.append("matrix_" + field + "_invalid")
+        for spec in [*matrix["models"], matrix["monitor_serving"]]:
+            if not isinstance(spec["id"], str) or not spec["id"]:
+                flags.append("matrix_required_field_invalid")
+            for key in ("reasoning_parser", "tool_call_parser"):
+                if key not in spec or (spec[key] is not None and
+                                      (not isinstance(spec[key], str) or not spec[key])):
+                    flags.append("matrix_" + key + "_invalid")
+            if type(spec.get("enable_auto_tool_choice")) is not bool:
+                flags.append("matrix_auto_tool_choice_invalid")
+            if type(spec.get("tensor_parallel_size", 1)) is not int or spec.get("tensor_parallel_size", 1) < 1:
+                flags.append("matrix_tensor_parallel_size_invalid")
+            if spec.get("weight_precision", "bf16") not in ("bf16", "fp8"):
+                flags.append("matrix_weight_precision_invalid")
+            if spec.get("revision") is not None and not isinstance(spec["revision"], str):
+                flags.append("matrix_required_field_invalid")
+        if type(matrix["sampling"]["interval_ns"]) is not int or matrix["sampling"]["interval_ns"] <= 0:
+            flags.append("matrix_sample_interval_invalid")
+        if kind == "budget":
+            spec = matrix["budget"]
+            if type(spec["calibration_repetitions"]) is not int or spec["calibration_repetitions"] < 1:
+                flags.append("matrix_calibration_repetitions_invalid")
+            if not isinstance(spec["live_conditions"], list) or not set(spec["live_conditions"]) <= set(matrix["conditions"]):
+                flags.append("matrix_live_conditions_invalid")
+            if len(spec["live_conditions"]) != len(set(spec["live_conditions"])):
+                flags.append("matrix_live_conditions_duplicate")
+            if spec["paired_generations"] != 2:
+                flags.append("matrix_paired_generation_contract_mismatch")
+    except (KeyError, TypeError, ValueError, AttributeError):
+        flags.append("matrix_required_field_invalid")
+    return tuple(sorted(set(flags)))
+
+
+def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return all structural and record flags; planning never gates collection."""
+    flags = list(structural_flags(matrix))
+    if not isinstance(matrix, Mapping):
+        return tuple(flags)
+    try:
+        for spec in [*matrix["models"], matrix["monitor_serving"]]:
             if not _citation(spec.get("reasoning_parser_source")):
                 flags.append("matrix_reasoning_parser_source_missing")
             if not spec.get("tool_call_parser_source"):
                 flags.append("matrix_tool_call_parser_source_missing")
-            if type(spec.get("enable_auto_tool_choice")) is not bool:
-                flags.append("matrix_auto_tool_choice_invalid")
-        for model in matrix["models"]:
-            if type(model.get("tensor_parallel_size", 1)) is not int or model.get("tensor_parallel_size", 1) < 1:
-                flags.append("matrix_tensor_parallel_size_invalid")
-            if model.get("weight_precision", "bf16") not in ("bf16", "fp8"):
-                flags.append("matrix_weight_precision_invalid")
+    except (KeyError, TypeError, AttributeError):
+        pass  # The structural pass already names malformed served entries.
+    try:
+        count = len(expand(matrix))
+        for key in ("episode_count", "measured_episode_count", "monitor_call_count"):
+            if type(matrix.get(key)) is not int:
+                flags.append("matrix_planning_field_invalid")
+        if matrix.get("episode_count") != count:
+            flags.append("matrix_episode_count_mismatch")
+        item_seeds = len(matrix["tasks"]) * len(matrix["seeds"])
+        if matrix["kind"] == "budget":
+            spec = matrix["budget"]
+            measured = len(matrix["models"]) * (
+                len(matrix["tasks"]) * spec["calibration_repetitions"]
+                + item_seeds * len(spec["live_conditions"]) * spec["paired_generations"])
+            monitor_calls = count
+        else:
+            measured = count
+            monitor_calls = count * len(matrix["monitor_visibilities"])
+        if matrix.get("measured_episode_count") != measured:
+            flags.append("matrix_measured_episode_count_mismatch")
+        if matrix.get("monitor_call_count") != monitor_calls:
+            flags.append("matrix_monitor_call_count_mismatch")
+    except (KeyError, TypeError, ValueError):
+        pass  # Invalid coordinates are handled by structural_flags.
+    try:
         for key in ("prefill_tokens", "decode_tokens", "tool_wait_s", "host_overhead_s",
                     "monitor_prefill_tokens", "monitor_decode_tokens"):
             value = matrix["workload"][key]
@@ -161,37 +217,10 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
                     flags.append(f"matrix_active_exceeds_total:{model}")
                 if any(v is not None for v in values) and not _citation(params["source"]):
                     flags.append(f"matrix_model_source_missing:{model}")
-        if type(matrix["sampling"]["interval_ns"]) is not int or matrix["sampling"]["interval_ns"] <= 0:
-            flags.append("matrix_sample_interval_invalid")
-        if matrix["kind"] == "budget":
-            spec = matrix["budget"]
-            if type(spec["calibration_repetitions"]) is not int or spec["calibration_repetitions"] < 1:
-                flags.append("matrix_calibration_repetitions_invalid")
-            if not set(spec["live_conditions"]) <= set(matrix["conditions"]):
-                flags.append("matrix_live_conditions_invalid")
-            if len(spec["live_conditions"]) != len(set(spec["live_conditions"])):
-                flags.append("matrix_live_conditions_duplicate")
-            if spec["paired_generations"] != 2:
-                flags.append("matrix_paired_generation_contract_mismatch")
-        item_seeds = len(matrix["tasks"]) * len(matrix["seeds"])
-        if matrix["kind"] == "budget":
-            spec = matrix["budget"]
-            measured = len(matrix["models"]) * (
-                len(matrix["tasks"]) * spec["calibration_repetitions"]
-                + item_seeds * len(spec["live_conditions"]) * spec["paired_generations"])
-            monitor_calls = count
-        else:
-            measured = count
-            monitor_calls = count * len(matrix["monitor_visibilities"])
-        if matrix.get("measured_episode_count") != measured:
-            flags.append("matrix_measured_episode_count_mismatch")
-        if matrix.get("monitor_call_count") != monitor_calls:
-            flags.append("matrix_monitor_call_count_mismatch")
-    except (KeyError, TypeError, ValueError, OverflowError):
-        flags.append("matrix_required_field_invalid")
+    except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+        flags.append("matrix_planning_field_invalid")
     flags.extend(numeric_provenance(matrix))
     return tuple(sorted(set(flags)))
-
 
 def load_matrix(path: Path) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Read a matrix and return all validation flags; I/O failures remain visible."""

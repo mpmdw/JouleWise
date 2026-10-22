@@ -29,7 +29,7 @@ from urllib.parse import urlsplit
 
 from joulewise.align.gpukit.coverage import power_coverage
 from joulewise.align.gpukit.identity import model_identity_matches
-from joulewise.align.gpukit.matrix import expand, load_matrix
+from joulewise.align.gpukit.matrix import expand, load_matrix, structural_flags
 from joulewise.align.gpukit.cost import calibration_slice
 from joulewise.align.gpukit.throttle import snapshot, compare
 from joulewise.align.gpukit.runner_adapter import write_runner_matrix
@@ -378,11 +378,11 @@ def run_session(options: SessionOptions, *,
     monitor_log = None
     try:
         matrix, matrix_flags = load_matrix(options.matrix)
-        if options.calibration_slice and matrix and not matrix_flags:
+        if options.calibration_slice and matrix and not structural_flags(matrix):
             matrix = calibration_slice(matrix)
             receipt["calibration_slice"] = "All models and task/condition strata, first seed; no throughput assumption."
         flags.extend(matrix_flags)
-        if not matrix or matrix_flags:
+        if not matrix or structural_flags(matrix):
             # R8: malformed inputs fail before inventory, preflight or serving.
             # This is a failed command, not a physical-isolation refusal.
             raise MatrixInputError("matrix is missing, unreadable or invalid")
@@ -495,7 +495,10 @@ def run_session(options: SessionOptions, *,
             except (OSError, ValueError, TypeError):
                 flags.append("nvml_preflight_unavailable")
                 receipt["status"] = "refused"
-        executable = bool(matrix and not matrix_flags and receipt["status"] != "refused")
+        executable = bool(matrix and not structural_flags(matrix)
+                          and "runner_settings_missing" not in flags
+                          and "runner_measured_gpu_layout_invalid" not in flags
+                          and receipt["status"] != "refused")
         if executable and placement == "gpu" and monitor_endpoint is not None:
             monitor_log = (output / "monitor-server.log").open("wb")
             monitor_argv = _serve_argv(options, monitor_model, options.monitor_port)
@@ -582,8 +585,7 @@ def run_session(options: SessionOptions, *,
                                 model_receipt["flags"].append("runner_command_failed")
                             if timed_out:
                                 model_receipt["flags"].append("runner_timeout")
-                            expected = matrix.get("measured_episode_count", matrix["episode_count"])
-                            expected //= len(matrix["models"])
+                            expected = sum(r.model == model["id"] for r in expand(matrix))
                             model_receipt["flags"].extend(_validate_output(
                                 model_dir / "episodes.jsonl", expected_count=expected,
                                 router=matrix["kind"] == "moe_stage_a", model=model["id"],

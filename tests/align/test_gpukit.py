@@ -871,6 +871,57 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
                 self.assertEqual(snapshot["power_limits"]["requested"], "650.00 W")
 
 
+
+    def test_record_matrix_provenance_flag_still_collects(self):
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        matrix["workload"]["prefill_tokens"] = 40000  # Fixture's twelve-turn context work.
+        matrix["workload"]["derivation"] = ""
+        path = self.base / "unsourced.json"
+        path.write_text(json.dumps(matrix))
+        result = run_session(self._options("unsourced", matrix=path))
+        self.assertTrue(result["data_complete"])
+        self.assertEqual(result["status"], "completed_with_flags")
+        self.assertIn("matrix_numeric_source_missing:workload.prefill_tokens", result["flags"])
+        self.assertEqual(len(result["models"]), 2)
+        self.assertIn("preflight_returncode", result)
+
+    def test_stale_declared_counts_do_not_change_data_completeness(self):
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        # Two seeds generate 40 coordinates; retain the old declarations deliberately.
+        matrix["seeds"] = [0, 1]
+        path = self.base / "stale.json"
+        path.write_text(json.dumps(matrix))
+        result = run_session(self._options("stale", matrix=path))
+        self.assertTrue(result["data_complete"])
+        self.assertIn("matrix_measured_episode_count_mismatch", result["flags"])
+        self.assertEqual([m["power_coverage"]["episodes_checked"] for m in result["models"]], [20, 20])
+
+    def test_malformed_planning_section_still_collects(self):
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        matrix["workload"] = None
+        path = self.base / "bad-planning.json"
+        path.write_text(json.dumps(matrix))
+        result = run_session(self._options("bad-planning", matrix=path))
+        self.assertTrue(result["data_complete"])
+        self.assertIn("matrix_planning_field_invalid", result["flags"])
+        self.assertEqual(len(result["models"]), 2)
+
+    def test_structural_condition_typo_fails_before_hardware(self):
+        from unittest.mock import patch
+        from joulewise.align.gpukit import session
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        matrix["conditions"] = ["benign", "attack"]
+        path = self.base / "bad-condition.json"
+        path.write_text(json.dumps(matrix))
+        with patch.object(session, "whole_gpu") as hardware, patch.object(session, "_command") as command:
+            result = run_session(self._options("bad-condition", matrix=path))
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("matrix_conditions_invalid", result["flags"])
+        self.assertEqual(result["models"], [])
+        hardware.assert_not_called()
+        command.assert_not_called()
+
+
 class FixArithmeticTests(unittest.TestCase):
     def test_budget_protocol_counts_by_hand(self):
         matrix, flags = load_matrix(CONFIG / "budget.json")
