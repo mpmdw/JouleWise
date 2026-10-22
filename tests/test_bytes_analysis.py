@@ -2287,17 +2287,83 @@ class BatteryCampaignTests(NumericTestCase):
         self.assertNotIn("bytes.meter_decode_unavailable", target["flags"])
 
     def test_out_of_receive_order_batches_match_ordered_terms_and_flags(self):
-        def change(items):
-            batches = [i for i in items if i.get("k") == "b"]
-            items[:] = [items[0], *reversed(batches), items[-1]]
-        records, _ = self.mutate(change)
-        for record in records:
-            expected = next(r for r in self.records if r["run_id"] == record["run_id"] and
-                            r["session_id"] == record["session_id"])
-            self.assertEqual(record["flags"], expected["flags"])
-            self.assertEqual(record["meter"]["battery_n"], expected["meter"]["battery_n"])
-            for key in ("gross_j", "secondary_j", "battery_gross_j", "battery_phase_edge_j", "offset_bound_j"):
-                self.assertAlmostEqual(record["meter"][key], expected["meter"][key], delta=1e-6)
+        for order in ("reverse", "shuffle"):
+            def change(items):
+                batches = [i for i in items if i.get("k") == "b"]
+                if order == "reverse":
+                    batches.reverse()
+                else:
+                    random.Random(1100).shuffle(batches)
+                items[:] = [items[0], *batches, items[-1]]
+            records, _ = self.mutate(change)
+            for record in records:
+                expected = next(r for r in self.records if r["run_id"] == record["run_id"] and
+                                r["session_id"] == record["session_id"])
+                # Receive sorting restores identical inputs and arithmetic.
+                for key in ("flags", "meter", "neg8_inputs"):
+                    self.assertEqual(record[key], expected[key])
+
+    def test_delayed_publications_pin_forward_edges_marker_and_offset_max(self):
+        from joulewise.b6.archive import bundle_of
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = archive_campaign(root, battery_assist=True, battery_publication="delayed", release="none")
+            out = cli_stage_chain(root, manifest)  # At most one additional CLI chain.
+            records = ba.load_records(root / "export", manifest, stage="all")
+            cells = ba.read_json(root / "stage1/fit_pass_estimates.json") + ba.read_json(out / "heldout_pass_estimates.json")
+            evidence = []
+            for session in manifest["sessions"]:
+                archive = Path(session["archive"])
+                # Independent BAT-2 §2–4 oracle: plain raw JSON, no parser or
+                # analysis integration/marker helpers. Same-input bar: 1e-6 J.
+                items = [json.loads(line) for line in (archive / "sources/night-custody/hazards/meter/stream-001.jsonl").read_text().splitlines()]
+                header = next(i for i in items if i["k"] == "h")
+                offset = header["start_raw_ns"] - header["start_mono_ns"]
+                polls = sorted((i for i in items if i["k"] == "b"), key=lambda i: i["rx"])
+                tau = 2 * 1.0 + max(b["rx"] - a["rx"] for a, b in zip(polls, polls[1:])) / 1e9
+                readings = [(p["rx"], -p["smc"]["B0AC"] * p["smc"]["B0AV"] / 1e6, p["smc"]["B0AC"]) for p in polls
+                            if p["smc"].get("B0AC") is not None and p["smc"].get("B0AV") is not None]
+                for episode in session["synthetic_battery_episodes"]:
+                    record = next(r for r in records if r["session_id"] == session["session_id"] and r["run_id"] == episode["run_id"])
+                    events = [json.loads(line) for line in (bundle_of(archive, {}, record["run_id"]) / "events.jsonl").read_text().splitlines()]
+                    d0, d1 = [round(next(e["timestamp_s"] for e in events if e.get("phase") == "decode" and e["event_type"] == kind) * 1e9) + offset
+                              for kind in ("phase_start", "phase_end")]
+                    n = sum(d0 <= t < d1 for t, _, _ in readings)
+                    weight = (d1 - d0) / 1e9 / n
+                    energy = weight * sum(w for t, w, _ in readings if d0 <= t < d1)
+                    start, end = [weight * sum(abs(w) for t, w, _ in readings if edge <= t < edge + tau * 1e9) for edge in (d0, d1)]
+                    marker = any(current < 0 and d0 + tau * 1e9 <= t < d1 + tau * 1e9 for t, _, current in readings)
+                    meter, placement = record["meter"], episode["placement"]
+                    for key, expected in (("battery_gross_j", energy), ("battery_v_start_j", start), ("battery_v_end_j", end)):
+                        self.assertAlmostEqual(meter[key], expected, delta=1e-6)
+                    self.assertEqual(meter["battery_n"], n)
+                    self.assertEqual("bytes.decode_battery_assist" in record["flags"], marker)
+                    if placement == "across_end":
+                        self.assertGreater(end, 1.0)  # BAT-2 ~1 J attribution scale.
+                        self.assertTrue(marker)
+                        self.assertFalse(any(current < 0 and d0 + tau * 1e9 <= t < d1 for t, _, current in readings))
+                    if placement == "prefill_only":
+                        self.assertLessEqual(abs(energy), start + 1e-6)
+                        self.assertFalse(marker)
+                    if placement == "both_edges":
+                        # Both edges >1 J: sum instead of max misses by >1 J,
+                        # over a million times the 1e-6 J program agreement bar.
+                        self.assertGreater(min(start, end), 1.0)
+                        factor = meter["r_max_s"] + meter["sample_interval_s"]
+                        self.assertAlmostEqual(meter["offset_bound_j"], max(meter["edge_powers_w"]) * factor + max(start, end), delta=1e-6)
+                        self.assertAlmostEqual(meter["phase_edge_j"], math.fsum(meter["edge_powers_w"]) * factor + start + end, delta=1e-6)
+                    evidence.append({"pass": session["pass_id"], "model": record["model"], "placement": placement,
+                        "burst_j": sum((z-a) / 1e9 * 12.774 for a, z in episode["spans_ns"]),
+                        "battery_j": energy, "v_start_j": start, "v_end_j": end, "marker": marker,
+                        "C_j": meter["offset_bound_j"], "phase_edge_j": meter["phase_edge_j"]})
+            for cell in cells:
+                if cell["boundary"] == "rails":
+                    continue
+                terms = cell["meter_run_terms"]
+                self.assertEqual(cell["battery_phase_edge_max_j"], max(t["battery_phase_edge_j"] for t in terms))
+                self.assertEqual(cell["meter_attribution_floor_j"], max(t["phase_edge_j"] for t in terms))
+            self.assertEqual(len(evidence), 30)
+            print("BAT3_DELAYED=" + json.dumps(evidence, sort_keys=True), flush=True)
 
     def test_global_poll_gap_including_empty_poll_outside_selected_spans_sets_tau(self):
         items = copy.deepcopy(self.items)

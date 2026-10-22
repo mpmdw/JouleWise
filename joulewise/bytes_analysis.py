@@ -24,6 +24,7 @@ OUTPUT_LABEL = "512 decode forward passes, one of which yields no returned token
 DC_BOUNDARY_DESCRIPTION = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
                            "the adapter's AC-to-DC loss is not included")
 H1_CHECKS = 21
+T_SMC_S = 1.0  # BAT-2 §3; km003c_parse's published SMC cadence.
 # Addendum 4: separate primary families on each boundary.
 H2_INTERVALS = {"rails": 9, "DC input": 9, "rest": 11}
 SCHEMA = "joulewise.bytes_predictions.v1"
@@ -425,6 +426,11 @@ def _battery_stream_data(stream):
     return times, watts, interval
 
 
+def _battery_delay_s(poll_interval):
+    # One second averaged, one held, then the stream's largest poll interval.
+    return 2 * T_SMC_S + poll_interval
+
+
 def _decode_battery_marker(stream, raw_span, tau):
     # BAT-2 §4 defines the marker by current, independently of whether a
     # voltage was available to calculate energy at that poll.
@@ -468,7 +474,7 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     battery_secondary = battery - battery_idle * duration
     # BAT-2 §3: one averaged second, one held second, then the stream's own
     # largest poll interval, over ALL polls (including incomplete SMC reads).
-    tau = 2 * 1.0 + poll_interval  # T_SMC = 1.0 s, km003c_parse's published cadence.
+    tau = _battery_delay_s(poll_interval)
     battery_edges = []
     for edge in spans[0]:
         lo = bisect.bisect_left(battery_times, edge)
@@ -930,7 +936,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     if str(exc) == "battery reading missing":
                         from joulewise.external import km003c_parse as kp
                         raw_span = [edge + kp.raw_offset_ns(stream) for edge in spans[row["run_id"]][0]]
-                        if _decode_battery_marker(stream, raw_span, 2 * 1.0 + battery_readings[2]):
+                        if _decode_battery_marker(stream, raw_span, _battery_delay_s(battery_readings[2])):
                             row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
             if row["meter"] is None:
                 row["flags"] = sorted(set(row["flags"]) | {"bytes.meter_decode_unavailable"})
