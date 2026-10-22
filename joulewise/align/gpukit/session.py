@@ -239,7 +239,8 @@ def _incomplete_flag(flag: str) -> bool:
                              "usage.", "clock.", "tool.", "token_counter.error."))
             or ".factory_error." in flag
             or flag in {"episode.interrupted", "episode.max_turns",
-                        "power.empty", "condition.unknown"}) and flag != "runner_adapter_provisional"
+                        "power.empty", "condition.unknown", "scratchpad.unclosed",
+                        "hidden_tokens.scratchpad_uncounted"}) and flag != "runner_adapter_provisional"
 
 
 def _validate_output(path: Path, *, expected_count: int, router: bool, model: str,

@@ -272,7 +272,7 @@ when the trace's clock differs. This is a coverage test, not a sensor-calibratio
 or scientific-admission verdict. Scoring can remain deferred.
 
 Dotted endpoint/runner/factory/task/sampler failures, interrupted/max-turn episodes,
-empty power, unknown conditions, usage/clock/tool/token-counter failures invalidate
+empty power, unknown conditions, unclosed/uncounted scratchpads and usage/clock/tool/token-counter failures invalidate
 completeness. Monitor/score failures stay recorded without erasing agent/power work;
 deferred scoring reads preserved transcripts. A declared mock trace cannot pass.
 
