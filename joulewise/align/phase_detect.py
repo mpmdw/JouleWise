@@ -5,18 +5,19 @@ it is practical for sub-ms traces without a quadratic dynamic-programming
 table. Its greedy splits can miss short balanced troughs; sensitivity must be
 reported by sensor/duration rather than presumed. Labels use local prefill peaks
 followed by lower decode, with near-idle troughs; decode may rise with context.
-Read gaps widen boundary uncertainty. Held values are thinned by observed
-cadence; robust multiscale variance retains within-decode token modulation.
+Read gaps widen boundary uncertainty. Register timing comes only from sensor
+configuration or characterization; values never establish a hold cadence.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import statistics
 from dataclasses import dataclass, replace
 
 from joulewise.align.records import Episode, PowerTrace, ToolCall
-from joulewise.align.sensor_sim import _held_change_indices, _mean_period_ns
+from joulewise.align.sensor_sim import _held_change_indices  # Compatibility diagnostic only.
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class Segment:
     idle_floor_w: float | None = None
     active_floor_w: float | None = None
     power_uncertainty_w: float = 0.0
+    hold_latency_ns: int = 0
+    settling_time_ns: int = 0
 
 
 @dataclass(frozen=True)
@@ -47,22 +50,25 @@ class ToolCallMatch:
     matched_count: int = 0
     tolerance_ns: int = 0
     indeterminate_candidates: tuple[Segment, ...] = ()
+    outside_trace_logged: tuple[ToolCall, ...] = ()
 
 
-def estimate_noise_sd(values: tuple[float, ...]) -> float:
+def estimate_noise_sd(values: tuple[float, ...], *, hold_period_ns: int = 0,
+                      sample_interval_ns: int = 0) -> float:
     """MAD of first differences / (sqrt(2) * Phi^-1(0.75)).
 
     Gaussian independent read noise differences have sd sqrt(2)*sigma.
     The Gaussian MAD consistency factor is Phi^-1(0.75), computed by stdlib.
     Sparse phase boundaries are robust outliers; ripple/correlation can bias
     this estimator, which is a limitation, not a hardware noise calibration.
-    Remove repeats only with evidence of a multi-poll conversion stream.
-    Otherwise, constant quantized plateaus carry real low-variance evidence.
+    Optional declared timing subsamples by index, never by repeated values.
+    Constant quantized plateaus otherwise carry real low-variance evidence.
     """
     if len(values) < 2:
         return 0.0
-    changes = _held_change_indices(values)
-    observed = [values[0]] + [values[i] for i in changes] if changes else values
+    stride = (max(1, math.ceil(hold_period_ns / sample_interval_ns))
+              if sample_interval_ns > 0 else 1)
+    observed = values[::stride]
     differences = [b - a for a, b in zip(observed, observed[1:])]
     center = statistics.median(differences)
     mad = statistics.median(abs(x - center) for x in differences)
@@ -80,7 +86,10 @@ def estimate_noise_sd(values: tuple[float, ...]) -> float:
     return scale
 
 
-def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list[Segment]:
+def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None,
+                  hold_latency_ns: int | None = None,
+                  register_refresh_period_ns: int | None = None,
+                  settling_time_ns: int | None = None) -> list[Segment]:
     """Split on SSE reduction > 2 sigma^2 log(n), then label level/duration.
 
     Each split adds a mean and a boundary-location parameter. BIC contributes
@@ -92,6 +101,27 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     flags = []
     interval = trace.nominal_interval_ns
     window = trace.averaging_window_ns or 0
+    # Lane-local timing keys preserve the frozen PowerTrace contract. A plain
+    # trace's documented window ends at t_ns, hence zero hold latency.
+    try:
+        metadata = json.loads(trace.notes) if trace.notes else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+    except (ValueError, TypeError):
+        metadata = {}
+        flags.append("invalid_trace_notes")
+    period = (metadata.get("register_refresh_period_ns") or 0
+              if register_refresh_period_ns is None else register_refresh_period_ns)
+    latency = (metadata.get("hold_latency_ns", period) if hold_latency_ns is None
+               else hold_latency_ns)
+    settling = (metadata.get("settling_time_ns", 0) if settling_time_ns is None
+                else settling_time_ns)
+    for key, value in (("register_refresh_period", period), ("hold_latency", latency),
+                       ("settling_time", settling)):
+        if not isinstance(value, int) or value < 0:
+            flags.append(f"invalid_{key}")
+    if any(f.startswith("invalid_") for f in flags):
+        period = latency = settling = 0
     if trace.unit != "W":
         flags.append("unsupported_cumulative_energy")
     if interval <= 0 or window < 0:
@@ -112,20 +142,12 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     gaps = [(a, b) for a, b in zip(trace.t_ns, trace.t_ns[1:]) if b - a >= 2 * interval]
     if gaps:
         flags.append("sample_gaps")
-    # Infer cadence only from conversion-like multi-poll runs, not from
-    # constant quantized phases. The same evidence rule governs noise MAD.
-    changes = _held_change_indices(trace.values)
-    effective_interval = interval
-    if changes:
-        change_times = [trace.t_ns[i] for i in changes]
-        observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
-        effective_interval = max(interval, math.ceil(_mean_period_ns(observed_periods)))
-        flags.append("held_values_cadence_inferred")
-        # Held conversion latency also supplies an inferred exposure when
-        # the trace has no narrower physical characterization.
-        window = max(window, effective_interval)
-    # Thin by the observed cadence rather than removing entire constant
-    # plateaus. A 500 ms truly idle span still has 500/dt observations.
+    # Thin only when the declared register refresh is slower than polling.
+    # Fresh quantized conversions can repeat; their values never select samples.
+    effective_interval = max(interval, period)
+    if period > interval:
+        flags.append("register_refresh_thinned")
+        window = max(window, period)
     indices = list(range(n))
     if effective_interval > interval:
         indices = [0]
@@ -193,10 +215,12 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             pending.extend(((left, best), (best, right)))
     leaves.sort()
     means = [(sums[b] - sums[a]) / (b - a) + center for a, b in leaves]
-    # At a step, mixed exposure can occupy ceil(window/dt) observations.
+    # Transition leaves cannot establish a sustained level.
     # These leaves cannot establish a sustained level; assign them using
     # temporal neighbors, retaining every sample in the final means.
-    exposure_bins = max(1, math.ceil(window / effective_interval))
+    # A step can mix the averaging window plus one register-refresh latency;
+    # measured workload settling further broadens that physical transition.
+    exposure_bins = max(1, math.ceil((window + latency + settling) / effective_interval))
     stable = [i for i, (a, b) in enumerate(leaves) if b - a > exposure_bins]
     if not stable:
         stable = list(range(len(leaves)))
@@ -355,13 +379,15 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         low_bar = quantum + math.sqrt(4 * variance * math.log(max(2, n)))
         observations = tuple((times[k] - window, times[k], xs[k]) for k in range(left, right)
                              if low and label == "low")
-        observation_uncertainty = boundary_uncertainty + (effective_interval if changes else 0)
+        # The conversion ended in (read-P, read], even with no equal reads.
+        # A settling tail likewise delays evidence after the workload edge.
+        observation_uncertainty = boundary_uncertainty + latency + settling
         idle_floor = min((means[j] for j in low), default=None)
         active_floor = min((means[j] for j in decode), default=None) if len(groups) >= 2 else None
         segment = Segment(start, end, mean, label, trace.clock_domain,
                           effective_interval, window, tuple(sorted(set(local_flags))),
                           boundary_uncertainty, observations, observation_uncertainty,
-                          idle_floor, active_floor, low_bar)
+                          idle_floor, active_floor, low_bar, latency, settling)
         if result and result[-1].label == label:
             previous = result.pop()
             duration = max(0, previous.end_ns - previous.start_ns)
@@ -400,6 +426,26 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
     logged = [call for turn in episode.turns if turn.logged
               for call in turn.tool_calls if call.logged]
     flags = set(flag for segment in segments for flag in segment.flags)
+    coverage = []
+    for segment in segments:
+        offset = 0
+        if segment.clock_domain not in ("", episode.clock_domain):
+            mappings = [m for m in episode.clock_mappings if
+                        m.trace_domain == segment.clock_domain and
+                        m.episode_domain == episode.clock_domain]
+            if len(mappings) != 1:
+                continue
+            offset = mappings[0].offset_ns
+        coverage.append((segment.start_ns + offset, segment.end_ns + offset))
+    outside = ()
+    if coverage:
+        lo, hi = min(a for a, b in coverage), max(b for a, b in coverage)
+        # Only wholly unobserved calls leave the denominator. Partial calls
+        # remain represented by the existing trace-edge indeterminate path.
+        outside = tuple(c for c in logged if c.end_ns <= lo or c.start_ns >= hi)
+        if outside:
+            flags.add("logged_call_outside_trace_coverage")
+            logged = [c for c in logged if c not in outside]
     # Visible generation envelopes, subtracting visible in-turn tool waits.
     # No access to unlogged turn/call timing is used to construct idle runs.
     active = []
@@ -474,7 +520,10 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
                 flags.add("invalid_clock_uncertainty")
                 indeterminate.append(segment)
                 continue
+        # Triangle bound: polling bin + exposure + register age + measured
+        # step settling + clock half-width + any missing acquisition span.
         bound = (segment.sample_interval_ns + segment.averaging_window_ns +
+                 segment.hold_latency_ns + segment.settling_time_ns +
                  uncertainty + segment.boundary_uncertainty_ns)
         tolerance = max(tolerance, bound)
         transformed.append((replace(segment, start_ns=segment.start_ns + offset,
@@ -570,4 +619,4 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
     precision = len(matched_segments) / usable_candidates if usable_candidates else 1.0
     return ToolCallMatch(
         recall, precision, tuple(c for j, c in enumerate(logged) if j not in matched_calls),
-        tuple(unlogged), tuple(sorted(flags)), count, tolerance, tuple(indeterminate))
+        tuple(unlogged), tuple(sorted(flags)), count, tolerance, tuple(indeterminate), outside)

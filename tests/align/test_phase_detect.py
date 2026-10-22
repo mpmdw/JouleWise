@@ -54,6 +54,11 @@ def production_sensor_models(seed, *, ina_cadence_ns=1_000_000,
             noise_sd_w=noise["nvml_100ms_25ms"], quantum_w=1e-3, seed=seed)),
         ("powermetrics_100ms", SensorModel.powermetrics(
             noise_sd_w=noise["powermetrics_100ms"], quantum_w=1e-3, seed=seed)),
+        # Scenario P: 140 us * bus/shunt * three channels = 840 us.
+        # Hardware replaces this parameter with its characterized cadence.
+        ("ina3221_register_840us_poll_1ms", SensorModel.ina3221(
+            cadence_ns=1_000_000, register_refresh_period_ns=840_000,
+            noise_sd_w=noise["ina3221_1ms"], quantum_w=ina_quantum, seed=seed)),
     )
 
 

@@ -1,16 +1,17 @@
-# align-jetson — FIX ROUND 2
+# align-jetson — FIX ROUND 3 (JET3; verification pending)
 
 ## SUMMARY
 
-Continued the existing jetson lane from 6fec76606; all code remains stdlib-only.
-Visible generation complements now explain ordinary client gaps with or without tools.
-Shared held-value evidence and endpoint-span cadence tolerate non-atomic V/I changes.
-Resolution-aware local peak/fall labels preserve waits without relying on token ripple.
-The study now measures covered in-turn and stretched-envelope omissions at zero client gap.
-Default 72-seed rows can support the specified under-5% false-alarm bound.
-The final align discovery run passed 46 tests, with no skips or optional dependencies.
-Covered-call point shortest durations are INA 5 ms, NVML 250 ms and powermetrics 250 ms; all FA controls are zero.
-M1's overlap-only short-call bar and m1's guaranteed phase counts require an observability ruling.
+Continued the pushed lane from b1613dad6; frozen contracts remain unchanged.
+Register cadence now comes from characterization or driver configuration only.
+Sampler trace notes declare per-rail refresh period, source and hold latency.
+Detector propagation includes observation, transition exposure and matching bounds.
+The simulator adds an optional seeded register-hold model; existing defaults are preserved.
+The study appends an 840 us conversion / 1 ms poll INA scenario.
+Wholly out-of-coverage logged calls are reported separately and excluded from recall.
+Missing alarm paths are distinguished from failures reading previously present paths.
+Execution environment is unavailable: this checkpoint is APPLIED_UNVERIFIED.
+No tests, probes or study have run in this round; no pass is claimed.
 
 ## FILES
 
@@ -109,6 +110,12 @@ live in sensor_sim; phase_detect re-exports the former for the supplied probe.
 
 ## TESTS RUN
 
+Round 3 checkpoint: no commands ran; exec_command refuses because no usable
+execution environment is available. The environment wait remains pending.
+All executions and numbers below belong to the preceding seat / Round 2.
+They do not validate the Round 3 source. Required align/probe/study runs remain open.
+
+
 Python 3.12.14. No extra was installed or required; no extra-dependent tests.
 No test used network or real hardware. No whole-repository suite was run.
 No registry was changed, so no registry-reader test was required.
@@ -164,6 +171,10 @@ A zero process exit is not claimed to mean every scientific pass condition
 passed: the explicit exceptions are in FIX LOG / NEEDS_RULING.
 
 ## END-TO-END
+
+Round 3: no executed world or study yet. The following is historical Round 2
+execution, not a current result. All new shortest-duration claims remain pending.
+
 
 Executed on this lane's numerical source 54ce0818dad4a3686ee41e78e4e1d6595bc3d5c3
 with Python 3.12.14. `python3 -m unittest discover -s tests/align -t .`
@@ -314,6 +325,12 @@ interpolated hardware limits. Neither nulls nor flagged episodes are discarded.
 
 ## CONTRACT-CHANGE
 
+Request PowerTrace.register_refresh_period_ns, hold_latency_ns and settling_time_ns.
+Current lane-local adapter uses those documented JSON keys in notes; source is
+register_refresh_source, with register_refresh_print_half_width_ns for driver
+precision. detect_phases keyword arguments override notes. The frozen files
+are unchanged. Historical Round 2 contract statement follows.
+
 none. Segment's appended fields are lane-local. Shared records and protocols
 are unchanged. The decode_w prose disagreement is resolved by preserving the
 existing code; no governing contract change is requested.
@@ -359,6 +376,15 @@ Full machine outputs remain in untracked .review2/before and .review2/verified.
 - JET2-m5 — fixed in 7299f9371582b9c27c0cb9c698aeb052303fe4c3. Both consumers now use one held predicate and endpoint-span mean. Before r7 skew50 seed1 `window=1688120 thinning_evidence=False`; after `window=1892148 thinning_evidence=True`. All 24 runs infer their trace window exactly with common thinning evidence; no private-name repro port.
 - JET2-m6 — fixed in c19381b858bafe53158ee2555a7031377f92b9fa. Before default 64 could only give derived zero-FA upper `0.056009089386636624`; after default is 72, the smallest integer making `1-.025**(1/n)<.05`. Both point and 95%-bound columns are computed and printed rather than choosing one silently.
 - JET2-m7 — fixed in 22c08424776f928b40e4b76a782b1d50a17d6972. Before report said zero tests and doc had stale FIX1C status; after both contain this seat's 46-test execution, all repro outcomes, full 72-seed production grid and shortest answers. Historical Round 1 FIX LOG is preserved; current non-passes are explicit.
+
+### Round 3 (JET3)
+
+- JET3-B1 — source checkpoint; verification pending. Reviewer-measured at b1613dad6 before: conversion/poll 1100/1000 us FA 11/12, 840/1000 us 8/12, 1500/1000 us 6/8. After: not executed.
+- JET3-M1 — source checkpoint; verification pending. Reviewer-measured before: "held inferred 71/72; mid hidden recall 67/72; with 1e-9 W dither 72/72". After: not executed.
+- JET3-m1 — settling parameter propagated; protocol and repro verification pending. Before reviewer-measured decay5 "FA episodes 2/6"; after not executed.
+- JET3-m2 — source checkpoint excludes wholly unobserved calls and reports them in outside_trace_logged. Before reviewer-measured cropped recalls ".545/.455 flags []"; after not executed.
+- JET3-m3 — source checkpoint adds only existing alarm paths, retaining failures after discovery. Before reviewer: absent alarms yield health_read_error; after not executed.
+- Setup-only ports: test_held_reads_with_estimated_and_supplied_noise and test_held_noninteger_ratio_noise_is_nonzero_and_calls_survive declare P in notes; test_real_sysfs_path_through_detector_with_held_conversions runs a changing-load characterization before sampling. Every scenario and assertion retained, as required by this brief.
 
 ## OPEN ISSUES
 

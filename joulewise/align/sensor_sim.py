@@ -203,6 +203,8 @@ class SensorModel:
     source: PowerSource = "mock"
     channel: str = "synthetic"
     clock_domain: str | None = None
+    register_refresh_period_ns: int = 0  # Optional held-register model; zero preserves old bytes.
+    conversion_phase_ns: int | None = None  # None: seed a uniform phase in [0, P).
 
     @classmethod
     def ina3221(cls, *, cadence_ns: int, noise_sd_w: float, quantum_w: float,
@@ -247,24 +249,47 @@ def simulate(timeline: Timeline, sensor: SensorModel) -> PowerTrace:
         flags.append("offset_in_same_clock_domain")
     times, values = [], []
     rng = random.Random(sensor.seed)
+    period = sensor.register_refresh_period_ns
+    if not isinstance(period, int) or period < 0:
+        flags.append("invalid_register_refresh_period")
+        valid = False
+    phase = (sensor.conversion_phase_ns if sensor.conversion_phase_ns is not None else
+             random.Random(sensor.seed).randrange(period) if period else 0)
+    last_completion, last_watts = None, None
     if valid:
         for t in range(timeline.start_ns + sensor.sample_interval_ns,
                        timeline.end_ns + 1, sensor.sample_interval_ns):
-            window = sensor.averaging_window_ns
-            watts = (timeline.integral(t - window, t) / window if window else
-                     timeline.power_at(t))
-            watts += rng.gauss(0, sensor.noise_sd_w)
-            if sensor.quantum_w:
-                watts = round(watts / sensor.quantum_w) * sensor.quantum_w
+            # A held register exposes the most recent completed conversion;
+            # its period-wide average ends there, not at the read timestamp.
+            completion = phase + ((t - phase) // period) * period if period else t
+            window = period or sensor.averaging_window_ns
+            if not period or completion != last_completion:
+                watts = (timeline.integral(completion - window, completion) / window if window else
+                         timeline.power_at(completion))
+                watts += rng.gauss(0, sensor.noise_sd_w)
+                if sensor.quantum_w:
+                    watts = round(watts / sensor.quantum_w) * sensor.quantum_w
+                last_completion, last_watts = completion, watts
+            else:
+                watts = last_watts
             times.append(t - sensor.clock_offset_ns)
             values.append(watts)
     notes = json.dumps({"flags": sorted(set(flags)),
                         "clock_offset_uncertainty_ns": sensor.clock_offset_uncertainty_ns,
                         "synthetic": True}, sort_keys=True)
+    if period:
+        # Synthetic characterization knows P exactly: no integer-ms print
+        # half-width. Uniform seeded phase is an input, not an inferred repeat.
+        notes = json.dumps({**json.loads(notes),
+                            "register_refresh_period_ns": period,
+                            "register_refresh_source": "characterization",
+                            "register_refresh_print_half_width_ns": 0,
+                            "hold_latency_ns": period,
+                            "conversion_phase_ns": phase}, sort_keys=True)
     cumulative = sensor.source == "nvml_energy"
     return PowerTrace(sensor.source, sensor.channel, domain, tuple(times), tuple(values),
                       "J_cumulative" if cumulative else "W",
-                      max(0, sensor.sample_interval_ns), max(0, sensor.averaging_window_ns),
+                      max(0, sensor.sample_interval_ns), max(0, period or sensor.averaging_window_ns),
                       sensor.duty_fraction if 0 < sensor.duty_fraction <= 1 else None,
                       sensor.quantum_w if math.isfinite(sensor.quantum_w) and sensor.quantum_w >= 0 else None,
                       notes)

@@ -1,5 +1,6 @@
 """Production-shaped controls for gap, resolution and local phase-label regressions."""
 
+import json
 import unittest
 from dataclasses import replace
 
@@ -135,7 +136,9 @@ class PhaseReviewTwoTest(unittest.TestCase):
                     j += 1
                 values.append(original.values[j])
             trace = PowerTrace('ina3221', 'VDD_IN', episode.clock_domain, times, tuple(values),
-                               'W', 1_000_000, conversion, resolution=.01)
+                               'W', 1_000_000, conversion, resolution=.01,
+                               notes=json.dumps({'register_refresh_period_ns': conversion,
+                                                 'hold_latency_ns': conversion}))
             # Nonzero read-noise input must not become zero merely because
             # a conversion is held. This checks the probability endpoint.
             self.assertGreater(estimate_noise_sd(trace.values), 0)

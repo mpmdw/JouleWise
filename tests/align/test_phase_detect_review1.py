@@ -1,5 +1,6 @@
 """End-to-end regressions ported from the independent first review."""
 
+import json
 import unittest
 from dataclasses import replace
 
@@ -76,7 +77,10 @@ class PhaseReviewTest(unittest.TestCase):
                     index += 1
                 values.append(original.values[index])
             trace = PowerTrace("ina3221", "VDD_IN", "host.monotonic", times,
-                               tuple(values), "W", 1_000_000)
+                               tuple(values), "W", 1_000_000,
+                               averaging_window_ns=hold * 1_000_000,
+                               notes=json.dumps({"register_refresh_period_ns": hold * 1_000_000,
+                                                 "hold_latency_ns": hold * 1_000_000}))
             for sd in (None, 0.05):
                 with self.subTest(hold=hold, sd=sd):
                     segments = detect_phases(trace, noise_sd_w=sd)

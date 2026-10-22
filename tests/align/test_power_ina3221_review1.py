@@ -23,8 +23,13 @@ class CharacterizationReviewTest(unittest.TestCase):
                 Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
             (dev / "samples").write_text("1")
             now = [episode.start_ns]
+            rehearsing = [True]
             def read(path):
                 if path.name == "curr1_input":
+                    if rehearsing[0]:
+                        # Characterization load changes by 8 mA each conversion,
+                        # above the fixture's 1 mA print LSB; every sweep is visible.
+                        return str(2000 + 8 * ((now[0] // conversion) % 7))
                     timestamp = (now[0] // conversion) * conversion
                     watts = (timeline.integral(timestamp - conversion, timestamp) / conversion
                              if timestamp > conversion else timeline.power_at(now[0]))
@@ -32,7 +37,11 @@ class CharacterizationReviewTest(unittest.TestCase):
                 return path.read_text().strip()
             sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000,
                                      clock=lambda: now[0], read_text=read)
-            sampler.discover()
+            # 1 s rehearsal at 1 ms polling spans 250 four-ms conversions.
+            sampler.characterize(reads=1001, sleep=lambda seconds:
+                                 now.__setitem__(0, now[0] + round(seconds * 1e9)))
+            rehearsing[0] = False
+            now[0] = episode.start_ns
             while now[0] < episode.end_ns:
                 now[0] += 1_000_000
                 sampler.sample_once()

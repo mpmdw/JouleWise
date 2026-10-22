@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from joulewise.align.records import PowerTrace
-from joulewise.align.sensor_sim import _held_change_indices, _mean_period_ns
+from joulewise.align.sensor_sim import _mean_period_ns
 
 
 @dataclass(frozen=True)
@@ -83,6 +83,7 @@ class Ina3221Sampler:
         averaging_window_ns: int | None = None,
         characterization: Characterization | None = None,
         shunt_resistance_ohm: float | None = None,
+        settling_time_ns: int | None = None,
         clock_domain: str = "host.monotonic",
         clock: Callable[[], int] = time.monotonic_ns,
         read_text: Callable[[Path], str] | None = None,
@@ -93,6 +94,8 @@ class Ina3221Sampler:
         self.averaging_window_ns = averaging_window_ns
         self.characterization = characterization
         self.shunt_resistance_ohm = shunt_resistance_ohm
+        self.settling_time_ns = settling_time_ns
+        self._timing_metadata: dict[str, dict] = {}
         self.clock_domain = clock_domain
         self._clock = clock
         self._read = read_text or (lambda path: path.read_text(encoding="utf-8").strip())
@@ -187,7 +190,8 @@ class Ina3221Sampler:
             if rail.current.name.startswith("curr"):
                 index = rail.current.name.removeprefix("curr").removesuffix("_input")
                 self._health_paths.update((rail.device / f"curr{index}_{kind}_alarm").resolve()
-                                          for kind in ("crit", "max"))
+                                          for kind in ("crit", "max")
+                                          if (rail.device / f"curr{index}_{kind}_alarm").exists())
         for device in devices:
             self._health_paths.update(path.resolve() for path in device.glob("*alarm*"))
             self._health_paths.update(path.resolve() for path in device.glob("*warn*"))
@@ -232,14 +236,30 @@ class Ina3221Sampler:
             for flag in calibration.flags:
                 self._flag(f"characterization:{rail.channel}:{flag}")
         cadence = calibration.cadence_ns if calibration else None
-        # Held register values can reveal a slower cadence than the configured
-        # integer-ms exposure. This is an observation, confounded by steady
-        # loads; keep that limitation visible and prefer supplied calibration.
-        changed = _held_change_indices(tuple(row[1] for row in rows))
-        if cadence is None and changed:
-            change_times = [rows[i][0] for i in changed]
-            cadence = _mean_period_ns([b - a for a, b in zip(change_times, change_times[1:])])
-            self._flag(f"cadence_inferred_from_held_values:{rail.channel}")
+        # Episode values never establish cadence: quantization repeats are
+        # indistinguishable from held conversions. Prefer the load rehearsal.
+        period = math.ceil(cadence) if cadence else driver_window
+        source = "characterization" if cadence else "update_interval" if driver_window else "unknown"
+        # update_interval prints integer ms rounded to nearest: its upper
+        # endpoint is P + (one printed ms)/2. A read can lag that endpoint
+        # by a full refresh regardless of whether the value changes.
+        print_bound = 500_000 if source == "update_interval" else 0
+        if period is None:
+            self._flag(f"register_refresh_period_unknown:{rail.channel}")
+        settling = self.settling_time_ns
+        if settling is None:
+            self._flag(f"settling_time_uncharacterized:{rail.channel}")
+            settling = 0
+        elif settling < 0:
+            self._flag(f"invalid_settling_time:{rail.channel}")
+            settling = 0
+        self._timing_metadata[rail.channel] = {
+            "register_refresh_period_ns": period,
+            "register_refresh_source": source,
+            "register_refresh_print_half_width_ns": print_bound,
+            "hold_latency_ns": (period + print_bound) if period else 0,
+            "settling_time_ns": settling,
+        }
         if cadence and driver_window and abs(cadence - driver_window) > self.sample_interval_ns:
             # One poll is the endpoint quantization bound for one cadence
             # interval; disagreement larger than this is observable.
@@ -396,7 +416,9 @@ class Ina3221Sampler:
             tuple(row[0] for row in self._rows.get(channel, [])),
             tuple(row[1] for row in self._rows.get(channel, [])), "W",
             max(0, self.sample_interval_ns), metadata.get(channel, (None, None))[0],
-            resolution=metadata.get(channel, (None, None))[1], notes=notes,
+            resolution=metadata.get(channel, (None, None))[1],
+            notes=json.dumps({**json.loads(notes), **self._timing_metadata.get(channel, {})},
+                             sort_keys=True),
         ) for channel in channels)
 
     def characterize(self, *, reads: int, sleep: Callable[[float], None] = time.sleep) -> Characterization:
@@ -455,4 +477,8 @@ class Ina3221Sampler:
                 rail.channel, tuple(row[4] for row in rows),
                 periods, quantum, dq_v, dq_i, tuple(flags),
             ))
-        return Characterization(tuple(results), tuple(self.update_intervals_ms.items()), tuple(self.flags))
+        self.characterization = Characterization(
+            tuple(results), tuple(self.update_intervals_ms.items()), tuple(self.flags))
+        # Characterization reads belong to the load rehearsal, not the episode.
+        self._rows.clear()
+        return self.characterization
