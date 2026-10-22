@@ -7,6 +7,8 @@ work never enters the measured GPU calculation. Rental prices are operator input
 from __future__ import annotations
 
 import argparse
+import copy
+import re
 import json
 import math
 from dataclasses import asdict, dataclass, field
@@ -122,12 +124,61 @@ def _calibration(path: Path, counts: Mapping[str, tuple[int, int]]) -> tuple[dic
     return basis, flags
 
 
+def _unsourced_inputs(matrix: Mapping[str, Any], flags: list[str]) -> dict[str, Any]:
+    """Mask only unsourced numerical inputs, preserving independent figures."""
+    result = copy.deepcopy(dict(matrix))
+    paths = {f.removeprefix("matrix_numeric_source_missing:") for f in flags
+             if f.startswith("matrix_numeric_source_missing:")}
+    for flag in tuple(flags):
+        if flag.startswith("matrix_throughput_efficiency_source_missing:"):
+            gpu, model = flag.removeprefix("matrix_throughput_efficiency_source_missing:").split(":", 1)
+            paths.add(f"gpu_classes.{gpu}.throughput.{model}.efficiency")
+        elif flag.startswith("matrix_hardware_source_missing:"):
+            gpu, key = flag.removeprefix("matrix_hardware_source_missing:").split(":", 1)
+            paths.add(f"gpu_classes.{gpu}.hardware.{key}.value")
+        elif flag.startswith("matrix_model_source_missing:"):
+            model = flag.removeprefix("matrix_model_source_missing:")
+            for key in ("total_parameters", "active_parameters"):
+                paths.add(f"model_parameters.{model}.{key}")
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, leaf in value.items():
+                where = path + "." + key if path else key
+                if where in paths and leaf is not None:
+                    value[key] = None
+                    flags.append("planning_input_unsourced:" + where)
+                else:
+                    walk(leaf, where)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(item, path + "." + str(index))
+    walk(result, "")
+    # Decode weights depend on the cited dimensions/counts in this same row.
+    # A syntactically valid formula cannot resurrect an unsourced operand.
+    parameters = result.get("model_parameters")
+    for model, params in (parameters.items() if isinstance(parameters, dict) else ()):
+        if not isinstance(params, dict):
+            continue
+        for key, value in tuple(params.items()):
+            derivation = params.get(key + "_derivation")
+            if isinstance(value, (int, float)) and isinstance(derivation, str):
+                missing = any(other != key and operand is None and
+                              re.search(r"(?<!\w)" + re.escape(other) + r"(?!\w)", derivation)
+                              for other, operand in params.items())
+                if missing:
+                    params[key] = None
+                    flags.append(f"planning_input_unsourced:model_parameters.{model}.{key}")
+    return result
+
+
 def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
              usd_per_gpu_hour: float | None = None, calibration: Path | None = None,
              monitor_placement: str = "none",
              monitor_usd_per_gpu_hour: float | None = None) -> Estimate:
     """Compute agent-only bounds/plans; an extra monitor GPU has its own line."""
     flags = list(validate(matrix))
+    matrix = _unsourced_inputs(matrix, flags)
     price = usd_per_gpu_hour
     if price is None:
         flags.append("price_not_supplied")
@@ -136,7 +187,13 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
         price = None
     if gpu_class not in matrix.get("gpu_classes", {}):
         flags.append("gpu_class_unknown")
-    if any(f.startswith(("matrix_", "gpu_class_")) for f in flags):
+    def blocks_cost(flag: str) -> bool:
+        if "_source_missing" in flag or flag in {
+                "matrix_episode_count_mismatch", "matrix_measured_episode_count_mismatch",
+                "matrix_monitor_call_count_mismatch"}:
+            return False
+        return flag.startswith(("matrix_", "gpu_class_"))
+    if any(blocks_cost(f) for f in flags):
         return Estimate(gpu_class, matrix.get("episode_count", 0), 0, 0,
                         None, None, None, None, None, price, None, tuple(sorted(set(flags))))
     gpu, work = matrix["gpu_classes"][gpu_class], matrix["workload"]

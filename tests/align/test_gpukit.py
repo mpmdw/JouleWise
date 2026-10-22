@@ -39,10 +39,62 @@ def planning_fixture(matrix):
     for gpu in value["gpu_classes"].values():
         gpu.update(setup_s=1800, model_load_s=180, router_overhead_fraction=0.25,
                    derivation="Explicit synthetic setup/load/router parameters; not observed hardware.")
+    # R17: cite this committed synthetic world, preserving every numerical input.
+    fixture_source = {
+        "url": "https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-gpukit/tests/align/test_gpukit.py",
+        "accessed": "2026-10-22",
+        "quote": "Synthetic fixture: 40000 prefill, 8000 decode, 16 s tools, 12 s host; 1800 s setup, 180 s load, 0.25 router fraction; no measured hardware."}
+    value["workload"]["source"] = fixture_source
+    for profile in value["gpu_classes"].values():
+        profile["source"] = fixture_source
     return value
 
 
 class MatrixTests(unittest.TestCase):
+
+    def test_public_citation_and_derivation_rules(self):
+        from joulewise.align.gpukit.matrix import _citation, numeric_provenance
+        citation = {"url": "https://github.com/mpmdw/JouleWise", "accessed": "2026-10-22",
+                    "note": "Synthetic fixture source."}
+        self.assertTrue(_citation(citation))
+        for host in ("localhost", "foo.test", "x.invalid", "foo.example",
+                     "x.localhost", "example.com", "sub.example.net", "example.org"):
+            self.assertFalse(_citation(dict(citation, url="https://" + host)))
+        for day in ("today", "2026-02-30", "20261022"):
+            self.assertFalse(_citation(dict(citation, accessed=day)))
+        matrix = {"workload": {"prefill_tokens": 40000, "derivation": "Operator-supplied"}}
+        self.assertIn("matrix_numeric_source_missing:workload.prefill_tokens", numeric_provenance(matrix))
+        matrix["workload"]["derivation"] = "prefill_tokens is the explicit synthetic input"
+        self.assertEqual(numeric_provenance(matrix), ())
+
+    def test_unsourced_cost_inputs_do_not_print_derived_figures(self):
+        matrix = planning_fixture(json.loads((CONFIG / "shade.json").read_text()))
+        matrix["workload"]["source"] = "Operator-supplied"
+        matrix["workload"]["derivation"] = "Operator-supplied"
+        for profile in matrix["gpu_classes"].values():
+            profile["source"] = "Operator-supplied"
+            profile["derivation"] = "Operator-supplied"
+            for rate in profile["throughput"].values():
+                rate["efficiency"] = 0.5  # Twice-ideal synthetic duration; intentionally unsourced here.
+                rate["efficiency_source"] = {"url": "https://x.invalid", "accessed": "today", "note": "guess"}
+        result = printable(estimate(matrix, "H100-SXM-80GB", usd_per_gpu_hour=2.49))
+        self.assertEqual(result["lower_bound_status"], "unavailable")
+        self.assertEqual(result["plan_status"], "unavailable")
+        self.assertIsNone(result["total_usd"])
+        self.assertIn("planning_input_unsourced:workload.prefill_tokens", result["flags"])
+        self.assertIn("matrix_throughput_efficiency_source_missing:H100-SXM-80GB:Qwen/Qwen3-8B", result["flags"])
+
+    def test_unsourced_allowance_does_not_hide_sourced_lower_bound(self):
+        matrix = planning_fixture(json.loads((CONFIG / "shade.json").read_text()))
+        gpu = matrix["gpu_classes"]["H100-SXM-80GB"]
+        gpu["setup_s_source"] = None
+        gpu["setup_s_derivation"] = "Operator-supplied"
+        result = estimate(matrix, "H100-SXM-80GB")
+        self.assertIsNotNone(result.lower_bound_wall_seconds)
+        self.assertIsNone(result.wall_seconds)
+        self.assertIn("planning_input_unsourced:gpu_classes.H100-SXM-80GB.setup_s", result.flags)
+
+
     def test_committed_matrices_counts_and_printed_wall_estimates(self):
         for name, rows, episodes, monitors in (
                 ("shade", 60, 60, 180), ("moe_stage_a", 30, 30, 90),

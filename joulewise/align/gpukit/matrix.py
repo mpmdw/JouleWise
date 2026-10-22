@@ -9,6 +9,10 @@ from __future__ import annotations
 import itertools
 import json
 import math
+import re
+import ipaddress
+from datetime import date
+from urllib.parse import urlsplit
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, get_args
@@ -38,15 +42,52 @@ def expand(matrix: Mapping[str, Any]) -> tuple[Run, ...]:
 
 
 def _citation(value: Any) -> bool:
-    """Require a dated public source for a claimed physical or measured value."""
-    return (isinstance(value, Mapping) and isinstance(value.get("url"), str)
-            and value["url"].startswith("https://") and bool(value.get("accessed"))
-            and bool(value.get("quote") or value.get("note")))
+    """Require HTTPS, a public host and a real ISO access date (R17)."""
+    if not isinstance(value, Mapping) or not isinstance(value.get("url"), str):
+        return False
+    try:
+        parsed = urlsplit(value["url"])
+        host = (parsed.hostname or "").rstrip(".").lower()
+        if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+            return False
+        # RFC 2606 sections 2/3 and RFC 6761 section 6 reserve these names.
+        reserved = ("test", "example", "invalid", "localhost",
+                    "example.com", "example.net", "example.org")
+        if any(host == suffix or host.endswith("." + suffix) for suffix in reserved):
+            return False
+        try:
+            if not ipaddress.ip_address(host).is_global:
+                return False
+        except ValueError:
+            if "." not in host:
+                return False
+        accessed = value.get("accessed")
+        if not isinstance(accessed, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", accessed):
+            return False
+        date.fromisoformat(accessed)
+    except (ValueError, TypeError):
+        return False
+    return bool(value.get("quote") or value.get("note"))
+
+
+def _matrix_keys(value: Any) -> set[str]:
+    if isinstance(value, Mapping):
+        return set(value) | {key for child in value.values() for key in _matrix_keys(child)}
+    if isinstance(value, list):
+        return {key for child in value for key in _matrix_keys(child)}
+    return set()
+
+
+def _derivation(value: Any, keys: set[str]) -> bool:
+    """A formula must name a matrix key as a whole word, not just arbitrary text."""
+    return isinstance(value, str) and any(
+        re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", value) for key in keys)
 
 
 def numeric_provenance(matrix: Mapping[str, Any]) -> tuple[str, ...]:
     """Require each numeric input's sibling citation or formula referencing sources."""
     flags: list[str] = []
+    keys = _matrix_keys(matrix)
 
     def walk(value: Any, path: str) -> None:
         if not isinstance(value, Mapping):
@@ -60,7 +101,7 @@ def numeric_provenance(matrix: Mapping[str, Any]) -> tuple[str, ...]:
             elif isinstance(leaf, (int, float)) and not isinstance(leaf, bool):
                 source = value.get(key + "_source", value.get("source"))
                 derivation = value.get(key + "_derivation", value.get("derivation"))
-                if not _citation(source) and not (isinstance(derivation, str) and derivation.strip()):
+                if not _citation(source) and not _derivation(derivation, keys):
                     flags.append("matrix_numeric_source_missing:" + where)
             elif isinstance(leaf, list):
                 for index, item in enumerate(leaf):
