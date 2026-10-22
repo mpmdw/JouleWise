@@ -1,8 +1,15 @@
-"""A lane-local whole-episode trace reducer; shared records remain unchanged."""
+"""Gross episode integration with explicit edge, clock and sensor uncertainty.
+
+Interior power samples are integrated with the piecewise-linear model. The
+reported half-width covers quantization and bracket-edge placement under that
+model, not arbitrary unseen load oscillations or undocumented sensor accuracy.
+"""
 
 from __future__ import annotations
 
+import json
 import math
+from bisect import bisect_left
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -16,21 +23,51 @@ class Energy:
     flags: tuple[str, ...] = ()
 
 
+def trace_flags(trace: PowerTrace) -> tuple[str, ...]:
+    """Read sampler flags from structured notes without changing PowerTrace."""
+    try:
+        notes = json.loads(trace.notes)
+        return tuple(str(f) for f in notes.get("flags", ())) if isinstance(notes, dict) else ()
+    except (ValueError, TypeError):
+        return ()
+
+
+def _notes(trace: PowerTrace) -> dict:
+    try:
+        value = json.loads(trace.notes)
+        return value if isinstance(value, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _edge(trace: PowerTrace, t: int) -> tuple[float, float, int]:
+    """Interpolated value, enclosing counter increment, distance to nearest poll."""
+    i = bisect_left(trace.t_ns, t)
+    if i < len(trace.t_ns) and trace.t_ns[i] == t:
+        return trace.values[i], 0.0, 0
+    a, b = trace.t_ns[i - 1], trace.t_ns[i]
+    x, y = trace.values[i - 1], trace.values[i]
+    return x + (y - x) * ((t - a) / (b - a)), y - x, min(t - a, b - t)
+
+
 def _interpolate(trace: PowerTrace, t: int) -> float:
-    for a, b, x, y in zip(trace.t_ns, trace.t_ns[1:], trace.values, trace.values[1:]):
-        if a <= t <= b:
-            return x + (y - x) * ((t - a) / (b - a))
-    raise ValueError("outside trace")
+    return _edge(trace, t)[0]
 
 
 def episode_energy(episode: Episode, *,
-                   channels: Sequence[tuple[str, str]] | None = None) -> Energy:
-    """Integrate gross energy in the episode bracket; never add redundant sensors.
+                   channels: Sequence[tuple[str, str]] | None = None,
+                   power_max_w: float | None = None,
+                   gap_factor: float = 1.5) -> Energy:
+    """Select nonoverlapping channels explicitly; no implicit choice among sensors.
 
-    With multiple channels, callers explicitly select nonoverlapping rails using
-    (source, channel) pairs. A power channel and its cumulative energy counter
-    must not be selected together. The alignment attribution lane can replace
-    this reducer through summarize's callback.
+    power_max_w is a prospective physical envelope, also accepted from the
+    sampler's JSON notes (power_bound_w) or episode.hardware. An unknown envelope
+    yields an infinite power interpolation bound, with a flag, while retaining J.
+    Summaries export that as an unknown bound rather than a nonfinite JSON number.
+
+    gap_factor is an operator parameter: 1.5 is the midpoint between one poll
+    and two polls. A missed poll is near 2*interval, unlike modest positive
+    event.wait + acquisition jitter. This flags gaps; it never discards energy.
     """
     traces = episode.power_traces
     if not traces:
@@ -39,14 +76,15 @@ def episode_energy(episode: Episode, *,
         if len(traces) != 1:
             return Energy(None, flags=("energy_channels_unspecified",))
     else:
-        keys = set(channels)
+        keys = set(map(tuple, channels))
         traces = tuple(t for t in traces if (t.source, t.channel) in keys)
         if len(traces) != len(keys):
             return Energy(None, flags=("energy_channel_missing_or_duplicate",))
     if not traces:
         return Energy(None, flags=("energy_channel_missing",))
-    values, bounds, flags = [], [], []
+    values, bounds, flags = [], [], list(episode.flags)
     for trace in traces:
+        flags.extend(trace_flags(trace))
         if (trace.resolution is not None
                 and (not math.isfinite(trace.resolution) or trace.resolution < 0)):
             return Energy(None, flags=("energy_resolution_invalid",))
@@ -68,40 +106,58 @@ def episode_energy(episode: Episode, *,
             return Energy(None, flags=("energy_trace_unbracketed",))
         if any(not math.isfinite(v) or v < 0 for v in trace.values):
             return Energy(None, flags=("energy_samples_invalid",))
-        times = [start, *(t for t in trace.t_ns if start < t < end), end]
-        readings = [_interpolate(trace, t) for t in times]
+        first, delta_a, distance_a = _edge(trace, start)
+        last, delta_b, distance_b = _edge(trace, end)
         duration_s = (end - start) / 1_000_000_000
         if trace.unit == "J_cumulative":
             if any(b < a for a, b in zip(trace.values, trace.values[1:])):
                 return Energy(None, flags=("energy_counter_reset",))
-            joules = readings[-1] - readings[0]
-            # Each counter endpoint has ± half a resolution quantum.
-            bound = trace.resolution
-            max_w = max((b - a) / ((tb - ta) / 1_000_000_000)
-                        for a, b, ta, tb in zip(trace.values, trace.values[1:],
-                                                trace.t_ns, trace.t_ns[1:]))
+            joules = last - first
+            # Monotonic counter truth at an edge lies between enclosing readings.
+            # Their entire increment bounds interpolation error without a Pmax.
+            # Include the clock-shift enclosure too, so no average-power estimate
+            # is mistaken for a bound on a subinterval.
+            edge_bound = delta_a + delta_b
+            if uncertainty_ns:
+                for t in (start, end):
+                    lo = max(0, bisect_left(trace.t_ns, t - uncertainty_ns) - 1)
+                    hi = min(len(trace.t_ns) - 1, bisect_left(trace.t_ns, t + uncertainty_ns))
+                    edge_bound += trace.values[hi] - trace.values[lo]
+            bound = None if trace.resolution is None else trace.resolution + edge_bound
         else:
-            joules = math.fsum((b - a) / 1_000_000_000 * (x + y) / 2.0
-                              for a, b, x, y in zip(times, times[1:], readings, readings[1:]))
-            # Worst-case quantization over the full bracket, not divided by sqrt(n).
-            bound = None if trace.resolution is None else trace.resolution * duration_s / 2.0
-            max_w = max(trace.values)
-        if bound is not None:
-            # Moving both bracket edges by the clock half-width costs at most 2 Pmax dt.
-            bound += 2.0 * max_w * uncertainty_ns / 1_000_000_000
-            # A trailing sensor average can move work across both bracket edges.
-            bound += 2.0 * max_w * (trace.averaging_window_ns or 0) / 1_000_000_000
+            # Walk the interior once; only the two edges need binary search.
+            interior = [(t, v) for t, v in zip(trace.t_ns, trace.values) if start < t < end]
+            points = [(start, first), *interior, (end, last)]
+            joules = math.fsum((b - a) / 1_000_000_000 * (x + y) / 2
+                              for (a, x), (b, y) in zip(points, points[1:]))
+            maximum = power_max_w
+            if maximum is None:
+                maximum = _notes(trace).get("power_bound_w", episode.hardware.get("power_max_w"))
+            if maximum is not None and (not math.isfinite(maximum) or maximum < max(trace.values)):
+                flags.append("energy_power_max_invalid")
+                maximum = None
+            if maximum is None:
+                flags.append("energy_power_max_missing")
+            # With a maximum power, each unsynchronised edge contributes
+            # Pmax * distance to the nearest sample. Clock displacement contributes
+            # 2*Pmax*dt, and a trailing averaging window contributes 2*Pmax*window.
+            edge_seconds = (distance_a + distance_b + 2 * uncertainty_ns
+                            + 2 * (trace.averaging_window_ns or 0)) / 1_000_000_000
+            bound = None if trace.resolution is None else trace.resolution * duration_s / 2
+            if bound is not None:
+                bound += maximum * edge_seconds if maximum is not None else math.inf
         if trace.resolution is None:
             flags.append("energy_resolution_unknown")
-        if trace.duty_fraction is not None and trace.duty_fraction < 1.0:
+        if trace.duty_fraction is not None and trace.duty_fraction < 1:
             flags.append("energy_duty_cycled_requires_repetitions")
-            bound = None  # Blind intervals cannot be bounded by the sampled powers.
+            bound = None
         if trace.source == "powermetrics":
             flags.append("energy_powermetrics_attribution_floor")
-            # The documented M3 Max instrument attribution half-width is about 1 J.
+            # Documented M3 Max attribution half-width is about 1 J.
             bound = None if bound is None else max(1.0, bound)
         if trace.nominal_interval_ns > 0 and any(
-                b - a > trace.nominal_interval_ns for a, b in zip(trace.t_ns, trace.t_ns[1:])):
+                b - a > gap_factor * trace.nominal_interval_ns
+                for a, b in zip(trace.t_ns, trace.t_ns[1:])):
             flags.append("energy_sample_gap")
         flags.append("energy_piecewise_linear_between_samples")
         values.append(joules)

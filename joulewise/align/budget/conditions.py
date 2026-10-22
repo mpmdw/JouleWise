@@ -32,6 +32,7 @@ class Condition:
     mode: str = "on"  # on, off, budget, concise, deletion
     fraction: float | None = None
     concise_prompt: str = CONCISE_PROMPT
+    deletion_span_count: int | None = 4  # Pilot design input; None reproduces old token deletion.
 
 
 def default_conditions(fractions: Sequence[float] = DEFAULT_FRACTIONS) -> tuple[Condition, ...]:
@@ -63,23 +64,43 @@ class Deletion:
     flags: tuple[str, ...] = ()
 
 
-def delete_spans(text: str, *, remove_tokens: int, codec: TokenCodec, seed: int) -> Deletion:
-    """Uniformly sample removed token positions and coalesce adjacent positions into spans."""
+def delete_spans(text: str, *, remove_tokens: int, codec: TokenCodec, seed: int,
+                 span_count: int | None = 4) -> Deletion:
+    """Delete a recorded number of contiguous spans, with uniformly composed lengths.
+
+    Choose positive span lengths summing to the cut and distinct insertion gaps
+    in the retained sequence. None is an explicit legacy token-deletion control.
+    """
     tokens = tuple(codec.encode(text))
     n = min(len(tokens), max(0, remove_tokens))
-    selected = sorted(random.Random(seed).sample(range(len(tokens)), n))
-    removed = set(selected)
+    rng = random.Random(seed)
     spans: list[tuple[int, int]] = []
-    for position in selected:
-        if spans and spans[-1][1] == position:
-            spans[-1] = (spans[-1][0], position + 1)
-        else:
-            spans.append((position, position + 1))
+    if span_count is None:
+        selected = sorted(rng.sample(range(len(tokens)), n))
+        for position in selected:
+            if spans and spans[-1][1] == position:
+                spans[-1] = (spans[-1][0], position + 1)
+            else:
+                spans.append((position, position + 1))
+    elif n:
+        k = min(max(1, span_count), n, len(tokens) - n + 1)
+        cuts = sorted(rng.sample(range(1, n), k - 1))
+        lengths = [b - a for a, b in zip([0, *cuts], [*cuts, n])]
+        gaps = sorted(rng.sample(range(len(tokens) - n + 1), k))
+        cursor_keep, out = 0, 0
+        for gap, length in zip(gaps, lengths):
+            out += gap - cursor_keep
+            cursor_keep = gap
+            spans.append((out, out + length))
+            out += length
+    removed = {i for a, b in spans for i in range(a, b)}
     visible = codec.decode([t for i, t in enumerate(tokens) if i not in removed])
     count = len(codec.encode(visible))
     flags = []
     if n != remove_tokens:
         flags.append("deletion_count_clipped")
+    if span_count is not None and n and len(spans) != span_count:
+        flags.append("deletion_span_count_clipped")
     if count != len(tokens) - n:
         flags.append("deletion_retokenized")
     return Deletion(visible, n, tuple(spans), count, tuple(flags))

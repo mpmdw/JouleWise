@@ -14,8 +14,9 @@ from typing import Any, Callable, Mapping, Sequence
 from joulewise.align.budget.conditions import (
     Condition, TokenCodec, cap_tokens, delete_spans, thinking_options,
 )
-from joulewise.align.budget.energy import Energy, episode_energy
+from joulewise.align.budget.energy import Energy, episode_energy, trace_flags
 from joulewise.align.budget.items import HintItem, ItemBatch
+from joulewise.align.budget.storage import TraceStore
 from joulewise.align.budget.score import HintMonitor, HintUse, MONITOR_PROMPT, Rate, judge_hint_use, wilson
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage, ChatResult, PowerSampler
 from joulewise.align.records import (
@@ -58,6 +59,9 @@ class Settings:
     thinking_open: str = "<think>"
     thinking_end: str = "\n</think>\n"
     measurement_id: str = "unmeasured"  # Change when hardware, precision, server, or sensor setup changes.
+    sampler_tail_intervals: float = 2.0  # Two poll periods permit one poll plus acquisition jitter.
+    sampler_interval_ns: int = 100_000_000  # Operator fallback when a sampler exposes no interval.
+    power_max_w: float | None = None  # Prospective physical envelope, including transients.
 
 
 @dataclass(frozen=True)
@@ -126,6 +130,7 @@ class MatrixResult:
     calibrations: tuple[Calibration, ...]
     run_sha256: str
     flags: tuple[str, ...] = ()
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -148,6 +153,13 @@ class Summary:
     mean_joules: float | None
     max_measurement_uncertainty_j: float | None
     flags: tuple[str, ...] = ()
+    seed: int = 0
+    flag_counts: Mapping[str, int] = field(default_factory=dict)
+    missing_monitor_verdicts: int = 0
+    missing_energies: int = 0
+    measured_trials: int = 0
+    excluded_trials: int = 0
+    configuration: Mapping[str, Any] = field(default_factory=dict)
 
 
 class _Journal:
@@ -156,16 +168,18 @@ class _Journal:
         self.trials: dict[str, BudgetTrial] = {}
         self.calibrations: dict[str, Calibration] = {}
         self.flags: list[str] = []
+        self.trace_store = TraceStore(path.with_name(path.name + ".traces.jsonl") if path is not None else None)
+        self.flags.extend(self.trace_store.flags)
         if path is None or not path.exists():
             return
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            handle = path.open(encoding="utf-8")
         except OSError as exc:
             self.flags.append(f"checkpoint_read_error:{type(exc).__name__}")
             return
-        for line in lines:
+        for line in handle:
             try:
-                entry = json.loads(line)
+                entry = self.trace_store.expand(json.loads(line))
                 if entry["run"] != fingerprint:
                     self.flags.append("checkpoint_other_run")
                     continue
@@ -177,12 +191,13 @@ class _Journal:
                         Calibration, json.dumps(entry["value"]))
             except (KeyError, ValueError, TypeError):
                 self.flags.append("checkpoint_line_invalid")
+        handle.close()
 
     def append(self, kind: str, key: str, value: Any) -> None:
         if self.path is None:
             return
         entry = {"run": self.fingerprint, "kind": kind, "key": key,
-                 "value": json.loads(to_json(value))}
+                 "value": value}
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # A crashed final line is retained as evidence and isolated from new entries.
@@ -194,7 +209,8 @@ class _Journal:
             with self.path.open("a", encoding="utf-8") as handle:
                 if needs_newline:
                     handle.write("\n")
-                handle.write(to_json(entry) + "\n")
+                self.trace_store.dump(entry, handle)
+                handle.write("\n")
                 handle.flush()
         except OSError as exc:
             self.flags.append(f"checkpoint_write_error:{type(exc).__name__}")
@@ -280,6 +296,9 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
             reasoning += final.reasoning_text
             reasoning_count += final.reasoning_tokens
             answer, answer_count = final.content, max(0, final.completion_tokens - final.reasoning_tokens)
+            if not answer and final.reasoning_text:
+                answer = final.reasoning_text
+                flags.append("continuation_answer_from_reasoning")
             if final.reasoning_tokens:
                 flags.append("reasoning_after_forced_delimiter")
         if condition.mode == "off" and reasoning_count:
@@ -289,6 +308,16 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
     finally:
         if sampler is not None:
             try:
+                # A2 waits a poll period, samples, then repeats; stop takes no
+                # closing sample. Leave one period plus acquisition slack after
+                # the last call, outside the Episode bracket.
+                interval = getattr(sampler, "interval_ns", settings.sampler_interval_ns)
+                tail_ns = max(0, math.ceil(interval * settings.sampler_tail_intervals))
+                advance = getattr(clock, "advance", None)
+                if advance is not None:
+                    advance(tail_ns)
+                else:
+                    time.sleep(tail_ns / 1_000_000_000)
                 traces = sampler.stop()
             except Exception as exc:
                 flags.append(f"sampler_stop_error:{type(exc).__name__}")
@@ -332,7 +361,8 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
                       model.endpoint_identity, seed, model.clock_domain, started, ended,
                       tuple(turns), power_traces=traces, clock_mappings=tuple(mappings),
                       hardware={"size_b": model.size_b, "attention_design": model.attention_design,
-                                "measurement_id": settings.measurement_id},
+                                "measurement_id": settings.measurement_id,
+                                "power_max_w": settings.power_max_w},
                       flags=tuple(sorted(set(flags))))
     return Generation(reasoning, answer, reasoning_count, answer_count,
                       tuple(calls), tuple(requests), episode)
@@ -342,9 +372,12 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                conditions: Sequence[Condition], *, seeds: Sequence[int], settings: Settings,
                monitor: HintMonitor, checkpoint: Path | None = None,
                sampler_factory: Callable[[ModelSpec], PowerSampler] | None = None,
-               clock: Callable[[], int] = time.monotonic_ns) -> MatrixResult:
+               clock: Callable[[], int] = time.monotonic_ns,
+               run_metadata: Mapping[str, Any] | None = None) -> MatrixResult:
     """Resume only exact experiment fingerprints; append each calibration and completed trial."""
     source_flags = items.flags if isinstance(items, ItemBatch) else ()
+    metadata = {"roster": dict(items.metadata) if isinstance(items, ItemBatch) else {},
+                **dict(run_metadata or {})}
     questions = items.items if isinstance(items, ItemBatch) else tuple(items)
     configs = list(conditions)
     flags = list(source_flags)
@@ -371,7 +404,7 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
             name: Path(__file__).with_name(name).read_text(encoding="utf-8")
             for name in ("run.py", "score.py", "conditions.py", "items.py", "energy.py")
         }),
-        "items": questions, "source_flags": source_flags,
+        "items": questions, "source_flags": source_flags, "metadata": metadata,
         "models": [{"model": m.model, "size_b": m.size_b, "backend": m.backend,
                     "endpoint": m.endpoint_identity, "codec": m.codec.identity,
                     "attention": m.attention_design, "domain": m.clock_domain,
@@ -444,7 +477,8 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                             if len(model.codec.encode(generation.reasoning)) != base.reasoning_tokens:
                                 trial_flags.append("deletion_usage_tokenization_mismatch")
                             deletion = delete_spans(generation.reasoning, remove_tokens=removed_target,
-                                                    codec=model.codec, seed=_seed(seed, key, "delete"))
+                                                    codec=model.codec, seed=_seed(seed, key, "delete"),
+                                                    span_count=condition.deletion_span_count)
                             visible, visible_count = deletion.text, deletion.visible_tokens
                             spans, removed = deletion.spans, deletion.removed_tokens
                             trial_flags.extend(deletion.flags)
@@ -499,76 +533,104 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                         base = trial
                     trials.append(trial)
     return MatrixResult(tuple(trials), tuple(calibrations), fingerprint,
-                        tuple(sorted(set(flags + journal.flags))))
+                        tuple(sorted(set(flags + journal.flags))), metadata)
 
 
 def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
               energy_reducer: Callable[[Episode], Energy] = episode_energy) -> tuple[Summary, ...]:
-    """One row per size/model/condition; unresolved labels and verdicts remain visible counts."""
-    groups: dict[tuple[str, float, str, str, str], list[BudgetTrial]] = {}
+    """One row per seed/configuration, avoiding pseudo-replication of an item roster."""
+    groups: dict[tuple, list[BudgetTrial]] = {}
     for trial in trials:
-        configuration_id = _digest({"endpoint": trial.episode.endpoint,
-                                    "hardware": trial.episode.hardware, "settings": trial.settings,
-                                    "monitor": trial.monitor_configuration, "condition": trial.condition})
+        configuration = {"endpoint": trial.episode.endpoint, "hardware": trial.episode.hardware,
+                         "settings": trial.settings, "monitor": trial.monitor_configuration,
+                         "condition": trial.condition, "seed": trial.seed}
+        configuration_id = _digest(configuration)
         groups.setdefault((trial.model, trial.size_b, trial.attention_design,
                            trial.condition.name, configuration_id), []).append(trial)
     rows = []
-    for (model, size, attention, condition, configuration_id), group in sorted(groups.items()):
-        positive = [t for t in group if t.hint_use.uses_hint is True]
-        negative = [t for t in group if t.hint_use.uses_hint is False]
+    for (model, size, attention, condition, configuration_id), original in sorted(groups.items()):
+        # Retain uncalibrated trials as records, but never label uncapped work
+        # as a measured budget cut. The exclusion is counted in the row.
+        group = [t for t in original if not (t.condition.mode == "budget"
+                                            and t.requested_cap_tokens is None)]
+        positive = [t for t in group if t.hint_use.uses_hint is True and t.monitor_flagged is not None]
+        negative = [t for t in group if t.hint_use.uses_hint is False and t.monitor_flagged is not None]
         catch = wilson(sum(t.monitor_flagged is True for t in positive), len(positive), confidence=confidence)
         false = wilson(sum(t.monitor_flagged is True for t in negative), len(negative), confidence=confidence)
-        if any(t.monitor_flagged is None for t in positive):
-            catch = replace(catch, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
-        if any(t.monitor_flagged is None for t in negative):
-            false = replace(false, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
+        missing_positive = sum(t.hint_use.uses_hint is True and t.monitor_flagged is None for t in group)
+        missing_negative = sum(t.hint_use.uses_hint is False and t.monitor_flagged is None for t in group)
+        if missing_positive:
+            catch = replace(catch, flags=(*catch.flags, "rate_monitor_incomplete"))
+        if missing_negative:
+            false = replace(false, flags=(*false.flags, "rate_monitor_incomplete"))
         accuracy = wilson(sum(t.hint_use.correct is True for t in group),
                           sum(t.hint_use.correct is not None for t in group), confidence=confidence)
         energies = []
-        for trial in group:
-            try:
-                energies.append(energy_reducer(trial.episode))
-            except Exception as exc:
-                energies.append(Energy(None, flags=(f"energy_reducer_error:{type(exc).__name__}",)))
-        flags = sorted({f for t in group for f in t.flags}
-                       | {f for e in energies for f in e.flags} | set(catch.flags) | set(false.flags) | set(accuracy.flags))
-        complete = all(e.joules is not None for e in energies)
-        if not complete:
-            flags.append("energy_incomplete")
+        per_trial_flags = []
+        for trial in original:
+            flags = set(trial.flags) | set(trial.episode.flags)
+            flags.update(f for tr in trial.episode.power_traces for f in trace_flags(tr))
+            if trial.condition.mode == "budget" and trial.requested_cap_tokens is None:
+                flags.add("budget_uncalibrated_excluded")
+            else:
+                try:
+                    energy = energy_reducer(trial.episode)
+                except Exception as exc:
+                    energy = Energy(None, flags=(f"energy_reducer_error:{type(exc).__name__}",))
+                energies.append(energy)
+                flags.update(energy.flags)
+                if energy.joules is None:
+                    flags.add("energy_incomplete")
+                if trial.hint_use.uses_hint is not None and trial.monitor_flagged is None:
+                    flags.add("rate_monitor_incomplete")
+            per_trial_flags.append(flags)
+        counts = {f: sum(f in fs for fs in per_trial_flags)
+                  for f in sorted(set().union(*per_trial_flags))}
+        available = [e for e in energies if e.joules is not None]
+        flags = set(counts) | set(catch.flags) | set(false.flags) | set(accuracy.flags)
+        n = len(group)
         rows.append(Summary(
-            model, size, attention, condition, configuration_id, len(group),
+            model, size, attention, condition, configuration_id, n,
             sum(t.hint_use.uses_hint is not None for t in group),
-            sum(t.hint_use.uses_hint is not None and t.monitor_flagged is not None for t in group),
-            accuracy,
-            math.fsum(t.reasoning_tokens for t in group) / len(group),
-            math.fsum(t.answer_tokens for t in group) / len(group),
-            math.fsum(t.visible_reasoning_tokens for t in group) / len(group),
-            math.fsum(t.episode.totals()["decode_tokens"] for t in group) / len(group),
+            len(positive) + len(negative), accuracy,
+            math.fsum(t.reasoning_tokens for t in group) / (n or 1),
+            math.fsum(t.answer_tokens for t in group) / (n or 1),
+            math.fsum(t.visible_reasoning_tokens for t in group) / (n or 1),
+            math.fsum(t.episode.totals()["decode_tokens"] for t in group) / (n or 1),
             catch, false,
-            math.fsum(e.joules for e in energies if e.joules is not None) / len(group) if complete else None,
-            max(e.uncertainty_j for e in energies if e.uncertainty_j is not None)
-            if complete and all(e.uncertainty_j is not None for e in energies) else None,
-            tuple(sorted(set(flags)))))
+            math.fsum(e.joules for e in available) / len(available) if available else None,
+            max(e.uncertainty_j for e in available)
+            if available and all(e.uncertainty_j is not None and math.isfinite(e.uncertainty_j)
+                                 for e in available) else None,
+            tuple(sorted(flags)), seed=original[0].seed, flag_counts=counts,
+            missing_monitor_verdicts=sum(t.monitor_flagged is None for t in group),
+            missing_energies=len(energies) - len(available), measured_trials=len(available),
+            excluded_trials=len(original) - n,
+            configuration={"condition": original[0].condition, "settings": original[0].settings,
+                           "seed": original[0].seed}))
     return tuple(rows)
 
 
 def summary_table(rows: Sequence[Summary]) -> str:
-    """Plain internal Markdown table; missing rates/energy are empty, with flags in every row."""
+    """Internal table with partial-data denominators and per-trial flag counts."""
     def rate(value: Rate) -> str:
         if value.estimate is None or value.interval is None:
             return ""
         return (f"{value.estimate:.3f} [{value.interval[0]:.3f}, {value.interval[1]:.3f}] "
                 f"{value.successes}/{value.trials}")
-    lines = ["| Model | B | Condition | n/scored | Reasoning tokens | Answer tokens | Visible tokens | Decode tokens | Accuracy (Wilson) | Catch (Wilson) | False flag (Wilson) | J | Flags |",
-             "|---|---:|---|---:|---:|---:|---:|---:|---|---|---|---:|---|"]
+    lines = ["| Model | B | Condition | Seed | n/scored | Reasoning tokens | Answer tokens | Visible tokens | Decode tokens | Accuracy (Wilson) | Catch (Wilson) | False flag (Wilson) | J | Missing monitor/J; excluded | Span count | Flags (trials) |",
+             "|---|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|---|---:|---|"]
     for r in rows:
-        joules = "" if r.mean_joules is None else f"{r.mean_joules:.3f}"
+        joules = "" if r.mean_joules is None else f"{r.mean_joules:.3f} (n={r.measured_trials})"
         if r.mean_joules is not None and r.max_measurement_uncertainty_j is not None:
             joules += f" +/- {r.max_measurement_uncertainty_j:.3f}"
-        lines.append(f"| {r.model} | {r.size_b:g} | {r.condition} | {r.trials}/{r.scored_trials} | "
+        condition = r.configuration.get("condition")
+        spans = getattr(condition, "deletion_span_count", "")
+        counted = ", ".join(f"{f}:{r.flag_counts[f]}" if f in r.flag_counts else f for f in r.flags)
+        lines.append(f"| {r.model} | {r.size_b:g} | {r.condition} | {r.seed} | {r.trials}/{r.scored_trials} | "
                      f"{r.mean_reasoning_tokens:.1f} | {r.mean_answer_tokens:.1f} | {r.mean_visible_reasoning_tokens:.1f} | "
                      f"{r.mean_decode_tokens:.1f} | {rate(r.accuracy)} | {rate(r.catch_rate)} | {rate(r.false_flag_rate)} | "
-                     f"{joules} | {', '.join(r.flags)} |")
+                     f"{joules} | {r.missing_monitor_verdicts}/{r.missing_energies}; {r.excluded_trials} | {spans} | {counted} |")
     lines.append("")
-    lines.append("J half-widths are maximum per-trial sensor/clock bounds; they are not confidence intervals on the mean.")
+    lines.append("J half-widths are maximum available per-trial quantization, bracket-edge interpolation, clock and averaging bounds, conditional on piecewise-linear interior power and a recorded power maximum. They are not confidence intervals on the mean or sensor-accuracy bounds. An absent half-width means an unknown/unbounded term, including duty-cycle gaps; missing trials are counted. Seeds have separate Wilson rows; repeated items are never pooled as independent.")
     return "\n".join(lines) + "\n"

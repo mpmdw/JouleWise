@@ -7,10 +7,12 @@ import importlib
 import json
 from pathlib import Path
 
+from joulewise.align.budget.energy import episode_energy
 from joulewise.align.budget.conditions import Condition, LocalEndpoint, default_conditions
-from joulewise.align.budget.items import HubMMLUSource, HubPin, ItemBatch
+from joulewise.align.budget.items import HubMMLUSource, HubPin, ItemBatch, stratified_roster
 from joulewise.align.budget.run import ModelSpec, Settings, run_matrix, summarize, summary_table
 from joulewise.align.budget.score import DEFAULT_MONITOR_MODEL, HintMonitor
+from joulewise.align.budget.storage import write_result
 from joulewise.align.budget.synthetic import run_synthetic
 from joulewise.align.records import ClockMapping, to_json, write_episodes
 
@@ -28,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         seeds = tuple(int(s) for s in args.seeds.split(","))
+        energy_options = {}
         if args.synthetic:
             result = run_synthetic(count=args.count, seeds=seeds,
                                    sizes_b=tuple(float(s) for s in args.sizes.split(",")),
@@ -43,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
             # The selected roster is deterministic, fixed before any model runs,
             # and included byte-for-byte in the resume fingerprint.
             count = source.get("count")
-            items = ItemBatch(batch.items[:count] if count is not None else batch.items, batch.flags)
+            items = stratified_roster(batch, count, seed=source.get("roster_seed", source.get("seed", 0)))
+            energy_options = config.get("energy", {})
             models = []
             for entry in config["models"]:
                 endpoint = LocalEndpoint(entry["base_url"], entry["model"], entry["backend"],
@@ -77,10 +81,12 @@ def main(argv: list[str] | None = None) -> int:
                     return constructor(**sampler_config.get("kwargs", {}))
             result = run_matrix(items, models, conditions, seeds=seeds, settings=settings,
                                 monitor=monitor, checkpoint=args.checkpoint,
-                                sampler_factory=sampler_factory)
-        rows = summarize(result.trials, confidence=confidence)
+                                sampler_factory=sampler_factory,
+                                run_metadata={"energy": energy_options})
+        rows = summarize(result.trials, confidence=confidence,
+                         energy_reducer=lambda ep: episode_energy(ep, **energy_options))
         args.output.mkdir(parents=True, exist_ok=True)
-        (args.output / "result.json").write_text(to_json(result) + "\n", encoding="utf-8")
+        write_result(args.output / "result.json", result)
         (args.output / "summary.json").write_text(to_json(rows) + "\n", encoding="utf-8")
         (args.output / "summary.md").write_text(summary_table(rows), encoding="utf-8")
         write_episodes(args.output / "episodes.jsonl", (t.episode for t in result.trials))

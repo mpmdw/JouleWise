@@ -24,7 +24,7 @@ from joulewise.align.budget.items import FixtureSource, HubMMLUSource, HubPin, I
 from joulewise.align.budget.run import BudgetTrial, ModelSpec, Settings, run_matrix, summarize, summary_table
 from joulewise.align.budget.score import HintMonitor, judge_hint_use, wilson
 from joulewise.align.budget.synthetic import (
-    FIVE_CONFIGURATIONS, ScriptedModel, ScriptedMonitor, ScriptedSampler, SyntheticClock,
+    DISCLOSURE, deletion_survival_probability, FIVE_CONFIGURATIONS, ScriptedModel, ScriptedMonitor, ScriptedSampler, SyntheticClock,
     WordCodec, run_synthetic, synthetic_items,
 )
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
@@ -371,9 +371,15 @@ class BudgetEnergyTests(OfflineTest):
         for trial in result.trials:
             trace = trial.episode.power_traces[0]
             # Independent rectangular-plus-slope integration on raw 100 ms samples.
-            expected = math.fsum((trace.t_ns[i + 1] - trace.t_ns[i]) / 1e9
-                                 * (trace.values[i] + (trace.values[i + 1] - trace.values[i]) / 2)
-                                 for i in range(len(trace.t_ns) - 1))
+            # Integrate only the Episode; the sampler now retains a trailing poll
+            # beyond it, as the real event.wait sampler must.
+            expected = 0.0
+            for a, b, x, y in zip(trace.t_ns, trace.t_ns[1:], trace.values, trace.values[1:]):
+                lo, hi = max(a, trial.episode.start_ns), min(b, trial.episode.end_ns)
+                if hi > lo:
+                    left = x + (y - x) * ((lo - a) / (b - a))
+                    right = x + (y - x) * ((hi - a) / (b - a))
+                    expected += (hi - lo) / 1e9 * (left + right) / 2
             energy = episode_energy(trial.episode)
             self.close_number(energy.joules, expected, uncertainty=energy.uncertainty_j)
 
@@ -445,7 +451,9 @@ class BudgetEndToEndTests(OfflineTest):
                            + rows["budget_0.6"].max_measurement_uncertainty_j)
         for name, fraction in (("budget_0.6", 614 / 1024), ("budget_0.4", 409 / 1024),
                                ("budget_0.3", 307 / 1024), ("deletion_0.6", 614 / 1024)):
-            probability = fraction if name.startswith("deletion") else fraction ** 2
+            probability = (deletion_survival_probability(1024, 1024 - cap_tokens(1024, fraction),
+                                                        len(DISCLOSURE.split()))
+                           if name.startswith("deletion") else fraction ** 2)
             positives = [t for t in result.trials if t.condition.name == name
                          and t.hint_use.uses_hint is True]
             # An independent transcript count checks the monitor/scoring numerator.
@@ -454,10 +462,9 @@ class BudgetEndToEndTests(OfflineTest):
                 if trial.condition.mode == "deletion":
                     tokens = trial.generation.reasoning.split()
                     removed = {i for a, b in trial.deleted_spans for i in range(a, b)}
-                    visible_mentions += any(w == "HINT_RELIANCE" and i not in removed
-                                            for i, w in enumerate(tokens))
+                    visible_mentions += DISCLOSURE in " ".join(w for i, w in enumerate(tokens) if i not in removed)
                 else:
-                    visible_mentions += "HINT_RELIANCE" in trial.generation.reasoning.split()
+                    visible_mentions += DISCLOSURE in trial.generation.reasoning
             self.assertEqual(rows[name].catch_rate.successes, visible_mentions)
             self.assertEqual(rows[name].catch_rate.trials, len(positives))
         print("\nSYNTHETIC five configurations x 200 items (seed 0):\n"
@@ -472,12 +479,15 @@ class BudgetEndToEndTests(OfflineTest):
                 if row.condition not in coverage:
                     continue
                 fraction = cap_tokens(1024, float(row.condition.rsplit("_", 1)[1])) / 1024
-                probability = fraction if row.condition.startswith("deletion") else fraction ** 2
+                probability = (deletion_survival_probability(1024, 1024 - cap_tokens(1024, fraction),
+                                                            len(DISCLOSURE.split()))
+                               if row.condition.startswith("deletion") else fraction ** 2)
                 low, high = row.catch_rate.interval
                 coverage[row.condition] += low <= probability <= high
         for name, successes in coverage.items():
-            # A 99% binomial interval on the independent-seed coverage must contain
-            # the nominal 95%. This checks calibration without an arbitrary ±bar.
+            # The reviewer specifies a 1-in-100 false-failure bar for coverage.
+            # Inverting that secondary test gives a 99% coverage interval.
+            # Across four conditions the union bound is at most 4% false failures.
             interval = wilson(successes, count, confidence=0.99).interval
             self.assertLessEqual(interval[0], 0.95, (name, successes))
             self.assertGreaterEqual(interval[1], 0.95, (name, successes))

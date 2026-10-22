@@ -7,8 +7,8 @@ import json
 import io
 import random
 import re
-from dataclasses import dataclass
-from typing import Callable, Iterable, Protocol
+from dataclasses import dataclass, field
+from typing import Any, Callable, Iterable, Mapping, Protocol
 from urllib.request import urlopen
 
 HINT_KINDS = ("authority", "metadata", "grader", "sycophancy")
@@ -32,6 +32,7 @@ class HintItem:
     hint_kind: str
     provenance: str = "authored-fixture"
     flags: tuple[str, ...] = ()
+    subject: str = "unspecified"
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -49,6 +50,7 @@ class HintItem:
 class ItemBatch:
     items: tuple[HintItem, ...]
     flags: tuple[str, ...] = ()
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 class ItemSource(Protocol):
@@ -90,7 +92,7 @@ def hint_suite(rows: Iterable[dict], *, seed: int = 0,
             wrong = [a for a in labels if a != correct]
             items.append(HintItem(str(row.get("id", index)), str(row["question"]), choices,
                                   correct, rng.choice(wrong), HINT_KINDS[index % len(HINT_KINDS)],
-                                  provenance))
+                                  provenance, subject=str(row.get("subject", "unspecified"))))
         except (KeyError, TypeError, ValueError):
             flags.append(f"item_invalid:{index}")
     if len({i.item_id for i in items}) != len(items):
@@ -145,7 +147,8 @@ class HubMMLUSource:
                     return ItemBatch((), ("dataset_decoder_missing:pyarrow",))
                 data = parquet.read_table(io.BytesIO(raw)).to_pylist()
                 rows = [{"id": f"{self.pin.path}:{n}", "question": r["question"],
-                         "choices": r["choices"], "answer": "ABCD"[r["answer"]]}
+                         "choices": r["choices"], "answer": "ABCD"[r["answer"]],
+                         "subject": r.get("subject", "unspecified")}
                         for n, r in enumerate(data)]
             else:
                 data = json.loads(raw)
@@ -156,3 +159,31 @@ class HubMMLUSource:
             return ItemBatch((), (f"dataset_format_invalid:{type(exc).__name__}",))
         return hint_suite(rows, seed=self.seed,
                           provenance=f"{self.pin.url}#sha256={self.pin.sha256}")
+
+
+def stratified_roster(batch: ItemBatch, count: int | None, *, seed: int = 0) -> ItemBatch:
+    """Seeded equal allocation across subjects, fixed before observing answers.
+
+    Subject order and within-subject row order are independently shuffled by
+    the roster RNG. Round-robin selection gives every nonempty subject one row
+    before allocating another; exhausted strata release their allocation.
+    """
+    groups: dict[str, list[HintItem]] = {}
+    for item in batch.items:
+        groups.setdefault(item.subject, []).append(item)
+    rng = random.Random(seed)
+    subjects = sorted(groups)
+    rng.shuffle(subjects)
+    for rows in groups.values():
+        rng.shuffle(rows)
+    target = len(batch.items) if count is None else min(len(batch.items), max(0, count))
+    selected: list[HintItem] = []
+    while len(selected) < target:
+        for subject in subjects:
+            if groups[subject] and len(selected) < target:
+                selected.append(groups[subject].pop())
+    rng.shuffle(selected)
+    counts = {subject: sum(i.subject == subject for i in selected) for subject in sorted(subjects)}
+    return ItemBatch(tuple(selected), batch.flags, {
+        **batch.metadata, "roster_seed": seed, "allocation": "equal_round_robin",
+        "selected_row_ids": [i.item_id for i in selected], "subject_counts": counts})
