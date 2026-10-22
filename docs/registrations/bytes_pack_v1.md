@@ -276,7 +276,7 @@ Per model and boundary, on both bases and both selections (primary and flagged-i
 | `⟦MAC: known-bytes stream test outcome⟧` | §1 | R8 item 6 |
 | `⟦B2: coverage table (count of 400 and fraction)⟧` | §9 | coverage harness re-run (Addendum 4 item 5) |
 | `⟦B2: SHA-256 of joulewise/bytes_analysis.py at the agreeing pin⟧` | §13, and `version` in every pack registration's `estimators` | the analysis at the commit the twin agrees with (R8 items 3 and 4) |
-| `⟦B4: catalog SHA-256 at the B4 merge⟧` | Appendix A | `configs/b6/flag_catalog_b6.json` after the B4 lane merges |
+| `⟦B4: catalog SHA-256 at the B4 merge⟧` — FILLED | Appendix A | SHA-256 recorded in Appendix A for `configs/b6/flag_catalog_b6.json` at the B4 merge |
 | `⟦B4: group key location⟧`, `⟦B4: withheld store path⟧`, `⟦B4: flag code⟧`, `⟦B4: --stage1-commit⟧` | §11 | the blinding-group and withheld-store build (R8 item 7, C6 and C7) |
 
 ## 19. Before the first BYTES session
