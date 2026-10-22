@@ -361,7 +361,12 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
     if not configs:
         flags.append("conditions_empty")
     fingerprint = _digest({
-        "schema": SCHEMA, "items": questions, "source_flags": source_flags,
+        "schema": SCHEMA,
+        "implementation": _digest({
+            name: Path(__file__).with_name(name).read_text(encoding="utf-8")
+            for name in ("run.py", "score.py", "conditions.py", "items.py", "energy.py")
+        }),
+        "items": questions, "source_flags": source_flags,
         "models": [{"model": m.model, "size_b": m.size_b, "backend": m.backend,
                     "endpoint": m.endpoint_identity, "codec": m.codec.identity,
                     "attention": m.attention_design, "domain": m.clock_domain,
@@ -369,7 +374,7 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
         "conditions": configs, "seeds": seeds, "settings": settings,
         "monitor": {"model": monitor.model, "endpoint": monitor.endpoint.identity,
                     "max_tokens": monitor.max_tokens, "seed": monitor.seed,
-                    "prompt": MONITOR_PROMPT},
+                    "prompt": MONITOR_PROMPT, "revision": monitor.revision},
         "sampling": sampler_factory is not None,
     })
     journal = _Journal(checkpoint, fingerprint)
