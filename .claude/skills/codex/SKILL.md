@@ -1,6 +1,6 @@
 ---
 name: codex
-description: Run OpenAI Codex (gpt-6-sol on the exec route; gpt-5.6-sol on the pinned MCP server) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
+description: Run OpenAI Codex (gpt-6.1-sol on the exec route; gpt-5.6-sol on the pinned MCP server) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
 ---
 
 # Sol bridge for Claude Code
@@ -53,7 +53,7 @@ Apply contract §4's t3 applicability and preferred-presentation-plane rule.
    project tool `codex` with the
    Git-root `cwd`, model `gpt-5.6-sol` (the MCP server runs the pinned
    0.153.3 CLI, the last release that ships `mcp-server`; that CLI cannot use
-   the 6.0 models, so Sol 6.0 = `gpt-6-sol` runs only on the exec route via
+   the 6.0 models, so Sol 6.1 = `gpt-6.1-sol` runs only on the exec route via
    `codex-run-v3` or `scripts/codex-bridge` on the current CLI), config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
@@ -108,8 +108,10 @@ foreground route.
 ## Session observability + recovery (WO-027)
 
 The native Codex pet does not consume the external observer JSONL. It follows
-running local conversations owned by the Codex desktop app. On Ed's configured
-machine, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task;
+running local conversations owned by the Codex desktop app. When the app is
+installed, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task
+(the app is not installed on the measurement Mac, checked 2026-10-21, so the
+file is moved aside there and the CLI transport runs);
 `scripts/codex-bridge` uses `scripts/codex-app-bridge.mjs` to start the real Sol
 turn there. The script serializes calls on that host task, captures the final
 answer from its rollout, and interrupts the app turn if the wrapper is
