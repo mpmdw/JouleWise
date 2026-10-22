@@ -274,7 +274,24 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
             result = chat(options, settings.max_tokens, messages)
             reasoning, answer = result.reasoning_text, result.content
             reasoning_count = result.reasoning_tokens
-            answer_count = max(0, result.completion_tokens - reasoning_count)
+            finish = result.raw_usage.get("_finish_reason", result.raw_usage.get("finish_reason"))
+            if (condition.mode != "off" and not reasoning and answer
+                    and (settings.thinking_open in answer or
+                         (finish == "length" and settings.thinking_end.strip() not in answer))):
+                # Also support ChatEndpoints other than LocalEndpoint whose
+                # strict parser files an unfinished thinking block as content.
+                reasoning = answer.partition(settings.thinking_open)[2] if settings.thinking_open in answer else answer
+                reasoning, close, answer = reasoning.partition(settings.thinking_end.strip())
+                reasoning_count = len(model.codec.encode(reasoning))
+                if not close:
+                    flags.append("reasoning_block_unclosed")
+            if reasoning and not answer:
+                # Delimiter tokens are generated work, not answer tokens.
+                answer_count = 0
+                if finish == "length":
+                    flags.append("reasoning_censored_at_token_limit")
+            else:
+                answer_count = max(0, result.completion_tokens - reasoning_count)
         else:
             if cap:
                 first = chat({**options, "stop": [settings.thinking_end.strip()]}, cap, messages)
@@ -297,14 +314,19 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
             continuation = (*messages, ChatMessage("assistant", prefix))
             final = chat({**options, "continue_final_message": True,
                           "add_generation_prompt": False}, settings.answer_max_tokens, continuation)
-            reasoning += final.reasoning_text
-            reasoning_count += final.reasoning_tokens
-            answer, answer_count = final.content, max(0, final.completion_tokens - final.reasoning_tokens)
-            if not answer and final.reasoning_text:
-                answer = final.reasoning_text
+            if not final.content and final.reasoning_text:
+                # Some parsers classify a tagless continuation as reasoning.
+                # After our forced close this text is the answer: do not leak
+                # it into the monitor transcript or the reasoning token count.
+                answer, answer_count = final.reasoning_text, final.completion_tokens
                 flags.append("continuation_answer_from_reasoning")
-            if final.reasoning_tokens:
-                flags.append("reasoning_after_forced_delimiter")
+            else:
+                reasoning += final.reasoning_text
+                reasoning_count += final.reasoning_tokens
+                answer = final.content
+                answer_count = max(0, final.completion_tokens - final.reasoning_tokens)
+                if final.reasoning_tokens:
+                    flags.append("reasoning_after_forced_delimiter")
         if condition.mode == "off" and reasoning_count:
             flags.append("reasoning_present_when_disabled")
     except Exception as exc:
@@ -433,9 +455,15 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                               settings=settings, episode_id=f"{fingerprint}:{calibration_key}:{repeat}",
                               sampler_factory=sampler_factory, clock=clock)
                     for repeat in range(max(0, settings.calibration_repetitions))]
-                lengths = tuple(g.reasoning_tokens for g in generations
+                # A ceiling-hit, unclosed reasoning run is right-censored:
+                # use the operator ceiling as its conservative lower-bound
+                # calibration length, never zero or a short parser artifact.
+                lengths = tuple(settings.max_tokens if "reasoning_censored_at_token_limit" in g.episode.flags
+                                else g.reasoning_tokens for g in generations
                                 if not any(f.startswith("generation_error") for f in g.episode.flags))
                 calibration_flags = sorted({f for g in generations for f in g.episode.flags})
+                if any("reasoning_censored_at_token_limit" in g.episode.flags for g in generations):
+                    calibration_flags.append("calibration_censored_at_ceiling")
                 if len(lengths) != settings.calibration_repetitions or not lengths:
                     calibration_flags.append("calibration_incomplete")
                 calibration = Calibration(model.model, item.item_id, lengths,

@@ -532,3 +532,80 @@ class BudgetReviewTests(OfflineTest):
                 self.assertEqual(accepted, [shape])
                 self.assertEqual(parse_answer(generation.answer_text, item.labels), "B")
                 self.assertFalse(any(f.startswith("generation_error") for f in generation.episode.flags))
+
+    def test_strict_and_loose_parsers_keep_censored_thinking_out_of_answers(self):
+        # Same 3000-word reasoning and strict/loose parser rules as the review
+        # repro. A tagged output spends one words-codec token on <think>.
+        item = synthetic_items(1).items[0]
+        text = " ".join(f"r{i}" for i in range(3000))
+        for mode in ("strict", "loose"):
+            for tagged in (True, False):
+                def transport(path, payload):
+                    if path == "/tokenize":
+                        return {"tokens": list(range(len(payload["prompt"].split())))}
+                    if payload.get("continue_final_message"):
+                        out = "\nANSWER: A"
+                    else:
+                        out = ("<think> " if tagged else "") + text + " </think> ANSWER: A"
+                        for stop in payload.get("stop", ()):
+                            out = out.split(stop, 1)[0]
+                    words = out.split()
+                    finish = "stop"
+                    if len(words) > payload["max_tokens"]:
+                        out, finish = " ".join(words[:payload["max_tokens"]]), "length"
+                    if mode == "strict" and not ("<think>" in out and "</think>" in out):
+                        reasoning, content = None, out
+                    else:
+                        body = out.partition("<think>")[2] if "<think>" in out else out
+                        reasoning, close, content = body.partition("</think>")
+                        content = content or None if close else None
+                    return {"choices": [{"message": {"content": content, "reasoning_content": reasoning},
+                                          "finish_reason": finish}],
+                            "usage": {"prompt_tokens": 256,
+                                      "completion_tokens": min(len(words), payload["max_tokens"])}}
+                endpoint = LocalEndpoint("http://mock", "m", "vllm", 1, transport=transport)
+                model = ModelSpec("m", 4.0, "vllm", endpoint.identity, endpoint, endpoint.configured,
+                                  controls_verified=True)
+                settings = Settings(2048, 32)
+                generation = _generate(model, item, Condition("thinking_on"), hinted=True,
+                                       median_tokens=None, seed=0, settings=settings, episode_id="censored",
+                                       sampler_factory=None, clock=lambda: 0)
+                with self.subTest(mode=mode, tagged=tagged):
+                    # 2048 generated words minus the optional opening marker;
+                    # zero final-answer words have been generated.
+                    self.assertEqual(generation.reasoning_tokens, 2048 - int(tagged))
+                    self.assertEqual(len(generation.reasoning.split()), 2048 - int(tagged))
+                    self.assertEqual(generation.answer_tokens, 0)
+                    self.assertEqual(generation.answer_text, "")
+                    self.assertIn("reasoning_censored_at_token_limit", generation.episode.flags)
+                    seen = []
+                    class Monitor:
+                        identity = "recording-monitor"
+                        def chat(self, messages, **kwargs):
+                            seen.append(json.loads(messages[-1].content)["reasoning"])
+                            return ChatResult("NO", "", (), 256, 0, 1, 0, 0, None, 1)
+                    HintMonitor(Monitor(), revision="r").assess(item, generation.reasoning)
+                    self.assertEqual(seen, [generation.reasoning])
+                    matrix = run_matrix((item,), (model,), (Condition("thinking_on"),),
+                                        seeds=(0,), settings=settings,
+                                        monitor=HintMonitor(Monitor(), revision="r"), clock=lambda: 0)
+                    # Each of the operator's three calibration repeats hits
+                    # the ceiling: the median uses three censored 2048s.
+                    self.assertEqual(matrix.calibrations[0].lengths, (2048, 2048, 2048))
+                    self.close_number(matrix.calibrations[0].median_tokens, 2048.0)
+                    self.assertIn("calibration_censored_at_ceiling", matrix.calibrations[0].flags)
+                    capped = _generate(model, item, Condition("budget", "budget", 0.3), hinted=True,
+                                       median_tokens=1000.0, seed=0, settings=Settings(4096, 32),
+                                       episode_id="cut", sampler_factory=None, clock=lambda: 0)
+                    # floor(.3*1000)=300 generated words; a generated <think>
+                    # consumes one of those words in this deliberately simple
+                    # codec. The final "\nANSWER: A" is exactly two words,
+                    # contrary to the repro's printed (truth 3) annotation.
+                    self.assertEqual(capped.reasoning_tokens, 300 - int(tagged))
+                    self.assertEqual(len(capped.reasoning.split()), 300 - int(tagged))
+                    self.assertEqual(capped.answer_tokens, 2)
+                    self.assertEqual(capped.answer_text, "\nANSWER: A")
+                    self.assertNotIn("ANSWER:", capped.reasoning)
+                    if mode == "loose":
+                        self.assertIn("continuation_answer_from_reasoning", capped.episode.flags)
+                    self.assertNotIn("reasoning_censored_at_token_limit", capped.episode.flags)
