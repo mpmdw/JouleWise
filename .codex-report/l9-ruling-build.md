@@ -263,7 +263,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
 | tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
 | tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
-| tests.b5_analysis.test_joined_probes | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.871 | Codex Cloud | `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
@@ -292,6 +292,9 @@ Completed cloud logs and test failures:
   - failure_names: tests.b5_analysis.test_dry_run.JoinedRunTests.test_J3_closeout_openers_issuers_and_disclosures_are_ok
   - failure_names: tests.b5_analysis.test_dry_run.JoinedRunTests.test_J4_completed_without_tooling_refusal
   - error_names: tests.b5_analysis.test_dry_run.JoinedRunTests.test_L9_real_chain_floor_inventory_sources_and_fill_boundary
+- `tests.b5_analysis.test_joined_probes` at `54da41a5e38d7045f120f946b083c6532613a595`: 2 tests, 2 failures, 0 errors, 0 skips, exit 1, 0.028 s. Log `/workspace/l9-1/dry-3/logs/tests_b5_analysis_test_joined_probes.log`, SHA-256 `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051`.
+  - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_disclosure_main_read_only_driver_output_paths_without_builder_seam
+  - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_load_correlated_restored_units_pass_real_tripwire_and_validator
 
 Additional logs (not completed acceptance modules):
 

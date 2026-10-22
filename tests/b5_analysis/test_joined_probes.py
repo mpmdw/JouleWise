@@ -4,55 +4,9 @@ import unittest
 from tests.b5_analysis.joined_s10 import cached_primary
 
 
-def _record_warm_callable_bindings():
-    """Read-only diagnostics for a prior joined run's process-local bindings."""
-    import dataclasses
-    import inspect
-    import json
-    import sys
-    from unittest import mock
-
-    found = []
-
-    def inspect_binding(label, value):
-        if isinstance(value, mock.Mock):
-            found.append({'binding': label, 'kind': 'Mock'})
-        elif inspect.isfunction(value):
-            origin = value.__module__
-            if origin.startswith(('tests.', 'unittest.mock')):
-                found.append({'binding': label, 'kind': 'test_function',
-                              'origin': origin, 'name': value.__qualname__})
-
-    for name, module in list(sys.modules.items()):
-        if module is None or not name.startswith(('joulewise.', 'scripts.')):
-            continue
-        for key, value in list(vars(module).items()):
-            label = name + '.' + key
-            inspect_binding(label, value)
-            if inspect.isfunction(value):
-                for index, default in enumerate(value.__defaults__ or ()):
-                    inspect_binding(label + '.default.' + str(index), default)
-                for key, default in (value.__kwdefaults__ or {}).items():
-                    inspect_binding(label + '.kwdefault.' + key, default)
-                for index, cell in enumerate(value.__closure__ or ()):
-                    try:
-                        inspect_binding(label + '.closure.' + str(index), cell.cell_contents)
-                    except ValueError:
-                        pass
-            elif isinstance(value, dict):
-                for key, member in list(value.items()):
-                    if isinstance(key, str):
-                        inspect_binding(label + '[' + key + ']', member)
-            elif isinstance(value, type) and dataclasses.is_dataclass(value):
-                for field in dataclasses.fields(value):
-                    inspect_binding(label + '.field.' + field.name, field.default)
-    print('L9_WARM_CALLABLE_BINDINGS ' + json.dumps(found, sort_keys=True))
-
-
 class JoinedProbeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        _record_warm_callable_bindings()
         # The scratch repository is removed by the release tests or at exit.
         cls.fixture, cls.harness, cls.result = cached_primary()
 
