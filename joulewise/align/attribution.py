@@ -101,6 +101,7 @@ class _Trace:
         self.times = tuple(t for t, _ in pairs)
         self.values = tuple(v for _, v in pairs)
         spans: list[_Span] = []
+        self.resets: list[tuple[int, int]] = []
         window = trace.averaging_window_ns
         if window is not None and window <= 0:
             self.flags.append("window.invalid")
@@ -108,10 +109,13 @@ class _Trace:
         if self.counter:
             for (a, x), (b, y) in zip(pairs, pairs[1:]):
                 if y < x:
-                    # No modulus/reset metadata exists: preserve the signed
-                    # observed difference, never invent an unwrapping modulus.
-                    self.flags.append("counter.wrap")
-                watts = (y - x) / ((b - a) / _NS_PER_S)
+                    # NVML counts mJ since driver load. A decrease denotes a
+                    # reset, not a modular negative-energy increment. The new
+                    # reading is the work accumulated since restart.
+                    self.flags.extend(("counter.wrap", "counter.reset"))
+                    self.resets.append((a, b))
+                increment = y if y < x else y - x
+                watts = increment / ((b - a) / _NS_PER_S)
                 spans.append(_Span(a, b, watts, watts))
         elif window is not None:
             self.method = "window_average_W"
@@ -155,7 +159,7 @@ class _Trace:
         hi = min(len(self.times), i + (2 if i < len(self.times) and self.times[i] == t else 1))
         return max((abs(v) for v in self.values[lo:hi]), default=0.0)
 
-    def _interpolation(self, t: int, *, start: bool) -> float:
+    def _interpolation(self, t: int, t0: int, t1: int, *, start: bool) -> float:
         if not self.spans:
             return 0.0
         i = bisect_right(self.starts, t) - 1
@@ -164,13 +168,16 @@ class _Trace:
         span = self.spans[i]
         if not span.start < t < span.end:
             return 0.0
-        a, b = (t, span.end) if start else (span.start, t)
+        a, b = (t, min(t1, span.end)) if start else (max(t0, span.start), t)
+        linear = span.integral(a, b)
         if self.counter:
-            # A held cumulative reading has no partial counter increment;
-            # linear interpolation allocates this partial observed increment.
-            return abs(span.integral(a, b)) / 2
-        held = span.left * ((b - a) / _NS_PER_S)
-        return abs(span.integral(a, b) - held) / 2
+            # A left-held cumulative reading jumps by the full increment at
+            # the right sample. Include that jump when the partial interval
+            # reaches it; otherwise the held counter contributes no increment.
+            held = span.integral(span.start, span.end) if b == span.end else 0.0
+        else:
+            held = span.left * ((b - a) / _NS_PER_S)
+        return abs(linear - held) / 2
 
     def energy(self, t0: int, t1: int, idle_watts: float) -> EnergyEstimate:
         flags = list(self.flags)
@@ -178,6 +185,16 @@ class _Trace:
             return EnergyEstimate(0.0, math.inf, self.method, _flags(flags + ["interval.reversed"]))
         if not math.isfinite(idle_watts):
             return EnergyEstimate(math.nan, math.inf, self.method, _flags(flags + ["idle.nonfinite"]))
+        if t1 == t0:
+            # Identical integration limits contain neither energy nor support
+            # on which any endpoint, resolution or coverage term can act.
+            return EnergyEstimate(0.0, 0.0, self.method, _flags(flags))
+        if not self.spans:
+            # No observed gross energy exists from which to subtract idle.
+            # Infinity prevents an empty sensor from claiming precision.
+            return EnergyEstimate(0.0, math.inf, self.method,
+                                  _flags(flags + ["trace.partial_coverage",
+                                                  "coverage.peak_missing"]))
         duration = (t1 - t0) / _NS_PER_S
         energies: list[float] = []
         uncovered_ns = 0
@@ -206,8 +223,16 @@ class _Trace:
             else:
                 bounds.append((self._adjacent_peak(t0) + self._adjacent_peak(t1))
                               * uncertainty / _NS_PER_S)
-        bounds.extend((self._interpolation(t0, start=True),
-                       self._interpolation(t1, start=False)))
+        bounds.extend((self._interpolation(t0, t0, t1, start=True),
+                       self._interpolation(t1, t0, t1, start=False)))
+        for a, b in self.resets:
+            reset_overlap = max(0, min(t1, b) - max(t0, a))
+            if reset_overlap:
+                # The reset can discard up to one polling interval's work.
+                # Use the observed peak as a sensitivity envelope, as for
+                # missing trace coverage; it is not a bound on unseen spikes.
+                bounds.append(reset_overlap / _NS_PER_S * self.peak)
+                flags.append("counter.reset_interval")
         resolution = self.trace.resolution
         if resolution is not None and math.isfinite(resolution) and resolution >= 0:
             bounds.append(2 * resolution if self.counter else resolution * duration)
@@ -229,13 +254,14 @@ def trace_energy(
 
     Idle power is subtracted over the FULL requested interval, including any
     out-of-trace duration, as specified by A4. Missing gross energy is zero
-    with a peak-power sensitivity allowance. For counter wraps the observed
-    signed difference is retained and flagged; no modulus is guessed.
+    with a peak-power sensitivity allowance. Counter decreases restart from
+    zero and carry counter.wrap/counter.reset, plus one polling interval's
+    observed-peak sensitivity for work lost before the reset.
 
-    At a partially cut reconstruction span, interpolation uncertainty is half
-    the energy difference from a left hold: [t0, span.end] at the start and
-    [span.start, t1] at the end. Constant window support has zero such
-    difference. A counter hold allocates zero increment on a partial span.
+    Endpoint hold-versus-line comparisons are clipped to the query itself.
+    Constant window support has zero such difference. A held counter jumps
+    at the right sample; that jump counts when the partial interval reaches it.
+    Empty reconstructions return zero energy with infinite uncertainty.
     """
     return _Trace(trace, mapping).energy(t0_ns, t1_ns, idle_watts)
 
@@ -347,10 +373,22 @@ def attribute_episode(
                 flags.append("clock.mapping_ambiguous")
         else:
             flags.append("clock.mapping_missing")
+            loose = [m for m in episode.clock_mappings if m.trace_domain == trace.clock_domain]
+            if loose:
+                mapping = loose[0]
+                flags.append("clock.episode_domain_mismatch")
+                if len(loose) > 1:
+                    flags.append("clock.mapping_ambiguous")
     reconstruction = _Trace(trace, mapping)
-    total = reconstruction.energy(episode.start_ns, episode.end_ns, idle_watts)
-    segments = tuple(SegmentEnergy(turn, kind, start, end,
-                                   reconstruction.energy(start, end, idle_watts))
+    def estimate(start: int, end: int) -> EnergyEstimate:
+        energy = reconstruction.energy(start, end, idle_watts)
+        if not traces:
+            return EnergyEstimate(0.0, math.inf, energy.method,
+                                  _flags(list(energy.flags) + ["trace.missing"]))
+        return energy
+
+    total = estimate(episode.start_ns, episode.end_ns)
+    segments = tuple(SegmentEnergy(turn, kind, start, end, estimate(start, end))
                      for turn, kind, start, end in _segments(episode, flags))
     flags.extend(total.flags)
     for segment in segments:

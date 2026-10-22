@@ -1,6 +1,7 @@
 """Closed-form and record-level checks of the real attribution API."""
 
 from dataclasses import replace
+from pathlib import Path
 import math
 import subprocess
 import sys
@@ -142,9 +143,57 @@ class AttributionChecks(unittest.TestCase):
         sensor = trace(times=(0, NS, 2 * NS, 3 * NS), values=(950.0, 990.0, 5.0, 45.0),
                        source="nvml_energy", unit="J_cumulative", resolution=0.001)
         estimate = trace_energy(sensor, 0, 3 * NS, mapping=mapping())
-        self.close(estimate.joules, 45 - 950, half_width=estimate.half_width_j)
+        # Positive increments 40 J + restart reading 5 J + 40 J.
+        self.close(estimate.joules, 40 + 5 + 40, half_width=estimate.half_width_j)
         self.assertIn("counter.wrap", estimate.flags)
-        self.assertIn("energy.negative", estimate.flags)
+        self.assertIn("counter.reset", estimate.flags)
+        self.assertNotIn("energy.negative", estimate.flags)
+
+    def test_counter_reset_recovers_work_without_inflating_peak(self):
+        period = NS // 10  # One 100 ms NVML counter poll.
+        times = tuple(range(0, 4 * NS + 1, period))
+        # At 300 W each step is 30 J. At 2 s the driver resets, then records
+        # the full step's 30 J: restart-from-zero must recover 1200 J exactly.
+        values = tuple(5_000_000.0 + 30 * k if k < 20 else 30.0 * (k - 19)
+                       for k in range(len(times)))
+        sensor = trace(times=times, values=values, source="nvml_energy",
+                       unit="J_cumulative", resolution=0.001)
+        estimate = trace_energy(sensor, 0, 4 * NS)
+        self.close(estimate.joules, 300 * 4, half_width=estimate.half_width_j)
+        self.assertIn("counter.reset_interval", estimate.flags)
+        # One 100 ms interval at the observed 300 W peak, plus two mJ quanta.
+        self.close(estimate.half_width_j, 300 * 0.1 + 2 * 0.001)
+        before = trace_energy(sensor, -NS, 0)
+        # One uncovered second at 300 W, not the pre-reset megajoule baseline.
+        self.close(before.half_width_j, 300 * 1 + 2 * 0.001)
+
+    def test_counter_hold_includes_jump_at_partial_start_interval_end(self):
+        sensor = trace(times=(0, NS, 2 * NS), values=(0.0, 100.0, 300.0),
+                       source="nvml_energy", unit="J_cumulative", resolution=0.001)
+        estimate = trace_energy(sensor, NS // 4, 3 * NS // 2,
+                                mapping=mapping(uncertainty=0))
+        self.close(estimate.joules, 175.0, half_width=estimate.half_width_j)
+        # At the start: |100 J held jump - 75 J linear| / 2 = 12.5 J.
+        # At the stop: |0 J held increment - 100 J linear| / 2 = 50 J.
+        self.close(estimate.half_width_j, 12.5 + 50 + 2 * 0.001)
+
+    def test_short_interval_uncertainty_uses_only_its_own_support(self):
+        sensor = trace(times=(0, NS), values=(0.0, 100.0))
+        estimate = trace_energy(sensor, 4 * NS // 10, NS // 2,
+                                mapping=mapping(uncertainty=0))
+        self.close(estimate.joules, 4.5, half_width=estimate.half_width_j)
+        # Left sample holds at 0 W; the line integrates to 4.5 J. Each end
+        # compares on the same requested 100 ms support: 2 * 4.5/2 + .1*.1.
+        self.close(estimate.half_width_j, 4.5 + 0.1 * 0.1)
+        empty = trace_energy(sensor, NS // 2, NS // 2)
+        self.assertEqual((empty.joules, empty.half_width_j), (0.0, 0.0))
+
+    def test_missing_trace_never_subtracts_idle_from_unobserved_energy(self):
+        result = attribute_episode(episode(), source="mock", channel="absent", idle_watts=70.0)
+        for estimate in (result.total, *(s.energy for s in result.segments)):
+            self.assertEqual(estimate.joules, 0.0)
+            self.assertTrue(math.isinf(estimate.half_width_j))
+            self.assertIn("trace.missing", estimate.flags)
 
     def test_mapping_translation_preserves_integer_nanoseconds(self):
         origin = 10**18  # An epoch at which binary64 cannot retain individual ns.
@@ -168,7 +217,8 @@ class AttributionChecks(unittest.TestCase):
         estimate = trace_energy(trace(resolution=None), 0, NS)
         self.assertIn("resolution.missing", estimate.flags)
         self.assertIn("clock.uncertainty_missing", estimate.flags)
-        self.close(estimate.half_width_j, 0.0, scale=100.0)
+        # Zero is exact here: all three terms are absent or identically zero.
+        self.assertEqual(estimate.half_width_j, 0.0)
         empty = trace_energy(trace(times=(), values=()), 0, NS)
         self.assertIn("trace.insufficient_samples", empty.flags)
         self.assertIn("coverage.peak_missing", empty.flags)
@@ -269,11 +319,21 @@ class AttributionChecks(unittest.TestCase):
         self.assertEqual(len(missing.segments), len(result.segments))
         # A records-valid mapping may target the wrong episode domain.
         bad = replace(record, clock_mappings=(replace(mapping(), episode_domain="other"),))
-        self.assertIn("clock.mapping_missing", attribute_episode(bad, source="mock", channel="package").flags)
+        # A known translation is retained even if its destination is mislabeled.
+        shifted = replace(bad, power_traces=(replace(record.power_traces[0],
+                          t_ns=tuple(t - NS for t in record.power_traces[0].t_ns)),),
+                          clock_mappings=(replace(bad.clock_mappings[0], offset_ns=NS),))
+        malformed = attribute_episode(shifted, source="mock", channel="package")
+        self.assertIn("clock.mapping_missing", malformed.flags)
+        self.assertIn("clock.episode_domain_mismatch", malformed.flags)
+        self.close(malformed.total.joules, result.total.joules,
+                   half_width=min(malformed.total.half_width_j, result.total.half_width_j))
 
     def test_zero_duration_and_invalid_idle_are_reported(self):
         estimate = trace_energy(trace(), NS, NS, mapping=mapping())
-        self.close(estimate.joules, 0.0, scale=100.0)
+        # Identical limits have exactly zero measure, energy and uncertainty.
+        self.assertEqual(estimate.joules, 0.0)
+        self.assertEqual(estimate.half_width_j, 0.0)
         self.assertNotIn("trace.partial_coverage", estimate.flags)
         bad = trace_energy(trace(), 0, NS, idle_watts=math.nan)
         self.assertIn("idle.nonfinite", bad.flags)
@@ -281,6 +341,7 @@ class AttributionChecks(unittest.TestCase):
     def test_import_works_without_site_packages(self):
         result = subprocess.run([sys.executable, "-S", "-c",
                                  "from joulewise.align.attribution import trace_energy"],
+                                cwd=Path(__file__).resolve().parents[2],
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
 
