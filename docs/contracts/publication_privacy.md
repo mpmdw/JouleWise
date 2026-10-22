@@ -29,8 +29,13 @@ pack output directory, when it encounters:
 - an event whose top-level keys differ from the exact five-key event contract;
 - an unknown summary top-level field;
 - an unknown `measurement_quality` field;
-- a power-trace column other than
-  `timestamp_s,power_w,source,rail`, or an unreviewed source/rail value; or
+- a power-trace header other than exactly `timestamp_s,power_w,source,rail`
+  (point samples) or exactly
+  `timestamp_s,power_w,source,rail,interval_start_s,interval_end_s`
+  (interval-average samples, whose `interval_start_s` and `interval_end_s`
+  must be finite numbers with start before end and `interval_end_s` equal to
+  `timestamp_s` on every row; `joulewise/publication_privacy.py`
+  `_audit_power_trace`), or an unreviewed source/rail value; or
 - malformed JSON, JSONL, or retained CSV.
 
 An entire subtree may be classified as redacted or omitted. Descendants of

@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "paper_renumber_refs.py"
 REAL_DRAFT = ROOT / "docs" / "paper" / "draft-v1.md"
-REAL_DRAFT_SHA256 = "939dfa23730a22d35e02154d7aa7904f396364d55c128e6715c72b849eaf39ab"
+REAL_DRAFT_SHA256 = "db095aca956a91ae34037b9ad1b1011704b1c3c3d4b08b2e857a92b3710ef579"
 EXPECTED_ORPHANS = {4, 9, 11, 14, 16, 17, 18, 21, 24, 25}
 EXPECTED_MAP = {
     1: 1,
