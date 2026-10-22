@@ -88,6 +88,12 @@ class DriverLane:
         inputs = plan_inputs.build(self.measurement, reg, layout.campaign_id, layout.session_id, identities,
             custody_root=paths.custody, runs_parent=paths.runs_parent, claim_backup=paths.backup_claim,
             bound_backup=paths.backup_bound, run=self.run)
+        disk_budget = inputs.pop("disk_budget", None)
+        if disk_budget is not None:
+            notes = [*notes, {"kind": "disk.budget", **disk_budget}]
+            if disk_budget["required_free_bytes"] is None:
+                write(stage / "disk-budget.json", disk_budget)
+                return LaneMissing("driver:disk.budget_missing")
         fp = {}
         checks = sorted((self.root / "staging" / layout.session_id.split("-smoke-")[0] / "precheck").glob("*/*/precheck.json"))
         if checks:
@@ -108,6 +114,8 @@ class DriverLane:
         metadata = {"session_id": layout.session_id, "packs": list(layout.packs), "campaign_id": layout.campaign_id,
             "paths": paths.json(), "inputs": inputs, "notes": notes, "smoke": smoke_record,
             "prepared": asdict(prepared), "runs_roots": []}
+        if disk_budget is not None:
+            metadata["disk_budget"] = disk_budget
         write(metadata_path(prepared), metadata)
         write(stage / "plan-inputs.json", inputs)
         write(pointer, asdict(prepared))

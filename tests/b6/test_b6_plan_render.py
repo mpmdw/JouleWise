@@ -20,6 +20,7 @@ from joulewise.b6.driver_lane import DriverLane, read
 from joulewise.b6.pack_registration import Registration
 from tests.b6.support import DeskCase, ROOT, document, write_json
 from tests import battery_float_fixture
+from joulewise.hazards import base, disk
 
 
 class ProductionPlanRenderTests(DeskCase):
@@ -190,6 +191,43 @@ class ProductionPlanRenderTests(DeskCase):
                     checked = self.check_plan(prepared)
                     self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
                     self.check_readers(prepared, written)
+
+    def test_bytes_pack_p_through_real_planner_and_disk_hazard(self):
+        # Synthetic integer receipts: P is bit-identical, no float tolerance.
+        b, wait, fixed = 1000001, 7200, 19
+        required = 2 * (b + wait) + fixed
+        terms = dict(B_bytes=b, extra_wait_raw_bytes=wait, fixed_retained_bytes=fixed,
+                     peak_copies=2, session_wait_budget_s=7200, required_free_bytes=required)
+        sizing = self.measurement / "configs/b6/registration/sizing_b5.json"
+        value = read(sizing)
+        value["packs"]["BYTES"] = dict(pack_id="bytes-s1-p1", programmed_span_s=3600,
+                                        T_stream_max_s=100, disk_derivation=terms)
+        write_json(sizing, value)
+        # Draft pass trees intentionally omit arm authority. Supply only the
+        # synthetic launch declaration here; never alter the committed tree.
+        pack = self.measurement / "configs/campaigns/bytes-s1-p1/plan_tree.json"
+        tree = read(pack)
+        launch = read(self.measurement / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json")["arm_attachments"]["launch"]
+        for row in launch["bindings"]:
+            if row["name"] in ("claim_runs_root", "bound_runs_root"):
+                row["leaf"] = tree["roots"][row["name"].replace("runs_root", "root_leaf")]
+        tree["arm_attachments"]["launch"] = launch
+        write_json(pack, tree)
+        prepared, written, _ = self.render("bytes-s1-p1", False)
+        metadata = read(Path(prepared.plan_path).parent.parent / "session.json")
+        budget = metadata["disk_budget"]
+        window = written["hazard_window"]
+        self.assertEqual(budget["member_count"], window["member_count"])
+        self.assertEqual(budget["flags"], ["disk.budget_encoded_from_p"])
+        targets = driver.disk_targets(window, arm=True)
+        for free, expected in ((required - 1, base.REFUSE), (required, base.PASS)):
+            with self.subTest(free=free):
+                measured = disk.measure(base.Context(), targets=targets,
+                    statvfs=lambda path: SimpleNamespace(f_bavail=free, f_frsize=1, f_blocks=required * 2),
+                    stat=lambda path: SimpleNamespace(st_dev=1))
+                judged = disk.judge(measured, window["thresholds"]["disk"])
+                self.assertEqual(judged.observed["volumes"][0]["required_bytes"], required)
+                self.assertEqual(judged.status, expected)
 
 
 class ScreenInputsTests(DeskCase):

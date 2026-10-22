@@ -115,4 +115,41 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
               "registration": {"path": REGISTRATION, "sha256": sha256(registration_raw)}}
     for key, name in (("identity_epoch_json", "identity-epoch.json"), ("t1_bindings_json", "t1-bindings.json")):
         result[key] = {k: identities[name][k] for k in ("path", "sha256")}
+    if pack_id.startswith("bytes-s"):
+        encode_disk_budget(result, sized["packs"][label].get("disk_derivation"))
     return deepcopy(result)
+
+
+def encode_disk_budget(inputs, terms):
+    """Encode the registered P in the native three-target budget, exactly.
+
+    No P is a disclosed open slot, never an inherited reserve threshold.
+    Count the same real stages (including optional spares) as the writer.
+    """
+    tree, _ = plan.read_plan_tree(Path(inputs["pack_root"]))
+    stages = plan.b5_chain.stage_plan(tree)
+    collections = [s for s in stages if s.in_chain and s.kind == "campaign_collection"]
+    n = sum(s.expected_count for s in collections)
+    n += sum(max(s.spare_sets) for s in collections
+             if s.spare_sets and inputs.get("spare_retries", True))
+    try:
+        keys = ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes")
+        if not isinstance(terms, dict) or any(type(terms.get(k)) is not int or terms[k] < 0 for k in keys):
+            raise ValueError("missing or malformed disk terms")
+        if terms.get("peak_copies") != 2 or terms.get("session_wait_budget_s") != 7200:
+            raise ValueError("disk terms differ from H-DISK-RULING")
+        b, wait, fixed, required = (terms[k] for k in keys)
+        if required != 2 * (b + wait) + fixed or n <= 0:
+            raise ValueError("disk terms do not reconstruct P")
+    except ValueError as exc:
+        inputs["disk_budget"] = {"flags": ["disk.budget_missing"], "detail": str(exc),
+                                 "required_free_bytes": None, "member_count": n}
+        return
+    q, remainder = divmod(2 * b, 3 * n)
+    headroom = remainder + 2 * wait + fixed
+    inputs["bytes_per_member"] = q
+    inputs["thresholds"]["disk"]["headroom_bytes"] = headroom
+    inputs["disk_budget"] = {"flags": ["disk.budget_encoded_from_p"], "derivation": deepcopy(terms),
+                             "member_count": n, "native_copies": 3, "bytes_per_member": q,
+                             "rounding_remainder_bytes": remainder, "headroom_bytes": headroom,
+                             "required_free_bytes": required}

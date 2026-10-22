@@ -1,10 +1,11 @@
 ## PROGRESS
 
-- Slice 2 handoff: source/test step is consistent, ready for director review/commit; three paths changed (scripts/bytes_gates.py, tests/test_bytes_gates.py, this report). No pack/planner edit started. The next slice begins with encoding P from a registered disk_derivation, then replay.
-- Done: slice 2 intake/M0; director ruling 1 applied; raw_allocated_bytes rate inputs and exact rational disk terms implemented in bytes_gates. All 14 bytes_gates tests pass, including missing-field unavailable/flag, P equality/P-1, rounding once, and retained-copy independence.
-- Done: H augmented receipts run successfully (C5 exit 2 from stopped completeness gates, no ConversionSyntax); rate maxima agree with disk_h.json within 1e-6 relative. Evidence and all twelve P terms below.
-- Next: encode P in plan_inputs/DriverLane, test through real planner and disk hazard; implement synthetic-tested replay CLI; complete registries/targeted checks and R6 draft.
-- Open: producer scripts/bytes_h_session.py measurements() remains outside scope (BY-H2); real replay and CI are director-owned. No commit/push attempted. No prohibited session tree accessed.
+- Slice 3 encoding step implemented and new focused tests green. Five paths changed: plan_inputs.py, driver_lane.py, test_plan_inputs.py, test_b6_plan_render.py, this report. No commit/push attempted (director owns Git writes).
+- Done: BYTES native q/headroom encoding from registered sizing_b5.json pack disk_derivation; count is real planner stages including optional spares. DriverLane records terms/flag in metadata, passes only native fields to the closed writer. Missing/malformed P records disk.budget_missing and returns LaneMissing, never Refused.
+- Done: real DriverLane → plan_inputs.build → plan.write_window_plan → disk.measure/judge synthetic BYTES pack: exact P requirement, REFUSE at P-1, PASS at P (1 test, exit 0). Plan-input module 6 tests green (includes alpha/beta/gamma unchanged inputs and spares); session-wrapper module 6 tests green. Sealed inventory diffs empty; git diff --check passes.
+- Done: existing alpha/beta/gamma production regression finished (1 test, 6 failing subtests, 131.197 s, exit 1). All six passed budget assertions, then failed unchanged check_readers courier-path equality: actual /private/tmp/... versus expected /tmp/.... This is the local-route environmental category; no fix attempted.
+- Next: replay CLI/tests inside bytes_gates; final per-pack q/headroom evidence; remaining targeted checks and finish report. BY-SLOTS must supply real draft launch authority and sizing/P (draft trees currently intentionally arm_attachments={}).
+- Open: BY-H2 native raw_allocated_bytes producer, director-run real 9+1 replay and CI. No prohibited session trees accessed. Current head f73c62198, local branch by-c5, intended director destination lane/2026-10-22-bytes-c5-gates.
 
 ## SUMMARY
 
@@ -14,8 +15,9 @@ Rates derive from one raw bundle's allocated byte receipts, without altering ret
 All twelve pass packs print both bases, per-model counts and allowances, WAIT, fixed, c and P.
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
 All 14 bytes_gates tests pass; H rates agree with disk_h at the required 1e-6 relative bar.
-Pack encoding, replay, end-to-end hazard verification and R6 text remain for the next slice.
+Pack encoding and synthetic end-to-end hazard verification are implemented in slice 3; replay and final reporting remain.
 Only authorized source/test/report files changed; no hardware operation or Git write ran.
+Slice 3 implements exact native encoding and proves P boundaries through the real planner/hazard; replay remains pending.
 
 ## GATES FIX
 
@@ -1108,7 +1110,11 @@ Exit 2 from stopped completeness gates; empty stderr; no ConversionSyntax. Rates
 
 ## PACK ENCODING
 
-Pending.
+Slice 3: plan_inputs.build reads disk_derivation from the selected sizing_b5.json pack row (the same source as its time allowances), for bytes-s* only. It uses plan.read_plan_tree and b5_chain.stage_plan to obtain the native member-plus-spares count, then divmod(c*B,3*n); headroom=remainder+c*WAIT+fixed. Integer fields are checked for reconstruction of P, c=2 and WAIT duration=7200. P values remain future BY-SLOTS registration inputs; no generated registration is changed.
+
+DriverLane removes the diagnostic disk_budget property before the closed-schema smoke/planner interface and retains it at session metadata disk_budget and notes. A missing or malformed P records disk.budget_missing in staging/disk-budget.json and returns LaneMissing, not Refused; no disk comparison runs for the absent record. The writer requires positive bytes_per_member, so a zero-budget plan would not parse. Existing alpha/beta/gamma inputs remain unchanged.
+
+The production-shaped synthetic test supplies the omitted launch declaration in its TMPDIR checkout only. Real draft BYTES trees currently have arm_attachments={}, as scripts/bytes_plan_trees.py intentionally generates; their launch authority remains a BY-SLOTS prerequisite.
 
 ## REPLAY PROGRAM
 
@@ -1116,7 +1122,7 @@ Pending. Director owns real replay; the worker must not access night-b6, night-b
 
 ## END-TO-END
 
-Pending.
+`tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_bytes_pack_p_through_real_planner_and_disk_hazard` passes (1 test, 16.637 s, exit 0). A synthetic bytes-s1-p1 registration sizing row uses B=1000001, WAIT=7200, fixed=19, hence P=2014421 bytes. Only the temporary tree is decorated with the existing fourteen launch bindings; no draft authority is asserted for committed trees. DriverLane.prepare_session/build/launch feeds the real plan.write_window_plan. driver.disk_targets groups its real target copies on one synthetic device; disk.measure stubs statvfs with f_frsize=1 to express both exact byte boundaries. disk.judge reports required_bytes exactly P, REFUSE at P-1 and PASS at P. This is synthetic evidence, not live hardware validation.
 
 ## SEALED INVENTORY
 
@@ -1131,6 +1137,14 @@ subprocess.run(["git", "diff", "--name-only", "HEAD", "--", *paths], check=True)
 Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
+
+Slice 3 exact commands (each fresh module TMPDIR, synthetic-only):
+
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_plan_inputs` — exit 0, 6 tests, 0.012 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_session_wrapper` — exit 0, 6 tests, 0.431 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_bytes_pack_p_through_real_planner_and_disk_hazard` — exit 0, 1 test, 16.637 s. Earlier attempts failed first on extra disk_budget key (fixed by keeping disclosure in DriverLane metadata), then on the intentionally absent draft launch declaration (synthetic fixture now supplies it in TMPDIR only).
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_each_production_pack_uses_b6_screen_and_no_spares` — exit 1, 1 test, 6 failing subtests, 131.197 s. All alpha/beta/gamma budget assertions passed for both registration states; each failed the unchanged check_readers line 142 courier path assertion because actual resolves /private/tmp while expected retains /tmp. Environmental path-alias failure per local route; not chased.
+- `git diff --check` — exit 0. Repeated sealed-inventory byte-path diff commands from bda481d5a and HEAD to working tree: both exit 0, stdout empty.
 
 Final slice-2 C5 module run: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_gates` — exit 0, 14 tests, 4.082 s, no skips. Includes measured-c disclosure invariance. H was rerun with --disk-evidence; exit 2, empty stderr, every P unchanged and measured_c=0.8020750916018277 beside c=2.
 
@@ -1152,13 +1166,15 @@ Exit 0; 11 tests in 1.132 seconds; OK, no skips or environmental failures. This 
 
 ## R6 DRAFT
 
-Pending final implementation numbers.
+For each BYTES pass session the sole disk refusal is measured session-volume free bytes, statvfs f_bavail multiplied by f_frsize with purgeable bytes excluded, below P. P = 2(B + WAIT) + fixed. B is the larger of ceil(r_s times the sum of model count times that model’s stream allowance) and ceil(r_w times the sum of model count times that model’s member-wall allowance). Rates are maxima over timed H members of one raw bundle tree’s inode-deduplicated POSIX st_blocks times 512 divided by stream seconds or member-wall seconds respectively. Each model uses its own measured allowances including the measured request max/min margin; the stream allowance includes mean request time plus maximum stream-minus-request time. Each full basis rounds up once in exact rational arithmetic. WAIT=ceil(r_s times 7200 seconds), fixed is the committed fixed-artifact allocation, and two copies count raw plus the partitioned rsync backups; the harvest APFS clone adds no copy. No reserve or further margin is added. All terms, P, free bytes and the measured whole-window implied copy count are disclosed; missing inputs are flags. The native three-target budget encodes P exactly with q=floor(2B/(3n)) and headroom=(2B-3nq)+2WAIT+fixed, where n is the writer’s actual members-plus-spares count; disk.budget_encoded_from_p names that encoding. BY-SLOTS fills the pack-specific values from the C5 output printed above, whose provisional stopped-session status remains disclosed.
 
 ## CI
 
 Director creates draft PR and reads CI under the local route. No PR number supplied yet.
 
 ## DECISIONS I MADE
+
+Slice 3: registered disk terms live in sizing_b5.json packs[label].disk_derivation, next to that pack’s own time allowances; BYTES draft registration files remain unchanged. The sealed writer cannot accept diagnostic input keys or zero bytes_per_member. DriverLane keeps disk_budget in session metadata, and an absent P yields a durable disk.budget_missing diagnostic plus LaneMissing before planning, never Refused. The draft pass tree’s deliberately absent launch declaration is supplied only by the synthetic E2E fixture; actual launch readiness belongs to BY-SLOTS. Flags here are preparation metadata, not harvested member flags, so no flag-catalog mutation is required for this step.
 
 Director ruling 1: per-run raw_allocated_bytes is the only disk-rate byte source (allocated st_blocks*512, raw-only tree, inode-deduplicated). Missing raw byte receipts enter no rate, are counted in disk.raw_bytes_missing; no rate makes disk unavailable. Never halve retained_bytes. Rates compare at 1e-6 relative; derived integer bytes compare exactly. BY-H2 owns native producer support. Synthetic never-ran receipts carry raw_allocated_bytes=null.
 
@@ -1169,9 +1185,11 @@ Applied director precedence: H ruling and committed disk_terms win over the para
 
 BY-H2 must add raw_allocated_bytes to scripts/bytes_h_session.py measurements(): POSIX st_blocks*512 of that run's raw bundle tree only (one copy, runs-parent/<stage dir>/<run_id>, inode-deduplicated); null for members that never ran. retained_bytes keeps raw plus archive allocations and must not be halved.
 
+The existing production reader regression has the /private/tmp versus /tmp courier-path environmental failure described in TESTS RUN.
+
 The native producer lacks raw_allocated_bytes, so tests.test_bytes_h_session.test_fully_observed_native_export_extracts_and_clears_c5 currently expects pass where the new contract requires unavailable. BY-H2 producer support must restore that integration; its file and test are outside this write scope.
 
-Remaining: pack P input/encoding, planner and real hazard proof, replay program/tests, remaining targeted tests and R6 paragraph. Real 9+1 replay and CI remain director-owned. Local branch by-c5; HEAD caa644063; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5: derive exact rational disk allocation from raw receipts.
+Remaining: finish planner and real hazard verification, replay program/tests, remaining targeted tests and R6 paragraph. Real 9+1 replay and CI remain director-owned. Local branch by-c5; HEAD f73c62198; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5: encode registered P exactly in native pass disk budget.
 
 ## NEEDS_RULING
 
