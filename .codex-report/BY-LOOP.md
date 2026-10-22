@@ -2,15 +2,14 @@
 
 ## PROGRESS
 
-- DONE: local intake at clean 17983dcb3; no active stop card. Added configs/b6/loop_bytes.json (twelve explicit pack_ids and BYTES order, dedicated root), loop discovery filter and CLI config-root default with explicit/env override retained. First full tests.test_b6_loop run: 57 tests, 32.572 s, OK (before guard addition); final 58 tests, 23.646s, OK.
-- DONE: DONE guard uses native zsh state read plus done.idle, published after successful final I/O. Explicit state change invalidates skip. Focused three new tests passed, 0.076 s; argv sentinel proves DONE invokes no tick executable.
-- NEXT: scratch rehearsal PASSED (root /private/tmp/jwtmp-byloop.VDqS8u; rehearsal.json), using tests.b6.round_support.bytes_rehearsal. Full loop rerun after guard PASSED: 58 tests, 23.646s, exit 0 (before final pending-outbox refinement). It uses real runpy entry point, open_packs, driver preparation and smoke.prepare; only hardware identity/precheck, transport and launch are synthetic. Next item 4 fails-before/passes-after; leak trace and module runs. Item 48 relay audit completed: no in-scope yield LOW relay found.
-- CHECKPOINT: DONE outbox retry edge hardened after full run: mailer records failures internally, so loop checks pending delivery/close entries before publishing done.idle. Two focused guard/retry tests passed (0.032s); full module rerun after this last change still pending.
-- OPEN: production BYTES sizing is absent from configs/b6/registration/sizing_b5.json (DriverLane requires plan_inputs.build sizing). Scratch may supply synthetic sizing; real C5 sizing remains an external registration gate. Historical cloud sections below need replacement as steps finish. No scope request yet. Director owns commits/pushes/CI. All existing edits are this slice's.
+- DONE (prior committed slice 9de9ae0a5): dedicated BYTES root, guard/no-tick sentinel, scratch rehearsal, item 48 relay audit and record-only item 6 disposition. Clean tree at this slice start; descendant baseline confirmed.
+- IMPLEMENTED item 4: smoke.py reads campaign member evaluations for anchor-only rc 1 explanation; desk caller no longer requires idle flags. Expanded existing exact-dispatch desk regression with anchor-only and three rejection cases. Fails-before: 1 test, anchor subcase failed (`fail != pass`), 1.123s, exit 1. Passes-after: 1 test, 1.615s, exit 0. Companion-member rejection added and passed; focused final regression PASS (2.014s); full combined run completed 81 tests / 204.993s, four failures from attempting recovery on incomplete/crashed chains. Fixed caller to attempt only when all failing exits are exactly rc 1. Final focused regression rerun: 3 tests / 2.420s / exit 0 (anchor matrix, incidental-physics crash controls, named physical stops).
+- NEXT: full final smoke/loop module verification and collect round-desk session 60415 failures; then trace item 5. Run each module (each module gets its own fresh TMPDIR); trace item 5 with bounded candidates. No whole suite. Do not call launchctl or access production state.
+- OPEN: process visibility blocked in this sandbox: pgrep exits 3 (`sysmond service not found`); /bin/ps denied. No monitor child started by this slice. Cannot claim leak reproduction/census. Production BYTES sizing remains external. Director owns commits/pushes/CI. No scope request yet.
 
 ## SUMMARY
 
-- Status: PARTIAL local implementation. Dedicated BYTES queue, CLI config-root selection, DONE guard and real-entry-point scratch rehearsal passed. Items 4/5 and remaining module/audit work pending.
+- Status: PARTIAL local implementation. Dedicated BYTES queue, CLI config-root selection, DONE guard and real-entry-point scratch rehearsal passed. Item 4 implemented with fails-before/passes-after and crash controls; full final reruns and item 5 remain pending.
 - Base confirmed through connected GitHub: `bda481d5af510b29dde4976f172a20170a42c955`.
 - BY-INT's lane head still equals that base; no base movement was observed.
 - No earlier BY-LOOP lane branch existed when checked.
@@ -50,11 +49,13 @@ Consequently the historical 3/10/10/3 plan can classify four successful one-memb
 
 ### 4. Item 52 / issue 509: explained anchor fallback
 
-Not implemented: executor unavailable. `smoke.stages_succeeded` currently explains campaign rc 1 only for recorded idle skips, after exact stage/member dispatch matching. Its desk caller also gates that explanation on idle flags. The fix must cover the caller as well as the helper, retain exact membership checks, and reject every other failed-member cause. Fails-before / passes-after evidence remains required.
+Implemented smoke.py campaign-member record reader and stages_succeeded extension; removed desk caller's idle-flags-only gate. Exact dispatch membership, reduction prefix, rc 1, and successful acquisition/strict validation remain required. A member evaluation must name only anchor_fallback_member_unusable, have rerun_required true and child exit 0. Any companion member in that failed stage needs a usable campaign evaluation or a recorded idle skip; other validation, flags and child exits remain failures. Acquisition status can be succeeded while campaign validation fails (scripts/run_campaign.py MemberEvaluation.failed and rerun_required). No energy quantity or acceptance counting rule changed.
+
+Expanded existing real desk/archive regression to exercise positive anchor-only case, extra collection flag, strict validation failure, nonzero child exit and a separate unexplainable companion member. Before production changes: 1 test in 1.123s, FAILED (anchor subcase fail != pass). After final robustness refinement: same test, 2.014s, OK, exit 0. Initial combined module run: 81 tests / 204.993s / exit 1, four failures from attempting evidence recovery for incomplete chains. Caller now requires every exit to be a success or rc 1, preserving existing crash/physical-stop handling. Focused rerun passed: 3 tests / 2.420s / exit 0.
 
 ### 5. Leaked hazard monitor
 
-Not fixed or reproduced: executor unavailable. Read `tests/b6/test_s3_cold_fixes.py`, `tests/test_fixture_orphan_census.py`, and `tests/b6/support.py`. The named cold-fix module has no direct Popen call at the base, so the originating process must be traced through its exercised seams or the broader s3-cold execution before asserting a cause. Do not claim the leak is repaired merely because the module contains no direct spawn. The fixture orphan census and a bounded fails-before / passes-after run remain required.
+Not fixed or reproduced: process visibility is denied in this local sandbox. Read `tests/b6/test_s3_cold_fixes.py`, `tests/test_fixture_orphan_census.py`, and `tests/b6/support.py`. The named cold-fix module has no direct Popen call at the base, so the originating process must be traced through its exercised seams or the broader s3-cold execution before asserting a cause. Do not claim the leak is repaired merely because the module contains no direct spawn. The fixture orphan census and a bounded fails-before / passes-after run remain required.
 
 ### 6. Duplicate block-6 close mail
 
@@ -127,7 +128,7 @@ Checkpoint `c2a7dd5025079c2ab01bc5aaf2ea845434171c2b` was verified as the exact 
 
 ## OPEN ISSUES
 
-- Item 4 stages_succeeded/caller and item 5 leak remain pending. Item 48 relay audit complete; recorded false alarm retained.
+- Item 4 implemented with focused regressions passed; full final module runs and item 5 leak remain pending. Item 48 relay audit complete; recorded false alarm retained.
 - Remaining scoped modules and hazard censuses pending.
 - Production BYTES C5 sizing absent; scratch values are synthetic only.
 - Director independent rehearsal, final review, commit/push and CI refresh outstanding.
@@ -135,3 +136,24 @@ Checkpoint `c2a7dd5025079c2ab01bc5aaf2ea845434171c2b` was verified as the exact 
 ## NEEDS_RULING
 
 none. Runtime availability is an infrastructure blocker, not a scientific ruling.
+
+### Local slice 2 verification checkpoint
+
+Every test command used JW_B5_SYNTHETIC_ONLY=1 and Python `/opt/homebrew/bin/python3.13 -B -m unittest`, with fresh `TMPDIR=$(mktemp -d /tmp/jwtmp-byloop.XXXXXX)` per invocation. Exact module suffixes and observed results:
+
+- `tests.b6.test_smoke.SmokeTests.test_desk_idle_loss_requires_exact_dispatch_records_and_campaign_exit`: before exit 1 / 1 test / 1.123s; after exit 0 / 1 test / 2.014s (includes final companion-member rejection).
+- `tests.test_b6_mailer`: exit 0, 10 tests, 0.075s, OK.
+- `tests.b6.test_chain_smoke_reduction`: exit 0, 1 test, 0.071s, OK.
+- `tests.b6.test_s3_cold_fixes`: exit 0, 6 tests, 0.236s, OK.
+- `tests.hazards.test_import_graph`: exit 1, 6 tests, 6.969s; arm decision NULL != GO (sandbox hardware/process seam; investigate before disposition).
+- `tests.hazards.test_refusal_allowlist`: exit 0, 23 tests, 79.883s, OK (skipped=1).
+- `tests.test_fixture_orphan_census`: exit 0, 14 tests, 0.599s, OK (skipped=2; sandbox process visibility).
+- `tests.b6.test_smoke.SmokeTests.test_22_desk_pass_physics_fail_and_index -v`: exit 0, 1 test, 0.522s, OK.
+- `tests.test_b6_loop tests.b6.test_smoke`: exit 1 / 81 tests / 204.993s / four smoke failures before final caller correction; invocation inadvertently shared TMPDIR across these two modules, so independent final per-module runs required. Four failures visible in smoke portion; loop portion had no reported failures.
+- `tests.b6.test_smoke`: independent exit 1 / 22 tests / 190.360s, same four pre-fix failures as combined run; final caller guard regression passed afterward. Full final module rerun remains due.
+- `tests.b6.test_loop_round_desk`: pending session 60415.
+- Focused existing clone/ledger tests: 2 tests / 1.963s / exit 0.
+
+`pgrep -fl hazard_monitor` before test investigation: exit 3 / sysmond service not found / Cannot get process list. `/bin/ps -axww -o pid=,ppid=,command=` denied (operation not permitted). Historical source confirms pid 43816 used `.scratch-fix/tmp/s3-run` in s3cold checkout, but no spawning test positively identified. No process killed by this slice. No leak-fix claim.
+
+Final sealed check: 682 paths; changed_overlap: [] (working-tree-inclusive diff from bda481d5a plus untracked paths). git diff --check exit 0.

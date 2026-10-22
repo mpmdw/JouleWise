@@ -359,7 +359,41 @@ def _flag_codes(value):
         yield value
 
 
-def stages_succeeded(stage_results, *, tree, repo_root, evidence):
+def _campaign_member_results(archive, window_plan):
+    """Read campaign acquisition losses, without interpreting energy values."""
+    from joulewise.b6.archive import bundle_roots
+
+    losses = {}
+    for root in bundle_roots(archive, window_plan):
+        try:
+            lines = (root / "campaign_log.jsonl").read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            for member in row.get("members", []):
+                if not isinstance(member, dict) or not isinstance(member.get("bundle_id"), str):
+                    continue
+                acquired = (row.get("exit_code") == 0
+                            and member.get("status") == "succeeded"
+                            and member.get("strict_valid") is True
+                            and member.get("validation_problems") == [])
+                flags = member.get("collection_integrity_flags")
+                anchor = (acquired and row.get("status") == "failed"
+                          and flags == ["anchor_fallback_member_unusable"]
+                          and member.get("rerun_required") is True)
+                usable = (acquired and row.get("status") in ("succeeded", "failed", "skipped")
+                          and flags == [] and member.get("rerun_required") is False)
+                losses[member["bundle_id"]] = "anchor" if anchor else "usable" if usable else "failed"
+    return losses
+
+
+def stages_succeeded(stage_results, *, tree, repo_root, evidence, campaign_members=None):
     """Explain campaign exit 1 only from the exact dispatched members' losses.
 
     The campaign returns 1 for unsuccessful members. Other exits, unresolved
@@ -390,7 +424,16 @@ def stages_succeeded(stage_results, *, tree, repo_root, evidence):
                 or {m.run_id for m in stage.members} != set(run_ids)):
             return False
         skipped = [m for m in stage.members if m.status != "succeeded"]
-        if not skipped or not all(m.status == "failed" and recorded_idle_skip(m) for m in skipped):
+        # Anchor loss is a campaign validation failure of a successfully
+        # acquired member, so its harvested status can still be succeeded.
+        campaign_members = campaign_members or {}
+        anchors = {m.run_id for m in stage.members if campaign_members.get(m.run_id) == "anchor"}
+        if anchors and any(campaign_members.get(m.run_id) not in ("anchor", "usable")
+                           and not (m.status == "failed" and recorded_idle_skip(m))
+                           for m in stage.members):
+            return False
+        if (not skipped and not anchors) or not all(
+                m.status == "failed" and recorded_idle_skip(m) for m in skipped):
             return False
     return True
 
@@ -490,12 +533,14 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
                                             registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint,
                                             pack_root=prepared.measurement / "configs/campaigns" / prepared.pack_id)
             a_result = acceptance.evaluate(prepared_a, evidence)
-        if (not stages_ok and {"idle.wait_cap_skip", "idle.wait_budget_skip"}.intersection(a_result.flags)
-                and loader and harvest_exit in (0, 6)):
+        if (not stages_ok and loader and harvest_exit in (0, 6)
+                and all(row["rc"] in (*row["success_exit_codes"], 1) for row in stage_results)):
             stage_evidence = loader(archive) if evidence_loader else loader(
                 archive, Path(prepared.plan_path), prepared.registration_dir)
             stages_ok = stages_succeeded(stage_results, tree=tree, repo_root=prepared.measurement,
-                                         evidence=stage_evidence)
+                                         evidence=stage_evidence,
+                                         campaign_members=_campaign_member_results(
+                                             archive, json.loads(Path(prepared.plan_path).read_text())))
     except Exception as exc:
         errors.append(f"acceptance: {type(exc).__name__}: {exc}")
         a_result = AcceptanceResult("UNAVAILABLE", ("acceptance failed",), (), True)
