@@ -125,10 +125,12 @@ class ReviewProbeTests(unittest.TestCase):
         class Late(SyntheticPowerSampler):
             def stop(self):
                 self.started = False
-                # Entirely later than this virtual episode; retained under the
-                # records contract with no invented time-offset or coverage.
-                return (PowerTrace("mock", "gpu0", "mock.monotonic",
-                    (10**15, 10**15 + 100_000_000), (100.0, 100.0), "W", 100_000_000),)
+                # Sampling begins one configured cadence after the stop bracket,
+                # so both integer stamps are provably later than episode.end_ns.
+                first = self.clock() + self.interval_ns
+                return (PowerTrace("mock", "gpu0", self.clock_domain,
+                    (first, first + self.interval_ns), (self.model.idle_watts,) * 2,
+                    "W", self.interval_ns),)
         episode = inbox_episode(sampler_class=Late)[0]
         self.assertEqual(len(episode.power_traces), 1)
         self.assertGreater(episode.power_traces[0].t_ns[0], episode.end_ns)
