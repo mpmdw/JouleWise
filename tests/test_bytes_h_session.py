@@ -475,7 +475,20 @@ class SessionTests(unittest.TestCase):
                 self.assertEqual(state['window_max_s'],60*math.ceil((math.ceil(base+member*margin)+
                     plan.T0_STAGE_CAP_S+plan.PAUSE_LIMIT_S+plan.SESSION_WAIT_BUDGET_S)/60))
                 self.assertEqual(state['disk']['required_free_bytes'],63_878_576_237 if mode=='full' else 56_122_258_559)
-                self.assertEqual(output.getvalue().count('stage: '),18)
+                printed_stages = [json.loads(line.removeprefix('stage: '))
+                    for line in output.getvalue().splitlines() if line.startswith('stage: ')]
+                expected_stages = ['bracket-reservation','pre-calibration','bound-collection',
+                    'bound-derivation','reference-start','test7-llama-70b-start',
+                    'test7-qwen35-122b-start','test7-qwen3-next-80b-start','reference-midpoint',
+                    'soak-llama-70b','soak-qwen35-122b','test7-llama-70b-end',
+                    'test7-qwen35-122b-end','test7-qwen3-next-80b-end','reference-end',
+                    'post-calibration','whole-window-verdict','backup']
+                self.assertEqual([s['stage_id'].removeprefix(h.PACK_ID+'-') for s in printed_stages],
+                                 expected_stages)
+                self.assertEqual([s['expected_count'] for s in printed_stages],
+                                 [1,1,18,1,3,4,4,4,1,12 if mode=='full' else 1,12,4,4,4,3,1,1,2])
+                self.assertLess(output.getvalue().index('stage: '),
+                                output.getvalue().index('preparation_status: STAGED'))
                 self.assertEqual(hashlib.sha256(ledger.read_bytes()).hexdigest(),before)
 
     def test_remainder_missing_journals_flags_inputs_only_without_pilot_span(self):

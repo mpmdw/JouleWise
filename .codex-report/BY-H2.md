@@ -1,20 +1,226 @@
-# BY-H2 — local implementation checkpoint (2026-10-22)
+# BY-H2 — remainder implementation handoff (2026-10-22)
 
 ## PROGRESS
-- DONE (local slice 2, start/head 184230b88): added prepare --remainder --soak-70b full|r12 --measured-session H_ROOT; distinct bytes-h2- IDs, staged subset P/native budget, derived sizing receipt authenticated by the real writer, ordered stage printing before final status. No generator changes. Missing H records yield INPUTS_ONLY with sizing.h_journal_unavailable and null span/window, never pilot substitution.
-- DONE: remainder_span reads journals, uses identical/paired H stages, includes nested calibration/corpus work, uses H soak-70B r01-r11 first, and same-config 122B check/test7 members. Unobserved soaks use the maximum measured collection residual (H bound collection, 170.816872596741 s). One shared cohort spread scales member seconds only. Closing verdict+backup get ONE explicitly aggregate B6 fixed_s=1191 s envelope, not invented individual timings. Thirteen registered 60 s settles = 780 s.
-- DONE: production-shaped synthetic prepares through real write_window_plan and chain dispatch succeed STAGED for both modes; independent hand arithmetic checks span, every stage term, maximum window, P, source ledger SHA-256, member counts, and session prefix. Added missing-journal INPUTS_ONLY regression. Full-path focused writer/disk tests pass. Refusal census passes unchanged (23 tests, one skip).
-- OBSERVED read-only H journal arithmetic (not hardware validation): shared margin 0.039793375558773825 (3.9793375558773825%); full span 16817.331989693055 s, ceil=16818, window_max_s=34560; r12 span 13804.910209347223 s, ceil=13805, window_max_s=31560. No journal/raw evidence writes.
-- NEXT: inspect/review the new prepare/span implementation, complete PROBE capture packet and finish all report sections (replace historical placeholders); add any remaining edge-case tests and rerun required modules separately with fresh TMPDIR. The complete H test module has NOT yet been rerun after slice 2. Director owns real fresh-checkout dry prepare, executing ACCEPT review, CI, PR, commits and pushes.
-- OPEN: ensure standalone probe packet has an actually supported rails+KM003C supervision route and explicit integer B/N selection from README rules; if numeric selection requires a measurement, label lead-owned rather than guess. Real prepare/install/arm remains prohibited in this session.
-- DONE (local slice 1): read checkpoint, M0/stop-card/queue/orchestration and bridge return rules; verified clean descendant baseline ac7b56d2b on by-h2 and 66 GiB available. No active stop card. User's scoped BY-H2 task governs this delegated implementation; no lead-owned queue/state files changed.
-- DONE: preserve native per-member flag_codes (including battery.assist) in MEASUREMENTS.json; skip textual disclosures in numeric validation. Tests exercise populated and empty disclosures and compare every native export row through the real desk chain.
-- DONE: optional measurement_view(remainder=True, soak_70b='full'|'r12') selects 18 stages, removes all checks, keeps midpoint, rebuilds chain links/science/collection plan, and uses byte-identical existing member configs. Both modes pass real chain.stage_plan and harvest.build_roster (73/62 members). Full generator unchanged.
-- DONE: remainder_disk_sizing derives counts from the staged identity inventory and reuses registration.derive_sizing.apply_disk_ruling unchanged. Independent rational arithmetic verifies both bases, seconds, WAIT and P: full P=63,878,576,237 bytes; r12 P=56,122,258,559 bytes. Not yet wired into prepare.
-- HISTORICAL NEXT (superseded by slice 2 above): implement prepare CLI/wiring, journal span and synthetic end-to-end tests.
-- OPEN: complete PROBE and arm packet; final required gates; director-owned real fresh-checkout dry prepare, executing review, CI and PR. No install/arm/measurement performed. Local commits only; no push under local route.
-- OPEN environment: import-graph module's synthetic arm test returns NULL because sandbox process-group census is unavailable (sysmond/pgrep). Five other tests passed. Do not chase or bypass this Mac environmental failure.
-- COMMIT ROUTE: director committed slice 1 as 184230b88. This slice does not attempt git writes: .git is read-only. Director must commit the three authorized modified paths after this slice; no push attempted.
+- DONE: implementation and local focused verification complete. Slice 3 began clean at f2f9bc72e; added assertions for prepare's printed stage order/counts and completed this report. Director owns commits/pushes because .git is read-only here.
+- DONE: both remainder modes prepare STAGED through the real writer in production-shaped synthetic tests; source ledger hash and full-kit bytes stay unchanged. Full session module: 35 tests pass; strengthened printed-order test rerun passes.
+- DONE: kit tests 4 pass; gates 7 pass; refusal census 23 pass (1 skip); generator --check passes. Import graph: 5 pass, 1 known sandbox process-group environmental failure (NULL rather than GO); no bypass attempted.
+- DONE: read-only H journals yield full span 16817.331989693055 s / maximum 34560 s and r12 span 13804.910209347223 s / maximum 31560 s. P is 63878576237 B full, 56122258559 B r12. No live validation claimed.
+- NEXT: director commits this slice; review final diff, dry-prepare in the fresh measurement clone, verify ledger SHA-256 unchanged, run executing review and CI, then prepare the real arm notice. Do not install/arm until Ed lifts the pause and lead clears the quiet-Mac gates.
+- OPEN: real dry prepare, executing ACCEPT review, CI and PR are director-owned. Standalone probe B/N require quiet-Mac memory observations and rehearsal; procedure below. No agent measurement, install, launchd action or arm was performed. All launched tests completed.
+
+## SUMMARY
+- Added prepare --remainder --soak-70b full|r12 --measured-session H_ROOT.
+- Full is the default; r12 selects only the original 70B r12 config bytes.
+- Distinct bytes-h2- identity and private runs/custody/backup roots separate the new session from H.
+- All ten check stages are omitted; fresh test7 starts accompany all three ends.
+- Fixed work and midpoint references remain, with ordered stage/count output before STAGED/INPUTS_ONLY.
+- Span comes from H journals, one measured cohort spread, registered settles and a named B6 closing envelope.
+- Subset P uses the unchanged H-DISK-RULING formula, native arm budget and non-purgeable free-byte line.
+- Desk preserves native per-run flag_codes, including battery.assist, in MEASUREMENTS.json.
+- Required local checks pass except the documented import-graph sandbox census failure; real preparation/review/CI remain pending.
+
+## DESIGN
+CLI: `prepare --measurement-root FRESH --session-root SCRATCH --remainder --soak-70b full|r12 --measured-session H_ROOT`. Existing full prepare/install/desk CLI and generator are unchanged. Selection occurs only inside measurement_view's disposable tree; ordinals, predecessor/successor links, science, collection plan/hash, manifests and identity inventory are rebuilt there. All selected config bytes are copied unchanged. No new committed kit file or member config is generated.
+
+`chain.stage_plan` and real `plan.write_window_plan` accept both trees. Reference-midpoint stays because acceptance._stage_roles uses the midpoint_reference input ID and harvest._neg8_disclose requires the NEG-8 (3,1,3) roles. The selected expected counts below are stage counts, with collection counts denoting members. Prefix every stage ID with `bytes-mac-check-`.
+
+| Stage | Kind | full / r12 |
+|---|---|---|
+| bracket-reservation | bracket_reservation | 1 / 1 |
+| pre-calibration | calibration_capture | 1 / 1 |
+| bound-collection | campaign_collection | 18 / 18 |
+| bound-derivation | bound_derivation | 1 / 1 |
+| reference-start | campaign_collection | 3 / 3 |
+| test7-llama-70b-start | campaign_collection | 4 / 4 |
+| test7-qwen35-122b-start | campaign_collection | 4 / 4 |
+| test7-qwen3-next-80b-start | campaign_collection | 4 / 4 |
+| reference-midpoint | campaign_collection | 1 / 1 |
+| soak-llama-70b | campaign_collection | 12 / 1 |
+| soak-qwen35-122b | campaign_collection | 12 / 12 |
+| test7-llama-70b-end | campaign_collection | 4 / 4 |
+| test7-qwen35-122b-end | campaign_collection | 4 / 4 |
+| test7-qwen3-next-80b-end | campaign_collection | 4 / 4 |
+| reference-end | campaign_collection | 3 / 3 |
+| post-calibration | calibration_capture | 1 / 1 |
+| whole-window-verdict | whole_window_verdict | 1 / 1 |
+| backup | backup | 2 / 2 |
+
+Totals: 73 or 62 members. Model counts (70B,122B,Next80B,reference): (16,16,4,37) or (5,16,4,37). Calibration screen/verdict and corpus derivation remain chain-owned nested work. Missing H journals produce sizing.h_journal_unavailable and INPUTS_ONLY with null span/window; no pilot substitution. Record/writer conditions remain printed flags. Existing physical model/disk hazard refusal sites are unchanged; no new refusal or import-registry entry is needed.
+
+## SPAN
+Read-only arithmetic on H's real files, not a measurement or real prepare:
+- chain-stages SHA-256: b49589884f71de69838732b3a2543721a8d7e3f6bf2049bfa1eaf147a85a5635.
+- run_clock SHA-256: 2c3168abc635462a6170e6ec94e1de38f15a3bc93062f45df7e7d20e5a5dbfed.
+- Shared margin m = max(max/min-1) within identical model/quantization/workload/sampling/hardware cohorts, across H's observed members. Winning cohort: Next80B large, 160.82098579406738 / 154.66629195213318 - 1 = 0.039793375558773825 (3.9793375558773825%). Apply once to member seconds; fixed work and residuals receive no extra margin.
+- Maximum measured collection residual O = bound collection 2442 - sum(18 member walls 2271.1831274032593) = 170.81687259674072 s. Applied once per unobserved soak. Shell durations use their integer endpoint differences, as derive_sizing does; no extra padding constant.
+
+The table gives each base b and member component M; each row contributes b + m*M. Values shown to six decimals for readability; receipt JSON retains full precision. Prefix stage IDs with bytes-mac-check-. Same rows apply to both modes except the 70B soak.
+
+| Stage | b (s) | M (s) | m*M (s) | Source |
+|---|---:|---:|---:|---|
+| bracket-reservation | 1.000000 | 0.000000 | 0.000000 | bracket-reservation |
+| pre-calibration | 227.000000 | 0.000000 | 0.000000 | pre-calibration, pre-calibration.screen, pre-calibration.window-calibration-verdict |
+| bound-collection | 2442.000000 | 2271.183127 | 90.378043 | bound-collection, bound-collection.retry-decision |
+| bound-derivation | 719.000000 | 0.000000 | 0.000000 | bound-derivation.corpus, bound-derivation |
+| reference-start | 397.000000 | 379.363332 | 15.096148 | reference-start |
+| test7-llama-70b-start | 807.000000 | 781.371997 | 31.093429 | test7-llama-70b-start |
+| test7-qwen35-122b-start | 649.000000 | 623.024698 | 24.792256 | test7-qwen35-122b-start |
+| test7-qwen3-next-80b-start | 598.000000 | 571.416020 | 22.738572 | test7-qwen3-next-80b-start |
+| reference-midpoint | 128.000000 | 127.715171 | 5.082218 | reference-midpoint |
+| soak-llama-70b | 3331.327781 | 3160.510908 | 125.767398 | soak-llama-70b-r01, soak-llama-70b-r02, soak-llama-70b-r03, soak-llama-70b-r04, soak-llama-70b-r05, soak-llama-70b-r06, soak-llama-70b-r07, soak-llama-70b-r08, soak-llama-70b-r09, soak-llama-70b-r10, soak-llama-70b-r11, bound-collection: measured collection residual |
+| soak-qwen35-122b | 2372.714790 | 2201.897917 | 87.620951 | check-qwen35-122b-r01, check-qwen35-122b-r02, check-qwen35-122b-r03, check-qwen35-122b-r04, check-qwen35-122b-r05, test7-qwen35-122b-start-r01, test7-qwen35-122b-start-r03, bound-collection: measured collection residual |
+| test7-llama-70b-end | 807.000000 | 781.371997 | 31.093429 | test7-llama-70b-start |
+| test7-qwen35-122b-end | 649.000000 | 623.024698 | 24.792256 | test7-qwen35-122b-start |
+| test7-qwen3-next-80b-end | 598.000000 | 571.416020 | 22.738572 | test7-qwen3-next-80b-start |
+| reference-end | 397.000000 | 379.363332 | 15.096148 | reference-start |
+| post-calibration | 227.000000 | 0.000000 | 0.000000 | pre-calibration, pre-calibration.screen, pre-calibration.window-calibration-verdict |
+| soak-llama-70b (r12 alternative) | 434.192782 | 263.375909 | 10.480616 | same r01-r11 mean plus O |
+
+The identical H stages use their complete stage envelopes: pre = 215 capture + 0 screen + 12 verdict = 227 s; bound derivation = 356 corpus + 363 derivation = 719 s. Test7/reference ends reuse their own starts; post uses the pre envelope. The H 70B soak mean is 263.37590902501887 s from r01-r11; multiply by 12 or 1. The 122B mean is 183.49149308885846 s from check r01-r05 and test7-start r01/r03; multiply by 12. No reference workload is mixed into either large-workload mean.
+
+Additional terms:
+- Closing whole-window-verdict + backup: ONE aggregate 1191 s B6 fixed-work envelope, from registration/sizing_b5.json #/packs/bytes-mac-check/breakdown/fixed_s. sizing_evidence.json names its r4-alpha chain/run-clock/compression sources. No independent verdict/backup durations are asserted; this intentionally retains the full observed B6 fixed envelope as conservative closing allowance.
+- Settles: (12 collection stages + 1 pre-calibration) * chain.SETTLE_S=60 = 780 s. Post has no added settle.
+- Full: sum(b + m*M) + 1191 + 780 = 16817.331989693055 s, printed ceiling 16818 s (about 4 h 40 min 18 s).
+- r12: 13804.910209347223 s, printed ceiling 13805 s (about 3 h 50 min 5 s).
+- window_max_s = 60*ceil((ceil(span)+3300 T0 +7200 pause +7200 WAIT)/60): 34560 s full (9 h 36 min), 31560 s r12 (8 h 46 min). Uses plan_inputs.window_max_s unchanged.
+
+## DISK
+P = 2*(B+WAIT)+fixed. The source is registration/sizing_b5.json disk_derivation; the helper calls registration.derive_sizing.apply_disk_ruling unchanged with only selected inventory counts. No measured-H alternative changes the refusal line. The table retains exact rational registered allowances; multiply each by its count and sum per basis.
+
+| Model | count full/r12 | stream allowance s | wall allowance s |
+|---|---:|---:|---:|
+| llama-70b | 16/5 | 9548214357147367/50000000000000 | 4746400816793639/20000000000000 |
+| neg8_reference | 37/37 | 2475038689504830954481754541426818773/25000000000000000000000000000000000 | 14122618421581197/100000000000000 |
+| qwen3-next-80b | 4/4 | 10830196702074579/100000000000000 | 7752958077403059/50000000000000 |
+| qwen35-122b | 16/16 | 11577116221769523/100000000000000 | 17078676005436927/100000000000000 |
+
+max_observed_bundle_bytes_per_stream_s = 16271360000000000000000/8813392312498763 B/s.
+
+max_observed_bundle_bytes_per_wall_s = 1162240000000000000000/893951484135219 B/s.
+
+| P term | full | r12 |
+|---|---:|---:|
+| stream_seconds | 225100807958010352315824918032792294601/25000000000000000000000000000000000 | 172585628993699833815824918032792294601/25000000000000000000000000000000000 |
+| wall_seconds | 1237531427648210713/100000000000000 | 122059922840570071/12500000000000 |
+| stream_basis_bytes | 16623321204 | 12745162365 |
+| wall_basis_bytes | 16089335406 | 12695357835 |
+| B_bytes | 16623321204 | 12745162365 |
+| extra_wait_raw_bytes | 13292701363 | 13292701363 |
+| peak_copies | 2 | 2 |
+| fixed_retained_bytes | 4046531103 | 4046531103 |
+| estimated_footprint_bytes | 63878576237 | 56122258559 |
+
+B = max(ceil(stream_rate*stream_seconds), ceil(wall_rate*wall_seconds)); WAIT = ceil(stream_rate*7200). Both modes retain c=2, WAIT=13292701363 B and fixed=4046531103 B. Native arm keeps its three-copy calculation, q=floor(c*B/(3*n)), with headroom=(c*B-3*n*q)+c*WAIT+fixed; total is P exactly, without a reserve. Prepare prints allowances, counts, bases, WAIT, c, fixed, P, f_bavail*f_frsize and separately labelled purgeable bytes. Only the former free count decides the physical disk line. Slice-3 df showed 66 GiB available at intake and 65 GiB at completion, above the brief's 10 GiB stop line; this is not a real prepare statvfs acceptance result.
+
+## PROBE
+Separate quiet-Mac step. chain campaign_collection dispatches campaign_runner with BenchmarkConfig members; bytes_stream_test.py has no such runtime adapter. Driver-wide KM003C coverage alone does not supply member rails over its span, so a nominal campaign stage would misrepresent capture.
+
+Director's later quiet-Mac procedure (draft only; no command below executed here):
+1. In the Interactive night-agent context with agents cleared, measure usable memory and cache capacity C in bytes. Choose an explicit positive integer B>C that the MLX uint8 allocation AND reduction workspace actually fit without memory-pressure intervention. Retain the cache/memory observations and allocation rehearsal. The README supplies no universal numeric B; this session must not guess it from a model size or bandwidth.
+2. Rehearse with explicit integer N0 (initially 1), retaining receipt duration d. Select final integer N=ceil(3600*N0/d) for the README's approximately one-hour target, then record literal decimal B and N in the lead packet. The observed d includes dispatch/reduction; no guessed bandwidth default. N0=1 is one actual iteration, 3600 is the requested hour. B/N remain lead-owned pending these measurements.
+3. From the quiet Interactive foreground controller, start these two supervised children BEFORE the probe (paths are lead-filled, fresh outputs):
+
+```sh
+sudo -n /usr/bin/powermetrics -b 0 -i 100 --samplers cpu_power,gpu_power,ane_power,thermal --format plist -o PROBE/rails.plist
+FRESH/.venv/bin/python -B FRESH/scripts/km003c_monitor.py --out PROBE/km003c.jsonl --stop-file PROBE/meter.stop
+```
+
+These are concurrent children, not sequential blocking shell lines. The rails argv is the production adapter's command with 100 ms from the member's registered 10 Hz sampling. Start meter at plain QoS (default 200 ms polling), retain stdout/stderr and child identities, and wait for a complete rails plist frame and a streaming KM003C header before the probe. Verify observed rails cadence in that context; a launchd rehearsal at 250 ms is not the member-cadence evidence. Keep periodic paired CLOCK_REALTIME/CLOCK_MONOTONIC_RAW observations during capture, each RAW-before / wall / RAW-after, with read-skew recorded. The controller must guarantee cleanup on probe failure or interruption.
+
+```sh
+FRESH/.venv/bin/python -B FRESH/scripts/bytes_stream_test.py --bytes B --repeats N --out PROBE/receipt.json
+```
+
+4. After receipt completion, retain at least one complete rails interval and meter poll beyond end_ns, then stop rails using the owned process identity with SIGTERM (the production adapter uses terminate, waits up to 10 s, then kill and reap if necessary), create meter.stop and wait for its trailer; reap both children and verify none remain. Keep every raw frame, clock pair, stderr and termination receipt. Lead owns the bounded controller invocation; no install/launchd/arm is needed for this separate probe.
+5. The probe already reports RAW [start_ns,end_ns], excluding allocation/fill. Map rails' UTC interval endpoints to RAW using the contemporaneous paired clock fit (retain fit/skew/residual); derive interval support from native elapsed_ns, never from presumed 100 ms timing. KM003C tx/rx are already RAW; decode queued samples with the existing meter harvest timing logic and retain their polling/timing uncertainty. Integrate interval overlaps with the exact receipt span, including boundary partial intervals and their uncertainty; never use the entire streams. Disclose gaps, clock steps, absent meter or unsupported boundary mapping. B*N is logical uint8 payload bytes, not a hardware-controller count. Preserve the receipt with harvest. This is a packet draft, not a tested standalone capture controller.
+
+## BATTERY
+The staged plan retains its native hazard_window/thresholds and uses driver.production_seams.monitor_argv -> hazard_monitor.build_config. DEFAULT_CADENCE battery_smc_s=1.0 remains active; harvest's deciding-phase battery.assist disclosure and withheld/battery-assist.json retention are unchanged. Desk now splits native CSV flag_codes on semicolons into each MEASUREMENTS.json run and excludes this textual list from numeric-field checks. Real harvest/export/desk tests compare every output run's codes and exercise empty/populated lists.
+
+H's supplied observations predict assistance on the large 70B members (soak r01-r12 plus test7 starts/ends r01/r03 =16 full; soak r12 plus four test7 large members =5 r12) and 122B (twelve soaks plus four test7 large members =16 either mode). No expected flag is synthesized on these or reference members. This retains disclosure; it does not remedy hardware delivery limits or implement the separate BYTES battery-energy estimator.
+
+## TESTS RUN
+Slice 3 exact commands below ran from repository root, each module with a fresh TMPDIR. All test runs set JW_B5_SYNTHETIC_ONLY=1; no whole-suite invocation. No live campaign was run. Unit install/arm checks use synthetic/hardware seams, not a real install or arm.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session`
+
+35 tests in 90.135s; exit 0, OK.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_mac_kit`
+
+4 tests in 0.149s; exit 0, OK.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_gates`
+
+7 tests in 0.361s; exit 0, OK.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_refusal_allowlist`
+
+23 tests in 13.000s; exit 0, OK (skipped=1: block-5 design branch absent in this clone).
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_import_graph`
+
+6 tests in 2.696s; exit 1, FAILED (failures=1); 5 pass. test_a_complete_arm_and_monitor_run_load_no_retired_module expected GO, got NULL. Prior slice diagnostic proves sysmond/pgrep process-group census unavailable in sandbox; do not chase or bypass..
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session.SessionTests.test_remainder_prepare_real_writer_both_soaks_and_journal_math`
+
+1 test in 0.205s; exit 0, OK, both mode subtests after adding printed-order/count assertions.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B scripts/bytes_mac_kit.py --check`: exit 0, `verified non-claim Mac kit`.
+
+`git diff --check`: initial report check found one extra EOF blank line; removed it, then final check exited 0 with no output. Full module loaded before the final assertion-only edit; the focused remainder test then passed on those exact final assertions. No implementation changed in slice 3.
+
+## END-TO-END
+Production-shaped fixture uses the appendix member durations (rounded milliseconds), integer stage seconds, original member/config identities and real tree. Both modes call prepare -> measurement_view -> real plan.write_window_plan -> chain.stage_plan/render path, not a mocked plan result. Only ledger head-status Git lineage inspection is patched to admit the synthetic checkout; the writer, allowance authentication, manifests, chain and budgets are real. Hardware identity producer and disk snapshots are deterministic synthetic boundaries.
+
+Both print bytes-h2- session identity, every span source/term, programmed ceiling/window, complete subset disk derivation, all 18 ordered stage IDs/kinds/counts, then preparation_status: STAGED. Tests independently hand-compute every base/member/margin/span/window term, exact rational P terms, check 73/62 members, stage order/counts, ledger SHA-256 unchanged and source full-kit byte identity. Missing-journal regression prints INPUTS_ONLY and no fabricated plan. Existing full prepare real-writer and desk chain tests pass. This is synthetic execution evidence only. Real dry prepare remains director-owned.
+
+## ARM PACKET DRAFT
+Lead fills FRESH and SCRATCH, choosing the 70B option from BY-0 (default full). FRESH must be the director's new measurement clone with the committed 402-row ledger and reproduced .venv. Do not use the h2 ledger with its two extra reservations. No access to the director's checkout occurred here.
+
+```sh
+FRESH/.venv/bin/python -B FRESH/scripts/bytes_h_session.py prepare --measurement-root FRESH --session-root SCRATCH --remainder --soak-70b full --measured-session /Users/edr/night-bytes/h-20261021T185555Z
+```
+
+Director records ledger SHA-256 before/after, STAGED output, every P term, real statvfs free>=P, span/stage list and diff review. Fresh scratch root is under /Users/edr/night-archive/forward-20261021/BY-H2/. Source checkout follows the director's specified measurement location; this session never reads/writes that location. Execute within foreground calls under ten minutes and never install during the pause.
+
+Candidate t0 = 60*ceil((now + launch_lead_s)/60). loop.json supplies launch_lead_s (fallback 420 s, minimum 300 s). The candidate is computed at prepare time; reprepare into a new scratch root if expired. Programmed duration uses ceil(span), maximum uses the separate T0/pause/WAIT arithmetic above. Lead records real epoch, UTC and local start, programmed end=t0+ceil(span), latest end=t0+window_max_s; do not substitute current report time.
+
+Recorded install command for AFTER pause lift and completed gates, not executed:
+
+```sh
+FRESH/.venv/bin/python -B FRESH/scripts/bytes_h_session.py install --session-root SCRATCH
+```
+
+Use the verified Interactive night-agent context for cadence, never the magistrate's launchd rehearsal context as proof. Lead owns executing ACCEPT review, CI (except gate-ledger), arm notice, real t0 and authorization.
+
+Notice draft:
+"BY-H2 is a separate non-claim remainder session. It runs fresh reservation/calibration/bound/reference work, all three test7 starts and ends, [full twelve / r12-only] 70B soak and twelve 122B soaks, midpoint/end references, closing calibration, whole-window verdict and backup. No check stages. Start [epoch/UTC/PDT]; programmed [16818 s full / 13805 s r12], maximum [34560 s / 31560 s]. Real free disk [bytes] >= P [63878576237 B / 56122258559 B]. Expect native battery.assist disclosures on 70B/122B large workloads; retain all observed flags and withheld receipts. Other record/identity/lineage observations remain named flags. The known-bytes probe is a separate quiet-Mac step. Nothing is armed until Ed lifts the pause and the lead clears gates."
+
+## DECISIONS I MADE
+- Preserve all full-kit/generator bytes; subset only in the disposable view, with existing r12 bytes/identity.
+- Preserve midpoint because existing acceptance/harvest assigns its protocol role.
+- Keep full 70B soak default; only the lead chooses r12 after BY-0.
+- Use own-stage H members first, then matching model/workload cohorts; mean member durations plus maximum observed residual for unobserved soaks, one shared observed-spread member margin. No pilot allowances substitute for missing H span evidence.
+- Name the single aggregate B6 fixed envelope rather than invent separate closing stage times. Keep fixed disk allocation and rational rates unchanged.
+- Keep derived span receipt separate from immutable registration, using the writer's authenticated relative-path/hash/pointer interface.
+- Keep preparation record failures as flags, with INPUTS_ONLY when no writer-authenticated plan can be produced.
+- Retain native battery flags without inferring flags or adding a battery energy estimator.
+- Keep standalone probe out of the campaign path; numerical B/N are explicitly deferred to the quiet-Mac observations the README requires.
+- No generated files, hazard registries, smoke_keep or import-graph lists changed because no generator/import/raise-site additions required them. No queue/state/run-report files outside WRITE_SCOPE changed.
+
+## OPEN ISSUES
+- Director: commit/push slice 3, final review, real fresh-checkout dry prepare and ledger hash proof, executing ACCEPT, CI branch and draft PR. No claim of real STAGED or green CI.
+- Import-graph synthetic arm environmental failure: process-group census unavailable in sandbox. Rerun in the director's supported CI/environment; no bypass or test weakening.
+- Standalone probe explicit B/N, quiet-Mac capture controller/clock mapping and resulting receipts remain lead-owned. Packet is a draft, not executed hardware evidence.
+- No real measurement, install, arm, launchd load, ops/stop ref change, PR or network push occurred. No local command left running.
+
+## NEEDS_RULING
+none. The brief assigns BY-0's soak choice, real prepare and probe measurements to the lead; no implementation authority expansion is requested.
+
+## PRIOR SLICE VERIFICATION HISTORY
+The following historical commands/results document fixes and prior testing; final status above supersedes their next-step notes.
 
 ## LOCAL SLICE 2 VERIFICATION
 All test/kit commands used `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B` from repository root. Commands below append to that exact prefix.
@@ -30,14 +236,6 @@ All test/kit commands used `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp
 - `-m unittest tests.test_bytes_gates`: exit 0, 7 tests, 0.441 s, OK.
 - `git diff --check`: exit 0. All launched commands completed. No live hardware work, installation, arm or background measurement was performed.
 
-## LOCAL SLICE 2 DECISIONS
-- Full-kit source/generator bytes remain unchanged. Only disposable subset view gets remainder-sizing.json; plan.read_allowance verifies its hash, JSON pointer and exact stored seconds.
-- Disk allowances/rates/margin stay registered and unchanged; H's observed wall spread determines span separately. P remains 63,878,576,237 B full / 56,122,258,559 B r12, independent of the H journal record gate.
-- Same-stage completed members take precedence over same-config members elsewhere: the 70B soak uses its own eleven completed H members, not check/test7 timing. The 122B soak uses seven same-config check/test7 large members. Reference/test7 end stages inherit their respective H starts.
-- Generalized derive_sizing's maximum observed collection residual to H (one residual per unobserved collection) and maximum within-config wall spread (one member margin). Both are named measured terms; no padding constant is added. The global maximum residual is deliberately conservative for the two unobserved soaks and disclosed by source stage.
-- Keep the registered aggregate B6 fixed-work envelope for the two never-observed closing stages once, with both stage IDs named together; do not claim independent verdict/backup durations.
-- Keep the source registration immutable in the view. The sizing receipt is separate and its source hash binds allowances at write time; full-kit registration readers continue to see their established conservative sizing. Session state and plan contain the subset span and budget.
-
 ## LOCAL SLICE 1 VERIFICATION
 Every test invocation below ran from the repository with its own fresh TMPDIR, prefixed exactly `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B`.
 
@@ -52,138 +250,3 @@ Every test invocation below ran from the repository with its own fresh TMPDIR, p
 - `scripts/bytes_mac_kit.py --check`: exit 0, `verified non-claim Mac kit`.
 - Full `-m unittest tests.test_bytes_h_session`: exit 0, 33 tests, 121.691 s, OK. This process loaded before the final disk-helper assertions were added; the subsequent focused RealKitStagingTests run covers those additions.
 - `git diff --check`: exit 0 after remainder and disk-helper changes.
-
-## LOCAL DECISIONS AND INSPECTION
-- Keep reference-midpoint for the existing NEG-8 (3,1,3) protocol: acceptance._stage_roles assigns midpoint_reference; harvest._neg8_disclose emits neg8.midpoint_lost for its absence. Preserve this role rather than knowingly create an incomplete reference protocol.
-- Selection belongs only in the disposable view; generator and all committed full-kit bytes stay unchanged. The subset collection_plan hash is rebound to the existing tree plan descriptor and reservation argv. r12 preserves original run identity/rep/index; no new config is authored.
-- Battery monitor remains the driver's production_seams.monitor_argv -> hazard_monitor.build_config path. DEFAULT_CADENCE has battery_smc_s=1.0; harvest retains withheld/battery-assist.json and export serializes member flags. Desk now retains those codes without synthesizing any.
-- Expected assistance from H's observations: 70B large-workload members (16 full / 5 r12) and 122B large-workload members (16 either mode); reference members are not assigned expected flags. Battery energy estimation remains separate scope.
-- Subset disk arithmetic (all bytes exact): full stream basis 16,623,321,204; wall basis 16,089,335,406; B=16,623,321,204; WAIT=13,292,701,363; fixed=4,046,531,103; c=2; P=63,878,576,237. r12 stream basis 12,745,162,365; wall basis 12,695,357,835; B=12,745,162,365; same WAIT/fixed/c; P=56,122,258,559. Per-model rational products are retained by disk_derivation.allowances_by_model and stream_seconds/wall_seconds. Counts full: 16/16/4/37 for llama-70b/qwen35-122b/qwen3-next-80b/neg8_reference; r12: 5/16/4/37. The helper still carries the full-kit span/window fields until the next slice's measured-span derivation replaces them; do not expose it as completed session sizing yet.
-- Slice ended after all launched test/diagnostic commands completed; no local measurement or background process was started. Tests used native fake/synthetic hardware seams. Final diff contains only the three authorized paths listed in the local commit attempt.
-
-The original cloud checkpoint below is historical planning context. Its claims of no implementation/tests refer only to that cloud attempt; local results above supersede them.
-
-## HISTORICAL CLOUD CHECKPOINT
-
-## SUMMARY
-- INCOMPLETE: no implementation or executable validation has been performed.
-- The attached cloud environment has not become usable; shell execution reports "No usable execution environment is available."
-- Runtime observations have moved from pending to starting and back to pending, with offline connectivity and no reported failure reason.
-- Diagnostic metadata has no retained records; no root cause has been established.
-- The authorized lane was verified through the GitHub read connection at c10b6895fab0894b23b42ad439cf900c37d07c0b before this report commit.
-- Repository code and generated kit files are unchanged by this checkpoint.
-- Remote source inspection found that desk drops native per-run flag_codes when constructing MEASUREMENTS.json.
-- No model execution, installation, launchd operation, arm, PR, or other branch write was performed.
-- Resume this item from the lane head and complete the implementation and all required gates.
-
-## DESIGN
-Not implemented. Proposed CLI remains the brief's prepare --remainder --soak-70b full|r12 --measured-session H_ROOT; this is not an available command yet.
-
-The existing measurement_view function in scripts/bytes_h_session.py is the appropriate selection boundary: it already rewrites stage manifests and copies dispatched config bytes. Preserve the generator and committed full tree/configs; select in the disposable view, repair ordinals/predecessor/successor, filter science, and rewrite the one-member r12 manifest there.
-
-Candidate stage order (existing fixed-stage expected_count values retained; collection counts are member counts):
-1. bracket-reservation: bracket_reservation, 1
-2. pre-calibration: calibration_capture, 1 (chain adds its screen and calibration verdict)
-3. bound-collection: campaign_collection, 18
-4. bound-derivation: bound_derivation, 1 (include its corpus derivation work)
-5. reference-start: campaign_collection, 3
-6. test7-llama-70b-start: campaign_collection, 4
-7. test7-qwen35-122b-start: campaign_collection, 4
-8. test7-qwen3-next-80b-start: campaign_collection, 4
-9. reference-midpoint: campaign_collection, 1
-10. soak-llama-70b: campaign_collection, 12 for full; 1 for r12
-11. soak-qwen35-122b: campaign_collection, 12
-12. test7-llama-70b-end: campaign_collection, 4
-13. test7-qwen35-122b-end: campaign_collection, 4
-14. test7-qwen3-next-80b-end: campaign_collection, 4
-15. reference-end: campaign_collection, 3
-16. post-calibration: calibration_capture, 1
-17. whole-window-verdict: whole_window_verdict, 1
-18. backup: backup, 2
-
-These selections total 73 or 62 members: full-kit 123 minus ten five-member checks, with eleven additional members removed for r12-only. Counts by model are llama-70b 16 or 5, qwen35-122b 16, qwen3-next-80b 4, neg8_reference 37.
-
-Keep reference-midpoint: existing acceptance assigns its role through the midpoint_reference external input ID (joulewise/b6/acceptance.py, _stage_roles); joulewise/b5/harvest.py, _neg8_disclose, describes the (3,1,3) reference protocol and discloses a missing midpoint. Inspect whole_window's deciding screen before finalizing the implementation explanation.
-
-The real writer's read_allowance verifies a relative JSON source locator, exact hash, and JSON pointer value. A derived sizing receipt in the disposable measurement view can use that interface without changing b5.plan or committed sizing. This has not been exercised.
-
-## SPAN
-Not computed. No H journals have been read from the Mac, and no synthetic fixture or derived sizing receipt has been executed.
-
-Use the brief's appendix for the synthetic fixture and H_ROOT/custody/night/chain-stages.jsonl plus H_ROOT/custody/collection/run_clock.jsonl at real prepare time. Account separately for shell-stamped fixed intervals, members, measured collection overhead, and registered chain.SETTLE_S settles. Apply one disclosed observed-spread margin to member/reference time, as governed. Resolve and name the committed fixed_s fallback for the unobserved verdict/backup without inventing separate durations. Print every source term and use plan_inputs.window_max_s.
-
-The committed sizing evidence names the block-6 r4-alpha clock/stage/compression sources. sizing_b5.json has breakdown.fixed_s = 1191; that is an aggregate fixed-work envelope, not independently measured verdict and backup durations. The eventual implementation/report must disclose that distinction.
-
-## DISK
-Not computed. Derive P independently of H journal availability from the existing committed rational allowances/rates and the subset counts above:
-P = 2 * (max(ceil(stream_rate * sum(count * own_stream_allowance)), ceil(wall_rate * sum(count * own_member_allowance))) + ceil(stream_rate * 7200)) + fixed.
-Keep fixed = 4,046,531,103 B and the registered formula, with no reserve. Preserve the native integer budget encoding so its total equals P exactly. Print all counts, products, bases, WAIT, fixed, c, free and purgeable bytes. No physical disk snapshot was taken in this seat.
-
-## PROBE
-Not implemented or run. The current chain permits campaign_collection only through campaign_runner; bytes_stream_test.py is a standalone MLX reduction and has no campaign adapter. The driver supervises KM003C across the chain, while member rails capture belongs to the campaign path. Do not add a nominal stage without proving exact-span rails capture.
-
-Complete the separate quiet-Mac packet by inspecting the supported standalone rails capture interface. Its probe command is:
-    MEASUREMENT/.venv/bin/python -B MEASUREMENT/scripts/bytes_stream_test.py --bytes B --repeats N --out RECEIPT
-
-B and N must be explicit positive integers chosen from measured available memory, cache capacity and a timed rehearsal for approximately one hour; no bandwidth-derived defaults. No numerical B/N or unverified capture command is supplied by this checkpoint. Preserve paired clock evidence and map both rails and KM003C onto the receipt's CLOCK_MONOTONIC_RAW start_ns/end_ns, excluding allocation/fill. This remains outstanding work, not an acceptance result.
-
-## BATTERY
-Remote source inspection only:
-- joulewise/b5/driver.py, production_seams.monitor_argv, builds the existing hazard monitor configuration; meter_argv supervises scripts/km003c_monitor.py.
-- joulewise/hazards/monitor.py declares battery_smc_s = 1.0 and the in-process SMC battery current task.
-- joulewise/b5/harvest.py emits per-member battery.assist and retains withheld/battery-assist.json.
-- joulewise/b6/export_runs.py preserves per-member flag_codes in the native CSV.
-- scripts/bytes_h_session.py, measurements, currently constructs numeric per-run receipts without carrying CSV flag_codes into MEASUREMENTS.json. Fix this within the authorized script and test it through desk.
-- H observations in the brief make assistance expected for the 70B and 122B large-workload members (16 and 16 in full, or 5 and 16 in r12-only). These are expectations, not flags to synthesize; keep observed native disclosures for every member.
-
-No battery-energy estimator change belongs to this item.
-
-## TESTS RUN
-None. No test or setup process was launched. No test counts, exit codes or skips are available.
-The attempted shell availability probe was cmd "pwd"; the execution tool rejected it before execution with "No usable execution environment is available. Wait for an environment to become available before using this tool."
-
-The environment startup wait remains unresolved at checkpoint time. This is an infrastructure blocker, not one of the specified macOS environmental test failures. No /private/tmp, launchd, launchctl, powermetrics, osascript, process-group, or fixture git-commit test failure was observed because no tests ran.
-
-Required on resume: seat_setup.sh and source /tmp/jw-seat.env; JW_B5_SYNTHETIC_ONLY=1 for every invocation; fresh module TMPDIR; tests.test_bytes_h_session, tests.test_bytes_mac_kit, tests.test_bytes_gates if desk changes, tests.hazards.test_refusal_allowlist, tests.hazards.test_import_graph, and scripts/bytes_mac_kit.py --check. Do not run the whole suite.
-
-## END-TO-END
-NOT RUN. Neither a synthetic remainder prepare nor a real Mac dry prepare has been performed. No STAGED result or unchanged-ledger proof is claimed.
-
-## ARM PACKET DRAFT
-NOT READY FOR USE. The remainder CLI is unimplemented. The director owns the real dry prepare, CI branch, draft PR, executing review and final real numbers.
-
-After implementation and gates, the proposed dry prepare shape is:
-    FRESH/.venv/bin/python -B FRESH/scripts/bytes_h_session.py prepare --measurement-root FRESH --session-root SCRATCH --remainder --soak-70b full --measured-session /Users/edr/night-bytes/h-20261021T185555Z
-
-FRESH belongs under /Users/edr/night-custody/measurement/ and SCRATCH under /Users/edr/night-archive/forward-20261021/BY-H2/. Use the fresh commit's 402-row ledger and compare its SHA-256 before/after prepare. The director must verify STAGED, term-by-term sizing and disk >= P.
-
-Existing t0 arithmetic is 60 * ceil((now + launch_lead_s) / 60), using configs/b6/loop.json (fallback 420 s, installer minimum 300 s). window_max_s separately adds the unchanged T0/pause/WAIT budgets to ceil(programmed_span_s), rounding up to a minute. Fill in real epoch/local times after successful prepare.
-
-Existing install command (recorded only; never executed by this seat):
-    FRESH/.venv/bin/python -B FRESH/scripts/bytes_h_session.py install --session-root SCRATCH
-
-Do not install or arm during the pause. A later lead-authorized handoff must use a current t0 and the Interactive night-agent context.
-
-Plain notice draft, requiring real numbers and lead approval:
-"BY-H2 is a separate non-claim remainder session. It includes fresh reservation/calibration/bound/reference work, all three test7 starts and ends, the selected 70B soak and all twelve 122B soaks, closing references/calibration, verdict and backup. It contains no check stages. Start: [t0]. Programmed duration: [derived span]; maximum window: [derived maximum]. Free disk [bytes] exceeds P [bytes]. Native battery-assist disclosures are expected on 70B and 122B large runs; record and retain them. Missing records and identity observations remain named flags. The standalone known-bytes probe needs its separate quiet-Mac capture packet. Nothing is armed until the pause is lifted and the lead completes the gates."
-
-## DECISIONS I MADE
-- Preserve the full generator and committed full kit; implement selection only in the existing disposable view.
-- Treat the two soak selections as 73/62 planned members; preserve all reference and test7 pairing work.
-- Preserve actual disclosure codes rather than inventing battery flags from H's expectations.
-- Do not present remote inspection, synthetic fixtures, or startup status as executable or hardware validation.
-- Save this incomplete checkpoint only on the expressly authorized lane, using the connected GitHub tool because no shell is usable.
-
-Other implementation choices remain unimplemented and unverified.
-
-## OPEN ISSUES
-- Cloud execution environment is unavailable; complete setup, local instructions/state inspection and branch checkout once it is ready.
-- Implement and test the remainder path, journal derivation, subset disk sizing and battery flag preservation.
-- Exercise both soak selections through the real writer and chain.stage_plan, including independent arithmetic and unchanged-ledger checks.
-- Register any changed refusal sites/census and import lists if needed.
-- Complete and verify the standalone probe packet.
-- Replace this checkpoint with the complete measured synthetic results and finished report.
-- Director: real fresh-checkout dry prepare, executing ACCEPT review, CI except gate-ledger, draft PR and real arm-packet numbers remain outstanding.
-
-## NEEDS_RULING
-none. The present blocker is execution infrastructure, not a scientific or numeric ruling.
