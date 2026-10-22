@@ -211,6 +211,65 @@ class StageAWorldTests(unittest.TestCase):
             assert_close(self, report["aucs"]["metadata"], 0.5)
             self.assertGreater(report["auc_gain"], 0.0)
 
+    def test_jsonl_cli_skips_only_unreadable_physical_lines(self):
+        # Use the same multi-turn, tool-using topic world as the production CLI
+        # control. Budgets/seeds are fixture parameters; episode counts and
+        # physical line numbers are integers and must match exactly.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "episodes.jsonl"
+            write_episodes(path, self.world)
+            lines = path.read_bytes().splitlines(keepends=True)
+            malformed = json.loads(lines[3])
+            malformed["router_log"]["experts"][0][0][0] = self.design.num_experts
+            cases = (
+                (lines[:-1] + [lines[-1][:len(lines[-1]) // 2]], len(lines), "JSONDecodeError"),
+                (lines[:3] + [json.dumps(malformed).encode() + b"\n"] + lines[4:],
+                 4, "RecordError"),
+                # An invalid byte and a blank line exercise binary iteration
+                # and physical numbering; later intact episodes still survive.
+                (lines[:3] + [b"\n", b"\xff\n"] + lines[4:], 5, "UnicodeDecodeError"),
+            )
+            for damaged, bad_line, error in cases:
+                with self.subTest(error=error):
+                    path.write_bytes(b"".join(damaged))
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        code = main([str(path), "--n-bootstrap", "32", "--seed", "83"])
+                    report = json.loads(output.getvalue())
+                    removed = len(self.world) - 1 if error == "JSONDecodeError" else 3
+                    expected_ids = [e.episode_id for i, e in enumerate(self.world) if i != removed]
+                    self.assertEqual(code, 0)
+                    self.assertEqual(len(report["episode_ids"]), len(lines) - 1)
+                    self.assertEqual(report["episode_ids"], expected_ids)
+                    self.assertIn(f"episode_input_line_unreadable:{bad_line}:{error}", report["flags"])
+                    self.assertTrue(all(stat["p_value"] is not None
+                                        and math.isfinite(stat["p_value"])
+                                        for stat in report["statistics"].values()))
+                    print("MOE_REVIEW_R2_CLI", error, len(report["episode_ids"]), report["flags"])
+
+    def test_jsonl_iterator_releases_logs_before_parsing_next_line(self):
+        # Port the streaming lifetime check through the actual JSONL adapter.
+        # The decoder observes whether its previous log survived the next read.
+        from joulewise.align.moe.stage_a import iter_episodes
+
+        previous = None
+
+        def decode(cls, line):
+            nonlocal previous
+            if previous is not None:
+                self.assertIsNone(previous())
+            episode = from_json(cls, line)
+            previous = weakref.ref(episode.router_log)
+            return episode
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "episodes.jsonl"
+            write_episodes(path, self.world)
+            with patch("joulewise.align.moe.stage_a.from_json", side_effect=decode):
+                result = analyze_stage_a(iter_episodes(path), n_bootstrap=16, seed=83)
+            self.assertEqual(result.episode_ids, self.result.episode_ids)
+            self.assertIsNone(previous())
+
     def test_full_qwen_shape_is_a_parameter(self):
         design = replace(self.design, groups=1, layers=48, num_experts=128, top_k=8, turns=2)
         for episode in topic_episodes(self.shift, design=design, seed=3):

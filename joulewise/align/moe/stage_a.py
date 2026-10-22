@@ -355,12 +355,35 @@ def _json_safe(value):
     return value
 
 
-def iter_episodes(path: Path) -> Iterator[Episode]:
-    """Stream shared Episode JSONL using the authoritative record decoder."""
-    with Path(path).open(encoding="utf-8") as handle:
-        for line in handle:
-            if line.strip():
-                yield from_json(Episode, line)
+def iter_episodes(path: Path, *, flags: list[str] | None = None) -> Iterator[Episode]:
+    """Stream readable shared records, recording each unreadable physical line.
+
+    Binary iteration isolates invalid UTF-8 to its own line. The optional flag
+    sink also records an opening failure; without a sink that OSError propagates.
+    No Episode is retained across yields.
+    """
+    try:
+        handle = Path(path).open("rb")
+    except OSError as exc:
+        if flags is None:
+            raise
+        flags.append(f"episode_input_unreadable:{type(exc).__name__}")
+        return
+    with handle:
+        for lineno, raw_line in enumerate(handle, start=1):
+            try:
+                line = raw_line.decode("utf-8")
+                if not line.strip():
+                    continue
+                episode = from_json(Episode, line)
+            except ValueError as exc:
+                # RecordError, JSONDecodeError and UnicodeDecodeError inherit
+                # ValueError. A damaged capture must not discard other records.
+                if flags is not None:
+                    flags.append(f"episode_input_line_unreadable:{lineno}:{type(exc).__name__}")
+                continue
+            yield episode
+            del episode
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -372,16 +395,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--n-perm", type=int)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
-    try:
-        result = analyze_stage_a(iter_episodes(args.episodes), n_bootstrap=args.n_bootstrap,
-                                 confidence=args.confidence, n_perm=args.n_perm, seed=args.seed)
-    except (OSError, ValueError) as exc:
-        # Preserve the existing failed-file policy: never silently analyze a
-        # prefix of a malformed file as if it were the complete dataset.
-        result = analyze_stage_a((), n_bootstrap=args.n_bootstrap,
-                                 confidence=args.confidence, n_perm=args.n_perm, seed=args.seed)
-        result = replace(result, flags=result.flags + (
-            f"episode_input_unreadable:{type(exc).__name__}",))
+    input_flags: list[str] = []
+    result = analyze_stage_a(iter_episodes(args.episodes, flags=input_flags),
+                             n_bootstrap=args.n_bootstrap, confidence=args.confidence,
+                             n_perm=args.n_perm, seed=args.seed)
+    result = replace(result, flags=result.flags + tuple(input_flags))
     print(json.dumps(_json_safe(asdict(result)), sort_keys=True, allow_nan=False))
     return 0
 

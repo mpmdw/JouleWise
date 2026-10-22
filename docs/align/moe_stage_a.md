@@ -178,7 +178,14 @@ python3 -m joulewise.align.moe.stage_a episodes.jsonl --n-bootstrap 2000 --seed 
 
 The bootstrap budget is chosen by the analyst; it is not a hidden agreement bar.
 The CLI streams JSONL through the shared record decoder, reduces each episode
-to scalar features, and releases its router log before advancing. Library callers
+to scalar features, and releases its router log before advancing. Input is read
+as binary lines and decoded separately. A malformed record or invalid UTF-8
+drops only that physical line; every later readable episode is analysed.
+The result adds `episode_input_line_unreadable:<lineno>:<ErrorType>`, with
+1-based physical line numbers (including blank lines). A file that cannot be
+opened yields an empty report with `episode_input_unreadable:<ErrorType>`.
+The streaming library adapter accepts an optional `flags` list for the same
+diagnostics. Library callers
 can pass any iterable to `analyze_stage_a`; retaining a list of Episodes in the
 caller still retains those logs. `episode_stats` validates once per aggregate
 call, while each standalone metric call validates independently. The shared
