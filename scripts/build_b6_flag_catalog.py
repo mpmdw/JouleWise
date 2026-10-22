@@ -48,6 +48,9 @@ def _entry(family: str, klass: str, effect: str, note: str) -> dict:
 
 
 NEW_CODES = {
+    "bytes.withheld_missing": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q1: an expected withheld export file is missing; disclose the pass and sidecar row counts, retain any surviving pass under Addendum 7 D9."),
+    "bytes.module_changed_after_commitment": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q2: the analysis module evaluating the held-out stage differs from the module that wrote the stage-1 commitment; the second commitment prints beside the registered result as the post-agreement fix."),
+    "bytes.commitment_not_rebuilt": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q2: under a module changed after the stage-1 commitment, the committed content does not rebuild; the committed content is evaluated as committed and the differing fields are listed."),
     "records.window_plan_unreadable": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "Registration 8.4: missing records never refuse a capture; its level screen is diagnostic."),
     "records.resume_finalize_failed": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "Desk refit failed twice; the named slot is retained in the aborted bracket and collection continues."),
     "agents.hid_recent": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "HID inactivity has no energy derivation; idle admission measures the hazard."),
