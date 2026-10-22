@@ -9,7 +9,10 @@ test failed strict validation because output_policy.emitted_tokens was absent.
 The lead also ran H1/H3/H4/id_probe and real-MLX H2 at that head. The lead's
 later local run at 86f441c93 executed the fix2c correction: all 23 lane tests
 passed, including strict campaign validation; the MLX harness printed strict [].
-Those results belong to the lead. Planning calculations remain derived.
+At c94b2f648 the lead ran all 30 lane tests successfully in 97.6 s and the
+unchanged second-review repros passed. The existing-module run retained the
+known spine shard failure. Those results belong to the lead. Planning
+calculations remain derived.
 
 Energy can count inference work omitted from a visible log. It cannot identify
 reasoning that fits inside the same forward passes.
@@ -437,9 +440,14 @@ exactly the budget is not cut. No existing test is skipped or removed.
 Seven added tests run through run_benchmark using SystemClock or the MLX backend
 with only the native library and its version lookup injected.
 
-This cloud executor remains pending/starting and offline, with capabilities [].
-No Python process or reviewer harness has executed in this continuation, and
-the APPENDIX scripts could not be materialized under .review3/. Source inspection
-and derived fixture arithmetic are not passing repros. The report lists the
-blocked commands and findings individually; current source fixes require an
-executing rerun before acceptance.
+The lead executed c94b2f648 locally on macOS with
+/opt/homebrew/bin/python3.13, JW_B5_SYNTHETIC_ONLY=1 and a fresh TMPDIR per run:
+30 lane tests passed in 97.6 s. The unchanged reviewer repros confirmed
+structured fault outcomes and retained partial artifacts (F1), native/mock
+token caps and clean CLI members (F2), harvest/arm identity parity and strict []
+(F3), reasoning/tool parsing (F4), finite-score handling (F5), the 74-token
+prior-hidden prefill count (F6), malformed-spec prepare outcomes (F7), and the
+measured repeatability citation (F8). The 16 existing modules ran 450 tests:
+one failure, zero errors and zero skips, the known spine shard mismatch (F9).
+The lane report records the lead's outputs per finding; this cloud seat
+executed zero Python tests.
