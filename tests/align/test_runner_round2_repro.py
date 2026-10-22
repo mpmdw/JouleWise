@@ -43,5 +43,18 @@ class RoundTwoRepros(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn("\nFAIL ", result.stdout)
 
+            # Explicit module loads validate the current code without recursive
+            # discovery; this temporary harness is removed after CI evidence.
+            modules = sorted("tests.align." + p.stem for p in (root / "tests/align").glob("test*.py")
+                             if p.name != Path(__file__).name)
+            for names in (["tests.align.test_runner_review"], modules):
+                command = [sys.executable, "-m", "unittest", *names]
+                started = time.monotonic()
+                result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+                print("R2_VALIDATION " + repr(command) + "\n" + result.stdout + result.stderr +
+                      "\nR2_WALL_SECONDS " + repr(time.monotonic() - started),
+                      file=sys.stderr, flush=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
 if __name__ == "__main__":
     unittest.main()
