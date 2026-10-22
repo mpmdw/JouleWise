@@ -1808,6 +1808,14 @@ def main(argv=None):
     exports = list(args.export)
     if args.export_dir:
         exports += sorted(args.export_dir.rglob("*.runs.csv"))
+    # Each file is read once.  A withheld store may also be named with --export (the convention
+    # before the store was located through the sidecar); its rows then enter once, not twice.
+    named, unique = set(), []
+    for path in exports:
+        if path.resolve() not in named:
+            named.add(path.resolve())
+            unique.append(path)
+    exports = unique
     # Lead ruling 2026-10-20 item 1: a held-out configuration's withheld rows enter only after the
     # stage-1 commit (stage 2, or the blinded post-commit agreement run named by --stage1-commit).
     read_withheld = args.stage == "2" or (args.stage == "blinded" and bool(args.stage1_commit))
@@ -1825,10 +1833,13 @@ def main(argv=None):
             sidecar = read_sidecar(path)
             session_ids = {r["session_id"] for r in batch} or {str(sidecar.get("session_id") or path.name)}
             for session_id in session_ids:
-                sidecars.setdefault(session_id, sidecar)
+                # A store named directly has no sidecar beside it; it never hides the export's.
+                if not sidecars.get(session_id):
+                    sidecars[session_id] = sidecar
             if read_withheld and withheld_record(sidecar) is not None:
                 store = load_withheld(path, sidecar, manifest)
-                rows += store["rows"]
+                if (path.parent / withheld_record(sidecar)["path"]).resolve() not in named:
+                    rows += store["rows"]
                 for session_id in session_ids:
                     withheld[session_id] = store
         archives = [load_archive(root) for root in args.archive]

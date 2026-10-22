@@ -38,9 +38,9 @@ def tearDownModule():
     WORLD["dir"].cleanup()
 
 
-def run_twin(world: Path, stage: str, *, archives=True, key_dir=True) -> dict:
+def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) -> dict:
     out = world / f"twin-{stage}.json"
-    argv = ["--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"),
+    argv = [*extra, "--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"),
             "--stage", stage, "--out", str(out)]
     if archives:
         for archive in sorted((world / "archives").iterdir()):
@@ -1164,6 +1164,23 @@ class WithheldStoreTests(unittest.TestCase):
         self.assertEqual(two["cells"]["qwen3-30b-a3b-4bit"]["passes_mean"]["boundaries"]["dc_input"]["quantities"]["gross"]["label"], "pass_mean")
         self.assertTrue(any(f["flag"] == "rows_withheld" and f["store_read"] for f in two["flags"]))
         self.assertEqual(two["h2"]["rails"]["passes_mean"]["n"], 10)
+
+    def test_a_store_also_named_with_export_is_read_once(self):
+        # The convention before the sidecar locator: the stage-2 caller names each withheld store
+        # with --export as well.  Named first, the store must neither double the model's rows nor
+        # hide the export's sidecar (tests.test_bytes_roster_drop's nine-model chain does this).
+        world = self.worlds["present"]
+        plain = run_twin(world, "2")
+        stores = sorted((world / "withheld").rglob("*.runs.csv"))
+        self.assertEqual(len(stores), 2)
+        named = run_twin(world, "2", extra=[a for s in stores for a in ("--export", str(s))])
+        self.assertEqual(named["sessions"], plain["sessions"])                          # row counts per session
+        self.assertEqual(named["cells"], plain["cells"])                                # same function, same rows
+        self.assertEqual(named["h2"], plain["h2"])
+        self.assertEqual(sorted(f["session_id"] for f in named["flags"] if f["flag"] == "rows_withheld" and f["store_read"]),
+                         ["p1-s2", "p2-s2"])
+        p1 = named["cells"]["qwen3-30b-a3b-4bit"]["pass1"]["boundaries"]["rails"]["gross"]
+        self.assertEqual((p1["n_r"], p1["n_b"]), (10, 10))       # 10 repeats, 10 quad units of 4: each run once
 
     def test_one_withheld_file_missing_is_a_flag_on_the_pass_and_the_point_is_one_pass(self):
         result = run_twin(self.worlds["one"], "2")
