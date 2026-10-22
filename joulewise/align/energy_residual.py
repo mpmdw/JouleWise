@@ -28,7 +28,13 @@ _MOM_RTOL = math.sqrt(_EPS)
 
 @dataclass(frozen=True)
 class TurnRow:
-    """A visible model call and its attributed active energy."""
+    """A logged call with the energy of every attribution segment it owns.
+
+    energy_j sums its prefill, decode and own tool-call segment energies;
+    energy_half_width_j is the standard uncertainty of that sum, including
+    covariance. Unowned gaps belong only to the whole-episode measured total,
+    so benign gap energy is positive residual, without a prediction term.
+    """
 
     episode_id: str
     group: str
@@ -124,6 +130,14 @@ def turn_rows_from_episode(
     episode: Episode, turn_energy: Mapping[int, tuple[float, float]],
 ) -> tuple[TurnRow, ...]:
     """Adapt records plus {turn_index: (active J, standard uncertainty J)}.
+
+    Each mapping value sums every segment owned by that turn: prefill, decode
+    and its own tool calls, with the standard uncertainty of their sum.
+    Unowned gaps (harness work after a tool, before the first turn or after
+    the last) remain in the whole-episode total but have no design term:
+    benign gap energy is positive residual. Grouped calibration absorbs its
+    false-positive rate; calibration diagnostics and calibrated power report
+    its effect. Modelling gaps requires a design term outside this API.
 
     Use logged turns and subtract hidden_tokens from decode_tokens, whose
     shared-record meaning includes hidden work. Context remains as logged;

@@ -8,7 +8,16 @@ what reasoning occurs inside the same forward passes.
 
 Train only on complete benign episodes, separately for each hardware/model/
 serving configuration. A TurnRow is one logged model call, with attributed active
-energy and its uncertainty. Its design is:
+energy and its uncertainty. A turn's energy_j sums every attribution segment
+owned by that turn: prefill, decode and its own tool calls. Its half-width is
+the standard uncertainty of that sum, including covariance. Segments with no
+turn owner (harness work between a tool's end and the next request, time before
+the first turn and after the last) remain in the whole-episode integral. The
+prediction has no term for them in the fixed five-term design. Benign unowned
+energy is therefore positive residual: the grouped threshold absorbs its
+false-positive rate; calibration diagnostics flag departures and calibrated
+power accounts for the benign score spread. A future gap design term is an
+open proposal, not part of this model. Its design is:
 
     [1, prefill, decode, context * decode, context * prefill]
 

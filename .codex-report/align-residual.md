@@ -2,6 +2,10 @@
 
 ## SUMMARY
 
+Round 2 is in progress from 971b2f31c7d7cf4c4e4603c6c098184e2b910121.
+The VM remains pending/starting and offline; no local round-2 execution yet.
+
+
 - Round-1 fixes are saved on lane/2026-10-21-align-residual.
 - Excludes unusable fit rows and held-out scores with counted flags.
 - Prediction uses shared parameter covariance plus n*sigma2; episode uncertainty is added once.
@@ -369,3 +373,7 @@ none
 - N7 fixed 50075672d7a0f248a4f26b5bf282996be668a323: retained 0.004 J as 1% of the smallest printed 0.4 J half-width.
 - N8 fixed 1b306448e8d36522ff20beba2728d1097eafe394: every planning number remains labelled as an assumption or parameter.
 - N9 fixed 1b306448e8d36522ff20beba2728d1097eafe394: re-derived all three examples, unchanged at six decimals.
+
+### Round 2
+
+Implementation and regression work in progress. No round-2 test or repro has run.
