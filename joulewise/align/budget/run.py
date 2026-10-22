@@ -448,11 +448,17 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                     key = _digest((model.model, item.item_id, condition, seed))
                     trial = journal.trials.get(key)
                     if trial is None:
-                        trial_flags: list[str] = list(calibration.flags)
+                        # Calibration calls are separate episodes. Preserve their
+                        # provenance so a failed calibration never labels a good
+                        # trial generation as failed.
+                        trial_flags = [f if f == "calibration_incomplete" else "calibration:" + f
+                                       for f in calibration.flags]
                         cap = None
                         if (condition.fraction is not None and calibration.median_tokens is not None
                                 and math.isfinite(condition.fraction) and 0 <= condition.fraction <= 1):
                             cap = cap_tokens(calibration.median_tokens, condition.fraction)
+                        if condition.mode in ("budget", "deletion") and cap is None:
+                            trial_flags.append("budget_uncalibrated_excluded")
                         source_id, spans, removed = None, (), 0
                         if condition.mode == "deletion" and base is not None:
                             generation, paired = base.generation, base.paired
@@ -463,6 +469,8 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                                             and t.item_id == item.item_id and t.seed == seed
                                             and t.condition.name == cut_name), None)
                             if cut_key is not None:
+                                if cut_key.requested_cap_tokens is None:
+                                    trial_flags.append("budget_uncalibrated_excluded")
                                 removed_target = max(0, base.reasoning_tokens - cut_key.reasoning_tokens)
                                 if cut_key.reasoning_tokens > base.reasoning_tokens:
                                     trial_flags.append("budget_cut_longer_than_source")
@@ -537,6 +545,13 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                         tuple(sorted(set(flags + journal.flags))), metadata)
 
 
+def _budget_uncalibrated(trial: BudgetTrial) -> bool:
+    """Budget and matched deletion rows must cover the same calibrated items."""
+    return ((trial.condition.mode in ("budget", "deletion")
+             and trial.requested_cap_tokens is None)
+            or "budget_uncalibrated_excluded" in trial.flags)
+
+
 def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
               energy_reducer: Callable[[Episode], Energy] = episode_energy) -> tuple[Summary, ...]:
     """One row per seed/configuration, avoiding pseudo-replication of an item roster."""
@@ -550,10 +565,9 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
                            trial.condition.name, configuration_id), []).append(trial)
     rows = []
     for (model, size, attention, condition, configuration_id), original in sorted(groups.items()):
-        # Retain uncalibrated trials as records, but never label uncapped work
-        # as a measured budget cut. The exclusion is counted in the row.
-        group = [t for t in original if not (t.condition.mode == "budget"
-                                            and t.requested_cap_tokens is None)]
+        # Retain uncalibrated trials as records, but never pool uncapped work
+        # into a budget cut or its matched deletion. Count both exclusions.
+        group = [t for t in original if not _budget_uncalibrated(t)]
         positive = [t for t in group if t.hint_use.uses_hint is True and t.monitor_flagged is not None]
         negative = [t for t in group if t.hint_use.uses_hint is False and t.monitor_flagged is not None]
         catch = wilson(sum(t.monitor_flagged is True for t in positive), len(positive), confidence=confidence)
@@ -571,7 +585,7 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
         for trial in original:
             flags = set(trial.flags) | set(trial.episode.flags)
             flags.update(f for tr in trial.episode.power_traces for f in trace_flags(tr))
-            if trial.condition.mode == "budget" and trial.requested_cap_tokens is None:
+            if _budget_uncalibrated(trial):
                 flags.add("budget_uncalibrated_excluded")
             else:
                 try:

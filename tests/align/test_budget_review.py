@@ -289,6 +289,52 @@ class BudgetReviewTests(OfflineTest):
         self.assertIn("| 0/0 |  |  |  |  |", summary_table((row,)))
         self.assertEqual(row.flag_counts["budget_uncalibrated_excluded"], 4)
 
+    def test_failed_calibration_excludes_matched_deletion_and_namespaces_flags(self):
+        # Production-shaped 200-item roster; one decile fails only calibration.
+        # Trial seed 0 succeeds, so any bare generation_error is misattribution.
+        items, clock, codec = synthetic_items(200), SyntheticClock(), WordCodec()
+        bad = {f"synthetic-{i}" for i in range(20)}
+        class FailingCalibration(ScriptedModel):
+            def chat(self, messages, **kwargs):
+                user = next(m.content for m in messages if m.role == "user")
+                item = next(i for i in self.items if user.startswith(i.question + "\n"))
+                if item.item_id in bad and kwargs.get("seed") != 0:
+                    raise ConnectionError("server 503 during calibration")
+                return super().chat(messages, **kwargs)
+        endpoint = FailingCalibration(items.items, clock, codec)
+        model = ModelSpec("m", 4.0, "mock", endpoint.identity, codec, endpoint.configured,
+                          "dense", "synthetic:monotonic", controls_verified=True)
+        result = run_matrix(items, (model,),
+                            (Condition("thinking_on"), Condition("budget_0.3", "budget", 0.3),
+                             Condition("deletion_0.3", "deletion", 0.3)),
+                            seeds=(0,), settings=Settings(1536, 32),
+                            monitor=HintMonitor(ScriptedMonitor(), revision="r"), clock=clock)
+        rows = {r.condition: r for r in summarize(result.trials)}
+        for name in ("budget_0.3", "deletion_0.3"):
+            row = rows[name]
+            self.assertEqual(row.trials, len(items.items) - len(bad))
+            self.assertEqual(row.excluded_trials, len(bad))
+            self.assertEqual(row.flag_counts["budget_uncalibrated_excluded"], len(bad))
+            failed = [t for t in result.trials if t.condition.name == name and t.item_id in bad]
+            self.assertTrue(all("budget_uncalibrated_excluded" in t.flags for t in failed))
+            # floor(0.3 * the 1024-token calibrated median) = 307 visible tokens.
+            self.close_number(row.mean_visible_reasoning_tokens, 307.0)
+        zero = [t for t in result.trials if t.condition.mode == "deletion" and t.removed_tokens == 0]
+        self.assertEqual({t.item_id for t in zero}, bad)
+        on = [t for t in result.trials if t.condition.name == "thinking_on"]
+        self.assertTrue(all(not any(f.startswith("generation_error") for f in t.generation.episode.flags)
+                            for t in on))
+        for trial in on:
+            for flags in (trial.flags, trial.episode.flags):
+                self.assertNotIn("generation_error:ConnectionError", flags)
+                if trial.item_id in bad:
+                    self.assertIn("calibration:generation_error:ConnectionError", flags)
+                    self.assertIn("calibration_incomplete", flags)
+        self.assertNotIn("generation_error:ConnectionError", rows["thinking_on"].flag_counts)
+        self.assertEqual(rows["thinking_on"].flag_counts["calibration:generation_error:ConnectionError"],
+                         len(bad))
+        self.assertEqual(rows["thinking_on"].trials, len(items.items))
+
     def test_null_json_and_tagless_forced_continuation(self):
         def transport(path, payload):
             if "chat" not in path:
