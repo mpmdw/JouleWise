@@ -44,7 +44,7 @@ Return details, pinned for the independent twin:
 # TESTS RUN
 - Python test commands executed: none; executed tests 0, skips 0, pass/fail status UNKNOWN.
 - Every attempted exec_command (including the minimal `pwd` readiness probe) failed before executing with: "No usable execution environment is available. Wait for an environment to become available before using this tool."
-- wait_for_environment was attempted repeatedly; the environment remained offline, moving between pending and starting. The latest status observation was pending, desired_phase running, network-policy state unknown, failure null. No root cause is asserted.
+- wait_for_environment was attempted repeatedly; the environment remained offline, moving between pending and starting. Status observations alternated between pending and starting, with desired_phase running, network-policy state unknown and failure null. No root cause is asserted.
 - Required next exact commands, from /workspace/JouleWise:
   - `python3 -m unittest discover -s tests/align -t .`
   - `python3 -m unittest discover -s tests`
@@ -53,6 +53,7 @@ Return details, pinned for the independent twin:
 - No extras installed, imported or required; no extra-dependent tests exist. Extra-dependency run: not applicable.
 - A separate JavaScript hand calculation of the fixture's nominal dominance relationships confirmed the expected differing frontier memberships below. This is design checking, not execution of the Python implementation or unittest evidence.
 - No workflow runs were attached to the second pushed checkpoint when checked; CI evidence is not claimed.
+- Connected GitHub compare from spine to 59a89cb66548f3d3558b6110f900e71635587b48 confirmed exactly the three authorized added files and three commits. Remote ref verification confirmed that commit on the requested branch.
 
 # END-TO-END
 The following worlds are implemented in the tests but have NOT EXECUTED:
@@ -98,7 +99,11 @@ The following worlds are implemented in the tests but have NOT EXECUTED:
 - ALL Python implementation and test execution is blocked by managed environment startup. This checkpoint must not be treated as passing CI or runtime verification.
 - On resume, checkout origin/lane/2026-10-21-align-frontier, read this report first, then run the commands above; repair any discovered lane defects and only then claim completion.
 - Repo-wide registry exceptions cannot be determined before the canonical suite executes.
-- The independent cross-model twin has not been compared. This lane did not spawn a same-model substitute or claim independent verification.
+- The independent twin branch appeared during final remote verification. After finishing the implementation, read tests/align/twins/frontier_twin.py at 13e7205fefd5a58268072b54f88c60725115ed4e. Formula review agrees on tau-b, tied ranks, n-2 residual SD, the default 10,001 draws, normal energy uncertainty, fixed token means, unconditional cheapest probabilities and shared minimum ties. No numerical comparison has executed; no independent verification is claimed.
+- Twin wire names differ and need a comparison adapter: joule_frontier/token_frontier vs this lane's joules_frontier/tokens_frontier; spearman_interval/residual_sd_interval vs spearman_ci/residual_sd_ci; n vs n_pairs. Set/frozenset equality is compatible.
+- Degenerate resamples differ: the twin redraws until both statistics are defined; this lane counts/flags a fixed draw budget, retaining finite values per statistic. For nondegenerate production worlds this difference should be negligible; it can materially affect small/tied worlds and needs a lead ruling before comparing or printing those intervals.
+- Twin cheapest_reaching uses random.Random.binomialvariate (Python >=3.12); this implementation uses its own stdlib CDF and works on the repository's Python 3.11 baseline. Any 3.11 twin harness needs an independent compatible sampler on the twin's lane.
+- This lane did not spawn a same-model substitute or change the twin's files.
 - No hardware validation or claim-bearing result; power remains blind to reasoning inside one forward pass.
 - Local /workspace/JouleWise status, local git checkout and fixture-process census could not be inspected. All changes described here are confirmed remote commits, not a claimed local workspace state.
 
@@ -107,3 +112,9 @@ Question: should token costs remain fixed, or should ConfigRow gain a token stan
 Options considered: (1) fixed token means, recording unavailable uncertainty; (2) an additive optional token uncertainty, with measured values supplied by the owning lane.
 Recommendation: keep the current flagged fixed means until measured token uncertainty exists; never convert joule widths to token units.
 Blocked work: no code construction; interpretation of token-cost probabilities for a printed result needs lead adjudication.
+
+
+Question: how should divergence bootstrap degeneracy be handled in the comparison contract?
+Options considered: (1) fixed B draws with finite values retained separately per statistic, counted/flagged (this lane); (2) redraw until B resamples have both statistics defined (independent twin).
+Recommendation: retain fixed-draw accounting and statistic-specific valid counts; valid OLS fits with constant energy have residual SD zero and should not be discarded merely because rho is undefined.
+Blocked work: no implementation work; final comparison of small/tied worlds and any printed intervals require lead adjudication of this estimator convention.
