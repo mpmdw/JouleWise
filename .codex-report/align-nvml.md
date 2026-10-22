@@ -225,6 +225,58 @@ preflight counts are historical; no fresh counts are claimed.
 
 ## DECISIONS I MADE
 
+### Round 2 derivation recorded before implementation
+
+- R2-M2 estimand: the mean run. Let A(u)=count{r:D_r>u}/n.
+  Pool readings on each covered span with coefficient A(u)/N(u), not
+  1/N(u); M=integral A=mean(D_r), C=integral_covered A. Scale
+  coefficients by M/C. Their sum is M, not max(D_r). Duration spread
+  remains in the existing phase-normalized run-to-run variance.
+- R2-B1 coverage: choose R=max(y)-min(y) over valid readings from
+  retained runs, including pre/post-roll. Under the explicit assumption
+  that unobserved power stays in this observed range, the extrapolation
+  error is at most (M-C)*R/1e9 J. Range is used rather than maximum
+  reading so a constant baseline cannot dominate spread calibration.
+- R2-M1 boundary: for window i of width w_i and clipped inside length
+  l_i, a whole-window mean differs from its inside mean by at most
+  (1-l_i/w_i)*R. Multiply by its actual energy coefficient c_i and sum.
+  Known endpoint error h_i contributes c_i*min(h_i/w_i,1)*R; each
+  term is a bound under the same observed-range assumption, not a
+  standard error. Add these linearly to the unchanged 95% Welch
+  repeatability term, quantum term and auxiliary-center displacement.
+  Compute them on the auxiliary coefficients to match the triangle-
+  inequality center displacement already in the interval.
+- Unknown sensor age is not a known endpoint bracket: any contributing
+  sample flagged sensor_age_unknown (including legacy A100 power_usage)
+  gives infinite half-width plus sensor_window_time_unknown, even when
+  a coarse period-plus-poll age diagnostic exists.
+- Hand-worked R2-B1(a): D=8.034 s, coverage=.8413, so missing time is
+  8.034*(1-.8413)=1.275 s to the brief's precision. The -80.08 J error
+  requires an observed range at least 80.08/1.275=62.81 W. At a 64 W
+  range the coverage term alone is 81.6 J; at a 250 W range it is
+  318.75 J. The world has prefill/decode/tool-wait levels separated
+  by much more than 62.81 W. These are hand calculations, not measured
+  new outputs.
+- Under-tiled plans: warn with RuntimeWarning and retain the evenly
+  spread offsets. Minimum repeats=ceil(1/d), four for 25-of-100 ms;
+  eight identifies within-phase repeatability with two replicas.
+- Positive coverage with known timing/resolution must have a finite
+  data-bounded interval under property 2. If a phase has no replica,
+  its variance is unidentified: retain phase_without_replicates and
+  bound its possible center error by its group coefficient mass times
+  R, under an explicit unreplicated_phase_observed_range_assumed flag.
+  This is a conservative data-envelope fallback, not an identified
+  Gaussian variance. Round-1 F10 remains true about identification.
+- New numeric diagnostic flags will be coverage_bound_j=<repr(float)>,
+  boundary_bound_j=<repr(float)>, timing_bound_j=<repr(float)>,
+  unreplicated_phase_bound_j=<repr(float)> and
+  repeatability_half_width_j=<repr(float)>.
+  Rename the nominal flag to
+  nominal_95pct_gaussian_repeatability_plus_observed_range_bounds.
+  Preserve worst_case_bias_j=<repr(float)> separately.
+- R2 is expressly authorized by the lead's properties and bars. No seed
+  tuning and no new NEEDS_RULING is required for this derivation.
+
 - Continued from the exact existing 95a37eef8 lane head, not the spine. Read its
   report first, followed by governing contracts and NVIDIA parser. ACTIVE_STOP_CARD
   was NONE. Exhaustive delegated scope overrides lead-owned queue/state edits.
