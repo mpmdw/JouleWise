@@ -117,13 +117,35 @@ class CoverageTests(unittest.TestCase):
         for name, gaps, check in (
                 ("two", [40_000_000_000], "cycle"),
                 ("stall", [5_000_000, 39_990_000_000, 5_000_000], "hole")):
-            trace = self.trace("power_instant", gaps)
-            trace = replace(trace, t_ns=tuple(t - 5_000_000 for t in trace.t_ns))
-            ok, flags, metrics = self.validate(self.episode([trace], duration=40_000_000_000))
+            # Like the review probes, keep all four real sampler channels.
+            traces = [self.trace("energy", gaps),
+                      self.trace("power_usage", gaps, average=1_000_000_000),
+                      self.trace("power_instant", gaps, period=100_000_000),
+                      self.trace("power_average", gaps, average=1_000_000_000,
+                                 period=100_000_000)]
+            traces = [replace(t, t_ns=tuple(x - 5_000_000 for x in t.t_ns)) for t in traces]
+            ok, flags, metrics = self.validate(self.episode(traces, duration=40_000_000_000))
             self.assertFalse(ok, name)
             self.assertIn("episode_power_coverage_" + check + ":gpu0:power_instant", flags)
             self.assertEqual(metrics["episodes_incomplete_on_power"], 1)
-            self.assertEqual(metrics["episodes_with_lost_reads"], 0)
+            # The stalled energy counter records read loss while spanning the
+            # energy exactly; the watt channels separately fail their hole bars.
+            self.assertEqual(metrics["episodes_with_lost_reads"], int(name == "stall"))
+
+    def test_interior_hole_is_not_widened_by_clock_uncertainty(self):
+        gaps = [10_000_000] * 196
+        gaps[20] = 25_000_000
+        trace = self.trace("power_instant", gaps)
+        # An offset half-width of 100 ms covers both edges, but cancels between
+        # two timestamps from this trace. The 25 ms gap still exceeds B=20.2 ms.
+        trace = replace(trace, clock_domain="sensor")
+        episode = replace(self.episode([trace]),
+                          clock_mappings=(ClockMapping("sensor", "host.monotonic",
+                                                       0, 100_000_000, "fixture"),))
+        ok, flags, _ = self.validate(episode)
+        self.assertFalse(ok)
+        self.assertIn("episode_power_coverage_hole:gpu0:power_instant", flags)
+        self.assertNotIn("episode_power_coverage_edge:gpu0:power_instant", flags)
 
     def test_period_from_driver_stamps_and_missing_supported_device(self):
         trace = self.trace("power_average", [100_000_000] * 19, period=100_000_000)
