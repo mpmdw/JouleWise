@@ -39,7 +39,9 @@ class _Window:
     right: int
     watts: float
     resolution: float
-    timing_ns: int
+    timing_ns: float
+    uncorrected_watts: float
+    boundary_error_w: float = 0.0
 
 
 def plan_offsets(period_ns: int, duty_fraction: float, repeats: int) -> list[int]:
@@ -143,8 +145,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     Let A(u)=count{r:D_r>u}/n be the fraction of retained runs still active.
     Integrate A(u) times the mean of readings covering u; each window is
     clipped to its own [0,D_r]. M=integral A=mean(D_r), C=integral_covered A.
-    Multiply by M/C: E=sum(c_i*y_i), sum(c_i)=M seconds. This targets the
-    mean run, including duration-varying tails, rather than the longest run.
+    Multiply by M/C: E=sum(c_i*z_i), with corrected readings z_i below;
+    sum(c_i)=M seconds. This targets the mean run, including duration-varying tails, rather than the longest run.
 
     The statistical term is the existing two-sided 95% Gaussian/Welch
     repeatability interval. Phase groups use exact geometry or repeat_group.
@@ -152,7 +154,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     d_i=(H_g/n_g)*c_i/h_r. Normalize each run's weighted mean, multiply by
     D_r/mean(D_g) to include duration spread, and combine independent group
     variances with Welch-Satterthwaite degrees of freedom. Add the center
-    displacement |sum(c_i*y_i)-sum(d_i*y_i)| by triangle inequality.
+    displacement |sum(c_i*z_i)-sum(d_i*z_i)| by triangle inequality.
     Quantum contributes sum(|d_i|*q_i/2), assuming rounding to the quantum.
 
     Add these systematic BOUNDS linearly, not in quadrature. R is the range
@@ -160,16 +162,29 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     * Coverage: (M-C)*R. Extrapolation error is missing time times the
       difference of missing and covered mean powers. Assumption: power over
       uncovered time stays in the observed range.
-    * Boundary: sum(|d_i|*(1-l_i/w_i)*R_b), w_i the original window width
-      and l_i its inside length. A whole-window mean differs from its
-      inside mean by outside_fraction*(outside_mean-inside_mean). R_b is
-      the range across both endpoints of each run's nearest fully inside
-      sample interval and its nearest full outside idle-baseline reading. This assumes the boundary contrast stays
-      within that observed LOCAL range. If any run lacks either bracketing
-      inside interval or outside baseline, use global R. A window straddling both edges uses max(R_b).
-      Selection uses actual endpoints, with no fixed neighborhood radius.
-    * Known timing: sum(|d_i|*min(h_i/w_i,1)*R), since translating a
-      w_i-wide mean by at most h_i replaces at most min(h_i,w_i) of it.
+    * Boundary correction: a straddling mean y satisfies
+      w*y = i*P_in + o_start*P_out_start + o_end*P_out_end.
+      Use each run's nearest fully outside reading b_edge (one reading avoids
+      averaging a more distant idle level into a drifting baseline), and pool
+      z = (w*y - sum(o_edge*b_edge))/i exactly where y was pooled.
+      Both edges contribute when a window contains the whole run. The error
+      is sum(o_edge*(P_out_edge-b_edge))/i. Thus coefficient d_i gives
+      sum_edges (|d_i|/i)*o_edge*R_base_edge, converted from ns to seconds.
+      R_base_edge is that run's range of fully outside readings on that side.
+      This assumes outside power during the straddle is stationary within
+      that observed baseline range; outside_baseline_stationarity_assumed
+      makes this empirical assumption explicit. It does not bound unseen work.
+      Without a baseline, leave that outside portion at y in the correction.
+      If instantaneous power is in [0,B], both y and outside power are in
+      [0,B], hence |P_out-y| <= B and its term is (|d_i|/i)*o_edge*B.
+      Without B this term is infinite, with boundary_baseline_missing.
+      boundary_uncorrected_joules and boundary_observed_range_bound_j retain
+      the old center and old inside/outside observed-range boundary term.
+      Noise in y and b_edge passes through z into run repeatability. Rounding
+      propagates linearly too: q_z = ((w-o_missing)+o_known)*q/i.
+    * Known timing: sum((|d_i|/i)*min(h_i,w_i)*R), since translating a
+      w_i-wide mean by at most h_i replaces at most min(h_i,w_i) of it,
+      and deconvolution multiplies its mean uncertainty by w_i/i.
       Timing assumes the underlying displaced-window contrast stays within
       global R; window averages cannot establish these range assumptions.
     * An unreplicated phase cannot identify its variance. Its group mass
@@ -178,7 +193,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
       not an identified Gaussian variance; use two replicas per phase.
 
     Numeric flags expose each term and the range assumption is explicit.
-    power_bound_w is NEVER required for these terms. The independent
+    power_bound_w is needed only for a missing edge baseline fallback. The independent
     worst_case_bias_j=<value> diagnostic still uses a supplied instantaneous
     bound B times the original-window kernel mismatch plus timing area; a
     missing B can make that diagnostic infinite without changing the width.
@@ -268,7 +283,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
             invalid_samples += sum(not valid for valid in valid_readings)
             run_windows = [
                 _Window(run_index, timestamp - start - trace.averaging_window_ns,
-                        timestamp - start, value, quantum, bracket or 0)
+                        timestamp - start, value, quantum, bracket or 0, value)
                 for timestamp, value, bracket, valid in zip(endpoints, trace.values, timing, valid_readings)
                 if valid and timestamp - start > 0
                 and timestamp - start - trace.averaging_window_ns < run_duration
@@ -277,7 +292,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 flags.add("run_without_coverage")
                 continue
             candidate = metadata.get("power_bound_w")
-            if isinstance(candidate, (int, float)) and math.isfinite(candidate) and candidate > 0:
+            if (isinstance(candidate, (int, float)) and not isinstance(candidate, bool)
+                    and math.isfinite(candidate) and candidate >= 0):
                 bounds.append(float(candidate))
                 if any(window.watts > candidate for window in run_windows):
                     flags.add("power_bound_violated")
@@ -304,6 +320,42 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 outer = sorted(outside[edge], key=lambda item: item[0])
                 near = inner[:2]+outer[-1:] if edge == 0 else inner[-2:]+outer[:1]
                 boundary_readings[edge].extend(item[2] for item in near)
+            corrected = []
+            for window in run_windows:
+                width = window.right-window.left
+                inside_ns = min(window.right, run_duration)-max(window.left, 0)
+                outside_ns = (max(0, -window.left), max(0, window.right-run_duration))
+                numerator = width*window.watts
+                known_ns = missing_ns = 0
+                boundary_terms = []
+                for edge, overlap in enumerate(outside_ns):
+                    if not overlap:
+                        continue
+                    flags.update(("outside_idle_baseline_assumed",
+                                  "outside_baseline_stationarity_assumed"))
+                    baseline = outside[edge]
+                    if baseline:
+                        nearest = (max(baseline, key=lambda item: item[1]) if edge == 0
+                                   else min(baseline, key=lambda item: item[0]))
+                        numerator -= overlap*nearest[2]
+                        known_ns += overlap
+                        baseline_range = max(item[2] for item in baseline)-min(item[2] for item in baseline)
+                        boundary_terms.append(overlap/inside_ns*baseline_range)
+                    else:
+                        flags.add("boundary_baseline_missing")
+                        numerator -= overlap*window.watts
+                        missing_ns += overlap
+                        boundary_terms.append(overlap/inside_ns*bounds[-1])
+                        if math.isfinite(bounds[-1]):
+                            flags.add("boundary_power_bound_fallback")
+                # Translating y's original window by h changes its mean by
+                # <= min(h/w,1)*R. Deconvolution multiplies this by w/i.
+                corrected.append(_Window(
+                    window.run, window.left, window.right, numerator/inside_ns,
+                    (width-missing_ns+known_ns)/inside_ns*window.resolution,
+                    min(window.timing_ns,width)*width/inside_ns, window.watts,
+                    math.fsum(boundary_terms)))
+            run_windows = corrected
             durations[run_index] = run_duration
             duration = max(durations.values())
             unknown_resolution |= run_unknown_resolution
@@ -333,7 +385,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         flags.add("durations_differ")
         flags.add(f"duration_spread_ns={max(durations.values())-min(durations.values())}")
     if not windows or duration is None:
-        flags.add("no_covered_work")
+        flags.update(("no_covered_work", "boundary_uncorrected_joules=0.0",
+                      "boundary_observed_range_bound_j=0.0"))
         return DutyEstimate(0.0, math.inf, 0.0, tuple(sorted(flags)))
 
     # Event sweep uses exact rational geometry, so exact tilings have exactly
@@ -366,13 +419,17 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         remaining -= ending_runs[boundary]
         previous = boundary
     if covered == 0:
-        flags.add("no_covered_work")
+        flags.update(("no_covered_work", "boundary_uncorrected_joules=0.0",
+                      "boundary_observed_range_bound_j=0.0"))
         return DutyEstimate(0.0, math.inf, 0.0, tuple(sorted(flags)))
     coefficients = [weight * mean_duration / covered for weight in coefficients]
     if covered < mean_duration:
         flags.add("partial_coverage")
     seconds = [float(weight / _NS_PER_S) for weight in coefficients]
     joules = math.fsum(weight * window.watts for weight, window in zip(seconds, windows))
+    uncorrected_joules = math.fsum(weight*window.uncorrected_watts
+                                  for weight, window in zip(seconds, windows))
+    flags.add(f"boundary_uncorrected_joules={uncorrected_joules!r}")
     interval_coefficients = coefficients
     center_widening = 0.0
     declared_groups: dict[Any, list[int]] = defaultdict(list)
@@ -427,8 +484,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         kernel_weight = coefficient / (window.right - window.left)
         kernel_events[window.left] += kernel_weight
         kernel_events[window.right] -= kernel_weight
-        timing_area += coefficient * min(Fraction(window.timing_ns,
-                                                   window.right - window.left), 1)
+        timing_area += coefficient * Fraction(window.timing_ns) / (window.right-window.left)
     positive = negative = Fraction()
     kernel = Fraction()
     previous = min(kernel_events)
@@ -449,6 +505,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         flags.add("sensor_window_time_unknown")
         bias = math.inf
     flags.add(f"worst_case_bias_j={bias!r}")
+    flags.add("worst_case_bias_targets_uncorrected_center")
 
     reading_range = max(observed)-min(observed)
     flags.add(f"observed_reading_range_w={reading_range!r}")
@@ -461,12 +518,15 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         flags.add("boundary_range_fallback_global")
     flags.add(f"boundary_start_range_w={boundary_ranges[0]!r}")
     flags.add(f"boundary_end_range_w={boundary_ranges[1]!r}")
-    boundary_bound = math.fsum(
+    old_boundary_bound = math.fsum(
         weight * (1-Fraction(min(window.right, durations[window.run])-max(window.left, 0),
                             window.right-window.left)) * max(
                                 boundary_ranges[0] if window.left < 0 else 0.0,
                                 boundary_ranges[1] if window.right > durations[window.run] else 0.0)
         for weight, window in zip(interval_seconds, windows))
+    flags.add(f"boundary_observed_range_bound_j={old_boundary_bound!r}")
+    boundary_bound = math.fsum(weight*window.boundary_error_w
+                               for weight, window in zip(interval_seconds, windows))
     timing_bound = float(timing_area/_NS_PER_S)*reading_range
     unreplicated_bound = 0.0
     if any(len(members) < 2 for members in declared_groups.values()):

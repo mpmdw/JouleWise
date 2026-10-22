@@ -230,35 +230,59 @@ run shifts with equal shift scale within each declared phase.
 
 Let R be the largest minus smallest valid reading in retained traces, including
 pre/post-roll, M the mean duration and C the active-run-weighted covered time.
-Coverage contributes (M-C)*R. A clipped window contributes its coefficient
-times its outside fraction times the local boundary range. For each run,
-select both endpoints of the nearest fully inside sample interval and the
-nearest full outside idle-baseline reading, pool them, and use their range.
-If any run lacks the inside interval or the outside baseline, fall back to R.
-Preserve outside_idle_baseline_assumed: the idle window supplies the outside
-level; local workload variation needs the two endpoints of an inside interval. This assumes the underlying boundary
-contrast stays inside that local range; an unrelated prefill peak must not
-set the uncertainty of a tool-wait-to-idle boundary. A known endpoint uncertainty h contributes
-its coefficient times min(h/window,1)*R. These are bounds and add linearly,
-conditional on underlying unobserved power and inside/outside contrasts staying
-within the observed reading range. Averaged readings cannot prove this range
-assumption; preserve observed_range_bounds_assumed and validate it on the pilot.
-The flag nominal_95pct_gaussian_repeatability_plus_observed_range_bounds names
-this combined interval. It is conservative on deterministic edge-error worlds;
-the Gaussian component's calibration is tested separately on spread-dominated
-worlds.
+Coverage contributes (M-C)*R. Before pooling, deconvolve each straddling
+window. If w is its full width, i its inside duration, and o_start/o_end its
+outside durations, its reported mean y satisfies
 
-Preserve boundary_observed_range_assumed; boundary_range_fallback_global
-records an incomplete local bracket. No arbitrary time radius selects these
-readings: measured sensor-window endpoints determine the nearest ones.
+    w*y = i*P_inside + o_start*P_out_start + o_end*P_out_end
+    corrected_inside = (w*y - o_start*b_start - o_end*b_end)/i
+
+Each b is that replay's nearest fully outside reading on that side. A single
+nearest reading avoids mixing a more distant idle level into a drifting
+baseline. A window containing the whole run uses both edge baselines.
+Pool corrected_inside over exactly the clipped support previously owned by y.
+Read noise in both y and b therefore enters the same run-level repeatability
+calculation. Rounding propagates through the correction: with a known baseline,
+its full quantum becomes (w+o_start+o_end)*q/i, with half that quantum used in
+the rounding bound. A missing baseline uses y for that outside portion, so
+its coefficient cancels from the numerator and is removed from that quantum.
+
+The remaining center error for coefficient d is
+
+    (d/i) * sum_edges o_edge*(P_out_edge-b_edge)
+
+Its boundary bound is the sum of (d/i)*o_edge*R_base_edge, in seconds times
+watts. R_base_edge is the observed range of fully outside baseline readings
+on that side of that replay. Preserve outside_idle_baseline_assumed and
+outside_baseline_stationarity_assumed: outside power during the straddle must
+stay within that empirical baseline range. Averaged readings cannot prove
+stationarity or contain unseen bursts. When an edge has no baseline, keep its
+outside portion at y and flag boundary_baseline_missing. If power_bound_w=B
+bounds instantaneous power in [0,B], both outside power and y lie in [0,B],
+so that portion contributes (d/i)*o_edge*B. Without B its boundary term is
+infinite. Preserve the energy and all flags in either case.
+
+The old center is retained as boundary_uncorrected_joules; the old
+inside/outside local-range width is boundary_observed_range_bound_j. The
+boundary_start_range_w/end_range_w and boundary_range_fallback_global flags
+refer to that old diagnostic. They do not set the corrected boundary width.
+This audit path permits comparison with the independent, unchanged twin.
+A known original-window timing half-width h contributes
+(d/i)*min(h,w)*R after deconvolution. Coverage and timing use observed global
+ranges and their stated assumptions. Preserve observed_range_bounds_assumed.
+The combined half-width adds nominal 95% repeatability and additive
+sensitivity bounds; it is not an unconditional confidence interval for
+arbitrary unobserved work. Hardware calibration remains PROVISIONAL.
+
 Numeric flags expose observed_reading_range_w, coverage_bound_j, boundary_bound_j, boundary_start_range_w, boundary_end_range_w,
 timing_bound_j, unreplicated_phase_bound_j, repeatability_half_width_j,
 resolution_bound_j and auxiliary_center_bound_j (each followed by =<value>).
-Preserve them beside the result. A supplied instantaneous power_bound_w is
-diagnostic only: worst_case_bias_j=<value> still gives the original-window
-kernel bound. With nonzero mismatch and no supplied bound it is inf plus
+Preserve them beside the result. A supplied instantaneous power_bound_w also supports missing-baseline
+fallbacks. As an independent diagnostic, worst_case_bias_j=<value> still gives the original-window
+kernel bound for the uncorrected audit center;
+worst_case_bias_targets_uncorrected_center names that target. With nonzero mismatch and no supplied bound it is inf plus
 worst_case_bias_unbounded; this alone does not make half_width_j infinite.
-No term in the data-bounded interval needs a power bound. Preserve any bound's
+The other observed-range terms do not require a power bound. Preserve any bound's
 physical evidence, including transients; an average power limit alone is not
 an instantaneous bound. Neither interval includes sensor calibration accuracy.
 Prefer complete phase coverage and validate these assumptions on the first
@@ -285,3 +309,33 @@ sabotage/benign pairs.
 Run the metadata and energy-residual analyses only after the measurement
 assumptions are checked. Energy can count additional work and hidden/deleted
 tokens or unlogged tool calls; it cannot reveal what one forward pass computed.
+
+## Clock and attribution uncertainty seams
+
+NvmlSampler exposes clock_mappings=(): it already reports in its declared
+clock_domain. The runner supplies the episode domain when constructing it.
+Mapped driver timestamps still include their window_timing_half_width_ns.
+Attribution propagates per-sample timestamp uncertainty at each endpoint as
+adjacent peak power times the largest touching timestamp half-width, adding
+the two endpoint terms and any mapping term. Explicit None entries touching
+an endpoint give infinite uncertainty with timing.sample_uncertainty_unknown.
+Missing notes contribute zero with timing.sample_uncertainty_unreported.
+Same-domain attribution has zero clock-offset uncertainty; a foreign domain
+without a mapping carries clock.mapping_missing and clock.uncertainty_missing.
+Public trace_energy without a mapping reads its limits in the trace domain.
+
+For the NVML cumulative energy channel, timing_half_width_ns brackets the API
+call only. unknown_sensor_age_bound_ns=None means the register's update age
+is uncharacterized. Attribution retains the counter integral and reports
+infinite timing sensitivity with timing.sensor_age_unknown. A future finite
+age bound adds adjacent peak times age at both endpoints. These are timing
+bounds, not Gaussian standard deviations. Synthetic fixtures with exactly
+known update epochs explicitly declare age zero; they are not live evidence.
+
+Attribution half-widths are additive bounds. Use
+energy_residual.turn_energy_from_attribution and pass
+uncertainty_kind="additive_bound" for whole-episode scores and divergence.
+Bounds read in SD formulas retain their values and flags. Normal-theory
+hidden-token power is a labelled conservative upper value to print beside
+calibrated power. A failed bound-fed frontier gate returns diverges=None:
+it cannot establish no divergence. A positive bound-fed gate remains True.

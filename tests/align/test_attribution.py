@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 import math
+import json
 import subprocess
 import sys
 import unittest
@@ -22,6 +23,10 @@ def trace(values=(100.0, 100.0, 100.0), *, times=(0, NS, 2 * NS), **overrides):
     fields = dict(source="mock", channel="package", clock_domain="meter",
                   t_ns=times, values=values, unit="W", nominal_interval_ns=NS, resolution=0.1)
     fields.update(overrides)
+    if fields["source"] == "nvml_energy" and "notes" not in fields:
+        # This analytic counter fixture updates exactly at t_ns (age=0).
+        # Real NVML leaves age unknown; the fix-round seam test covers it.
+        fields["notes"] = json.dumps({"unknown_sensor_age_bound_ns": 0})
     return PowerTrace(**fields)
 
 
@@ -83,7 +88,7 @@ class AttributionChecks(unittest.TestCase):
         # Two ends * 100 W * 10 ms, plus 0.1 W * 1.5 s; constant interpolation is zero.
         self.close(estimate.half_width_j, 2 * 100 * 0.01 + 0.1 * 1.5)
         self.assertEqual(estimate.method, "trapezoid_W")
-        self.assertFalse(estimate.flags)
+        self.assertEqual(estimate.flags, ("timing.sample_uncertainty_unreported",))
 
     def test_ramp_partial_intervals_are_not_snapped(self):
         estimate = trace_energy(trace(values=(10.0, 20.0, 30.0)), NS // 4, 7 * NS // 4,
@@ -130,9 +135,9 @@ class AttributionChecks(unittest.TestCase):
         sensor = trace(times=(0, NS // 10), values=(100.0, 200.0),
                        averaging_window_ns=NS // 40, duty_fraction=0.25)
         full = trace_energy(sensor, 0, NS // 10, mapping=mapping(uncertainty=0))
-        # Endpoint knots have no C1 or window-cut term. The 75 ms gap
-        # contributes |200-100| W * .075 s/2; resolution is .1 W * .1 s.
-        self.close(full.half_width_j, 100 * 0.075 / 2 + 0.1 * 0.1)
+        # Both endpoint knots touch the raw bracket: each adds its
+        # triangle |200-100|*.1/2. The gap adds |dP|*.075/2.
+        self.close(full.half_width_j, 2*100*.1/2 + 100 * 0.075 / 2 + 0.1 * 0.1)
         cut = trace_energy(sensor, NS // 40, NS // 20, mapping=mapping(uncertainty=0))
         # The raw 100..200 W bracket has slope 1000 W/s. Its line-minus-
         # hold integral on [.025,.05] s is .9375 J at EACH end (C1);
@@ -152,8 +157,9 @@ class AttributionChecks(unittest.TestCase):
         self.close(estimate.joules, 63 * 0.063, half_width=estimate.half_width_j)
         # Raw means interpolate from 0 to 63 W. On [37,100] ms the
         # line's integral is (23.31 + 63)/2 * .063 = 2.718765 J.
-        # Full C1 comparison plus C2's neighbouring range 100 W * .1 s/4.
-        self.close(estimate.half_width_j, 2.718765 + 100 * 0.1 / 4 + 0.001 * 0.063)
+        # Both endpoints include this bracket (including the end knot),
+        # so twice the C1 area plus C2's neighbouring range 100 W * .1 s/4.
+        self.close(estimate.half_width_j, 2*2.718765 + 100 * 0.1 / 4 + 0.001 * 0.063)
         self.assertLessEqual(abs(exact - estimate.joules), estimate.half_width_j)
         self.assertIn("window.edge_allocation_unresolved", estimate.flags)
 
@@ -178,9 +184,8 @@ class AttributionChecks(unittest.TestCase):
                 self.close(cut, expected_cut, half_width=estimate.half_width_j)
                 self.assertLessEqual(cut, (300 - 70) * length / NS)
                 # The raw bracket rises 230 W in .1 s: line-minus-hold is
-                # slope*(b^2-a^2)/2 at each strict-interior end. The end
-                # exactly at 100 ms contributes zero, so it counts once.
-                endpoint_terms = 1 if b == period else 2
+                # slope*(b^2-a^2)/2 at each end, including the knot.
+                endpoint_terms = 2
                 c1 = endpoint_terms * (300 - 70) / (period / NS) * (
                     (b / NS) ** 2 - (a / NS) ** 2) / 2
                 self.close(estimate.half_width_j,
@@ -384,7 +389,7 @@ class AttributionChecks(unittest.TestCase):
     def test_missing_terms_and_reversed_interval_are_flags(self):
         estimate = trace_energy(trace(resolution=None), 0, NS)
         self.assertIn("resolution.missing", estimate.flags)
-        self.assertIn("clock.uncertainty_missing", estimate.flags)
+        self.assertNotIn("clock.uncertainty_missing", estimate.flags)  # Public times use trace domain.
         # Zero is exact here: all three terms are absent or identically zero.
         self.assertEqual(estimate.half_width_j, 0.0)
         empty = trace_energy(trace(times=(), values=()), 0, NS)
@@ -526,8 +531,9 @@ class AttributionChecks(unittest.TestCase):
             with patch.object(attribution, "_Span", wraps=attribution._Span) as span:
                 first = trace_energy(sensor, a, b)
                 # One span per overlapping sample interval, plus the two
-                # endpoint comparisons. A cold call must not build all 10 s.
-                self.assertLessEqual(span.call_count, (b - a) // period + 2)
+                # endpoint comparisons, two spans per endpoint knot.
+                # A cold call must not build all 10 s.
+                self.assertLessEqual(span.call_count, (b - a) // period + 4)
             second = trace_energy(sensor, a + NS, b + NS)
             self.assertEqual(prepare.call_count, 1)  # Exactly one immutable trace preparation.
             translated = trace_energy(sensor, a + NS, b + NS,

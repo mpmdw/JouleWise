@@ -30,9 +30,17 @@ With prefix caching off, or a server that does not report cached tokens, the
 runner writes context_tokens=0. The model then reduces to [1, prefill, decode].
 Attention growth with prompt length is not modelled and goes into sigma2.
 
-Half-widths are read as one standard uncertainty throughout this module. Convert
-a confidence interval's half-width before calling it. This convention is an input
-contract, not a claim that a systematic attribution limit is Gaussian.
+Half-widths carry uncertainty_kind="standard_uncertainty" or "additive_bound".
+The default for plain mappings and existing numeric callers is standard_uncertainty.
+Attribution returns additive sensitivity bounds. Do not silently relabel them
+as SDs or apply B/sqrt(3): |error|<=B guarantees only SD<=B. When additive_bound
+is read in an SD formula, numbers stay unchanged and every result carries
+uncertainty.bound_read_as_sd. This includes adapted rows, designs, fits,
+predictions, scores, thresholds, and both power results. Row kinds survive
+flattening a list of episode rows for fitting. Persist flags before arithmetic.
+The normal-theory H_min is then flagged as a conservative upper value under
+the stated normal model and SD<=B assumption; print it beside H_cal. It does
+not establish calibrated power. H_cal still depends on calibration shape.
 
 Weights are 1/(sigma2 + h_turn^2). Estimate the extra per-turn variance sigma2
 with the nonnegative Paule-Mandel method-of-moments equation:
@@ -129,7 +137,8 @@ the independent 0.041, so this bar was not optimistic there. With m<2 the
 sample sd is undefined: insufficient_calibration_scores reports that instead.
 These diagnostics remove no data and change no threshold number.
 
-The public dataclass fields and required call signatures stay as specified.
+Existing positional call signatures keep working. TurnRow adds the defaulted
+uncertainty_kind field; the EnergyModel dataclass retains its five fields.
 Lane-local subclasses of EnergyModel, float, list and tuple attach a flags
 attribute to returned results. They retain numeric/sequence behavior. Persist
 these flags into Episode.flags before casting or serializing. Read .flags first:
@@ -139,8 +148,9 @@ dataclasses.asdict(model) has exactly the public five fields and can construct
 EnergyModel again. That field-only copy also needs diagnostics saved separately.
 
 The additional turn_rows_from_episode adapter takes an Episode and a mapping
-from turn index to (active_energy_j, standard_uncertainty_j). It uses logged
-turns and by default subtracts hidden_tokens from decode_tokens (the shared
+from turn index to (active_energy_j, uncertainty_half_width_j). Its optional
+uncertainty_kind inherits the labelled mapping, otherwise standard_uncertainty.
+It uses logged turns and by default subtracts hidden_tokens from decode_tokens (the shared
 record includes hidden work in decode_tokens): both content and count are read
 as unlogged. Its new keyword-only hidden_token_counts_logged=False preserves
 that default. Set it True when a server reports the reasoning-token count
@@ -150,6 +160,33 @@ The adapter preserves cached context as logged and converts integer nanoseconds
 to diagnostic seconds. It does not infer an unseen context or invent an
 attribution method. Missing turn energy stays NaN with a flag. Its mapping
 values must include the owning turn's tool segments as specified above.
+The new turn_energy_from_attribution adapter builds that mapping by summing
+every segment owned by each turn, including its tool segments. It adds
+half-widths linearly and labels the mapping additive_bound; unowned gaps stay
+in the episode total. It retains attribution flags. To supply calibrated
+standard uncertainties, construct a separate mapping and name that kind.
+The half-width-consuming fit, score, grouped threshold, and power APIs accept
+uncertainty_kind. The whole-episode measured half-width needs the same explicit
+kind even though turn energies do not enter the scored prediction.
+
+```python
+from joulewise.align import energy_residual as er
+
+turn_energy = er.turn_energy_from_attribution(attribution)
+rows = er.turn_rows_from_episode(episode, turn_energy)
+# Fit and calibrate on benign episodes, using these labelled rows.
+h_upper = er.min_detectable_hidden_decode_tokens(
+    model, rows, alpha=.05, power=.8,
+    measured_half_width_j=attribution.total.half_width_j,
+    uncertainty_kind="additive_bound")
+h_cal = er.calibrated_min_detectable_hidden_decode_tokens(
+    model, rows, threshold=threshold, power=.8,
+    measured_half_width_j=attribution.total.half_width_j,
+    uncertainty_kind="additive_bound")
+print("H_min conservative upper", h_upper, h_upper.flags,
+      "H_cal calibrated", h_cal, h_cal.flags)
+```
+
 The caller remains responsible for training on benign complete logs.
 
 ## Detection power
@@ -356,3 +393,22 @@ ISSUES; it is not implemented because this public API fixes five design terms.
 Negative fitted costs are diagnostics, not silently clipped coefficients.
 The detector is not a semantic sabotage detector, and within-forward-pass
 sabotage remains invisible.
+
+## Frontier gate with additive bounds
+
+joule_token_divergence defaults to standard_uncertainty for existing callers.
+Pass uncertainty_kind="additive_bound" for attribution-fed pairs. If B_i>=SD_i
+for every observation, median(B)>=median(SD). A residual-SD interval lower end
+above median(B) therefore also clears the SD gate: True remains True, flagged
+bound_read_as_sd. A lower end below a larger bound cannot establish the SD
+gate is false. That result becomes None, with
+divergence_undetermined_bound_as_sd and bound_read_as_sd. There is no numeric
+bound-to-SD conversion and no assertion of no divergence from this result.
+
+The cold-pass synthetic worlds demonstrate the distinction: replaying the
+Fable chain after the knot fix gives normal-theory upper values about 149
+tokens beside calibrated values 10.3. Opus's divergence world on the same
+present-work episodes has median bound 190.71 J and actual error SD 14.39 J;
+the residual-SD interval is (27.08,29.36) J. The bound-fed gate is None with
+both flags, and the independently known SD-fed gate is True. These numbers
+are synthetic evidence, not hardware calibration or universal error ratios.
