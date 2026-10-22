@@ -251,3 +251,31 @@ The known custody-driver cloud setup needs the owning Mac run; its 29 errors are
 NEEDS_RULING: none. All choices determined by the governing texts are implemented.
 
 Done: all implementation items, focused refusals/limitations, the opted-in joined driver and its final result table, final non-joined modules, registry/census checks and opted-in test 39. Not done in this seat: lead-owned merge/review/Mac gates listed above.
+
+## L9-1 joined-head acceptance (2026-10-22)
+
+Execution source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
+
+A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
+
+| Module | Tests | Failures | Errors | Skips | Exit | Wall seconds | Where it ran | Log SHA-256 |
+|---|---|---|---|---|---|---|---|---|
+| tests.b5_analysis.test_dry_run | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_chain_fixture | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_joined_probes | — | — | — | — | — | — | cloud: pending | — |
+| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
+| tests.test_docs_freshness | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_sensitivity_guard | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_mint_kept_units | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_s10_chain_defects | — | — | — | — | — | — | cloud: pending | — |
+| tests.test_r4_acceptance_oracle | — | — | — | — | — | — | cloud: pending | — |
+| tests.test_authentication_io | 22 | 0 | 0 | — | — | 2 | Mac, director | prefix `df310df7d1f6cb9d` |
+| tests.test_docs_freshness | 31 | 0 | 0 | — | — | 1 | Mac, director | prefix `f2ddd6c22fd8e05c` |
+| tests.test_run_d165_closeout_from_custody | 35 | 0 | 0 | — | — | 465 | Mac, director | `6b305b6edf079b92f6b6ff66f9ecb26feaec85cb6e8b8302804a95676cdba313` |
+
+The supplied Mac d165 result has no remaining errors. Mac skips and exits were not separately supplied.
+
+Completed cloud logs and test failures:
+
+- `tests.test_authentication_io` at `c413e6f0459e5865a71c90999d11666bdc7497ec`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 1.741 s. Log `/tmp/l9-1/checks-1/logs/tests_test_authentication_io.log`, SHA-256 `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d`.
