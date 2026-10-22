@@ -57,7 +57,9 @@
       "_attribution_note": "The module ran whole (one shard) in all 5 runs. The heavy test's seconds are the GitHub log timestamp of its verbose result line minus that of the preceding result line; the remainder is the module's MODULE PASS seconds minus the heavy test, per run; median of each."
     }
   },
+  "_hosted_observation_2026_10_22_align_moe": "ADDED for tests.align.test_moe_calibration: single hosted observation from CI run 39715696032, shard 9, MODULE PASS seconds=1451.183. This is a scheduling hint, not evidence; replace with hosted medians at the next timing harvest.",
   "seconds_by_module": {
+    "tests.align.test_moe_calibration": 1451.183,
     "tests.flags.test_flags_catalog": 0.005,
     "tests.flags.test_flags_collect": 28.678,
     "tests.flags.test_flags_exclusions": 0.007,
