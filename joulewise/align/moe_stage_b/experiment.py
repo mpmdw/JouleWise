@@ -17,7 +17,7 @@ from typing import Any
 from joulewise.align.records import Episode, RouterLog, ToolCall, Turn
 from joulewise.align.moe_stage_b.analysis import (
     RoutingObservation, extract_features, pearson, plan_detectability, recover_routing,
-    required_correlation, fisher_interval_95,
+    required_correlation, fisher_interval_95, recover_power_increment,
 )
 from joulewise.align.moe_stage_b.simulation import (
     SensorModel, ina3221_sensor, nvml_sensor, simulate_episode,
@@ -188,7 +188,9 @@ def synthetic_token_schedule(
 def default_sensors() -> tuple[SensorModel, ...]:
     """Explicit synthetic INA rail and requested NVML sensitivity scenario."""
     # Example rail assumptions: 5 V, 2 A, 10 mOhm. These are scenario inputs.
-    # The TI quantum and 3*(1.1+1.1)ms conversion frame derive the sensor shape.
+    # TI quantum and 3*(1.1+1.1)ms frame derive cadence; each rail's
+    # current integrates only its 1.1ms shunt conversion. INA noise SD 0.04W
+    # is an explicit scenario parameter, not a datasheet or calibrated noise.
     ina = ina3221_sensor(bus_voltage_v=5.0, current_a=2.0, shunt_ohm=0.01,
                          enabled_channels=3, shunt_conversion_ns=1_100_000,
                          bus_conversion_ns=1_100_000, averages=1,
@@ -257,8 +259,7 @@ def run_world(
                 noise_std_w=sensor.noise_std_w,
                 # Gaussian one-sigma diagnostic half-width; alpha is a separate
                 # design parameter in required_correlation, not this display bound.
-                noise_multiplier=1.0, attribution_floor_j=0.0, windows=windows,
-                reference_decode_duration_ns=timing.reference_decode_duration_ns)
+                noise_multiplier=1.0, attribution_floor_j=0.0, windows=windows)
             outcome["features"] = asdict(features)
             flags.update(features.flags)
             if statistic is None or features.energy_per_decode_token_j is None:
@@ -268,7 +269,7 @@ def run_world(
             condition_statistics[condition].append(statistic)
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
                                                    statistic, features))
-            decode_extra = math.fsum(t.incremental_energy_j for t in simulated.traffic.tokens
+            decode_extra = math.fsum(t.energy_j for t in simulated.traffic.tokens
                                      if t.phase == "decode")
             actual_extra.append(decode_extra/decode_count)
             transfer_only_extra.append(math.fsum(t.energy_j for t in simulated.traffic.tokens
@@ -288,7 +289,8 @@ def run_world(
                 "groups": config.groups, "episode_outcomes": outcomes,
                 "recovery": None, "forecast": None, "total_modelled_bytes": None,
                 "flags": sorted(flags)}
-    names = ("energy_per_decode_token_j", "token_energy_variance_j2", "token_rate_amplitude_w")
+    names = ("energy_per_decode_token_j", "token_energy_variance_j2", "token_rate_amplitude_w",
+             "decode_seconds_per_token", "mean_decode_power_w")
     recovery = {name: asdict(recover_routing(observations, feature_name=name)) for name in names}
     # The attenuation r in d_B=r*d_A is WITHIN-condition. Held-out
     # predictions stay blind to condition; condition labels are used only to
@@ -297,6 +299,7 @@ def run_world(
                                      else "benign") for o in observations}
     truth_by_id = {o.episode_id: o.routing_statistic for o in observations}
     for name, values in recovery.items():
+        values["timing_only_recovery_feature"] = "decode_seconds_per_token"
         pairs = [(identity, prediction) for identity, prediction in values["predictions"]
                  if prediction is not None]
         truth_residuals, prediction_residuals = [], []
@@ -334,11 +337,12 @@ def run_world(
     routing_residual_sd = math.sqrt(statistics.fmean(
         (y-slope*x)**2 for x, y in zip(centered_x, centered_y)))
     error_j = [(a-b)*decode_count for a, b in zip(estimated_extra, actual_extra)]
-    # Phase/noise error is measured from this synthetic sweep only. A real forecast
-    # must replace it with phase-swept hardware repetitions on the same channel.
+    # Fitted from these SAME episodes, so forecast agreement is descriptive,
+    # not independent validation. Hardware must use separate calibration data.
     error_std = statistics.pstdev(error_j)
     decode_duration_s = statistics.fmean(decode_durations_s)
-    white_variance_j2 = (sensor.noise_std_w**2 * decode_duration_s
+    white_variance_j2 = ((sensor.noise_std_w**2+(sensor.quantum_w**2/12
+                           if sensor.noise_std_w >= sensor.quantum_w/2 else 0.0)) * decode_duration_s
                          * max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND)
     phase_bias = math.sqrt(max(0.0, error_std**2-white_variance_j2))
     # Stage A d uses WITHIN-condition SD. Pooled between-condition spread would
@@ -359,22 +363,27 @@ def run_world(
         interval = result["within_condition_held_out_interval_95"]
         if required is None or interval is None or interval[0] <= required <= interval[1]:
             empirical_meets[name] = None
+            flags.add("held_out_recovery_inconclusive_at_cohort_size")
             result["verdict"] = "inconclusive at this cohort size"
             result["flags"] = (*result["flags"], "held_out_recovery_inconclusive_at_cohort_size")
         else:
             empirical_meets[name] = requirement.feasible and interval[0] > required
             result["verdict"] = "yes" if empirical_meets[name] else "no"
-    # Energy is predeclared; diagnostic features cannot override its uncertainty.
-    energy_recovers = empirical_meets["energy_per_decode_token_j"]
-    contrast_clears = (forecast.contrast_energy_j is not None
-                       and forecast.contrast_half_width_j is not None
-                       and forecast.contrast_energy_j > forecast.contrast_half_width_j)
-    if energy_recovers is None:
-        flags.add("held_out_recovery_inconclusive_at_cohort_size")
-    elif not energy_recovers:
-        flags.add("held_out_energy_recovery_below_design_requirement")
-    if forecast.detectable_under_assumptions and energy_recovers is False:
-        flags.add("forecast_empirical_disagreement")
+    # Primary criterion is the incremental, group-held-out power recovery after
+    # timing control. Raw energy and mean power are labelled candidates only.
+    increment = asdict(recover_power_increment(observations))
+    interval = increment["held_out_interval_95"]
+    increment_meets = (requirement.feasible and interval[0] > required
+                       if interval is not None and required is not None
+                       and not interval[0] <= required <= interval[1] else None)
+    increment["within_condition_held_out_correlation"] = increment["held_out_correlation"]
+    increment["within_condition_held_out_interval_95"] = interval
+    increment["verdict"] = ("inconclusive at this cohort size" if increment_meets is None
+                            else "yes" if increment_meets else "no")
+    flags.update(increment["flags"])
+    if increment_meets is None:
+        flags.add("power_increment_inconclusive_at_cohort_size")
+    flags.add("forecast_phase_bias_fitted_on_evaluation_episodes")
     energy_interval = recovery["energy_per_decode_token_j"]["within_condition_held_out_interval_95"]
     forecast_agrees = (energy_interval[0] <= forecast.model_correlation <= energy_interval[1]
                        if energy_interval is not None and forecast.model_correlation is not None
@@ -382,11 +391,16 @@ def run_world(
     return {
         "sensor": asdict(sensor), "all_resident": all_resident,
         "empirical_recovery_meets_requirement": empirical_meets,
-        "stage_b_detectable_under_assumptions": (energy_recovers and contrast_clears
-                                                  if energy_recovers is not None else None),
-        "stage_b_verdict": ("inconclusive at this cohort size" if energy_recovers is None
-                            else "yes" if energy_recovers and contrast_clears else "no"),
+        "stage_b_detectable_under_assumptions": increment_meets,
+        "stage_b_verdict": increment["verdict"],
+        "stage_b_criterion": "group_held_out_energy_increment_over_decode_timing",
+        "power_increment_over_timing": increment,
+        "energy_only_verdict": recovery["energy_per_decode_token_j"]["verdict"],
+        "mean_power_candidate_verdict": recovery["mean_decode_power_w"]["verdict"],
+        "episode_outcomes": outcomes,
         "forecast_inside_held_out_interval_95": forecast_agrees,
+        "forecast_feature": "energy_per_decode_token_j",
+        "forecast_phase_bias_provenance": "fitted_on_the_same_evaluation_episodes",
         "episodes": len(observations), "groups": config.groups,
         "turns_per_episode": config.turns, "decode_tokens_per_episode": decode_count,
         "prefill_tokens_per_episode": config.turns*config.prefill_tokens_per_turn,

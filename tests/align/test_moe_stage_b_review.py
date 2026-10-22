@@ -15,10 +15,19 @@ from dataclasses import asdict, replace
 from unittest.mock import patch
 
 import joulewise.align.moe_stage_b.experiment as ex
-from joulewise.align.moe_stage_b import apply_decode_stalls, extract_features, simulate_episode
+from joulewise.align.moe_stage_b import apply_decode_stalls, extract_features, simulate_episode, model_traffic
+from joulewise.align.records import RouterLog
 
 DESIGN = dict(stage_a_effect_sd=1.0, n_per_condition=50, alpha=.05, power=.8, comparisons=3)
-FIXED = False  # Baseline evidence checkpoint; enabled with the implementation fixes.
+FIXED = True  # Baseline capture preceded this fix; all review pass conditions now bind.
+
+
+def feature_summary(value):
+    if value is None:
+        return None
+    return {key: value.get(key) for key in (
+        "within_condition_held_out_correlation", "within_condition_held_out_interval_95",
+        "held_out_episodes", "held_out_effective_n", "flags", "verdict")}
 
 
 def compact(result):
@@ -29,12 +38,15 @@ def compact(result):
         ci=energy.get("within_condition_held_out_interval_95"),
         verdict=result.get("stage_b_verdict"), forecast_r=forecast.get("model_correlation"),
         contrast=forecast.get("contrast_energy_j"), bound=forecast.get("contrast_half_width_j"),
+        worst_case_bound_j=forecast.get("worst_case_same_sign_quantization_bound_j"),
         apparent=result.get("apparent_extra_j_per_decode_token_range"),
         true=result.get("true_extra_j_per_decode_token_range"),
-        timing=result.get("recovery", {}).get("decode_seconds_per_token") if result["recovery"] else None,
-        increment=result.get("power_increment_over_timing"),
-        mean_power=result.get("recovery", {}).get("mean_decode_power_w") if result["recovery"] else None,
+        timing=feature_summary(result.get("recovery", {}).get("decode_seconds_per_token")) if result["recovery"] else None,
+        increment=feature_summary(result.get("power_increment_over_timing")),
+        mean_power=feature_summary(result.get("recovery", {}).get("mean_decode_power_w")) if result["recovery"] else None,
         episodes=result["episodes"], status=result.get("status", "ok"),
+        required_r=result.get("requirement", {}).get("minimum_absolute_correlation"),
+        recovery_meets=result.get("empirical_recovery_meets_requirement", {}).get("energy_per_decode_token_j"),
         phase_err_sd_J=result.get("phase_sweep_energy_error_std_j"),
     )
 
@@ -122,6 +134,13 @@ class TestMoeStageBReview(unittest.TestCase):
                       if dropped.energy_per_decode_token_j is not None else None)))
             invalid = extract_features(out.episode, trace, reference_decode_duration_ns=10**15, **kw)
             emit("p4 reference", dict(flags=invalid.flags))
+        duplicate = RouterLog("dup", 64, 2, (0,), ("decode",), (((3, 3),),))
+        dup_flags = model_traffic(duplicate, replace(offload, expert_bytes={0: 10}, cache_capacity_bytes=100)).flags
+        bad_flags = model_traffic(duplicate, replace(offload, expert_bytes={0: 10},
+                                 resident=frozenset({(5, 1)}))).flags
+        emit("p4 flags", dict(duplicate=dup_flags, bad_resident=bad_flags))
+        self.assertIn("duplicate_expert_ids", dup_flags)
+        self.assertIn("invalid_resident_expert", bad_flags)
         # p5: drop one reading in one of the 24 episodes, preserving all routing.
         drop_results = []
         for world in (ex.WorldConfig(), ex.WorldConfig(decode_miss_stalls=False)):
@@ -143,6 +162,17 @@ class TestMoeStageBReview(unittest.TestCase):
             emit("p5 "+("stalls" if world.decode_miss_stalls else "no-stalls"), compact(result))
             if "episode_outcomes" in result:
                 emit("p5 dropped_episode", result["episode_outcomes"][0])
+        # F10 ablation: restore only the legacy noise seed, preserving all
+        # routing/timing/sensor inputs. This is evidence, never the registered run.
+        import random as standard_random
+        from types import SimpleNamespace
+        from joulewise.align.moe_stage_b import simulation
+        old_rng = SimpleNamespace(Random=lambda seed: standard_random.Random(
+            int(seed[6:]) if isinstance(seed, str) and seed.startswith("noise-") else seed))
+        with patch.object(simulation, "random", old_rng):
+            for sensor in (ina, nvml):
+                result = ex.run_world(ex.WorldConfig(), sensor, all_resident=False, **DESIGN)
+                emit("p10 legacy_noise_seed "+sensor.name, compact(result))
         emit("elapsed", dict(seconds=time.perf_counter()-started))
         if FIXED:
             for (mode, _), result in results.items():
@@ -164,6 +194,73 @@ class TestMoeStageBReview(unittest.TestCase):
                     "within_condition_held_out_correlation"], float)
                 self.assertIn(result["stage_b_verdict"], ("yes", "no", "inconclusive at this cohort size"))
                 self.assertIn("incomplete_decode_coverage", result["episode_outcomes"][0]["features"]["flags"])
+
+    def test_prefill_32_updates_cache_and_33_preserves_it(self):
+        world = ex.WorldConfig(groups=1, turns=1)
+        base = replace(ex.world_offload(world), expert_bytes={0: 10}, cache_capacity_bytes=10,
+                       prefill_mode="bypass", prefill_batch_tokens=128)
+        for count in (32, 33):
+            for probe in (0, 1):
+                # Prime expert 1; short prefill expert 0 must evict it, while
+                # large prefill must preserve it. Independent final readouts
+                # detect both warmth and preservation without an intervening fill.
+                log = RouterLog("prefill-boundary", 64, 1, (0,),
+                    ("decode",)+("prefill",)*count+("decode",),
+                    (((1,),),)+(((0,),),)*count+(((probe,),),))
+                result = model_traffic(log, base)
+                self.assertEqual(result.tokens[-1].bytes_moved,
+                                 (0 if probe == 0 else 10) if count == 32
+                                 else (10 if probe == 0 else 0))
+                # 32 is max_batch at pinned a37cc461 :230, used by :503;
+                # 33 is the next integer. Expert bytes are exact fixture counts.
+                expected = "prefill_small_batch_cache_updated" if count == 32 else "prefill_cache_bypassed"
+                self.assertIn(expected, result.flags)
+
+    def test_increment_matches_pairwise_oracle_on_real_world_features(self):
+        from joulewise.align.moe_stage_b.analysis import RoutingObservation, recover_power_increment
+        from joulewise.align.moe_stage_b.reference import reference_power_increment
+        observations = []
+        real_extract = ex.extract_features
+        def capture(episode, trace, **kw):
+            features = real_extract(episode, trace, **kw)
+            observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
+                                ex.decode_reuse(episode.router_log), features))
+            return features
+        with patch.object(ex, "extract_features", capture):
+            ex.run_world(ex.WorldConfig(groups=4, turns=2), ex.default_sensors()[0],
+                         all_resident=False, **DESIGN)
+        actual = recover_power_increment(observations)
+        expected, count = reference_power_increment(observations)
+        self.assertEqual(actual.held_out_episodes, count)
+        # Algebra has no printed uncertainty: brief rule 3 gives 1e-6 relative.
+        self.assertLessEqual(abs(actual.held_out_correlation-expected),
+                             1e-6*abs(expected))
+        blind = [replace(item, features=replace(item.features, energy_per_decode_token_j=0,
+                                                mean_decode_power_w=12)) for item in observations]
+        constant = recover_power_increment(blind)
+        self.assertIsNone(constant.held_out_correlation)
+        self.assertIn("constant_power_increment_feature", constant.flags)
+
+    def test_averaged_ina_uses_disjoint_shunt_slices(self):
+        from joulewise.align.moe_stage_b.simulation import ina3221_sensor, PowerPulse, simulate_trace
+        from joulewise.align.moe_stage_b.traffic import TrafficResult
+        sensor = ina3221_sensor(bus_voltage_v=5, current_a=2, shunt_ohm=.01,
+            enabled_channels=3, shunt_conversion_ns=1_100_000, bus_conversion_ns=1_100_000,
+            averages=4, poll_interval_ns=10_000_000, noise_std_w=0)
+        # Four 1.1ms shunt slices separated by the 6.6ms six-conversion cycle.
+        self.assertEqual(sensor.acquisition_slices_ns,
+                         ((0, 1_100_000), (6_600_000, 7_700_000),
+                          (13_200_000, 14_300_000), (19_800_000, 20_900_000)))
+        stamp = 26_400_000
+        # A 4W load present only during the latest slice gives a 1W mean.
+        trace = simulate_trace(TrafficResult((), ()), replace(sensor, phase_ns=0),
+            start_ns=0, end_ns=2*stamp, clock_domain="fixture", baseline_w=0,
+            loads=(PowerPulse(stamp-1_100_000, stamp, 4),)).trace
+        index = trace.t_ns.index(stamp)
+        # q/400 is below 1% of the displayed q/2 half-width and far above
+        # 1e6 binary64 ulps at this one-watt scale.
+        expected = round(1/sensor.quantum_w)*sensor.quantum_w
+        self.assertLessEqual(abs(trace.values[index]-expected), sensor.quantum_w/400)
 
 
 if __name__ == "__main__":

@@ -6,10 +6,9 @@ Implementation provenance:
 - Each token/layer selection is one atomic request, in log.layers order.
 - Over-capacity requests stream every selected nonresident expert and leave
   cache contents and recency unchanged.
-- Prefill bypass streams each nonresident expert once per explicit batch,
-  charging its first occurrence without changing the dynamic cache. This
-  batch-union approximation does not model read-only cache reuse for large
-  upstream batches.
+- Review-round updates follow the pinned max_batch=32 source rule: small
+  prefill batches mutate cache, large batches bypass updates. Revised by this
+  fix seat; these revisions are not a new independent-model derivation.
 - Synthetic calculations only; these functions are not hardware measurements.
 """
 
@@ -76,7 +75,8 @@ def reference_transfers(
     In bypass mode, contiguous prefill rows are partitioned into batches of
     config.prefill_batch_tokens (default one). Their expert union is streamed
     once per batch, assigned to each expert's first token occurrence. A phase
-    change starts a fresh batch. Dynamic cache state is preserved throughout.
+    change starts a fresh batch. Only batches larger than max_batch=32 preserve
+    cache state; smaller ones plan their layer union before charging first uses.
     """
     capacity = _integer(config.cache_capacity_bytes, "cache_capacity_bytes")
     if capacity < 0:
@@ -107,81 +107,65 @@ def reference_transfers(
     # Lists run from oldest to newest. LRU uses only probation.
     probation: list[ExpertKey] = []
     protected: list[ExpertKey] = []
-    output: list[ReferenceTransfer] = []
-    prefill_position = 0
-    batch_seen: set[ExpertKey] = set()
+    moved_by_token = [0]*len(log.phase)
 
     def size_of(keys: Sequence[ExpertKey]) -> int:
         return sum(sizes[key[0]] for key in keys)
 
-    for phase, token in zip(log.phase, log.experts):
+    def request(wanted_order, update):
+        wanted = set(wanted_order)
+        request_bytes = size_of(wanted_order)
+        if not update or config.cache_policy == "none" or request_bytes > capacity:
+            return wanted
+        before = set(probation) | set(protected)
+        hits = [key for key in wanted_order if key in before]
+        misses = sorted(wanted-before)
+        for key in hits:
+            if key in probation:
+                probation.remove(key)
+            else:
+                protected.remove(key)
+            if config.cache_policy == "lru":
+                probation.append(key)
+            else:
+                protected.append(key)
+                while size_of(protected) > capacity//2:
+                    probation.append(protected.pop(0))
+        for key in misses:
+            while size_of(probation)+size_of(protected)+sizes[key[0]] > capacity:
+                victim = next(key for key in probation+protected if key not in wanted)
+                if victim in probation:
+                    probation.remove(victim)
+                else:
+                    protected.remove(victim)
+            probation.append(key)
+        return set(misses)
+
+    position = 0
+    while position < len(log.phase):
+        phase = log.phase[position]
         if phase not in ("prefill", "decode"):
             raise ValueError("unknown RouterLog phase")
-        if phase == "decode":
-            prefill_position = 0
-            batch_seen.clear()
-        else:
-            if prefill_position % batch_tokens == 0:
-                batch_seen.clear()
-            prefill_position += 1
-        moved = 0
-        for layer, experts in zip(log.layers, token):
-            wanted_order = list(dict.fromkeys(
-                (layer, expert) for expert in experts
-                if (layer, expert) not in config.resident
-            ))
-            wanted = set(wanted_order)
-            request_bytes = size_of(tuple(wanted))
-            bypass = phase == "prefill" and config.prefill_mode == "bypass"
-            if bypass:
-                moved += size_of(tuple(wanted - batch_seen))
-                batch_seen.update(wanted)
-                continue
-            if config.cache_policy == "none" or request_bytes > capacity:
-                moved += request_bytes
-                continue
-
-            before = set(probation) | set(protected)
-            hits = [key for key in wanted_order if key in before]
-            misses = sorted(wanted - before)
-            moved += size_of(misses)
-
-            # Complete all hit touches before admitting any miss.
-            for key in hits:
-                if key in probation:
-                    probation.remove(key)
-                else:
-                    protected.remove(key)
-                if config.cache_policy == "lru":
-                    probation.append(key)
-                else:
-                    protected.append(key)
-                    # Protected byte budget is floor(capacity / 2).
-                    while size_of(protected) > capacity // 2:
-                        probation.append(protected.pop(0))
-
-            for key in misses:
-                needed = sizes[key[0]]
-                while size_of(probation) + size_of(protected) + needed > capacity:
-                    # Selected keys cannot be evicted during their request.
-                    victim = next(
-                        (
-                            candidate
-                            for candidate in probation + protected
-                            if candidate not in wanted
-                        ),
-                        None,
-                    )
-                    if victim is None:
-                        raise AssertionError("atomic request capacity invariant")
-                    if victim in probation:
-                        probation.remove(victim)
-                    else:
-                        protected.remove(victim)
-                probation.append(key)
-
-        output.append(ReferenceTransfer(moved, moved * energy_rate))
-    return tuple(output)
+        end = position+1
+        if phase == "prefill" and config.prefill_mode == "bypass":
+            while end < len(log.phase) and end-position < batch_tokens and log.phase[end] == phase:
+                end += 1
+        # Pinned llama-moe-cache.cpp:503: max_batch=32, larger batches
+        # preserve cache state. Small prefill unions use the same plan as decode.
+        update = phase == "decode" or config.prefill_mode == "serial" or end-position <= 32
+        for column, layer in enumerate(log.layers):
+            ordered = list(dict.fromkeys(
+                (layer, expert) for row in log.experts[position:end] for expert in row[column]
+                if (layer, expert) not in config.resident))
+            missing = request(ordered, update)
+            seen = set()
+            for token in range(position, end):
+                selected = {(layer, expert) for expert in log.experts[token][column]}
+                fresh = (selected & missing)-seen
+                moved_by_token[token] += size_of(tuple(fresh))
+                seen.update(selected)
+        position = end
+    return tuple(ReferenceTransfer(moved, moved*energy_rate) for moved in moved_by_token)
 
 
 def _rectangles(
@@ -451,13 +435,16 @@ def reference_detection_forecast(
     phase_bias_std_j: float,
     stage_a_effect_sd: float,
     systematic_contrast_half_width_j: float,
+    *, n_per_condition: int,
 ) -> ReferenceDetectionForecast:
     """Return diagnostic correlation, group contrast, and systematic bound.
 
     White sensor noise uses max(sample interval, averaging window) as its
     effective correlation time. Independent phase-bias variance adds in
     quadrature. The contrast assumes standardized linear attenuation. The
-    systematic half-width adds the supplied contrast bound and quantum*T.
+    systematic half-width is supplied. In the dither scenario, independent
+    rounding variance q^2/12 is propagated to two n-episode condition means.
+    The prior same-sign q*T alternative is not a decision bound.
     Zero signal and zero noise produce undefined correlation (None).
     """
     sensor_sigma = _finite(sensor_noise_std_w, "sensor_noise_std_w")
@@ -480,14 +467,16 @@ def reference_detection_forecast(
     if decode_tokens <= 0 or duration <= 0:
         raise ValueError("decode token count and duration must be positive")
     signal = abs(slope) * routing
-    white_sigma_j = sensor_sigma * sqrt(
-        duration * (max(interval_ns, window_ns) / 1_000_000_000)
-    )
+    dt = max(interval_ns, window_ns)/1_000_000_000
+    # Integral is dt*sum(readings), so rounding Var=q^2/12*T*dt.
+    rounding_j2 = quantum**2/12*duration*dt if sensor_sigma >= quantum/2 else 0.0
+    white_sigma_j = sqrt(sensor_sigma**2*duration*dt+rounding_j2)
     noise = hypot(white_sigma_j, phase_sigma) / decode_tokens
     denominator = hypot(signal, noise)
     correlation = signal / denominator if denominator else None
     contrast = abs(effect) * signal * decode_tokens
-    bound = systematic + quantum * duration
+    # Independent means of n readings of episode energy: Var(diff)=2*Var/n.
+    bound = systematic + sqrt(2*rounding_j2/n_per_condition)
     return ReferenceDetectionForecast(correlation, contrast, bound)
 
 
@@ -536,3 +525,44 @@ def reference_residual_adjusted_correlation(
     total_sd_j = math.sqrt(math.fsum(value*value for value in
         (signal_j, residual_j, white_j, phase_j)))
     return signal_j / total_sd_j if total_sd_j else None
+
+
+def reference_power_increment(observations) -> tuple[float | None, int]:
+    """Review-round oracle using pairwise OLS and explicit projection vectors.
+
+    Revised in this fix seat, not a new independent-model implementation.
+    Groups are held out together; conditions center evaluation, never training.
+    """
+    residuals = []
+    for target in observations:
+        training = [item for item in observations if item.group != target.group]
+        if len(training) < 2:
+            continue
+        z = [item.features.decode_seconds_per_token for item in training]
+        x = [item.features.energy_per_decode_token_j for item in training]
+        y = [item.routing_statistic for item in training]
+        tz = [target.features.decode_seconds_per_token]
+        all_z = z+tz
+        fitted_x = reference_linear_prediction(z, x, all_z)
+        fitted_y = reference_linear_prediction(z, y, all_z)
+        rx = [value-fit for value, fit in zip(x, fitted_x)]
+        ry = [value-fit for value, fit in zip(y, fitted_y)]
+        xx, _, _ = _pairwise_sums(rx, ry)
+        if not xx:
+            continue
+        tx = target.features.energy_per_decode_token_j-fitted_x[-1]
+        predicted = reference_linear_prediction(rx, ry, [tx])[0]
+        residuals.append((target.episode_id.endswith("-sabotage"),
+                          target.routing_statistic-fitted_y[-1], predicted))
+    truth, prediction = [], []
+    for label in (False, True):
+        selected = [(a, b) for tag, a, b in residuals if tag == label]
+        if selected:
+            ma, mb = fsum(a for a, _ in selected)/len(selected), fsum(b for _, b in selected)/len(selected)
+            truth.extend(a-ma for a, _ in selected)
+            prediction.extend(b-mb for _, b in selected)
+    try:
+        correlation = reference_pearson(truth, prediction)
+    except ValueError:
+        correlation = None
+    return correlation, len(truth)

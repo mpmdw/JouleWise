@@ -176,9 +176,9 @@ class TestMoeStageBTraffic(StageBAssertions):
 class TestMoeStageBSensors(StageBAssertions):
     def test_sensor_cadence_and_quantum_come_from_rail_parameters(self):
         ina, nvml = default_sensors()
-        # Three enabled channels, each 1.1ms shunt + 1.1ms bus: 6.6ms.
-        # Polling is 10ms, so effective independent read interval is 10ms.
-        self.assertEqual(ina.averaging_window_ns, 6_600_000)
+        # Three enabled channels produce a 6.6ms frame; this rail acquires
+        # current only in its own 1.1ms shunt slice. Polling remains 10ms.
+        self.assertEqual(ina.averaging_window_ns, 1_100_000)
         self.assertEqual(ina.interval_ns, 10_000_000)
         # P=VI; 40uV/10mOhm * 5V + 8mV*2A + product of both LSBs.
         self.assertRelative(ina.quantum_w, 0.036032)
@@ -340,7 +340,7 @@ class TestMoeStageBAnalysis(StageBAssertions):
             systematic_contrast_half_width_j=1.0)
         oracle = reference_detection_forecast(
             sensor.noise_std_w, sensor.interval_ns, sensor.averaging_window_ns,
-            sensor.quantum_w, 0.2, 0.05, 512, 25.6, 0.1, 1.0, 1.0)
+            sensor.quantum_w, 0.2, 0.05, 512, 25.6, 0.1, 1.0, 1.0, n_per_condition=50)
         self.assertRelative(forecast.model_correlation, oracle.model_correlation)
         self.assertRelative(forecast.contrast_energy_j, oracle.contrast_j)
         self.assertRelative(forecast.contrast_half_width_j, oracle.contrast_half_width_j)
@@ -490,44 +490,48 @@ class TestMoeStageBEndToEnd(StageBAssertions):
             })
         print("STAGEB_SYNTHETIC_EVIDENCE " + json.dumps(evidence, sort_keys=True, allow_nan=False))
 
-    def test_ina_routing_signal_clears_parameterized_stage_b_requirement(self):
+    def test_stalled_routing_recovery_is_reported_beside_timing_increment(self):
         result = self.ina
-        correlation = result["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_correlation"]
-        # The comparison bar is the normal-design correlation required for the
-        # supplied Stage A d=1, n=50 groups/condition, alpha=.05, power=.8,
-        # with three predeclared features, not an arbitrary recovery threshold.
-        self.assertGreater(result["recovery"]["energy_per_decode_token_j"][
-            "within_condition_held_out_interval_95"][0],
-            result["requirement"]["minimum_absolute_correlation"])
-        self.assertTrue(result["stage_b_detectable_under_assumptions"])
+        # F1 changes the feature being tested: timing carries routing, while
+        # sampled power must add held-out information after timing control.
+        self.assertIn("decode_seconds_per_token", result["recovery"])
+        self.assertIn("mean_decode_power_w", result["recovery"])
+        self.assertEqual(result["stage_b_verdict"], result["power_increment_over_timing"]["verdict"])
         self.assertEqual(result["episodes"], 2*self.world.groups)
         self.assertEqual(result["tool_calls_per_episode"], self.world.turns)
 
-    def test_variable_timing_gapped_ina_clears_interval_and_synchronized_world_fails(self):
-        # Same routes, energy, sensor and fixed design. Only step-time jitter
-        # changes. Assert interval separation, never a finite-cohort point.
-        required = self.gapped_ina["requirement"]["minimum_absolute_correlation"]
-        positive = self.gapped_ina["recovery"]["energy_per_decode_token_j"]
+    def test_variable_and_synchronized_ina_report_new_sensor_and_bound(self):
+        # F2/F4 replace the old q*T rejection and 6.6ms default with random
+        # rounding and a 1.1ms shunt slice. The fixed design bar is unchanged.
+        for result in (self.gapped_ina, self.synchronized):
+            self.assertEqual(result["sensor"]["averaging_window_ns"], 1_100_000)
+            self.assertIn("dithered_rounding_forecast", result["forecast"]["flags"])
+            self.assertIn("power_increment_over_timing", result)
+        required = self.synchronized["requirement"]["minimum_absolute_correlation"]
         negative = self.synchronized["recovery"]["energy_per_decode_token_j"]
-        self.assertGreater(positive["within_condition_held_out_interval_95"][0], required)
-        self.assertTrue(self.gapped_ina["empirical_recovery_meets_requirement"][
-            "energy_per_decode_token_j"])
-        # Recovery clears its Fisher bound; the unchanged q*T physical bar
-        # separately rejects this transfer-only scenario. Keep both conclusions.
-        self.assertFalse(self.gapped_ina["stage_b_detectable_under_assumptions"])
-        self.assertIn("contrast_below_systematic_bound", self.gapped_ina["forecast"]["flags"])
         self.assertLess(negative["within_condition_held_out_interval_95"][1], required)
-        self.assertFalse(self.synchronized["stage_b_detectable_under_assumptions"])
+        self.assertNotEqual(self.synchronized["stage_b_verdict"], "yes")
         self.assertIn("synchronized_bursts", self.synchronized["flags"])
 
     def test_all_resident_control_has_no_modelled_routing_energy(self):
         result = self.resident
         self.assertEqual(result["total_modelled_bytes"], 0)
-        # Quantization alone bounds reported per-token energy at q/2 * token
-        # duration; this bound also covers the algebraic zero traffic energy.
+        # Algebra gives sum(0 bytes*J/B)=0. Permit only accumulation float noise:
+        # one ulp at the all-miss per-token energy scale per selected expert.
+        scale = (self.world.layers*self.world.top_k*3_538_944*self.world.joules_per_byte)
+        float_bar = self.world.layers*self.world.top_k*math.ulp(scale)
+        self.assertLessEqual(max(map(abs, result["true_extra_j_per_decode_token_range"])), float_bar)
         sensor = result["sensor"]
-        bar = sensor["quantum_w"]/2 * self.world.decode_token_period_ns/1e9
-        self.assertLessEqual(max(map(abs, result["true_extra_j_per_decode_token_range"])), bar)
+        # Apparent resident energy can contain one prefill/decode boundary cell
+        # per turn, each at |prefill load-decode load| W. Add q/2*T and a
+        # Bonferroni Gaussian two-sided 95% envelope across these episodes.
+        duration = max(result["decode_duration_s_range"])
+        n = result["episodes"]
+        z = statistics.NormalDist().inv_cdf(1-.05/(2*n))
+        noise_j = z*sensor["noise_std_w"]*math.sqrt(duration*sensor["interval_ns"]/1e9)
+        boundary_j = self.world.turns*abs(self.world.prefill_load_w-self.world.decode_load_w)*sensor["interval_ns"]/1e9
+        sensor_bar = (noise_j+sensor["quantum_w"]/2*duration+boundary_j)/result["decode_tokens_per_episode"]
+        self.assertLessEqual(max(map(abs, result["apparent_extra_j_per_decode_token_range"])), sensor_bar)
         self.assertFalse(result["forecast"]["detectable_under_assumptions"])
         self.assertIn("no_routing_energy_coupling", result["forecast"]["flags"])
 
@@ -688,13 +692,14 @@ class TestMoeStageBContinuation(StageBAssertions):
                                     baseline_w=12, noise_std_w=0, noise_multiplier=1,
                                     attribution_floor_j=0, windows=timing.windows,
                                     reference_decode_duration_ns=timing.reference_decode_duration_ns)
-        # 30B*.001J/B + 12W*.030s = .39J incremental. Sensor q/2
-        # times actual .040s is its rounding bound; /400 comparison is below
-        # 1% of that bound and above 1e6*float noise at this energy scale.
-        expected_energy = .03+12*.030
+        # Observed energy subtracts 12W over actual decode windows: memory
+        # contributes .03J. The .36J running-stall cost remains traffic truth,
+        # never an analyst correction from the simulator's nominal duration.
+        # q*.040/400 is below 1% of q/2*T and above 1e6 float noise.
+        expected_energy = .03
         self.assertLessEqual(abs(features.energy_per_decode_token_j*3-expected_energy),
                              sensor.quantum_w*.040/400)
-        self.assertRelative(sum(t.incremental_energy_j for t in traffic.tokens), expected_energy)
+        self.assertRelative(sum(t.incremental_energy_j for t in traffic.tokens), .03+12*.030)
         self.assertEqual(timing.episode.turns[0].tool_calls[0].end_ns
                          -timing.episode.turns[0].tool_calls[0].start_ns, 5_000_000)
         self.assertNotIn("transfer_exceeds_token_window", traffic.flags)
@@ -719,7 +724,7 @@ class TestMoeStageBContinuation(StageBAssertions):
             cooler.episode, cooler.episode.power_traces[-1], baseline_w=12,
             noise_std_w=0, noise_multiplier=1, attribution_floor_j=0,
             windows=timing.windows, reference_decode_duration_ns=10_000_000)
-        self.assertLessEqual(abs(cooler_features.energy_per_decode_token_j*3-(.03+6*.030)),
+        self.assertLessEqual(abs(cooler_features.energy_per_decode_token_j*3-(.03+(6-12)*.030)),
                              sensor.quantum_w*.040/400)
         trace = sampled.episode.power_traces[-1]
         sparse = replace(trace, t_ns=trace.t_ns[::2], values=trace.values[::2])
@@ -727,8 +732,9 @@ class TestMoeStageBContinuation(StageBAssertions):
             sampled.episode, sparse, baseline_w=12, noise_std_w=0,
             noise_multiplier=1, attribution_floor_j=0, windows=timing.windows,
             reference_decode_duration_ns=10_000_000)
-        self.assertIsNone(missing.energy_per_decode_token_j)
-        self.assertIn("stall_energy_reference_requires_complete_decode_coverage", missing.flags)
+        self.assertTrue(math.isfinite(missing.energy_per_decode_token_j))
+        self.assertIn("incomplete_decode_coverage", missing.flags)
+        self.assertIn("reference_decode_duration_ignored", missing.flags)
 
     def test_transfer_ns_ceil_matches_exact_integer_oracle_at_real_expert_size(self):
         # 37 * 3,538,944 bytes / 32e9 B/s is exactly 4,091,904ns.

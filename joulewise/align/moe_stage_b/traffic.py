@@ -39,7 +39,7 @@ class OffloadConfig:
     path: str
     bandwidth_source: str
     energy_source: str
-    prefill_mode: str = "bypass"  # "bypass" (no cache update) | "serial"
+    prefill_mode: str = "bypass"  # Upstream batch policy (bypass only >32) | legacy "serial"
     prefill_batch_tokens: int = 1  # Explicit backend microbatch size; never inferred.
     flags: tuple[str, ...] = ()  # Unavailable configuration inputs remain explicit.
     decode_miss_stalls: bool = False
@@ -249,8 +249,9 @@ def model_traffic(
 
     No timestamps means a serial transfer-only clock starting at zero. Explicit
     windows anchor transfers to token starts. Transfers that cannot fit are
-    queued and flagged, not silently clipped or discarded. Prefill defaults to
-    bypassing cache updates because shared records do not describe its batches.
+    queued and flagged, not silently clipped or discarded. Explicit prefill
+    microbatches up to upstream max_batch=32 plan/fill/evict atomically per layer;
+    larger ones bypass updates. Missing batch identity remains an assumption flag.
     """
     flags: list[str] = list(config.flags)
     if config.cache_policy not in ("none", "lru", "slru"):
@@ -294,12 +295,10 @@ def model_traffic(
         return TrafficResult((), (), tuple(flags))
     if "prefill" in router.phase:
         flags.append("prefill_batch_boundaries_unavailable")
-        flags.append("prefill_cache_bypassed" if config.prefill_mode == "bypass"
+        flags.append("prefill_upstream_batch_cache_policy" if config.prefill_mode == "bypass"
                      else "serial_prefill_assumption")
         if config.prefill_mode == "bypass" and config.prefill_batch_tokens > 1:
             flags.append("prefill_batch_union_profile_assumption")
-        if config.prefill_mode == "bypass":
-            flags.append("prefill_readonly_cache_reuse_unmodelled")
     if windows is None:
         flags.append("transfer_only_time_axis")
     flags.append("serialized_token_start_transfer_profile")
@@ -312,7 +311,11 @@ def model_traffic(
     available_ns = windows[0].start_ns if windows else 0
     prefill_offset = 0
     prefill_seen: set[ExpertKey] = set()
+    prefill_hit_keys: set[ExpertKey] = set()
     batch_start = batch_end = 0
+    # llama.cpp a37cc461 src/llama-moe-cache.cpp:503 checks n_tokens >
+    # max_batch; the constant is 32. It is an upstream limit, not a fitted bar.
+    max_batch = 32
     for i, (phase, row) in enumerate(zip(router.phase, router.experts)):
         if phase == "prefill" and config.prefill_mode == "bypass":
             if prefill_offset % config.prefill_batch_tokens == 0:
@@ -323,6 +326,23 @@ def model_traffic(
                        and batch_end-i+1 < config.prefill_batch_tokens
                        and router.phase[batch_end+1] == "prefill"):
                     batch_end += 1
+                prefill_hit_keys.clear()
+                if batch_end-batch_start+1 <= max_batch:
+                    # Each layer plans its whole microbatch union before fills.
+                    for layer_index, layer in enumerate(router.layers):
+                        union = tuple(dict.fromkeys(
+                            (layer, expert) for batch_row in router.experts[batch_start:batch_end+1]
+                            for expert in batch_row[layer_index]
+                            if (layer, expert) not in config.resident))
+                        before = set(cache.probation) | set(cache.protected)
+                        _, _, bypass = cache.request(union)
+                        if bypass:
+                            flags.append("request_exceeds_cache_capacity")
+                        if not bypass and config.cache_policy != "none" and config.cache_capacity_bytes:
+                            prefill_hit_keys.update(before.intersection(union))
+                    flags.append("prefill_small_batch_cache_updated")
+                else:
+                    flags.extend(("prefill_cache_bypassed", "prefill_readonly_cache_reuse_unmodelled"))
             prefill_offset += 1
         else:
             prefill_offset = 0
@@ -339,7 +359,8 @@ def model_traffic(
                 fresh = [key for key in keys if key not in prefill_seen]
                 batch_reuse += len(keys)-len(fresh)
                 prefill_seen.update(keys)
-                n_hit, n_miss, bypass = 0, len(fresh), False
+                n_hit = sum(key in prefill_hit_keys for key in fresh)
+                n_miss, bypass = len(fresh)-n_hit, False
             else:
                 n_hit, n_miss, bypass = cache.request(keys)
             if bypass:

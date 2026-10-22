@@ -28,6 +28,8 @@ class PowerFeatures:
     energy_half_width_per_token_j: float | None
     coverage_fraction: float
     flags: tuple[str, ...] = ()
+    decode_seconds_per_token: float | None = None
+    mean_decode_power_w: float | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,8 @@ class DetectionPlan:
     contrast_half_width_j: float | None
     detectable_under_assumptions: bool
     flags: tuple[str, ...] = ()
+    worst_case_same_sign_quantization_bound_j: float | None = None
+    rounding_contrast_std_j: float | None = None
 
 
 def pearson(x: Sequence[float], y: Sequence[float]) -> float | None:
@@ -124,7 +128,11 @@ def extract_features(
     Each reading represents a nominal cell ENDING at its timestamp. Missing
     cells are not filled. For duty-cycled sensors this is an apparent energy,
     requiring randomized sampling phases/repetitions before an unbiased claim.
-    Quantization is bounded by q/2 per sample; it is not assumed to dither.
+    Energy is the observed baseline-subtracted integral, including stalls.
+    The deprecated reference argument is flagged and ignored: simulator truth
+    never enters a feature. Missing cells remain missing and coverage is printed.
+    With noise SD >= q/2, rounding is treated as dithered uniform noise; otherwise
+    q/2 times observed duration remains a labelled conservative feature bound.
     """
     flags = list(episode.flags)
     count = sum(t.decode_tokens for t in episode.turns)
@@ -197,22 +205,9 @@ def extract_features(
     if coverage_ns < duration_ns:
         flags.append("incomplete_decode_coverage")
     duration_s = duration_ns/NS_PER_SECOND
-    if (reference_decode_duration_ns is not None
-            and (not isinstance(reference_decode_duration_ns, int)
-                 or isinstance(reference_decode_duration_ns, bool)
-                 or not 0 <= reference_decode_duration_ns <= duration_ns)):
-        return missing("invalid_reference_decode_duration")
-    # Subtract nominal compute energy, preserving platform power during added
-    # blocking time. The trace already contains that power: do not add a pulse.
-    stall_energy = (baseline_w*(duration_ns-reference_decode_duration_ns)/NS_PER_SECOND
-                    if reference_decode_duration_ns is not None else 0.0)
-    if stall_energy and coverage_ns < duration_ns:
-        # A total nominal duration cannot locate missing stall energy. Keep it
-        # missing rather than filling unsampled cells with the model reference.
-        return missing("stall_energy_reference_requires_complete_decode_coverage")
-    if stall_energy:
-        flags.append("nominal_compute_energy_reference")
-        flags.append("variance_excludes_running_stall_energy")
+    if reference_decode_duration_ns is not None:
+        # Compatibility only. No nominal compute-time estimate enters analysis.
+        flags.append("reference_decode_duration_ignored")
     if coverage_ns == 0:
         return missing("no_decode_sample_coverage")
     quantum = trace.resolution
@@ -220,10 +215,16 @@ def extract_features(
         flags.append("unknown_power_resolution")
         half_width = None
     else:
-        # q/2 * observed duration is a deterministic rounding bound.
-        quantization_bound = quantum/2 * sum(cell_weights_s)
-        independent_noise = noise_multiplier*noise_std_w*math.sqrt(
-            math.fsum(w*w for w in cell_weights_s))
+        # Uniform rounding on [-q/2,q/2] has variance q^2/12. A noise
+        # SD of at least q/2 is the declared dither scenario criterion;
+        # hardware must validate this assumption or supply a measured bound.
+        dithered = noise_std_w >= quantum/2
+        quantization_bound = 0.0 if dithered else quantum/2 * sum(cell_weights_s)
+        rounding_variance = quantum**2/12 if dithered else 0.0
+        independent_noise = noise_multiplier*math.sqrt(
+            (noise_std_w**2+rounding_variance)*math.fsum(w*w for w in cell_weights_s))
+        flags.append("dithered_rounding_uncertainty" if dithered
+                     else "undithered_rounding_bound")
         # A clock shift moves both boundaries of each disjoint observed decode
         # interval. Explicit token timing may contain multiple intervals per turn.
         intervals: list[tuple[int, int]] = []
@@ -257,10 +258,11 @@ def extract_features(
     if trace.averaging_window_ns and trace.averaging_window_ns > interval:
         flags.append("noise_independence_requires_calibration")
     return PowerFeatures(episode.episode_id, count,
-                         (math.fsum(token_energies)+stall_energy)/count,
+                         math.fsum(token_energies)/count,
                          statistics.pvariance(token_energies) if len(token_energies) > 1 else 0.0,
                          rate, amplitude, half_width, coverage,
-                         tuple(dict.fromkeys(flags)))
+                         tuple(dict.fromkeys(flags)), duration_s/count,
+                         baseline_w+math.fsum(token_energies)/(coverage_ns/NS_PER_SECOND))
 
 
 def recover_routing(
@@ -274,7 +276,7 @@ def recover_routing(
     evaluating the held-out groups; selecting the best feature here is leakage.
     """
     allowed = ("energy_per_decode_token_j", "token_energy_variance_j2",
-               "token_rate_amplitude_w")
+               "token_rate_amplitude_w", "decode_seconds_per_token", "mean_decode_power_w")
     flags: list[str] = []
     if feature_name not in allowed:
         return RoutingRecovery(feature_name, None, None, None, (),
@@ -317,6 +319,70 @@ def recover_routing(
                            fisher_interval_95(held_out, len(paired_truth)),
                            len(paired_truth), len(paired_truth))
 
+
+
+def recover_power_increment(observations: Sequence[RoutingObservation]) -> RoutingRecovery:
+    """Group-held-out energy recovery after controlling for decode seconds/token.
+
+    Other task groups fit timing -> routing and timing -> energy, then routing
+    residuals against energy residuals. Evaluate held-out residual routing and
+    prediction. No condition label trains a fit; no simulator reference is used.
+    """
+    valid = [o for o in observations if all(
+        value is not None and math.isfinite(value) for value in
+        (o.routing_statistic, o.features.energy_per_decode_token_j,
+         o.features.decode_seconds_per_token))]
+    flags: list[str] = []
+    predictions = []
+    truth, predicted, labels = [], [], []
+
+    def line(xs, ys):
+        mx, my = statistics.fmean(xs), statistics.fmean(ys)
+        xx = math.fsum((v-mx)**2 for v in xs)
+        slope = math.fsum((x-mx)*(y-my) for x, y in zip(xs, ys))/xx if xx else 0.0
+        return mx, my, slope
+
+    for observation in observations:
+        train = [o for o in valid if o.group != observation.group]
+        prediction = None
+        if observation in valid and len(train) >= 2:
+            times = [o.features.decode_seconds_per_token for o in train]
+            energy = [o.features.energy_per_decode_token_j for o in train]
+            routing = [o.routing_statistic for o in train]
+            mt, me, se = line(times, energy)
+            _, mr, sr = line(times, routing)
+            er = [e-me-se*(t-mt) for e, t in zip(energy, times)]
+            rr = [r-mr-sr*(t-mt) for r, t in zip(routing, times)]
+            _, _, slope = line(er, rr)
+            variance = math.fsum((e-statistics.fmean(er))**2 for e in er)
+            if variance:
+                t = observation.features.decode_seconds_per_token
+                prediction = slope*(observation.features.energy_per_decode_token_j-me-se*(t-mt))
+                truth.append(observation.routing_statistic-mr-sr*(t-mt))
+                predicted.append(prediction)
+                labels.append(observation.episode_id.endswith("-sabotage"))
+            else:
+                flags.append("constant_power_increment_feature")
+        else:
+            flags.append("insufficient_grouped_training_data")
+        predictions.append((observation.episode_id, prediction))
+    centered_truth, centered_prediction = [], []
+    for label in (False, True):
+        pairs = [(a, b) for a, b, tag in zip(truth, predicted, labels) if tag == label]
+        if pairs:
+            ma, mb = statistics.fmean(a for a, _ in pairs), statistics.fmean(b for _, b in pairs)
+            centered_truth.extend(a-ma for a, _ in pairs)
+            centered_prediction.extend(b-mb for _, b in pairs)
+    correlation = pearson(centered_truth, centered_prediction)
+    if correlation is None:
+        flags.append("undefined_power_increment_correlation")
+    # Two condition means and one timing covariate consume three degrees of
+    # freedom. This nominal Fisher interval shares the CV dependence caveat.
+    return RoutingRecovery(
+        "energy_increment_over_decode_timing", pearson(truth, predicted), correlation,
+        math.sqrt(statistics.fmean((a-b)**2 for a, b in zip(truth, predicted))) if truth else None,
+        tuple(predictions), tuple(dict.fromkeys(flags)),
+        fisher_interval_95(correlation, len(truth), fitted_means=3), len(truth), max(0, len(truth)-3))
 
 def required_correlation(
     *, stage_a_effect_sd: float, n_per_condition: int, alpha: float,
@@ -363,8 +429,8 @@ def plan_detectability(
 
     phase_bias_std_j MUST come from phase-swept repetitions or calibration;
     a duty fraction alone cannot identify energy missed between acquisitions.
-    White measurement noise averages down; quantization and systematic bounds
-    do not. The transfer slope must describe energy visible on this sensor's
+    White measurement noise and dithered rounding average down. The supplied
+    systematic bound is a measured/scenario parameter, never inferred from q*T. The transfer slope must describe energy visible on this sensor's
     channel, not unmeasured host DRAM energy on a GPU-only NVML channel.
     """
     requirement = required_correlation(stage_a_effect_sd=stage_a_effect_sd,
@@ -387,15 +453,24 @@ def plan_detectability(
                              False, tuple(dict.fromkeys(flags + ["invalid_sensor_forecast"])))
     sample_s = max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND
     # Variance of the integral of independent averaged readings: sigma_W^2 * T * dt.
-    white_noise_j = sensor.noise_std_w*math.sqrt(decode_duration_s*sample_s)
+    dithered = sensor.noise_std_w >= sensor.quantum_w/2
+    # Uniform rounding: Var=q^2/12 per reading. Two n-episode means give
+    # Var(contrast)=2*(q^2/12)*T*dt/n. Hardware must validate dithering.
+    rounding_variance = sensor.quantum_w**2/12 if dithered else 0.0
+    white_noise_j = math.sqrt((sensor.noise_std_w**2+rounding_variance)*decode_duration_s*sample_s)
+    rounding_contrast_std = math.sqrt(2*rounding_variance*decode_duration_s*sample_s/n_per_condition)
     signal_sd = abs(traffic_energy_slope_j_per_token)*routing_stat_sd
     noise_sd = math.hypot(white_noise_j/decode_tokens, phase_bias_std_j/decode_tokens,
                          routing_energy_residual_std_j_per_token)
     correlation = (signal_sd/math.hypot(signal_sd, noise_sd)
                    if signal_sd or noise_sd else None)
     contrast = abs(stage_a_effect_sd)*signal_sd*decode_tokens
-    # Two condition means can each carry q/2*T rounding bias of opposite sign.
-    bound = systematic_contrast_half_width_j + sensor.quantum_w*decode_duration_s
+    # One-SD random rounding contrast plus a supplied measured systematic
+    # half-width. Same-sign q*T is a labelled alternative, never the verdict.
+    bound = systematic_contrast_half_width_j + rounding_contrast_std
+    worst_case = systematic_contrast_half_width_j + sensor.quantum_w*decode_duration_s
+    flags.append("dithered_rounding_forecast" if dithered
+                 else "undithered_rounding_requires_measured_systematic_bound")
     if sensor.averaging_window_ns < sensor.interval_ns:
         flags.append("requires_measured_random_phase_bias")
     if routing_energy_residual_std_j_per_token:
@@ -409,4 +484,5 @@ def plan_detectability(
                   and correlation >= requirement.minimum_absolute_correlation and contrast > bound)
     flags.append("conditional_forecast_not_hardware_validation")
     return DetectionPlan(requirement.minimum_absolute_correlation, correlation,
-                         contrast, bound, detectable, tuple(dict.fromkeys(flags)))
+                         contrast, bound, detectable, tuple(dict.fromkeys(flags)),
+                         worst_case, rounding_contrast_std)

@@ -7,7 +7,7 @@ The reference module is an independent test oracle, not a production estimator.
 from joulewise.align.moe_stage_b.analysis import (
     CorrelationRequirement, DetectionPlan, PowerFeatures, RoutingObservation,
     RoutingRecovery, extract_features, pearson, plan_detectability,
-    recover_routing, required_correlation, fisher_interval_95,
+    recover_routing, required_correlation, fisher_interval_95, recover_power_increment,
 )
 from joulewise.align.moe_stage_b.simulation import (
     PowerPulse, SensorModel, SimulatedEpisode, SimulatedTrace, ina3221_sensor,
@@ -20,7 +20,7 @@ from joulewise.align.moe_stage_b.traffic import (
 )
 
 __all__ = [
-    "fisher_interval_95", "apply_decode_stalls", "StallTiming",
+    "fisher_interval_95", "apply_decode_stalls", "StallTiming", "recover_power_increment",
     "CorrelationRequirement", "DetectionPlan", "PowerFeatures", "RoutingObservation",
     "RoutingRecovery", "extract_features", "pearson", "plan_detectability",
     "recover_routing", "required_correlation", "PowerPulse", "SensorModel",

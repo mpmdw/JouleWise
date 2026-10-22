@@ -31,6 +31,7 @@ class SensorModel:
     noise_std_w: float
     phase_ns: int = 0
     notes: str = ""
+    acquisition_slices_ns: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -76,8 +77,10 @@ def ina3221_sensor(
     TI INA3221 datasheet SBOS576C: shunt LSB 40 uV; bus LSB 8 mV.
     https://www.ti.com/lit/ds/symlink/ina3221.pdf
     A full enabled-channel conversion/averaging frame bounds independent updates.
-    A contiguous frame average approximates staggered rail conversions; measure
-    the actual transfer function before making a token-spectrum claim.
+    Sections 7.3.1 and 7.4.2.1 / Figure 7-3 converts shunt then bus for each enabled channel.
+    A single channel's current is acquired only during its own shunt slices,
+    not across other rails or bus conversions. Multiple averages use separated
+    shunt slices; frame/poll cadence still bounds independent updates.
     """
     frame = enabled_channels * (shunt_conversion_ns + bus_conversion_ns) * averages
     if shunt_ohm <= 0:
@@ -86,9 +89,15 @@ def ina3221_sensor(
         # First-order P=VI quantization, including the product of both LSBs.
         delta_i, delta_v = 40e-6 / shunt_ohm, 8e-3
         quantum = abs(bus_voltage_v)*delta_i + abs(current_a)*delta_v + delta_i*delta_v
+    # Slices are offsets before the reading timestamp, anchored at the end of
+    # the latest selected-rail shunt conversion. Uniform episode phase represents
+    # unknown register/poll phase. Bus voltage is treated as constant in this world.
+    cycle = enabled_channels*(shunt_conversion_ns+bus_conversion_ns)
+    slices = tuple((j*cycle, j*cycle+shunt_conversion_ns) for j in range(averages))
     return SensorModel("ina3221", "ina3221", "VDD_IN", max(frame, poll_interval_ns),
-                       frame, quantum, noise_std_w, phase_ns,
-                       "synthetic contiguous-frame approximation; rail conversion staggering unmodelled")
+                       averages*shunt_conversion_ns, quantum, noise_std_w, phase_ns,
+                       "shunt-slice current acquisition; constant bus voltage; noise is a scenario parameter",
+                       slices if averages > 1 else ())
 
 
 class _Integral:
@@ -158,15 +167,19 @@ def simulate_trace(
         if pulse.end_ns > end_ns or pulse.start_ns < start_ns:
             flags.append("traffic_outside_episode")
     integral = _Integral(pulses)
-    rng = random.Random(seed)
+    rng = random.Random(f"noise-{seed}")
     times: list[int] = []
     values: list[float] = []
     # Include one reading beyond the end if needed to reconstruct the final cell.
     t = start_ns + sensor.phase_ns
     last = end_ns + sensor.interval_ns
+    slices = sensor.acquisition_slices_ns or ((0, sensor.averaging_window_ns),)
+    if any(not isinstance(a, int) or not isinstance(b, int) or a < 0 or b <= a for a, b in slices):
+        return SimulatedTrace(None, tuple(dict.fromkeys(flags+["invalid_acquisition_slices"])))
+    acquisition_ns = sum(b-a for a, b in slices)
     while t < last:
         watts = (baseline_w + episode_bias_w
-                 + integral.between(t-sensor.averaging_window_ns, t)/sensor.averaging_window_ns
+                 + math.fsum(integral.between(t-b, t-a) for a, b in slices)/acquisition_ns
                  + rng.gauss(0.0, sensor.noise_std_w))
         values.append(round(watts/sensor.quantum_w)*sensor.quantum_w)
         times.append(t)
@@ -200,7 +213,8 @@ def simulate_episode(
     Explicit token windows bypass only the uniform timing adapter, not traffic
     or sensor simulation. Explicit windows must already include any upload waits;
     the implicit compute-only adapter applies configured stalls once. Outputs
-    expose actual windows and the nominal decode duration for feature extraction.
+    expose actual windows. The nominal duration remains a simulator diagnostic
+    compatibility alias and is never consumed by feature extraction.
     All input episode flags survive.
     """
     flags = list(episode.flags)
