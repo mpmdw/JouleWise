@@ -3,14 +3,15 @@
 ## SUMMARY
 
 Implemented stdlib ctypes NVML power and cumulative-energy sampling.
-Separate device workers retain query brackets, sensor facts and raw counter discontinuities.
-Added duty-window pooling with coverage, quantization and run-repeatability uncertainty.
-Declared phase labels preserve scheduler jitter through a normalized auxiliary interval.
+Fresh sampler cycles retain query brackets, sensor facts and raw counter discontinuities.
+Added duty-window pooling with coverage, quantum, timing and repeatability uncertainty.
 Added whole-GPU preflight, opt-in clock commands, owned load cleanup and JSON evidence.
-Added realistic multi-turn worlds, ctypes/executable fakes and an independent numerical twin.
-Documented the first rented-GPU session without performing hardware measurements.
-Executed lane tests pass in CI; the final connected-path/lifecycle additions are awaiting CI.
-Shared contracts and the existing NVIDIA adapter are unchanged.
+The connected driver/thread/record world recovered 1,161 J within its 0.103840 J half-width.
+The independent numerical twin passed; 95% duty intervals missed 52 of 1,000 seeds.
+Final CI executed 52 lane tests: 51 passed and one optional-pynvml test skipped.
+Build, wheel smoke, repository fences and the 212-module quick suite passed.
+The full suite failed an existing courier timeout; local commands remain blocked by Cloud startup.
+Shared contracts and the NVIDIA parser are unchanged; no hardware measurements were performed.
 
 ## FILES
 
@@ -45,36 +46,51 @@ NVML trace notes use JSON format `joulewise.align.nvml.v1`. They retain query ha
 
 ## TESTS RUN
 
-Executed through GitHub CI (Python 3.13, stdlib-only), source `7fd8641d6dea558b2b0809d78c03bb473e5ace6e`:
-- NVML: 14 tests, 0 failures/errors, 1 skip.
-- Duty worlds: 9 tests, 0 failures/errors/skips.
-- Independent twin: 12 tests, 0 failures/errors/skips.
-- Preflight: 12 tests, 0 failures/errors/skips.
-- Thus 47 lane tests: 46 passed and 1 optional-package skip. The existing records module's 4 tests also passed.
-- The skip is `test_optional_pynvml_uses_the_same_sampler_path`: "optional nvidia-ml-py is not installed; ctypes path is tested".
+Final executed source: `023c9d29592626e92f8715cd2af3d1f77f2f0f5c`.
+CI: <https://github.com/mpmdw/JouleWise/actions/runs/39709783657>.
+Python 3.13, stdlib-only test jobs; build/fence/wheel jobs also used Python 3.11.
 
-Final connected-path/lifecycle regressions are not yet executed; this checkpoint precedes the final CI run.
+Exact commands and outcomes:
+- `python3 scripts/quick_suite.py --tier quick --workers 4`: 212 modules, 179 excluded by the existing quick tier, 0 failures, PASS (152.545 s).
+- `python -m compileall -q joulewise tests`: PASS in all twelve ordinary shards.
+- Ordinary CI jobs execute `python -` with SHARD_COUNT=12 and SHARD_INDEX=1..12. The exact stdin program is the "Unit tests (stdlib core only, per D-009/D-017)" here-doc in the [unchanged workflow](https://github.com/mpmdw/JouleWise/blob/023c9d29592626e92f8715cd2af3d1f77f2f0f5c/.github/workflows/ci.yml). It invokes `shard_tests.run_units(partitions[index - 1], count, index)`, using stdlib unittest loader/runner. It does not invoke the local discovery CLI.
 
-The managed environment repeatedly remained pending/starting (observed revisions 3 through 11); every attempted shell command returned no usable execution environment. No local checkout, pip install, local unittest run or live hardware measurement is claimed.
+| Lane module | Tests | Failures | Errors | Skips |
+|---|---:|---:|---:|---:|
+| tests.align.test_power_nvml | 17 | 0 | 0 | 1 |
+| tests.align.test_power_duty | 10 | 0 | 0 | 0 |
+| tests.align.test_power_duty_twin | 12 | 0 | 0 | 0 |
+| tests.align.test_power_preflight | 13 | 0 | 0 | 0 |
+| Total | 52 | 0 | 0 | 1 |
 
-Existing GitHub CI was invoked with draft PR <https://github.com/mpmdw/JouleWise/pull/524>, targeting the spine branch. At source head `7fd8641d6dea558b2b0809d78c03bb473e5ace6e`, run <https://github.com/mpmdw/JouleWise/actions/runs/39705591969>:
-- `python3 scripts/quick_suite.py --tier quick --workers 4`: passed after the census namespace addition.
-- `python -m compileall -q joulewise tests`: passed in all twelve ordinary shards before execution.
-- Full stdlib suite ran through the unchanged `.github/workflows/ci.yml` embedded `python -` shard driver: `shard_tests.run_units(partitions[index - 1], count, index)`, using stdlib `unittest.TestLoader`/`TextTestRunner`. Ten ordinary shards passed; shard 4 failed an existing timeout assertion; shard 10 was cancelled by matrix fail-fast. The eleven completed ordinary shards ran 8,567 tests with 1 failure, 0 errors and 118 skips (including the optional lane skip above). Base-suite skip reasons are retained in the linked job logs.
-- Exclusive commands `python -m unittest -v tests.test_calibration_exits` and the existing embedded crash-matrix shard driver passed: 48 calibration-exit tests and 20 crash-matrix tests, no skips.
-- The failure outside this lane was `tests.test_v5_s1_qualification.QualificationSubsetTests.test_delivered_courier_journal_assembles_with_observed_exit_and_timeout`, subtest `still_running=True`: observed duration 30.20556086700026 s failed its existing <5 s assertion. The failing assertion is in the existing courier helper at tests/test_run_night.py:6572. Neither file nor its thresholds was changed. Its root cause was not established from this seat. This is an observed failure, not a claim of a green whole-repository suite.
-- Build, installed-wheel smoke, state/pin/doc/receipt fences and strict mock CLI flow passed.
+The skip is `test_optional_pynvml_uses_the_same_sampler_path`: "optional nvidia-ml-py is not installed; ctypes path is tested". The existing records module's 4 tests also passed, so all 56 alignment tests completed (55 passed, 1 skipped), even though some enclosing repository jobs were later cancelled.
 
-Required local commands remain blocked by workspace startup:
+- Completed ordinary-module groups across all final logs: 288 groups, 7,122 tests, 1 failure, 0 errors, 76 skips. These are exact completed-module counters, excluding interrupted modules; they are not a whole-suite pass count. The 76 include the one lane skip and 75 pre-existing-suite skips for unavailable Darwin/live-hardware probes, optional libraries, retained corpora/model mirrors, or registered proof/structural prerequisites. Their literal per-test reasons remain in the linked job logs.
+- Ordinary shard summaries: shard 8 PASS (827 tests, 13 skips), shard 12 PASS (917 tests, 5 skips), shard 2's runner PASS (479 tests, 11 skips, though its enclosing job was cancelled), shard 4 FAIL (843 tests, 1 failure, 9 skips). Other ordinary jobs were cancelled by matrix fail-fast after already executing the lane modules.
+- `python -m unittest -v tests.test_calibration_exits`: 48 tests, PASS, no skips (677.168 s).
+- Crash-matrix exclusive jobs execute `python -` with the exact "Exclusive calibration-writer crash-matrix module" here-doc in the same workflow: 1 + 19 = 20 tests, PASS, no skips.
+- `python -m unittest -v tests.test_docs_freshness`: 31 tests, PASS, no skips, as part of fences. Build (`python -m build`), installed-wheel smoke, state/pin/receipt fences and strict mock CLI flow also passed.
+
+The full-suite failure is `tests.test_v5_s1_qualification.QualificationSubsetTests.test_delivered_courier_journal_assembles_with_observed_exit_and_timeout`, subtest `still_running=True`. Its existing helper at `tests/test_run_night.py:6572` measured 30.204094708999946 s against its <5 s assertion. Neither that helper, its caller, nor its threshold was changed. Root cause was not established from this seat. Fixing that failure would require work outside WRITE_SCOPE; no green full-suite claim is made.
+
+Earlier CI evidence:
+- Run [39704268162](https://github.com/mpmdw/JouleWise/actions/runs/39704268162) failed the quick-suite shard census because unittest's `align.*` names did not match inventory `tests.align.*`. The sole registry exception corrected that namespace normalization.
+- Run [39705591969](https://github.com/mpmdw/JouleWise/actions/runs/39705591969), source `7fd8641d6dea558b2b0809d78c03bb473e5ace6e`, passed all then-existing 47 lane tests (46 pass, one optional skip), quick/build/fences/wheel and the exclusive jobs. Eleven completed ordinary shards ran 8,567 tests with 1 failure, 0 errors and 118 skips; the same courier helper measured 30.20556086700026 s against <5 s, and fail-fast cancelled shard 10.
+
+The final branch tip changes only this report after the tested source above; no additional implementation/test run is implied by that report-only commit.
+
+The managed environment never provided a shell (observed revisions 3 through 15 remained pending/starting and offline). Every attempted shell command returned no usable execution environment. These exact required local commands were NOT RUN:
 - `python3 -m unittest discover -s tests/align -t .`
 - `python3 -m unittest discover -s tests`
 - `python3 scripts/fixture_orphan_census.py --fail-on-orphans`
 
-Optional nvidia-ml-py is guarded by unittest.skipUnless. No optional package was installed from this seat; the extra-dependent run is pending a usable environment. The default path needs no extras.
+No optional package could be installed from this seat, so the extra-dependent run was NOT RUN. The optional test is guarded with unittest.skipUnless, and the ctypes path executed without extras. No local checkout, local unittest result or real hardware measurement is claimed.
+
+Draft PR [524](https://github.com/mpmdw/JouleWise/pull/524) targets the spine solely for review/CI. Its gate ledger explicitly leaves executing independent review, current-main integration, final-head green CI and the cold Fable measurement pass NOT-RUN. Static review and independently authored tests are distinguished from those merge gates.
 
 ## END-TO-END
 
-Observed CI world output at `7fd8641`:
+Observed CI world output at `023c9d2` (also reproduced at `7fd8641`):
 
 | Repeats | Estimate J | Absolute error J | Coverage | Half-width J |
 |---|---:|---:|---:|---:|
@@ -90,7 +106,9 @@ Declared multi-turn world: six 1 s turns, six local tool calls, 4,608 prefill to
 
 Coverage calibration is predeclared at seeds 0..999, 64 repeats, independent Gaussian 2 W run shifts, and nominal 95%; the allowed miss-fraction deviation is one binomial standard error sqrt(0.05*0.95/1000). The executed miss count was 52/1,000 = 0.052 against nominal 0.05, within the predeclared standard error 0.006892024376045114. No outcomes were used to select seeds or sample count.
 
-The driver-connected variant uses the same waveform through real ctypes pointers, worker threads, mapped driver timestamps, estimate_energy and record serialization. Preflight worlds execute fake nvidia-smi/load programs on PATH, with a 50 W idle baseline, 250 W load, 0.2 W ripple, 5 ms polling, and a no-movement control. Separate 1,000-seed Gaussian idle worlds test the predictive criterion's declared 5% nominal rate.
+The driver-connected variant ran the same waveform through real ctypes pointers, actual worker threads, monotonic call brackets, mapped driver timestamps, estimate_energy and Episode JSON round-trip. Eight runs retained 60 instantaneous samples each (480 observations). It returned 1160.999993675 J against 1161 J: absolute error approximately 0.000006325 J, half-width 0.10383991662699932 J and coverage 0.9999999916666666. The synthetic 100 ns clock-call increments and full driver microsecond rounding bound yield 1,050 ns window-timing bounds. The tiny uncovered boundary is retained, not rounded away. Re-estimating the serialized Episode reproduced the result bit-for-bit.
+
+Preflight worlds executed actual fake nvidia-smi/load programs on PATH through the production ctypes sampler and process-cleanup paths: 50 W idle, 250 W load, 0.2 W ripple and 5 ms polling. The retained instant channel had 5 idle and 3 load readings; its fake-sensor/thinning phase yielded idle mean 49.8 W, sigma 0 W and threshold 49.801 W. Load peak 249.8 W gave measurement_ready=True; the 49.8 W no-movement control gave False. A separate 1,000-seed Gaussian idle world (0.5 W sigma, 64 idle readings and one held-out reading) exercised nonzero-noise predictive thresholds: 54/1,000 = 0.054 exceeded against nominal 0.05, within binomial SE 0.006892024376045111. Seeds and counts were fixed before results.
 
 The independent oracle was authored by GPT-6-astra without viewing production duty.py. Commits `1e454773786b7de6882cbabb9ae2d35f2b24595c` and `22d85e54b54653f0a5ac8a142b128df660321a8b` preserve its authorship. It enumerates a rational interval grid rather than production's event sweep and independently inverts Student-t. It checks complete/sparse/overhanging windows, timing, unequal replica weights, 16 mixed seeded worlds and an analytic jitter fixture.
 
@@ -126,12 +144,13 @@ Request structured per-sample timing/flags/sensor-support metadata and separate 
 ## OPEN ISSUES
 
 - Local required commands, optional-package execution and fixture census are blocked by Cloud startup; CI execution is distinguished above.
+- Whole-repository CI remains red at the existing courier timeout assertion in `tests/test_run_night.py:6572`, called by `tests/test_v5_s1_qualification.py:132`. A follow-up there is outside this lane's WRITE_SCOPE; failure and cancelled coverage are retained above.
 - No real NVIDIA hardware, sensor age semantics, Gaussian idle assumptions, sensor accuracy or actual 25-of-100 ms behavior has been validated.
 - Declared-phase jitter uncertainty is approximate/provisional; independent arithmetic agreement does not establish hardware calibration.
 - Clock reset-to-default semantics are explicit; prior clock-lock policy cannot be queried/restored by the chosen NVML subset.
 - If both cleanup-owner threads cannot start, native references remain until process exit, explicitly flagged; no shutdown races an active native call.
 - Raw energy integers preserve precision near uint64 wrap that cumulative float joules cannot retain.
-- Draft PR merge gates (main integration, executing independent review and cold claim/measurement review) belong to the integrating lead. No merge-readiness claim is made.
+- Draft PR merge gates (main integration, executing independent review and cold Fable claim/measurement review) remain explicitly NOT-RUN. No merge-readiness claim is made.
 
 ## NEEDS_RULING
 
