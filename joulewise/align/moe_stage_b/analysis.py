@@ -69,12 +69,19 @@ def pearson(x: Sequence[float], y: Sequence[float]) -> float | None:
     """Centered two-pass Pearson correlation; constant series stay undefined."""
     if len(x) != len(y) or len(x) < 2 or any(not math.isfinite(v) for v in (*x, *y)):
         return None
-    mx, my = statistics.fmean(x), statistics.fmean(y)
-    xx = math.fsum((v-mx)**2 for v in x)
-    yy = math.fsum((v-my)**2 for v in y)
+    scale_x, scale_y = max(map(abs, x)), max(map(abs, y))
+    if scale_x == 0.0 or scale_y == 0.0:
+        return None
+    normalized_x, normalized_y = [v/scale_x for v in x], [v/scale_y for v in y]
+    mx, my = statistics.fmean(normalized_x), statistics.fmean(normalized_y)
+    centered_x = [v-mx for v in normalized_x]
+    centered_y = [v-my for v in normalized_y]
+    xx = math.fsum(v*v for v in centered_x)
+    yy = math.fsum(v*v for v in centered_y)
     if xx == 0.0 or yy == 0.0:
         return None
-    value = math.fsum((a-mx)*(b-my) for a, b in zip(x, y))/math.sqrt(xx*yy)
+    value = (math.fsum(a*b for a, b in zip(centered_x, centered_y))
+             / math.sqrt(xx) / math.sqrt(yy))
     # Cauchy-Schwarz bounds the mathematical value; rounding can stray outside.
     return max(-1.0, min(1.0, value))
 
@@ -173,8 +180,15 @@ def extract_features(
         quantization_bound = quantum/2 * sum(cell_weights_s)
         independent_noise = noise_multiplier*noise_std_w*math.sqrt(
             math.fsum(w*w for w in cell_weights_s))
-        # Shifting each turn boundary by u changes at most 2*u*max|P-baseline| energy.
-        clock_bound = (2*len(episode.turns)*uncertainty/NS_PER_SECOND
+        # A clock shift moves both boundaries of each disjoint observed decode
+        # interval. Explicit token timing may contain multiple intervals per turn.
+        intervals: list[tuple[int, int]] = []
+        for window in decode:
+            if intervals and window.start_ns == intervals[-1][1]:
+                intervals[-1] = (intervals[-1][0], window.end_ns)
+            else:
+                intervals.append((window.start_ns, window.end_ns))
+        clock_bound = (2*len(intervals)*uncertainty/NS_PER_SECOND
                        * max(abs(v-baseline_w) for v in trace.values))
         half_width = (quantization_bound+independent_noise+attribution_floor_j+clock_bound)/count
     rate = count/duration_s
@@ -268,14 +282,25 @@ def required_correlation(
     Bonferroni alpha and known-variance normal approximation. Repeated episodes
     of the same task are not independent units; n is independent task groups.
     """
-    if (not math.isfinite(stage_a_effect_sd) or not 0 < alpha < 1
-            or not 0.5 < power < 1 or n_per_condition <= 0 or comparisons <= 0):
+    if (not all(math.isfinite(v) for v in (stage_a_effect_sd, alpha, power))
+            or not 0 < alpha < 1 or not 0.5 <= power < 1
+            or not isinstance(n_per_condition, int) or isinstance(n_per_condition, bool)
+            or not isinstance(comparisons, int) or isinstance(comparisons, bool)
+            or n_per_condition <= 0 or comparisons <= 0):
         return CorrelationRequirement(None, False, ("invalid_detection_design",))
     if stage_a_effect_sd == 0:
         return CorrelationRequirement(None, False, ("stage_a_has_no_effect",))
     normal = statistics.NormalDist()
-    minimum = ((-normal.inv_cdf(alpha/(2*comparisons)) + normal.inv_cdf(power))
-               * math.sqrt(2/n_per_condition)/abs(stage_a_effect_sd))
+    try:
+        tail = alpha/(2*comparisons)
+        if tail == 0.0:
+            return CorrelationRequirement(None, False, ("design_tail_below_float_range",))
+        minimum = ((-normal.inv_cdf(tail) + normal.inv_cdf(power))
+                   * math.sqrt(2/n_per_condition)/abs(stage_a_effect_sd))
+    except (ArithmeticError, statistics.StatisticsError):
+        return CorrelationRequirement(None, False, ("detection_design_outside_float_range",))
+    if not math.isfinite(minimum):
+        return CorrelationRequirement(None, False, ("required_correlation_exceeds_float_range",))
     return CorrelationRequirement(minimum, minimum <= 1.0,
                                   () if minimum <= 1.0 else ("required_correlation_exceeds_one",))
 
@@ -299,7 +324,7 @@ def plan_detectability(
                                        n_per_condition=n_per_condition,
                                        alpha=alpha, power=power, comparisons=comparisons)
     flags = list(requirement.flags)
-    numeric = (routing_stat_sd, traffic_energy_slope_j_per_token, decode_duration_s,
+    numeric = (stage_a_effect_sd, routing_stat_sd, traffic_energy_slope_j_per_token, decode_duration_s,
                phase_bias_std_j, systematic_contrast_half_width_j,
                sensor.noise_std_w, sensor.quantum_w)
     if (not all(math.isfinite(v) for v in numeric) or decode_tokens <= 0
