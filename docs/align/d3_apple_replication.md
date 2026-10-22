@@ -54,19 +54,49 @@ No new clock observation is used to reinterpret an old capture. The generic
 checkpoint is an intermediate record; consume `result.json` or exported
 Episode views, which have the measured mappings attached.
 
-`apple_energy` explicitly sums gross CPU+GPU+ANE rails. It never adds a package
-channel on top, substitutes wall energy, subtracts idle, or counts paired and
-deletion captures as extra independent energy observations. An unresolved native
-anchor, missing rail, or unbracketed trace has no energy estimate. Native
+`apple_energy` sums gross CPU+GPU+ANE rails, integrating each rail's interval
+averages over their recorded supports: the claim path's WO-005 convention in
+`reduce._integrate`. Powermetrics stamps each average at its interval end;
+point interpolation would lag half an interval and bias every episode low by
+about dP*dt/2, where dP is busy minus idle power and dt is the sample interval.
+An edge term remains that 10 Hz interval averages cannot resolve: a support
+straddling an episode edge by o seconds can err by at most dP*o*(dt-o)/dt,
+maximized at o=dt/2 as dP*dt/4. For a designed 32.8 W step at 10 Hz, that is
+about 0.82 J per edge. The term is one-sided for an episode that starts and
+ends with model work: the straddling support averages in the lower power just
+outside the episode, so the estimate is low. With the sampler's phase uniform
+over the interval, the expected shortfall is dP*dt/6 per edge, about 1.09 J
+per episode at 32.8 W. On the designed step world this leaves thinking_off
+(about 8.2 J true) 9.6 to 16.5% low and thinking_on (about 52 J) 1.0 to 2.9%
+low, against 22 to 24% and about 3% for point interpolation. Because the shortfall
+is roughly fixed per episode, it weighs most on short episodes and on ratios
+between conditions. It is part of the uncertainty that stays blank and is
+comparable to the ~1 J attribution limit documented in RUN_STATE and D-078.
+Sub-joule differences between conditions are not resolvable from single
+episodes, and a D3 analysis plan must say how it treats this term. One option
+it could weigh: integrating the whole supports that cover the episode errs
+high instead, by the outside power times the uncovered part of each edge
+support (at most 0.15 J per edge at a 1.5 W idle).
+
+A dropped sample leaves its interval uncounted: the reducer adds no energy for
+time no support covers, as `reduce._integrate` does, and flags the episode
+`energy_sample_gap` when two consecutive samples are more than 1.5 sampling
+cycles apart (the budget reducer's rule). The analysis plan decides whether
+flagged episodes count.
+Consecutive supports from the adapter can miss each other by a few hundred
+nanoseconds, because epoch-scale seconds are rounded to integer nanoseconds;
+on a production-shaped seam (epoch offset 1.79e9 s) that moved a constant
+32.3 W episode by at most 2.5e-5 J, far below anything printed.
+
+The reducer never adds a package channel on top, substitutes wall energy,
+subtracts idle, or counts paired and deletion captures as extra independent
+energy observations. An unresolved native anchor, missing rail, missing or
+malformed sample support, or unbracketed trace has no energy estimate. Native
 quantization is unknown in the adapter: the summary retains J but leaves its
-complete uncertainty blank. The existing reducer carries the approximately
-1 J attribution limit documented in RUN_STATE and D-078; extra clock, averaging,
-and edge terms can only widen it. A blank bound is unknown, never zero or proof
-of a sub-joule distinction. Do not treat ~1 J as a new acceptance threshold or
-claim that this exploratory harness implements a calibrated claim interval.
-When finite component bounds exist, the shared reducer applies the minimum
-per rail and adds their bounds. That conservative sum is not a new instrument
-calibration.
+complete uncertainty blank. A blank bound is unknown, never zero or proof of
+a sub-joule distinction; extra clock and averaging terms can only widen it.
+Do not treat ~1 J as a new acceptance threshold or claim that this exploratory
+harness implements a calibrated claim interval.
 
 Exports are `result.json` and its content-addressed trace sidecar, summary JSON
 and Markdown, and hinted/paired/calibration Episode views. Metadata records
@@ -93,8 +123,10 @@ JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$JW_WT/.scratch-D3-BUIL
 ```
 
 Create that TMPDIR first. Rehearsal uses scripted endpoints, a simulated clock,
-and production-shaped 10 Hz three-rail interval samples injected at the native
-telemetry boundary. It runs the real matrix, Apple representation adapter,
+and constant-power 10 Hz three-rail samples carrying interval supports like the
+adapter, injected at the native telemetry boundary. At constant power these
+samples cannot distinguish support overlap from point interpolation; the ramp
+and step tests do. Rehearsal runs the real matrix, Apple representation adapter,
 mapping attachment, reducer, checkpoint, and export. It does not simulate MLX
 kernel behavior, privilege checks, native clock anchoring, or actual sensor
 resolution. Native-shaped mocked streams additionally test the MLX endpoint
@@ -206,6 +238,17 @@ rails and NVIDIA device energy have different scopes and exclude different
 system costs. Absolute J, tokens/J, or a cross-platform cheapest-model ranking
 are not interchangeable. Small effects near the attribution limit cannot settle
 a ranking. There is no registered D3 power analysis or claim protocol here.
+
+### Budget-lane accounting effects (not D3 code)
+
+Two accounting effects are deferred to `lane/2026-10-21-align-budget` and are
+symmetric across the NVIDIA and Apple paths. (I1) The budget cap is the thinking
+call's `max_tokens`, which counts the `<think>` opener (and its newline on real
+Qwen3), while the calibration median counts reasoning tokens only. Thus
+`budget_1.0` is censored by the opener tokens and is not a no-cut control.
+(I2) `answer_tokens` includes the think delimiters in uncapped conditions but
+not in capped ones: identical answers can differ in `mean_answer_tokens` by
+the delimiter count (about 4 tokens on Qwen3). Read decode tokens for totals.
 
 ## What would kill it
 

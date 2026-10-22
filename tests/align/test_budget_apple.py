@@ -21,12 +21,13 @@ from joulewise.align.budget.apple.models import MODEL_SIZES, CachedModel, resolv
 from joulewise.align.budget.apple.run import (
     DOMAIN, SyntheticAppleTelemetry, _conditions, run_dry, run_live,
 )
-from joulewise.align.budget.apple.sampling import BudgetAppleSampler, apple_energy, normalize_result
+from joulewise.align.budget.apple.sampling import CHANNELS, BudgetAppleSampler, apple_energy, normalize_result
 from joulewise.align.budget.conditions import default_conditions
+from joulewise.align.budget.energy import episode_energy
 from joulewise.align.budget.run import Settings
 from joulewise.align.budget.score import HintMonitor
 from joulewise.align.budget.storage import read_episode_views, read_result
-from joulewise.align.budget.synthetic import ScriptedMonitor, synthetic_items
+from joulewise.align.budget.synthetic import ScriptedModel, ScriptedMonitor, synthetic_items
 from joulewise.align.interfaces import ChatMessage
 from joulewise.align.records import Episode, to_json
 from joulewise.clock import ClockStamp, FakeClock
@@ -151,6 +152,7 @@ class EndpointTests(unittest.TestCase):
         result = self.call(ep.configured({"stop": ["</think>"], "chat_template_kwargs": {"enable_thinking": True}}))
         self.assertEqual("".join(runtime.observed_tokens), "reasoning</think>")
         self.assertEqual(result.reasoning_text, "reasoning")
+        self.assertEqual(result.reasoning_tokens, len("reasoning"))
         self.assertEqual(result.completion_tokens, len("reasoning</think>"))
         self.assertEqual(result.raw_usage["_finish_reason"], "stop")
         self.assertEqual(sum(e["event_type"] == "token" for e in result.raw_usage["native_events"]),
@@ -244,7 +246,7 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(replay, result)
 
     def test_offset_ramp_energy_oracle_and_mapping_counterfactual(self):
-        # Reviewer's offset_world.py world: point samples on three linear rails.
+        # Production-shaped interval averages on three designed linear rails.
         offset_s = 1_790_901_234.567
         offset_ns = 1_790_901_234_567_000_000  # Exact decimal OFF * 1e9, without float-product rounding.
         start_ns = 100_000_000_000  # run_dry starts monotonic time at 100 s.
@@ -284,7 +286,7 @@ class MatrixTests(unittest.TestCase):
                 for i in range(1, count + 1):
                     t = self.start_s + i * step
                     for rail, (watts, slope) in rails.items():
-                        samples.append(PowerSample(t, watts + slope * (t - t0),
+                        samples.append(PowerSample(t, watts + slope * ((t - step / 2) - t0),
                                                    "powermetrics", rail, t - step, t))
                 return TelemetryStopResult(samples, {"clock_anchor": {
                     "status": "bounded", "method": "synthetic_offset_anchor",
@@ -297,15 +299,15 @@ class MatrixTests(unittest.TestCase):
             "joulewise.align.budget.apple.run.FakeClock", OffsetClock
         ), patch("joulewise.align.budget.apple.run.SyntheticAppleTelemetry", RampTelemetry):
             result = run_dry(output=Path(tmp), config=config, count=1, seed=3)
-        # Lead-set 0.01 J absolute bar = 1% of the ~1 J per-run attribution
-        # limit (D-078 clause 11; CLAUDE.local.md physics source for bars).
-        # At epoch 1.79e9 s, float64 ulp is ~2.4e-7 s. The reviewer measured
-        # worst relative error 1.58e-7, putting the 1e-6 default <10x above
-        # that float floor. With the relative-time oracle here, observed worst
-        # errors are 1.719414968e-6 J absolute / 8.735061670e-9 relative.
-        # Even that leaves the relative default far below doctrine's 1e6x
-        # float-noise separation; shorter trials could fail on timestamp noise.
-        bar_j = 0.01
+        # A width-dt support overlapping by o uses its WHOLE-support mean.
+        # On a linear ramp its error is k*o*(dt-o)/2, maximized at o=dt/2:
+        # k*dt**2/8. Only the two episode-edge supports can err, so the
+        # bound is 2*k*dt**2/8 = 0.025 J (summed slope k=10 W/s, dt=0.1 s).
+        # Epoch-scale float noise is ~1.7e-6 J, four orders below this bar.
+        # The 1e-6 relative default is not used: it sits far below doctrine's
+        # 1e6x float-noise separation; shorter trials could fail on timestamp noise.
+        k, dt = 10.0, 0.1
+        bar_j = 2 * k * dt ** 2 / 8
         for trial in result.trials:
             episode = trial.episode
             # Subtract integer monotonic ns BEFORE converting to relative
@@ -322,18 +324,139 @@ class MatrixTests(unittest.TestCase):
             # A -100 ms offset shift moves integration 0.1 s RIGHT, within
             # the sampler's 1 s post-window dwell. Total slope is 10 W/s,
             # so this changes energy by 10 * 0.1 * duration = ~1 J/s of
-            # trial, exercising the mapping well above the 0.01 J bar.
+            # trial, exercising the mapping well above the derived bar.
             shifted = replace(episode, clock_mappings=tuple(
                 replace(m, offset_ns=m.offset_ns - 100_000_000) for m in episode.clock_mappings))
             wrong = apple_energy(shifted)
             self.assertIsNotNone(wrong.joules, (trial.trial_id, wrong.flags))
             self.assertGreater(abs(wrong.joules - expected), bar_j, trial.trial_id)
+            # End-stamped averages treated as points lag half an interval.
+            point = episode_energy(episode, channels=CHANNELS)
+            self.assertIsNotNone(point.joules, (trial.trial_id, point.flags))
+            self.assertGreater(abs(point.joules - expected), bar_j, trial.trial_id)
+
+    def test_step_interval_average_energy_with_partial_edge_bound(self):
+        # Designed levels, not M3 measurements: summed IDLE=1.5 W, BUSY=34.3 W.
+        idle = {"cpu_power": 1.0, "gpu_power": 0.5, "ane_power": 0.0}
+        busy = {"cpu_power": 6.0, "gpu_power": 28.0, "ane_power": 0.3}
+        delta_w = math.fsum(busy.values()) - math.fsum(idle.values())  # 32.8 W.
+        dt = 0.1  # Designed 10 Hz supports, matching powermetrics' interval convention.
+        original_chat = ScriptedModel.chat
+        for phase_s in (0.0, 0.05):
+            with self.subTest(phase_s=phase_s):
+                calls = []
+
+                def chat(model, *args, **kwargs):
+                    result = original_chat(model, *args, **kwargs)
+                    calls.append((result.start_ns, result.end_ns))
+                    return result
+
+                def busy_ns(a, b):
+                    return sum(max(0, min(b, end) - max(a, start)) for start, end in calls)
+
+                class StepTelemetry:
+                    def __init__(self, clock):
+                        self.clock = clock
+
+                    def start_sampling(self, config, context):
+                        self.start_s = self.clock.now() + phase_s
+                        return AdapterResult(ok=True)
+
+                    def stop_sampling_with_evidence(self, config, context, **kwargs):
+                        step = 1 / config.sampling.power_hz
+                        count = math.floor((self.clock.now() - self.start_s) / step)
+                        samples = []
+                        for i in range(1, count + 1):
+                            t = self.start_s + i * step
+                            a, b = round((t - step) * 1e9), round(t * 1e9)
+                            fraction = busy_ns(a, b) / (b - a)
+                            for rail in idle:
+                                watts = idle[rail] + (busy[rail] - idle[rail]) * fraction
+                                samples.append(PowerSample(t, watts, "powermetrics", rail, t - step, t))
+                        return TelemetryStopResult(samples, {"clock_anchor": {
+                            "status": "bounded", "method": "synthetic_identity_clock",
+                            "wall_minus_monotonic_lower_s": 0.0,
+                            "wall_minus_monotonic_upper_s": 0.0,
+                            "effective_clock_anchor_bound_s": 0.0}})
+
+                with tempfile.TemporaryDirectory() as tmp, patch.object(ScriptedModel, "chat", chat), patch(
+                    "joulewise.align.budget.apple.run.SyntheticAppleTelemetry", StepTelemetry
+                ):
+                    result = run_dry(output=Path(tmp), config=base(), count=1)
+                seen = set()
+                for trial in result.trials:
+                    episode = trial.episode
+                    key = episode.start_ns, episode.end_ns
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    start, end = key
+                    expected = (math.fsum(idle.values()) * (end - start)
+                                + delta_w * busy_ns(start, end)) / 1e9
+                    supports = json.loads(episode.power_traces[0].notes)["sample_support_ns"]
+                    # With power bounded in [IDLE, BUSY], a support straddling
+                    # an edge by o errs by <= dP*o*(dt-o)/dt, at most
+                    # dP*dt/4 = 0.82 J per edge here. Full supports inside
+                    # the episode are exact: mean times width is the integral.
+                    bound = 0.0
+                    for edge in (start, end):
+                        for a, b in supports:
+                            if a < edge < b:
+                                o = max(0, min(end, b) - max(start, a)) / 1e9
+                                bound += delta_w * o * (dt - o) / dt
+                    # COMMON 1e-6 relative default for float noise; FakeClock
+                    # noise here is ~1e-13 relative, far below this allowance.
+                    bound += 1e-6 * expected
+                    energy = apple_energy(episode)
+                    self.assertIsNotNone(energy.joules, (phase_s, trial.trial_id, energy.flags))
+                    self.assertLessEqual(abs(energy.joules - expected), bound, (phase_s, trial.trial_id))
+                    self.assertIsNone(energy.uncertainty_j)
+                    self.assertIn("energy_interval_average_support_overlap", energy.flags)
 
     def test_unresolved_anchor_and_missing_channel_have_no_energy(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = run_dry(output=Path(tmp), config=base(), count=1)
             ep = result.trials[0].episode
-            self.assertIsNone(apple_energy(replace(ep, power_traces=ep.power_traces[:1])).joules)
+            first, *rest = ep.power_traces
+
+            def with_notes(notes):
+                return replace(ep, power_traces=(replace(first, notes=json.dumps(notes)), *rest))
+
+            missing = json.loads(first.notes)
+            missing.pop("sample_support_ns")
+            cases = [(with_notes(missing), "energy_sample_support_missing")]
+            supports = json.loads(first.notes)["sample_support_ns"]
+            for malformed in (None, [], supports[:-1], [None, *supports[1:]],
+                              [[0, 0], *supports[1:]], [[0.0, 1], *supports[1:]],
+                              [supports[1], supports[0], *supports[2:]]):
+                notes = json.loads(first.notes)
+                notes["sample_support_ns"] = malformed
+                cases.append((with_notes(notes), "energy_sample_support_missing"))
+            for value in (-1.0, math.inf, math.nan):
+                cases.append((replace(ep, power_traces=(
+                    replace(first, values=(value, *first.values[1:])), *rest)), "energy_samples_invalid"))
+            cases.extend([
+                (replace(ep, power_traces=tuple(rest)), "energy_channel_missing_or_duplicate"),
+                # Three traces can still duplicate one rail while missing another.
+                (replace(ep, power_traces=(first, first, rest[0])), "energy_channel_missing_or_duplicate"),
+                (replace(ep, clock_mappings=tuple(replace(m, episode_domain="unrelated")
+                                                for m in ep.clock_mappings)), "energy_clock_mapping_invalid"),
+                (replace(ep, clock_mappings=(*ep.clock_mappings, *ep.clock_mappings)),
+                 "energy_clock_mapping_invalid"),
+                (replace(ep, clock_mappings=tuple(replace(m, uncertainty_ns=-1)
+                                                for m in ep.clock_mappings)), "energy_clock_mapping_invalid"),
+                (replace(ep, clock_mappings=tuple(replace(m, method="unmeasured")
+                                                for m in ep.clock_mappings)), "energy_clock_mapping_unmeasured"),
+                (replace(ep, clock_mappings=tuple(replace(m, offset_ns=m.offset_ns + 1_000_000_000_000)
+                                                for m in ep.clock_mappings)), "energy_trace_unbracketed"),
+                (replace(ep, power_traces=tuple(replace(t, t_ns=(), values=()) for t in ep.power_traces)),
+                 "energy_trace_missing"),
+            ])
+            for episode, flag in cases:
+                with self.subTest(flag=flag, episode=episode.episode_id):
+                    energy = apple_energy(episode)
+                    self.assertIsNone(energy.joules)
+                    self.assertEqual(energy.flags, (flag,))
             duplicate_scope = replace(ep.power_traces[0], channel="package",
                                       values=tuple(1000.0 for _ in ep.power_traces[0].values))
             self.assertEqual(apple_energy(replace(ep, power_traces=(*ep.power_traces, duplicate_scope))).joules,
@@ -345,6 +468,30 @@ class MatrixTests(unittest.TestCase):
                 traces.append(replace(trace, notes=json.dumps(notes)))
             self.assertEqual(apple_energy(replace(ep, power_traces=tuple(traces))).flags,
                              ("energy_apple_anchor_unresolved",))
+
+            # One dropped poll doubles an otherwise regular 100 ms cycle;
+            # the shared 1.5-cycle diagnostic flags it without refusing J.
+            notes = json.loads(first.notes)
+            del notes["sample_support_ns"][2]
+            notes["flags"].append("synthetic_trace_flag")
+            dropped = replace(first, t_ns=first.t_ns[:2] + first.t_ns[3:],
+                              values=first.values[:2] + first.values[3:], notes=json.dumps(notes),
+                              duty_fraction=0.5)
+            energy = apple_energy(replace(ep, power_traces=(dropped, *rest), flags=("synthetic_episode_flag",)))
+            self.assertIsNotNone(energy.joules)
+            for flag in ("energy_sample_gap", "synthetic_trace_flag", "synthetic_episode_flag",
+                         "energy_duty_cycled_requires_repetitions", "energy_interval_average_support_overlap"):
+                self.assertIn(flag, energy.flags)
+            self.assertIsNone(energy.uncertainty_j)
+
+            # Mapping uncertainty that extends past both trace bounds admits
+            # measured overlap and labels the partial clock bracket.
+            extent = first.t_ns[-1] - first.t_ns[0]
+            partial = replace(ep, clock_mappings=tuple(replace(m, uncertainty_ns=extent)
+                                                     for m in ep.clock_mappings))
+            energy = apple_energy(partial)
+            self.assertIsNotNone(energy.joules)
+            self.assertIn("energy_clock_bracket_partial", energy.flags)
 
     def test_unavailable_sampler_preserves_notes_without_zero_energy(self):
         clock = FakeClock(100.0)

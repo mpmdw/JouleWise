@@ -1,12 +1,16 @@
-"""Carry per-capture Apple clock evidence through budget checkpoints."""
+"""Carry Apple clock evidence and integrate interval averages over recorded supports.
+Use reduce._integrate's WO-005 convention: point interpolation would lag half
+an interval and bias episode energy low.
+"""
 
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, replace
 
 from joulewise.align.apple.sampler import ApplePowerSampler
-from joulewise.align.budget.energy import Energy, episode_energy
+from joulewise.align.budget.energy import Energy, _median_interval_ns, trace_flags
 from joulewise.align.budget.run import MatrixResult
 from joulewise.align.records import ClockMapping, Episode
 
@@ -97,10 +101,70 @@ def normalize_result(result: MatrixResult) -> MatrixResult:
 
 
 def apple_energy(episode: Episode) -> Energy:
-    """Gross CPU+GPU+ANE rails only; unresolved native anchors have no estimate."""
+    """Integrate CPU+GPU+ANE interval averages over their recorded supports.
+    Follow reduce._integrate's WO-005 convention; point interpolation would
+    lag half an interval and bias episode energy low. Uncertainty stays unknown.
+    """
     if not any(t.values for t in episode.power_traces):
         return Energy(None, flags=("energy_trace_missing",))
     if any(json.loads(t.notes).get("clock_anchor", {}).get("status") != "bounded"
            for t in episode.power_traces):
         return Energy(None, flags=("energy_apple_anchor_unresolved",))
-    return episode_energy(episode, channels=CHANNELS)
+    traces = tuple(t for t in episode.power_traces if (t.source, t.channel) in CHANNELS)
+    if any(sum((t.source, t.channel) == key for t in traces) != 1 for key in CHANNELS):
+        return Energy(None, flags=("energy_channel_missing_or_duplicate",))
+    joules, flags = [], list(episode.flags)
+    for trace in traces:
+        offset, uncertainty_ns = 0, 0
+        if trace.clock_domain != episode.clock_domain:
+            mappings = [m for m in episode.clock_mappings
+                        if m.trace_domain == trace.clock_domain
+                        and m.episode_domain == episode.clock_domain]
+            if len(mappings) != 1 or mappings[0].uncertainty_ns < 0:
+                return Energy(None, flags=("energy_clock_mapping_invalid",))
+            if mappings[0].method == "unmeasured":
+                return Energy(None, flags=("energy_clock_mapping_unmeasured",))
+            offset, uncertainty_ns = mappings[0].offset_ns, mappings[0].uncertainty_ns
+        start, end = episode.start_ns - offset, episode.end_ns - offset
+        supports = json.loads(trace.notes).get("sample_support_ns")
+        if (not isinstance(supports, list) or not supports
+                or len(supports) != len(trace.values)
+                or any(not isinstance(pair, list) or len(pair) != 2
+                       or any(type(t) is not int for t in pair) or pair[0] >= pair[1]
+                       for pair in supports)):
+            return Energy(None, flags=("energy_sample_support_missing",))
+        # Order each bound without requiring adjacent supports to meet: epoch
+        # float rounding in the adapter can leave tiny overlaps or gaps.
+        if any(a[0] > b[0] or a[1] > b[1] for a, b in zip(supports, supports[1:])):
+            return Energy(None, flags=("energy_sample_support_missing",))
+        if any(not math.isfinite(v) or v < 0 for v in trace.values):
+            return Energy(None, flags=("energy_samples_invalid",))
+        if supports[0][0] > start + uncertainty_ns or supports[-1][1] < end - uncertainty_ns:
+            return Energy(None, flags=("energy_trace_unbracketed",))
+        if supports[0][0] > start - uncertainty_ns or supports[-1][1] < end + uncertainty_ns:
+            flags.append("energy_clock_bracket_partial")
+        joules.append(math.fsum(
+            value * max(0, min(end, b) - max(start, a))
+            for value, (a, b) in zip(trace.values, supports)) / 1_000_000_000)
+        intervals = [b - a for a, b in zip(trace.t_ns, trace.t_ns[1:])]
+        if intervals:
+            # As in energy.episode_energy: wait T plus acquisition A gives a
+            # cycle T+A; a missed poll is near twice that, so 1.5 is the
+            # midpoint. With >=3 intervals normal cycles remain a strict
+            # majority after one drop; for fewer use min, not a mixed median.
+            observed_cycle = (min(intervals) if len(intervals) < 3
+                              else _median_interval_ns(intervals))
+            cycle_ns = max(trace.nominal_interval_ns, observed_cycle)
+            if any(interval > 1.5 * cycle_ns for interval in intervals):
+                flags.append("energy_sample_gap")
+        flags.extend(trace_flags(trace))
+        if trace.resolution is None:
+            flags.append("energy_resolution_unknown")
+        if trace.source == "powermetrics":
+            flags.append("energy_powermetrics_attribution_floor")
+        if trace.duty_fraction is not None and trace.duty_fraction < 1:
+            flags.append("energy_duty_cycled_requires_repetitions")
+    flags.append("energy_interval_average_support_overlap")
+    # Native resolution and the partial-support edge term are unknown; a
+    # printed number must never turn that blank half-width into zero.
+    return Energy(math.fsum(joules), uncertainty_j=None, flags=tuple(sorted(set(flags))))
