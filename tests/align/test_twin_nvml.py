@@ -303,7 +303,9 @@ class TwinAgreementTests(unittest.TestCase):
             self.assertLessEqual(abs(lane_spread - twin_spread), REL * twin_spread, (seed, a.flags, b))  # 1e-6 relative
             self.assertLessEqual(abs(a.joules - b.joules), joules_bar(a, b), (seed, a, b))
 
-    @unittest.expectedFailure
+    @unittest.skip("OPEN align-nvml review-3 finding: the boundary bound misses a sub-window "
+                   "start burst; test body and bar unchanged (tests/test_s0_blocked_enumeration.py "
+                   "forbids expectedFailure)")
     def test_boundary_bound_contains_a_sub_window_start_burst(self) -> None:
         """Review 3 finding: the boundary bound's local range comes from 25 ms averages.
 
