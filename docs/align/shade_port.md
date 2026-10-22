@@ -280,7 +280,8 @@ The failed interval must not be treated as a zero-work observation.
 Discovery failures remain on TaskPairList.flags; task/endpoint flags must also
 be copied into Episode.flags. The runner lane still needs to propagate these
 diagnostics (including unknown cached/reasoning counts); the typed failure
-channel only prevents completely failed accounting from becoming zero-token turns. All nonphysical failures are recorded conditions.
+channel only prevents completely failed accounting from becoming zero-token
+turns. All nonphysical failures are recorded conditions.
 No model service, hardware or paid API is used by the test suite.
 
 ## Offline verification to run
@@ -307,12 +308,20 @@ urllib SSE -> actual mock environment -> separate judge facade -> original
 normalizer -> ShadeMonitor under all three visibilities -> Episode JSONL and
 transcript/usage/verdict files. Four worlds cover both usage flavours and both
 conditions. A fifth complete benign episode tests missing, real-50 and capped
-monitor replies; its runner copies flags by visibility, saves diagnostics and
-catches typed failures, stores only valid score() returns unchanged, and round-trips them.
+monitor replies; its runner copies flags by visibility, saves diagnostics,
+catches typed failures and round-trips only valid score() returns unchanged.
 The server's monitor response in the comparative worlds depends on the actual received tool
 name and result, so removing either changes its response. The optional source
-test covers loading, prompts, schemas, end_task and main/side scoring for all
-five real pairs without a service call.
+tests cover loading, prompts, schemas, end_task and main/side scoring for all
+five real pairs without a service call. The pandas parity test also checks
+all five normalizers under the review's judge replies plus uppercase and
+unclosed score tags, including direct judge_score_tag_missing assertions.
+
+Four additional HTTP failure cases exercise a fourth-request HTTP error,
+partial-reasoning timeout, truncated stream, and a server that never reports
+usage. The first three retain only the successful earlier Turns; the last
+has zero Turns. Each records endpoint.error.EndpointRequestFailed while
+the exception retains partial request evidence.
 
 These tests have been authored but not executed in this seat because the
 selected environment remains offline in pending/starting. No hardware,

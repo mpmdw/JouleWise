@@ -289,7 +289,6 @@ class TaskTests(unittest.TestCase):
             self.assertIn("judge_generation_cap_reached",
                           task.evaluation_outputs["judge_calls"][0]["flags"])
 
-
     def test_runner_call_records_hide_arguments_and_reasoning_from_judge(self):
         with fixture_source() as source:
             task = ShadeTask("ledger_review", upstream=source)
@@ -474,7 +473,6 @@ class MonitorTests(unittest.TestCase):
                 self.assertEqual(write_episodes(path, [episode]), 1)
                 self.assertEqual(read_episodes(path), [episode])
 
-
     def test_monitor_endpoint_failure_is_typed_and_retains_partial_reply(self):
         from joulewise.align.endpoints import EndpointRequestFailed
         with fixture_source() as source:
@@ -589,7 +587,6 @@ class RealUpstreamTests(unittest.TestCase):
             for remove, visibility in ((True, "no_scratchpad"), (False, "full")):
                 self.assertEqual(logging.llm_conversation_to_string(up, remove_thinking_tags=remove),
                                  render_transcript(transcript, visibility=visibility))
-
 
     def test_judge_score_tags_and_pandas_normalization_match(self):
         import pandas as pd

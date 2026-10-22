@@ -164,7 +164,6 @@ class ShadeHTTPTests(unittest.TestCase):
                     self.assertEqual(read_episodes(path), [episode])
                 self.assertFalse(world.packets)
 
-
     def test_failed_request_omits_turn_and_records_protocol_error(self):
         for mode in ("http400", "stall", "cut", "never_usage"):
             with self.subTest(mode=mode), fixture_source() as source:

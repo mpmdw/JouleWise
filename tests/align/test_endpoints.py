@@ -440,8 +440,6 @@ class EndpointTests(unittest.TestCase):
             self.assertEqual(result.raw_usage["timings"], timings)
             self.assertIn("prompt_tokens_from_timings", result.raw_usage["joulewise"]["flags"])
 
-
-
     def test_partial_reasoning_failures_preserve_evidence_and_never_retry(self) -> None:
         # The server emits exactly 120 synthetic reasoning tokens before either
         # closing or exceeding an operator transport budget; no timing bar is used.
