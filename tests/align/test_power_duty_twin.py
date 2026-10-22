@@ -113,6 +113,7 @@ def twin_estimate_energy(
     """Direct rational-grid reference for the agreed window estimator."""
     readings: list[_Reading] = []
     signatures: dict[int, tuple[tuple[int, int], ...]] = {}
+    declared_groups: dict[int, str] = {}
     power_bounds: list[float | None] = []
     flags = ["constant_workload_assumed"]
     duration: int | None = None
@@ -173,6 +174,9 @@ def twin_estimate_energy(
             continue
         readings.extend(this_run)
         signatures[run_id] = tuple((item.left, item.right) for item in this_run)
+        label = notes.get("repeat_group")
+        if isinstance(label, str) and label:
+            declared_groups[run_id] = label
         bound = notes.get("power_bound_w")
         power_bounds.append(float(bound) if _nonnegative(bound) else None)
 
@@ -206,40 +210,70 @@ def twin_estimate_energy(
         float(coefficient) * item.watts
         for coefficient, item in zip(coefficients, readings)
     )
-    quantum = math.fsum(
-        float(abs(coefficient)) * item.quantum / 2
-        for coefficient, item in zip(coefficients, readings)
-    )
-
-    # Repeatability is across runs with identical window geometry, not across
-    # timestamps or staggered phases.  Each z contains the complete run weight.
-    groups: dict[tuple[tuple[int, int], ...], list[float]] = defaultdict(list)
+    # Planned labels select replicas without moving their actual boundaries.
+    # Normalize each run's weighted power so a common Gaussian run shift has
+    # the same scale within a declared group even when its total weight differs.
+    groups: dict[object, list[int]] = defaultdict(list)
     for run_id, signature in signatures.items():
-        z = math.fsum(
+        key = (
+            ("declared", declared_groups[run_id])
+            if run_id in declared_groups else ("geometry", signature)
+        )
+        groups[key].append(run_id)
+    run_mass = {
+        run_id: sum(
+            (coefficient for coefficient, item in zip(coefficients, readings)
+             if item.run == run_id),
+            Fraction(0),
+        )
+        for run_id in signatures
+    }
+    normalized_power = {
+        run_id: math.fsum(
             float(coefficient) * item.watts
             for coefficient, item in zip(coefficients, readings)
             if item.run == run_id
-        )
-        groups[signature].append(z)
+        ) / float(run_mass[run_id])
+        for run_id in signatures
+    }
+    auxiliary = coefficients.copy()
     contributions = []
-    for zs in groups.values():
-        n = len(zs)
+    spread = 0.0
+    for run_ids in groups.values():
+        n = len(run_ids)
+        group_mass = sum((run_mass[run_id] for run_id in run_ids), Fraction(0))
+        for index, item in enumerate(readings):
+            if item.run in run_ids:
+                auxiliary[index] *= group_mass / (n * run_mass[item.run])
+        if any(run_id in declared_groups for run_id in run_ids):
+            if len({signatures[run_id] for run_id in run_ids}) > 1:
+                flags.append("declared_phase_variable_geometry_provisional")
         if n == 1:
             flags.append("unreplicated_phase")
             spread = math.inf
-            break
-        mean = math.fsum(zs) / n
-        contribution = n * math.fsum((z - mean) ** 2 for z in zs) / (n - 1)
-        contributions.append((contribution, n - 1))
-    else:
-        variance = math.fsum(part for part, _ in contributions)
-        if variance == 0:
-            spread = 0.0
         else:
+            xs = [normalized_power[run_id] for run_id in run_ids]
+            mean = math.fsum(xs) / n
+            sample_variance = math.fsum((x - mean) ** 2 for x in xs) / (n - 1)
+            contribution = float(group_mass) ** 2 * sample_variance / n
+            contributions.append((contribution, n - 1))
+    if math.isfinite(spread):
+        variance = math.fsum(part for part, _ in contributions)
+        if variance:
             df = variance * variance / math.fsum(
                 part * part / degrees for part, degrees in contributions
             )
             spread = _student_975(df) * math.sqrt(variance)
+
+    auxiliary_energy = math.fsum(
+        float(coefficient) * item.watts
+        for coefficient, item in zip(auxiliary, readings)
+    )
+    center_shift = abs(energy - auxiliary_energy)
+    quantum = math.fsum(
+        float(abs(coefficient)) * item.quantum / 2
+        for coefficient, item in zip(auxiliary, readings)
+    )
 
     # The second grid uses the FULL windows, including their outside tails.
     # Rational arithmetic makes a perfectly tiled kernel mismatch exactly zero.
@@ -254,7 +288,7 @@ def twin_estimate_energy(
         kernel = sum(
             (
                 coefficient / Fraction(item.right - item.left, 1_000_000_000)
-                for coefficient, item in zip(coefficients, readings)
+                for coefficient, item in zip(auxiliary, readings)
                 if item.left <= left and right <= item.right
             ),
             Fraction(0),
@@ -268,7 +302,7 @@ def twin_estimate_energy(
     area = max(positive, negative)
     timing_area = math.fsum(
         float(abs(coefficient)) * min(item.timing / (item.right - item.left), 1.0)
-        for coefficient, item in zip(coefficients, readings)
+        for coefficient, item in zip(auxiliary, readings)
     )
     if area == 0 and timing_area == 0:
         bias = 0.0
@@ -278,7 +312,9 @@ def twin_estimate_energy(
     else:
         bound = max(power_bounds)
         bias = bound * (float(area) + timing_area)
-    return TwinEstimate(energy, spread + quantum + bias, float(coverage), tuple(flags))
+    return TwinEstimate(
+        energy, spread + quantum + bias + center_shift, float(coverage), tuple(flags),
+    )
 
 
 def _run(
@@ -292,9 +328,12 @@ def _run(
     resolution: float = 0.2,
     power_bound: float | None = 250.0,
     timing: Sequence[float] | None = None,
+    repeat_group: str | None = None,
 ) -> tuple[PowerTrace, int, int]:
     period = width if period is None else period
     notes = {}
+    if repeat_group is not None:
+        notes["repeat_group"] = repeat_group
     if power_bound is not None:
         notes["power_bound_w"] = power_bound
     if timing is not None:
@@ -467,6 +506,81 @@ class DutyIndependentTwinTests(unittest.TestCase):
                     ))
             with self.subTest(world=world):
                 self.assert_matches_twin(runs)
+
+    def test_declared_replicas_with_unequal_weights_and_analytic_jitter(self):
+        ms = 1_000_000
+        width, duration = 25 * ms, 200 * ms
+        breaks = [0, 40 * ms, 115 * ms, 170 * ms, duration]
+        levels = [20, 80, 160, 95, 45, 20]
+
+        def window_mean(left, right):
+            # Integrate the declared piecewise waveform analytically, including
+            # power before/after the workload for boundary-straddling windows.
+            cuts = sorted({left, right, *(b for b in breaks if left < b < right)})
+            numerator = sum(
+                (b - a) * levels[sum(a >= boundary for boundary in breaks)]
+                for a, b in zip(cuts, cuts[1:])
+            )
+            return numerator / (right - left)
+
+        jitters = [
+            [-400_000, 200_000, 800_000],
+            [900_000, -200_000, 100_000],
+            [-600_000, 700_000, 300_000],
+            [500_000, -800_000, -100_000],
+        ]
+        shifts = [-0.7, 0.2, 0.5]
+        runs = []
+        for phase, phase_jitters in enumerate(jitters):
+            for replica, jitter in enumerate(phase_jitters):
+                ends = [
+                    (phase + 1) * width + jitter,
+                    (phase + 1) * width + 100 * ms
+                    + jitter * (replica + 1) // 2 + (phase - 1) * 100_000,
+                ]
+                runs.append(_run(
+                    ends,
+                    [window_mean(end - width, end) + shifts[replica] for end in ends],
+                    width=width, duration=duration, period=100 * ms,
+                    start=10**15 + len(runs) * 10**9,
+                    resolution=0.2 + replica * 0.05 + phase * 0.01,
+                    timing=[10_000 * (replica + 1), 5_000 * (phase + 1)],
+                    repeat_group=f"planned-phase-{phase}",
+                ))
+
+        # Prove this fixture exercises unequal run masses, rather than merely
+        # unequal endpoints whose aggregate coefficients happen to match.
+        supports = [
+            (run_id, timestamp - start - width, timestamp - start)
+            for run_id, (trace, start, _) in enumerate(runs)
+            for timestamp in trace.t_ns
+            if timestamp - start > 0 and timestamp - start - width < duration
+        ]
+        edges = sorted(
+            {0, duration}
+            | {max(0, left) for _, left, _ in supports}
+            | {min(duration, right) for _, _, right in supports}
+        )
+        masses = [Fraction(0) for _ in runs]
+        for left, right in zip(edges, edges[1:]):
+            active = [run_id for run_id, a, b in supports if a <= left and right <= b]
+            if active:
+                for run_id in active:
+                    masses[run_id] += Fraction(right - left, len(active))
+        self.assertGreater(len(set(masses[:3])), 1)
+
+        expected = self.assert_matches_twin(runs)
+        self.assertTrue(math.isfinite(expected.half_width_j))
+        self.assertIn("declared_phase_variable_geometry_provisional", expected.flags)
+
+        # Actual geometry stays distinct: without the caller's planned labels
+        # these runs have no exact replicas and the spread is unidentifiable.
+        unlabeled = []
+        for trace, start, end in runs:
+            notes = json.loads(trace.notes)
+            del notes["repeat_group"]
+            unlabeled.append((replace(trace, notes=json.dumps(notes)), start, end))
+        self.assertEqual(self.assert_matches_twin(unlabeled).half_width_j, math.inf)
 
     def test_invalid_runs_are_skipped_without_changing_valid_result(self):
         run = _run(
