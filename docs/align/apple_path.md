@@ -85,7 +85,9 @@ nanoseconds onto episode monotonic nanoseconds.
 
 Mapping uncertainty carries the complete effective anchor bound. That bound
 already includes the full wall-minus-monotonic span: only observations outside
-the anchor envelope add bridge extent. Unbounded mappings instead carry their
+the anchor envelope add bridge extent. Resolution of the separate episode
+observations, including serialized-stamp rounding, remains additive.
+Unbounded mappings instead carry their
 observed bracket and clock resolutions, with clock_anchor_unresolved.
 Each seconds-to-nanoseconds product is priced at math.ulp(x * 1e9) / 2
 (128 ns near an epoch of 1.8e18 ns), plus integer rounding when the spacing is
@@ -133,7 +135,7 @@ in this lane. Expected draw is therefore an explicit pilot input for each:
 
 | Candidate | Expected decode whole-machine draw | Comparison to 140 W / assist expectation |
 |---|---|---|
-| Qwen3-8B | P_8 W, to measure | P_8 - 140 W headroom; assist possible, frequency unknown |
+| Qwen3-8B | P_8 W, to measure | P_8 - 140 W draw excess; assist possible, frequency unknown |
 | Qwen3-32B | P_32 W, to measure | P_32 - 140 W; sustained deficit predicts assistance |
 | Qwen3-30B-A3B | P_30A3 W, to measure | P_30A3 - 140 W; active experts alone do not determine machine draw |
 | Llama-3.3-70B | P_70 W, to measure | P_70 - 140 W; heavier decode may increase assist frequency |

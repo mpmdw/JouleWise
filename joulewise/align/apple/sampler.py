@@ -94,6 +94,7 @@ def stamp_mapping(
     upper = max(s.epoch_s - s.monotonic_before_s for s in stamps)
     flags: list[str] = []
     anchor = (evidence or {}).get("clock_anchor", {})
+    bridge_resolution_s = max(s.wall_resolution_s + s.monotonic_resolution_s for s in stamps)
     if anchor.get("status") == "bounded":
         anchor_lower = float(anchor["wall_minus_monotonic_lower_s"])
         anchor_upper = float(anchor["wall_minus_monotonic_upper_s"])
@@ -103,12 +104,14 @@ def stamp_mapping(
         outside_s = max(0.0, anchor_lower - lower, upper - anchor_upper)
         lower = min(lower, anchor_lower)
         upper = max(upper, anchor_upper)
-        bound_s = float(anchor["effective_clock_anchor_bound_s"]) + outside_s
+        # These episode/serialization observations are distinct from the
+        # collector's anchor stamps; their resolution includes restored-record
+        # rounding, which must survive even on a bounded native-anchor path.
+        bound_s = float(anchor["effective_clock_anchor_bound_s"]) + outside_s + bridge_resolution_s
         method = str(anchor["method"])
     else:
         bound_s = (
-            max(s.wall_resolution_s + s.monotonic_resolution_s for s in stamps)
-            + (upper - lower) / 2
+            bridge_resolution_s + (upper - lower) / 2
         )
         method = "paired_clock_bracket_only"
         if evidence is not None:

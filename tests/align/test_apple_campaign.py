@@ -237,21 +237,26 @@ class AppleCampaignTests(unittest.TestCase):
         mlx = replace(mlx, model=replace(mlx.model, source=None), hardware_target=replace(
             mlx.hardware_target, runtime_backend=RuntimeBackend.MLX
         ))
-        unsupported = as_config(base, "apple-vllm")
-        unsupported = replace(unsupported, hardware_target=replace(
-            unsupported.hardware_target, runtime_backend=RuntimeBackend.VLLM
-        ))
-        for config in (missing, bad, mlx, unsupported):
+        unsupported = []
+        for backend in RuntimeBackend:
+            if backend in (RuntimeBackend.MOCK, RuntimeBackend.MLX):
+                continue
+            config = as_config(base, f"apple-{backend.value}")
+            unsupported.append(replace(config, hardware_target=replace(
+                config.hardware_target, runtime_backend=backend
+            )))
+        for config in (missing, bad, mlx, *unsupported):
             with self.subTest(run_id=config.run_id), tempfile.TemporaryDirectory() as directory:
                 clock = FakeClock()
                 bundle, summary = run_benchmark(config, Path(directory), clock)
+                # D-012 maps RUNTIME_UNAVAILABLE to unsupported.
                 self.assertEqual(summary.status.value, "unsupported", summary)
                 self.assertEqual(summary.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
                 self.assertTrue(summary.failure_message)
                 self.assertIsNone(summary.gross_energy_j)
                 self.assertFalse((bundle / "outputs/align_episode.json").exists())
                 self.assertFalse(any(
-                    event.get("phase") == "measured_run"
+                    event.get("phase") in ("idle_baseline", "warmup", "measured_run")
                     for event in (json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines())
                 ))
 
