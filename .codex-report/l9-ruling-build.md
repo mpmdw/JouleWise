@@ -267,7 +267,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.871 | Codex Cloud | `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
-| tests.b5_analysis.test_mint_kept_units | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
 | tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
 | tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 3.323 | Codex Cloud | `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71` |
 | tests.test_authentication_io | 22 | 0 | 0 | — | — | 2 | Mac, director | prefix `df310df7d1f6cb9d` |
@@ -285,3 +285,5 @@ Completed cloud logs and test failures:
 - `tests.b5_analysis.test_s10_chain_defects` at `cd4a6168286e791ead72479252cd344227a95b2d`: 34 tests, 0 failures, 0 errors, 0 skips, exit 0, 6.176 s. Log `/tmp/l9-1/checks-2/logs/tests_b5_analysis_test_s10_chain_defects.log`, SHA-256 `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada`.
 - `tests.b5_analysis.test_sensitivity_guard` at `54da41a5e38d7045f120f946b083c6532613a595`: 12 tests, 0 failures, 0 errors, 0 skips, exit 0, 27.989 s. Log `/workspace/l9-1/checks-3/logs/tests_b5_analysis_test_sensitivity_guard.log`, SHA-256 `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4`.
 - `tests.test_r4_acceptance_oracle` at `54da41a5e38d7045f120f946b083c6532613a595`: 10 tests, 0 failures, 0 errors, 0 skips, exit 0, 3.323 s. Log `/workspace/l9-1/checks-3/logs/tests_test_r4_acceptance_oracle.log`, SHA-256 `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71`.
+- `tests.b5_analysis.test_mint_kept_units` at `38ff2a7fe5c20b5fcfb92268d05aa4e5288cfce5`: 87 tests, 0 failures, 0 errors, 1 skips, exit 0, 492.383 s. Log `/workspace/l9-1/mint-1/logs/tests_b5_analysis_test_mint_kept_units.log`, SHA-256 `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892`.
+  - skip_names: ['tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_s10_sealed_floor_packs_bootstrap_their_producer_contracts', 'chain extraction reports not built (ChainTests C4 with JW_B5_S10_CHAIN_CACHE)']
