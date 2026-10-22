@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ast
 import hashlib
+import importlib.metadata
 import importlib.util
 import json
 import math
@@ -343,10 +344,14 @@ _UPSTREAM_CACHE = os.environ.get("JOULEWISE_SHADE_CACHE")
 _EXTRAS = ("pydantic", "yaml", "pandas", "rich", "docstring_parser", "typing_extensions",
            "anthropic", "openai", "matplotlib", "seaborn", "email_validator")
 _HAVE_EXTRAS = all(importlib.util.find_spec(name) is not None for name in _EXTRAS)
+try:
+    _HAVE_EXTRAS = _HAVE_EXTRAS and int(importlib.metadata.version("pydantic").split(".")[0]) >= 2
+except (importlib.metadata.PackageNotFoundError, ValueError):
+    _HAVE_EXTRAS = False
 
 
 @unittest.skipUnless(_UPSTREAM_CACHE and _HAVE_EXTRAS,
-                     "requires an explicitly supplied pinned cache and upstream optional dependencies")
+                     "requires an explicitly supplied pinned cache and upstream extras (pydantic >=2, email-validator)")
 class RealUpstreamTests(unittest.TestCase):
     def test_prompts_and_monitor_views_match_pinned_upstream(self):
         source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
