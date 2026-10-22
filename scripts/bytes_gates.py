@@ -380,7 +380,129 @@ def json_default(value):
     raise TypeError("unsupported JSON value")
 
 
+def replay_disk(session_roots, c5, measurements):
+    """Byte-only desk replay; missing receipts remain visible, never refusals.
+
+    B6 compression sizes are logical lower bounds on one raw copy, as in
+    BY-0's disk_c_b6.py. H instead has the raw allocated-byte receipts.
+    WAIT and committed fixed artifacts come from the supplied H C5 terms.
+    """
+    kit = next((g for g in c5.get("gates", []) if g.get("gate") == "disk:kit"), {})
+    wait = kit.get("extra_wait_raw_bytes")
+    fixed = kit.get("fixed_retained_bytes")
+    candidates = {k: v["required_free_bytes"] for k, v in c5.get("sessions", {}).items()
+                  if k.startswith("bytes-s") and type(v.get("required_free_bytes")) is int}
+    largest = max(candidates, key=candidates.get) if candidates else None
+    rows = []
+    for root in map(Path, session_roots):
+        flags, sources = [], []
+
+        def load(path):
+            sources.append(str(path))
+            return read(path)
+
+        def attempt(name, fn):
+            try:
+                return fn()
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, ArithmeticError) as exc:
+                flags.append({"code": "disk.replay_input_missing", "input": name, "reason": str(exc)})
+                return None
+
+        def arm_free():
+            arm = load(root / "custody/hazards/arm.json")
+            device = root.stat().st_dev
+            frees = [t["free_bytes"] for r in arm["hazards"]["disk"]
+                     if not (r.get("measurement") or {}).get("error")
+                     for t in (r.get("measurement") or {}).get("values", {}).get("targets", [])
+                     if not t.get("error") and t.get("device") == device
+                     and type(t.get("free_bytes")) is int and t["free_bytes"] >= 0]
+            return min(frees)
+
+        def compression_raw():
+            path = root / "archive.desk/compression.jsonl"
+            sources.append(str(path))
+            sizes = [integer(r["size"], "compression size") for r in
+                     (json.loads(s) for s in path.read_text().splitlines())
+                     if r.get("event") == "compress" and r.get("root") == "runs"]
+            if not sizes:
+                raise ValueError("no compressed runs-root sizes")
+            return sum(sizes)
+
+        is_h = not (root / "archive.desk/compression-summary.json").exists() and (root / "desk.json").exists()
+        if is_h:
+            desk = attempt("desk.json disk", lambda: load(root / "desk.json")["disk"])
+            free_arm = attempt("free at arm", lambda: integer(desk["free_at_arm_bytes"], "arm free"))
+            free_desk = attempt("free at desk", lambda: integer(desk["free_at_desk_start_bytes"], "desk free"))
+
+            def h_raw():
+                if measurements["session_id"] != c5["session_id"]:
+                    raise ValueError("H measurements/C5 session mismatch")
+                sizes = [integer(r["raw_allocated_bytes"], "raw_allocated_bytes")
+                         for r in measurements["runs"].values() if r.get("stream_s") is not None]
+                if not sizes:
+                    raise ValueError("no timed H raw byte receipts")
+                return sum(sizes)
+
+            raw = attempt("H raw allocated bytes", h_raw)
+            basis = "H timed raw_allocated_bytes sum (allocated)"
+        else:
+            free_arm = attempt("arm receipt session-device targets", arm_free)
+            free_desk = attempt("compression summary", lambda: integer(
+                load(root / "archive.desk/compression-summary.json")["free_bytes_before"], "desk free"))
+            raw = attempt("compression runs-root sizes", compression_raw)
+            basis = "compression runs-root size sum (logical lower bound; implied c upper bound)"
+        w = attempt("C5 WAIT", lambda: integer(wait, "WAIT"))
+        f = attempt("C5 committed fixed artifacts", lambda: integer(fixed, "fixed"))
+        if largest is None:
+            flags.append({"code": "disk.replay_input_missing", "input": "BYTES pass P"})
+        required = None if None in (raw, w, f) else 2 * (raw + w) + f
+        drawdown = None if None in (free_arm, free_desk) else free_arm - free_desk
+        row = {"session": str(root), "B_bytes": raw, "bytes_basis": basis,
+               "stream_rate_bytes_per_s": kit.get("stream_rate_bytes_per_s"),
+               "wall_rate_bytes_per_s": kit.get("wall_rate_bytes_per_s"),
+               "extra_wait_raw_bytes": w, "session_wait_budget_s": SESSION_WAIT_BUDGET_S,
+               "fixed_retained_bytes": f, "peak_copies": 2, "required_free_bytes": required,
+               "free_at_arm_bytes": free_arm, "free_at_desk_start_bytes": free_desk,
+               "D_bytes": drawdown, "measured_c": None if drawdown is None or not raw else drawdown / raw,
+               "refused": None if flags else free_arm < required,
+               "largest_pass_pack": largest, "largest_pass_required_free_bytes": candidates.get(largest),
+               "largest_pass_refused": None if flags else free_arm < candidates[largest],
+               "flags": flags, "sources": sources}
+        rows.append(row)
+    return {"schema_version": "joulewise.bytes_disk_replay.v1", "sessions": rows,
+            "refusal_count": sum(r["refused"] is True for r in rows),
+            "largest_pass_refusal_count": sum(r["largest_pass_refused"] is True for r in rows),
+            "unavailable_count": sum(r["refused"] is None for r in rows),
+            "session_count": len(rows), "refusal_census": []}
+
+
+def replay_main(argv):
+    parser = argparse.ArgumentParser(description="Byte-only H-DISK-RULING replay; no arm or measurement")
+    parser.add_argument("--c5", type=Path, required=True, help="C5 JSON: H rates/WAIT/fixed and pass P")
+    parser.add_argument("--measurements", type=Path, required=True, help="H augmented raw-byte receipts")
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("sessions", nargs="+", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        result = replay_disk(args.sessions, read(args.c5), read(args.measurements))
+    except (OSError, ValueError, TypeError) as exc:
+        print("bytes_gates replay: " + str(exc), file=sys.stderr)
+        return 1
+    result["inputs"] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in (args.c5, args.measurements)}
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(result, indent=2, sort_keys=True, default=json_default, allow_nan=False) + "\n")
+    for row in result["sessions"]:
+        print(json.dumps(row, sort_keys=True, default=json_default))
+    print("refusal_count=" + str(result["refusal_count"]) + "/" + str(result["session_count"])
+          + " unavailable=" + str(result["unavailable_count"])
+          + " largest_pass_refusal_count=" + str(result["largest_pass_refusal_count"]))
+    return 2 if result["refusal_count"] else 1 if result["unavailable_count"] else 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == "replay":
+        return replay_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", type=Path, required=True)
     parser.add_argument("--measurements", type=Path, required=True)

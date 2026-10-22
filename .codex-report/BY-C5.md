@@ -1,11 +1,11 @@
 ## PROGRESS
 
-- Slice 3 encoding step implemented and new focused tests green. Five paths changed: plan_inputs.py, driver_lane.py, test_plan_inputs.py, test_b6_plan_render.py, this report. No commit/push attempted (director owns Git writes).
-- Done: BYTES native q/headroom encoding from registered sizing_b5.json pack disk_derivation; count is real planner stages including optional spares. DriverLane records terms/flag in metadata, passes only native fields to the closed writer. Missing/malformed P records disk.budget_missing and returns LaneMissing, never Refused.
-- Done: real DriverLane → plan_inputs.build → plan.write_window_plan → disk.measure/judge synthetic BYTES pack: exact P requirement, REFUSE at P-1, PASS at P (1 test, exit 0). Plan-input module 6 tests green (includes alpha/beta/gamma unchanged inputs and spares); session-wrapper module 6 tests green. Sealed inventory diffs empty; git diff --check passes.
-- Done: existing alpha/beta/gamma production regression finished (1 test, 6 failing subtests, 131.197 s, exit 1). All six passed budget assertions, then failed unchanged check_readers courier-path equality: actual /private/tmp/... versus expected /tmp/.... This is the local-route environmental category; no fix attempted.
-- Next: replay CLI/tests inside bytes_gates; final per-pack q/headroom evidence; remaining targeted checks and finish report. BY-SLOTS must supply real draft launch authority and sizing/P (draft trees currently intentionally arm_attachments={}).
-- Open: BY-H2 native raw_allocated_bytes producer, director-run real 9+1 replay and CI. No prohibited session trees accessed. Current head f73c62198, local branch by-c5, intended director destination lane/2026-10-22-bytes-c5-gates.
+- Slice 4: replay CLI and three new synthetic tests implemented; full C5 module passes 17 tests (7.238 s, exit 0). Changed scripts/bytes_gates.py, tests/test_bytes_gates.py and this report only this slice so far.
+- Done from earlier slices: raw allocated-byte rates, exact rational per-pack P; native q/headroom encoding; real DriverLane/planner/disk-hazard synthetic boundary proof at P-1 and P. Current head 9b7d58527; clean intake.
+- Replay reads B6 custody/hazards/arm.json on the session device, compression-summary free_bytes_before, runs-root compression sizes; H desk.json disk plus augmented raw receipts. WAIT and committed fixed bytes come from the supplied H C5 output. Every missing input remains a flagged row, never a refusal. No real session trees accessed.
+- Done: per-pack q/headroom table added, encoder reconstruction exact for all twelve. Focused bytes-packs (9), B6 catalog (4), flags catalog (6), H disk/receipt (7), plan-inputs (6), wrapper (6), C5 (17) tests green. Sealed-inventory diffs empty; diff check clean.
+- Next: remaining importer checks (test_lane_adapters, test_cold_pass_fixes, test_s3_cold_fixes, test_round2_review_fixes, test_capture_screen_reachability, test_loop_round_desk, test_desk_resume_finalize, test_b6_loop, test_b6_machine_test, hazards test_clock/test_arm); split long classes across slices. Final report audit. Consider extending real-writer equality proof to all twelve real H terms; current all-twelve proof uses the real encoder, and real writer/hazard uses a production-shaped synthetic pack.
+- Open: director-run 9+1 replay/table and CI; BY-H2 native raw_allocated_bytes producer. No Git writes attempted. Director destination lane/2026-10-22-bytes-c5-gates.
 
 ## SUMMARY
 
@@ -15,9 +15,9 @@ Rates derive from one raw bundle's allocated byte receipts, without altering ret
 All twelve pass packs print both bases, per-model counts and allowances, WAIT, fixed, c and P.
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
 All 14 bytes_gates tests pass; H rates agree with disk_h at the required 1e-6 relative bar.
-Pack encoding and synthetic end-to-end hazard verification are implemented in slice 3; replay and final reporting remain.
+Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
 Only authorized source/test/report files changed; no hardware operation or Git write ran.
-Slice 3 implements exact native encoding and proves P boundaries through the real planner/hazard; replay remains pending.
+Replay preserves missing inputs as flags and prints refusal totals; real 9+1 replay and CI remain director-owned.
 
 ## GATES FIX
 
@@ -1108,6 +1108,24 @@ Exit 2 from stopped completeness gates; empty stderr; no ConversionSyntax. Rates
 }
 ```
 
+
+Slice 4 encoding disclosure from the printed H terms, through the actual plan_inputs encoder and real stage_plan member counts (no spare retries). Integer reconstruction is exact; real-writer/hazard evidence is the synthetic E2E test below.
+
+| pack | n | q bytes/member | headroom bytes | 3nq+headroom = P bytes |
+|---|---:|---:|---:|---:|
+| bytes-s1-p1 | 125 | 116714296 | 27266299574 | 71034160574 |
+| bytes-s1-p2 | 125 | 116714296 | 27266299574 | 71034160574 |
+| bytes-s2-p1 | 125 | 122494740 | 27266299556 | 73201827056 |
+| bytes-s2-p2 | 125 | 122494740 | 27266299556 | 73201827056 |
+| bytes-s3-p1 | 125 | 131781624 | 27266299632 | 76684408632 |
+| bytes-s3-p2 | 125 | 131781624 | 27266299632 | 76684408632 |
+| bytes-s4-p1 | 125 | 146918935 | 27266299549 | 82360900174 |
+| bytes-s4-p2 | 125 | 146918935 | 27266299549 | 82360900174 |
+| bytes-s5-p1 | 75 | 203567677 | 27266299389 | 73069026714 |
+| bytes-s5-p2 | 75 | 203567677 | 27266299389 | 73069026714 |
+| bytes-s6-p1 | 75 | 145622589 | 27266299495 | 60031382020 |
+| bytes-s6-p2 | 75 | 145622589 | 27266299495 | 60031382020 |
+
 ## PACK ENCODING
 
 Slice 3: plan_inputs.build reads disk_derivation from the selected sizing_b5.json pack row (the same source as its time allowances), for bytes-s* only. It uses plan.read_plan_tree and b5_chain.stage_plan to obtain the native member-plus-spares count, then divmod(c*B,3*n); headroom=remainder+c*WAIT+fixed. Integer fields are checked for reconstruction of P, c=2 and WAIT duration=7200. P values remain future BY-SLOTS registration inputs; no generated registration is changed.
@@ -1118,7 +1136,19 @@ The production-shaped synthetic test supplies the omitted launch declaration in 
 
 ## REPLAY PROGRAM
 
-Pending. Director owns real replay; the worker must not access night-b6, night-bytes or night-custody trees.
+Implemented as `scripts/bytes_gates.py replay --c5 <C5.json> --measurements <MEASUREMENTS.raw.json> --out <replay.json> <session-root>...`. It prints one JSON row per session and a final refusal_count/session_count, unavailable_count and largest-pass refusal count. JSON includes an empty refusal_census. Exit codes: 2 any measured free<P, 1 unavailable rows with no refusal, 0 all available rows pass. This desk subcommand never arms a session.
+
+Inputs: B6 free-at-arm is the minimum valid target on the session st_dev (ignoring measurement/target errors and foreign devices), free-at-desk is compression-summary.free_bytes_before, and B is summed compression.jsonl compress/runs size. These logical compressed-file sizes are a lower bound on one raw copy (implied c an upper bound), as BY-0 documents. H uses desk.json disk free values and the sum of timed augmented raw_allocated_bytes; never-ran null receipts enter no sum. WAIT and fixed are the committed terms already disclosed in C5 disk:kit, reused without adding margins. Each row discloses the byte basis, B, WAIT, fixed, c=2, P, both free readings, D, measured c, refusal, largest pass P and its refusal. Missing/malformed inputs remain flagged rows, never dropped or refused.
+
+Synthetic tests exercise nine B6 plus one H with zero refusals, exact P and P-1 boundaries, foreign-device/error filtering, runs-only/event filtering, missing inputs and the executable CLI. All 17 C5 tests pass. This is synthetic evidence only. Real refusal count is pending director replay.
+
+Exact director command (do not execute in this worker; C5_JSON is the output generated from augmented H receipts; REPLAY_JSON is the director-chosen output):
+
+```sh
+/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py replay --c5 "$C5_JSON" --measurements /Users/edr/night-archive/forward-20261021/BY-C5/MEASUREMENTS.raw.json --out "$REPLAY_JSON" /Users/edr/night-b6/sessions/r*-alpha /Users/edr/night-b6/sessions/r*-beta /Users/edr/night-b6/sessions/r*-gamma /Users/edr/night-bytes/h-20261021T185555Z
+```
+
+The ending alpha/beta/gamma globs exclude -smoke-0 directories. Director owns real replay and committed table; worker accessed no prohibited session tree.
 
 ## END-TO-END
 
@@ -1137,6 +1167,20 @@ subprocess.run(["git", "diff", "--name-only", "HEAD", "--", *paths], check=True)
 Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
+
+Slice 4 commands (all from repository root):
+
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_gates` — exit 0, 17 tests, 7.238 s initially; 5.114 s after adding replay rate disclosure. No skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_bytes_packs` — exit 0, 9 tests, 9.515 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_catalog` — exit 0, 4 tests, 0.673 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.flags.test_flags_catalog` — exit 0, 6 tests, 0.127 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session.DiskRulingTests tests.test_bytes_h_session.ReceiptMathTests` — exit 0, 7 tests from one module, 0.007 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_plan_inputs` — exit 0, 6 tests, 0.009 s, no skips.
+- `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byc5.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_session_wrapper` — exit 0, 6 tests, 0.492 s, no skips.
+- An initial combined plan_inputs/session_wrapper invocation passed (12 tests, 0.570 s, exit 0), but shared a TMPDIR between modules. Both were rerun above with separate TMPDIRs to follow the local route.
+- All-twelve q/headroom report derivation invoked actual plan_inputs.encode_disk_budget on the already printed H terms. All integer reconstruction assertions pass. No real session tree read.
+- Sealed-inventory commands shown above repeated against working tree from bda481d5a and HEAD: exit 0, stdout empty. `git diff --check`: exit 0. No whole suite and no hardware/installer operation.
+
 
 Slice 3 exact commands (each fresh module TMPDIR, synthetic-only):
 
@@ -1174,6 +1218,9 @@ Director creates draft PR and reads CI under the local route. No PR number suppl
 
 ## DECISIONS I MADE
 
+Slice 4: replay B is the measured one-copy sum, as the director specifies, rather than pass allowances. The same supplied C5 H stream rate determines WAIT and the same C5 committed fixed-artifact bytes supplies fixed across replay rows, without a new reserve or margin. B6 compressed-file logical bytes retain BY-0's lower-bound label; H uses augmented allocated raw bytes. Desk replay results do not add an arm refusal site; scripts/bytes_gates.py already has the registry not_scanned=desk disposition. No new imports, scan entries or harvested flag codes are needed. Missing/malformed row inputs are caught and flagged, and all rows remain in session_count with separate unavailable_count.
+
+
 Slice 3: registered disk terms live in sizing_b5.json packs[label].disk_derivation, next to that pack’s own time allowances; BYTES draft registration files remain unchanged. The sealed writer cannot accept diagnostic input keys or zero bytes_per_member. DriverLane keeps disk_budget in session metadata, and an absent P yields a durable disk.budget_missing diagnostic plus LaneMissing before planning, never Refused. The draft pass tree’s deliberately absent launch declaration is supplied only by the synthetic E2E fixture; actual launch readiness belongs to BY-SLOTS. Flags here are preparation metadata, not harvested member flags, so no flag-catalog mutation is required for this step.
 
 Director ruling 1: per-run raw_allocated_bytes is the only disk-rate byte source (allocated st_blocks*512, raw-only tree, inode-deduplicated). Missing raw byte receipts enter no rate, are counted in disk.raw_bytes_missing; no rate makes disk unavailable. Never halve retained_bytes. Rates compare at 1e-6 relative; derived integer bytes compare exactly. BY-H2 owns native producer support. Synthetic never-ran receipts carry raw_allocated_bytes=null.
@@ -1189,7 +1236,7 @@ The existing production reader regression has the /private/tmp versus /tmp couri
 
 The native producer lacks raw_allocated_bytes, so tests.test_bytes_h_session.test_fully_observed_native_export_extracts_and_clears_c5 currently expects pass where the new contract requires unavailable. BY-H2 producer support must restore that integration; its file and test are outside this write scope.
 
-Remaining: finish planner and real hazard verification, replay program/tests, remaining targeted tests and R6 paragraph. Real 9+1 replay and CI remain director-owned. Local branch by-c5; HEAD f73c62198; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5: encode registered P exactly in native pass disk budget.
+Remaining: importer regressions and final report audit. Planner/hazard synthetic boundary proof, replay program/tests and R6 draft are done. Real 9+1 replay and CI remain director-owned. Local branch by-c5; HEAD 9b7d58527; intended destination lane/2026-10-22-bytes-c5-gates. Proposed slice commit: BY-C5: byte-only disk replay over B6 and H receipts with missing-input flags.
 
 ## NEEDS_RULING
 

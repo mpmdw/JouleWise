@@ -85,6 +85,79 @@ def synthetic_harvest(root):
     return result, measured
 
 
+class ReplayTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        # Integer identities: WAIT=ceil((1/3 B/s)*7200s)=2400B;
+        # B=101B, fixed=7B, c=2, hence P=5009B with no padding.
+        self.p = 2 * (101 + 2400) + 7
+        self.c5 = {"session_id": "h", "gates": [{"gate": "disk:kit",
+            "extra_wait_raw_bytes": 2400, "fixed_retained_bytes": 7}],
+            "sessions": {"bytes-s1-p1": {"required_free_bytes": self.p + 1}}}
+        self.measured = {"session_id": "h", "runs": {
+            "one": {"stream_s": 3, "raw_allocated_bytes": 101},
+            "never": {"stream_s": None, "raw_allocated_bytes": None}}}
+
+    def b6(self, name, free):
+        root = self.root / name
+        root.mkdir()
+        device = root.stat().st_dev
+        write(root / "custody/hazards/arm.json", {"hazards": {"disk": [
+            {"measurement": {"error": "ignore", "values": {"targets": [{"device": device, "free_bytes": 0}]}}},
+            {"measurement": {"values": {"targets": [
+                {"device": device + 1, "free_bytes": 0},
+                {"device": device, "free_bytes": free + 10},
+                {"device": device, "free_bytes": free},
+                {"device": device, "error": "ignore", "free_bytes": 0}]}}}]}})
+        write(root / "archive.desk/compression-summary.json", {"free_bytes_before": free - 50})
+        (root / "archive.desk/compression.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+            {"event": "compress", "root": "runs", "size": 100},
+            {"event": "compress", "root": "runs", "size": 1},
+            {"event": "skip", "root": "runs", "size": 999},
+            {"event": "compress", "root": "archive", "size": 999}]))
+        return root
+
+    def test_nine_plus_h_replay_and_integer_boundaries(self):
+        roots = [self.b6("r" + str(i), self.p + i) for i in range(9)]
+        h = self.root / "h"
+        write(h / "desk.json", {"disk": {"free_at_arm_bytes": self.p, "free_at_desk_start_bytes": self.p - 50}})
+        result = gates.replay_disk([*roots, h], self.c5, self.measured)
+        self.assertEqual(result["session_count"], 10)
+        self.assertEqual(result["refusal_count"], 0)
+        self.assertEqual(result["unavailable_count"], 0)
+        self.assertEqual(result["largest_pass_refusal_count"], 2)
+        for row in result["sessions"]:
+            self.assertEqual(row["required_free_bytes"], self.p)
+            self.assertEqual(row["D_bytes"], 50)
+            self.assertTrue(math.isclose(row["measured_c"], 50 / 101, rel_tol=1e-6))
+        below = self.b6("below", self.p - 1)
+        self.assertTrue(gates.replay_disk([below], self.c5, self.measured)["sessions"][0]["refused"])
+
+    def test_missing_inputs_are_listed_never_refused(self):
+        missing = self.root / "absent"
+        result = gates.replay_disk([missing], self.c5, self.measured)
+        self.assertEqual(result["session_count"], 1)
+        self.assertEqual(result["unavailable_count"], 1)
+        self.assertEqual(result["refusal_count"], 0)
+        self.assertEqual(result["refusal_census"], [])
+        self.assertIsNone(result["sessions"][0]["refused"])
+        self.assertTrue(result["sessions"][0]["flags"])
+
+    def test_cli_outputs_rows_and_refusal_count(self):
+        root = self.b6("below", self.p - 1)
+        write(self.root / "c5.json", self.c5)
+        write(self.root / "measurements.json", self.measured)
+        out = self.root / "replay.json"
+        run = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_gates.py"), "replay",
+            "--c5", str(self.root / "c5.json"), "--measurements", str(self.root / "measurements.json"),
+            "--out", str(out), str(root)], capture_output=True, text=True)
+        self.assertEqual(run.returncode, 2, run.stderr)
+        self.assertIn("refusal_count=1/1 unavailable=0", run.stdout)
+        self.assertEqual(json.loads(out.read_text())["refusal_count"], 1)
+
+
 class World(unittest.TestCase):
     """The synthetic native harvest shared by the C5 test classes."""
 
