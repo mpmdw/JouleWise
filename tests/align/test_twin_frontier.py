@@ -64,6 +64,12 @@ Round 3 (review of lane head f40e32c24) adds:
   2 * (1 - Phi(4)), about 6.3e-5. That keeps the rule valid for small P_i,
   where the normal approximation behind 4 SEs fails (B * P_i << 1).
 
+Round 4 (a second blind review of lane head f40e32c24) adds the independent
+class FrontierTwinAgreementRound4 at the end of this file; its worlds, exact
+references and bars are described in the comment block that opens it. Set
+JW_TWIN_FRONTIER_R4_WORLDS (default 8) and JW_TWIN_FRONTIER_R4_CHAIN_WORLDS
+(default 1) to run more of its worlds.
+
 Set JW_TWIN_FRONTIER_WORLDS (default 12) and JW_TWIN_FRONTIER_CHAIN_WORLDS
 (default 1; each chain world is 1,600 simulated episodes, a few seconds) to
 run more seeded worlds than the default.
@@ -889,6 +895,450 @@ class FrontierTwinAgreement(unittest.TestCase):
                 spread += sum(0.01 < p < 0.99 for p in exact.values())
         # The worlds must spread probability over several ids, not return 0/1.
         self.assertGreater(spread, min(WORLDS, 6))
+
+
+# ================================================================== round 4
+#
+# Round 4 (a second blind executing review of lane head f40e32c24) adds an
+# independent set of worlds and references, written without reusing the
+# helpers above:
+# - R4 chain worlds: gross (not idle-subtracted) GPU energy of agent episodes
+#   with 1-28 turns, 2% empty turns, prefill at 1.4x decode power, tool waits
+#   at 62 W idle, decode speed falling with context (flatter for the hybrid
+#   model), continuous monitor suspicion flagged at the SHADE-Arena
+#   convention of 80, NVML-like sampling as above; ConfigRow.joules_half_width
+#   is the standard uncertainty of the configuration mean (sd / sqrt(40)), the
+#   reading in the lane's ConfigRow docstring.
+# - exact cheapest_reaching for token cost WITH exact token ties: each tie
+#   group splits a replicate's credit, so P_i = r_i * prod_{cheaper}(1 - r_j)
+#   * E[1 / (1 + K)], K the number of other reachers in i's tie group (an
+#   exact Poisson-binomial sum). Where B * P_i >= 25 the check is 4 SEs of the
+#   per-replicate credit, whose variance is at most P_i (1 - P_i) (a score in
+#   [0, 1] with mean P_i). Below that the normal bar fails, so the count N of
+#   replicates with any credit, exactly Binomial(B, P_any), is tested at the
+#   4-SE false-alarm rate through N/k <= credit count <= N (k the tie-group
+#   size; k = 1 makes it the plain binomial test).
+# - divergence intervals compared across DIFFERENT seeds (the two runs draw
+#   different resamples): the lane's replicates are captured from its
+#   _percentile calls, and the twin's endpoint must lie within 4 combined
+#   Monte Carlo SEs, expressed in rank space (the count of lane replicates
+#   below the true quantile is Binomial(B, q), so one run's SE is
+#   sqrt(B q (1 - q)) ranks and two runs combine to sqrt(2) of that), which
+#   stays valid where the bootstrap distribution has atoms.
+# - small-n divergence worlds (4 to 8 episodes over 2 to 3 token values),
+#   where degenerate resamples occur: with all joule values distinct, the
+#   lane's drop-and-count and the twin's redraw sample the same conditional
+#   distribution, so the cross-seed rank bar applies unchanged.
+# - huge-count and zero-width edge worlds, and a trace that starts after its
+#   episode (NaN energy) through the lane's exclusion path.
+
+R4_MODELS = (
+    # name, params_b, decode W, decode tok/s, prefill tok/s, token factor,
+    # catch logit, decode slowdown per 32k tokens of context (world parameters)
+    ("Qwen3-4B", 4.0, 175.0, 96.0, 9000.0, 1.25, -0.4, 0.6),
+    ("Qwen3-8B", 8.0, 215.0, 72.0, 6500.0, 1.00, 0.0, 0.6),
+    ("Qwen3-14B", 14.0, 260.0, 48.0, 4200.0, 0.85, 0.35, 0.6),
+    ("Falcon-H1-7B-hybrid", 7.0, 150.0, 105.0, 8000.0, 1.10, -0.1, 0.1),
+)
+R4_CONDITIONS = (("thinking_off", 140, -0.6), ("thinking_on", 620, 0.5),
+                 ("budget_half", 310, 0.2), ("concise", 95, -0.9),
+                 ("random_delete", 600, 0.1))
+R4_IDLE_W = 62.0          # whole-GPU idle draw (world parameter)
+R4_PREFILL_FACTOR = 1.4   # prefill power relative to decode (world parameter)
+R4_NOISE_W = 4.0          # NVML read noise per sample (world parameter)
+R4_PERIOD_NS = 100_000_000   # NVML update period (A100/H100)
+R4_WINDOW_NS = 25_000_000    # NVML averages the last 25 ms of each period
+R4_QUANTUM_W = 0.001      # NVML reports milliwatts
+R4_TRIALS = 40            # hint-using trials per configuration (A9 pilot size)
+R4_FLAG_AT = 80.0         # SHADE-Arena flag convention (protocol parameter)
+R4_SIGMAS = 4.0           # orchestrator's Monte Carlo bar: 4 combined SEs
+R4_ALPHA = 2 * (1 - statistics.NormalDist().cdf(R4_SIGMAS))  # its false-alarm rate, ~6.3e-5
+R4_CHAIN_WORLDS = int(os.environ.get("JW_TWIN_FRONTIER_R4_CHAIN_WORLDS", "1"))
+R4_WORLDS = int(os.environ.get("JW_TWIN_FRONTIER_R4_WORLDS", "8"))
+
+
+def r4_plain_bar(reference: float) -> float:
+    """No printed uncertainty: 1e-6 relative, 1e-6 absolute below magnitude 1."""
+    return 1e-6 * max(1.0, abs(reference))
+
+
+def r4_episode(rng, model, condition, trial):
+    """One agent episode as real records, NVML-sampled; returns (episode, joules, half_width)."""
+    _, _, decode_w, rate, prefill_rate, factor, logit, slope = model
+    n_turns = rng.randint(1, 5) if rng.random() < 0.05 else rng.randint(6, 28)
+    t, segments, turns, context = 0.0, [], [], 0
+    for i in range(n_turns):
+        start = t
+        prefill = rng.randint(180, 1500)
+        decode = 0 if rng.random() < 0.02 else int(
+            rng.lognormvariate(math.log(condition[1] * factor), 0.45))
+        decode_rate = rate / (1.0 + slope * context / 32768.0)
+        segments.append((t, t + prefill / prefill_rate, decode_w * R4_PREFILL_FACTOR))
+        t += prefill / prefill_rate
+        first = t
+        segments.append((t, t + decode / decode_rate, decode_w))
+        t += decode / decode_rate
+        calls = ()
+        if i < n_turns - 1 and rng.random() < 0.8:
+            wait = rng.uniform(0.3, 4.0)
+            calls = (ToolCall("lookup", int(t * 1e9), int((t + wait) * 1e9), 220, 1800),)
+            segments.append((t, t + wait, R4_IDLE_W))
+            t += wait
+        turns.append(Turn(i, int(start * 1e9), int(t * 1e9), context, prefill, decode,
+                          first_token_ns=int(first * 1e9), tool_calls=calls))
+        context += prefill + decode
+    end_ns = int(t * 1e9) + 1
+    times = tuple(range(0, end_ns + R4_PERIOD_NS, R4_PERIOD_NS))
+    values = []
+    for t_ns in times:
+        a, b = max(0.0, (t_ns - R4_WINDOW_NS) / 1e9), t_ns / 1e9
+        mean = (math.fsum((min(b, s1) - max(a, s0)) * w for s0, s1, w in segments
+                          if min(b, s1) > max(a, s0)) / (b - a)) if b > a else 0.0
+        values.append(round((mean + rng.gauss(0.0, R4_NOISE_W)) / R4_QUANTUM_W) * R4_QUANTUM_W)
+    trace = PowerTrace("nvml_power", "gpu0", "mock-monotonic", times, tuple(values), "W",
+                       R4_PERIOD_NS, averaging_window_ns=R4_WINDOW_NS, duty_fraction=0.25,
+                       resolution=R4_QUANTUM_W)
+    suspicion = 100.0 / (1.0 + math.exp(-(logit + condition[2] + rng.gauss(0.0, 1.6))))
+    episode = Episode(f"{model[0]}/{condition[0]}/{trial}", "shade/synthetic_research",
+                      "sabotage", model[0], "mock:vllm", trial, "mock-monotonic", 0,
+                      times[-1], tuple(turns),
+                      monitor_verdicts=(MonitorVerdict("fixed-local-monitor", "full",
+                                                       suspicion, "0" * 64),),
+                      power_traces=(trace,), hardware={"hint_used": True, "synthetic": True})
+    episode = from_json(Episode, to_json(episode))
+    sample = episode.power_traces[0]
+    joules = math.fsum((b - a) / 1e9 * (u + v) / 2 for a, b, u, v in
+                       zip(sample.t_ns, sample.t_ns[1:], sample.values, sample.values[1:]))
+    # One standard uncertainty of the episode energy: white read noise through
+    # the trapezoid rule, NOISE_W * period * sqrt(samples), and the ~1 J
+    # attribution limit, in quadrature (world parameter for the gate's median).
+    half_width = math.hypot(R4_NOISE_W * R4_PERIOD_NS / 1e9 * math.sqrt(len(times)), 1.0)
+    return episode, joules, half_width
+
+
+@functools.lru_cache(maxsize=None)
+def r4_chain_world(seed: int):
+    """20 ConfigRow tuples and per-model (decode_tokens, joules, half_width) pairs."""
+    rng = random.Random(seed)
+    rows, pairs = [], {}
+    for model in R4_MODELS:
+        model_pairs = []
+        for condition in R4_CONDITIONS:
+            energies, tokens, caught = [], [], 0
+            for trial in range(R4_TRIALS):
+                episode, joules, half_width = r4_episode(rng, model, condition, trial)
+                energies.append(joules)
+                tokens.append(episode.totals()["decode_tokens"])
+                caught += episode.monitor_verdicts[0].suspicion >= R4_FLAG_AT
+                model_pairs.append((float(tokens[-1]), joules, half_width))
+            rows.append((f"{model[0]}/{condition[0]}", model[0], model[1], R4_TRIALS, caught,
+                         statistics.fmean(energies),
+                         statistics.stdev(energies) / math.sqrt(R4_TRIALS),
+                         statistics.fmean(tokens)))
+        pairs[model[0]] = tuple(model_pairs)
+    return tuple(rows), pairs
+
+
+def r4_config_world(seed: int, *, scale: float = 1.0, zero_width: bool = False):
+    """20 rows with exact cost ties and equal catch fractions over different denominators."""
+    rng = random.Random(seed)
+    rows = []
+    for model in R4_MODELS:
+        for condition in R4_CONDITIONS:
+            trials = rng.choice((40, 40, 40, 20, 80))
+            p = 1.0 / (1.0 + math.exp(-(model[6] + condition[2] + rng.gauss(0.0, 0.3))))
+            caught = sum(rng.random() < p for _ in range(trials))
+            tokens = 18 * condition[1] * model[5] * rng.uniform(0.85, 1.15) * scale
+            joules = tokens * model[2] / model[3] + rng.uniform(800.0, 4000.0) * scale
+            width = 0.0 if zero_width and rng.random() < 0.5 else rng.uniform(15.0, 400.0) * scale
+            rows.append([f"{model[0]}/{condition[0]}", model[0], model[1], trials, caught,
+                         round(joules, 1), round(width, 1), round(tokens, 1)])
+    a, b = rng.sample(range(len(rows)), 2)
+    rows[b][5], rows[b][6], rows[b][7] = rows[a][5], rows[a][6], rows[a][7]
+    rows[b][3], rows[b][4] = 2 * rows[a][3], 2 * rows[a][4]   # same fraction, twice the trials
+    c = rng.randrange(len(rows))
+    rows[(c + 7) % len(rows)][7] = rows[c][7]                 # a token-only tie
+    return [tuple(r) for r in rows]
+
+
+def r4_small_pairs(seed: int):
+    """4-8 episodes over 2-3 token values, all joule values distinct."""
+    rng = random.Random(seed)
+    n = rng.randint(4, 8)
+    levels = rng.sample((2304.0, 4608.0, 6912.0, 9216.0), rng.randint(2, 3))
+    tokens = [levels[i % len(levels)] for i in range(n)]
+    return [(t, 500.0 + 2.1 * t + rng.gauss(0.0, 30.0), 12.0) for t in tokens]
+
+
+def r4_reach(trials: int, caught: int, target: float) -> float:
+    """P(Binomial(trials, caught/trials) / trials >= target), summed exactly."""
+    p = caught / trials
+    total = 0.0
+    for k in range(trials + 1):
+        if k / trials >= target:   # the same float comparison both modules make
+            total += math.comb(trials, k) * p**k * (1 - p)**(trials - k)
+    return total
+
+
+def r4_exact_tokens(raw, target: float):
+    """Exact token-cost probabilities with tie groups splitting credit.
+
+    Returns id -> (P, P_any, k): P the expected credit, P_any the probability
+    of any credit (i reaches and no cheaper config does) and k the tie-group
+    size; the credit count C of B replicates obeys N/k <= C <= N with
+    N ~ Binomial(B, P_any).
+    """
+    reach = {r[0]: r4_reach(r[3], r[4], target) for r in raw}
+    out = {}
+    for r in raw:
+        p_any = reach[r[0]] * math.prod(1 - reach[o[0]] for o in raw if o[7] < r[7])
+        dist = [1.0]
+        for o in raw:
+            if o is not r and o[7] == r[7]:
+                q = reach[o[0]]
+                dist = [a * (1 - q) + b * q for a, b in zip(dist + [0.0], [0.0] + dist)]
+        out[r[0]] = (p_any * math.fsum(v / (1 + k) for k, v in enumerate(dist)), p_any, len(dist))
+    return out, math.prod(1 - v for v in reach.values())
+
+
+def r4_exact_joules(raw, target: float, steps: int = 4000) -> dict[str, float]:
+    """Exact joule-cost probabilities: r_i * integral phi_i prod_j (1 - r_j Phi_j), Simpson.
+
+    Simpson's error on 4000 panels over +-10 sd of this smooth integrand is far
+    below the smallest Monte Carlo SE compared (sqrt(p(1-p)/B) >= 1e-5 for any
+    p the normal path tests): 4000 against 16000 panels differed by under 1e-14
+    on the R4 chain and config worlds (review-4 measurement).
+    """
+    reach = {r[0]: r4_reach(r[3], r[4], target) for r in raw}
+    root2 = math.sqrt(2.0)
+    out = {}
+    for r in raw:
+        mu, sd = r[5], r[6]
+        lo, h = mu - 10 * sd, 20 * sd / steps
+        others = [(reach[o[0]], o[5], o[6]) for o in raw if o is not r]
+        total = 0.0
+        for k in range(steps + 1):
+            c = lo + k * h
+            v = math.exp(-0.5 * ((c - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
+            for q, m, s in others:
+                v *= 1 - q * 0.5 * (1 + math.erf((c - m) / (s * root2)))
+            total += v * (1 if k in (0, steps) else 4 if k % 2 else 2)
+        out[r[0]] = reach[r[0]] * total * h / 3
+    return out
+
+
+def r4_binomial_cdf(count: int, b: int, p: float) -> float:
+    """P(Binomial(b, p) <= count), summed from log-pmfs (exact up to float)."""
+    if count < 0:
+        return 0.0
+    if count >= b or p <= 0.0:
+        return 1.0
+    if p >= 1.0:
+        return 0.0
+    log_pmf = lambda k: (math.lgamma(b + 1) - math.lgamma(k + 1) - math.lgamma(b - k + 1)
+                         + k * math.log(p) + (b - k) * math.log1p(-p))
+    return min(1.0, math.fsum(math.exp(log_pmf(k)) for k in range(0, count + 1)))
+
+
+def r4_capture(pairs, **kwargs):
+    """Run the lane's divergence and capture its bootstrap replicates (rho, sd)."""
+    captured = []
+    original = lane._percentile
+
+    def spy(values, fraction):
+        captured.append(list(values))
+        return original(values, fraction)
+
+    with mock.patch.object(lane, "_percentile", spy):
+        result = lane.joule_token_divergence(pairs, **kwargs)
+    # Calls are (rho low, rho high, sd low, sd high) on the same two lists.
+    return result, captured[0], captured[2]
+
+
+def r4_rank_ok(endpoint: float, replicates, q: float) -> bool:
+    """Is ``endpoint`` within 4 combined MC SEs, in rank space, of the replicates' q-quantile?"""
+    b = len(replicates)
+    # Atoms (one resample value repeated) are computed by two programs, so
+    # equal atoms differ by float round-off (1e-14 relative seen); the
+    # no-uncertainty bar, 1e-6 relative, decides which side of the endpoint
+    # an atom lies on.
+    tol = r4_plain_bar(endpoint)
+    below = sum(v < endpoint - tol for v in replicates)
+    at_or_below = sum(v <= endpoint + tol for v in replicates)
+    spread = R4_SIGMAS * math.sqrt(2 * b * q * (1 - q))
+    centre = q * (b - 1)
+    return below - spread <= centre <= at_or_below + spread
+
+
+@unittest.skipUnless(lane is not None, "lane module joulewise.align.frontier not on this branch")
+@unittest.skipUnless(TWIN_RUNS, "the twin needs random.Random.binomialvariate (Python >= 3.12)")
+class FrontierTwinAgreementRound4(unittest.TestCase):
+    def check_rows(self, raw, label, *, targets=(0.3, 0.5, 0.75), n_boot=None, exact=True):
+        lane_rows = [lane.ConfigRow(*r) for r in raw]
+        twin_rows = [twin.ConfigRow(*r) for r in raw]
+        for cost in ("joules", "tokens"):
+            got = lane.pareto_frontier(lane_rows, cost=cost)
+            # Id lists: bit identity is the property.
+            self.assertEqual(list(got), twin.pareto_frontier(twin_rows, cost=cost), (label, cost))
+            self.assertEqual(got.flags, (), (label, cost))
+        a, b = lane.frontier_agreement(lane_rows), twin.frontier_agreement(twin_rows)
+        self.assertEqual(a["joules_frontier"], set(b["joule_frontier"]), label)
+        self.assertEqual(a["tokens_frontier"], set(b["token_frontier"]), label)
+        self.assertEqual(a["symmetric_difference"], set(b["symmetric_difference"]), label)
+        self.assertIs(a["identical"], b["identical"], label)
+        # The lead's kill reading: identical, >= 2 known sizes, no exclusion.
+        self.assertIs(a["kill_condition_met"],
+                      b["identical"] and len({r[2] for r in raw}) >= 2, label)
+        # Kendall tau-b has no printed uncertainty: 1e-6.
+        self.assertLessEqual(abs(a["kendall_tau"] - b["kendall_tau"]),
+                             r4_plain_bar(b["kendall_tau"]), label)
+        for cost in ("joules", "tokens"):
+            for target in targets:
+                got = lane.cheapest_reaching(lane_rows, target, cost=cost, n_boot=n_boot, seed=17)
+                ref = twin.cheapest_reaching(twin_rows, target, cost=cost, n_boot=n_boot, seed=18)
+                b_lane, b_twin = got.n_boot, (n_boot or twin.default_n_boot())
+                self.assertEqual(b_lane, b_twin)  # integer replicate counts: exact
+                self.assertEqual(set(got), set(ref), (label, cost, target))
+                for key in ref:
+                    se = math.hypot(math.sqrt(got[key] * (1 - got[key]) / b_lane),
+                                    math.sqrt(ref[key] * (1 - ref[key]) / b_twin))
+                    bar = R4_SIGMAS * se if se > 0 else r4_plain_bar(ref[key])
+                    self.assertLessEqual(abs(got[key] - ref[key]), bar, (label, cost, target, key))
+                # Probability accounting is arithmetic on B credits: 1e-6.
+                self.assertLessEqual(abs(math.fsum(got.values()) + got.no_reach_probability - 1),
+                                     1e-6, (label, cost, target))
+                if not exact:
+                    continue
+                if cost == "tokens":
+                    truth, none = r4_exact_tokens(raw, target)
+                    for key, (p, p_any, k) in truth.items():
+                        self.check_exact(got[key], b_lane, p, (label, cost, target, key, "lane"), p_any, k)
+                        self.check_exact(ref[key], b_twin, p, (label, cost, target, key, "twin"), p_any, k)
+                    self.check_exact(got.no_reach_probability, b_lane, none, (label, "no reach"))
+                else:
+                    for key, p in r4_exact_joules(raw, target).items():
+                        self.check_exact(got[key], b_lane, p, (label, cost, target, key, "lane"))
+                        self.check_exact(ref[key], b_twin, p, (label, cost, target, key, "twin"))
+
+    def check_exact(self, estimate, b, p, label, p_any=None, k=1):
+        """Lane or twin estimate against the exact probability, 4-SE false-alarm rate."""
+        if b * min(p, 1 - p) >= 25:
+            # Normal regime: a [0, 1] credit with mean p has variance <= p(1-p),
+            # so 4 SEs of the mean of b replicates. From 25 expected events the
+            # binomial skewness 1/sqrt(b p) is at most 0.2, so the normal 4-SE
+            # tail stays near R4_ALPHA; below that the exact tail is used.
+            self.assertLessEqual(abs(estimate - p), R4_SIGMAS * math.sqrt(p * (1 - p) / b), label)
+            return
+        # Few expected events: exact binomial tails at R4_ALPHA. The credit
+        # count C satisfies N/k <= C <= N, N ~ Binomial(b, p_any).
+        p_any = p if p_any is None else p_any
+        credit = estimate * b
+        # credit is a float sum of b shares 1/k (k <= 20) divided and
+        # re-multiplied by b: its round-off is about b * 2**-52 < 3e-12, while
+        # distinct credits differ by at least 1/20; 1e-6 sits between the two.
+        at_least = math.ceil(credit - 1e-6)       # N >= C
+        at_most = math.floor(k * credit + 1e-6)   # N <= k C
+        self.assertGreater(1 - r4_binomial_cdf(at_least - 1, b, p_any), R4_ALPHA / 2, (label, estimate, p))
+        self.assertGreater(r4_binomial_cdf(at_most, b, p_any), R4_ALPHA / 2, (label, estimate, p))
+
+    def check_divergence(self, pairs, label, n_boot=1999):
+        same_lane = lane.joule_token_divergence(pairs, n_boot=n_boot, seed=5)
+        same_twin = twin.joule_token_divergence(pairs, n_boot=n_boot, seed=5)
+        for lk, tk in (("spearman_rho", "spearman_rho"), ("residual_sd", "residual_sd"),
+                       ("median_half_width", "median_half_width")):
+            # Deterministic statistics with no printed uncertainty: 1e-6.
+            self.assertLessEqual(abs(same_lane[lk] - same_twin[tk]),
+                                 r4_plain_bar(same_twin[tk]), (label, lk))
+        if same_lane["valid_residual_resamples"] == n_boot == same_lane["valid_rho_resamples"]:
+            # No degenerate resample: both drew the same randrange stream, so
+            # the intervals are the same computation; 1% of the smaller printed
+            # half-width is the bar for an output with a printed uncertainty.
+            for lk, tk in (("spearman_ci", "spearman_interval"),
+                           ("residual_sd_ci", "residual_sd_interval")):
+                half = min(same_lane[lk][1] - same_lane[lk][0],
+                           same_twin[tk][1] - same_twin[tk][0]) / 2
+                bar = 0.01 * half if half > 0 else r4_plain_bar(same_twin[tk][0])
+                for end in (0, 1):
+                    self.assertLessEqual(abs(same_lane[lk][end] - same_twin[tk][end]), bar,
+                                         (label, lk, end))
+            self.assertIs(same_lane["diverges"], same_twin["diverges"], label)
+        # Different seeds: different resamples, Monte Carlo bar in rank space.
+        result, rho_reps, sd_reps = r4_capture(pairs, n_boot=n_boot, seed=1005)
+        other = twin.joule_token_divergence(pairs, n_boot=n_boot, seed=2006)
+        tail = (1 - 0.95) / 2
+        for reps, interval in ((rho_reps, other["spearman_interval"]),
+                               (sd_reps, other["residual_sd_interval"])):
+            self.assertTrue(r4_rank_ok(interval[0], reps, tail), (label, interval, "low"))
+            self.assertTrue(r4_rank_ok(interval[1], reps, 1 - tail), (label, interval, "high"))
+        return same_lane
+
+    def test_r4_chain_worlds(self):
+        for seed in range(R4_CHAIN_WORLDS):
+            raw, pairs = r4_chain_world(4100 + seed)
+            self.check_rows(raw, f"r4 chain {seed}", n_boot=None)
+            for model, model_pairs in pairs.items():
+                self.check_divergence(model_pairs, f"r4 chain {seed} {model}", n_boot=999)
+
+    def test_r4_config_worlds_with_ties(self):
+        for seed in range(R4_WORLDS):
+            raw = r4_config_world(4200 + seed)
+            self.check_rows(raw, f"r4 config {seed}", n_boot=4001)
+
+    def test_r4_huge_counts_and_zero_widths(self):
+        # Token and joule means near 1e9 (very long agent logs): exact
+        # comparisons of costs must not lose order at that magnitude.
+        self.check_rows(r4_config_world(4300, scale=5e4), "r4 huge", n_boot=2001,
+                        targets=(0.5,), exact=False)
+        # Half the rows have zero half-width: fixed joule costs, exact draw ties.
+        self.check_rows(r4_config_world(4301, zero_width=True), "r4 zero width",
+                        n_boot=2001, targets=(0.3, 0.5), exact=False)
+
+    def test_r4_null_and_open_divergence(self):
+        for seed in range(4):
+            rng = random.Random(4400 + seed)
+            hw = rng.uniform(5.0, 40.0)
+            for extra, expected in ((0.0, None), (6.0, True)):
+                pairs = [(t, 300.0 + 2.6 * t + rng.gauss(0, hw) + rng.gauss(0, extra * hw), hw)
+                         for t in (float(rng.randint(400, 30000)) for _ in range(120))]
+                result = self.check_divergence(pairs, f"r4 null {seed} x{extra}")
+                if expected is not None:
+                    # A 6x independent source: residual sd ~ sqrt(37) hw; the
+                    # lower end sits many bootstrap SEs above hw (n = 120).
+                    self.assertIs(result["diverges"], expected)
+
+    def test_r4_small_n_degenerate_resamples(self):
+        for seed in range(12):
+            pairs = r4_small_pairs(4500 + seed)
+            self.check_divergence(pairs, f"r4 small {seed}")
+
+    def test_r4_trace_after_episode_is_excluded_not_refused(self):
+        raw, pairs = r4_chain_world(4100)
+        broken = list(raw)
+        # A trace that starts after its episode attributes no energy: NaN.
+        broken[7] = broken[7][:5] + (math.nan, math.nan) + broken[7][7:]
+        lane_rows = [lane.ConfigRow(*r) for r in broken]
+        valid = [twin.ConfigRow(*r) for i, r in enumerate(raw) if i != 7]
+        agreement = lane.frontier_agreement(lane_rows)
+        reference = twin.frontier_agreement(valid)
+        self.assertEqual(agreement["joules_frontier"], set(reference["joule_frontier"]))
+        self.assertEqual(agreement["tokens_frontier"], set(reference["token_frontier"]))
+        self.assertLessEqual(abs(agreement["kendall_tau"] - reference["kendall_tau"]),
+                             r4_plain_bar(reference["kendall_tau"]))
+        self.assertIn(f"excluded_row:{raw[7][0]}", agreement["flags"])
+        self.assertIs(agreement["kill_condition_met"], False)
+        # Token-cost outputs keep the row: its token cost and counts are valid.
+        tokens = lane.pareto_frontier(lane_rows, cost="tokens")
+        self.assertEqual(list(tokens), twin.pareto_frontier([twin.ConfigRow(*r) for r in raw],
+                                                            cost="tokens"))
+        model = raw[7][1]
+        episode_pairs = list(pairs[model])
+        episode_pairs[3] = (episode_pairs[3][0], math.nan, episode_pairs[3][2])
+        got = lane.joule_token_divergence(episode_pairs, n_boot=999, seed=5)
+        ref = twin.joule_token_divergence(episode_pairs[:3] + episode_pairs[4:], n_boot=999, seed=5)
+        self.assertIn("excluded_pair:3", got["flags"])
+        self.assertEqual(got["n_pairs"], ref["n"])  # integer counts: exact
+        self.assertLessEqual(abs(got["residual_sd"] - ref["residual_sd"]),
+                             r4_plain_bar(ref["residual_sd"]))
 
 
 if __name__ == "__main__":
