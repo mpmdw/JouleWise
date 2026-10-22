@@ -33,7 +33,7 @@ from joulewise.align.records import Episode, PowerTrace, Turn, to_json
 class BudgetReviewTests(OfflineTest):
     def test_event_wait_sampler_needs_tail_and_jitter_does_not_signal_missed_poll(self):
         # Two nominal periods cover a poll plus the scripted +10 ms acquisition
-        # overhead at 100 ms and +1 ms at 10 ms, matching A2's polling shape.
+        # overhead at both 100 ms and 10 ms, matching A2's polling shape.
         for interval in (100_000_000, 10_000_000):
             items, clock, codec = synthetic_items(6), SyntheticClock(), WordCodec()
             endpoint = ScriptedModel(items.items, clock, codec, base_reasoning_tokens=24,
@@ -41,7 +41,7 @@ class BudgetReviewTests(OfflineTest):
             model = ModelSpec("m", 4.0, "mock", endpoint.identity, codec, endpoint.configured,
                               clock_domain="synthetic:monotonic", controls_verified=True)
             def sampler(_):
-                return ScriptedSampler(clock, 80.0, interval_ns=interval, jitter_ns=interval // 10)
+                return ScriptedSampler(clock, 80.0, interval_ns=interval, jitter_ns=10_000_000)
             def run(tail):
                 return run_matrix(items, (model,), (Condition("thinking_on"),
                                   Condition("budget_0.5", "budget", 0.5)), seeds=(0,),
@@ -56,7 +56,7 @@ class BudgetReviewTests(OfflineTest):
                 self.assertLessEqual(trace.t_ns[0], trial.episode.start_ns)
                 self.assertGreaterEqual(trace.t_ns[-1], trial.episode.end_ns)
                 # No artificial stop-time sample: every poll lies on the jittered grid.
-                self.assertTrue(all((t - trace.t_ns[0]) % (interval + interval // 10) == 0
+                self.assertTrue(all((t - trace.t_ns[0]) % (interval + 10_000_000) == 0
                                     for t in trace.t_ns))
                 energy = episode_energy(trial.episode)
                 self.assertIsNotNone(energy.joules)

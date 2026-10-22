@@ -444,7 +444,7 @@ class BudgetEndToEndTests(OfflineTest):
         self.assertGreater(rows["deletion_0.6"].catch_rate.interval[0],
                            rows["budget_0.6"].catch_rate.interval[1])
         # Removing 410 generated tokens saves 8.2 s minus the extra 0.2 s prefill:
-        # at 80 W this is 640 J, far above the two sensor half-widths (~1.7 J total).
+        # at 80 W this is 640 J; compare with both computed edge/sensor half-widths.
         self.assertGreater(rows["deletion_0.6"].mean_joules
                            - rows["deletion_0.6"].max_measurement_uncertainty_j,
                            rows["budget_0.6"].mean_joules
