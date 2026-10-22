@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.records import RouterLog
 from joulewise.align.moe.stats import (
@@ -14,7 +15,8 @@ from joulewise.align.moe.stats import (
 
 def assert_close(test: unittest.TestCase, actual: float, expected: float) -> None:
     # No printed uncertainty: brief requires 1e-6 relative agreement. For a
-    # structural zero use unit scale (these normalized statistics have scale 1).
+    # structural zero use 1e-6 in the column's own unit: tokens for reuse
+    # distance, dimensionless for the other statistics/effects and for AUC.
     test.assertTrue(math.isclose(actual, expected, rel_tol=1e-6,
                                  abs_tol=1e-6 if expected == 0 else 0.0),
                     (actual, expected))
@@ -35,6 +37,20 @@ class RoutingStatisticsTests(unittest.TestCase):
             assert_close(self, reuse_fraction(log, phase=phase), 1.0)
             assert_close(self, mean_reuse_distance(log, phase=phase), 1.0)
         self.assertEqual(len(episode_stats(log)), 4 * 3)  # Four metrics, three phases.
+
+    def test_episode_path_validates_once_and_matches_individual_metrics(self):
+        # Multi-turn interleaving exercises the actual filtered-sequence path.
+        phases = ("prefill",) * 80 + ("decode",) * 40
+        rows = tuple((((t % 8), (t + 1) % 8), ((t + 2) % 8, (t + 3) % 8))
+                     for t in range(len(phases)))
+        log = RouterLog("validation/oracle", 8, 2, (0, 1), phases * 3, rows * 3)
+        with patch("joulewise.align.moe.stats.routing_flags", wraps=routing_flags) as validate:
+            result = episode_stats(log)
+        self.assertEqual(validate.call_count, 1)  # One validation per aggregate call.
+        for phase in ("prefill", "decode", "both"):
+            for function in (usage_entropy, load_imbalance, reuse_fraction, mean_reuse_distance):
+                assert_close(self, result[f"{phase}_{function.__name__}"],
+                             function(log, phase=phase))
 
     def test_balanced_cycle_and_distances(self):
         cycle = ((0, 1), (2, 3), (4, 5), (6, 7)) * 3
