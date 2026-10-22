@@ -17,7 +17,7 @@ from joulewise.align.budget.__main__ import main
 from joulewise.align.budget.conditions import Condition, LocalEndpoint, delete_spans
 from joulewise.align.budget.energy import episode_energy
 from joulewise.align.budget.items import ItemBatch, hint_suite, stratified_roster
-from joulewise.align.budget.run import ModelSpec, Settings, run_matrix, summarize, summary_table
+from joulewise.align.budget.run import ModelSpec, Settings, _generate, run_matrix, summarize, summary_table
 from joulewise.align.budget.score import HintMonitor, judge_hint_use, parse_answer
 from joulewise.align.budget.storage import (
     read_episode_views, read_result, read_trial_episode, write_episode_views, write_result,
@@ -492,3 +492,43 @@ class BudgetReviewTests(OfflineTest):
             self.assertEqual(runner.call_args.kwargs["run_metadata"]["energy"], config["energy"])
             self.assertTrue(all(r["mean_joules"] is not None
                                 for r in json.loads((root / "out" / "summary.json").read_text())))
+
+    def test_qwen_continuation_template_accepts_all_four_reasoning_shapes(self):
+        item = synthetic_items(1).items[0]
+        body = "Recall the relevant definition.\n\nCheck every option."
+        shapes = {"natural": body + "\n</think>\n\nANSWER: B",
+                  "cut": body + " Therefore", "cut_nl": body + "\n\n", "cap0": None}
+        for shape, output in shapes.items():
+            accepted = []
+            def transport(path, payload):
+                if path == "/tokenize":
+                    return {"tokens": list(range(len(payload["prompt"].split())))}
+                if payload.get("continue_final_message"):
+                    final = payload["messages"][-1]["content"]
+                    reasoning = final.partition("<think>")[2].partition("</think>")[0]
+                    # The real Qwen3 template normalizes thinking this way;
+                    # transformers requires the final message verbatim in it.
+                    render = "<think>\n" + reasoning.strip("\n") + "\n</think>\n\n"
+                    if final.strip() not in render:
+                        raise ValueError("Qwen3 final message absent from rendered template")
+                    accepted.append(shape)
+                    out = "\nANSWER: B"
+                else:
+                    out = "<think>\n" + output
+                    for stop in payload.get("stop", ()):
+                        out = out.split(stop, 1)[0]
+                return {"choices": [{"message": {"content": out, "reasoning_content": None},
+                                      "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 256, "completion_tokens": len(out.split())}}
+            endpoint = LocalEndpoint("http://mock", "m", "vllm", 1, transport=transport)
+            model = ModelSpec("m", 4.0, "vllm", endpoint.identity, endpoint, endpoint.configured,
+                              controls_verified=True)
+            generation = _generate(model, item, Condition("budget", "budget", 0.6), hinted=True,
+                                   median_tokens=0.0 if shape == "cap0" else 1000.0,
+                                   seed=0, settings=Settings(4096, 32), episode_id=shape,
+                                   sampler_factory=None, clock=lambda: 0)
+            with self.subTest(shape=shape):
+                # All four categorical shapes must be accepted and answer B.
+                self.assertEqual(accepted, [shape])
+                self.assertEqual(parse_answer(generation.answer_text, item.labels), "B")
+                self.assertFalse(any(f.startswith("generation_error") for f in generation.episode.flags))

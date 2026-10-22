@@ -289,7 +289,11 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
                     flags.append("budget_reasoning_tokens_from_tokenizer")
                 if first.reasoning_text and first.content:
                     flags.append("budget_early_answer_replaced")
-            prefix = settings.thinking_open + reasoning + settings.thinking_end
+            # Qwen3 re-renders assistant thinking with exactly one opening
+            # newline and reasoning.strip("\n"). Match that template so
+            # continue_final_message finds final_message.strip() verbatim,
+            # including natural closes, newline cuts and the empty cap.
+            prefix = settings.thinking_open + "\n" + reasoning.strip("\n") + settings.thinking_end
             continuation = (*messages, ChatMessage("assistant", prefix))
             final = chat({**options, "continue_final_message": True,
                           "add_generation_prompt": False}, settings.answer_max_tokens, continuation)
