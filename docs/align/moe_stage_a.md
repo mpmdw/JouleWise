@@ -1,6 +1,8 @@
 # MoE Stage A: routing beyond counts
 
-Status: implementation in progress; synthetic validation is not hardware evidence.
+Status: offline Stage A is implemented. Execution evidence and optional-model
+coverage are recorded in .codex-report/align-moe.md. Synthetic validation is not
+hardware evidence.
 No real model download, rented GPU, or live power collection is part of this lane.
 
 Stage A asks whether aggregate router statistics separate benign and sabotage
