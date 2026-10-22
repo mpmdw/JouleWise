@@ -236,6 +236,34 @@ local-boundary witness. The locally corrected external twin suite passes
 and reviewer calibrations are in progress; the final report will replace
 the old blocked-execution sections below.
 
+### Boundary temporal-range correction, derived before implementation
+
+Boundary baseline support: the final local range uses the nearest
+inside sample-to-sample interval (two endpoints) and the nearest full
+outside baseline reading. Outside time is the pre/post-roll idle baseline,
+whose level is observed by that full window; the range assumption covers
+its inside/outside contrast. Two outside samples are not required to
+observe that level and would force fallback merely because a supplied
+one-period post-roll contains one full idle window. Missing the inside
+interval or the outside baseline still falls back to the global range.
+The outside-baseline assumption is explicitly flagged. No collection span,
+bar, seed or acceptance assertion changes.
+
+The first local candidate passes F5 but probe1 exact gives |err|=1.1068 J
+against hw=1.1000 J. Its nearest-only end range is 181.950 W. A single
+inside reading per run cannot describe variation of that side's window
+mean. Use the two endpoints of the nearest observed sample-to-sample
+interval on each side of a boundary. Two samples are the structural
+minimum for a temporal reading range; no radius, threshold, confidence
+constant or seed-dependent count is introduced. If either side lacks
+that interval in any run, fall back to the global range.
+The same bound c_i*outside_fraction_i*R_b and explicit local-range
+assumption apply. In probe1 the measured interval endpoints give
+R_end=185.062 W; coverage/statistical/timing terms do not change.
+This corrects the local assumption's data support, not an acceptance bar.
+All reviewer worlds will rerun; no one-seed containment is a substitute
+for their calibration bars.
+
 ### Round 2 boundary refinement, derived before implementation
 
 The global-range candidate passes the aligned F5 case (7/400 misses) but

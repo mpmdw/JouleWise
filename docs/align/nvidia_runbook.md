@@ -232,9 +232,11 @@ Let R be the largest minus smallest valid reading in retained traces, including
 pre/post-roll, M the mean duration and C the active-run-weighted covered time.
 Coverage contributes (M-C)*R. A clipped window contributes its coefficient
 times its outside fraction times the local boundary range. For each run,
-select the nearest fully inside and fully outside sensor windows at that
-edge, pool their readings, and use their range. If any run lacks either
-bracketing window, fall back to R. This assumes the underlying boundary
+select both endpoints of the nearest fully inside sample interval and the
+nearest full outside idle-baseline reading, pool them, and use their range.
+If any run lacks the inside interval or the outside baseline, fall back to R.
+Preserve outside_idle_baseline_assumed: the idle window supplies the outside
+level; local workload variation needs the two endpoints of an inside interval. This assumes the underlying boundary
 contrast stays inside that local range; an unrelated prefill peak must not
 set the uncertainty of a tool-wait-to-idle boundary. A known endpoint uncertainty h contributes
 its coefficient times min(h/window,1)*R. These are bounds and add linearly,

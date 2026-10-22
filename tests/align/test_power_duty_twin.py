@@ -340,13 +340,14 @@ def twin_estimate_energy(
             within = [(a, b, v) for a, b, v in row if a >= 0 and b <= duration]
             beyond = [(a, b, v) for a, b, v in row
                       if (b <= 0 if edge == 0 else a >= duration)]
-            if not within or not beyond:
+            if len(within) < 2 or not beyond:
                 selected = []
                 break
             within.sort()
             beyond.sort()
-            selected.extend((within[0 if edge == 0 else -1][2],
-                             beyond[-1 if edge == 0 else 0][2]))
+            # The nearest measured temporal interval has two endpoints.
+            near = within[:2]+beyond[-1:] if edge == 0 else within[-2:]+beyond[:1]
+            selected.extend(item[2] for item in near)
         edge_ranges.append(max(selected)-min(selected) if selected else reading_range)
     boundary_bound = math.fsum(
         float(weight) * ((item.right-item.left) -
@@ -489,7 +490,7 @@ class DutyIndependentTwinTests(unittest.TestCase):
 
     def test_local_boundary_range_excludes_unrelated_prefill(self):
         ms = 1_000_000
-        ends = list(range(0, 226 * ms, 25 * ms))
+        ends = list(range(-25 * ms, 251 * ms, 25 * ms))
         # 100 ms prefill at 350 W, 90 ms tool wait at 75 W, idle 55 W.
         def integral(left, right):
             cuts = sorted({left, right, *(t for t in (0, 100*ms, 190*ms)

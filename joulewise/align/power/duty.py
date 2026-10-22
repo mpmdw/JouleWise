@@ -163,10 +163,10 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     * Boundary: sum(|d_i|*(1-l_i/w_i)*R_b), w_i the original window width
       and l_i its inside length. A whole-window mean differs from its
       inside mean by outside_fraction*(outside_mean-inside_mean). R_b is
-      the range across each run's nearest fully inside and fully outside
-      readings at that boundary. This assumes the boundary contrast stays
+      the range across both endpoints of each run's nearest fully inside
+      sample interval and its nearest full outside idle-baseline reading. This assumes the boundary contrast stays
       within that observed LOCAL range. If any run lacks either bracketing
-      window, use global R. A window straddling both edges uses max(R_b).
+      inside interval or outside baseline, use global R. A window straddling both edges uses max(R_b).
       Selection uses actual endpoints, with no fixed neighborhood radius.
     * Known timing: sum(|d_i|*min(h_i/w_i,1)*R), since translating a
       w_i-wide mean by at most h_i replaces at most min(h_i,w_i) of it.
@@ -292,17 +292,18 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
             inside = [item for item in all_windows if item[0] >= 0 and item[1] <= run_duration]
             outside = ([item for item in all_windows if item[1] <= 0],
                        [item for item in all_windows if item[0] >= run_duration])
-            # Nearest observed full windows bracket each edge. No arbitrary
-            # neighborhood radius: actual window endpoints select the data.
+            # Observe local workload variation with the two endpoints of
+            # its nearest full sample interval, plus the nearest full idle
+            # baseline outside. Two is an interval's structural endpoint
+            # count, not a fitted threshold; outside stationarity is flagged.
             for edge in (0, 1):
-                if not inside or not outside[edge]:
+                if len(inside) < 2 or not outside[edge]:
                     boundary_bracketed[edge] = False
                     continue
-                inner = (min(inside, key=lambda item: item[0]) if edge == 0 else
-                         max(inside, key=lambda item: item[1]))
-                outer = (max(outside[edge], key=lambda item: item[1]) if edge == 0 else
-                         min(outside[edge], key=lambda item: item[0]))
-                boundary_readings[edge].extend((inner[2], outer[2]))
+                inner = sorted(inside, key=lambda item: item[0])
+                outer = sorted(outside[edge], key=lambda item: item[0])
+                near = inner[:2]+outer[-1:] if edge == 0 else inner[-2:]+outer[:1]
+                boundary_readings[edge].extend(item[2] for item in near)
             durations[run_index] = run_duration
             duration = max(durations.values())
             unknown_resolution |= run_unknown_resolution
@@ -455,6 +456,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     boundary_ranges = [max(readings)-min(readings) if complete else reading_range
                        for readings, complete in zip(boundary_readings, boundary_bracketed)]
     flags.add("boundary_observed_range_assumed")
+    flags.add("outside_idle_baseline_assumed")
     if not all(boundary_bracketed):
         flags.add("boundary_range_fallback_global")
     flags.add(f"boundary_start_range_w={boundary_ranges[0]!r}")
