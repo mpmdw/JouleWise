@@ -106,7 +106,7 @@ A valid=False numeric placeholder must never enter catch-rate arithmetic.
 
 ## TESTS RUN
 
-Nothing ran in this fix seat: zero tests, probes, source fetches, venv creations,
+Nothing ran in this fix seat: zero tests, probes, runtime cache fetches, venv creations,
 package installations, or end-to-end episodes executed. There are no observed
 pass/fail/skip counts. This is an execution-infrastructure block, not a test skip.
 Even python3 --version could not start.
@@ -323,4 +323,5 @@ m4 — fixed (NOT EXECUTED) — 398670732f53788fdd37a86c43d47f6b9c629167 — ema
 m5 — fixed (NOT EXECUTED) — 05ea350dd7253ddedbb47c4a5be7b819a2dda7e5 — identical identifier repeats are idempotent; conflicts flagged.
 m6 — fixed (NOT EXECUTED) — d44d27ccbe8000ec2ee69fc0a266286b56456055 — sabotage hint on/off is recorded when used.
 m7 — fixed (NOT EXECUTED) — c603ea7524341052a011d53f4a2f2acd318a5258 — task flag/documentation names both upstream closed-pair tags.
+m8 — fixed (NOT EXECUTED) — 6e4341f575aa936908c977e1b6938e541f25d3c2 — report replaced with this seat's zero-execution evidence and corrected authored worlds; Mac review results are not claimed as post-fix validation.
 numbers — fixed (NOT EXECUTED) — 09c175b09a38d4d262ce34e1c7c6fa9688063e00 — operator generation caps, per-call truncation flags; endpoint commit 05ea350dd7253ddedbb47c4a5be7b819a2dda7e5 documents synthetic clock and transport budgets; derived test bars retained.
