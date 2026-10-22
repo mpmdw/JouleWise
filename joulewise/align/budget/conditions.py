@@ -175,10 +175,11 @@ class LocalEndpoint:
             # A concatenation is not the chat template; never claim an exact count.
             prompt = len(self.encode("\n".join(m.content for m in messages)))
             flags.append("prompt_tokens_template_estimate")
-        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
         usage["_budget_flags"] = flags
+        usage["_finish_reason"] = raw["choices"][0].get("finish_reason")
         calls = tuple(ToolCallRequest(c.get("id", ""), c["function"]["name"],
                                       c["function"].get("arguments", "{}"))
-                      for c in message.get("tool_calls", ()))
+                      for c in (message.get("tool_calls") or ()))
         return ChatResult(content, reasoning, calls, int(prompt), int(cached),
                           int(completion), int(reasoning_tokens), start, None, end, usage)

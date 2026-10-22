@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
                 monitor_config["backend"], monitor_config["timeout_s"],
                 options=monitor_config.get("options", {}))
             monitor = HintMonitor(monitor_endpoint, model=monitor_endpoint.model,
-                                  max_tokens=monitor_config.get("max_tokens", 64),
+                                  max_tokens=monitor_config.get("max_tokens", 2048),
                                   seed=monitor_config.get("seed", 0),
                                   revision=monitor_config["runtime_revision"])
             settings = Settings(**config["settings"])
@@ -92,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         print(to_json({"run_sha256": result.run_sha256, "flags": result.flags}))
     except Exception as exc:
         print(to_json({"flags": [f"pilot_error:{type(exc).__name__}"]}))
+        return 1
     return 0
 
 
