@@ -261,7 +261,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | Module | Tests | Failures | Errors | Skips | Exit | Wall seconds | Where it ran | Log SHA-256 |
 |---|---|---|---|---|---|---|---|---|
 | tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
-| tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
+| tests.b5_analysis.test_release_equality | 12 | 2 | 0 | 0 | 1 | 47231.364 | Codex Cloud | `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559` |
 | tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
 | tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
@@ -297,12 +297,17 @@ Completed cloud logs and test failures:
   - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_load_correlated_restored_units_pass_real_tripwire_and_validator
 - `tests.test_authentication_io` at `01aac454c12bf31ba7c2628a3ecc4d12eae1d413`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 2.290 s. Log `/workspace/l9-1/checks-main-1/logs/tests_test_authentication_io.log`, SHA-256 `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b`.
 - `tests.test_docs_freshness` at `01aac454c12bf31ba7c2628a3ecc4d12eae1d413`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 1.155 s. Log `/workspace/l9-1/checks-main-1/logs/tests_test_docs_freshness.log`, SHA-256 `e07c6fb1abd7a00f20ae1854231da7ea58b5d37e685b352d65b8ca8b3145ecb1`.
+- `tests.b5_analysis.test_release_equality` at `500f7ad3d230a4b764283134426eea6d90354f74`: 12 tests, 2 failures, 0 errors, 0 skips, exit 1, 47231.364 s. Log `/workspace/l9-1/j6-1/logs/tests_b5_analysis_test_release_equality.log`, SHA-256 `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559`.
+  - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_release_after_dry_run_passes
+  - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_two_custody_roots_have_identical_output_digests
 
 Additional logs (not completed acceptance modules):
 
 - interrupted nohup dry-run attempt, no completed module result: `/tmp/l9-1/dry-1/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `2e42a4d7fc20e0071a5a25465409762de8ac5f48fcc5d758ec137546b6d43c97`.
 - interrupted tmpfs dry-run attempt, no completed module result: `/tmp/l9-1/dry-2/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `33e0f4f0f768f4094bae6f2496da4ff2a2f6cf0b80cc14b53e4f34204e35ae4d`.
 - fixture-lifetime mechanism probe, not a step-9b replay: `/workspace/l9-1/lifetime-probe/probe.log`, SHA-256 `ee7f85e8dd62de5e97fa78587061a1f500867ca7857823d4aa7214c9d887d58f`.
+- independent complete synthetic-fixture snapshot before step 9b, 22,950 files copied and verified: `/workspace/l9-1/no-joined-observer-1/pre9b-snapshot/snapshot.log`, SHA-256 `d67a3e69417d550e924da6e9314da78987b9d9dc78b803cdf5179af7be6a655d`.
+- passive runtime-observer instrumentation smoke check, one real worker and owned temporary cleanup; not acceptance: `/workspace/l9-1/runtime-observer-smoke/runtime.jsonl`, SHA-256 `5badf05fc7f368da1f668f6090e3d63c62e28ffcb4e4e37228996be2efb6c9ab`.
 
 Exact merged-input diagnostic after the 49-test legacy prefix: admitted VerifiedClaimEvidence, no validator codes, exit 0, 3588.285 s including the prefix; all ten original bound-file hashes matched before and after. This does not replace the failed joined acceptance. Log `/workspace/l9-1/prefix-1/control.log`, SHA-256 `01f46960fd4d4807af7df0b8b7e87f91dfc13ea1bf975347b3a6c1854127bad6`; passive provenance log SHA-256 `808bde69efbf4fcaed346530b58235a30981786e309bbb0dea71004dc3d323ba`. The original runner exited at its completed-module boundary; retained synthetic trees were restored at their exact original locators and their ten bindings reverified.
 
