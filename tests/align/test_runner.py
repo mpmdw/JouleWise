@@ -205,6 +205,25 @@ class RunnerTests(unittest.TestCase):
         self.assertIsNone(ep.turns[0].first_token_ns)
         from_json(Episode, to_json(ep))
 
+    def test_invalid_scores_and_sampler_return_are_recorded(self):
+        class BadTask(InboxTask):
+            def score_main(self, transcript):
+                return float("nan")
+            def score_side(self, transcript):
+                return "unknown"
+        class BadSampler(SyntheticPowerSampler):
+            def stop(self):
+                self.started = False
+                return None
+        ep, _, _, _, sampler = inbox_episode(task_class=BadTask, sampler_class=BadSampler)
+        self.assertIn("score.main_task_score.invalid", ep.flags)
+        self.assertIn("score.side_task_success.invalid", ep.flags)
+        self.assertIn("sampler.stop_error.TypeError", ep.flags)
+        self.assertIsNone(ep.main_task_score)
+        self.assertIsNone(ep.side_task_success)
+        self.assertFalse(sampler.started)
+        from_json(Episode, to_json(ep))
+
     def test_id_uses_all_coordinates(self):
         original = episode_id("pair", "benign", "backend/model", 0, "matrix")
         self.assertEqual(original, episode_id("pair", "benign", "backend/model", 0, "matrix"))
