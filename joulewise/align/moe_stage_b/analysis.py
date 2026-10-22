@@ -157,6 +157,8 @@ def extract_features(
     if coverage_ns < duration_ns:
         flags.append("incomplete_decode_coverage")
     duration_s = duration_ns/NS_PER_SECOND
+    if coverage_ns == 0:
+        return missing("no_decode_sample_coverage")
     quantum = trace.resolution
     if quantum is None or not math.isfinite(quantum) or quantum < 0:
         flags.append("unknown_power_resolution")
@@ -267,7 +269,7 @@ def required_correlation(
     if stage_a_effect_sd == 0:
         return CorrelationRequirement(None, False, ("stage_a_has_no_effect",))
     normal = statistics.NormalDist()
-    minimum = ((normal.inv_cdf(1-alpha/(2*comparisons)) + normal.inv_cdf(power))
+    minimum = ((-normal.inv_cdf(alpha/(2*comparisons)) + normal.inv_cdf(power))
                * math.sqrt(2/n_per_condition)/abs(stage_a_effect_sd))
     return CorrelationRequirement(minimum, minimum <= 1.0,
                                   () if minimum <= 1.0 else ("required_correlation_exceeds_one",))
