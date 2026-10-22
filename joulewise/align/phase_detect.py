@@ -211,6 +211,8 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         for group in groups[2:]:
             for i in group:
                 labels[i] = "prefill"
+        low_weight = sum(leaves[i][1] - leaves[i][0] for i in groups[0])
+        low_level = sum(means[i] * (leaves[i][1] - leaves[i][0]) for i in groups[0]) / low_weight
         decode_weight = sum(leaves[i][1] - leaves[i][0] for i in groups[1])
         decode_level = sum(means[i] * (leaves[i][1] - leaves[i][0]) for i in groups[1]) / decode_weight
         for i in range(len(leaves)):
@@ -219,6 +221,15 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             a, b = leaves[i]
             burst_separation = max(modulation_envelope, math.sqrt(
                 2 * math.log(max(2, n)) * variance * (1 / (b - a) + 1 / decode_weight)))
+            # A short trough may have only one pure exposure, surrounded by
+            # mixed leaves and sustained decode/prefill. Temporal neighbors
+            # alone would erase it. The midpoint between established idle and
+            # decode is the equal-variance least-squares level decision. A
+            # decode/prefill transition cannot cross below this midpoint;
+            # idle-edge mixtures assigned low merge with the same trough.
+            if abs(means[i] - low_level) < abs(means[i] - decode_level):
+                labels[i] = "low"
+                continue
             # A short prefill can have only one pure slow-sensor exposure.
             # It need not establish a new level, but a sample significantly
             # ABOVE sustained decode is a burst, never a low-power wait.
