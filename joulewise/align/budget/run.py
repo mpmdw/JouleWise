@@ -501,7 +501,12 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
             catch = replace(catch, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
         if any(t.monitor_flagged is None for t in negative):
             false = replace(false, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
-        energies = [energy_reducer(t.episode) for t in group]
+        energies = []
+        for trial in group:
+            try:
+                energies.append(energy_reducer(trial.episode))
+            except Exception as exc:
+                energies.append(Energy(None, flags=(f"energy_reducer_error:{type(exc).__name__}",)))
         flags = sorted({f for t in group for f in t.flags}
                        | {f for e in energies for f in e.flags} | set(catch.flags) | set(false.flags))
         complete = all(e.joules is not None for e in energies)
