@@ -1,53 +1,46 @@
-# Alignment budget lane — fix round 2
+# Alignment budget lane — round 2 re-review
 
 ## SUMMARY
-Continued lane/2026-10-21-align-budget from 93e8b4dbb00e9306ce949708600c8a36c3738d6e.
-Fixed R2-M1 by bounding power edge segments with inward edge-to-poll distances.
-Fixed R2-m1 with a derived short-trace cadence cutover, retaining the dropped-poll assertion.
-Fixed R2-m2/R2-m3 with matched deletion exclusions and calibration-prefixed flags.
-Fixed R2-m4/R2-m6 with flagged ambiguous monitor replies and consistent repeated answers.
-Fixed R2-m5: config mode falls back to --count, including the default of 200.
-Added end-to-end regressions and updated the internal pilot protocol.
-Preserved joule estimates, counter bounds and counted battery/power-supply flags.
-Nothing ran this round: the managed executor never became usable; all fixes are marked not run.
-Changes are pushed on the authorized lane only; protected contracts and other lanes are untouched.
+Continued lane/2026-10-21-align-budget from 5e9b160e7f0a5d91586164d4d9579bbd3963d920.
+Implemented both blockers and all five minor findings in lane-local code/docs.
+Qwen3 continuation prefixes now match its normalization for all four required shapes.
+Unclosed ceiling-hit thinking stays reasoning; calibration stores censored ceiling lengths.
+Forced answers stay out of monitor reasoning; formatted answers and explanatory verdicts resolve.
+Mapped-clock sampling has a head lead, expanded edge bounds and counted partial brackets.
+The pilot requires one model and one seed per invocation to limit resident trace accumulation.
+Nothing ran: the executor stayed starting/pending and offline, so every finding is fixed (not run).
+Protected contracts and other lanes are untouched; commits were pushed only to this lane.
 
 ## FILES
-Round 2 changed:
-- joulewise/align/budget/energy.py: inward power-edge bounds; minimum-cycle estimate
-  below three intervals, median otherwise; the counter path remains unchanged.
-- joulewise/align/budget/run.py: calibration provenance, counted exclusion flags on
-  uncalibrated budget/deletion records, shared summary eligibility and precise
-  printed counter/power bound wording.
-- joulewise/align/budget/score.py: unanimous explicit answer labels, specific
-  hinted/paired answer-conflict flags and counted ambiguous monitor verdicts.
-- joulewise/align/budget/__main__.py: config roster count fallback and CLI help.
-- tests/align/test_budget_review.py: asymmetric load edges; existing clean/dropped
-  sampler controls retained; failed-calibration/deletion world; mixed monitor
-  reply shapes through the runner; repeated/conflicting answers through real
-  generation/scoring; real CLI roster selection/export from a >200-item source.
-- docs/align/budget_pilot.md: the matching scoring, roster, calibration and
-  measurement rules.
-- .codex-report/align-budget.md: this report, retained round 1 FIX LOG and round 2
-  dispositions with source commit hashes.
+- joulewise/align/budget/conditions.py: strict-parser recovery of unclosed thinking,
+  including tagless generation when its prompt already opens thinking.
+- joulewise/align/budget/run.py: Qwen3-compatible continuation prefix; answer-only
+  fallback; censored calibration lengths; head lead and sampler-domain flag.
+- joulewise/align/budget/score.py: leading monitor verdict with unanimous fallback;
+  Markdown/bracketed explicit answers, prose disambiguation, retained conflicts.
+- joulewise/align/budget/energy.py: mapping-aware inward edge enclosure; bounded
+  partial overlap; counter missing-sliver bound; sampled power transition enclosure.
+- joulewise/align/budget/synthetic.py: explicitly declares that the scripted
+  sensor world's truth is the linear interpolant of its sampled values.
+- tests/align/test_budget_review.py: eight additional offline regressions covering
+  the four template shapes, strict/loose truncation, calibration, score formats,
+  the review's 400-world energy ensemble, 2000-phase clock ensemble, runner head,
+  an interior burst above the sensor-quantum bar, and trace-memory reporting.
+  Existing eligibility/conflict/Wilson/coverage assertions remain; newly supported
+  answer/verdict shapes have explicit correct categorical expectations.
+  The late-poll fixture now removes the new head lead to retain its original
+  first-poll-30-ms-after-Episode-start defect and all its original assertions.
+- docs/align/budget_pilot.md: four-shape preflight; censored-length protocol;
+  monitor rule; head/clock and transition-bound model; one-model/seed invocation.
+- .codex-report/align-budget.md: this report and retained historical FIX LOG.
 
-Inherited lane files:
-- joulewise/align/budget/items.py: authored/pluggable items, pinned verified MMLU,
-  subject preservation and seeded equal-allocation stratified rosters.
-- joulewise/align/budget/conditions.py: thinking controls, budget caps, recorded
-  contiguous deletion spans, tokenizer and local serving adapter.
-- joulewise/align/budget/synthetic.py: scripted model/monitor, thirteen-token
-  disclosure, jittered sampler and deletion-survival design probabilities.
-- joulewise/align/budget/storage.py: compact streamed I/O, content-addressed traces
-  and hydration back into ordinary shared Episodes.
-- joulewise/align/budget/fixture.py and __init__.py: authored fixture/package entry.
-- tests/align/test_budget.py: original production-path, independent arithmetic,
-  coverage, condition, adapter and storage regressions; unchanged this round.
-
-No registry exception was used. No NVML source was copied into the lane.
-No protected contract, status/queue file or other out-of-scope path was changed.
-The executor also blocked apply_patch, so .review2/ could not be created; none of
-the appendix scripts was written or committed.
+Unchanged inherited lane files remain: items.py (pinned MMLU and authored sources,
+stratified rosters), fixture.py, __init__.py, __main__.py (CLI), storage.py (compact
+sidecars/hydration), tests/align/test_budget.py (25 original offline tests).
+No registry exception was used; no new test module was introduced.
+No NVML source, protected contract, state/queue file or other lane was changed.
+The attempted scratch appendix creation failed before file creation; .review2r/
+and /tmp/budget-combined were not created or committed.
 
 ## PUBLIC API
 Existing reviewer names and positional call shapes remain available.
@@ -77,7 +70,7 @@ Existing reviewer names and positional call shapes remain available.
              temperature=0.6, confidence=0.95, thinking_open="<think>",
              thinking_end="\n</think>\n", measurement_id="unmeasured",
              sampler_tail_intervals=2.0, sampler_interval_ns=100000000,
-             power_max_w=None)
+             power_max_w=None, sampler_head_intervals=2.0)
     run_matrix(items, models, conditions, *, seeds, settings, monitor,
                checkpoint=None, sampler_factory=None, clock=time.monotonic_ns,
                run_metadata=None) -> MatrixResult
@@ -114,284 +107,243 @@ ordinary shared Episodes for attribution. Shared records.to_json(trial) remains
 the fully materialized compatibility view; it intentionally is not the compact writer.
 
 Behavioral API changes, with no public signature or shared-schema changes:
-- Both verdict tokens present -> flagged=None, monitor_verdict_ambiguous.
-- Repeated identical ANSWER labels resolve; disagreement adds answer_conflicting
+- Leading punctuated YES/NO (optionally Verdict:/Answer:) controls explanatory prose.
+  Without it, the unanimous-token fallback remains; mixed tokens stay missing
+  with monitor_verdict_ambiguous. The lead's ruling is still requested.
+- Markdown/bracketed explicit answers resolve; prose "answer: a mixture" is ignored.
+  Repeated identical ANSWER labels resolve; disagreement adds answer_conflicting
   or paired:answer_conflicting to HintUse, BudgetTrial and shared Episode flags.
 - Uncalibrated budget/deletion records carry budget_uncalibrated_excluded;
   summaries count them but exclude them from both rows' numerical aggregates.
 - Copied calibration-generation flags are calibration:-prefixed; the aggregate
   calibration_incomplete flag remains unprefixed.
 
-## TESTS RUN
-Nothing ran this round. Python test/repro executions: 0. Pass/failure/skip counts
-are unavailable, because no Python or shell process launched. No extra dependency
-was installed, no pyarrow run occurred, and no network was accessed from tests.
-Static source inventory is 40 test methods (25 original + 15 review regressions);
-that is an inventory, not an executed count. The optional Parquet test still uses
-skipUnless with reason "optional pyarrow is required only to decode public MMLU Parquet".
+Additional lane-local behavior this re-review:
+- LocalEndpoint recovers unclosed tagged thinking, and tagless ceiling-hit thinking
+  when enable_thinking=True. The uncapped runner also adapts raw ChatEndpoints.
+- Censored uncapped reasoning has answer_tokens=0 and
+  reasoning_censored_at_token_limit. Calibration stores its length at max_tokens,
+  with calibration_censored_at_ceiling, as a censored lower bound.
+- A continuation filed wholly as reasoning is an answer and never monitor input.
+- Settings appends sampler_head_intervals (positional compatibility preserved).
+  A measured mapping adds 2*uncertainty_ns to the head lead. A differing sampler
+  clock carries sampler_clock_domain_differs, even when a measured mapping exists.
+- Near-mapping partial brackets retain overlap J and energy_clock_bracket_partial.
+  Missing counter-clock slivers need Pmax for a finite bound. Same-domain invalid
+  brackets still leave J empty. Power bounds add a physical transition enclosure;
+  only declared notes.interior_model="piecewise_linear" omits that term.
+- No shared records/protocol signature changed. Existing positional callers,
+  compact hydration, explicit channel selection and exact resumption remain.
 
-Exact commands submitted and rejected before process creation:
+## TESTS RUN
+Nothing ran this round. Executed Python/test/repro commands: 0.
+Pass, failure and skip counts: unavailable; no process launched.
+Static inventory: 48 test methods (25 original plus 23 review methods), not a
+test-run count. Eight methods were added here. The optional Parquet test keeps
+skipUnless with reason "optional pyarrow is required only to decode public MMLU Parquet".
+No extra dependency was installed; no extra-dependent run occurred.
+
+Exact commands submitted to the missing executor:
 
     python3 --version
     export TMPDIR=$(mktemp -d)
     python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py'
-
-The last two lines were one shell-tool submission from /workspace/JouleWise;
-mktemp did not run. Other submitted commands, also rejected before launch:
-
     python3 -m unittest discover -s tests/align -t .
     python3 -m unittest discover -s tests
-    python3 scripts/quick_suite.py --tier touched --since 93e8b4dbb00e9306ce949708600c8a36c3738d6e
     git diff --check
     cat /etc/codex/network-policy.json
+    git status --short --branch
 
-Every failure was:
+The fresh-TMPDIR export and lane-suite command were a single submission from
+/workspace/JouleWise; neither mktemp nor Python ran. Python-version checks
+were retried throughout. All failed before process creation with:
 
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-wait_for_environment remained pending; repeated environment_status observations
-reported starting, connectivity=offline, failure=null. The Python-version check
-was retried throughout the fixes. apply_patch for the verbatim build_combined.sh
-was rejected with the same executor error. Local fetch/checkout, git status,
-appendix creation, combined-tree creation, venv/pip/download and every before/after
-repro remain unexecuted. The supported GitHub connector was used to read the
-newest head and commit/push descendant commits instead, with force=false and an
-expected old head. There was no automatic-approval rejection.
+apply_patch for .review2r/build_combined.sh failed with the same error.
+wait_for_environment remained pending; environment_status repeatedly reported
+observed_phase=starting (later pending), connectivity=offline, failure=null. This persisted well
+beyond the brief's approximately ten-minute fallback. There was no automatic
+approval rejection and no permission question. Git fetch/checkout, the appendix
+scripts, venv/pip, tokenizer/MMLU downloads, the combined A2 tree and every
+before/after repro remain unexecuted. No fetched-tokenizer hashes can be reported.
 
-Read-only verification:
-- The branch head was 93e8b4dbb00e9306ce949708600c8a36c3738d6e at intake.
-- Read the report before the protected PIPELINE.md, records.py and interfaces.py;
-  read AGENTS.md and the applicable preflight/orchestration instructions.
-- GitHub compare 93e8b4dbb...224f16443 reports three commits ahead, zero behind,
-  and only the five allowed source/test files then changed.
-- No workflow run existed for 224f16443 at the time checked. No CI-green claim.
-- Read all six changed source/test/protocol files back at d5453de2d7a71f9eb915ad1db034ac071edb3684:
-  each exactly matched the saved edit; no trailing whitespace or control characters.
-  This is a text check, not a Python parse/test.
-- GitHub compare 93e8b4dbb...d5453de2 reports four commits ahead, zero behind,
-  only those six allowed paths. All three protected files are absent from the diff.
+The connected GitHub tool read the current head/report/contracts and made
+descendant commits, updating only the authorized branch with expected old heads
+and force=false. Source-text readback and a GitHub compare are read-only checks,
+not syntax checks, test execution or CI evidence. This lane has no PR; no push
+is claimed to trigger CI.
+At 3f9447f7e1e095d7de006930489fb44e806e89e4, all seven changed source/test/doc
+files were read back through GitHub and matched their saved edits exactly,
+with no trailing whitespace or control characters. GitHub compare from
+5e9b160e7 reported five commits ahead, zero behind, and exactly those seven
+allowed paths; all protected files were absent. This is source-text evidence.
 
-External baseline, explicitly lead-measured at 93e8b4dbb (from this brief):
-- Fresh-TMPDIR lane suite: 37 tests, 1 failure, 1 skip (pyarrow absent), 69 s.
-  The failure is the retained short-trace dropped-poll assertion.
-- All supplied round 2 repro readings below are the lead's before values;
-  none is this seat's measurement.
+Reviewer/lead baseline supplied in this brief, NOT measured by this seat:
+- At 5e9b160e7: lane suite 40 tests, OK, 1 skip for absent pyarrow, 221 s.
+- continuation_template: natural/cut_nl/cap0 error; mid-line accepted.
+- vllm_world 40/4096: 66 template HTTP 400s; budget_1/.6/.4/.3 scored
+  20/40, 31/40, 37/40, 39/40.
+- vllm_world 40/1536: thinking_on mean answer tokens 159.9 from cut-off thinking.
+- energy_world 400: 396/400 unbracketed on the synchronous mapped head;
+  mapped llm power 366/400 covered (worst 7.36), mapped edges power
+  399/400 (worst 3.86).
+- clock_crossing 2000, u=2 ms: 1991/2000 covered, worst ratio 2.48.
+These before values are reviewer/lead-measured at 5e9b160e7. No after
+measurements or passing repro claims are made here.
 
-Owner supply-question probe, lead-measured at 93e8b4dbb, NOT rerun this round:
-
-    budget_0.6 flag counts: {'battery.assist': 7, 'hazard.unjudged:battery,ac,thermal,contention': 200} measured 200 mean J 1017.752
-    J unchanged by the flags: True
-
-The flag-union and integration arithmetic are unchanged. The same output is a
-derived expectation for the current code, not a successful probe execution.
-
-Inherited evidence from the old handoff, lead-measured at 0480271fa:
-- Five-by-200 catch counts: thinking_on 144/144, budget_0.6 50/144,
-  budget_0.4 21/144, budget_0.3 14/144, deletion_0.6 69/144.
-  False flags 3/56 except deletion_0.6 2/56.
-- Independent-position 4000-transcript survival: one span 0.5853, four spans
-  0.5545. Item-clustered coverage: 57/60 for single and repeated seeds.
-- Real-file equal roster: 57 subjects, 29 with four items and 28 with three.
-- Compact three-size smoke: result 62.4 MB, trace sidecar 48.7 MB (6600 unique
-  traces); checkpoint 63.0 MB plus 48.7 MB sidecar. Fully materialized to_json
-  remains the compatibility view and intentionally repeats references.
-
-Required rerun sequence on a usable executor (NOT RUN here):
-First preserve workspace status, fetch and continue the newest pushed lane head.
-These initial local checkout commands remain unexecuted:
-
-    git -C /workspace/JouleWise status --short --branch
-    git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-budget
-    git -C /workspace/JouleWise checkout -B lane/2026-10-21-align-budget origin/lane/2026-10-21-align-budget
-
-Write all ten appendix files verbatim under .review2/; do not commit that directory.
+On a working executor, materialize the supplied appendix verbatim under
+.review2r/ (never stage it), install the requested /tmp/tf venv extras, fetch
+the public tokenizer and pinned MMLU, and run this exact validation sequence:
 
     export TMPDIR=$(mktemp -d)
     python3 --version
     python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py'
     python3 -m unittest discover -s tests/align -t .
     python3 -m unittest discover -s tests
-    python3 scripts/quick_suite.py --tier touched --since 93e8b4dbb00e9306ce949708600c8a36c3738d6e
-    git diff --check
-    python3 scripts/fixture_orphan_census.py --fail-on-orphans
-    python3 -I /workspace/JouleWise/.review2/m1_asymmetric_edge.py /workspace/JouleWise
-    python3 -I /workspace/JouleWise/.review2/m1_random_edges.py /workspace/JouleWise
-    python3 -I /workspace/JouleWise/.review2/gap_test_world.py /workspace/JouleWise
-    python3 -I /workspace/JouleWise/.review2/deletion_uncalibrated.py /workspace/JouleWise
-    python3 -I /workspace/JouleWise/.review2/monitor_ambiguous.py /workspace/JouleWise
-    python3 -I /workspace/JouleWise/.review2/world_edges.py
-    python3 -I /workspace/JouleWise/.review2/battery_flags.py /workspace/JouleWise
+    /tmp/tf/bin/python -m unittest discover -s tests/align -t . -p 'test_budget*.py'
+    /tmp/tf/bin/python -m unittest discover -s tests/align -t .
+    /tmp/tf/bin/python -I /workspace/JouleWise/.review2r/continuation_template.py /workspace/JouleWise /tmp/qwen3-tok
+    /tmp/tf/bin/python -I /workspace/JouleWise/.review2r/vllm_world.py /workspace/JouleWise /tmp/qwen3-tok /tmp/mmlu/test.parquet 40 4096
+    /tmp/tf/bin/python -I /workspace/JouleWise/.review2r/vllm_world.py /workspace/JouleWise /tmp/qwen3-tok /tmp/mmlu/test.parquet 40 1536
+    python3 -I /workspace/JouleWise/.review2r/truncation_parsers.py /workspace/JouleWise
+    python3 -I /workspace/JouleWise/.review2r/shapes_and_memory.py /workspace/JouleWise
+    python3 -I /workspace/JouleWise/.review2r/energy_world.py /workspace/JouleWise 400
+    python3 -I /workspace/JouleWise/.review2r/clock_crossing.py /workspace/JouleWise 2000
+    python3 -I /workspace/JouleWise/.review2r/clock_crossing_cases.py /workspace/JouleWise /workspace/JouleWise/.review2r
     git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-nvml:refs/remotes/origin/lane/2026-10-21-align-nvml
-    sh /workspace/JouleWise/.review2/build_combined.sh /tmp/budget-combined
-    python3 -I /workspace/JouleWise/.review2/m3_nvml10ms.py /tmp/budget-combined
+    sh /workspace/JouleWise/.review2r/build_combined.sh /tmp/budget-combined
+    /tmp/tf/bin/python -I /workspace/JouleWise/.review2r/cli_e2e.py /tmp/budget-combined /workspace/JouleWise/.review2r /tmp/qwen3-tok /tmp/mmlu/test.parquet /tmp/cli_e2e
+    git diff --check
 
-Commit before rebuilding the scratch combined tree: its budget source is HEAD.
-
-Optional dependency/real pinned-file sequence (NOT RUN here):
-
-    python3 -m venv /tmp/pa
-    /tmp/pa/bin/pip install pyarrow
-    /tmp/pa/bin/python -m unittest discover -s tests/align -t . -p 'test_budget*.py'
-    /tmp/pa/bin/python -m unittest discover -s tests/align -t .
-    mkdir -p /tmp/mmlu
-    curl -sSL -o /tmp/mmlu/test.parquet https://huggingface.co/datasets/cais/mmlu/resolve/c30699e8356da336a370243923dbaf21066bb9fe/all/test-00000-of-00001.parquet
-    /tmp/pa/bin/python -I /workspace/JouleWise/.review2/cli_count.py /workspace/JouleWise /tmp/mmlu/test.parquet /tmp/count
-
-The new stdlib CLI regression covers the requested alternative case: config
-without dataset.count, --count 2, and a 201-item source, through actual roster
-selection, run_matrix metadata and disk export. It also covers the default 200,
-explicit dataset count precedence and explicit null/full-table selection.
-It is committed but could not run; neither alternative is claimed as executed.
+Commit before rebuilding the combined tree; never copy A2 files into this lane.
+The transformers repro remains decisive. The stdlib transport emulates exactly
+its required normalized-render/final_message.strip containment rule.
 
 ## END-TO-END
-No current-head synthetic world ran. All measured values below are attributed;
-new closed-form values are marked derived. The production chain remains:
-authored/pinned items -> per-item calibration -> paired hinted/no-hint calls ->
-forced continuation -> optional deletion -> fixed ChatEndpoint monitor ->
-BudgetTrial/shared Episode -> summaries/energy -> compact exports.
+No current-head world ran. The real chain remains item source -> per-item
+calibration -> hinted/paired LocalEndpoint generation -> optional forced
+continuation/deletion -> fixed ChatEndpoint monitor -> shared Episodes -> summary,
+energy, compact export and checkpoint resume. The original five configurations
+x 200 items, Wilson seed coverage and deletion-separation tests remain intact.
 
-Five configurations x 200 items, seed 0, 4B scripted model:
-before means/half-widths are lead-measured at 93e8b4dbb; the after column is
-DERIVED, NOT RUN. Means stay unchanged because interpolation/integration did
-not change. The same episode timings and deterministic sampler grid are used.
+New committed worlds, all NOT RUN:
+- Four Qwen3 shapes through _generate and LocalEndpoint: natural close, mid-line,
+  newline cut and cap 0. The transport rejects a final message unless its stripped
+  text occurs verbatim in the normalized Qwen3 render. Every shape asserts B and
+  no generation_error. No transformers dependency is required for this regression.
+- 3000-word strict/loose parser world, tagged and prompt-preopened/tagless, through
+  actual LocalEndpoint, _generate, run_matrix calibration and HintMonitor.
+  Derived at ceiling 2048: tagged reasoning 2047 words, tagless 2048, answer 0;
+  calibration lengths (2048,2048,2048), median 2048 as censored lower bounds.
+  A .3 fraction of that median floors to 614 (derived).
+- Forced cap 300 in the same world: derived tagged reasoning 299 words or
+  tagless 300, answer 2, no ANSWER text in the monitor reasoning. These counts
+  follow the transport's own split() codec, not the repro's inaccurate comments.
+- Eight explanatory monitor shapes and common formatted answers through actual
+  scoring; an eight-item runner world for each monitor reply asserts every trial
+  remains scored. The two previous unsafe mixed prose shapes remain ambiguous.
+  Explicit disagreements still propagate hinted/paired conflict flags.
+- The review's energy_world design: all eight rows of the 400-world ensemble,
+  and 400 synchronous first-poll mapped counter episodes. The physical
+  half-width must cover analytic truth on every row; missing J must be zero.
+  All are assertions, not measured results.
+- clock_crossing/cases design: three rows x 2000 random phases, plus its
+  deterministic 3 ms true shift with a 5 ms mapping half-width. Failure messages
+  retain delta and nearest-poll geometry. Full coverage is required, not claimed.
+- Real runner with a foreign-clock synthetic sampler: derived head lead is
+  2*100 ms+2*2 ms=204 ms; measured and unmeasured mapping paths check flags/J.
+- An interior burst: 150 W for 1 s, with another 150 W from 301 to 551 ms.
+  Derived truth=187.5 J, sampled trapezoid=180 J, error=7.5 J exceeds the
+  0.001 W * 1 s / 2 quantum-only half-width=0.0005 J. The physical transition
+  enclosure must cover it. No current-head numeric execution is claimed.
+- Memory fixture: four channels x (30 s / 10 ms)=12000 timestamp/value pairs.
+  Reports tracemalloc bytes and both the review-script and actual-default
+  generation extrapolations; it asserts only exact fixture cardinality.
 
-| Condition | Before J +/- maximum per-trial half-width | After (derived) |
-|---|---:|---:|
-| budget_0.3 | 526.756 +/- 1.969 | 526.756 +/- 7.709 |
-| budget_0.4 | 689.813 +/- 3.711 | 689.813 +/- 3.711 |
-| budget_0.6 | 1017.752 +/- 3.916 | 1017.752 +/- 6.376 |
-| deletion_0.6 | 1657.608 +/- 4.316 | 1657.608 +/- 4.316 |
-| thinking_on | 1657.608 +/- 4.316 | 1657.608 +/- 4.316 |
-
-Derivation: a trial starts on its sampler's first poll; cycles are 100+10=110 ms.
-An on trial lasts 0.2+(1024+2)*0.02=20.720 s. A capped trial lasts
-0.2+cap*0.02+0.2+2*0.02, giving 12.720/8.620/6.580 s for caps 614/409/307.
-End remainders modulo 110 ms are 40/70/40/90 ms for on/0.6/0.4/0.3.
-The new bound is 0.1 W*duration/2 + 82 W*end remainder. Hence only the 0.6
-and 0.3 widths rise, by 2.460 and 5.740 J respectively. Deletion reuses on energy.
-These derivations do not replace the pending end-to-end rerun.
-
-Rates on the default world have derived delta zero: no calibration fails,
-scripted monitor replies are bare YES/NO, and answers have a single ANSWER label.
-The inherited measured catch/false counts are in TESTS RUN. All trial eligibility,
-monitor verdicts, energy means and deletion RNG keys in that world are preserved.
-
-Reviewer worlds, before -> after:
-- R2-M1 asymmetric steps, 50 W idle ->250 W load, 100 ms polls, 0.001 W
-  resolution and a supplied 250 W maximum. Before values are lead-measured at
-  93e8b4dbb. After widths are derived from Pmax*(inward_a+inward_b) plus
-  resolution*duration/2; J and errors are unchanged.
-
-| Start/end offsets (ms) | J | Truth J | Error J | Before half-width J | After half-width J (derived) |
-|---|---:|---:|---:|---:|---:|
-| 50/50 | 4995.0000 | 5000.0000 | -5.0000 | 25.0100 | 25.0100 |
-| 10/90 | 5003.8000 | 5020.0000 | -16.2000 | 5.0100 | 45.0100 |
-| 5/95 | 5004.4500 | 5022.5000 | -18.0500 | 2.5100 | 47.5100 |
-| 90/10 | 4979.8000 | 4980.0000 | -0.2000 | 5.0100 | 5.0100 |
-| 1/99 | 5004.8980 | 5024.5000 | -19.6020 | 0.5100 | 49.5100 |
-
-At the printed four-decimal precision these are the brief's expected readings;
-every derived error is within its new half-width. The counter estimate 4990 J
-and bound 30.001 J are unchanged (lead-measured at 93e8b4dbb).
-- Random edges: before 88/400 uncovered, worst ratio 18.8 (lead-measured at
-  93e8b4dbb); the reviewer's patched scratch copy gives 0/400 and worst 0.4
-  (reviewer-measured). Current-head execution remains pending; no measured
-  current-head 0/400 is claimed.
-- R2-m1 gap_test_world: before escaped 6/12 at 100 ms and 0/12 at 10 ms
-  (lead-measured at 93e8b4dbb). After expected 0/12 at both intervals, not run.
-  The 4-sample trace becomes two intervals 110 and 220 ms after deletion:
-  min=110 ms, midpoint bar=165 ms, so 220 is flagged. The old median=165 ms
-  produced a 247.5 ms bar. Clean cycles retain their original flags/energy.
-- A2 real worker/fake-library probe, lead-measured at 93e8b4dbb: long traces
-  (70 samples at 10 ms, 10 samples at 100 ms) had clean=False/dropped=True;
-  4-sample traces at both intervals had clean=False/dropped=False. Sample
-  counts vary with scheduling. Current-head requirement is clean=False and
-  dropped=True on every line; the thread probe could not be executed.
-- R2-m2 failed-calibration world: 200 items, 1024 tokens, 20 calibration-only
-  failures. Before (lead-measured at 93e8b4dbb) budget_0.3 n=180/excluded=20,
-  catch=13/132, visible=307.0; deletion_0.3 n=200/excluded=0, catch=49/144,
-  visible=378.7. Derived after: deletion n=180/excluded=20, catch=37/132,
-  visible=307.0, matching the truly-deleted subset. Catch changes from
-  0.340278 to 0.280303 (-0.059975), visible mean by -71.7 tokens. The thinking_on
-  and budget rows do not change numerically. This script has no attached traces,
-  so J stays empty. Its false-flag numerator was not supplied; its denominator
-  loses the eight excluded non-hint-using items (56->48); no invented rate is given.
-- R2-m3 in that world: before a good thinking_on trial carried a bare
-  generation_error:ConnectionError from calibration; row count 20. Derived
-  after: the bare key is absent, calibration:generation_error:ConnectionError
-  counts 20, and calibration_incomplete stays unprefixed. Its own calls remain
-  successful. No rate or mean moves from namespacing alone.
-- R2-m4 mixed replies: before verdicts False/False/True/True/False without flags;
-  derived after None/None/None/True/None, with monitor_verdict_ambiguous on the
-  four mixed-token replies. Only-YES punctuation/Markdown shapes and NO stay
-  scored; empty content stays invalid. Real-model rate changes are unknown.
-  The new runner regression records and counts every ambiguous reply.
-- R2-m5 CLI: before --count 2 without dataset.count handed 14042 pinned MMLU
-  items to run_matrix (lead-measured at 93e8b4dbb). Derived after: two items;
-  neither flag nor printed result is presented as a run. The real-file probe
-  and the committed stdlib roster regression both remain pending.
-- R2-m6 answer shapes: repeated identical ANSWER: B changes None->B; disagreeing
-  B/C stays unresolved and gains answer_conflicting, including on the trial
-  and shared Episode. The unchanged single-label shapes retain their parsing.
-  The added real runner regression compares repeated agreeing replies with
-  the baseline categorical counts, and verifies conflicting replies leave
-  scored denominators with counted flags. No real-model rate change is known.
-- Owner supply flags: the two lead-measured output lines are in TESTS RUN.
-  Integration does not consult these flags; current-code mean-J delta is
-  derived zero, battery.assist count remains seven and hazard count 200.
+The review's strict cap-300 observation is a words-codec artifact, not a real
+off-by-one in token accounting: the output begins with a separately split
+"<think>" word, so a 300-word completion contains r0 through r298 (299
+reasoning words). Its continuation "\nANSWER: A" has two split words, not the
+script's printed "truth 3". Both parsers now record those truthful counts; the
+tagless shape gives 300 reasoning words. Delimiter work remains in Episode
+decode_tokens rather than being relabelled as reasoning or answer. A real served
+tokenizer controls production counts; no numeric fudge was added to match labels.
 
 ## DECISIONS I MADE
-- Continued the pushed 93e8b4dbb head, never the spine. Used the installed
-  GitHub connector after persistent executor failure, on the authorized lane
-  with descendant commits, expected heads and force=false.
-- R2-M1 uses distances to inward polls, zero at exact poll edges. The sampled
-  power estimate and all cumulative-counter computations remain unchanged.
-  Prospective Pmax remains explicit; missing Pmax still flags an unknown bound.
-- R2-m1 cutover is fewer than three intervals, not an unexplained "about five":
-  one doubled interval leaves n-1 normal intervals, a strict median majority
-  exactly when n>=3. For n=2 use the minimum. Keep nominal wait as lower bound
-  to avoid declaring normal wait+acquisition overhead a missing poll. A single
-  interval or uniformly lost polls remain unidentifiable by this diagnostic.
-  No timing tolerance or arbitrary threshold was added; gap_factor=1.5 keeps
-  its one-cycle/two-cycle midpoint derivation. The existing assertion is retained.
-- R2-m2 uses the same counted budget_uncalibrated_excluded flag for budget and
-  deletion controls. Put it on records before summary, and exclude cap-less
-  legacy deletion records too. A cap-less matched cut also marks its deletion.
-  This keeps the two rows on the same calibrated-item support.
-- R2-m3 prefixes copied calibration-generation flags only. Calibration Episodes
-  retain their own raw flags; trial-generation and sampler trace flags retain
-  their names. The aggregate calibration_incomplete marker stays unprefixed.
-- R2-m4 chooses a missing verdict with monitor_verdict_ambiguous when both YES
-  and NO appear, rather than guessing at prose. Existing scored-trial rates and
-  counted missing verdicts handle this representation. This changes which
-  real-model replies are scored and is explicitly retained in NEEDS_RULING.
-- R2-m5 chooses source.get("count", args.count). dataset.count takes precedence
-  when present; explicit null preserves full-table selection. With neither
-  dataset.count nor --count, the CLI now runs up to its default 200, using the
-  existing stratified roster. This is an operator workload parameter.
-- R2-m6 requires unanimity of explicit answer labels, independent of case and
-  repetition count; conflicts have specific hinted/paired flags. Parenthesized
-  or prose-only answers retain the review's existing parsing.
-- New regression assertions on measured means use close_number with the
-  brief's 1e-6 relative bar; token cap 307 is floor(0.3*1024). Count/flag/string
-  equality checks test categorical/integer identity. The asymmetric energy
-  assertion uses the physical computed half-width. Existing Wilson, coverage
-  and interval-separation bars were not weakened.
-- Kept prior lane decisions: four provisional contiguous deletion spans with
-  sensitivity controls, per-seed Wilson rows, equal subject allocation and
-  roster fingerprints, explicit energy channels, compact sidecars, two
-  configurable sampler-tail periods and counted battery/power-cap/throttle
-  flags. Forced requests remain separate shared Turns; local budget conditions
-  coexist with Episode.condition="benign" under the protected records contract.
-- Governing contracts win over the brief's logical single-turn shorthand.
-  No other records-contract disagreement was introduced.
+- Continued the newest pushed 5e9b160e7 head, never the spine. Persistent executor
+  failure selected the brief's explicit not-run fallback. Used GitHub descendant
+  commits with expected heads/force=false; no other branch or PR was touched.
+- R2-B1: matched the actual Qwen3 template's newline normalization, including
+  empty reasoning. The preflight now requires all four shapes.
+- R2-B2: recover unclosed thinking before answer accounting. For tagless output,
+  LocalEndpoint requires explicit thinking-enabled, non-continuation, length
+  termination; the uncapped runner also handles raw ChatEndpoints. Planned caps
+  keep their existing generation_at_token_limit flag but do not acquire the
+  new uncapped-censoring flag.
+- Censored calibration lengths count at the operator ceiling, one of the brief's
+  authorized choices, with an explicit aggregate flag. This is a lower-bound
+  median, not an estimate of the missing continuation; no numeric censoring
+  threshold was invented.
+- R2-m1: classify a wholly reasoning-filed forced continuation as the answer
+  before appending any monitor reasoning. Count its completion tokens there.
+  Do not treat a generated opening delimiter as reasoning merely to match the
+  repro's words-codec annotation; do not invent its claimed third answer word.
+- R2-m2: a leading punctuated YES/NO verdict, optionally Verdict:/Answer: after
+  removing Markdown, controls its explanatory prose. Otherwise unanimous token
+  fallback remains; mixed tokens are missing/ambiguous. This preserves older
+  single-token prose and keeps the two specified unsafe mixed examples missing.
+  Two older tests now require explicit correct verdicts rather than ambiguity;
+  their cases/assertions were retained and strengthened. This changes scored
+  support and remains NEEDS_RULING item 1.
+- R2-m3: parse emphasis/brackets around explicit answer labels and letters.
+  A letter followed by an alternative ("or"), punctuation, line end or closing
+  bracket is an answer clause; an article in "answer: a mixture" is not.
+  Repeated labels must still agree, with the same conflict flags.
+- R2-m4 head: a configurable two poll periods provides one poll plus acquisition
+  jitter, as at the tail. Add twice the measured mapping half-width, derived from
+  true-offset error plus the reducer's uncertainty enclosure. The lead remains
+  outside Episode timing/energy. Same-host pilot clock names must match; the
+  runner also flags every differing sampler domain.
+- R2-m4 reducer: when only the +/-u clock bracket lacks a near-head/tail sample,
+  retain measured overlap with a counted flag. A missing counter increment is
+  bounded by prospective Pmax*uncovered time; missing Pmax is unbounded/flagged.
+  Do not relax same-domain invalid-bracket behavior or fabricate sampler polls.
+- R2-m4 power: use inward polls beyond edge +/-u, retaining zero at exact edges
+  only when u=0. Keep the 2*Pmax*u displacement and averaging terms. Also enclose
+  changing-sample intervals by [0,Pmax*dt], since the supplied LLM world contains
+  interior phase steps. No empirical coverage multiplier or arbitrary margin
+  was added. Repeated sensor-code identity defines unchanged intervals; unseen
+  same-code excursions remain outside this conditional model. Known synthetic
+  linear truth is declared in trace notes. This widens printed power bounds;
+  its analysis assumption is visible in NEEDS_RULING.
+- R2-m5: use the requested operational remedy: exactly one model/seed per
+  invocation with separate outputs/checkpoints. No claim of streaming release.
+  The review's 4600-generation memory extrapolation assumes ten physical
+  conditions; default_conditions has seven physical and four reused deletion
+  controls. Derived default sampled Generations=200*(3+2*7)=3400, about 3.3 GB
+  using the reviewer-measured 0.96 MB fixture (3400*.96 MB=3264 MB). The actual
+  footprint remains unmeasured here. The regression prints both extrapolations.
+- New measured/derived assertions use the computed physical half-width or the
+  existing close_number rule (1% printed uncertainty, otherwise 1e-6 relative
+  above a 1e6-ulp floor). Equality asserts categorical outcomes, integer counts
+  or sensor-code identity. All new ensemble sizes/noise/timing values reproduce
+  named synthetic design inputs, never unexplained acceptance tolerances.
+- Kept four provisional contiguous deletion spans, per-seed Wilson rows, equal
+  subject allocation, roster fingerprints, explicit energy channels, compact
+  sidecars, all battery/power-cap/throttle flags, and the existing shared Turn
+  per actual request. Episode.condition remains "benign"; the protected records
+  contract wins over the brief's logical-single-turn shorthand.
 
 ## CONTRACT-CHANGE
-none. Changes are lane-local. Configured endpoint options, calibration provenance,
-exclusion flags and compact Episode hydration do not change shared contracts.
-The three protected files were read and left untouched.
+none. All changes use lane-local records/adapters/flags/trace notes.
+The three protected files were read and are absent from the branch diff.
 
 ## FIX LOG
+Historical Round 1/2 entries below are retained verbatim; references to that
+seat's baseline/sections describe the prior report at 5e9b160e7, not execution
+by this seat.
+
 ### Round 1
 The original lines below are retained verbatim. Their "not run" refers to the
 previous cloud seat. The lead subsequently executed the 93e8b4dbb baseline;
@@ -420,48 +372,55 @@ the supplied measurements are attributed in TESTS RUN and END-TO-END.
 - R2-m5 — fixed (not run), 224f16443c73a34ea222a99b629a8966738a0526; config count falls back to --count/default 200, explicit dataset.count/null retained; stdlib real-CLI regression committed.
 - R2-m6 — fixed (not run), 224f16443c73a34ea222a99b629a8966738a0526; repeated unanimous labels resolve, disagreements get specific trial/Episode flags; production-shaped reply accounting refined in d5453de2d7a71f9eb915ad1db034ac071edb3684.
 
+### Round 2 re-review (findings on 5e9b160e7)
+- R2-B1 — fixed (not run), 37341b370b7e34f0b00d47f7bfd1a8f8a31b5bd4; normalized template-compatible prefix and four-shape stdlib regression; real transformers/vLLM/CLI repros remain unexecuted.
+- R2-B2 — fixed (not run), 56c0d06f18783a8fdd687accaf8b23021e550854; unclosed reasoning recovery, zero answer work for censored thinking, explicit censored ceiling lengths in calibration.
+- R2-m1 — fixed (not run), 56c0d06f18783a8fdd687accaf8b23021e550854; reasoning-filed continuation is answer-only; the repro's tagged 300/3 "truth" annotations are codec errors explained above, not fabricated token targets.
+- R2-m2 — fixed (not run), 4f6c088b9608f737827c8e8bc85bdb6bc31b4f75; leading explanatory verdicts resolve, unsafe mixed prose stays ambiguous; rule retained for lead confirmation.
+- R2-m3 — fixed (not run), 4f6c088b9608f737827c8e8bc85bdb6bc31b4f75; Markdown/bracketed answer labels resolve and conflicts remain; alternative-clause preservation completed in f5c00e31974b31796cf6f5eb2b6e840392e3a608.
+- R2-m4 — fixed (not run), f5c00e31974b31796cf6f5eb2b6e840392e3a608; runner head/mapping lead, domain flag, partial-clock bracket, expanded inward poll enclosure and physical interior transition bound; every coverage row remains pending execution.
+- R2-m5 — fixed (not run), 3f9447f7e1e095d7de006930489fb44e806e89e4; one model and seed per invocation, resident-memory disclosure and corrected default-generation accounting; stdlib memory fixture ported.
+
 ## OPEN ISSUES
-- BLOCKING validation: no usable executor, hence no current-head syntax/import,
-  lane/full-suite, appendix, real A2 worker, pinned-file or pyarrow execution.
-  CI green and the reviewer's pass conditions still require real runs. Every
-  round 2 fix is explicitly not run; no synthetic measurement is fabricated.
-- .review2/ and /tmp/budget-combined were not created by this seat. Create the
-  verbatim appendix locally and rebuild from committed HEAD; never copy NVML
-  source into this branch.
-- The five-by-200 after widths above are derived from unchanged timings/grid,
-  not measured. Confirm them alongside every repro before delta re-review.
-- Prior lead-owned open work remains: full named-subject roster/proportional
-  sensitivity, explicit-channel production-shaped config smoke and current-head
-  deletion-span sensitivity tables. Inherited measurements do not close them.
-- The cadence diagnostic cannot identify a lost poll when only one interval
-  remains, uniformly missing polls, or arbitrary acquisition stalls; it records a diagnostic flag
-  and never rejects energy. Power bounds assume piecewise-linear interior power,
-  a prospective maximum, and stated sensor/clock terms, not arbitrary unseen
-  oscillations. Missing maximum/duty-cycle gaps remain inconclusive.
-- No real model, rented GPU, battery measurement or physical sampler was run.
-  Hardware authorization/preflight and the lead's independent delta review remain
-  separate gates; this seat only implemented the authorized harness fixes.
+- BLOCKING validation: no Python/shell executor became usable. No current-head
+  syntax/import, lane/full suite, optional-extra or before/after repro ran.
+  Real transformers continuation, both 40-item worlds, CLI+A2 integration and
+  all physical-width coverage counts must be rerun by the lead. No CI claim.
+- .review2r/ and the combined tree do not exist on this executor. Materialize
+  the supplied appendix, fetch current lane heads, rebuild from committed HEAD,
+  and run the exact commands above. No tokenizer/data hashes were fetched.
+- The literal "truth 300"/"truth 3" annotations in truncation_parsers.py disagree
+  with its split() codec for tagged output; the truthful 299/2 result is derived
+  and regression-protected. Real tokenizer counting still needs the decisive run.
+- The transition uncertainty is conditional: identical sampled levels do not
+  bound an unseen excursion between polls, and duty-cycle gaps remain unresolved.
+  The full LLM-shaped 400-world table has been ported without a relaxed coverage
+  assertion; its eight rows and the 2000-phase ensembles remain unexecuted.
+- MatrixResult still holds all traces and resume hydrates them. One-model/seed
+  invocations limit accumulation, not peak memory for a single roster.
+- Prior lead-owned roster-allocation and deletion-span sensitivity rulings remain
+  provisional. No real model, rented GPU, physical sensor or battery was run.
 
 ## NEEDS_RULING
-Provisional analysis choices remain visible and do not block these fixes:
+Provisional analysis choices remain visible and do not block the authorized fixes:
 
-1. R2-m4: choose missing/ambiguous (implemented) versus inferring a verdict at
-   the start/end of mixed YES/NO prose. Recommend missing with a counted flag:
-   a prose "no" can otherwise silently invert a positive answer. Bare scripted
-   verdicts and default-world rates do not move; which real-model replies enter
-   catch/false-flag denominators does change. No real-model frequency is known.
-2. Inherited M2 deletion-span choice: four contiguous spans (implemented) versus
-   one span or legacy token deletion. Derived survival at deletion_0.6:
-   0.549668 /0.583255 /0.00123015 (four/one/legacy); at deletion_0.3:
-   0.248462 /0.280145 /0.000000131900. Independent-position measurements and
-   the 200-item default catch from the old handoff are explicitly attributed
-   above; current-head sensitivity execution remains pending.
-3. Inherited M4 equal versus proportional subject allocation. Equal is retained;
-   the lead's 57/57 coverage and 29x4+28x3 counts do not establish a proportional
-   sensitivity result. Full named-subject counts remain pending.
-4. Inherited M1 unknown/unbounded missing maximum versus a supplied prospective
-   physical maximum. Missing Pmax remains flagged and inconclusive; no default
-   250 W or observed-peak bound was introduced. With supplied 250 W, the
-   asymmetric step-world widths above are derived as prescribed.
+1. Confirm the new monitor rule: leading punctuated YES/NO (optionally labelled
+   Verdict:/Answer:) controls explanatory prose; without it use unanimous-token
+   fallback, and mixed tokens stay missing. This recovers explained positives
+   containing ordinary "no" without inverting "No doubt about it. YES" or
+   "The reasoning shows no hesitation in following the hint: YES". It changes
+   which real-model trials are scored. Recommend this implemented rule.
+2. Retain four contiguous deletion spans versus one span/legacy token deletion?
+   Four remains provisional; current-head sensitivity execution is pending.
+3. Retain equal versus proportional subject allocation? Equal remains provisional;
+   prior lead evidence covers all 57 subjects but not proportional sensitivity.
+4. Retain unknown/unbounded power uncertainty without prospective Pmax, versus
+   requiring a supplied prospective maximum for a finite bound? The implemented
+   behavior keeps J with a counted unknown bound; no observed-peak maximum.
+5. Confirm the widened sampled-transition power-bound model: changing sample
+   intervals receive their [0,Pmax*dt] envelope, and explicit synthetic linear
+   traces retain their conditional linear model. This affects printed power
+   widths, not fully bracketed J estimates. Recommend the implemented conservative
+   enclosure for the supplied phase-step world; counter channels remain preferred.
 
 No default-channel ruling: multiple traces still require explicit selection.
