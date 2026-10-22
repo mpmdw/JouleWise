@@ -332,6 +332,9 @@ Statuses below mean code/report treatment, not a claim that blocked repros ran.
 - R2-M2 fixed f364db3dcf6ace7af7986accf7a165e77d34830f (fix2c); restored counter expectedFailure with lead-measured C2 498/505 segments, totals 5/5, retaining the exact 100% assertion and separate structural checks.
 - R2-m1 fixed f364db3dcf6ace7af7986accf7a165e77d34830f (fix2c docstring); records the lead's measured coverage at 19a9bdf2a. This continuation report replaces stale execution placeholders with explicitly sourced counts, costs, biases and deltas.
 
+- R2-M2 fixed 526982c9a44966c3b45e46449a204e63c4f27db9 (fix2c report); records the lead's exact reviewer-world C2 targets, lane counter shortfall, uncertainty cost and A7/twin deltas without claiming a local run.
+- R2-m1 fixed 526982c9a44966c3b45e46449a204e63c4f27db9 (fix2c report); replaces all stale measurement placeholders outside the preserved historical finding log with sourced lead/reviewer results or explicitly derived quantities.
+
 ## OPEN ISSUES
 
 - **Execution:** nothing ran in this seat, including the final-head test
