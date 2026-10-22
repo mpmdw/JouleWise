@@ -16,7 +16,8 @@ import tempfile
 import textwrap
 import unittest
 
-from joulewise.align.gpukit.cost import estimate, work_counts
+from joulewise.align.gpukit.cost import estimate, printable, work_counts
+from joulewise.align.gpukit.throughput import ceilings
 from joulewise.align.gpukit.matrix import expand, load_matrix, validate
 from joulewise.align.gpukit.session import (
     IsolationError, SessionOptions, package_results, run_session, verify_manifest, whole_gpu,
@@ -38,14 +39,22 @@ class MatrixTests(unittest.TestCase):
                 self.assertEqual(len(expand(matrix)), rows)  # Integer Cartesian row identity.
                 self.assertEqual(matrix["measured_episode_count"], episodes)
                 self.assertEqual(matrix["monitor_call_count"], monitors)
-                for gpu, printed in matrix["planning_wall_seconds"].items():
+                for gpu, printed in matrix["lower_bound_wall_seconds"].items():
                     result = estimate(matrix, gpu)
                     self.assertEqual(result.measured_episodes, episodes)
                     self.assertEqual(result.monitor_calls, monitors)
-                    # No uncertainty on arithmetic: prescribed 1e-6 relative bar.
-                    self.assertTrue(math.isclose(result.wall_seconds, printed, rel_tol=1e-6))
+                    # Printed bound is rounded downward at two significant digits.
+                    # A rounding cell spans 10^(floor(log10(bound))-1) seconds.
+                    quantum = 10 ** (math.floor(math.log10(result.lower_bound_wall_seconds)) - 1)
+                    self.assertLessEqual(printed, result.lower_bound_wall_seconds)
+                    self.assertLess(result.lower_bound_wall_seconds, printed + quantum)
+                    self.assertIsNone(matrix["planning_wall_seconds"][gpu])
+                    self.assertIsNone(result.wall_seconds)
+                    self.assertIsNone(result.gpu_hours)
                     self.assertIsNone(result.total_usd)
                     self.assertIn("price_not_supplied", result.flags)
+                    self.assertIn("throughput_efficiency_not_supplied", result.flags)
+                    self.assertEqual(printable(result)["lower_bound_wall_seconds"], printed)
 
     @unittest.skipUnless(importlib.util.find_spec("jsonschema"), "optional jsonschema is not installed")
     def test_json_schema(self):
@@ -57,43 +66,78 @@ class MatrixTests(unittest.TestCase):
 
     def test_independent_hand_arithmetic(self):
         matrix, _ = load_matrix(CONFIG / "shade.json")
-        gpu = matrix["gpu_classes"]["A100-80GB"]
-        # Separate closed-form scenario: five pairs * two conditions * three
-        # seeds = 30 episodes/model. Each sees 40k prefill + 8k decode tokens.
-        agent_seconds = 30 * (40000 / 2000 + 8000 / 60 + 16 + 12)
-        agent_seconds += 30 * (40000 / 1700 + 8000 / 51 + 16 + 12)
-        # Three monitor visibilities * 60 episodes = 180 calls. Qwen3-4B rate
-        # is 2800 prefill/s and 84 decode/s in this unmeasured scenario.
-        monitor_seconds = 180 * (8000 / 2800 + 32 / 84)
-        seconds = 1800 + 5 * 180 + agent_seconds + monitor_seconds
-        scenario_price = 2.0  # Test input only, not a provider price or recommendation.
-        result = estimate(matrix, "A100-80GB", usd_per_gpu_hour=scenario_price)
-        # Prescribed 1e-6 relative agreement bar for quantities without uncertainty.
-        self.assertTrue(math.isclose(result.wall_seconds, seconds, rel_tol=1e-6))
-        self.assertTrue(math.isclose(result.total_usd, seconds / 3600 * scenario_price,
+        # NVIDIA A100 datasheet p1 SXM4 80GB: 2039 GB/s, dense BF16 312 TFLOPS.
+        # https://images.nvidia.com/data-center/a100/a100-datasheet.pdf (2026-10-22)
+        # HF model cards (same access date): Qwen3-8B 8.2B, 30B-A3B 3.3B
+        # active (30.5B total), monitor Qwen3-4B 4.0B.
+        # Closed form: each weight uses 2 BF16 bytes and 2 multiply-add FLOPs.
+        # Five pairs * two conditions * three seeds = 30 episodes/model;
+        # three visibilities * 60 episodes = 180 monitor calls.
+        bandwidth, flops = 2039 * 10**9, 312 * 10**12
+        agent_bound = 30 * (2 * (8.2 + 3.3) * 10**9) * (40000 / flops + 8000 / bandwidth)
+        monitor_bound = 180 * (2 * 4.0 * 10**9) * (8000 / flops + 32 / bandwidth)
+        seconds = agent_bound + monitor_bound
+        price_input = 2.0  # An explicit test price parameter, never a provider quote.
+        result = estimate(matrix, "A100-SXM4-80GB", usd_per_gpu_hour=price_input)
+        # Prescribed 1e-6 relative agreement bar: no measurement uncertainty.
+        self.assertTrue(math.isclose(result.lower_bound_wall_seconds, seconds, rel_tol=1e-6))
+        self.assertTrue(math.isclose(result.lower_bound_total_usd, seconds / 3600 * price_input,
                                      rel_tol=1e-6))
-        changed = copy.deepcopy(matrix)
-        changed["gpu_classes"]["A100-80GB"]["gpu_count"] = 2
-        doubled = estimate(changed, "A100-80GB", usd_per_gpu_hour=scenario_price)
-        self.assertTrue(math.isclose(doubled.gpu_hours, result.gpu_hours * 2, rel_tol=1e-6))
-        self.assertEqual(gpu["gpu_count"], 1)
+        self.assertIsNone(result.total_usd)
+        # Test-only synthetic efficiency: observed time = twice the ideal time,
+        # hence achieved rate / ceiling = 1/2. This is not public performance.
+        for rate in matrix["gpu_classes"]["A100-SXM4-80GB"]["throughput"].values():
+            rate.update(efficiency=1 / 2, efficiency_source={
+                "url": "https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-gpukit/tests/align/test_gpukit.py",
+                "accessed": "2026-10-22", "note": "Synthetic twice-ideal-duration fixture only."})
+        planned = estimate(matrix, "A100-SXM4-80GB", usd_per_gpu_hour=price_input)
+        # Original explicit allowances: 1800 setup, five 180 s loads, and
+        # 60 agent episodes with 16 s tool waits + 12 s host overhead.
+        planned_seconds = 2 * seconds + 1800 + 5 * 180 + 60 * (16 + 12)
+        self.assertTrue(math.isclose(planned.wall_seconds, planned_seconds, rel_tol=1e-6))
+        self.assertTrue(math.isclose(planned.total_usd, planned_seconds / 3600 * price_input,
+                                     rel_tol=1e-6))
+        self.assertNotIn("throughput_efficiency_not_supplied", planned.flags)
+        matrix["gpu_classes"]["A100-SXM4-80GB"]["gpu_count"] = 2
+        doubled = estimate(matrix, "A100-SXM4-80GB", usd_per_gpu_hour=price_input)
+        # Two allocated devices bill twice the GPU-hours; no speedup assumed.
+        self.assertTrue(math.isclose(doubled.gpu_hours, planned.gpu_hours * 2, rel_tol=1e-6))
+        self.assertTrue(math.isclose(doubled.wall_seconds, planned.wall_seconds, rel_tol=1e-6))
 
     def test_bad_inputs_are_flags(self):
         matrix, _ = load_matrix(CONFIG / "shade.json")
         for mutation, expected in (
             (lambda m: m.update(episode_count=1), "matrix_episode_count_mismatch"),
-            (lambda m: m["gpu_classes"]["A100-80GB"]["throughput"]
-             ["Qwen/Qwen3-8B"].update(decode_tps=0),
-             "matrix_throughput_invalid:A100-80GB:Qwen/Qwen3-8B:decode_tps"),
+            (lambda m: m["gpu_classes"]["A100-SXM4-80GB"]["throughput"]
+             ["Qwen/Qwen3-8B"].update(efficiency=0),
+             "matrix_throughput_efficiency_invalid:A100-SXM4-80GB:Qwen/Qwen3-8B"),
             (lambda m: m["seeds"].append(0), "matrix_duplicate_seeds"),
         ):
             broken = copy.deepcopy(matrix)
             mutation(broken)
             self.assertIn(expected, validate(broken))
-            self.assertIsNone(estimate(broken, "A100-80GB").gpu_hours)
-        self.assertIn("price_invalid", estimate(matrix, "A100-80GB",
+            self.assertIsNone(estimate(broken, "A100-SXM4-80GB").lower_bound_wall_seconds)
+        self.assertIn("price_invalid", estimate(matrix, "A100-SXM4-80GB",
                                                 usd_per_gpu_hour=float("nan")).flags)
         self.assertIn("gpu_class_unknown", estimate(matrix, "other").flags)
+        rate = matrix["gpu_classes"]["A100-SXM4-80GB"]["throughput"]["Qwen/Qwen3-8B"]
+        rate["efficiency"] = 1 / 2  # Positive synthetic parameter without required citation.
+        self.assertIn("matrix_throughput_efficiency_source_missing:A100-SXM4-80GB:Qwen/Qwen3-8B",
+                      validate(matrix))
+
+    def test_sku_ceilings_and_missing_source(self):
+        matrix, _ = load_matrix(CONFIG / "shade.json")
+        # H100 NVIDIA datasheet p1: 1979 sparse TFLOPS / 2 = dense BF16,
+        # 3.35 TB/s. HF card active 3.3B, not the 30.5B resident total.
+        prefill, decode = ceilings(matrix, "H100-SXM-80GB", "Qwen/Qwen3-30B-A3B")
+        # No uncertainty on arithmetic: prescribed 1e-6 relative agreement.
+        self.assertTrue(math.isclose(prefill, (1979e12 / 2) / (2 * 3.3e9), rel_tol=1e-6))
+        self.assertTrue(math.isclose(decode, 3.35e12 / (2 * 3.3e9), rel_tol=1e-6))
+        matrix["gpu_classes"]["H100-SXM-80GB"]["hardware"]["memory_bandwidth_bytes_s"]["value"] = None
+        result = estimate(matrix, "H100-SXM-80GB")
+        self.assertIn("throughput_source_unavailable", result.flags)
+        self.assertIsNone(result.lower_bound_wall_seconds)
+        self.assertIsNone(result.wall_seconds)
 
     def test_budget_deletion_does_not_invent_fresh_energy(self):
         matrix, _ = load_matrix(CONFIG / "budget.json")
@@ -114,6 +158,8 @@ class SessionTests(unittest.TestCase):
         self.bin.mkdir()
         self.old_env = dict(os.environ)
         self.addCleanup(self._restore_env)
+        os.environ["JOULEWISE_PYTHON"] = sys.executable
+        os.environ["JOULEWISE_VENV"] = str(self.base / "session-venv")
         os.environ["PATH"] = str(self.bin) + os.pathsep + os.environ.get("PATH", "")
         # Child fixture scripts run from a temporary directory without an installed
         # package. Scope the source checkout path to this test and its children.

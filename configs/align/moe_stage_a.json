@@ -1,5 +1,5 @@
 {
-  "schema": "joulewise.align.gpukit.matrix.v1",
+  "schema": "joulewise.align.gpukit.matrix.v2",
   "name": "moe_stage_a",
   "kind": "moe_stage_a",
   "models": [
@@ -44,118 +44,211 @@
     "host_overhead_s": 12,
     "monitor_prefill_tokens": 8000,
     "monitor_decode_tokens": 32,
-    "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+    "source": "Operator-supplied workload-volume and wait/host allowances; these define the requested synthetic planning workload, not measured production token volumes. Override before spend approval.",
     "shape": "12 agent turns, 8 tool calls with 2 s wait each; cumulative uncached prefill 40000 tokens; 8000 generated tokens including reasoning."
   },
   "gpu_classes": {
-    "A100-80GB": {
+    "A100-SXM4-80GB": {
       "gpu_count": 1,
       "setup_s": 1800,
       "model_load_s": 180,
       "router_overhead_fraction": 0.25,
-      "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+      "source": "Operator-supplied planning allowances retained from original kit; not measurements. Override setup/load/router allowances before approval; excluded from hard lower bound.",
+      "hardware": {
+        "memory_bandwidth_bytes_s": {
+          "value": 2039000000000,
+          "source": {
+            "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+          }
+        },
+        "dense_bf16_flops_s": {
+          "value": 312000000000000,
+          "source": {
+            "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+          }
+        },
+        "memory_bytes": {
+          "value": 80000000000,
+          "source": {
+            "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+          }
+        }
+      },
       "throughput": {
         "Qwen/Qwen3-4B": {
-          "prefill_tps": 2800,
-          "decode_tps": 84,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-4B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-8B": {
-          "prefill_tps": 2000,
-          "decode_tps": 60,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-8B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-14B": {
-          "prefill_tps": 1300,
-          "decode_tps": 39,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
-        },
-        "microsoft/Phi-3.5-mini-instruct": {
-          "prefill_tps": 2800,
-          "decode_tps": 84,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-14B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-30B-A3B": {
-          "prefill_tps": 1700,
-          "decode_tps": 51,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.Qwen/Qwen3-30B-A3B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.A100-SXM4-80GB.hardware and model_parameters.microsoft/Phi-3.5-mini-instruct; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         }
       }
     },
-    "H100-80GB": {
+    "H100-SXM-80GB": {
       "gpu_count": 1,
       "setup_s": 1800,
       "model_load_s": 180,
       "router_overhead_fraction": 0.25,
-      "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+      "source": "Operator-supplied planning allowances retained from original kit; not measurements. Override setup/load/router allowances before approval; excluded from hard lower bound.",
+      "hardware": {
+        "memory_bandwidth_bytes_s": {
+          "value": 3350000000000,
+          "source": {
+            "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+          }
+        },
+        "dense_bf16_flops_s": {
+          "value": 989500000000000,
+          "source": {
+            "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+          }
+        },
+        "memory_bytes": {
+          "value": 80000000000,
+          "source": {
+            "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+          }
+        }
+      },
       "throughput": {
         "Qwen/Qwen3-4B": {
-          "prefill_tps": 5600,
-          "decode_tps": 140,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-4B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-8B": {
-          "prefill_tps": 4000,
-          "decode_tps": 100,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-8B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-14B": {
-          "prefill_tps": 2600,
-          "decode_tps": 65,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
-        },
-        "microsoft/Phi-3.5-mini-instruct": {
-          "prefill_tps": 5600,
-          "decode_tps": 140,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-14B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-30B-A3B": {
-          "prefill_tps": 3400,
-          "decode_tps": 85,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.Qwen/Qwen3-30B-A3B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.H100-SXM-80GB.hardware and model_parameters.microsoft/Phi-3.5-mini-instruct; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         }
       }
     },
-    "L40S-48GB": {
+    "L40S-PCIe-48GB": {
       "gpu_count": 1,
       "setup_s": 1800,
       "model_load_s": 180,
       "router_overhead_fraction": 0.25,
-      "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+      "source": "Operator-supplied planning allowances retained from original kit; not measurements. Override setup/load/router allowances before approval; excluded from hard lower bound.",
+      "hardware": {
+        "memory_bandwidth_bytes_s": {
+          "value": 864000000000,
+          "source": {
+            "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+          }
+        },
+        "dense_bf16_flops_s": {
+          "value": 362050000000000,
+          "source": {
+            "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+          }
+        },
+        "memory_bytes": {
+          "value": 48000000000,
+          "source": {
+            "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+          }
+        }
+      },
       "throughput": {
         "Qwen/Qwen3-4B": {
-          "prefill_tps": 2520,
-          "decode_tps": 77,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-4B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-8B": {
-          "prefill_tps": 1800,
-          "decode_tps": 55,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-8B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-14B": {
-          "prefill_tps": 1170,
-          "decode_tps": 35.75,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
-        },
-        "microsoft/Phi-3.5-mini-instruct": {
-          "prefill_tps": 2520,
-          "decode_tps": 77,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-14B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         },
         "Qwen/Qwen3-30B-A3B": {
-          "prefill_tps": 1530,
-          "decode_tps": 46.75,
-          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.Qwen/Qwen3-30B-A3B; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "ceiling_formula": "prefill = dense_bf16_flops_s / (2 * active_parameters); decode = memory_bandwidth_bytes_s / (2 * active_parameters)",
+          "source": "gpu_classes.L40S-PCIe-48GB.hardware and model_parameters.microsoft/Phi-3.5-mini-instruct; BF16 is 2 bytes/weight; multiply-add is 2 FLOPs/weight; single stream, no KV/attention overhead.",
+          "efficiency": null,
+          "efficiency_source": null
         }
       }
     }
   },
   "example_prices": [],
   "planning_wall_seconds": {
-    "A100-80GB": 10446.134453781511,
-    "H100-80GB": 7509.731092436974,
-    "L40S-48GB": 11110.62133944487
+    "A100-SXM4-80GB": null,
+    "H100-SXM-80GB": null,
+    "L40S-PCIe-48GB": null
   },
   "sources": {
     "pipeline": "docs/align/PIPELINE.md",
@@ -171,8 +264,63 @@
     "model_revisions_unpinned",
     "runner_lane_not_on_spine",
     "local_monitor_included_in_estimate",
-    "vllm_router_capture_adapter_required"
+    "vllm_router_capture_adapter_required",
+    "throughput_efficiency_not_supplied",
+    "single_stream_bf16_bound_only"
   ],
   "measured_episode_count": 30,
-  "monitor_call_count": 90
+  "monitor_call_count": 90,
+  "model_parameters": {
+    "Qwen/Qwen3-4B": {
+      "total_parameters": 4000000000,
+      "active_parameters": 4000000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B",
+        "accessed": "2026-10-22",
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+      }
+    },
+    "Qwen/Qwen3-8B": {
+      "total_parameters": 8200000000,
+      "active_parameters": 8200000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B",
+        "accessed": "2026-10-22",
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+      }
+    },
+    "Qwen/Qwen3-14B": {
+      "total_parameters": 14800000000,
+      "active_parameters": 14800000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B",
+        "accessed": "2026-10-22",
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+      }
+    },
+    "Qwen/Qwen3-30B-A3B": {
+      "total_parameters": 30500000000,
+      "active_parameters": 3300000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B",
+        "accessed": "2026-10-22",
+        "note": "Model Overview: 30.5B total, 3.3B activated."
+      }
+    },
+    "microsoft/Phi-3.5-mini-instruct": {
+      "total_parameters": 3800000000,
+      "active_parameters": 3800000000,
+      "source": {
+        "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct",
+        "accessed": "2026-10-22",
+        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count."
+      }
+    }
+  },
+  "lower_bound_wall_seconds": {
+    "A100-SXM4-80GB": 830,
+    "H100-SXM-80GB": 490,
+    "L40S-PCIe-48GB": 1800
+  },
+  "rounding": "Two significant digits (active parameter counts have as few as two); lower bounds rounded downward, planning values nearest. Full-precision arithmetic is available from cost.estimate."
 }

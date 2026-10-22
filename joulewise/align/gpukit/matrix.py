@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-SCHEMA = "joulewise.align.gpukit.matrix.v1"
+SCHEMA = "joulewise.align.gpukit.matrix.v2"
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,12 @@ def expand(matrix: Mapping[str, Any]) -> tuple[Run, ...]:
     return tuple(Run(m["id"], task, condition, seed)
                  for m, task, condition, seed in itertools.product(
                      matrix["models"], matrix["tasks"], matrix["conditions"], matrix["seeds"]))
+
+
+def _citation(value: Any) -> bool:
+    """Require a dated public source for a claimed physical or measured value."""
+    return (isinstance(value, Mapping) and isinstance(value.get("url"), str)
+            and value["url"].startswith("https://") and bool(value.get("accessed")))
 
 
 def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
@@ -67,14 +73,35 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
                     flags.append(f"matrix_gpu_parameter_invalid:{gpu}:{key}")
             if type(profile["gpu_count"]) is not int or profile["gpu_count"] < 1:
                 flags.append(f"matrix_gpu_count_invalid:{gpu}")
+            for key in ("memory_bandwidth_bytes_s", "dense_bf16_flops_s", "memory_bytes"):
+                datum = profile["hardware"][key]
+                value = datum["value"]
+                if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                          or not math.isfinite(value) or value <= 0):
+                    flags.append(f"matrix_hardware_invalid:{gpu}:{key}")
+                if value is not None and not _citation(datum["source"]):
+                    flags.append(f"matrix_hardware_source_missing:{gpu}:{key}")
             for model in [m["id"] for m in matrix["models"]] + [matrix["monitor_model"]]:
                 rate = profile["throughput"][model]
-                for key in ("prefill_tps", "decode_tps"):
-                    value = rate[key]
-                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-                        flags.append(f"matrix_throughput_invalid:{gpu}:{model}:{key}")
+                efficiency = rate["efficiency"]
+                if efficiency is not None:
+                    if (isinstance(efficiency, bool) or not isinstance(efficiency, (int, float))
+                            or not math.isfinite(efficiency) or not 0 < efficiency <= 1):
+                        flags.append(f"matrix_throughput_efficiency_invalid:{gpu}:{model}")
+                    if not _citation(rate["efficiency_source"]):
+                        flags.append(f"matrix_throughput_efficiency_source_missing:{gpu}:{model}")
                 if not rate["source"]:
                     flags.append(f"matrix_throughput_source_missing:{gpu}:{model}")
+                params = matrix["model_parameters"][model]
+                values = [params[key] for key in ("total_parameters", "active_parameters")]
+                for value in values:
+                    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                              or not math.isfinite(value) or value <= 0):
+                        flags.append(f"matrix_model_parameters_invalid:{model}")
+                if all(isinstance(v, (int, float)) for v in values) and values[1] > values[0]:
+                    flags.append(f"matrix_active_exceeds_total:{model}")
+                if any(v is not None for v in values) and not _citation(params["source"]):
+                    flags.append(f"matrix_model_source_missing:{model}")
         if type(matrix["sampling"]["interval_ns"]) is not int or matrix["sampling"]["interval_ns"] <= 0:
             flags.append("matrix_sample_interval_invalid")
         if matrix["kind"] == "budget":

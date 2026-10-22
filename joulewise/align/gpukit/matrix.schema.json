@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-gpukit/joulewise/align/gpukit/matrix.schema.json",
-  "title": "JouleWise gpukit matrix v1",
-  "description": "Runner not present on spine; lane-local format. matrix.validate adds cross-field count checks. All rates and times are operator parameters, not hardware claims.",
+  "title": "JouleWise gpukit matrix v2",
+  "description": "Lane-local planning format; runner_adapter translates supported campaigns provisionally. Source data define single-stream BF16 ceilings, not benchmarks.",
   "type": "object",
   "required": [
     "schema",
@@ -23,11 +23,14 @@
     "planning_wall_seconds",
     "flags",
     "sources",
-    "example_prices"
+    "example_prices",
+    "model_parameters",
+    "lower_bound_wall_seconds",
+    "rounding"
   ],
   "properties": {
     "schema": {
-      "const": "joulewise.align.gpukit.matrix.v1"
+      "const": "joulewise.align.gpukit.matrix.v2"
     },
     "name": {
       "type": "string",
@@ -167,7 +170,8 @@
           "model_load_s",
           "router_overhead_fraction",
           "source",
-          "throughput"
+          "throughput",
+          "hardware"
         ],
         "properties": {
           "gpu_count": {
@@ -192,23 +196,56 @@
             "additionalProperties": {
               "type": "object",
               "required": [
-                "prefill_tps",
-                "decode_tps",
-                "source"
+                "ceiling_formula",
+                "source",
+                "efficiency",
+                "efficiency_source"
               ],
               "properties": {
-                "prefill_tps": {
-                  "type": "number",
-                  "exclusiveMinimum": 0
-                },
-                "decode_tps": {
-                  "type": "number",
-                  "exclusiveMinimum": 0
+                "ceiling_formula": {
+                  "type": "string"
                 },
                 "source": {
                   "type": "string",
                   "minLength": 1
+                },
+                "efficiency": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                },
+                "efficiency_source": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/citation"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
+              }
+            }
+          },
+          "hardware": {
+            "type": "object",
+            "required": [
+              "memory_bandwidth_bytes_s",
+              "dense_bf16_flops_s",
+              "memory_bytes"
+            ],
+            "properties": {
+              "memory_bandwidth_bytes_s": {
+                "$ref": "#/$defs/sourced_value"
+              },
+              "dense_bf16_flops_s": {
+                "$ref": "#/$defs/sourced_value"
+              },
+              "memory_bytes": {
+                "$ref": "#/$defs/sourced_value"
               }
             }
           }
@@ -218,7 +255,11 @@
     "planning_wall_seconds": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/$defs/nonnegative"
+        "type": [
+          "number",
+          "null"
+        ],
+        "minimum": 0
       }
     },
     "flags": {
@@ -270,6 +311,49 @@
           "type": "string"
         }
       }
+    },
+    "model_parameters": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "total_parameters",
+          "active_parameters",
+          "source"
+        ],
+        "properties": {
+          "total_parameters": {
+            "$ref": "#/$defs/nullable_positive"
+          },
+          "active_parameters": {
+            "$ref": "#/$defs/nullable_positive"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/citation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "lower_bound_wall_seconds": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "minimum": 0
+      }
+    },
+    "rounding": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "allOf": [
@@ -304,6 +388,55 @@
       "items": {
         "type": "string",
         "minLength": 1
+      }
+    },
+    "citation": {
+      "type": "object",
+      "required": [
+        "url",
+        "accessed"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "accessed": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "nullable_positive": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "sourced_value": {
+      "type": "object",
+      "required": [
+        "value",
+        "source"
+      ],
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/nullable_positive"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/citation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       }
     }
   }
