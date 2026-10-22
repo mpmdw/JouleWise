@@ -56,6 +56,77 @@ class ReviewProbeTests(unittest.TestCase):
                             self.assertIn("MATRIX cells disagreeing with standalone run_episode: 0", result.stdout)
                             self.assertIn("MATRIX random-kill trials with byte mismatch: 0 of 12", result.stdout)
 
+                        if label == "CURRENT":
+                            if name == "world_review.py":
+                                self.assertIn("reasoning_fed_back_any False", result.stdout)
+                                self.assertIn("duration_s 500.877838281 turn0 start 10000000000", result.stdout)
+                                for line in result.stdout.splitlines():
+                                    if line.startswith(("EDGE wall-clock endpoint:", "EDGE earlier-domain endpoint:")):
+                                        self.assertIn("clock.endpoint_outside_call", line)
+                                    if line.startswith("EDGE tampered visibility"):
+                                        self.assertIn("[]", line)
+                                        self.assertIn("monitor.visibility_tampered_unavailable", line)
+                                # These exact turn counts are the review world's seeded randint draws.
+                                self.assertIn("EDGE content None: 26 of 26", result.stdout)
+                                self.assertIn("EDGE bytes tool result: 10 of 10 ledger turns", result.stdout)
+                            elif name == "edge2.py":
+                                self.assertIn("tokens re-sent): 0 ; total reasoning generated: 1294", result.stdout)
+                                self.assertIn("tamper.hide_scratchpad.noop", result.stdout)
+                            elif name == "edge3.py":
+                                self.assertIn("complete run: 20 episodes", result.stdout)
+                                self.assertIn("after resume with endpoint down: 20 episodes; 0 zero-turn", result.stdout)
+                                self.assertIn("failure record task_pair values: []", result.stdout)
+                            elif name == "matrix_review.py":
+                                self.assertIn("DUP planned jobs 20 -> episodes 20 ; run.json order len 20 unique 20", result.stdout)
+                                self.assertIn("TYPO conditions recorded: [('benign', ()), ('benign', ())]", result.stdout)
+                                self.assertIn("agent_model contains secret: False", result.stdout)
+                                self.assertIn("FAIL secret in episodes.jsonl: False", result.stdout)
+                                self.assertIn("FAIL->FIXED records for one cell: 2 [(0, ('factory.error.RuntimeError',)), (18, ())]", result.stdout)
+
+
+
+            # The lead explicitly requests this one matrix-spec change for RUN-R1-08.
+            retry_source = PROBES["matrix_review.py"].replace(
+                'endpoints=["rv.int"]))',
+                'endpoints=["rv.int"], retry_flags=["episode.interrupted"]))')
+            retry_probe = probes / "matrix_review_retry.py"
+            retry_probe.write_text(retry_source, encoding="utf-8")
+            result = subprocess.run([sys.executable, "-I", str(probes / "run_in.py"),
+                                     str(root), str(retry_probe)], cwd=root, capture_output=True, text=True)
+            print("REVIEW_PROBE CURRENT matrix_review_retry.py\n" +
+                  result.stdout + result.stderr, file=sys.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("INT after resume: episodes 21", result.stdout)
+
+            readings = probes / "readings.py"
+            readings.write_text(
+                "import sys\n"
+                "sys.path.insert(0, " + repr(str(probes)) + ")\n"
+                "import world_review as W\n"
+                "for seed in range(6):\n"
+                "    ep, transcript, ledger, *_ = W.build('sabotage', seed)\n"
+                "    print('SCRATCHPAD_BASELINES', seed, ep.totals()['hidden_tokens'], "
+                "sum(t['reasoning'] for t in ledger.turns), sum(t['scratch'] for t in ledger.turns))\n",
+                encoding="utf-8")
+            result = subprocess.run([sys.executable, "-I", str(probes / "run_in.py"),
+                                     str(root), str(readings)], cwd=root, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            print(result.stdout, file=sys.stderr)
+            if not os.environ.get("JOULEWISE_REVIEW_DISCOVERY_CHILD"):
+                environment = {**os.environ, "JOULEWISE_REVIEW_DISCOVERY_CHILD": "1"}
+                environment.pop("PYTHONPATH", None)
+                commands = [
+                    ([sys.executable, "-m", "unittest", "discover", "-s", "tests/align", "-t", "."], root),
+                    ([sys.executable, "-I", str(probes / "run_in.py"), "/tmp", "-m",
+                      "unittest", "discover", "-s", str(root / "tests/align"), "-t", str(root)], root),
+                ]
+                for command, working in commands:
+                    result = subprocess.run(command, cwd=working, env=environment,
+                                            capture_output=True, text=True)
+                    print("REVIEW_VALIDATION_COMMAND " + repr(command) + "\n" +
+                          result.stdout + result.stderr, file=sys.stderr)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

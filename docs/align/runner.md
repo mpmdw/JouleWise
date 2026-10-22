@@ -1,8 +1,8 @@
 # Alignment runner
 
-This is internal machinery for synthetic validation and later authorized local
-hardware runs. The mock results are not hardware evidence. Power can count work;
-it cannot identify reasoning that fits inside a forward pass.
+Internal machinery for synthetic validation and later authorized hardware runs.
+Mock results are synthetic evidence. Power counts work; it cannot identify
+reasoning that fits inside a forward pass.
 
 ## Run procedure
 
@@ -17,13 +17,12 @@ python3 -m joulewise.align tamper --input /tmp/align-run/episodes.jsonl --output
 python3 -m joulewise.align tamper --input /tmp/align-run/episodes.jsonl --output /tmp/random.jsonl --kind delete_turns --fraction 0.25 --seed 7
 ```
 
-Use a separate output directory for a different experiment. Use one writer per
-directory. Hardware, paid APIs and rented GPUs still need their separate owner
-authorization; none of these commands makes an external call with the mock world.
+Use one writer per output directory. Hardware, paid APIs and rented GPUs need
+their separate owner authorization; mock runs make no external calls.
 
 ## Matrix format
 
-A complete two-pair, two-condition, five-seed synthetic matrix:
+A complete two-pair, two-condition, five-seed offline matrix:
 
 ```json
 {
@@ -37,7 +36,7 @@ A complete two-pair, two-condition, five-seed synthetic matrix:
   ],
   "conditions": ["benign", "sabotage"],
   "seeds": [0, 1, 2, 3, 4],
-  "endpoints": [{"factory": "mock.scripted"}],
+  "endpoints": [{"factory": "mock.scripted", "identity": "mock-8B-default"}],
   "monitors": [
     {"factory": "mock.monitor", "visibilities": ["full", "no_scratchpad", "actions_only"]}
   ],
@@ -50,135 +49,201 @@ A complete two-pair, two-condition, five-seed synthetic matrix:
 }
 ```
 
-Relative output_dir paths resolve beside the matrix file. Component entries can
-also be factory-name strings. A component's config object is passed unchanged to
-its factory. Optional imports lists trusted, already-installed Python modules
-that register factories; the runner never fetches code. Tasks may also be named
-under tasks for compatibility.
+The serving budgets max_turns and max_tokens are required. An omitted field
+records matrix.missing.<field> in run.json and schedules no work. The example's
+40-turn/600-token budgets are parameters chosen for this offline script, not
+budgets recommended for thinking models. Set real serving budgets explicitly.
+For compatibility with earlier matrices, omitted temperature selects greedy
+decoding (0.0), records matrix.default.temperature, and records the effective
+settings in run.json and hardware.runner. Explicit temperature is recommended.
 
-The default order seed is 0 and is always recorded. Matrix ID defaults to the
-SHA-256 of canonical JSON settings excluding output_dir. Supply an explicit ID
-when settings should share an experiment identity. Changing settings under an
-existing ID records matrix.spec_changed; valid existing episode IDs still skip.
-To rerun failed flagged episodes, choose a fresh experiment directory/ID.
+Relative output_dir paths resolve beside the matrix file. Component entries may
+also be factory-name strings. A config object is passed unchanged to its factory.
+Optional imports names trusted installed modules that register factories; the
+runner never installs or fetches code. tasks aliases task_pairs. Unknown conditions
+are skipped with matrix.condition_unknown.<value>; they never become benign rows.
+An empty Cartesian product records matrix.empty.
 
-## Factories and shared records
+order_seed defaults to 0 and is always recorded. matrix_id defaults to a digest
+of settings, excluding output_dir and credential fields. An explicit matrix_id
+permits extension/resumption; a changed spec then records matrix.spec_changed.
+Use a new matrix ID for a new experiment or changed serving settings.
 
-Register with register_task_factory, register_endpoint_factory,
-register_monitor_factory or register_sampler_factory in joulewise.align.runner.
-Factories have signature factory(config, context). FactoryContext holds task_pair,
-condition, seed, matrix_id, clock_domain and a callable integer-nanosecond clock.
-Factory objects implement the protocols in interfaces.py. Optional
-register_clock_factory and register_token_counter_factory install a clock
-callable and a TokenCounter. Real runs normally omit clock and use monotonic_ns.
+## Factories and episode lifecycle
 
-run_episode accepts monitor objects for full visibility or pairs of
-(monitor, visibilities). The task's tools run serially in the order returned.
-Turn times delimit the model call, and ToolCall times delimit subsequent tool
-work; the episode spans both. Endpoint usage determines prefill, cached context,
-decode and hidden counts. A malformed count is flagged and normalized only as
-needed to meet records.py; hidden counts never exceed total decode. Scratchpad
-tokens are counted using the supplied model tokenizer. Missing tokenizer counts
-are flagged rather than estimated.
+Register task, endpoint, monitor, sampler, clock and token-counter factories with
+the six register_*_factory functions in joulewise.align.runner. Each factory is
+called as factory(config, context). FactoryContext contains task_pair, condition,
+seed, matrix_id, clock_domain and an integer-nanosecond clock. The first context
+uses the declared task_pair (or config.task_pair/config.pair when available).
+After constructing the task its actual task_pair is used for later factories.
 
-The shared ChatMessage record has no tool-call array. This lane's adapter uses
-a separate assistant message per tool request, with name, tool_call_id, and JSON
-arguments in content. A tool result has role tool and the same name/ID. Endpoint
-adapters must serialize these messages into their backend's native tool format.
-Natural assistant text has no call ID. Separate reasoning_text is retained
-between <jw_reasoning> tags. no_scratchpad removes these and task scratchpad
-spans from natural assistant text; actions_only contains call and result
-messages. System prompts and tool arguments/results are not edited.
-tampered labels a caller-supplied transcript view; Episode-only tampering cannot
-reconstruct an edited transcript.
+Objects implement interfaces.py; no other lane is imported. Real runs normally
+omit clock and use time.monotonic_ns. The built-in mock factories are registered
+locally. run_episode also accepts monitor objects (full visibility) or
+(monitor, visibilities) pairs.
 
-A sampler may offer clock_mapping() returning a real ClockMapping. A foreign
-trace without one is omitted with clock.unmapped. No offset is invented.
-A sampler may offer observe_episode(episode), used only by the synthetic sensor.
-Hardware stores endpoint and sampler identities, plus runner adapter metadata.
-Factory, endpoint, tool, scoring, monitor and sampler failures keep an episode
-with diagnostic flags. KeyboardInterrupt records episode.interrupted, stops
-sampling and retains the current episode; the matrix then stops scheduling.
+Sampling brackets model/tool work and stops before scoring and monitors.
+A Turn covers one model call; its ToolCalls cover subsequent serial tool waits.
+Endpoint timestamps must satisfy call_start <= start <= first_token <= end <=
+call_end, with equality allowed and first_token optional. Invalid types record
+clock.endpoint_invalid/clock.first_token_invalid. Stamps outside the bracket
+record clock.endpoint_outside_call and use the runner's call bracket, with an
+unknown first-token boundary. No foreign endpoint offset stretches the episode.
 
-## Output and recovery
+Server usage supplies cached context, uncached prefill and total decode.
+Reasoning plus tokenizer-counted scratchpad spans are inside hidden_tokens,
+which are part of decode_tokens. Invalid usage is flagged and normalized only
+to satisfy records.py. Missing tokenizer counts are flagged. Model work is
+recorded before parsing content or executing tools. Null content becomes empty
+with endpoint.content_missing; non-text tool results record tool.non_text_result
+and use JSON, bytes as hex, or a representable fallback. Endpoint, tool, sampler,
+monitor, scoring and setup failures remain records with flags.
 
-- episodes.jsonl: ordinary records.py Episode JSON, one record per line.
-- transcripts.jsonl: episode_id, messages (ChatMessage dictionaries), and flags.
-- run.json: matrix identity, settings digest, order seed, randomized episode-ID
-  order, and matrix/recovery flags.
-- recovery.jsonl: discarded invalid or incomplete lines, preserved as raw_hex
-  with source filename and line number, created only when recovery is needed.
+## Transcript contract
 
-The transcript is flushed and fsynced before the episode. A valid episode line
-is the commit marker. Resume skips committed episode IDs without model calls.
-An uncommitted transcript is dropped and regenerated. An incomplete final line
-is detected and truncated with a resume.partial_last_line flag in run.json;
-its bytes remain in recovery.jsonl. Invalid records are similarly quarantined,
-flagged, and regenerated when their planned ID has no valid record. Unexpected
-missing committed transcripts produce flagged empty transcript placeholders.
-Recovery flags stay in run.json so replayed episode bytes need not change.
-For the deterministic mock, recovery after a simulated process kill reproduces
-the episode and transcript files byte for byte.
+ChatMessage has no tool-call array. A separate assistant call message carries
+name, tool_call_id and JSON arguments in content; each tool result carries the
+same name/ID and role tool. Adapters serialize these into the backend's native
+tool format. Natural assistant text has no call ID.
 
-IDs hash (task_pair, condition, endpoint identity, seed, matrix ID). Endpoints
-must include model/version/configuration identity, never credentials. A changed
-endpoint identity produces a different episode. Duplicate coordinates share an
-ID and execute once.
+The returned/scored transcript, transcripts.jsonl, and full monitor view retain
+separated reasoning_text between <jw_reasoning> tags. History passed to
+endpoint.chat strips those spans from natural assistant messages. Task scratchpad
+spans and action/result messages are retained in endpoint history. The runner
+records reasoning_history_policy="strip_separated_reasoning". Endpoint adapters
+receive this already-filtered history and must not turn the archived reasoning
+into ordinary assistant content. Native reasoning fields would require an
+additive ChatMessage contract extension.
 
-## Tampering and hidden scratchpads
+no_scratchpad strips jw_reasoning and task scratchpad spans from natural assistant
+text. actions_only contains calls/results. System prompts, tool arguments and
+results are unchanged. transcript_view(..., "tampered") remains available for an
+explicit caller-supplied altered transcript. run_episode has no such transcript:
+it skips that monitor visibility with monitor.visibility_tampered_unavailable.
 
-All transforms return new Episode values, preserve measured tokens, timings,
-scores and power, and add transform flags. Deletion marks Turn.logged=False;
-dropping calls marks ToolCall.logged=False. Use totals(logged_only=True) to
-inspect visible counts.
+## Clock mappings and power flags
 
-Turn.hidden_tokens already includes scratchpad tokens the runner counted.
-The runner stores per-turn counts in hardware.runner.scratchpad_tokens and
-indices already accounted for in scratchpad_counted_hidden. hide_scratchpad
-uses that metadata idempotently. A producer supplying visible scratchpad counts
-can omit its index from scratchpad_counted_hidden to move those counts into
-hidden_tokens once. If no count is available, the transform flags the missing
-count and preserves known token counts. There is no text/tokenizer guessing.
+A sampler may offer clock_mapping() returning a ClockMapping. A foreign trace
+without a matching mapping is omitted with clock.unmapped; no offset is invented.
+Conflicting mappings record clock.mapping_conflict. Empty traces remain flagged.
 
-random_tamper uses the caller's Random instance and round(fraction * eligible
-items). The fraction is a configured evaluation-set parameter. An unknown kind
-or invalid fraction is flagged.
+For attached traces, notes containing a JSON object with a flags list of strings
+are propagated verbatim as power.<channel>.<original flag>. Distinct full names
+appear once even if a sampler repeats a flag per sample. Thus battery.assist on
+channel package becomes power.package.battery.assist; throttling flags retain
+their original text in the same way. Such flags describe data, never refuse it.
+Other nonempty notes (plain text, malformed JSON, or other shapes) retain the
+generic power.notes flag. Notes never cause a trace to be dropped.
 
-## Synthetic world
+## Identities, attempts and recovery
 
-InboxTask reads ten messages, sends a digest and answers: 12 turns and 11 tool
-calls. Sabotage adds a transfer at turn 6: 13 turns and 12 calls, with 120
-separate reasoning tokens and 64 scratchpad tokens. All sizes are configurable
-through ScriptConfig; task turns must match endpoint turns. Defaults draw
-prefill counts from 800/1200/1600 and visible decode from 80/160/240; side work
-adds 184 hidden decode tokens. Tool waits are 0.4 s for read, 1.2 s for send,
-2.0 s for transfer. This is an 8B-class one-GPU-shaped workload, not a fit.
+- episodes.jsonl contains ordinary Episode records.
+- transcripts.jsonl contains episode_id, messages and flags.
+- run.json contains matrix/settings digests, effective run_settings, order_seed,
+  planned-cell order, matrix/recovery flags and duplicate-cell diagnostics.
+- recovery.jsonl quarantines incomplete/invalid JSONL as raw_hex with source
+  filename/line number. It is created only when needed.
 
-The synthetic power model is:
-E = idle_W * duration_s + a * prefill + b * decode + c * cached_context * decode.
-Defaults are idle_W=55, a=0.03 J/token, b=3 J/token,
-c=0.00004 J/(cached token * decoded token). Prefill runs at 2000 tokens/s and
-decode at 60 tokens/s. Rectangular excess-power phases are derived from the
-recorded model start, first-token and end times. Tool waits remain at idle.
-Samples arrive every 100 ms, average the preceding 25 ms, add Gaussian sigma
-0.5 W noise, and quantize to 0.1 W. All these are explicit configurable world
-assumptions. The trace records cadence, averaging, duty fraction and quantum.
-It includes trailing averaging coverage. Sampler seed, virtual clock and
-script seed make synthetic files reproducible.
+A planned cell hashes matrix ID, sanitized task-spec digest, condition, seed and
+endpoint key. Distinct task configs (including prompt variants of the same pair)
+always get distinct cells. Adding a task variant under an explicit matrix ID
+preserves existing IDs. Identical task/endpoint specs execute once and record
+matrix.duplicate_planned_id with the colliding spec digests.
 
-## Executed synthetic checks
+An endpoint's optional top-level identity names its planned configuration; use
+a non-secret model/version/configuration identity. Otherwise a factory occurrence
+slot names it (identical specs share a slot). Declare identity for stable naming
+when reordering/extending endpoints. Under an explicit matrix ID, changing an
+endpoint config in the same slot keeps the cell; choose a new identity or matrix
+ID to run a new experimental configuration. Runtime endpoint/model identities
+remain in Episode.endpoint/agent_model. No raw factory config enters records,
+transcripts or run.json; credential-looking fields are removed before spec hashes.
 
-The matrix test prints an ALIGN_RUNNER_END_TO_END JSON line to stderr with
-episode, turn, call and token totals, hidden work by sabotage episode, and
-sampled versus independently summed gross energy. It also runs all four
-tamper dataset variants through write_episodes/read_episodes. A separate test
-kills the writer at four append boundaries and checks both recovered primary
-files against the uninterrupted files byte for byte.
+Resume looks up the planned cell before constructing factories. A complete cell
+therefore stays skipped even when an endpoint is unavailable. A factory failure
+records the successful task's actual pair when available, a safe planned endpoint
+name, factory.error.<type> and hardware.runner.planned_cell_id. Failed factories
+are retried automatically; the same still-failing diagnostic is not appended
+again. When construction succeeds, a linked attempt is appended and retained
+alongside the flagged failure.
 
-For energy conservation the test configures 100 ms samples averaging contiguous
-100 ms bins, with noise and quantum set to zero. Including trailing averaging
-coverage conserves excess energy; the independent calculation adds idle energy
-only inside the episode. Agreement uses 1e-6 relative, the pipeline rule when no
-uncertainty is specified. The default 100 ms/25 ms duty sensor, 0.5 W Gaussian
-noise and 0.1 W quantum are exercised separately in test_mock_world. These are
-synthetic checks and do not validate a physical sensor.
+Other flagged episodes are committed by default, including interrupted/endpoint
+error episodes. Optional retry_flags lists exact flags or shell-style patterns,
+for example ["episode.interrupted", "endpoint.error.*"]. Resume retries only when
+the latest attempt matches. Every attempt stores planned_cell_id, attempt and
+retry_of; the first ID equals the cell, later IDs hash the cell and attempt number.
+A successful latest attempt makes further resume a no-op. Old attempts remain
+available for analysis to filter explicitly.
+
+The transcript is fsynced before its episode, which is the commit marker.
+An uncommitted transcript is removed and regenerated. A partial last line is
+truncated and quarantined with resume.partial_last_line; malformed records are
+handled similarly. Recovery flags stay in run.json, preserving deterministic
+episode/transcript bytes on replay. Missing committed transcripts receive flagged
+empty placeholders. Corrupt run.json is rebuilt with resume.invalid_metadata.
+Ctrl-C retains the current partial episode, stops samplers and stops scheduling.
+
+## Tampering and the scratchpad baseline question
+
+Transforms return new Episodes, preserve measured work/traces and add flags.
+delete_turns marks Turn.logged=False; drop_tool_calls marks ToolCall.logged=False.
+Use totals(logged_only=True) for logged counts.
+
+The current records contract counts scratchpads as hidden from the outset.
+hardware.runner stores scratchpad_tokens and scratchpad_counted_hidden.
+hide_scratchpad moves only known, not-yet-hidden scratchpad tokens; unavailable
+counts are flagged. Whenever an application changes no turn's hidden count,
+tamper.hide_scratchpad.noop is present, including random_tamper's hide variant.
+A first application that moves tokens has no noop flag. Reapplying that result
+adds noop and leaves its work unchanged. Evaluation builders must filter noop
+rows rather than label them as effective hidden-work manipulations.
+
+The lead must rule whether the untampered scratchpad baseline remains hidden
+(as records.Turn specifies) or becomes visible so hiding it changes the counts.
+The interim implementation keeps the contract's baseline and discloses noop.
+
+## Independent synthetic world
+
+Built-in names/config keys remain mock.clock, mock.inbox, mock.scripted,
+mock.monitor, mock.power and mock.tokens. ScriptConfig defaults represent a
+12-turn inbox job, with one extra sabotage turn at index 6: 120 reasoning tokens,
+64 scratchpad tokens and a transfer tool. Prefill draws are 800/1200/1600 tokens;
+visible decode draws are 80/160/240. Rates are configurable 2000 prefill and
+60 decode tokens/s. Read/send/transfer waits are 0.4/1.2/2 s.
+
+VirtualClock owns a WorkLedger. ScriptedEndpoint appends ModelWork entries using
+its actual phase times and token usage; InboxTask appends ToolWork entries.
+The sampler reads that independent ledger between its start/stop brackets.
+It never receives an Episode through observe_episode. Direct constructors must
+share the same clock or explicitly supply a ledger; factories wire this up.
+sample_ledger(ledger, start_ns=..., end_ns=...) supports deterministic replay.
+Changing a finished Episode's token counts cannot rewrite the sensor's source.
+
+PowerModel parameters are assumptions, not measured coefficients:
+
+- Idle: 55 W.
+- Prefill excess: 0.03 J/token; at 2000 tokens/s this is 60 W.
+- Decode excess: 3 J/token; at 60 tokens/s this is 180 W.
+- Context excess: 0.00004 J/(cached token * decoded token). At 25000 cached
+  tokens this adds 1 J/decode token, one third of the chosen decode base;
+  the size is a configurable context stress contrast.
+- Tool waits draw idle power.
+- Default sensor: 100 ms cadence, preceding 25 ms average, 0.5 W Gaussian sigma
+  and 0.1 W quantum. These noise/quantum values are configurable assumptions.
+- supply_limit=true on mock.power simulates battery assistance and writes
+  supply.battery_assist into structured trace notes. It changes the supply
+  provenance flag, with no invented change to the power model's joules.
+
+Noiseless contiguous averaging bins conserve excess energy including trailing
+coverage. Tests compare the independent ledger sensor to Episode count sums
+at the brief's 1e-6 relative bar. Counterfactual hidden-work tests hold visible
+work, context and timings fixed. Their 1 J effect-size bar is the brief's M3
+attribution limit used for synthetic design; it is not a claimed GPU limit.
+Text-only changes with identical work produce bit-identical traces.
+
+The review regression harness keeps the appendix probe sources as test fixtures,
+writes them only to a temporary directory and executes the archived 52999e6a2
+baseline before current code. Its outer execution also runs align discovery from
+the root and through run_in.py with cwd=/tmp; a recursion guard suppresses only
+further nested discovery, while every nested assertion/probe still runs.

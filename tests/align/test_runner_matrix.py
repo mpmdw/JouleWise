@@ -443,6 +443,11 @@ class MatrixTests(unittest.TestCase):
             self.assertIn("matrix.default.temperature", metadata["flags"])
             self.assertEqual(metadata["run_settings"]["temperature"], 0.0)  # Exact greedy policy parameter.
             self.assertTrue(all(ep.hardware["runner"]["temperature"] == 0.0 for ep in read_episodes(path)))
+            explicit = runner.run_matrix(write_spec(directory, "explicit.json", output_dir="explicit"))
+            # Same greedy policy/seed/workload: exact file identity is intended.
+            self.assertEqual(path.read_bytes(), explicit.read_bytes())
+            self.assertEqual(path.with_name("transcripts.jsonl").read_bytes(),
+                             explicit.with_name("transcripts.jsonl").read_bytes())
 
     def test_supply_limit_flag_round_trips_on_exactly_one_matrix_cell(self):
         def supply_sampler(config, context):
