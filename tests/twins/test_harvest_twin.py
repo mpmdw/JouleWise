@@ -15,14 +15,65 @@ class RegisteredExamples(unittest.TestCase):
         # in these examples, and above 1e6 × float noise at their scale.
         self.assertAlmostEqual(observed, expected, delta=1e-7)
 
+    def near_seconds(self, observed, expected):
+        # 54.531 ms prints in 1 us units: half-unit = 0.5 us; 1% = 5e-9 s.
+        # 1e6 * ulp(0.068 s) ~= 1.4e-11 s < 1e-9 s < 5e-9 s.
+        self.assertAlmostEqual(observed, expected, delta=1e-9)
+
     def test_overlap_example_reg_0_4(self):
         rows = [PowerInterval(9.90, 10.03, 20), PowerInterval(10.03, 10.16, 30),
                 PowerInterval(10.16, 10.29, 30)]
         self.near(overlap_energy(rows, 10, 10.25), 7.20)
 
     def test_bracket_examples_b6_1_7(self):
-        self.near(calibration_bracket(.040, .030, .014531).operative_fiducial_s, .054531)
-        self.near(calibration_bracket(.028, .048, .014531).operative_fiducial_s, .068)
+        self.near_seconds(calibration_bracket(.040, .030, .014531).operative_fiducial_s, .054531)
+        # B6's 20 ms drift only flags; no B5 maximum applies to this example.
+        self.near_seconds(calibration_bracket(.028, .048, .014531).operative_fiducial_s, .068)
+
+    def test_bracket_optional_maximum_applies_to_allowance(self):
+        # B5-REG 0.11: the issued 24-capture within-test Q99 drift ceiling.
+        maximum = .01550217418713139
+        with self.assertRaisesRegex(ValueError, "allowance exceeds maximum"):
+            calibration_bracket(.030, .047, .014531, maximum_allowance_s=maximum)
+        # A screen alone can exceed a supplied maximum even without drift.
+        with self.assertRaisesRegex(ValueError, "allowance exceeds maximum"):
+            calibration_bracket(.030, .030, .016, maximum_allowance_s=maximum)
+        # Strict 'exceeds': equality is allowed; 0.125 s is binary-exact.
+        self.near_seconds(calibration_bracket(0, .125, .125,
+                          maximum_allowance_s=.125).drift_allowance_s, .125)
+        for invalid in (-1, math.inf, math.nan, True):
+            with self.assertRaises(ValueError):
+                calibration_bracket(.030, .040, .014531, maximum_allowance_s=invalid)
+
+    def test_anchor_short_phase_refused_but_exactly_two_g_allowed(self):
+        rows = [PowerInterval(0, 2, 5)]
+        # Binary-exact g=1/8 s: the inward corner reverses below 2g=1/4 s.
+        with self.assertRaisesRegex(ValueError, "reversed displaced corner"):
+            anchor_envelope(rows, 1, 1.125, .125, 0, 0)
+        self.near(anchor_envelope(rows, 1, 1.25, .125, 0, 0).minimum_j, 0)
+
+    def test_anchor_end_coverage_refused_but_exact_margin_allowed(self):
+        rows = [PowerInterval(0, 2, 5)]
+        # g+m=1/8+1/16=3/16 s, binary-exact at both support boundaries.
+        with self.assertRaisesRegex(ValueError, "trace does not cover"):
+            anchor_envelope(rows, 1, 1.875, .125, 0, .0625)
+        env = anchor_envelope(rows, 1, 1.8125, .125, 0, .0625)
+        self.near(env.point_j, 5 * .8125)
+
+    def test_anchor_start_coverage_refused_but_exact_margin_allowed(self):
+        rows = [PowerInterval(0, 2, 5)]
+        # g+m=3/16 s as above; no tolerance on the strict coverage edge.
+        with self.assertRaisesRegex(ValueError, "trace does not cover"):
+            anchor_envelope(rows, .125, 1, .125, 0, .0625)
+        env = anchor_envelope(rows, .1875, 1, .125, 0, .0625)
+        self.near(env.point_j, 5 * .8125)
+
+    def test_trace_overlap_above_reader_tolerance_and_reordered_starts_refused(self):
+        # bundle_read admits <=1 us; 2 us is unambiguously outside that limit.
+        with self.assertRaisesRegex(ValueError, "overlap or are out of order"):
+            overlap_energy([PowerInterval(0, 1, 5), PowerInterval(1 - 2e-6, 2, 5)], 0, 2)
+        with self.assertRaisesRegex(ValueError, "overlap or are out of order"):
+            overlap_energy([PowerInterval(1, 2, 5), PowerInterval(0, 1, 5)], 0, 2)
 
     def test_exact_timing_examples_reg_0_10(self):
         rows = [PowerInterval(9.95, 10.08, 2), PowerInterval(10.08, 10.99, 30),

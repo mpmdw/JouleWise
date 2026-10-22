@@ -3,6 +3,9 @@
 Written from B5-REG §§0.4, 0.10–0.12 and B6-REPL §§1.7–1.8 before
 opening the harvest implementation or its tests. Inputs are already decoded,
 time-aligned evidence. No production reducer/harvest/statistics kernel is used.
+Where the registrations are silent (refusal edges of the timing envelope, the
+support-overlap tolerance), it follows production's reducer and reader; those
+post-freeze choices are listed in PR #554.
 This module never reads a session directory or decides whether it is unblinded.
 The caller must authenticate and classify evidence before supplying it.
 """
@@ -49,10 +52,10 @@ def _trace(records: Iterable[PowerInterval]) -> tuple[PowerInterval, ...]:
     result = tuple(records)
     if not result:
         raise ValueError("empty power trace")
-    # Epoch supports reconstructed as end-duration can overlap by rounding.
-    # Each endpoint can contribute one ULP; no physics tolerance is added.
-    if any(a.start_s > b.start_s or a.end_s - b.start_s >
-           math.ulp(a.end_s) + math.ulp(b.start_s)
+    # Match bundle_read's interval-support representation tolerance (1 us).
+    # At 45 W, the top of the request power range, 1 us * 45 W = 4.5e-5 J,
+    # below 1e-4 of the approximately 1 J attribution limit; both supports count.
+    if any(a.start_s > b.start_s or b.start_s < a.end_s - 1e-6
            for a, b in zip(result, result[1:])):
         raise ValueError("power intervals overlap or are out of order")
     return result
@@ -90,7 +93,9 @@ def anchor_envelope(records: Iterable[PowerInterval], start_s: float,
 
     Within each corner E is piecewise linear in the common shift. Thus its
     extrema occur at ±m or when either displaced edge meets any record edge.
-    A reversed displaced interval has zero overlap, as does an empty phase.
+    Refuse a reversed displaced corner or trace support that does not cover
+    every corner under every common shift: unmeasured power is not zero.
+    Equality at a zero-length corner or at a support edge is allowed.
     """
     rows = _trace(records)
     start = _finite(start_s, "start_s")
@@ -106,11 +111,19 @@ def anchor_envelope(records: Iterable[PowerInterval], start_s: float,
     g = math.fsum((_finite(operative_fiducial_s, "fiducial", nonnegative=True),
                    _finite(wall_minus_monotonic_span_s, "span", nonnegative=True)))
     m = _finite(effective_clock_bound_s, "clock bound", nonnegative=True)
+    trace_start = min(row.start_s for row in rows)
+    trace_end = max(row.end_s for row in rows)
     point = _integral(rows, start, end)
     extrema = [point]
     boundaries = {edge for row in rows for edge in (row.start_s, row.end_s)}
     for e_on, e_off in product((-g, g), repeat=2):
         left, right = start + e_on, end + e_off
+        if right < left:
+            raise ValueError("reversed displaced corner")
+        # Production's strict comparisons, in elapsed coordinates: all
+        # supports together must cover [start - g - m, end + g + m].
+        if trace_start + m > left or trace_end - m < right:
+            raise ValueError("trace does not cover displaced phase and common shift")
         shifts = {-m, m}
         shifts.update(edge - displaced for edge in boundaries
                       for displaced in (left, right)
@@ -128,12 +141,22 @@ class CalibrationBracket:
 
 
 def calibration_bracket(opening_s: float, closing_s: float,
-                        bracket_screen_s: float) -> CalibrationBracket:
-    """B5-REG §0.10; B6-REPL §1.7. The acceptance supplies the screen."""
+                        bracket_screen_s: float, *,
+                        maximum_allowance_s: float | None = None) -> CalibrationBracket:
+    """B5-REG §0.11; B6-REPL §§1.7, 3.3. Acceptance supplies the screen.
+
+    A supplied maximum enforces B5's ceiling on max(observed drift, screen).
+    With None this is arithmetic only: block 6's drift budget only flags
+    (calibration.drift_above_budget), so it must not refuse that arithmetic.
+    """
     pre, post, screen = (_finite(v, name, nonnegative=True) for v, name in (
         (opening_s, "opening"), (closing_s, "closing"), (bracket_screen_s, "screen")))
     drift = abs(post - pre)
     allowance = max(drift, screen)
+    if maximum_allowance_s is not None:
+        maximum = _finite(maximum_allowance_s, "maximum allowance", nonnegative=True)
+        if allowance > maximum:
+            raise ValueError("calibration drift allowance exceeds maximum")
     return CalibrationBracket(drift, allowance, max(pre, post) + allowance)
 
 
