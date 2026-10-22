@@ -3,8 +3,8 @@
 Binary segmentation costs O(n log n) for balanced changes and uses O(n) storage;
 it is practical for sub-ms traces without a quadratic dynamic-programming
 table. Its greedy splits can miss short balanced troughs; sensitivity must be
-reported by sensor/duration rather than presumed. Labels assume idle < decode
-< prefill and shorter prefill bursts, as in the synthetic timeline model.
+reported by sensor/duration rather than presumed. Labels use local prefill peaks
+followed by lower decode, with near-idle troughs; decode may rise with context.
 Read gaps widen boundary uncertainty. Held values are thinned by observed
 cadence; robust multiscale variance retains within-decode token modulation.
 """
@@ -30,6 +30,11 @@ class Segment:
     averaging_window_ns: int = 0
     flags: tuple[str, ...] = ()
     boundary_uncertainty_ns: int = 0
+    low_observation_windows: tuple[tuple[int, int, float], ...] = ()
+    observation_uncertainty_ns: int = 0
+    idle_floor_w: float | None = None
+    active_floor_w: float | None = None
+    power_uncertainty_w: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -61,7 +66,18 @@ def estimate_noise_sd(values: tuple[float, ...]) -> float:
     differences = [b - a for a, b in zip(observed, observed[1:])]
     center = statistics.median(differences)
     mad = statistics.median(abs(x - center) for x in differences)
-    return mad / (math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75))
+    scale = mad / (math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75))
+    if scale == 0.0:
+        # Quantized independent noise can occupy one bin for >half the
+        # differences. Exact out-and-back excursions identify an observed
+        # small step without mistaking a one-way phase transition for noise.
+        # Uniform rounding in that bin has sd q/sqrt(12). This is an
+        # observable resolution floor, not a calibrated analog-noise estimate.
+        excursions = [abs(b - a) for a, b, c in zip(observed, observed[1:], observed[2:])
+                      if a == c and b != a]
+        if excursions:
+            scale = min(excursions) / math.sqrt(12)
+    return scale
 
 
 def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list[Segment]:
@@ -105,6 +121,9 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
         effective_interval = max(interval, math.ceil(_mean_period_ns(observed_periods)))
         flags.append("held_values_cadence_inferred")
+        # Held conversion latency also supplies an inferred exposure when
+        # the trace has no narrower physical characterization.
+        window = max(window, effective_interval)
     # Thin by the observed cadence rather than removing entire constant
     # plateaus. A 500 ms truly idle span still has 500/dt observations.
     indices = list(range(n))
@@ -186,58 +205,126 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     # Complete-span grouping never chains idle through intermediate mixed
     # samples. The individual envelope includes correlated token modulation;
     # SE(mean) alone would split a decode ripple as read noise tends to zero.
-    modulation_envelope = math.sqrt(2 * math.log(max(2, n)) * 2 * modulation_variance)
+    # For Gaussian level errors with difference variance v, the tail bound
+    # exp(-d^2/(2v)) <= 1/n gives d=sqrt(2*v*log(n)). For independent
+    # means v=variance*(1/n1+1/n2); for local modulation use two readings.
+    # Two rounded values each have +/-q/2 ambiguity, so their separation
+    # must also exceed one whole quantum. Add that bounded rounding error
+    # to the statistical mean-error term by the triangle inequality; it
+    # cannot average away without demonstrated dithering. This survives zero ripple.
+    modulation_envelope = max(quantum, math.sqrt(
+        2 * math.log(max(2, n)) * 2 * modulation_variance))
     for index in order:
         separation = modulation_envelope
         if groups:
             a, b = leaves[index]
             c, d = leaves[groups[-1][0]]
-            separation = max(separation, math.sqrt(
+            separation = max(separation, quantum + math.sqrt(
                 2 * math.log(max(2, n)) * variance * (1 / (b - a) + 1 / (d - c))))
-        if not groups or means[index] - means[groups[-1][0]] > separation:
+        if not groups or means[index] - means[groups[-1][0]] > (
+                separation + math.ulp(means[index]) + math.ulp(means[groups[-1][0]])):
             groups.append([index])
         else:
             groups[-1].append(index)
+    low = []
     labels = ["unknown"] * len(leaves)
     if len(groups) >= 2:
-        # Timeline ordering: idle < decode < prefill. Growing context can
-        # create several sustained prefill levels.
-        for i in groups[0]:
-            labels[i] = "low"
-        for i in groups[1]:
-            labels[i] = "decode"
-        for group in groups[2:]:
-            for i in group:
-                labels[i] = "prefill"
-        low_weight = sum(leaves[i][1] - leaves[i][0] for i in groups[0])
-        low_level = sum(means[i] * (leaves[i][1] - leaves[i][0]) for i in groups[0]) / low_weight
-        decode_weight = sum(leaves[i][1] - leaves[i][0] for i in groups[1])
-        decode_level = sum(means[i] * (leaves[i][1] - leaves[i][0]) for i in groups[1]) / decode_weight
-        for i in range(len(leaves)):
-            if i in stable:
-                continue
+        rank = {i: k for k, group in enumerate(groups) for i in group}
+        # Consolidate sustained equal levels temporally. Global rank does
+        # not identify decode: waits can sit above idle and KV growth can
+        # give each decode its own level. A prefill is a local high burst;
+        # the sustained level immediately after its fall is decode.
+        anchors = []
+        for i in stable:
+            if anchors and rank[anchors[-1][-1]] == rank[i]:
+                anchors[-1].append(i)
+            else:
+                anchors.append([i])
+
+        def separation(i, j):
             a, b = leaves[i]
-            burst_separation = max(modulation_envelope, math.sqrt(
-                2 * math.log(max(2, n)) * variance * (1 / (b - a) + 1 / decode_weight)))
-            # A short trough may have only one pure exposure, surrounded by
-            # mixed leaves and sustained decode/prefill. Temporal neighbors
-            # alone would erase it. The midpoint between established idle and
-            # decode is the equal-variance least-squares level decision. A
-            # decode/prefill transition cannot cross below this midpoint;
-            # idle-edge mixtures assigned low merge with the same trough.
-            if abs(means[i] - low_level) < abs(means[i] - decode_level):
+            c, d = leaves[j]
+            return max(modulation_envelope, quantum + math.sqrt(
+                2 * math.log(max(2, n)) * variance * (1 / (b - a) + 1 / (d - c))))
+
+        peaks, following_bursts = set(), set()
+        for k, anchor in enumerate(anchors):
+            i = anchor[0]
+            before = anchors[k - 1][-1] if k else None
+            after = anchors[k + 1][0] if k + 1 < len(anchors) else None
+            # A prefill shorter than one exposure can be an unstable leaf
+            # before a sustained decode. It must not turn that decode into
+            # the highest sustained level of the cycle.
+            previous_end = before + 1 if before is not None else 0
+            short_burst = any(means[j] - means[i] > separation(j, i) and
+                              (before is None or means[j] - means[before] > separation(j, before))
+                              for j in range(previous_end, i))
+            if short_burst:
+                following_bursts.add(k)
+            if (not short_burst and after is not None and
+                    rank[i] > rank[after] and
+                    (before is None or rank[i] > rank[before])):
+                peaks.add(k)
+        # A decode following one observed burst can be a local maximum
+        # when another prefill falls entirely between sensor slices. Do not
+        # let that one unresolved burst promote its following wait to the
+        # episode-wide decode level. Established peak/fall roles outrank
+        # local height alone.
+        post_peak_ranks = {rank[anchors[k + 1][0]] for k in peaks}
+        peaks = {k for k in peaks if rank[anchors[k][0]] not in post_peak_ranks}
+        decode_anchors = set(following_bursts)
+        for k in peaks:
+            following = k + 1
+            # A low head and equal-level tail establish idle. In a trace
+            # cropped to active work, the last post-prefill level is decode.
+            edge_idle = (following == len(anchors) - 1 and
+                         rank[anchors[0][0]] == rank[anchors[following][0]] and
+                         0 not in peaks)
+            if not edge_idle:
+                decode_anchors.add(following)
+        if not decode_anchors:
+            # Too little temporal structure for peak/fall identification:
+            # retain the original ordered-level hypothesis and flag its
+            # duration check below (including deliberately inverted worlds).
+            for i in groups[0]:
+                labels[i] = "low"
+            for i in groups[1]:
+                labels[i] = "decode"
+            for group in groups[2:]:
+                for i in group:
+                    labels[i] = "prefill"
+        else:
+            decode_ranks = {rank[i] for k in decode_anchors for i in anchors[k]}
+            for k, anchor in enumerate(anchors):
+                i = anchor[0]
+                nearest_decode = min((anchors[j][0] for j in decode_anchors),
+                                     key=lambda j: abs(means[i] - means[j]))
+                above_decode = means[i] - means[nearest_decode] > separation(i, nearest_decode)
+                label = ("decode" if k in decode_anchors or rank[i] in decode_ranks else
+                         "prefill" if k in peaks or above_decode else "low")
+                for i in anchor:
+                    labels[i] = label
+        low = [i for i in stable if labels[i] == "low"]
+        decode = [i for i in stable if labels[i] == "decode"]
+        for i in range(len(leaves)):
+            if i in rank:
+                continue
+            # Nearest established low/decode level is the equal-variance
+            # least-squares decision. Only established lows can create a
+            # short trough; an active-only two-level trace has none.
+            low_distance = min((abs(means[i] - means[j]) for j in low), default=math.inf)
+            decode_distance = min((abs(means[i] - means[j]) for j in decode), default=math.inf)
+            if low_distance < decode_distance:
                 labels[i] = "low"
                 continue
-            # A short prefill can have only one pure slow-sensor exposure.
-            # It need not establish a new level, but a sample significantly
-            # ABOVE sustained decode is a burst, never a low-power wait.
-            if means[i] - decode_level > burst_separation:
-                labels[i] = "prefill"
-                continue
+            if decode:
+                j = min(decode, key=lambda j: abs(means[j] - means[i]))
+                if means[i] - means[j] > separation(i, j):
+                    labels[i] = "prefill"
+                    continue
             left = next((j for j in reversed(stable) if j < i), None)
             right = next((j for j in stable if j > i), None)
             neighbors = [j for j in (left, right) if j is not None]
-            # Nearest adjacent mean is the least-squares equal-variance choice.
             closest = min(neighbors or stable, key=lambda j: abs(means[j] - means[i]))
             labels[i] = labels[closest]
     else:
@@ -252,9 +339,20 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             if a - effective_interval <= start <= b or a - effective_interval <= end <= b:
                 boundary_uncertainty = max(boundary_uncertainty, b - a)
                 local_flags.append("boundary_indeterminate_read_gap")
+        # Retain low-segment exposures to test whether an empty visible gap
+        # can explain their convolution. Even a partial-window trough can
+        # refute a short client gap; it need not be a pure-idle observation.
+        # Gaussian tail <=1/n plus bounded rounding derives the power bar.
+        low_bar = quantum + math.sqrt(2 * variance * math.log(max(2, n)))
+        observations = tuple((times[k] - window, times[k], xs[k]) for k in range(left, right)
+                             if low and label == "low")
+        observation_uncertainty = boundary_uncertainty + (effective_interval if changes else 0)
+        idle_floor = min((means[j] for j in low), default=None)
+        active_floor = min((means[j] for j in decode), default=None) if len(groups) >= 2 else None
         segment = Segment(start, end, mean, label, trace.clock_domain,
                           effective_interval, window, tuple(sorted(set(local_flags))),
-                          boundary_uncertainty)
+                          boundary_uncertainty, observations, observation_uncertainty,
+                          idle_floor, active_floor, low_bar)
         if result and result[-1].label == label:
             previous = result.pop()
             duration = max(0, previous.end_ns - previous.start_ns)
@@ -264,7 +362,10 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             segment = replace(
                 segment, start_ns=previous.start_ns, mean_w=mean,
                 flags=tuple(sorted(set(previous.flags) | set(segment.flags))),
-                boundary_uncertainty_ns=max(previous.boundary_uncertainty_ns, boundary_uncertainty))
+                boundary_uncertainty_ns=max(previous.boundary_uncertainty_ns, boundary_uncertainty),
+                low_observation_windows=previous.low_observation_windows + observations,
+                observation_uncertainty_ns=max(previous.observation_uncertainty_ns,
+                                               observation_uncertainty))
         result.append(segment)
     # Compare phase-run durations after consolidation; comparing individual
     # ripple leaves with a whole prefill would manufacture a model mismatch.
@@ -369,10 +470,32 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
         tolerance = max(tolerance, bound)
         transformed.append((replace(segment, start_ns=segment.start_ns + offset,
                                     end_ns=segment.end_ns + offset,
-                                    clock_domain=episode.clock_domain), bound))
-    edges = [[j for j, ((left, right), _) in enumerate(run_items)
+                                    clock_domain=episode.clock_domain,
+                                    low_observation_windows=tuple((a + offset, b + offset, value)
+                                        for a, b, value in segment.low_observation_windows),
+                                    observation_uncertainty_ns=segment.observation_uncertainty_ns +
+                                        uncertainty), bound))
+    def gap_explains_observations(segment, left, right):
+        if segment.idle_floor_w is None or segment.active_floor_w is None:
+            return True  # No amplitude evidence; retain timing uncertainty.
+        uncertainty = segment.observation_uncertainty_ns
+        left, right = left - uncertainty, right + uncertainty
+        for a, b, value in segment.low_observation_windows:
+            idle_duration = max(0, min(b, right) - max(a, left))
+            active_fraction = (1 - idle_duration / (b - a) if b > a else
+                               float(not left <= b <= right))
+            # Idle and decode are conservative lower power levels; prefill
+            # can only raise the expected average outside the visible gap.
+            expected = segment.idle_floor_w + active_fraction * (
+                segment.active_floor_w - segment.idle_floor_w)
+            if value < expected - segment.power_uncertainty_w:
+                return False
+        return True
+
+    edges = [[j for j, ((left, right), calls) in enumerate(run_items)
               if abs(segment.start_ns - left) <= bound and
-              abs(segment.end_ns - right) <= bound]
+              abs(segment.end_ns - right) <= bound and
+              (calls or gap_explains_observations(segment, left, right))]
              for segment, bound in transformed]
     owner = {}
 
@@ -390,6 +513,20 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
         augment(i, set())
     matched_segments = set(owner.values())
     matched_calls = {index for j in owner for index in run_items[j][1]}
+    # An unmatched visible call whose envelope remains at the sustained
+    # decode level has no separable trough. Name the observational failure
+    # specifically; level alone cannot distinguish a wait equal to decode.
+    for j, call in enumerate(logged):
+        if j not in matched_calls and any(
+                s.label == "decode" and
+                s.start_ns + next((m.offset_ns for m in episode.clock_mappings
+                                  if m.trace_domain == s.clock_domain and
+                                  m.episode_domain == episode.clock_domain), 0) < call.end_ns and
+                s.end_ns + next((m.offset_ns for m in episode.clock_mappings
+                                if m.trace_domain == s.clock_domain and
+                                m.episode_domain == episode.clock_domain), 0) > call.start_ns
+                for s in segments):
+            flags.add("tool_wait_not_separated_from_decode_level")
     unlogged = []
     for i, (segment, _) in enumerate(transformed):
         if i in matched_segments:

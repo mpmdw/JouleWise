@@ -81,6 +81,9 @@ class CharacterizationReviewTest(unittest.TestCase):
                     # dividing by observed periods gives the cadence error bound.
                     bound = (poll + 10_000) / len(rail.distinct_periods_ns)
                     self.assertLessEqual(abs(rail.cadence_ns - conversion), bound)
+                    # Slower-than-poll conversions remain resolved even
+                    # when their period is below twice the poll interval.
+                    self.assertNotIn("cadence_poll_limited", rail.flags)
                 else:
                     self.assertIn("cadence_poll_limited", rail.flags)
 
