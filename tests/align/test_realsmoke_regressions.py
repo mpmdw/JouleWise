@@ -18,8 +18,9 @@ from urllib.error import HTTPError
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint
-from joulewise.align.apple.sampler import ApplePowerSampler, TRACE_DOMAIN, stamp_mapping
-from joulewise.align.attribution import trace_energy
+from joulewise.align.apple.sampler import ApplePowerSampler, TRACE_DOMAIN, power_records, stamp_mapping
+from joulewise.align.attribution import attribute_episode, trace_energy
+from joulewise.align.energy_residual import turn_energy_from_attribution
 from joulewise.align.budget.__main__ import main
 from joulewise.align.budget.conditions import Condition, LocalEndpoint
 from joulewise.align.budget.energy import episode_energy
@@ -30,7 +31,7 @@ from joulewise.align.budget.synthetic import (
 )
 from joulewise.align.endpoints import OpenAICompatEndpoint
 from joulewise.align.interfaces import ChatMessage, ChatResult
-from joulewise.align.records import ClockMapping, Episode, PowerTrace, to_json, from_json
+from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn, to_json, from_json
 from joulewise.align.runner import FactoryContext, _make, run_episode
 from joulewise.clock import ClockStamp, FakeClock
 from joulewise.interfaces import AdapterResult, PowerSample
@@ -225,6 +226,9 @@ class RealSmokeRegressions(unittest.TestCase):
         estimate = trace_energy(trace, 0, SECOND, mapping=mapping)
         self.assertTrue(math.isinf(estimate.half_width_j))
         self.assertIn('clock.unmeasured', estimate.flags)
+        attribution = attribute_episode(ep, source='powermetrics', channel='cpu')
+        self.assertTrue(math.isinf(attribution.total.half_width_j))
+        self.assertNotIn('powermetrics.attribution_floor', attribution.total.flags)
 
     def test_powermetrics_floor_agrees_between_reducers(self):
         # Constant 4 W for exactly 1 s has 4 J; exact integers are representable.
@@ -232,14 +236,56 @@ class RealSmokeRegressions(unittest.TestCase):
                            (4., 4., 4.), 'W', SECOND, resolution=0.)
         ep = Episode('e', 't', 'benign', 'm', 'e', 0, 'host', 0, SECOND, (), power_traces=(trace,))
         budget = episode_energy(ep, channels=(('powermetrics', 'cpu'),), power_max_w=4.)
-        attribution = trace_energy(trace, 0, SECOND)
+        attribution = attribute_episode(ep, source='powermetrics', channel='cpu').total
         self.assertEqual(budget.joules, 4.)
         self.assertEqual(attribution.joules, 4.)
         self.assertGreaterEqual(budget.uncertainty_j, 1.)
         self.assertGreaterEqual(attribution.half_width_j, 1.)
 
-    def test_non_vllm_budget_is_excluded_without_generating_pair(self):
-        for backend in ('mlx', 'llamacpp'):
+    def test_powermetrics_floor_belongs_to_printed_totals_not_segments(self):
+        # Constant 4 W and 0.02 W resolution give 0.01 J/s modeled bounds,
+        # well below the D-078 printed minimum of 1 J, even after tiling.
+        trace = PowerTrace('powermetrics', 'cpu', 'host',
+                           tuple(k*SECOND//10 for k in range(41)), (4.,)*41,
+                           'W', SECOND//10, resolution=.02)
+        turns = tuple(Turn(k, k*SECOND, (k+1)*SECOND, 0, 10, 10,
+                           first_token_ns=k*SECOND+SECOND//4,
+                           tool_calls=((ToolCall('read', SECOND//2, 3*SECOND//4, 2, 2),)
+                                       if k == 0 else ())) for k in range(3))
+        ep = Episode('floor', 't', 'benign', 'm', 'e', 0, 'host', 0, 3*SECOND,
+                     turns, power_traces=(trace,))
+        attribution = attribute_episode(ep, source='powermetrics', channel='cpu')
+        self.assertGreater(len(attribution.segments), len(turns))
+        self.assertTrue(any(s.kind == 'tool' for s in attribution.segments))
+        for segment in attribution.segments:
+            query = trace_energy(trace, segment.start_ns, segment.end_ns)
+            # Bit identity is required: same production query, same inputs.
+            self.assertEqual(segment.energy.half_width_j, query.half_width_j)
+            self.assertNotIn('powermetrics.attribution_floor', segment.energy.flags)
+        self.assertTrue(any(s.energy.half_width_j < 1. for s in attribution.segments))
+        self.assertGreaterEqual(attribution.total.half_width_j, 1.)  # D-078 clause 11.
+        self.assertIn('powermetrics.attribution_floor', attribution.total.flags)
+        self.assertIn('powermetrics.attribution_floor', attribution.flags)
+        own = trace_energy(trace, ep.start_ns, ep.end_ns)
+        # Same max/fsum expressions and identical query inputs, so exact equality.
+        self.assertEqual(attribution.total.half_width_j, max(1., own.half_width_j,
+            math.fsum(s.energy.half_width_j for s in attribution.segments)))
+        per_turn = turn_energy_from_attribution(attribution)
+        for turn in turns:
+            expected = max(1., math.fsum(s.energy.half_width_j for s in attribution.segments
+                                         if s.turn == turn.index))
+            self.assertEqual(per_turn[turn.index][1], expected)  # Identical max/fsum.
+        # At 4 W resolution, the half-quantum term is 2 J per one-second
+        # turn. This pins retaining a modeled bound above the printed minimum.
+        wider = attribute_episode(replace(ep, power_traces=(replace(trace, resolution=4.),)),
+                                  source='powermetrics', channel='cpu')
+        for turn, (_, bound) in turn_energy_from_attribution(wider).items():
+            self.assertGreater(bound, 1.)
+            self.assertEqual(bound, math.fsum(s.energy.half_width_j for s in wider.segments
+                                             if s.turn == turn))  # Same fsum, identical inputs.
+
+    def test_unsupported_budget_labels_are_excluded_and_llamacpp_generates_pair(self):
+        for backend in ('mlx', 'unknown'):
             result, endpoint = self.world(backend=backend,
                 conditions=[Condition('budget_0.6', 'budget', .6)])
             trial = result.trials[0]
@@ -249,6 +295,34 @@ class RealSmokeRegressions(unittest.TestCase):
             row = summarize(result.trials)[0]
             self.assertEqual((row.trials, row.excluded_trials), (0, 1))
             self.assertIsNone(row.mean_reasoning_tokens)
+        result, endpoint = self.world(backend='llamacpp',
+            conditions=[Condition('budget_0.6', 'budget', .6)])
+        trial = result.trials[0]
+        self.assertNotIn('budget_forcing_continuation_unsupported', trial.flags)
+        self.assertEqual(len(trial.generation.calls), 2)
+        self.assertEqual(len(trial.paired.calls), 2)
+        self.assertEqual((summarize(result.trials)[0].trials,
+                          summarize(result.trials)[0].excluded_trials), (1, 0))
+
+    def test_reasoning_only_answer_at_cap_is_excluded_for_supported_labels(self):
+        class IgnoresContinuation(ScriptedModel):
+            def chat(self, messages, *, max_tokens, **kwargs):
+                result = super().chat(messages, max_tokens=max_tokens, **kwargs)
+                if self.options.get('continue_final_message'):
+                    return replace(result, content='', reasoning_text='fresh reasoning',
+                                   completion_tokens=max_tokens, reasoning_tokens=max_tokens)
+                return result
+        for backend in ('vllm', 'llamacpp'):
+            with self.subTest(backend=backend):
+                result, _ = self.world(backend=backend, endpoint_class=IgnoresContinuation,
+                    conditions=[Condition('budget_0.6', 'budget', .6)])
+                trial = result.trials[0]
+                self.assertEqual(len(trial.generation.calls), 2)
+                self.assertIn('budget_answer_call_at_token_limit', trial.generation.episode.flags)
+                self.assertIn('budget_answer_call_at_token_limit', trial.flags)
+                row = summarize(result.trials)[0]
+                self.assertEqual((row.trials, row.excluded_trials), (0, 1))
+                self.assertIsNone(row.mean_reasoning_tokens)
 
     def test_generation_failures_are_excluded_and_monitor_is_skipped(self):
         class Broken(ScriptedModel):
@@ -343,6 +417,92 @@ class RealSmokeRegressions(unittest.TestCase):
         self.assertNotIn('variable_averaging_support:cpu_power', flags['gpu_power'])
         self.assertEqual(sampler.clock_mappings[0].method, 'unmeasured')
 
+    def test_variable_apple_windows_cover_low_to_high_step_through_runner(self):
+        # Epoch floats reproduce real powermetrics' varying support widths,
+        # including conversion roundoff on nominally 100 ms windows.
+        epoch_offset = 1_700_000_000.0123
+        class EpochClock(FakeClock):
+            def now(self): return super().now() + epoch_offset
+            def stamp(self):
+                mono = FakeClock.now(self)
+                return ClockStamp(self.now(), mono, mono, 1e-9, 1e-9)
+            def ns(self): return round(FakeClock.now(self)*SECOND)
+        clock = EpochClock(1.85)
+        samples = []
+        for k in range(41):
+            end = k/10 + epoch_offset
+            samples.append(PowerSample(end, 2. if k <= 20 else 40., 'powermetrics',
+                rail='cpu_power', interval_start_s=end-.1, interval_end_s=end))
+        evidence = {'clock_anchor': {'status': 'bounded', 'method': 'synthetic_anchor_v2',
+            'wall_minus_monotonic_lower_s': epoch_offset-1e-6,
+            'wall_minus_monotonic_upper_s': epoch_offset+2e-6,
+            'effective_clock_anchor_bound_s': .031}}  # D-078's 31 ms bound.
+        adapter = SimpleNamespace(start_sampling=lambda *args: AdapterResult(ok=True),
+            stop_sampling_with_evidence=lambda *args, **kw: SimpleNamespace(
+                samples=samples, uncertainty_evidence=evidence))
+        sampler = ApplePowerSampler(config(), clock, episode_domain='host', adapter=adapter)
+        class StepEndpoint(Fixed):
+            def chat(self, *args, **kwargs):
+                start = clock.ns()
+                clock.sleep(.3)
+                return replace(super().chat(*args, **kwargs), start_ns=start, end_ns=clock.ns())
+        ep, _ = run_episode(Task(), 'benign', StepEndpoint(), samplers=(sampler,),
+            seed=0, max_turns=1, max_tokens=64, temperature=0., clock_domain='host', clock=clock.ns)
+        trace = ep.power_traces[0]
+        notes = json.loads(trace.notes)
+        self.assertIsNone(trace.averaging_window_ns)
+        self.assertIsNone(trace.resolution)
+        for timestamp, support, half in zip(trace.t_ns, notes['sample_support_ns'],
+                                             notes['timing_half_width_ns']):
+            a, b = support
+            # These are integer identities, including downward midpoint rounding
+            # and the ceiling that encloses the odd-width half nanosecond.
+            self.assertEqual(timestamp, (a+b)//2)
+            self.assertEqual(half, (b-a+1)//2)
+        attribution = attribute_episode(ep, source='powermetrics', channel='cpu_power')
+        segment = next(s for s in attribution.segments if s.turn == 0)
+        step = 2*SECOND
+        # Exact integral of the designed step: each sample is the exact mean
+        # of its nominal [(k-1)/10, k/10] support, wholly on one side of the
+        # step. Epoch serialization perturbs recorded timing only, not truth.
+        # Integer ns durations times integer W sum exactly before the final
+        # seconds conversion (6.300 J).
+        truth = (2*(step-segment.start_ns) + 40*(segment.end_ns-step))/SECOND
+        self.assertLessEqual(abs(segment.energy.joules-truth), segment.energy.half_width_j)
+        turns = turn_energy_from_attribution(attribution)
+        self.assertLessEqual(abs(turns[0][0]-truth), turns[0][1])
+        budget = episode_energy(ep, channels=(('powermetrics', 'cpu_power'),))
+        # Two reducers, project's 1e-6 relative (or absolute near zero) agreement bar.
+        self.assertLessEqual(abs(budget.joules-attribution.total.joules),
+                             1e-6*max(1., abs(attribution.total.joules)))
+
+    def test_variable_support_rounding_missing_support_and_written_order(self):
+        samples = [PowerSample(t/SECOND, 4., 'powermetrics', rail='cpu_power',
+                    interval_start_s=a/SECOND if a is not None else None,
+                    interval_end_s=t/SECOND if a is not None else None)
+                   for t, a in ((10, 7), (20, None), (30, 25))]
+        traces, _ = power_records(samples, nominal_interval_ns=10)
+        trace = traces[0]
+        self.assertEqual(trace.t_ns, (8, 20, 27))  # Integer floor midpoints; unknown keeps timestamp.
+        self.assertEqual(json.loads(trace.notes)['timing_half_width_ns'], [2, None, 3])
+        estimate = trace_energy(trace, 8, 27)
+        self.assertTrue(math.isinf(estimate.half_width_j))
+        self.assertIn('timing.sample_uncertainty_unknown', estimate.flags)
+        # Reported ends increase, but midpoints go 5 -> 0 ns; the actual written
+        # point sequence must reject the second row, preserving notes alignment.
+        reversed_midpoints = [PowerSample(t/SECOND, 4., 'powermetrics', rail='cpu_power',
+            interval_start_s=a/SECOND, interval_end_s=t/SECOND) for t, a in ((10, 0), (20, -20))]
+        traces, flags = power_records(reversed_midpoints, nominal_interval_ns=10)
+        self.assertEqual(traces[0].t_ns, (5,))
+        self.assertEqual(json.loads(traces[0].notes)['timing_half_width_ns'], [5])
+        self.assertIn('nonincreasing_power_timestamp:cpu_power', flags)
+        # Uniform supports retain the window-end representation and no new timing list.
+        traces, _ = power_records([samples[0], replace(samples[0], timestamp_s=20/SECOND,
+            interval_start_s=17/SECOND, interval_end_s=20/SECOND)], nominal_interval_ns=10)
+        self.assertEqual(traces[0].t_ns, (10, 20))
+        self.assertEqual(traces[0].averaging_window_ns, 3)
+        self.assertNotIn('timing_half_width_ns', json.loads(traces[0].notes))
+
     def test_apple_native_template_preserves_tool_calls_and_thinking_control(self):
         clock = FakeClock()
         runtime = MlxRuntimeAdapter(clock)
@@ -380,6 +540,45 @@ class RealSmokeRegressions(unittest.TestCase):
         self.assertIn('unclosed_reasoning_span', flags)
         ep = episode(Fixed(result.content, usage=result.raw_usage, decode=1))
         self.assertIn('endpoint.unclosed_reasoning_span', ep.flags)
+
+    def test_apple_cut_open_thinking_is_hidden_and_visible_prefix_tools_survive(self):
+        tool = '<tool_call>{"name":"read_page","arguments":{}}</tool_call>'
+        closed = '<think>plan</think>'
+        for prefix, finish in (('', 'length'), (tool, 'length'), (closed, 'length'), ('', 'stop')):
+            with self.subTest(prefix=prefix, finish=finish):
+                clock = FakeClock()
+                runtime = MlxRuntimeAdapter(clock)
+                runtime._model = object()
+                class Tokenizer:
+                    eos_token_ids = {0}
+                    def apply_chat_template(self, *args, **kwargs): return 'prompt'
+                    def encode(self, text, **kwargs): return [1, 2, 3]
+                runtime._tokenizer = Tokenizer()
+                def stream_generate(*args, **kwargs):
+                    clock.sleep(.1)
+                    yield SimpleNamespace(token=1, text=prefix+'<think>unfinished', finish_reason=finish)
+                runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: None)
+                cfg = config()
+                cfg = replace(cfg, hardware_target=replace(cfg.hardware_target, runtime_backend=RuntimeBackend.MLX))
+                endpoint = MlxEndpoint(runtime, cfg, clock, episode_domain='host')
+                result = endpoint.chat([ChatMessage('user', 'review')], max_tokens=1, temperature=0., seed=0)
+                flags = result.raw_usage['joulewise']['flags']
+                self.assertIn('unclosed_reasoning_span', flags)
+                if finish == 'stop':
+                    self.assertEqual(result.content, '<think>unfinished')
+                    self.assertEqual(result.reasoning_text, '')
+                    self.assertEqual(result.reasoning_tokens, 0)
+                    self.assertNotIn('reasoning_censored_at_token_limit', flags)
+                else:
+                    # An earlier closed span in the same turn stays reasoning.
+                    self.assertEqual(result.reasoning_text,
+                                     'plan\nunfinished' if prefix == closed else 'unfinished')
+                    self.assertEqual(result.content, '' if prefix == closed else prefix)
+                    self.assertGreater(result.reasoning_tokens, 0)
+                    self.assertEqual(result.reasoning_tokens, 1)  # min(1 emitted, 3 retokenized), integer.
+                    self.assertIn('reasoning_tokens_retokenized', flags)
+                    self.assertIn('reasoning_censored_at_token_limit', flags)
+                    self.assertEqual([c.name for c in result.tool_calls], ['read_page'] if prefix == tool else [])
 
 
 if __name__ == '__main__':

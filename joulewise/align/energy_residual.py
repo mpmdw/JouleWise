@@ -37,8 +37,9 @@ class TurnRow:
 
     energy_j sums its prefill, decode and own tool-call segment energies;
     energy_half_width_j names its interpretation in uncertainty_kind.
-    standard_uncertainty includes covariance; additive_bound is a linearly
-    summed sensitivity bound, retained as an SD upper value with a flag. Unowned gaps belong only to the whole-episode measured total,
+    standard_uncertainty includes covariance; additive_bound is a summed
+    sensitivity bound with any instrument minimum, retained as an SD upper
+    value with a flag. Unowned gaps belong only to the whole-episode measured total,
     so benign gap energy is positive residual, without a prediction term.
     """
 
@@ -145,7 +146,9 @@ def turn_energy_from_attribution(attribution: EpisodeAttribution) -> TurnEnergy:
     """Sum all segments owned by each turn, labelling additive_bound.
 
     Includes that turn's tool segments; unowned gaps remain only in the total.
-    Sensitivities add linearly without independence assumptions. The adapter
+    Sensitivities add linearly without independence assumptions. When the total
+    carries the powermetrics attribution floor, each finite printed turn bound
+    has the same 1 J minimum (D-078 clause 11); segments remain unfloored. The adapter
     never turns them into an SD or applies a distribution-specific factor:
     |error| <= B implies only SD <= B. A calibrated standard uncertainty needs
     a separately supplied mapping labelled standard_uncertainty by the caller.
@@ -154,8 +157,15 @@ def turn_energy_from_attribution(attribution: EpisodeAttribution) -> TurnEnergy:
     for segment in attribution.segments:
         if segment.turn is not None:
             owned.setdefault(segment.turn, []).append(segment.energy)
+
+    def half_width(energies) -> float:
+        bound = math.fsum(e.half_width_j for e in energies)
+        if "powermetrics.attribution_floor" in attribution.total.flags and math.isfinite(bound):
+            bound = max(1.0, bound)
+        return bound
+
     return TurnEnergy({turn: (math.fsum(e.joules for e in energies),
-                              math.fsum(e.half_width_j for e in energies))
+                              half_width(energies))
                        for turn, energies in owned.items()},
                       uncertainty_kind="additive_bound", flags=attribution.flags)
 

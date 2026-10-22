@@ -525,7 +525,12 @@ class ProductionShapedEndToEnd(unittest.TestCase):
                     attr = attribute_episode(episode, source=source, channel=channel, idle_watts=60.0)
                     # Tiling is integer bookkeeping: exact.
                     self.assertEqual(_layout(attr), expected_layout)
-                    self.assertEqual(attr.flags, ())
+                    # D-078 clause 11 adds a diagnostic only to finite
+                    # powermetrics episode totals, not to segment queries.
+                    floor_flags = (("powermetrics.attribution_floor",)
+                                   if source == "powermetrics" and math.isfinite(attr.total.half_width_j)
+                                   else ())
+                    self.assertEqual(attr.flags, floor_flags)
                     self.assertNotIn("trace.partial_coverage", attr.total.flags)
                     # Sum of segments against the total (brief: "derive the bar from the number of
                     # terms and the magnitude"). Terms: every sample interval in the episode plus
@@ -589,6 +594,26 @@ class ProductionShapedEndToEnd(unittest.TestCase):
         step_bound = steps * 0.001 / 2
         n_ina = int(duration_s * 1000) + 2
         self.assertLessEqual(abs(ina.joules - true_total), step_bound + float_bar(n_ina, peak * duration_s))
+
+
+class PowermetricsPrintedFloor(unittest.TestCase):
+    def test_only_episode_total_gets_the_printed_minimum(self):
+        trace = w_trace(GRID_0_10S, [4.]*len(GRID_0_10S), source="powermetrics",
+                        resolution=0.)
+        turns = (Turn(0, S, 2*S, 0, 1, 1, first_token_ns=S+S//2),
+                 Turn(1, 2*S, 3*S, 0, 1, 1, first_token_ns=2*S+S//2))
+        episode = Episode("floor", "t", "benign", "m", "e", 0, "host", S, 3*S,
+                          turns, power_traces=(trace,))
+        result = attribute_episode(episode, source="powermetrics", channel="gpu0")
+        # Constant power and zero resolution have exactly zero modeled
+        # sensitivity; D-078 clause 11 adds 1 J only to the printed total.
+        self.assertEqual(result.total.half_width_j, 1.)
+        self.assertIn("powermetrics.attribution_floor", result.total.flags)
+        self.assertIn("powermetrics.attribution_floor", result.flags)
+        for segment in result.segments:
+            self.assertEqual(segment.energy.half_width_j, 0.)
+            self.assertNotIn("powermetrics.attribution_floor", segment.energy.flags)
+        self.assertEqual(trace_energy(trace, S, 3*S).half_width_j, 0.)
 
 
 if __name__ == "__main__":

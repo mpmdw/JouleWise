@@ -1,8 +1,9 @@
 """Bridge the existing Apple telemetry adapter into alignment power records.
 
 The adapter owns capture, parsing and native-second clock anchoring. This
-module only changes representation. Native averaging supports remain in notes
-when their widths vary, since records.v1 has one averaging width per trace.
+module only changes representation. Variable native averaging supports become
+midpoint samples with half-support timing bounds, since records.v1 has one
+averaging width per trace. The original supports remain in notes.
 """
 
 from __future__ import annotations
@@ -164,9 +165,6 @@ def power_records(
         supports: list[list[int] | None] = []
         for sample in rows:
             timestamp = seconds_ns(sample.timestamp_s)
-            if times and timestamp <= times[-1]:
-                flags.append(f"nonincreasing_power_timestamp:{channel}")
-                continue
             if not math.isfinite(sample.power_w):
                 flags.append(f"nonfinite_power:{channel}")
                 continue
@@ -185,6 +183,22 @@ def power_records(
         )
         if variable:
             flags.append(f"variable_averaging_support:{channel}")
+        # Keep the uniform-support window representation unchanged. Variable
+        # window means belong at their support midpoint, rounded down to ns;
+        # ceil(width / 2) bounds both endpoints even for an odd integer width.
+        written_times, written_values, written_supports, timing = [], [], [], []
+        for timestamp, value, support in zip(times, values, supports):
+            if variable and support is not None:
+                a, b = support
+                timestamp = (a + b) // 2
+            if written_times and timestamp <= written_times[-1]:
+                flags.append(f"nonincreasing_power_timestamp:{channel}")
+                continue
+            written_times.append(timestamp)
+            written_values.append(value)
+            written_supports.append(support)
+            timing.append((support[1] - support[0] + 1) // 2 if support is not None else None)
+        times, values, supports = written_times, written_values, written_supports
         source = "powermetrics" if any(row.source == "powermetrics" for row in rows) else "mock"
         # Parsing converts mW to W but does not establish sensor quantization.
         # Leave resolution unknown rather than inventing a physical quantum.
@@ -198,6 +212,7 @@ def power_records(
             resolution=resolution,
             notes=json.dumps({
                 "sample_support_ns": supports,
+                **({"timing_half_width_ns": timing} if variable else {}),
                 "clock_anchor": {
                     "method": (evidence or {}).get("clock_anchor", {}).get("method"),
                     "status": (evidence or {}).get("clock_anchor", {}).get("status", "unknown"),

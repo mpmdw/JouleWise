@@ -390,6 +390,22 @@ class MlxEndpoint:
             text, reasoning_tokens=reasoning_tokens
         )
         flags.extend(parse_flags)
+        if cut and "unclosed_reasoning_span" in parse_flags:
+            prefix, _, tail = text.rpartition("<think>")
+            # Parse tools only in the visible prefix; an unfinished thought
+            # may itself contain tool-like text that must remain hidden.
+            # Closed spans earlier in the same turn stay reasoning too.
+            visible, prior, calls, prefix_flags = parse_completion(
+                prefix, reasoning_tokens=reasoning_tokens
+            )
+            reasoning = "\n".join(part for part in (prior, tail) if part)
+            flags.extend(prefix_flags)
+            if self.config.hardware_target.runtime_backend == RuntimeBackend.MLX:
+                reasoning_tokens = min(completion_tokens, sum(
+                    len(_encode(tokenizer, part, add_special_tokens=False))
+                    for part in (prior, tail) if part))
+                flags.append("reasoning_tokens_retokenized")
+            flags.append("reasoning_censored_at_token_limit")
         calls = tuple(replace(call, call_id=f"{turn_index}-{call.call_id}") for call in calls)
         self.flags.extend(flags)
         self.turn_provenance.append({

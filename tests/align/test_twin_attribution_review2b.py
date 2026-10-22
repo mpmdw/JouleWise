@@ -393,6 +393,13 @@ class TwinAgreement(unittest.TestCase):
         compared = 0
         for a, b, le, te in pairs:
             label = f"{where} [{a - epoch}, {b - epoch}]"
+            # The lane models per-sample unknown timing that the twin does
+            # not, so their finiteness can differ. Pin the floor policy on
+            # each result rather than requiring that diagnostic to agree.
+            for estimate, total in ((le, mine.total), (te, other.total)):
+                self.assertEqual("powermetrics.attribution_floor" in estimate.flags,
+                    estimate is total and trace.source == "powermetrics"
+                    and math.isfinite(estimate.half_width_j), f"{label} printed floor")
             # joules: 1% of the smaller printed half-width (orchestrator's bar).
             self.assertLessEqual(abs(le.joules - te.joules), 0.01 * min(le.half_width_j, te.half_width_j),
                                  f"{label} joules lane {le.joules!r} twin {te.joules!r}")
@@ -410,16 +417,15 @@ class TwinAgreement(unittest.TestCase):
                             + twin_interpolation(trace, mapping, start, end)
                             + c2_terms(trace, mapping, start, end)
                             + reset_term(trace, mapping, start, end))
-                    if trace.source == "powermetrics":
-                        # D-078 clause 11: attribution limit about 1 J; the lane
-                        # applies it to every query on this head.
-                        width = max(1.0, width)
                     return width
 
                 expected = query_width(a, b)
                 if le is mine.total and trace.unit == "W" and trace.averaging_window_ns is None:
                     expected = max(expected, math.fsum(query_width(s.start_ns, s.end_ns)
                                                       for s in other.segments))
+                if le is mine.total and trace.source == "powermetrics" and math.isfinite(expected):
+                    # D-078 clause 11: the minimum belongs to the printed total.
+                    expected = max(1.0, expected)
                 if math.isinf(expected):
                     self.assertTrue(math.isinf(le.half_width_j), f"{label} lane half-width finite")
                 else:

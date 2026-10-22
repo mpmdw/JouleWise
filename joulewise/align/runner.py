@@ -359,7 +359,9 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 if not result.tool_calls:
                     diagnostics = result.raw_usage.get("joulewise", {})
                     finish = diagnostics.get("finish_reason") if isinstance(diagnostics, Mapping) else None
-                    if finish in ("length", "max_tokens", "max_new_tokens") or decode >= max_tokens:
+                    if finish in ("length", "max_tokens", "max_new_tokens") or (
+                        finish is None and decode >= max_tokens
+                    ):
                         flags.append(f"episode.turn_token_budget_reached:{index}")
                     break
             else:

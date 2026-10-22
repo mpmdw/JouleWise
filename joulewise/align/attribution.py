@@ -473,11 +473,6 @@ class _Trace:
         if energy < 0:
             flags.append("energy.negative")
         half_width = math.fsum(bounds)
-        if self.trace.source == "powermetrics":
-            # D-078: the M3 Max instrument is attribution-limited at about 1 J.
-            # Match budget.energy; this is an additive bound, never an SD.
-            half_width = max(1.0, half_width)
-            flags.append("powermetrics.attribution_floor")
         return EnergyEstimate(energy, half_width, method, _flags(flags))
 
 
@@ -618,6 +613,8 @@ def attribute_episode(
     tools taking precedence over model phases; no time is counted twice.
     Point W totals use the larger of the single-query bound and summed
     segment bounds; windowed W and counter totals keep their own query bound.
+    Finite powermetrics totals then carry the D-078 clause 11 minimum of 1 J;
+    individual queries and segments retain their modeled bounds.
     """
     flags = list(episode.flags)
     traces = [trace for trace in episode.power_traces
@@ -665,6 +662,11 @@ def attribute_episode(
         # when the episode endpoints have no hold-versus-line sensitivity.
         total = EnergyEstimate(total.joules, max(total.half_width_j, math.fsum(
             segment.energy.half_width_j for segment in segments)), total.method, total.flags)
+    if trace.source == "powermetrics" and math.isfinite(total.half_width_j):
+        # D-078 clause 11: ~31 ms times ~33 W limits the printed episode
+        # total to about 1 J, not each query used to construct that total.
+        total = EnergyEstimate(total.joules, max(1.0, total.half_width_j), total.method,
+                               _flags([*total.flags, "powermetrics.attribution_floor"]))
     flags.extend(total.flags)
     for segment in segments:
         flags.extend(segment.energy.flags)

@@ -244,7 +244,7 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
             flags.append("budget_median_missing")
         else:
             cap = cap_tokens(median_tokens, condition.fraction)
-    if condition.mode == "budget" and model.backend not in ("vllm", "mock"):
+    if condition.mode == "budget" and model.backend not in ("vllm", "llamacpp", "mock"):
         flags.append("budget_forcing_continuation_unsupported")
     skip_generation = (condition.mode == "budget" and (cap is None or
                        "budget_forcing_continuation_unsupported" in flags)) or condition.mode == "deletion"
@@ -335,6 +335,11 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
             continuation = (*messages, ChatMessage("assistant", prefix))
             final = chat({**options, "continue_final_message": True,
                           "add_generation_prompt": False}, settings.answer_max_tokens, continuation)
+            if (final.content == "" and final.reasoning_text
+                    and final.completion_tokens >= settings.answer_max_tokens):
+                # A server may ignore continuation and spend the entire answer
+                # budget on fresh thinking. Such an incomplete answer is excluded.
+                flags.append("budget_answer_call_at_token_limit")
             if not final.content and final.reasoning_text:
                 # Some parsers classify a tagless continuation as reasoning.
                 # After our forced close this text is the answer: do not leak
@@ -694,7 +699,8 @@ def _generation_excluded(generation: Generation) -> bool:
     """Unknown token work and incomplete/unsupported generations cannot count as zero."""
     return any(f.startswith("generation_error:") or f in {
         "reasoning_tokens_unavailable", "completion_tokens_unavailable", "prompt_tokens_unavailable",
-        "budget_forcing_continuation_unsupported", "generation_skipped",
+        "budget_forcing_continuation_unsupported", "budget_answer_call_at_token_limit",
+        "generation_skipped",
     } for f in generation.episode.flags)
 
 
