@@ -139,6 +139,9 @@ Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
 
+Current Part 2 slice 3 results supersede historical pending runs below: tests.test_b6_loop 55 pass; tests.b6.test_integration_seams 7 pass; tests.b6.test_smoke 22 pass; all 24 precheck tests pass individually in fresh TMPDIRs; all four real-desk freshness/status cases pass individually (exit 0). Import graph: 6 tests, 1 known sandbox GO/NULL failure, 5 static checks pass. Exact commands and pending native desk/importer runs are recorded in BY-C5-fix1.md. No success is inferred from partial dots.
+
+
 Slice 6 native module split: 31 tests PASS in 20.471 s, exit 0, no skips. Only test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates was excluded from this split because its full-module invocation remains running; all other native-module tests, including the real producer C5 integration, passed. Exact command:
 
 ```sh
@@ -262,7 +265,7 @@ The committed fixed source is configs/campaigns/bytes_mac_check/registration/siz
 
 ## CI
 
-Draft PR #547; latest supplied CI at cf716ce00: 20 pass, gate-ledger fails. Current local HEAD dcceb8480 on by-c5; director commits/pushes fix slices to lane/2026-10-22-bytes-c5-gates. No network query or Git writes by worker.
+Draft PR #547; latest reviewer-supplied CI at dcceb8480: 20 of 20 green, gate-ledger red as expected for a draft. Part 2 slice 3 intake local HEAD 4aa17a44e on by-c5; director commits/pushes fix slices to lane/2026-10-22-bytes-c5-gates. No network query or Git writes by worker.
 
 ## DECISIONS I MADE
 
@@ -302,13 +305,16 @@ The production/test map below records the governing numerical clauses. Counterfa
 
 ## OPEN ISSUES
 
-BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Required importer checks and final report cleanup continue in fix-round PROGRESS.
+Reviewer free space 53,472,432,128 B is below all pass P values: correct arm refusal/PRECHECK WAIT until operator frees about 9.3–31.7 GB, plus up to 1.83 GB smoke retention. Current slice intake free space is 47 GiB. No arming or measurement was attempted.
+
+
+BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Current importer results and remaining long checks are tracked in BY-C5-fix1.md PROGRESS; historical pending invocations below do not establish results.
 
 Native producer support is implemented and the fully observed native-export integration passes under the explicit slice-6 scope grant: raw-only POSIX st_blocks*512, independent per-run seen-set, null absent raw trees; retained_bytes unchanged. Synthetic full raw/archive copies assert retained_bytes == 2*raw_allocated_bytes. No BY-H2 producer blocker remains.
 
 The production reader path-alias regression is resolved: all six subtests pass under /private/tmp. No production fix was necessary.
 
-Environmental-pending for director outside sandbox: tests.hazards.test_arm (sysmond/pgrep), tests.hazards.test_import_graph GO/NULL, tests.hazards.test_clock bootsessionuuid. Director explicitly owns these reruns; no hardware path changes made. CI/PR, executing review, replay re-run and final verification remain director-owned. Long importer checks listed in TESTS RUN have not yet produced final results; the director may run them outside the sandbox per the slice-6 instruction. Local intake HEAD 98ed69513 on by-c5; destination lane/2026-10-22-bytes-c5-gates. No Git writes attempted.
+Environmental-pending for director outside sandbox: tests.hazards.test_arm (sysmond/pgrep), tests.hazards.test_import_graph GO/NULL, tests.hazards.test_clock bootsessionuuid. Director explicitly owns these reruns; no hardware path changes made. CI/PR, executing review, replay re-run and final verification remain director-owned. Long importer checks listed in TESTS RUN have not yet produced final results; the director may run them outside the sandbox per the slice-6 instruction. Part 2 slice 3 intake HEAD 4aa17a44e on by-c5; destination lane/2026-10-22-bytes-c5-gates. No Git writes attempted.
 
 ## NEEDS_RULING
 
