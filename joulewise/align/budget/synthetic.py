@@ -165,6 +165,9 @@ class ScriptedSampler:
         return (PowerTrace("mock", "gpu0", self.clock_domain, tuple(times), values, "W",
                            self.interval_ns, resolution=self.resolution_w,
                            notes=json.dumps({"synthetic": True, "flags": [],
+                                             # This world's truth is the linear
+                                             # interpolant of its noisy samples.
+                                             "interior_model": "piecewise_linear",
                                              "power_bound_w": self.watts + self.noise_w})),)
 
 

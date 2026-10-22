@@ -1,15 +1,16 @@
 """Gross episode integration with explicit edge, clock and sensor uncertainty.
 
-Interior power samples are integrated with the piecewise-linear model. The
-reported half-width covers quantization and bracket-edge placement under that
-model, not arbitrary unseen load oscillations or undocumented sensor accuracy.
+Power is estimated with piecewise-linear interpolation. The half-width also
+bounds arbitrary transitions within intervals whose sensor readings change,
+plus quantization and bracket edges. Identical sampled levels cannot reveal
+unseen excursions; no undocumented sensor-accuracy bound is claimed.
 """
 
 from __future__ import annotations
 
 import json
 import math
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -129,14 +130,36 @@ def episode_energy(episode: Episode, *,
                 return Energy(None, flags=("energy_clock_mapping_unmeasured",))
             offset, uncertainty_ns = mappings[0].offset_ns, mappings[0].uncertainty_ns
         start, end = episode.start_ns - offset, episode.end_ns - offset
-        if (len(trace.t_ns) < 2 or trace.t_ns[0] > start - uncertainty_ns
-                or trace.t_ns[-1] < end + uncertainty_ns):
+        if (len(trace.t_ns) < 2 or trace.t_ns[0] > start + uncertainty_ns
+                or trace.t_ns[-1] < end - uncertainty_ns):
+            return Energy(None, flags=("energy_trace_unbracketed",))
+        # A synchronous first poll can lie inside the mapping's uncertainty
+        # bracket, even though it preceded the true call. Retain the measured
+        # overlap and bound the missing sliver, rather than discarding J.
+        # This exception is limited to +/- the stated clock half-width:
+        # a same-domain missing bracket still has no estimate.
+        partial = (trace.t_ns[0] > start - uncertainty_ns
+                   or trace.t_ns[-1] < end + uncertainty_ns)
+        if partial:
+            flags.append("energy_clock_bracket_partial")
+        measured_start = max(start, trace.t_ns[0])
+        measured_end = min(end, trace.t_ns[-1])
+        if measured_start > measured_end:
             return Energy(None, flags=("energy_trace_unbracketed",))
         if any(not math.isfinite(v) or v < 0 for v in trace.values):
             return Energy(None, flags=("energy_samples_invalid",))
-        first, delta_a = _edge(trace, start)
-        last, delta_b = _edge(trace, end)
+        first, delta_a = _edge(trace, measured_start)
+        last, delta_b = _edge(trace, measured_end)
         duration_s = (end - start) / 1_000_000_000
+        maximum = power_max_w
+        if maximum is None:
+            maximum = _notes(trace).get("power_bound_w")
+            if maximum is None:
+                maximum = episode.hardware.get("power_max_w")
+        if maximum is not None and (not math.isfinite(maximum) or maximum < 0
+                                    or (trace.unit == "W" and maximum < max(trace.values))):
+            flags.append("energy_power_max_invalid")
+            maximum = None
         if trace.unit == "J_cumulative":
             if any(b < a for a, b in zip(trace.values, trace.values[1:])):
                 return Energy(None, flags=("energy_counter_reset",))
@@ -151,35 +174,62 @@ def episode_energy(episode: Episode, *,
                     lo = max(0, bisect_left(trace.t_ns, t - uncertainty_ns) - 1)
                     hi = min(len(trace.t_ns) - 1, bisect_left(trace.t_ns, t + uncertainty_ns))
                     edge_bound += trace.values[hi] - trace.values[lo]
+            # Outside the sampled clock envelope a cumulative counter gives
+            # no increment. Its missing duration needs a prospective Pmax;
+            # without one retain J with an explicitly unbounded half-width.
+            missing_ns = (max(0, trace.t_ns[0] - (start - uncertainty_ns))
+                          + max(0, end + uncertainty_ns - trace.t_ns[-1]))
+            if missing_ns:
+                if maximum is None:
+                    flags.append("energy_power_max_missing")
+                edge_bound += maximum * missing_ns / 1_000_000_000 if maximum is not None else math.inf
             bound = None if trace.resolution is None else trace.resolution + edge_bound
         else:
             # Walk the interior once; only the two edges need binary search.
-            interior = [(t, v) for t, v in zip(trace.t_ns, trace.values) if start < t < end]
-            points = [(start, first), *interior, (end, last)]
+            interior = [(t, v) for t, v in zip(trace.t_ns, trace.values)
+                        if measured_start < t < measured_end]
+            points = [(measured_start, first), *interior, (measured_end, last)]
             joules = math.fsum((b - a) / 1_000_000_000 * (x + y) / 2
                               for (a, x), (b, y) in zip(points, points[1:]))
-            maximum = power_max_w
-            if maximum is None:
-                maximum = _notes(trace).get("power_bound_w")
-                if maximum is None:
-                    maximum = episode.hardware.get("power_max_w")
-            if maximum is not None and (not math.isfinite(maximum) or maximum < max(trace.values)):
-                flags.append("energy_power_max_invalid")
-                maximum = None
             if maximum is None:
                 flags.append("energy_power_max_missing")
             # An unsynchronised edge segment extends to the poll INSIDE the
             # episode. With power in [0, Pmax], its error is at most Pmax times
             # that inward distance, even when the outer poll is much closer.
-            # Clock displacement adds 2*Pmax*dt; averaging adds 2*Pmax*window.
-            ia, ib = bisect_left(trace.t_ns, start), bisect_left(trace.t_ns, end)
-            inward_a = trace.t_ns[ia] - start
-            inward_b = 0 if trace.t_ns[ib] == end else end - trace.t_ns[ib - 1]
+            # A clock shift can carry an edge over a poll into an interval
+            # formerly treated as interior. Use the first poll strictly past
+            # start+u and last poll strictly before end-u. The additional 2*u
+            # covers displacement of the two integration limits themselves.
+            # At u=0 preserve zero width at an exactly synchronized poll.
+            if uncertainty_ns:
+                ia = min(len(trace.t_ns) - 1, bisect_right(trace.t_ns, start + uncertainty_ns))
+                ib = max(0, bisect_left(trace.t_ns, end - uncertainty_ns) - 1)
+                inward_a = max(0, trace.t_ns[ia] - start)
+                inward_b = max(0, end - trace.t_ns[ib])
+            else:
+                ia, ib = bisect_left(trace.t_ns, start), bisect_left(trace.t_ns, end)
+                inward_a = trace.t_ns[ia] - start
+                inward_b = 0 if trace.t_ns[ib] == end else end - trace.t_ns[ib - 1]
             edge_seconds = (inward_a + inward_b + 2 * uncertainty_ns
                             + 2 * (trace.averaging_window_ns or 0)) / 1_000_000_000
             bound = None if trace.resolution is None else trace.resolution * duration_s / 2
             if bound is not None:
                 bound += maximum * edge_seconds if maximum is not None else math.inf
+                # A changed sensor level may hide multiple phase transitions
+                # (e.g. decode -> wait -> prefill) within that poll interval.
+                # Its true integral is in [0, Pmax*dt]; the furthest endpoint
+                # from the trapezoid gives the physical error bound below.
+                # Repeated identical sensor codes define constant-level
+                # interiors in this conditional model. Equality here tests
+                # reported code identity, not numerical agreement. Unseen
+                # excursions returning to the same code remain unidentifiable.
+                # A declared linear synthetic trace needs no transition term.
+                if _notes(trace).get("interior_model") != "piecewise_linear":
+                    if maximum is not None:
+                        bound += math.fsum((b - a) / 1_000_000_000
+                                           * max((x + y) / 2, maximum - (x + y) / 2)
+                                           for (a, x), (b, y) in zip(points, points[1:]) if x != y)
+                    flags.append("energy_transition_interpolation_bound")
         if trace.resolution is None:
             flags.append("energy_resolution_unknown")
         if trace.duty_fraction is not None and trace.duty_fraction < 1:

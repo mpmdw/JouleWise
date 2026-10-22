@@ -27,7 +27,7 @@ from joulewise.align.budget.synthetic import (
     WordCodec, deletion_survival_probability, run_synthetic, synthetic_items,
 )
 from joulewise.align.interfaces import ChatMessage, ChatResult
-from joulewise.align.records import Episode, PowerTrace, Turn, to_json
+from joulewise.align.records import ClockMapping, Episode, PowerTrace, Turn, to_json
 
 
 class BudgetReviewTests(OfflineTest):
@@ -140,8 +140,12 @@ class BudgetReviewTests(OfflineTest):
         index = next(i for i, t in enumerate(trials) if t.condition.name == "budget_0.6")
         trial = trials[index]
         trace = trial.episode.power_traces[0]
-        # 30 ms late at the first poll is inside the 110 ms next-poll interval.
-        late = replace(trace, t_ns=(trace.t_ns[0] + 30_000_000, *trace.t_ns[1:]))
+        # Remove the head lead as well: the first retained poll is 30 ms
+        # after the Episode start, inside the next 110 ms sampling cycle.
+        late_start = trial.episode.start_ns + 30_000_000
+        later = [(ns, value) for ns, value in zip(trace.t_ns, trace.values) if ns > late_start]
+        late = replace(trace, t_ns=(late_start, *(ns for ns, _ in later)),
+                       values=(trace.values[0], *(value for _, value in later)))
         trials[index] = replace(trial, episode=replace(trial.episode, power_traces=(late,),
                                     flags=(*trial.episode.flags, "battery_discharge")))
         other = next(i for i, t in enumerate(trials) if i != index and t.condition.name == "budget_0.6")
@@ -656,3 +660,182 @@ class BudgetReviewTests(OfflineTest):
             row = summarize(result.trials)[0]
             self.assertEqual(row.scored_trials, len(result.trials))
             self.assertEqual(row.missing_monitor_verdicts, 0)
+
+    @staticmethod
+    def _review_energy_world(rng, kind, foreign, lead_ns=None):
+        # Verbatim physical design of energy_world.py: 60 W idle, up to
+        # 300 W prefill, 150..280 W decode, and 100 ms polls plus 0.5..12 ms
+        # acquisition jitter. All these values are synthetic design inputs.
+        second = 1_000_000_000
+        start = 10 * second + rng.randrange(0, 200_000_000)
+        duration = rng.randrange(second // 2, 30 * second)
+        end = start + duration
+        load = rng.uniform(150, 280)
+        segments = [(0, 60.0), (start, load), (end, 60.0)]
+        if kind == "llm":
+            burst = rng.randrange(150_000_000, 400_000_000)
+            segments = [(0, 60.0), (start, 300.0), (start + burst, load)]
+            if rng.random() < 0.5 and duration > 2 * second:
+                gap_start = start + rng.randrange(second, duration - second)
+                gap = rng.randrange(20_000_000, 80_000_000)
+                segments += [(gap_start, 60.0), (gap_start + gap, 300.0),
+                             (gap_start + gap + burst, load)]
+            segments += [(end, 60.0)]
+        def power(t):
+            value = segments[0][1]
+            for edge, watts in segments:
+                if t >= edge:
+                    value = watts
+            return value
+        def integral(a, b):
+            points = sorted({a, b, *[edge for edge, _ in segments if a < edge < b]})
+            return math.fsum((y - x) / second * power(x) for x, y in zip(points, points[1:]))
+        t = start - (rng.randrange(50_000, 2_000_000) if lead_ns is None else lead_ns)
+        times = [t]
+        while True:
+            t += 100_000_000 + rng.randrange(500_000, 12_000_000)
+            if t > end + 2 * 100_000_000:
+                break
+            times.append(t)
+        offset = 5_000_000 + (rng.randrange(-2_000_000, 2_000_001) if foreign else 0)
+        domain = "gpu:clock" if foreign else "host"
+        stamps = tuple(t - (offset if foreign else 0) for t in times)
+        traces = (
+            PowerTrace("nvml_power", "gpu0:power_instant", domain, stamps,
+                       tuple(round(power(t) * 1000) / 1000 for t in times),
+                       "W", 100_000_000, resolution=0.001),
+            PowerTrace("nvml_energy", "gpu0:energy", domain, stamps,
+                       tuple(round(integral(times[0], t) * 1000) / 1000 for t in times),
+                       "J_cumulative", 100_000_000, resolution=0.001))
+        mappings = (ClockMapping("gpu:clock", "host", 5_000_000, 2_000_000, "round-trip"),) if foreign else ()
+        episode = Episode("e", "budget/x", "benign", "m", "vllm", 0, "host", start, end,
+                          (Turn(0, start, end, 0, 200, 1000),), power_traces=traces,
+                          clock_mappings=mappings, hardware={"power_max_w": 300.0})
+        return episode, integral(start, end)
+
+    def test_review_energy_world_all_rows_and_synchronous_first_poll(self):
+        worlds = 400  # Reproduce the review's prescribed ensemble, not a coverage threshold.
+        coverage = {}
+        for kind in ("edges", "llm"):
+            for foreign in (False, True):
+                rng = random.Random(f"{kind}{foreign}")
+                for channel in (("nvml_power", "gpu0:power_instant"), ("nvml_energy", "gpu0:energy")):
+                    covered = 0
+                    for _ in range(worlds):
+                        episode, truth = self._review_energy_world(
+                            rng, kind, foreign, 210_000_000 if foreign else None)
+                        energy = episode_energy(episode, channels=(channel,))
+                        self.assertIsNotNone(energy.joules)
+                        # The physical half-width, including mapping and sensor
+                        # terms, must cover every analytic energy in this world.
+                        self.assertLessEqual(abs(energy.joules - truth), energy.uncertainty_j)
+                        covered += abs(energy.joules - truth) <= energy.uncertainty_j
+                    coverage[kind, foreign, channel[0]] = covered
+        rng = random.Random(7)
+        missing = 0
+        for _ in range(worlds):
+            episode, truth = self._review_energy_world(rng, "edges", True, 100_000)
+            energy = episode_energy(episode, channels=(("nvml_energy", "gpu0:energy"),))
+            missing += energy.joules is None
+            self.assertIsNotNone(energy.joules)
+            self.assertLessEqual(abs(energy.joules - truth), energy.uncertainty_j)
+        self.assertEqual(missing, 0)  # No episode is lost solely to the +/-2 ms mapping bracket.
+        print("RE-REVIEW energy world coverage / 400:", coverage, "missing J:", missing)
+
+    def test_mapped_clock_crossing_poll_bound_and_case_diagnostics(self):
+        second = 1_000_000_000
+        def build(start, end, load, host_polls, delta, uncertainty, foreign):
+            def power(t):
+                return load if start <= t < end else 60.0
+            def integral(a, b):
+                points = sorted({a, b, *[edge for edge in (start, end) if a < edge < b]})
+                return math.fsum((y - x) / second * power(x) for x, y in zip(points, points[1:]))
+            offset = 5_000_000 + delta
+            times = tuple(t - (offset if foreign else 0) for t in host_polls)
+            trace = PowerTrace("nvml_power", "p", "gpu" if foreign else "host", times,
+                               tuple(round(power(t) * 1000) / 1000 for t in host_polls),
+                               "W", 100_000_000, resolution=0.001)
+            mappings = (ClockMapping("gpu", "host", 5_000_000, uncertainty, "round-trip"),) if foreign else ()
+            episode = Episode("e", "t", "benign", "m", "vllm", 0, "host", start, end,
+                              (Turn(0, start, end, 0, 256, 1000),), power_traces=(trace,),
+                              clock_mappings=mappings, hardware={"power_max_w": 300.0})
+            return episode_energy(episode), integral(start, end)
+        coverage = {}
+        for foreign, uncertainty in ((False, 0), (True, 2_000_000), (True, 20_000_000)):
+            rng = random.Random(uncertainty)
+            covered = 0
+            for _ in range(2000):  # Same 2000 random phases as clock_crossing.py/cases.py.
+                start = 10 * second
+                end = start + rng.randrange(second // 2, 20 * second)
+                load = rng.uniform(150, 280)
+                lead = rng.randrange(2 * uncertainty + 1000, 220_000_000)
+                delta = rng.randrange(-uncertainty, uncertainty + 1) if foreign else 0
+                t = start - lead
+                polls = [t]
+                while t < end + 300_000_000:
+                    t += 100_000_000 + rng.randrange(500_000, 12_000_000)
+                    polls.append(t)
+                energy, truth = build(start, end, load, polls, delta, uncertainty, foreign)
+                # Diagnostics keep the crossing geometry of every failure.
+                geometry = (delta, min(polls, key=lambda p: abs(p - start)) - start,
+                            min(polls, key=lambda p: abs(p - end)) - end)
+                self.assertLessEqual(abs(energy.joules - truth), energy.uncertainty_j, geometry)
+                covered += abs(energy.joules - truth) <= energy.uncertainty_j
+            coverage[foreign, uncertainty] = covered
+        start, end = 10 * second, 12 * second
+        polls = [start - 99_000_000 + k * 100_000_000 for k in range(26)]
+        energy, truth = build(start, end, 250.0, polls, 3_000_000, 5_000_000, True)
+        self.assertLessEqual(abs(energy.joules - truth), energy.uncertainty_j)
+        print("RE-REVIEW clock crossing coverage / 2000:", coverage)
+
+    def test_sampler_head_lead_and_foreign_domain_are_recorded(self):
+        items, clock, codec = synthetic_items(1), SyntheticClock(), WordCodec()
+        endpoint = ScriptedModel(items.items, clock, codec)
+        mapping = ClockMapping("gpu:clock", "synthetic:monotonic", 5_000_000, 2_000_000, "round-trip")
+        model = ModelSpec("m", 4.0, "mock", endpoint.identity, codec, endpoint.configured,
+                          clock_domain="synthetic:monotonic", clock_mappings=(mapping,),
+                          controls_verified=True)
+        samplers = []
+        class ForeignSampler(ScriptedSampler):
+            def stop(self):
+                return tuple(replace(trace, t_ns=tuple(t - 6_000_000 for t in trace.t_ns))
+                             for trace in super().stop())
+        def factory(_):
+            sampler = ForeignSampler(clock, 80.0, clock_domain="gpu:clock")
+            samplers.append(sampler)
+            return sampler
+        settings = Settings(1536, 32)
+        generation = _generate(model, items.items[0], Condition("thinking_on"), hinted=True,
+                               median_tokens=None, seed=0, settings=settings, episode_id="mapped",
+                               sampler_factory=factory, clock=clock)
+        trace = generation.episode.power_traces[0]
+        # Two 100 ms intervals allow a poll plus jitter; 2*u covers true
+        # offset error and the requested uncertainty enclosure at the head.
+        expected_lead = 2 * samplers[0].interval_ns + 2 * mapping.uncertainty_ns
+        self.assertEqual(generation.episode.start_ns - samplers[0].started_ns, expected_lead)
+        self.assertLessEqual(trace.t_ns[0] + mapping.offset_ns,
+                             generation.episode.start_ns - mapping.uncertainty_ns)
+        self.assertIn("sampler_clock_domain_differs", generation.episode.flags)
+        self.assertIsNotNone(episode_energy(generation.episode).joules)
+        unmapped = _generate(replace(model, clock_mappings=()), items.items[0], Condition("thinking_on"),
+                             hinted=True, median_tokens=None, seed=0, settings=settings, episode_id="unmapped",
+                             sampler_factory=factory, clock=clock)
+        self.assertIn("sampler_clock_domain_differs", unmapped.episode.flags)
+        self.assertIn("energy_clock_mapping_unmeasured", unmapped.episode.flags)
+        self.assertIsNone(episode_energy(unmapped.episode).joules)
+
+    def test_interior_load_step_exceeds_quantum_and_is_in_physical_width(self):
+        # Synthetic 1 s episode at 150 W with a 300 W burst from 301..551 ms:
+        # analytic J=150+150*.250=187.5; the 100 ms sampled trapezoid is 180 J.
+        grid = tuple(range(0, 1_100_000_000, 100_000_000))
+        trace = PowerTrace("nvml_power", "p", "h", grid,
+                           tuple(300.0 if 301_000_000 <= t < 551_000_000 else 150.0 for t in grid),
+                           "W", 100_000_000, resolution=0.001)
+        episode = Episode("e", "t", "benign", "m", "vllm", 0, "h", 0, 1_000_000_000,
+                          (Turn(0, 0, 1_000_000_000, 0, 256, 1000),), power_traces=(trace,),
+                          hardware={"power_max_w": 300.0})
+        energy = episode_energy(episode)
+        error = abs(energy.joules - 187.5)
+        self.assertGreater(error, 0.001 * 1.0 / 2)  # Quantum-only bound is resolution*duration/2.
+        self.assertLessEqual(error, energy.uncertainty_j)
+        self.assertIn("energy_transition_interpolation_bound", energy.flags)

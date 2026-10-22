@@ -27,7 +27,7 @@ def _answer_labels(text: str) -> set[str]:
     # bare letter must end the answer clause; "answer: a mixture" is prose,
     # not a second A verdict that conflicts with a prior ANSWER: B.
     pattern = (r"\bANSWER[*_`]*\s*:\s*[*_`]*\s*[\(\[]?\s*[*_`]*([A-Z])\b[*_`]*"
-               r"(?:[ \t]*[\)\]]|(?=[ \t]*(?:$|[\r\n.,;!?])))")
+               r"(?:[ \t]*[\)\]]|(?=[ \t]*(?:$|[\r\n.,;!?]|or\b)))")
     return {m.upper() for m in re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)}
 
 

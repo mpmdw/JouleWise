@@ -62,6 +62,7 @@ class Settings:
     sampler_tail_intervals: float = 2.0  # Two poll periods permit one poll plus acquisition jitter.
     sampler_interval_ns: int = 100_000_000  # Operator fallback when a sampler exposes no interval.
     power_max_w: float | None = None  # Prospective physical envelope, including transients.
+    sampler_head_intervals: float = 2.0  # One initial poll plus acquisition jitter, outside the Episode.
 
 
 @dataclass(frozen=True)
@@ -267,7 +268,23 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
         if sampler_factory is not None:
             try:
                 sampler = sampler_factory(model)
+                if sampler.clock_domain != model.clock_domain:
+                    flags.append("sampler_clock_domain_differs")
                 sampler.start()
+                # Match the tail's one poll plus acquisition-jitter allowance.
+                # Two mapping half-widths cover both the true offset error and
+                # the reducer's requested +/-u enclosure around the first call.
+                interval = getattr(sampler, "interval_ns", settings.sampler_interval_ns)
+                uncertainty = max((m.uncertainty_ns for m in model.clock_mappings
+                                   if m.trace_domain == sampler.clock_domain
+                                   and m.episode_domain == model.clock_domain
+                                   and m.method != "unmeasured"), default=0)
+                head_ns = max(0, math.ceil(interval * settings.sampler_head_intervals)) + 2 * max(0, uncertainty)
+                advance = getattr(clock, "advance", None)
+                if advance is not None:
+                    advance(head_ns)
+                else:
+                    time.sleep(head_ns / 1_000_000_000)
             except Exception as exc:
                 flags.append(f"sampler_start_error:{type(exc).__name__}")
         if cap is None:
