@@ -310,3 +310,6 @@ NEG-8 predicate diagnostic on the retained first J6 input: the actual `_archive_
 
 Fresh fixture initialization then retained-input opener: admitted; validator codes []; process exit 0; wall 4871.240 s; execution head `152d8dc9f0098c232704aded50632f9560ab4f7d`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/fixture-opener-1/control.log`, SHA-256 `c9f7bcee7aa0a80cc56324df66fc0379a246e0867618146be1daf42991219187`.
 Passive leaf trace `/workspace/l9-1/fixture-opener-1/leaf.jsonl`, SHA-256 `b84df619e8000b08540f9c2d438364424496b774ee24b72b5c14d468744202e9`.
+
+Real StepRunner plus outer descriptor capture around retained-input opener: admitted; validator codes []; process exit 0; wall 4651.787 s; execution head `152d8dc9f0098c232704aded50632f9560ab4f7d`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/captured-opener-1/control.log`, SHA-256 `48763bc1e2e530fd276b25624dc0a6f2121a080e42c0c97911da5598fdb6d810`.
+Passive leaf trace `/workspace/l9-1/captured-opener-1/leaf.jsonl`, SHA-256 `99846e91b308f080e90748468cb342f37185c2fcdd1b81da80b6af3e4d81f57e`.
