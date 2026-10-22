@@ -254,7 +254,7 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 ## L9-1 joined-head acceptance (2026-10-22)
 
-Execution source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
+L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Newer-main merge `01aac454c12bf31ba7c2628a3ecc4d12eae1d413` contains main `c21c52dfa`; the selected L9 package/test diff from 70fd61aa1 is empty. Rows retain their actual execution anchors; authentication and docs freshness are rerun after the incoming documentation changes. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
@@ -264,7 +264,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
 | tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
 | tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
-| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
+| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.871 | Codex Cloud | `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
 | tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
@@ -295,6 +295,7 @@ Completed cloud logs and test failures:
 - `tests.b5_analysis.test_joined_probes` at `54da41a5e38d7045f120f946b083c6532613a595`: 2 tests, 2 failures, 0 errors, 0 skips, exit 1, 0.028 s. Log `/workspace/l9-1/dry-3/logs/tests_b5_analysis_test_joined_probes.log`, SHA-256 `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051`.
   - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_disclosure_main_read_only_driver_output_paths_without_builder_seam
   - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_load_correlated_restored_units_pass_real_tripwire_and_validator
+- `tests.test_authentication_io` at `01aac454c12bf31ba7c2628a3ecc4d12eae1d413`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 2.290 s. Log `/workspace/l9-1/checks-main-1/logs/tests_test_authentication_io.log`, SHA-256 `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b`.
 
 Additional logs (not completed acceptance modules):
 
