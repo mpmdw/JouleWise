@@ -36,7 +36,7 @@ class CoverageTests(unittest.TestCase):
                           "J_cumulative" if energy else "W", self.interval,
                           notes=json.dumps(notes))
 
-    def episode(self, traces, *, duration=None):
+    def episode(self, traces, *, duration=None, clock_mappings=()):
         end = self.start + (self.duration if duration is None else duration)
         # Twelve model turns and eleven tool calls, with production-sized usage.
         step = (end - self.start) // 12
@@ -47,7 +47,8 @@ class CoverageTests(unittest.TestCase):
                       for i in range(12))
         return Episode("e", "shade/task", "benign", "Qwen/Qwen3-8B", "vllm:test", 0,
                        "host.monotonic", self.start, end, turns,
-                       power_traces=tuple(traces), flags=("power.empty",))
+                       power_traces=tuple(traces), clock_mappings=tuple(clock_mappings),
+                       flags=("power.empty",))
 
     def validate(self, episode):
         metrics = {}
@@ -139,9 +140,9 @@ class CoverageTests(unittest.TestCase):
         # An offset half-width of 100 ms covers both edges, but cancels between
         # two timestamps from this trace. The 25 ms gap still exceeds B=20.2 ms.
         trace = replace(trace, clock_domain="sensor")
-        episode = replace(self.episode([trace]),
-                          clock_mappings=(ClockMapping("sensor", "host.monotonic",
-                                                       0, 100_000_000, "fixture"),))
+        episode = self.episode(
+            [trace], clock_mappings=(ClockMapping("sensor", "host.monotonic",
+                                                 0, 100_000_000, "fixture"),))
         ok, flags, _ = self.validate(episode)
         self.assertFalse(ok)
         self.assertIn("episode_power_coverage_hole:gpu0:power_instant", flags)
