@@ -632,14 +632,15 @@ was built and checked (§10); the replication (§11).
   not affected: they are the chip's own sensors and report on-chip power whatever its source (a physical argument,
   not a measurement). The opposite failure, losing the adapter, is a physical hazard: in block 5 the adapter's output
   lost voltage for 26 s during BETA's attempt 4 and the Mac then slept for 3,507 s, costing 4 runs, which is why the
-  pre-session check and every run read the battery current directly. The whole-machine line adds the battery term
-  back over each request (DC input energy + battery energy); block 6 keeps the battery term per request, not per
-  phase (§2), and flags a phase whose request shows battery assist. BYTES, the other experiment on this instrument
-  (§0 item 18), splits the battery term at the phase edges, and there a second problem appears: because a battery
-  reading is recorded up to 2.302 s after its energy flows (worked example, second bullet), the battery energy
-  recorded in the 2.302 s after a phase edge may belong to the phase before it. Its per-phase battery term carries
-  that energy as uncertainty, the rule the BAT-2 ruling adopted for BYTES. In block 6 no run showed battery assist
-  (Status, below).
+  pre-session check and every run read the battery current directly. The battery term printed beside the
+  whole-machine line (§2) adds the battery's energy back over each request, so that DC input energy + battery energy
+  is what the whole machine took (its *machine energy*); block 6 keeps the battery term per request, not per phase,
+  because the battery is read only once a second (§2), and flags a phase whose request shows battery assist. BYTES,
+  the other experiment on this instrument (§0 item 18), splits the battery term at the phase edges anyway, and there
+  the reading's timing matters: because a battery reading is recorded up to 2.302 s after its energy flows (worked
+  example, second bullet), the battery energy recorded in the 2.302 s after a phase edge may belong to the phase
+  before it. Its per-phase battery term carries that energy as uncertainty, the rule the BAT-2 ruling adopted for
+  BYTES. In block 6 no run showed battery assist (Status, below).
 - **Evidence.** `RUN_STATE.md:36` and `docs/design/block6_collection_draft.md:72` (the block-5 drop in the adapter's
   output); `joulewise/external/km003c_parse.py:312` (`battery_watts`: −B0AC × B0AV / 10⁶ W at each poll), `:397-425`
   (`delta_machine_energy`: the machine term is the meter term plus the battery term); `joulewise/hazards/smc.py:1-12`
