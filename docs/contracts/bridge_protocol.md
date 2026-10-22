@@ -360,7 +360,7 @@ Start a fresh thread for:
 
 Thread states:
 
-- `pending`: MCP call started; thread id not yet returned.
+- `pending`: MCP call started; thread id may be null until the adapter binds it.
 - `waiting_lead`: Worker returned an early question or partial result.
 - `active`: Continued work is running.
 - `complete`: Objective finished.
@@ -795,9 +795,12 @@ rubber-stamping delegated implementation.
 
 ## 9. Known limitations
 
-- Lost blocking calls: Claude records `pending` before MCP invocation, but if
-  the call is lost before return, its Codex thread id may be unrecoverable.
-  Record `lost_before_return`; do not guess by timestamp.
+- Lost blocking calls: the project adapter persists a `pending` row to
+  `.codex-bridge/mcp-calls.jsonl` as soon as `thread/start` or `thread/resume`
+  returns, before `turn/start`. Recover that exact id from the matching callId
+  and prompt hash if MCP loses the return. A loss before the thread response
+  can still leave the id unavailable; record `lost_before_return`, never guess
+  by timestamp. The adapter log does not replace the §6 registry or receipts.
 - Correlated reviewers: Sol and Fable are not statistically independent
   evidence sources. Shared training, shared repository context, and shared
   prompt framing can correlate errors.
@@ -809,9 +812,26 @@ rubber-stamping delegated implementation.
   observe ignored files, external paths, or side effects in external systems.
 - Convention versus enforcement: Prompt and envelope rules are mechanically
   validated only where a helper or adapter performs validation.
-- Installed MCP ceiling: The project does not control `codex mcp-server`
-  internals, so adapter-level persistence of a not-yet-returned thread id is
-  unavailable.
+- Caller timeout: the project now owns `scripts/codex-mcp-server.mjs` over
+  the installed `codex app-server`, replacing the removed `codex mcp-server`
+  route. It can persist the thread id before a tool result returns, but cannot
+  extend the caller's hard MCP timeout. Progress notifications are conditional
+  on a caller-supplied token. Claude Code's `MCP_TOOL_TIMEOUT` controls that
+  caller budget; long evidence-heavy runs still use the audited CLI.
+
+The forward adapter permits only `gpt-6.1-sol` and high/xhigh effort,
+defaults to read-only/on-request, forces `mcp_servers.claude.enabled=false`
+on every start/resume, and explicitly selects the user approval reviewer.
+It declines command, file-change, permissions, input, and MCP elicitation
+requests, reporting the declines in the tool result and hash-only call log.
+Model/effort metadata comes from app-server responses and settings/reroute
+notifications; it is not inferred from the requested config. A reroute away
+from the permitted model is a tool error. After a process restart the legacy
+reply schema has no policy fields, so resume explicitly reapplies the safe
+high/read-only/on-request defaults. The native app-server child must exist
+before MCP initialization succeeds and throughout the adapter's lifetime;
+its failure ends in-flight calls with errors and terminates the adapter.
+This lifetime invariant is part of the ruled census boundary.
 
 ## 10. Implementation and consumption pointers
 
@@ -898,11 +918,14 @@ Tracked implementation:
   Claude-to-Sol script route and optional desktop-owned turn transport; the
   latter is what gives the native pet real running-conversation state
 - `scripts/claude-bridge-mcp.mjs`: guarded reverse consult
+- `scripts/codex-mcp-server.mjs`: forward MCP adapter, early thread-id log,
+  protocol recording, and native app-server lifecycle
 - `.mcp.json`: Claude-to-Codex server configuration
 - `.codex/config.toml`: Codex-to-Fable server registration
 - `scripts/codex-bridge`: audited tracked CLI bridge
 - `tests/test_bridge.py`: focused bridge state and scope tests
 - `tests/test_claude_bridge_mcp.py`: reverse-adapter tests
+- `tests/test_codex_mcp_server.py`: forward-adapter transcript replays
 
 Claude-side consumers:
 
