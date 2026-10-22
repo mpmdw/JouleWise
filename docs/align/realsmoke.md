@@ -27,7 +27,7 @@ The shell tool returns:
 The managed runtime repeatedly reported desired_phase=running and
 connectivity=offline, alternating observed_phase between pending and starting.
 The startup wait did not yield a usable executor; shell retries continued through
-14:16 UTC.
+14:17 UTC.
 The diagnostic index returns history_status=not_found with no retained records.
 These observations do not establish the cause of the startup failure.
 
