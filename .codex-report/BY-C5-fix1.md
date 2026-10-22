@@ -2,8 +2,10 @@
 
 - Done (slice 1): finding 2 committed-fixed input/provenance, missing/malformed unavailable behavior, measured-unused disclosure; finding 7 exact measured_c assertion and imported WAIT constant.
 - Verified: 18 bytes_gates tests and 6 plan_inputs tests pass. Real augmented H main exits 2, writes /tmp/byc5f1/C5.json; all 12 P values exactly equal the director's committed-fixed targets. Reviewer re-derivation agrees. Sealed diff is empty.
-- Next: finding 1 shared disk validation + PRECHECK P + smoke retention decision and boundary tests; finding 3 stopped-before-model main test; finding 6 smoke metadata; finish findings 4/8 report revisions and importer checks. Planner equality on all 12 updated P values remains to run.
-- Open: director owns real replay, commits/push and PR #547 CI. No real session trees read. All edits uncommitted, local by-c5 HEAD cf716ce00bf7341a1a62e3a2e96206f23f3eb013. Intake disk available 44 GiB (>25 GiB gate).
+- Done (slice 2): finding 3 stops max()/mean arithmetic on a model without sizing observations; records model.observations_missing and unavailable model lines, pack disk/sizing/span/clock candidates. main repro covers all 21 qwen35-122b rows never-ran; exit 2 and file written. 19 bytes_gates tests pass.
+- Next: finding 1 shared disk validation + PRECHECK P + smoke retention decision and boundary tests; finding 6 smoke metadata; finish findings 4/8 report revisions and importer checks. Planner equality on all 12 updated P values remains to run.
+- Open: director owns real replay, commits/push and PR #547 CI. No real session trees read. Slice 1 committed by director as 36b16f0d5; slice 2 edits uncommitted on local by-c5. HEAD movement was external, between slices. Intake disk available 44 GiB (>25 GiB gate).
+- Verified (slice 2): real H C5-step2.json equals slice-1 C5.json exactly; sealed-step2.log confirms all 682 paths have empty diff against bda481d5a, including working tree.
 - Evidence /tmp/byc5f1/: C5.json, H-C5.stdout, rederive.log, step1-tests.log, plan-inputs-tests.log, sealed.log. run.py gives each invocation a fresh TMPDIR and deletes it afterward.
 
 ## SUMMARY
@@ -14,7 +16,7 @@ The measured 1,266,544,640 B partial-session allocation is labelled unused discl
 The committed source path, SHA-256 and JSON pointer are recorded in C5.
 Missing or malformed committed fixed input makes all disk lines unavailable, never a measured fallback.
 All twelve augmented-H P values match the director's exact byte targets.
-Finding 7 is fixed; findings 1/3/6 and final report/check work remain.
+Findings 3 and 7 are fixed; findings 1/6 and final report/check work remain.
 
 ## FIX LOG
 
@@ -22,7 +24,7 @@ Finding 7 is fixed; findings 1/3/6 and final report/check work remain.
 |---|---|
 | 1 major | Pending: PRECHECK shared helper, smoke accounting, twelve-pack boundaries and reviewer probe. |
 | 2 major | Code fixed in bytes_gates.committed_fixed/calculate/main. GatesTests.test_committed_fixed_source_override_and_missing_never_fallback checks integer delta, provenance, invalid types, missing CLI input and no fallback. Real H targets agree; planner equality pending. |
-| 3 minor | Pending stopped-before-model main repro and unavailable dependent lines. |
+| 3 minor | Fixed in bytes_gates.calculate: guard absent model observations, record model.observations_missing; mark dependent packs unavailable. StoppedSessionTests.test_model_never_ran_cli_writes_unavailable_dependent_packs runs main on all 21 qwen35-122b rows never-ran and checks exit 2, JSON output, five unavailable model lines, s6 dependent null candidates, unaffected packs and llama clock. Full module 19 tests passes. |
 | 4 minor | Form unchanged as directed; final R6 text/sensitivity disclosure pending. |
 | 5 nit | No change needed: maximum of two whole summed bases; reviewer rederive confirms stated deltas. |
 | 6 nit | Pending smoke metadata native requirement. |
@@ -63,7 +65,9 @@ Compare P_committed_fixed column; its P column deliberately uses measured-fixed 
 
 ## STOPPED-EARLY C5
 
-Pending finding 3. Real H main exits 2 because completeness and thermal lines fail (thermal_level 1), not a program fault.
+Finding 3 synthetic main output: completeness:qwen35-122b:check: fail; completeness:qwen35-122b:soak: fail; contention/cpu_contention/calibration_T10/resolvability/clock:qwen35-122b: unavailable; disk:bytes-s6-p{1,2}: unavailable; sizing:bytes-s6-p{1,2}: unavailable; clock:llama-70b: pass. Exit 2, JSON written. All 21 qwen35-122b rows (5 checks + 12 soaks + 4 test-7 probes) never-ran. Both s6 packs have null programmed_span_s, T_stream_max_s, required_free_bytes and disk_derivation; all other packs remain available. Flag model.observations_missing names qwen35-122b.
+
+Real H main exits 2 because completeness and thermal lines fail (thermal_level 1), not a program fault.
 
 ## TESTS RUN
 
@@ -72,6 +76,8 @@ All runs set JW_B5_SYNTHETIC_ONLY=1 and PYTHONDONTWRITEBYTECODE=1, use /opt/home
 - `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -c '<temporary-directory subprocess runner>'`: child `-m unittest tests.test_bytes_gates`; 18 tests, 3.040 s, exit 0, no skips/environment failures, /tmp/byc5f1/step1-tests.log.
 - `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/plan-inputs-tests.log -m unittest tests.b6.test_plan_inputs`: 6 tests, 0.017 s, exit 0, no skips/environment failures.
 - `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/H-C5.stdout scripts/bytes_gates.py --runs /tmp/byc5f1/bytes-h-20261021T185555335572Z-calibration.runs.csv --measurements /tmp/byc5f1/MEASUREMENTS.raw.json --disk-evidence /tmp/byc5f1/disk_h.json --out /tmp/byc5f1/C5.json`: exit 2, JSON written, all twelve exact expected byte targets pass.
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/stopped-early-tests.log -m unittest tests.test_bytes_gates`: 19 tests, 3.104 s, exit 0, no skips/environment failures.
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/H-C5-step2.stdout scripts/bytes_gates.py --runs /tmp/byc5f1/bytes-h-20261021T185555335572Z-calibration.runs.csv --measurements /tmp/byc5f1/MEASUREMENTS.raw.json --disk-evidence /tmp/byc5f1/disk_h.json --out /tmp/byc5f1/C5-step2.json`: exit 2, JSON written.
 - `git diff --check`: exit 0.
 
 ## SEALED INVENTORY
@@ -86,12 +92,15 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 - Keep C5's member-wall form and maximum of two whole summed bases as instructed; report details still pending.
 - Local-route prohibition on Git writes overrides commit/push rules. Director should commit this slice as `BY-C5 fix1 slice 1: committed fixed provenance and exact constants`, then push only lane/2026-10-22-bytes-c5-gates.
 
+- Finding 3: absent model sizing data is a recorded flag. No mean, maximum or allowance is invented; all dependent pass candidates stay null. Completeness retains exit 2 under the existing contract.
+
 ## Clause map
 
 | Clause | Production site | Biting assertion | Counterfactual |
 |---|---|---|---|
 | committed fixed only, recorded provenance | scripts/bytes_gates.py committed_fixed/calculate/main | test_committed_fixed_source_override_and_missing_never_fallback | Use measured fixed or omit source hash: exact P delta/provenance assertion fails. |
 | absent committed input is unavailable, no fallback | scripts/bytes_gates.py committed_fixed/calculate | same test, invalid input loop and main missing-file check | Fall back to measured fixed: disk statuses and CLI exit assertions fail. |
+| model without observations remains visible | scripts/bytes_gates.py calculate model loop and pass loop | test_model_never_ran_cli_writes_unavailable_dependent_packs | Remove the guard: main exits 1 without JSON; substitute zero allowances: unavailable/null assertions fail. |
 | measured c exact division | tests/test_bytes_gates.py ReplayTests | test_nine_plus_h_replay_and_integer_boundaries | Perturb measured_c by any representable amount: equality fails. |
 
 ## OPEN ISSUES

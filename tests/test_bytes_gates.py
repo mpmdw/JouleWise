@@ -433,6 +433,44 @@ class StoppedSessionTests(World):
             measured["sizing"] = {"fixed_desk_s": None, "collection_stage_overhead_s": None}
         return rows, measured, dropped
 
+    def test_model_never_ran_cli_writes_unavailable_dependent_packs(self):
+        rows, measured = deepcopy(self.rows), deepcopy(self.measured)
+        missing = {m["run_id"] for m in self.plan["members"] if m["model_id"] == "qwen35-122b"}
+        # Five checks, twelve soaks and four test-7 probes are planned for this model.
+        self.assertEqual(len(missing), 5 + 12 + 4)
+        for row in rows:
+            if row["run_id"] in missing:
+                row["status"] = "failed"
+                measured["runs"][row["run_id"]] = {
+                    **dict.fromkeys(gates.TIMING_FIELDS), "retained_bytes": 0, "raw_allocated_bytes": None}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            csv_path = root / "early.runs.csv"
+            with csv_path.open("w", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+            write(root / "early.session.json", self.sidecar)
+            write(root / "measurements.json", measured)
+            out = root / "c5.json"
+            cli = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/bytes_gates.py"),
+                "--runs", str(csv_path), "--measurements", str(root / "measurements.json"),
+                "--out", str(out)], capture_output=True, text=True)
+            self.assertEqual(cli.returncode, 2, cli.stderr)  # Incomplete check/soak groups fail.
+            result = gates.read(out)
+            self.assertIn({"code": "model.observations_missing", "model_id": "qwen35-122b"}, result["flags"])
+            lines = {g["gate"]: g for g in result["gates"]}
+            for prefix in ("contention:", "cpu_contention:", "calibration_T10:", "resolvability:", "clock:"):
+                self.assertEqual(lines[prefix + "qwen35-122b"]["status"], "unavailable")
+            for pack, sized in result["sessions"].items():
+                affected = "qwen35-122b" in sized["modules"]
+                for prefix in ("disk:", "sizing:"):
+                    self.assertEqual(lines[prefix + pack]["status"] == "unavailable", affected)
+                if affected:
+                    for field in ("programmed_span_s", "required_free_bytes", "T_stream_max_s", "disk_derivation"):
+                        self.assertIsNone(sized[field])
+            self.assertIn("clock:llama-70b: pass", cli.stdout)
+
     def test_stopped_session_prints_measured_lines_and_marks_the_rest(self):
         rows, measured, dropped = self.stopped_world()
         # The same membership H exported: 95 ran, 28 never started.

@@ -211,7 +211,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             if len(times) >= 2:
                 exact_spreads.append(max(times) / min(times) - 1)
     disk_margin = max(exact_spreads)
-    models, cpu_alternative = {}, []
+    models, cpu_alternative, model_flags = {}, [], []
     reference_ids = (set(exported) - {r for r, m in planned.items() if m["model_id"] != "reference"}) & measured_ids
     if not reference_ids:
         raise ValueError("reference sizing observations are absent")
@@ -238,6 +238,15 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
         # R6 specifies the longest measured phase, not full sampler stream.
         # Include test-7 workloads; ignoring one could loosen P_limit.
         all_model = [r for r, m in planned.items() if m["model_id"] == model and r in measured_ids]
+        if not all_model or not run_ids:
+            reason = "model sizing observations absent: " + model
+            model_flags.append({"code": "model.observations_missing", "model_id": model})
+            models[model] = {"status": "unavailable", "reason": reason,
+                             "request_mean_s": None, "member_wall_mean_s": None,
+                             "T_stream_max_s": None, "bytes_per_member": None}
+            for name in ("contention:", "cpu_contention:", "calibration_T10:", "resolvability:", "clock:"):
+                gates.append(line(name + model, "unavailable", reason=reason))
+            continue
         tmax = max(number(exported[r]["dur_decode_s"], "decode duration", positive=True) for r in all_model)
         if regime_absent:
             gates.append(line("contention:" + model, "unavailable", T_max_s=tmax,
@@ -312,7 +321,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
     for receipt in raw_runs:
         integer(receipt["raw_allocated_bytes"], "raw_allocated_bytes")
     flags = ([{"code": "disk.raw_bytes_missing", "count": len(raw_missing), "run_ids": raw_missing}]
-             if raw_missing else [])
+             if raw_missing else []) + model_flags
     if fixed_flag:
         flags.append(fixed_flag)
     disk_reason = "disk.committed_fixed_missing" if fixed_flag else "disk.raw_bytes_missing"
@@ -342,25 +351,27 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             pack_id = f"bytes-s{n}-p{pass_id}"
             tree = read(Path(repo_root) / "configs/campaigns" / pack_id / "plan_tree.json")
             mids = [m.removeprefix("bytes-") for m in tree["module_order"]]
+            missing_models = [m for m in mids if models[m].get("status") == "unavailable"]
+            unavailable_sizing = sizing_absent + ["model:" + m for m in missing_models]
             collections = [s for s in tree["stage_graph"] if s["kind"] == "campaign_collection"]
             science_count = len(tree["science"])
             reference_count = sum(s["expected_count"] for s in collections) - science_count
             # SETTLE_S is registered by the chain, before pre-calibration
             # and every collection. Fixed desk seconds excludes these and
             # member time; the README defines the disjoint measured terms.
-            seconds = None if sizing_absent else (
+            seconds = None if unavailable_sizing else (
                 (sum(50 * models[m]["member_wall_mean_s"] for m in mids)
                  + reference_count * ref_mean_wall) * (1 + margin)
                 + (len(collections) + 1) * SETTLE_S + len(collections) * stage_s + fixed_s)
-            projected_bytes = None if fixed_bytes is None else fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
+            projected_bytes = None if fixed_bytes is None or missing_models else fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
             allowances = {m: disk_allowance([receipts[r] for r in groups[m] if r in measured_ids],
                            sum(row["module_id"] == "bytes-" + m for row in tree["science"]), disk_margin)
-                          for m in mids}
+                          for m in mids if m not in missing_models}
             allowances["reference"] = disk_allowance([receipts[r] for r in sorted(reference_ids)], reference_count, disk_margin)
-            terms = None if rates is None else disk_terms(*rates, allowances, fixed_bytes,
+            terms = None if rates is None or missing_models else disk_terms(*rates, allowances, fixed_bytes,
                                                           measured_c=disk.get("measured_c"))
             sessions[pack_id] = {"programmed_span_s": seconds, "est_minutes": None if seconds is None else seconds / 60,
-                                 "T_stream_max_s": max(models[m]["T_stream_max_s"] for m in mids),
+                                 "T_stream_max_s": None if missing_models else max(models[m]["T_stream_max_s"] for m in mids),
                                  "measured_margin": margin, "projected_footprint_bytes": projected_bytes,
                                  "required_free_bytes": None if terms is None else terms["required_free_bytes"],
                                  "disk_derivation": terms,
@@ -371,10 +382,10 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
                               "pass" if free >= terms["required_free_bytes"] else "fail",
                               pre_arm_free_bytes=free, committed_fixed_source=fixed_source,
                               measured_fixed_retained_bytes_unused=measured_fixed,
-                              **({"required_free_bytes": None, "reason": disk_reason} if terms is None else terms)))
-            if sizing_absent:
+                              **({"required_free_bytes": None, "reason": "model.observations_missing:" + ",".join(missing_models) if missing_models else disk_reason} if terms is None else terms)))
+            if unavailable_sizing:
                 gates.append(line("sizing:" + pack_id, "unavailable", est_minutes=None,
-                                  reason="sizing receipt absent: " + ",".join(sizing_absent)))
+                                  reason="sizing receipt absent: " + ",".join(unavailable_sizing)))
             else:
                 gates.append(line("sizing:" + pack_id, "pass" if margin_complete else "flag_only",
                                   est_minutes=seconds / 60,
