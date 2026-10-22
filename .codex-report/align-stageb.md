@@ -10,7 +10,7 @@ The stalled episode-factor grid changes from no at 0.368832 ms/token SD to incon
 F8 uses continuous Gaussian Fourier rounding and covariance bounds; current-world recovery values and upstream slot-guard arithmetic remain intact.
 F4/F5/F6 explicitly retain the permitted marginal-effect, simulator-baseline and uncalibrated-null limitations; F7 is deferred to the lead.
 CI 39739338982 passed all 41 Stage B tests plus 4 shared-record tests, with zero lane failures, errors or skips; no extras, network tests or hardware were used.
-The report and runbook now contain executed before/final evidence, the timing sweep and ordered dispositions; PR #526 remains draft and unmerged.
+The report/runbook are complete; final-head CI is blocked by the lead's spine registry conflict in tests/test_shard_tests.py, preserved under F7. PR #526 remains draft and unmerged.
 
 ## FILES
 
@@ -180,8 +180,29 @@ The existing CLI test actually invokes:
 /opt/hostedtoolcache/Python/3.13.16/x64/bin/python -m joulewise.align.moe_stage_b.experiment
 ```
 
-Final report/runbook CI: publication and final-head validation are recorded
-after the evidence commit; PR #526 remains draft and unmerged throughout.
+**Final-head CI is BLOCKED, not green.** The lead moved the spine from
+4d47c4362352ccd8d4d904134a79f0d8260b21b5 to
+6bca315c2e04d5a254ab1a4aedd366deb4e59ddf while this continuation was
+finishing. That commit changes only tests/test_shard_tests.py, including the
+same normalization line this lane inherited. GitHub reports mergeable=false,
+mergeable_state=dirty; the final report head has zero workflow runs/checks.
+Compare confirms exactly one behind-spine commit, and the only overlapping
+path is tests/test_shard_tests.py. Thus GitHub cannot build a PR merge tree
+or start final-head CI. The earlier runbook-only candidate ca1fc4489 did
+schedule CI 39746060999 against the old spine; it is not final-head evidence.
+
+F7 says: "leave tests/test_shard_tests.py exactly as it is on the branch";
+the lead "lands the registry line on the spine and drops it from this lane
+before merge". Its blob remains 6f19d939162b5ea9b5a727173f5bae541a66103a.
+This seat did not change it or merge the spine. The concrete remaining action
+is for the lead to resolve that one file against its new spine version, or
+explicitly authorize that exact scope expansion. A single close/reopen of
+PR #526 attempted a CI refresh before the new spine conflict was diagnosed;
+the PR stayed draft, unmerged, and is open. No ready transition occurred.
+
+This operational block is separate from the successful 45-test code-head CI
+above. No final-head success is claimed. The report and PR are otherwise
+complete; independent review/merge/cold gates remain lead-owned.
 
 ## END-TO-END
 
@@ -481,15 +502,17 @@ RoutingObservation.condition is lane-local and requires no shared schema change.
 - Every no-stall world is counterfactual relative to the pinned blocking-upload backend. The stalled verdict depends on realistic between-episode timing spread; no universal sensor detectability conclusion follows.
 - Exact upstream replay still needs group/slot/reset and actual microbatch/token timing inventory; large-batch read-only cache reuse remains flagged as unmodelled.
 - The numerical reference and independent reviewer sketch agree, but lead-owned independent executing review, merged-tree verification and cold final gate remain unfilled. Gate-ledger failure is expected and is not waived.
-- F7 is deferred: the lead lands the registry line on the spine and drops it from this lane before merge.
+- F7 is deferred: the lead has now landed 6bca315c2 on the spine and must resolve/drop this lane's inherited line in tests/test_shard_tests.py. Its overlapping change blocks GitHub's final PR merge tree and CI. The exact path is preserved under the explicit F7 instruction; taking the spine version requires new authority for this seat.
 - No usable executor existed for literal local discovery, git checkout or isolated-script execution. CI fallback evidence is identified explicitly.
 
 ## NEEDS_RULING
 
-none. The brief fixes the primary estimand and explicitly permits F4/F5/F6
-fallbacks; implementation is complete within that authority. Calibration,
-registration, measured-result interpretation and merge gates remain prospective
-lead work, not a request to choose a detector from these synthetic outcomes.
+none for the scientific implementation. The brief fixes the primary estimand
+and explicitly permits F4/F5/F6 fallbacks. Calibration, registration and
+measured-result interpretation remain prospective lead work. The operational
+F7 scope block is recorded in TESTS RUN / OPEN ISSUES: the lead must resolve
+tests/test_shard_tests.py, or authorize this seat to take the spine version,
+before final-head CI can run. This is not a change of scientific criterion.
 
 ## FIX ROUND 2
 
@@ -499,7 +522,9 @@ covariance. Replaced the withdrawn affirmative default counterfactual decision
 with the executed inconclusive result. Printed both timing grids and the
 stalled-world transition, retained the permitted F4/F5/F6 fallbacks, and deferred
 F7. This continuation changes documentation/evidence only after reading the
-successful code-head CI; it does not redo the pushed implementation.
+successful code-head CI; it does not redo the pushed implementation. The lead's
+new spine registry commit creates an F7 overlap, so final-head CI remains
+blocked rather than silently expanding this seat's write scope.
 
 The baseline evidence commit e229ff9b9 retains the failures. The implementation
 commit is 49d2232f4; ac07bbbde extends the factor grid and a01f24374 asserts
