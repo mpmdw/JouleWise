@@ -576,7 +576,7 @@ raise SystemExit(1)
             + "elif args[:2] == ['-m', 'pip']:\n"
             + "    pass\n"
             + "elif args[:2] == ['-m', 'joulewise.align.gpukit.session']:\n"
-            + "    print('session reached')\n"
+            + "    print(json.dumps({'measured_gpu_indices': [0], 'monitor_gpu_index': None}) if '--validate-only' in args else 'session reached')\n"
             + "else:\n"
             + f"    os.execv({sys.executable!r}, [{sys.executable!r}, *args])\n",
             encoding="utf-8")
@@ -948,6 +948,40 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         self.assertFalse(options.output.exists())
         hardware.assert_not_called()
         command.assert_not_called()
+
+
+
+    def test_bootstrap_tp2_checks_mig_on_second_device_before_install(self):
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        matrix["models"][0]["tensor_parallel_size"] = 2
+        path = self.base / "tp2.json"
+        path.write_text(json.dumps(matrix))
+        calls = self.base / "inventory.jsonl"
+        self._script("nvidia-smi", "#!" + sys.executable + "\n" +
+                     "import sys,json\n" +
+                     f"with open({str(calls)!r}, 'a') as h: h.write(json.dumps(sys.argv[1:]) + '\\n')\n" +
+                     "i = sys.argv[sys.argv.index('-i') + 1]\n" +
+                     "mig = 'Enabled' if i == '1' else 'Disabled'\n" +
+                     "print('<nvidia_smi_log><gpu><uuid>GPU-test</uuid><mig_mode><current_mig>' + mig + '</current_mig></mig_mode><gpu_virtualization_mode><virtualization_mode>None</virtualization_mode></gpu_virtualization_mode></gpu></nvidia_smi_log>')\n")
+        result = subprocess.run([
+            "bash", str(ROOT / "joulewise/align/gpukit/bootstrap.sh"),
+            "--gpu-index", "0", str(path), "--output", str(self.base / "tp2-run"),
+            "--ready-timeout-s", "30", "--command-timeout-s", "30",
+            "--runner-timeout-s", "30", "--poll-s", "0.01", "--monitor-placement", "none"],
+            cwd=self.base, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        indices = [json.loads(line)[1] for line in calls.read_text().splitlines()]
+        self.assertEqual(indices, ["0", "1"])
+        self.assertFalse((self.base / "session-venv").exists())
+        self.assertFalse((self.base / "tp2-run").exists())
+
+    def test_bootstrap_invalid_arguments_do_not_install(self):
+        result = subprocess.run([
+            "bash", str(ROOT / "joulewise/align/gpukit/bootstrap.sh"),
+            str(CONFIG / "shade.json"), "--bad-arg"],
+            cwd=self.base, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertFalse((self.base / "session-venv").exists())
 
 
 class FixArithmeticTests(unittest.TestCase):
