@@ -53,6 +53,56 @@ class FrontierInputRegressionTests(unittest.TestCase):
         self.assertEqual(F.pareto_frontier(rows, cost="joules"),
                          F.pareto_frontier(self.rows, cost="joules"))
 
+    def test_unknown_size_keeps_both_frontiers_and_tau(self):
+        rows = [
+            F.ConfigRow("q4", "Qwen3-4B", 4.0, 40, 12, 2300.0, 15.0, 2304.0),
+            F.ConfigRow("q14", "Qwen3-14B", 14.0, 40, 30, 9800.0, 30.0, 4600.0),
+            F.ConfigRow("x", "hybrid", 12.0, 40, 10, 1800.0, 10.0, 3000.0),
+        ]
+        reference = F.frontier_agreement(rows)
+        for size in (None, 0, math.nan, math.inf):
+            with self.subTest(params_b=size):
+                panel = rows[:2] + [replace(rows[2], params_b=size)]
+                self.assertEqual(F.pareto_frontier(panel, cost="joules"),
+                                 ["x", "q4", "q14"])
+                self.assertEqual(F.pareto_frontier(panel, cost="tokens"), ["q4", "q14"])
+                agreement = F.frontier_agreement(panel)
+                self.assertEqual(agreement["joules_frontier"], {"x", "q4", "q14"})
+                self.assertEqual(agreement["tokens_frontier"], {"q4", "q14"})
+                self.assertEqual(agreement["symmetric_difference"], {"x"})
+                # Costs/counts and the Kendall computation are identical;
+                # model size is not an input to ranks, so bit identity applies.
+                self.assertEqual(agreement["kendall_tau"], reference["kendall_tau"])
+                self.assertFalse(agreement["identical"])
+                self.assertFalse(agreement["kill_condition_met"])
+                self.assertIn("invalid_params_b:x", agreement["flags"])
+                self.assertNotIn("excluded_row:x", agreement["flags"])
+                self.assertFalse(any(f.startswith("rows_used:") for f in agreement["flags"]))
+                # Even with identical frontiers and two known sizes, an unknown
+                # size cannot supply evidence for the cross-size kill decision.
+                same = F.frontier_agreement(panel[:2] + [replace(panel[2], tokens_mean=1800.0)])
+                self.assertTrue(same["identical"])
+                self.assertFalse(same["kill_condition_met"])
+
+    def test_unknown_size_preserves_production_panel(self):
+        cheapest = min(self.rows, key=lambda r: r.joules_mean)
+        reference = F.frontier_agreement(self.rows)
+        for size in (None, 0):
+            with self.subTest(params_b=size):
+                rows = [replace(r, params_b=size) if r is cheapest else r for r in self.rows]
+                agreement = F.frontier_agreement(rows)
+                # The minimum-energy hybrid row remains nondominated.
+                self.assertIn(cheapest.config_id, agreement["joules_frontier"])
+                # Identical cost/count inputs execute the identical computations;
+                # frontiers, their set difference, and tau must be bit-identical.
+                for key in ("joules_frontier", "tokens_frontier",
+                            "symmetric_difference", "kendall_tau", "identical"):
+                    self.assertEqual(agreement[key], reference[key])
+                self.assertIn(f"invalid_params_b:{cheapest.config_id}", agreement["flags"])
+                self.assertFalse(any(f.startswith(("excluded_row:", "rows_used:"))
+                                     for f in agreement["flags"]))
+                self.assertFalse(agreement["kill_condition_met"])
+
     def test_one_missing_episode_keeps_other_199_pairs(self):
         pairs = list(self.by_model["Qwen3-4B"])
         pairs[17] = (pairs[17][0], math.nan, math.nan)
@@ -113,6 +163,10 @@ class FrontierInputRegressionTests(unittest.TestCase):
                         {"tokens_mean": math.nan}):
             rows = [base, replace(base, config_id="bad", **changes)]
             probabilities = F.cheapest_reaching(rows, 0.75, cost="tokens", n_boot=99)
+            # caught=trials makes every sampled catch rate 1; this is the only
+            # eligible config, credited exactly 1.0 each replicate. A sum of
+            # B ones is exactly B for B < 2**53 (here B=99), and B/B is exactly
+            # 1.0. Bit identity, rather than measured agreement, is the property.
             self.assertEqual(probabilities, {"valid": 1.0})
             self.assertIn("excluded_row:bad", probabilities.flags)
         pairs = divergence_world(1, n=200)

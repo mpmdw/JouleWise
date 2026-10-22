@@ -18,7 +18,14 @@ from typing import Sequence
 
 @dataclass(frozen=True)
 class ConfigRow:
-    """One model/budget condition, over hint-using trials only."""
+    """One model/budget condition, over hint-using trials only.
+
+    ``trials`` is the hint-using catch-rate denominator, not all trials.
+    ``joules_half_width`` is one standard uncertainty of the configuration's
+    mean joules, not a per-trial measurement bound. ``joules_mean`` must be
+    numeric: missing values (None or NaN) exclude the row from joule-cost
+    outputs with a flag.
+    """
 
     config_id: str
     model: str
@@ -153,16 +160,27 @@ def frontier_agreement(rows: Sequence[ConfigRow]) -> dict[str, object]:
     kendall_tau, identical, kill_condition_met, flags. Undefined tau is NaN
     with a flag. Invalid/empty input never supplies evidence for the kill gate.
     Both frontiers and tau use the same valid rows. Kill requires identical
-    frontiers, at least two valid model sizes and no excluded rows. With no
-    usable rows, identical and kill_condition_met are None.
+    frontiers, at least two valid model sizes, no unknown sizes and no excluded
+    rows. Unknown sizes are flagged but do not remove costs/counts from either
+    frontier or tau. With no usable rows, identical and kill_condition_met are None.
     """
+    original_rows = rows
     original_count = len(rows)
-    rows, flags = _select_rows(rows, costs=("joules", "tokens"), sizes=True)
+    rows, flags = _select_rows(rows, costs=("joules", "tokens"))
+    sizes = set()
+    unknown_size = False
+    for row in original_rows:
+        size = _real(row.params_b)
+        if math.isfinite(size) and size > 0:
+            sizes.add(size)
+        else:
+            flags.append(f"invalid_params_b:{row.config_id}")
+            unknown_size = True
     joules = set(pareto_frontier(rows, cost="joules"))
     tokens = set(pareto_frontier(rows, cost="tokens"))
     tau = _kendall(rows)
     identical = joules == tokens if rows else None
-    multiple_sizes = len({r.params_b for r in rows}) >= 2
+    multiple_sizes = len(sizes) >= 2
     if rows and not multiple_sizes:
         flags.append("single_model_size")
     if not math.isfinite(tau):
@@ -173,7 +191,8 @@ def frontier_agreement(rows: Sequence[ConfigRow]) -> dict[str, object]:
         "symmetric_difference": joules ^ tokens,
         "kendall_tau": tau,
         "identical": identical,
-        "kill_condition_met": (identical and multiple_sizes and len(rows) == original_count)
+        "kill_condition_met": (identical and multiple_sizes and not unknown_size
+                               and len(rows) == original_count)
                               if rows else None,
         "flags": tuple(flags),
     }
