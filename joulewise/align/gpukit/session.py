@@ -272,6 +272,8 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
                      power_metrics: dict[str, Any] | None = None) -> tuple[str, ...]:
     """Check coordinates, usable turns and non-mock power spanning each episode."""
     flags: list[str] = []
+    if expected_coordinates:
+        expected_count = len(expected_coordinates)
     metrics = _power_metrics()
     try:
         episodes = read_episodes(path)
@@ -373,6 +375,7 @@ def _wait_gpu_clear(devices: Sequence[int], *, directory: Path,
     flags = []
     for device in devices:
         deadline = time.monotonic() + options.stop_grace_s
+        saw_processes = False
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -390,8 +393,11 @@ def _wait_gpu_clear(devices: Sequence[int], *, directory: Path,
                     raise ValueError("GPU inventory missing")
                 if not root.findall(".//gpu/processes/process_info"):
                     break  # Drivers/stubs omitting processes also mean none (R18).
+                saw_processes = True
             except (OSError, ValueError, subprocess.TimeoutExpired, ET.ParseError) as exc:
                 flags.append(f"gpu_processes_unavailable:{device}:{type(exc).__name__}")
+                if saw_processes:
+                    flags.append(f"gpu_processes_remaining:{device}")
                 break
             time.sleep(min(options.poll_s, max(0.0, deadline - time.monotonic())))
     return tuple(flags)
@@ -459,6 +465,13 @@ def validate_session(options: SessionOptions) -> dict[str, Any]:
             "structural_flags": layout["flags"]}
 
 
+def _recorded_flags(value: Any) -> tuple[str, ...]:
+    """Malformed optional metadata remains visible without stopping collection."""
+    if isinstance(value, (list, tuple)) and all(isinstance(flag, str) for flag in value):
+        return tuple(value)
+    return ("matrix_record_flags_invalid",)
+
+
 def run_session(options: SessionOptions, *,
                 probe: Callable[[str, float], bool] = _healthy) -> dict[str, Any]:
     """Run serial agent models with an explicitly placed, unsampled monitor.
@@ -513,7 +526,7 @@ def run_session(options: SessionOptions, *,
                 flags.append(name + "_provenance_unavailable")
         if matrix:
             _json(output / "matrix.json", matrix)
-            flags.extend(matrix.get("flags", ()))
+            flags.extend(_recorded_flags(matrix.get("flags", ())))
         measured = layout["measured_gpu_indices"]
         receipt["measured_gpu_indices"] = measured
         placement = options.monitor_placement
@@ -613,7 +626,7 @@ def run_session(options: SessionOptions, *,
                                          "revision": monitor_model.get("revision")}
             if not monitor_model.get("revision"):
                 flags.append("monitor_revision_unpinned")
-            flags.extend(monitor_model.get("serve_flags", ()))
+            flags.extend(_recorded_flags(monitor_model.get("serve_flags", ())))
             try:
                 monitor_process = subprocess.Popen(
                     monitor_argv, stdout=monitor_log, stderr=subprocess.STDOUT,
@@ -643,7 +656,7 @@ def run_session(options: SessionOptions, *,
                 endpoint = f"http://127.0.0.1:{options.port}"
                 model_receipt: dict[str, Any] = {
                     "model": model["id"], "weight_precision": model.get("weight_precision", "bf16"),
-                    "flags": list(model.get("serve_flags", ())),
+                    "flags": list(_recorded_flags(model.get("serve_flags", ()))),
                     "measured_gpu_indices": devices, "power_coverage": _power_metrics()}
                 receipt["models"].append(model_receipt)
                 runner_path = model_dir / "runner-matrix.json"

@@ -1161,6 +1161,43 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         self.assertEqual(start["counters_us"]["sw_therm_slowdown"], "1000")
 
 
+
+    def test_bootstrap_layout_error_precedes_install(self):
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        matrix["models"][0]["tensor_parallel_size"] = 2
+        path = self.base / "short-layout.json"
+        path.write_text(json.dumps(matrix))
+        result = subprocess.run([
+            "bash", str(ROOT / "joulewise/align/gpukit/bootstrap.sh"),
+            "--gpu-indices", "0", str(path), "--output", str(self.base / "short-layout-run"),
+            "--ready-timeout-s", "30", "--command-timeout-s", "30",
+            "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--stop-grace-s", "5",
+            "--runner-timeout-s", "30", "--poll-s", "0.01", "--monitor-placement", "none"],
+            cwd=self.base, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertFalse((self.base / "session-venv").exists())
+        self.assertFalse((self.base / "short-layout-run").exists())
+
+    def test_remaining_gpu_process_is_only_a_flag(self):
+        self._script("nvidia-smi", "#!" + sys.executable + "\n" +
+                     "print('<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_mode><gpu_virtualization_mode><virtualization_mode>None</virtualization_mode></gpu_virtualization_mode><processes><process_info><pid>123</pid></process_info></processes></gpu></nvidia_smi_log>')\n")
+        # Cleanup timeout is a fixture policy parameter, not a physics/data bar.
+        result = run_session(self._options("gpu-not-cleared", stop_grace_s=1.0))
+        self.assertTrue(result["data_complete"])
+        self.assertIn("gpu_processes_remaining:0", result["flags"])
+        for model in result["models"]:
+            self.assertIn("runner_returncode", model)
+
+    def test_malformed_optional_flags_do_not_stop_collection(self):
+        matrix = json.loads((CONFIG / "shade.json").read_text())
+        matrix["flags"] = None
+        matrix["models"][0]["serve_flags"] = 17
+        path = self.base / "bad-record-flags.json"
+        path.write_text(json.dumps(matrix))
+        result = run_session(self._options("bad-record-flags", matrix=path))
+        self.assertTrue(result["data_complete"])
+        self.assertIn("matrix_record_flags_invalid", result["flags"])
+
 class FixArithmeticTests(unittest.TestCase):
     def test_budget_protocol_counts_by_hand(self):
         matrix, flags = load_matrix(CONFIG / "budget.json")

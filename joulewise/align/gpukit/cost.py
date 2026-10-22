@@ -186,7 +186,8 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
     elif isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price) or price < 0:
         flags.append("price_invalid")
         price = None
-    if gpu_class not in matrix.get("gpu_classes", {}):
+    profiles = matrix.get("gpu_classes")
+    if not isinstance(profiles, Mapping) or gpu_class not in profiles:
         flags.append("gpu_class_unknown")
     def blocks_cost(flag: str) -> bool:
         if "_source_missing" in flag or flag in {
