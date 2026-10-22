@@ -656,9 +656,10 @@ def bytes_rehearsal(root):
     sites.mkdir(parents=True)
     (measurement / '.gitignore').write_text('.venv/\nruns/\n')
     init_git_fixture(measurement, '-q')
-    subprocess.run(['git', '-C', str(measurement), 'add', '.'], check=True, capture_output=True)
-    subprocess.run(['git', '-C', str(measurement), '-c', 'commit.gpgsign=false',
-                    'commit', '-qm', 'synthetic BYTES rehearsal'], check=True, capture_output=True)
+    # Same fixture identity as Round: CI runners have no global git identity.
+    for args in (('config', 'user.name', 'B6 Desk'), ('config', 'user.email', 'desk@invalid'),
+                 ('config', 'commit.gpgsign', 'false'), ('add', '.'), ('commit', '-qm', 'synthetic BYTES rehearsal')):
+        subprocess.run(['git', '-C', str(measurement), *args], check=True, capture_output=True)
     fake = root / 'bin/launchctl'
     fake.parent.mkdir()
     fake.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> ' + str(root / 'launchctl.argv') + '\nexit 0\n')

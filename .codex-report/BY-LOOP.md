@@ -1,104 +1,16 @@
-# BY-LOOP — implementation complete; director publication pending
+# BY-LOOP — complete; lead-verified
 
 ## PROGRESS
 
-- SLICE 5 DONE: F-A/F-B regressions failed before (3 tests / 0.030s / three failures). CLI config lookup by resolved root, duplicate rejection, top-level-only DONE guard and control marker invalidation implemented. Full loop module passed (61 / 9.536s / exit 0); new guard-shaped rehearsal CI test passed (1 / 15.226s / exit 0). Standalone rehearsal passed at /private/tmp/jwtmp-byloop.ZhKeYM: NEXT → PRECHECK → SMOKE_RUN → SMOKE_RUN; packs [bytes-s1-p1]; discovered 12; fake launchctl only. Report refreshed with director results, scoped/sealed diff reviewed.
-- NEXT: director review/commit seven scoped changed files, independent updated rehearsal, lane/CI publication and PR #542 CI refresh. No commit or push attempted by this seat.
-- OPEN: production BYTES sizing external; SIGKILL cannot execute Python cleanup; independent updated rehearsal/current CI pending. No SCOPE REQUEST. NEEDS_RULING none.
+- Slices 1-5 (local codex-run-v3, gpt-6.1-sol high; Codex Cloud gave no shell twice): 9de9ae0a5, b8a25c2e1,
+  6129d0475, 9e38914c6, ceac3ad86. Director notes that steered slices 4 and 5 (item 5 source, scope grant
+  tests/hazards/test_monitor.py + tests/fixture_signatures.json, findings F-A and F-B) are summarised in ITEMS and
+  DIRECTOR VERIFICATION; the full notes are in the lane history at ceac3ad86.
+- Lead fix after slice 5: CI shard 7 failed on fba44874a because bytes_rehearsal committed its scratch git fixture
+  without an identity (CI runners have none). tests/b6/round_support.py now sets the same local fixture identity
+  Round already uses. See DIRECTOR VERIFICATION 2.
+- NEEDS_RULING none. No scope request open.
 
-- DIRECTOR NOTES (before slice 5, 2026-10-22 13:50Z). Slice 4 committed as 9e38914c6.
-  - DIRECTOR RESULTS, outside the sandbox, fresh /private/tmp TMPDIR per module (copy these into TESTS RUN):
-    item 5 live census (scratchpad driver: start one real SupervisorTests case, wait for the monitor's "start"
-    journal line, signal the runner only, let it exit, run the census CLI with the new registry):
-    unfixed test file (6129d0475) SIGINT -> runner rc -2, census 1 row `hazards-test-real-monitor` ppid 1;
-    SIGTERM -> runner rc -15, census 1 row; both orphans then killed by the director. Fixed (slice 4) SIGINT -> rc -2,
-    census []; SIGTERM -> rc -2 (handler re-raises as KeyboardInterrupt), census []. pgrep hazard_monitor empty after.
-    Regression counterfactual (SupervisorTests.run replaced by a pre-fix run that only sets _supervisors):
-    SupervisorCleanupTests 2 FAIL "ProcessLookupError not raised"; census [] afterwards (the regression's own finally
-    reaped). Fixed: 2 OK. Modules at 9e38914c6: tests.hazards.test_import_graph 6 OK (the sandbox NULL-vs-GO failure
-    was ps denial, now settled); tests.hazards.test_monitor 37 OK in 70.2 s (live classes ran, no skips);
-    tests.test_fixture_orphan_census 16 OK (no skips); tests.b6.test_s3_cold_fixes 6 OK; tests.test_b6_mailer 10 OK;
-    tests.b6.test_chain_smoke_reduction 1 OK; tests.test_b6_loop 59 OK; tests.b6.test_smoke 22 OK in 85.3 s;
-    tests.hazards.test_refusal_allowlist 23 OK (skipped=1). Round desk at 6129d0475 (b6 code unchanged since):
-    test_physics_refusal_wait_reprepare_then_retry OK 59.0 s; test_stops_close_bracket_advance_pin_and_reach_next_smoke
-    OK 197.0 s; test_lost_session_reaches_desk_and_holds_before_beta OK 47.9 s (the slice-3 SESSION_RUN failure did not
-    recur outside the sandbox). Real DONE root read-only check: /Users/edr/night-b6/loop/state.json has exactly one
-    `"state"` line (top level, DONE) and 0 of 12 outbox entries pending, so the first updated tick would publish done.idle.
-  - FINDING F-A (blocker, director's executing review of the launchd path). The production tick never passes --config:
-    configs/launchd/com.joulewise.b6loop.plist.template sets only JW_B6_LOOP_ROOT, and scripts/b6_loop_guard.zsh execs
-    `b6_loop.py tick --loop-root "$loop_root"`. scripts/b6_loop.py then reads configs/b6/loop.json whatever the root. So a
-    loop installed at /Users/edr/night-b6/loop-bytes would run with loop.json: base_order alpha, beta, gamma first and no
-    pack_ids filter, and a fresh root would select alpha and collect a replication pack again. The rehearsal hid this
-    because bytes_rehearsal passes `--config` explicitly. FIX (in scope, scripts/b6_loop.py): with no --config, pick the
-    configs/b6/loop*.json in the repo root whose "loop_root" equals the resolved loop root; two matches is an error; no
-    match keeps configs/b6/loop.json (scratch roots in tests). Every other caller (status, hold, resume, reharvested,
-    the wake) goes through the same CLI, so they inherit it. REGRESSIONS: (i) tests/test_b6_loop.py: a temp repo root
-    holding copies of both configs with scratch loop_roots (never a /Users/edr path: Mailer and Loop may create files
-    under the root); main() with the guard's exact argv (`tick --loop-root <bytes scratch root>`, no --config) and a
-    capturing factory receives the BYTES config (pack_ids present, first order entry bytes-s1-p1); the loop.json root
-    and an unknown root receive loop.json; two configs claiming one root fail. Show it fails before the fix.
-    (ii) bytes_rehearsal: drop `--config`, call scripts/b6_loop.py with the guard's argv shape
-    (`--repo-root <measurement> tick --loop-root <root>/loop-bytes`), rewrite the measurement copy's
-    configs/b6/loop_bytes.json loop_root to `<root>/loop-bytes` (and its wake_argv to []), and loop.json's loop_root to a
-    different scratch path, so a wrong fallback would select alpha and fail the transition/packs asserts.
-    (iii) Add one test in tests/b6/test_loop_round_desk.py that calls bytes_rehearsal on a fresh TMPDIR and asserts its
-    result (transitions NEXT, PRECHECK, SMOKE_RUN, SMOKE_RUN; packs [bytes-s1-p1]; fake launchctl argv). It runs in CI on
-    Linux (the round-desk module has no platform skip), which is this item's cloud rehearsal while Codex Cloud is offline.
-  - FINDING F-B (should fix). The guard's DONE regex accepts `"state": "DONE"` at any indent, so a nested key (e.g.
-    last_exception.state) plus a stale done.idle would keep a resumed loop dormant: control() never removes done.idle.
-    Fix: match only the top-level key (atomic_state writes indent=2, so exactly two leading spaces), and have
-    Loop.control unlink done.idle before it writes state for any command. Regression in tests/test_b6_loop.py: state
-    NEXT with a nested `"state": "DONE"` line and a stale done.idle -> the guard runs the tick; resume from DONE removes
-    done.idle.
-  - Then refresh the report: SUMMARY, ITEMS 1/2/5, REHEARSAL (guard-shaped argv), DONE TICK, TESTS RUN (director results
-    above plus yours), DECISIONS I MADE, OPEN ISSUES (remove items now settled), NEEDS_RULING. Keep it short; drop the
-    superseded slice checkpoints into one line each. Run tests.test_b6_loop and the new round-desk test only
-    (round-desk tests take 50-200 s each; the director reruns the rest).
-- DIRECTOR NOTES (before slice 4, 2026-10-22 13:25Z; director ran these outside the sandbox):
-  - ITEM 5 SOURCE FOUND. pid 43816 was started 10-15 09:41 by the s3-cold lane's ad-hoc runner
-    `/Users/edr/code/JouleWise-wt-b6-s3cold-fix/.scratch-fix/run_remaining.py`, which ran every tests/b6 and
-    tests/hazards module. Its log `.scratch-fix/logs/after-remaining.log` ends inside
-    `tests.hazards.test_monitor.SupervisorTests.test_all_probes_together_cost_at_most_half_a_percent_of_one_core`
-    ("Two real monitors side by side for about 40 s") with a KeyboardInterrupt raised in `wait_for`'s
-    `time.sleep` (line 697 -> 624): the runner was interrupted mid-test. The leaked custody dir is
-    `.scratch-fix/tmp/s3-run/tmpxwija5mv/tmpzvtu2yd3/hazards/monitor` (TMPDIR/setUp tmp/mkdtemp root), matching
-    that test's two `tempfile.mkdtemp(dir=self.custody)` roots. Mechanism: unittest re-raises KeyboardInterrupt out of
-    `TestCase.run` WITHOUT running tearDown or `addCleanup` callbacks, so `_kill_quietly` never ran; and
-    `monitor.Supervisor.start` launches the monitor with `start_new_session=True`, so the runner's process-group
-    kill does not reach it; the monitor does not watch its parent, so it ran on as a ppid-1 orphan.
-    `joulewise/hazards/monitor.py` and `scripts/hazard_monitor.py` are in the block-5 sealed inventory: do not touch.
-  - SCOPE GRANT (director, slice 4): `tests/hazards/test_monitor.py` and `tests/fixture_signatures.json` (neither is in
-    the sealed inventory; checked). Fix lives in the test file; `tests/b6/test_s3_cold_fixes.py` needs no change.
-  - WHAT TO BUILD (decide details yourself, list them under DECISIONS I MADE):
-    (a) In tests/hazards/test_monitor.py make every real `monitor.Supervisor` a SupervisorTests test starts get reaped
-        even when the run is interrupted: e.g. track started supervisors on the instance and override
-        `SupervisorTests.run` with try/finally that calls `_kill_quietly` on each (finally runs on KeyboardInterrupt;
-        addCleanup does not). Also cover SIGTERM (the default signal of wall-clock bounds such as timeout(1)): while
-        SupervisorTests runs in the main thread, temporarily turn SIGTERM into an exception so the finally runs, and
-        restore the previous handler afterwards. SIGKILL cannot be covered from the test; record it as residual
-        (only a parent-death watch in the sealed monitor would cover it).
-    (b) A regression in tests/hazards/test_monitor.py: run a SupervisorTests-derived case (class defined inside the
-        test, not module level) whose test method starts one real supervisor, records its pid, then raises
-        KeyboardInterrupt; assert the KeyboardInterrupt still propagates AND `os.kill(pid, 0)` raises
-        ProcessLookupError afterwards (the reaper waits on the child, so no timing bar is needed). Its own finally must
-        kill the pid if the assertion fails, so the regression can never leak. Fails-before / passes-after evidence:
-        run it against the unfixed class first (stash or temporarily revert your (a) edit), then fixed.
-    (c) Census visibility: the census (scripts/fixture_orphan_census.py, sealed; registry tests/fixture_signatures.json,
-        not sealed) deliberately ignores production monitor commands, so it cannot see this orphan class today. Add one
-        registry row, e.g. id `hazards-test-real-monitor`, matching a real `scripts/hazard_monitor.py --config <path>`
-        only when the config path has a tempfile-made component (`tmp` + 8 of [a-z0-9_]) before
-        `.../hazards/monitor/config.json`; check by grep that no production custody path is a tempfile name, and
-        add a row-matching unit test in tests/test_fixture_orphan_census.py (test-shaped path matches; production-shaped
-        paths such as `/Users/edr/night-b6/.../custody/hazards/monitor/config.json` and the existing
-        `-m joulewise.hazards.monitor` row do not). The census is a recorded flag, never a refusal; keep it so.
-  - The director will prove (c) live after your slice: interrupt the SupervisorTests module mid-test with SIGINT and
-    SIGTERM, let the runner exit, then run the census CLI: before your fix it should list a
-    `hazards-test-real-monitor` orphan; after, none. You cannot do this in the sandbox (ps denied); do not try.
-  - Round-desk cases (`test_physics_refusal_wait_reprepare_then_retry`, `test_stops_close_bracket_advance_pin_and_reach_next_smoke`),
-    the lost-session rerun, tests.hazards.test_import_graph and the local rehearsal repeat: the DIRECTOR runs these
-    outside the sandbox now. Do not run them in slice 4. Run only tests.hazards.test_monitor (its non-live classes run
-    in the sandbox; list any ps/taskpolicy environment failures), tests.test_fixture_orphan_census and
-    tests.b6.test_s3_cold_fixes.
 ## SUMMARY
 
 - Items 1–6 implemented or given their authorized record-only disposition.
@@ -108,7 +20,7 @@
 - Item 48 LOW remains a sealed-driver false alarm; no scoped relay was found. Duplicate magistrate mail is external/manual.
 - Historical monitor interruption leak fixed in test-owned cleanup; director SIGINT/SIGTERM census empty afterward.
 - Director module runs pass; slice-5 loop 61 tests and new rehearsal test pass locally. No sealed file changed.
-- Director final review, independent updated rehearsal, publication and current CI remain pending.
+- Director (lead) verification at ceac3ad86: see DIRECTOR VERIFICATION at the end; rehearsal repeated locally, every targeted module and all six round-desk tests pass outside the sandbox; CI on ci/2026-10-22-bytes-loop.
 
 ## LOOP ROOT CHOICE
 
@@ -175,7 +87,7 @@ PY
 
 Helper argv for all three real-entry-point ticks: `scripts/b6_loop.py --repo-root <scratch>/measurement tick --loop-root <scratch>/loop-bytes`, without --config. Layout: measurement/{configs,joulewise,scripts,.git,.venv}, loop-bytes/{state.json,staging}, bin/launchctl, launchctl.argv, rehearsal.json. Both config copies have distinct scratch roots. Twelve registered-shaped synthetic registrations and full plan trees are committed only in scratch. Real open_packs, composition, DriverLane preparation and smoke.prepare execute. Hardware/precheck, transport, stop-ref observation and launch are synthetic seams. Fake launchctl is first on PATH and set as the driver's override; only fake executes, no install/arm.
 
-Observed: NEXT → PRECHECK → SMOKE_RUN → SMOKE_RUN; discovered 12; packs [bytes-s1-p1]; prepared r1-bytes-s1-p1-smoke-0. Plan: loop-bytes/staging/r1-bytes-s1-p1-smoke-0/smoke/bytes-s1-p1-20261022T1340Z/custody/night_plan.json. Isolated clone, reduced tree, copied ledger/pin, wrapper and session.json exist. Fake argv exactly `rehearsal-only r1-bytes-s1-p1-smoke-0` plus newline. Fixture sizing copies ALPHA allowances; max_s=124620 is synthetic, never BYTES C5 evidence. Director independent updated repetition and Linux CI remain pending; cloud shell unavailable.
+Observed: NEXT → PRECHECK → SMOKE_RUN → SMOKE_RUN; discovered 12; packs [bytes-s1-p1]; prepared r1-bytes-s1-p1-smoke-0. Plan: loop-bytes/staging/r1-bytes-s1-p1-smoke-0/smoke/bytes-s1-p1-20261022T1340Z/custody/night_plan.json. Isolated clone, reduced tree, copied ledger/pin, wrapper and session.json exist. Fake argv exactly `rehearsal-only r1-bytes-s1-p1-smoke-0` plus newline. Fixture sizing copies ALPHA allowances; max_s=124620 is synthetic, never BYTES C5 evidence. Director repetition and Linux CI: see DIRECTOR VERIFICATION.
 
 ## DONE TICK
 
@@ -237,7 +149,14 @@ Slice-5 output: committed sealed_paths: 682 changed_overlap: []; working-tree-in
 
 ## CI
 
-Local branch by-loop at 9e38914c6 plus uncommitted slice-5 changes. Director publishes lane/2026-10-22-bytes-loop and ci/2026-10-22-bytes-loop. Draft PR #542: https://github.com/mpmdw/JouleWise/pull/542. Current CI unknown; historical cloud pending/gate-ledger results predate implementation. No network, commits or pushes attempted here. New rehearsal test is Linux-capable without platform skip.
+Lane lane/2026-10-22-bytes-loop; CI-only branch ci/2026-10-22-bytes-loop = the lane head merged with BY-INT's
+pass-1 head da27be7b9 and main 81db9f355 (git merge-tree --write-tree, then git commit-tree; no conflicts).
+Draft PR #542 (https://github.com/mpmdw/JouleWise/pull/542) follows the CI branch. First CI run (fba44874a, lane
+ceac3ad86): 19 of 20 test jobs green; shard 7 failed in tests.b6.test_loop_round_desk.test_bytes_guard_shaped_rehearsal
+(git commit exit 128, no identity on the runner); gate-ledger red as expected for a draft. Fixed in the lead commit
+that follows ceac3ad86; the CI result for the rebuilt CI branch is in DIRECTOR VERIFICATION 2. The new rehearsal
+test has no platform skip, so the Linux CI shards run it (this item's cloud rehearsal while Codex Cloud gave no
+shell).
 
 ## DECISIONS I MADE
 
@@ -251,10 +170,83 @@ Local branch by-loop at 9e38914c6 plus uncommitted slice-5 changes. Director pub
 
 ## OPEN ISSUES
 
-- Director final diff review, independent updated rehearsal, commit/push and current CI.
+- Install step (arm-time, not done here): render configs/launchd/com.joulewise.b6loop.plist.template with __LOOP_ROOT__=/Users/edr/night-b6/loop-bytes; the CLI now selects configs/b6/loop_bytes.json from that root. Same label as the replication job, which is DONE. Install only after the BYTES packs are registered: until then a fresh BYTES root sits in NEXT and each 300 s tick starts Python (NEXT with no open pack is not dormant by design, so a later registration is discovered).
 - Production BYTES C5 sizing remains external; fixture values are synthetic.
 - SIGKILL cannot execute cleanup; production parent-death supervision requires a separate sealed-code decision.
 
 ## NEEDS_RULING
 
 none. No scope expansion; director evidence settles live leak acceptance and prior sandbox discrepancies.
+
+## DIRECTOR VERIFICATION (lead, Opus 5.5, outside the sandbox, 2026-10-22)
+
+Every command: repository cwd, `JW_B5_SYNTHETIC_ONLY=1`, a fresh `/private/tmp` TMPDIR per invocation,
+`/opt/homebrew/bin/python3.13 -B`. No launchctl, no install, no arm; the real loop root was only read
+(state.json state lines, outbox delivery fields).
+
+- Finding F-A (blocker, found by the lead reading the launchd path, fixed in slice 5): the plist sets only
+  JW_B6_LOOP_ROOT and the guard execs `b6_loop.py tick --loop-root <root>` without --config, so a loop at
+  /Users/edr/night-b6/loop-bytes would have read configs/b6/loop.json. Counterfactual, slice-5 tests on the
+  pre-fix code (6129d0475): the guard-shaped rehearsal opened `r1-alpha` with packs [alpha] (a replication pack
+  collected again); test_cli_selects_config_for_guard_loop_root got loop.json for the BYTES root. Both pass at
+  ceac3ad86. F-B counterfactual: nested-DONE guard case and resume-marker case fail pre-fix, pass after.
+- Rehearsal, local, at ceac3ad86: `bytes_rehearsal` on /private/tmp/jwtmp-byloop-reh.63NiFv, exit 0:
+  transitions NEXT, PRECHECK, SMOKE_RUN, SMOKE_RUN; 12 discovered; packs [bytes-s1-p1]; smoke prepared
+  r1-bytes-s1-p1-smoke-0 (plan under loop-bytes/staging/r1-bytes-s1-p1-smoke-0/smoke/.../custody/night_plan.json);
+  fake launchctl argv log exactly `rehearsal-only r1-bytes-s1-p1-smoke-0`.
+- DONE tick, direct: scratch root with atomic_state DONE (plus a nested last_exception.state DONE) and done.idle;
+  guard run with JW_B6_LOOP_TICK as a recorder: rc 0, tick not started. Same root without done.idle: tick started.
+- Item 5 live: unfixed test file, runner interrupted after the monitor's start journal line: SIGINT -> 1 census row
+  `hazards-test-real-monitor` (ppid 1), SIGTERM -> 1 row; fixed: SIGINT and SIGTERM -> census []. Regression
+  counterfactual (pre-fix run): 2 FAIL "ProcessLookupError not raised"; fixed 2 OK; census [] and
+  `pgrep -fl hazard_monitor` empty after every run.
+- Modules at ceac3ad86 / 9e38914c6 (b6 code unchanged between them except slice 5's loop files, rerun at ceac3ad86):
+  tests.test_b6_loop 61 OK; tests.b6.test_smoke 22 OK; tests.test_b6_mailer 10 OK; tests.b6.test_chain_smoke_reduction
+  1 OK; tests.b6.test_s3_cold_fixes 6 OK; tests.test_fixture_orphan_census 16 OK (no skips); tests.hazards.test_monitor
+  37 OK (live classes ran); tests.hazards.test_import_graph 6 OK; tests.hazards.test_refusal_allowlist 23 OK (1 skip).
+  Round desk at ceac3ad86, one test per run: bytes_guard_shaped_rehearsal OK 12.6 s; alpha_smoke_session_desk_and_beta_rotation
+  OK 41.8 s; physics_refusal_wait_reprepare_then_retry OK 50.9 s; stops_close_bracket_advance_pin_and_reach_next_smoke
+  OK 168.4 s; lost_session_reaches_desk_and_holds_before_beta OK 35.6 s; resume_after_hold_continues_real_round OK 43.0 s.
+- Sealed inventory, committed: `git diff --name-only bda481d5a ceac3ad86` (13 paths) intersect 682 sealed paths = [].
+  `git diff --check bda481d5a ceac3ad86` exit 0.
+
+## DIRECTOR VERIFICATION 2 (lead, Opus 5.5, 2026-10-22 15:52-16:10Z, outside the sandbox)
+
+Same conditions as above (repository cwd via the runner, `JW_B5_SYNTHETIC_ONLY=1`, fresh `/private/tmp` TMPDIR
+per invocation, `/opt/homebrew/bin/python3.13 -B`, no launchctl, no install, no arm). The Mac was running other
+lanes' Sol seats (load average 30-38).
+
+- CI shard 7 fix (tests/b6/round_support.py only). Emulating a runner with no git identity
+  (GIT_CONFIG_GLOBAL = a file holding only `user.useConfigOnly = true`, GIT_CONFIG_NOSYSTEM=1, no GIT_* identity
+  variables): at ceac3ad86 test_bytes_guard_shaped_rehearsal ERROR, `git ... commit -qm synthetic BYTES rehearsal`
+  exit 128 (the CI failure); with the fix 1 OK in 14.0 s.
+- Rehearsal repeated locally with the fix (`bytes_rehearsal` on /private/tmp/jwtmp-byloop-reh.gPXZV4, exit 0):
+  transitions NEXT, PRECHECK, SMOKE_RUN, SMOKE_RUN; 12 packs discovered; packs [bytes-s1-p1]; smoke prepared
+  r1-bytes-s1-p1-smoke-0 with plan loop-bytes/staging/r1-bytes-s1-p1-smoke-0/smoke/bytes-s1-p1-20261022T1554Z/
+  custody/night_plan.json; fake launchctl argv log exactly `rehearsal-only r1-bytes-s1-p1-smoke-0`.
+- DONE tick: scratch roots written by loop.atomic_state. DONE (with a nested last_exception.state DONE) plus
+  done.idle: guard rc 0, recorder tick not started, /usr/bin/time 0.00 s user and sys. NEXT with the same nested
+  value plus done.idle: tick started. DONE without done.idle: tick started (the first updated tick publishes it).
+- stages_succeeded on real block-6 smoke data (read-only replay of the desk's stage computation over the ten
+  /Users/edr/night-b6/loop/staging/*-smoke-0 sessions; statuses only, no energy values read out): nine sessions
+  have every in-chain stage at a success exit, so the function is not called. r2-alpha-smoke-0 has one stage
+  (alpha-science-prefill-p2048-absolute) at rc 1 whose only member has harvested status succeeded and campaign
+  class anchor; before the change stages_succeeded returned False (the recorded smoke status was fail, the
+  10-19 hold that item 52 calls wrong), after it returns True. The negative cases (other flag, strict-validation
+  failure, nonzero child exit, an unexplained companion member, idle-skip variants) stay failures in
+  tests.b6.test_smoke (22 OK).
+- Item 5 live, fixed test file: runner of tests.hazards.test_monitor.SupervisorTests interrupted once 2 real
+  monitor children were seen: SIGINT runner rc -2, SIGTERM runner rc -2 (translated); census [] and no child
+  alive after either. Counterfactual with the 6129d0475 test file in a scratch worktree: SIGINT left 2
+  `hazards-test-real-monitor` rows at ppid 1, SIGTERM (rc -15) left 2; the director killed them; no monitor of
+  either tree alive afterwards. Census [] before and after every module run below.
+- Modules with the fix, run in parallel: tests.test_b6_loop 61 OK; tests.b6.test_smoke 22 OK;
+  tests.test_fixture_orphan_census 16 OK; tests.hazards.test_import_graph 6 OK; tests.hazards.test_refusal_allowlist
+  23 OK (1 skip); tests.test_b6_mailer 10 OK; tests.b6.test_chain_smoke_reduction 1 OK; tests.b6.test_s3_cold_fixes
+  6 OK. tests.hazards.test_monitor: 37 OK once, and twice 36 OK with
+  SupervisorTests.test_all_probes_together_cost_at_most_half_a_percent_of_one_core failing its 80 s wait for five
+  cost records from the background-QoS monitor (starved at load average 30-38). That test alone passed at base
+  bda481d5a and at this head back to back under the same load; this lane changed only how its supervisors are
+  registered for reaping, not its timing. Environmental, not chased.
+- Sealed inventory on the lead commit: `git diff --name-only bda481d5a HEAD` (13 paths, the same 13 as at
+  ceac3ad86) intersect 682 sealed paths = []. `git diff --check` clean.
