@@ -255,6 +255,20 @@ class MeterWorkedExamples(NumericTestCase):
         with self.assertRaises(ba.AnalysisError):
             ba.meter_decode(self.stream(), [-1, 6_000_000_000], [1, 2])
 
+    def test_battery_end_window_coverage_changes_only_the_record_field(self):
+        stream = self.stream()
+        spans = ([4_000_000_000, 6_000_000_000], [1_000_000_000, 3_000_000_000])
+        full = ba.meter_decode(stream, *spans)
+        self.assertIs(full.pop("battery_end_window_complete"), True)
+        # Keep all polls read by the arithmetic; remove only polls at/after
+        # d1 + tau = 8.2 s. Identical arithmetic must remain bit-identical.
+        end = spans[0][1] + 2_200_000_000
+        cut = sum(rx < end for rx in stream.poll_ns)
+        stream.poll_ns, stream.smc = stream.poll_ns[:cut], stream.smc[:cut]
+        shortened = ba.meter_decode(stream, *spans)
+        self.assertIs(shortened.pop("battery_end_window_complete"), False)
+        self.assertEqual(shortened, full)
+
 
 class BatteryRulingWorkedExamples(NumericTestCase):
     def example(self, duration_ns, n, first_ns, nonzero, *, meter=None):
@@ -2288,6 +2302,75 @@ class BatteryCampaignTests(NumericTestCase):
         self.assertIsNone(target["meter"])
         self.assertIn("bytes.meter_decode_unavailable", target["flags"])
         self.assertIn("bytes.decode_battery_assist", target["flags"])
+
+    def test_marker_survives_nonbattery_meter_failure(self):
+        a, z = self.spans(self.target["run_id"])["decode"]
+        tau_ns = round(self.target["meter"]["battery_tau_s"] * 1e9)
+        def change(items):
+            for item in items:
+                if item.get("k") != "b":
+                    continue
+                # Batches received just after decode can still contain its
+                # final samples; clear their payloads too, retaining polls.
+                if a <= item["rx"] < z + tau_ns:
+                    item.update(n=0, p="")
+                # A physical one-second, -1000 mA burst received wholly
+                # inside the registered marker window; no new threshold.
+                if a + tau_ns <= item["rx"] < a + tau_ns + 1_000_000_000:
+                    item["smc"]["B0AC"] = -1000
+        records, manifest = self.mutate(change)
+        target = next(r for r in records if r["run_id"] == self.target["run_id"])
+        self.assertIsNone(target["meter"])
+        self.assertNotEqual(target["meter_unavailable_reason"], "battery reading missing")
+        self.assertIn("bytes.decode_battery_assist", target["flags"])
+        self.assertIs(target["decode_assist_evaluated"], True)
+        self.assertIs(target["battery_end_window_complete"], True)
+        for cell in ba.reduce_models(records, manifest):
+            if cell["boundary"] == "rails":
+                self.assertEqual(cell["decode_assisted_member_counts"]["repeat"], sum(
+                    r["stratum"] == "repeat" and "bytes.decode_battery_assist" in r["flags"] for r in records))
+
+    def test_no_marker_polls_prints_null_with_real_cause_and_run_ids(self):
+        stream = kp.parse(self.path)
+        stream.poll_ns, stream.smc = [], []
+        manifest = {**self.manifest, "models": [self.spec], "sessions": [self.session]}
+        with patch.object(ba, "_session_streams", return_value=[("no-polls", stream)]):
+            records = list(ba.archive_records(self.archive, manifest, self.session, stage="all"))
+        for row in records:
+            self.assertIs(row["decode_assist_evaluated"], False)
+            self.assertIs(row["battery_end_window_complete"], False)
+            self.assertIn(row["run_id"], row["decode_assist_evaluated_reason"])
+        for cell in ba.reduce_models(records, manifest):
+            if cell["boundary"] == "rails":
+                self.assertIsNone(cell["decode_assisted_member_counts"])
+                reason = cell["decode_assisted_member_counts_reason"]
+                self.assertIn("no mapped meter stream has polls in the marker window", reason)
+                self.assertNotIn("blinded", reason)
+                self.assertTrue(all(r["run_id"] in reason for r in records))
+                self.assertEqual(cell["without_assisted"]["reason"], reason)
+                self.assertIsNone(cell["without_assisted"]["mean_j"])
+                self.assertIsNotNone(cell["harvest_assisted_member_counts"])
+
+    def test_filtered_stream_hides_unselected_smc_and_preserves_terms_and_tau(self):
+        spans = self.spans(self.target["run_id"])
+        selected = [spans["decode"], spans["idle_baseline"]]
+        full = kp.parse(self.path)
+        expected = ba.meter_decode(full, *selected)
+        filtered = ba._filtered_stream(self.path, selected)
+        tau_ns = expected["battery_tau_s"] * 1e9
+        offset = kp.raw_offset_ns(full)
+        self.assertEqual(filtered.poll_ns, full.poll_ns)
+        hidden_discharge = False
+        for rx, original, actual in zip(full.poll_ns, full.smc, filtered.smc):
+            keep = any(a + offset <= rx < z + offset + tau_ns for a, z in selected)
+            self.assertEqual(actual, original if keep else {})
+            hidden_discharge |= not keep and original.get("B0AC", 0) < 0
+        self.assertTrue(hidden_discharge)  # Later, unselected assisted runs.
+        self.assertEqual(ba.meter_decode(filtered, *selected), expected)
+        with patch.object(kp, "raw_offset_ns", return_value=None):
+            unmapped = ba._filtered_stream(self.path, selected)
+        self.assertEqual(unmapped.poll_ns, full.poll_ns)
+        self.assertTrue(all(values == {} for values in unmapped.smc))
 
     def test_charging_read_survives_archive_join_with_signed_energy(self):
         a, z = self.spans(self.target["run_id"])["decode"]

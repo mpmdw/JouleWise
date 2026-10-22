@@ -173,6 +173,8 @@ maximums and sum of run counts. `decode_assisted_member_counts` and
 `harvest_assisted_member_counts` disclose kept run counts by stratum.
 The without-assisted line uses the decode marker at every boundary.
 At the blinded stage, `decode_assisted_member_counts` and the without-assisted line's numbers are null with reason "not evaluated at the blinded stage"; harvest-assisted counts remain evaluated.
+At stages reading the meter, unevaluated decode counts and without-assisted numbers are null with the actual missing marker-window cause and run ids; harvest-assisted counts remain evaluated.
+`battery_end_window_complete` records whether a poll reaches decode end plus tau, in each meter result and (if every meter reduction fails) on the row, where True means at least one qualifying marker stream reaches that endpoint.
 No separate meter-only estimate line is printed: DC input minus the battery
 column gives it. Every DC/rest value carries `boundary_description`:
 "whole-machine DC input plus the battery term, measured at the USB-C input; the adapter's AC-to-DC loss is not included".

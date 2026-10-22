@@ -502,6 +502,8 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
             "battery_idle_power_w": battery_idle, "battery_phase_edge_j": v,
             "battery_v_start_j": battery_edges[0], "battery_v_end_j": battery_edges[1],
             "battery_tau_s": tau, "battery_poll_interval_max_s": poll_interval,
+            "battery_end_window_complete": bool(stream.poll_ns and
+                stream.poll_ns[-1] >= spans[0][1] + tau * 1e9),
             "battery_n": battery_n, "battery_n_idle": battery_nb,
             "decode_battery_assist": assisted,
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
@@ -551,9 +553,10 @@ def _filtered_stream(path, spans):
     never unpacked into power samples or retained. Batch endpoint *sequence
     numbers* alone provide the same clock-fit points as the native parser.
     One sample on either side is retained for the ruled meter edge bound.
-    All poll receive times and SMC readings are retained: BAT-2's delay uses
-    the largest interval over the whole stream, and its end-edge window
-    extends beyond each selected span. No unselected meter power is decoded.
+    All poll receive times are retained for BAT-2's largest poll interval.
+    SMC readings are retained only in selected raw-clock [start, end + tau)
+    windows; without a raw/monotonic mapping, none are retained. No unselected
+    meter power is decoded.
     """
     from joulewise.external import km003c_parse as kp
     header = trailer = None
@@ -579,7 +582,7 @@ def _filtered_stream(path, spans):
     # Match km003c_parse.parse: transport line order is not receive order.
     polls.sort(key=lambda row: row[0]["rx"])
     poll_ns = [item["rx"] for item, _ in polls]
-    smc = [dict(item.get("smc") or {}) for item, _ in polls]
+    smc = [{} for _ in polls]
     with Path(path).open() as handle:
         for item, location in polls:
             if item.get("n"):
@@ -614,6 +617,12 @@ def _filtered_stream(path, spans):
     offset = kp.raw_offset_ns(shell)
     if offset is None:
         return shell
+    tau = _battery_delay_s(_battery_stream_data(shell)[2])
+    for a, b in spans:
+        lo = bisect.bisect_left(poll_ns, a + offset)
+        hi = bisect.bisect_left(poll_ns, b + offset + tau * 1e9)
+        for i in range(lo, hi):
+            smc[i] = dict(polls[i][0].get("smc") or {})
     # Sorted disjoint time ranges permit O(log n) selection per sample.
     ranges = sorted((a + offset - step * 1_000_000, b + offset + step * 1_000_000) for a, b in spans)
     merged = []
@@ -933,13 +942,29 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     break
                 except AnalysisError as exc:
                     errors.append(str(exc))
-                    if str(exc) == "battery reading missing":
-                        from joulewise.external import km003c_parse as kp
-                        raw_span = [edge + kp.raw_offset_ns(stream) for edge in spans[row["run_id"]][0]]
-                        if _decode_battery_marker(stream, raw_span, _battery_delay_s(battery_readings[2])):
-                            row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
             if row["meter"] is None:
                 row["flags"] = sorted(set(row["flags"]) | {"bytes.meter_decode_unavailable"})
+                from joulewise.external import km003c_parse as kp
+                marker_windows = []
+                for name, stream, battery_readings in prepared_streams:
+                    offset = kp.raw_offset_ns(stream)
+                    if offset is None:
+                        continue
+                    raw_span = [edge + offset for edge in spans[row["run_id"]][0]]
+                    tau = _battery_delay_s(battery_readings[2])
+                    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
+                    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
+                    if lo == hi:
+                        continue
+                    marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau * 1e9)
+                    if _decode_battery_marker(stream, raw_span, tau):
+                        row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
+                row["decode_assist_evaluated"] = bool(marker_windows)
+                row["battery_end_window_complete"] = any(marker_windows)
+                if not marker_windows:
+                    row["decode_assist_evaluated_reason"] = (
+                        "decode marker not evaluated: no mapped meter stream has polls in the marker window"
+                        f" (run {row['run_id']})")
         row["meter_unavailable_reason"] = "; ".join(errors) or "no raw KM003C streams" if row["meter"] is None else None
         row["neg8_inputs"] = refs
         yield row
@@ -1231,7 +1256,9 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                         harvest_assisted_member_counts={stratum: sum(r["stratum"] == stratum and
                             "battery.assist" in r["flags"] for r in kept) for stratum in ("repeat", "quad")})
             if any(r.get("decode_assist_evaluated") is False for r in kept):
-                reason = "not evaluated at the blinded stage"
+                reason = "; ".join(sorted({r.get("decode_assist_evaluated_reason",
+                    "not evaluated at the blinded stage") for r in kept
+                    if r.get("decode_assist_evaluated") is False}))
                 cell.update(decode_assisted_member_counts=None,
                     decode_assisted_member_counts_reason=reason,
                     with_assisted_label="with assisted members",

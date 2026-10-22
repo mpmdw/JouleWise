@@ -3,15 +3,18 @@
 - Slice 1 started from clean `115f9ac179795f4aedc232d5e87177708f44ba75`, branch `lane/2026-10-22-bytes-battery-term`; recent history matches the supplied baseline. No active stop card. This explicit delegated fix-round brief selects the work; queue/state files remain lead-owned and untouched.
 - Done: read the whole build brief and current BAT-2 ruling at `281b53370`, including §4 and §8 in full. Exported ruling: `/tmp/bat3f1r2/BAT-RULING.md`. No H data or forbidden night directories read.
 - Done: finding 1's three third-dispatch registration blocks inserted verbatim, with whitespace wrapping matching the registration, and the §20 row gains Authority. `regtext_check.py` against `281b53370`: ALL OK, exit 0. `tests.b6.test_bytes_packs`: 9 tests pass, exit 0, no skips. Registration diff has only the four authorized changes; `git diff --check` passes.
-- Next slice: implement findings 2–4 in small production/test hunks, starting with archive_records' failure branch at bytes_analysis.py:936 and reduce_models' hard-coded blinded reason at :1234. Then bounded class runs, M22–M24, three-world/all-stage identity against `115f9ac17`, agreement comparison and refusal census. No implementation or fixture change yet.
-- Open: findings 2–4 and prescribed verification; director owns commit/push and PR #544 CI; BY-MERGE owns conflict resolution and final cold passes. No scope expansion or science ruling needed.
+- Slice 2 resumed from clean director commit `af821460d` (the registration slice), a descendant of the supplied baseline; no other branch merged.
+- Done in slice 2: implemented findings 2–4 and four new focused tests, with no fixture hook, import change or new flag code. Final runs: seven meter/ruling tests, all 17 BatteryCampaignTests, nine pack tests and five float-sweep tests pass (38 total; no skips). Initial fault missed one late-batch sample; corrected and full class reran green. Log `/tmp/bat3f1r2/roundb-campaign-recheck.log`.
+- Done: M24 KILLED by the new cut/full coverage test; disposable copy and TMPDIR deleted. Runner `/tmp/bat3f1r2/mutate_roundb.py` is ready for M22 and M23 next slice.
+- Next slice: run `/tmp/bat3f1r2/mutate_roundb.py M22 M23`, remaining archive/boundary classes (inventory below), default/instant/delayed three-stage identity against `115f9ac17`, agreement comparison and refusal census. All child processes finished and disposable test/mutant directories cleaned; no run left active at handoff.
+- Open: prescribed verification; director owns commit/push and PR #544 CI; BY-MERGE owns conflict resolution and final cold passes. No scope expansion or science ruling needed.
 
 ## FIX LOG (round b)
 
 1. Fixed in slice 1: three required §8 blocks from `281b53370` placed in Authority, §6 and §7; §20 gains Authority. Current-ruling checker reports ALL OK; `tests.b6.test_bytes_packs` passes all 9 tests, no skips.
-2. Pending: evaluate the decode marker on qualifying mapped streams after any meter failure; stage-correct null/reason when no stream qualifies; synthetic archive-join tests.
-3. Pending: retain SMC only inside selected spans extended forward by τ while retaining every poll time; exact filtered-stream test and default/instant/delayed three-stage identity.
-4. Pending: add bool `battery_end_window_complete` to meter results and marker-only rows, documentation sentence and full/cut stream tests.
+2. Fixed in production and passing focused tests: after every meter stream fails for any reason, evaluate markers on each mapped stream holding a poll in its own marker window; any marked stream sets the flag. No qualifying stream records False plus a run-specific actual cause; cells print null through the existing path. Tests `test_marker_survives_nonbattery_meter_failure` and `test_no_marker_polls_prints_null_with_real_cause_and_run_ids` pass; existing blinded-stage CLI test pins its unchanged registered reason. M22 pending.
+3. Fixed in production and passing focused test: retain SMC only in selected [start, end + τ) windows while retaining all poll times; no mapping retains no SMC. `test_filtered_stream_hides_unselected_smc_and_preserves_terms_and_tau` passes exact terms, receive grid and hidden values, including no-mapping case. M23 and three-world/all-stage identity pending.
+4. Fixed: bool `battery_end_window_complete` in meter results, automatically retained in existing `meter_run_terms`; marker-only rows record the same field. Documentation names it. `MeterWorkedExamples.test_battery_end_window_coverage_changes_only_the_record_field` passes: full True, cut False, every other field exactly equal. M24 KILLED by that test.
 5. Rejected as directed: representation-only expansion is within the synthetic disk budget; trimming `meter_run_terms` would change fields seen by downstream readers. Leave full meter dictionaries intact.
 6. Handled by director before round b: round-a slice-4 report committed as `115f9ac17` and pushed to lane and CI branches, PR #544. Director pushes each new slice and final head; this worker performs no Git writes or network actions.
 7. Handed forward to BY-MERGE: merge no branch here. Preserve decode-marker selection and both callers' `h1_family` when resolving pass1 conflicts; both cold passes on merged tree must run BatteryCampaignTests and test_bytes_roster_drop. Round-b production/fixture hunks listed below as introduced.
@@ -20,10 +23,17 @@
 
 - Slice 1 changes only finding 1's permitted registration lines and this report. The explicit local route replaces cloud setup, Git writes, push and CI actions. Required code/tests will be run in bounded slices, never the whole suite.
 - A scratch runner `/tmp/bat3f1r2/run_check.py` creates and deletes a separate `/tmp/jwtmp-bat3f1.*` directory per check, sets both required environment variables for its child and records exact argv/cwd/exit/time in `/tmp/bat3f1r2/checks.jsonl`. A shell cleanup command was rejected before execution; Python TemporaryDirectory provides permitted cleanup.
+- Finding 2's per-row reason is `decode marker not evaluated: no mapped meter stream has polls in the marker window (run <run_id>)`, field `decode_assist_evaluated_reason`; cell reasons concatenate distinct per-row reasons in sorted order. Blinded rows without an explicit reason keep exactly `not evaluated at the blinded stage`.
+- Marker-only rows record `battery_end_window_complete` as a bool: True iff at least one qualifying marker stream holds a poll at/after that stream's own d1 + τ; False also covers no qualifying stream, distinguished by `decode_assist_evaluated=False` and its reason. No flags or estimates depend on this completeness field.
+- Four new tests reuse the existing BatteryCampaignTests build/CLI chain; no extra CLI chain or campaign fixture edit. No production import changed; both import-graph list files and float READERS stay untouched.
 
 ## HUNKS FOR BY-MERGE (round b)
 
-- None in `joulewise/bytes_analysis.py` or `tests/fixtures/bytes/campaign.py` in slice 1.
+- `joulewise/bytes_analysis.py`, `meter_decode` return: add end-window completeness bool only.
+- `joulewise/bytes_analysis.py`, `_filtered_stream` docstring, SMC initialization and post-offset selection: mask SMC outside selected spans plus τ; retain original receive grid and clock/meter fitting.
+- `joulewise/bytes_analysis.py`, `archive_records` meter-failure branch: replace battery-missing-only marker evaluation with qualifying-stream fallback and explicit unevaluated reason/completeness.
+- `joulewise/bytes_analysis.py`, `reduce_models` null branch: choose actual per-row reason when present, preserving registered blinded default. Neither `_phase_cell` call changed.
+- No hunk in `tests/fixtures/bytes/campaign.py`.
 
 ## REGISTRATION (round b)
 
@@ -44,9 +54,22 @@ All checks use `/opt/homebrew/bin/python3.13 -B` (checker also `-I`), `JW_B5_SYN
 
 Wrapper invocation for each: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/run_check.py <label> <child argv above>`; cwd is this clone. No environmental test failure so far. No measurements, launch/arm steps, commits, pushes or merges attempted.
 
+Slice 2 commands (same wrapper/environment/TMPDIR discipline):
+
+- `roundb-meter /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.MeterWorkedExamples tests.test_bytes_analysis.BatteryRulingWorkedExamples`: 7 tests pass, exit 0, no skips, 0.734 s process. Initial run exposed an undefined test-only bisect name; corrected with existing poll-list arithmetic, then reran green. Log `/tmp/bat3f1r2/roundb-meter.log`.
+- `roundb-packs /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_bytes_packs`: 9 tests pass, exit 0, no skips; 1.876 s unittest / 2.127 s process. Log `/tmp/bat3f1r2/roundb-packs.log`.
+- `roundb-float /opt/homebrew/bin/python3.13 -B -m unittest tests.test_battery_float_sweep`: 5 tests pass, exit 0, no skips; 2.928 s unittest / 3.161 s process. Log `/tmp/bat3f1r2/roundb-float.log`.
+- `roundb-campaign /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests`: 17 tests, one new fault-shape assertion failure, exit 1; 66.008 s unittest / 66.778 s process. The fault cleared receives only inside decode, leaving one decode meter sample in the next batch. Extended payload clearing to z+τ, retaining every receive/SMC reading. All other 16 tests passed, including new SMC masking/no-mapping and no-marker-polls/null-reason tests. Log `/tmp/bat3f1r2/roundb-campaign.log`.
+- `roundb-campaign-recheck /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests`: 17 tests pass, exit 0, no skips; 63.650 s unittest / 64.403 s process. Includes both pre-existing real CLI chains (instant/delayed); no new CLI chain. Log `/tmp/bat3f1r2/roundb-campaign-recheck.log`.
+- `git diff --check`: exit 0 after code and test edits. An attempted read-only process listing (`ps`) was denied by the sandbox; no process-control action attempted and no test affected.
+- `roundb-preservation /opt/homebrew/bin/python3.13 -B -c <exact code recorded in /tmp/bat3f1r2/checks.jsonl, label roundb-preservation>`: round-a tail exactly equals director commit af821460d, changed-path set is within scope, M24 copy removed; exit 0, 0.148 s. Log `/tmp/bat3f1r2/roundb-preservation.log`.
+
 ## MUTATION KILLS (round b)
 
-Pending M22, M23 and M24, in disposable copies only.
+Command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/mutate_roundb.py M24`. The runner copies the working tree without .git, changes only the copy, creates a fresh TMPDIR for the child, then deletes TMPDIR and copy in finally.
+
+- M24 (`battery_end_window_complete` always True): KILLED by `tests.test_bytes_analysis.MeterWorkedExamples.test_battery_end_window_coverage_changes_only_the_record_field`, child `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.MeterWorkedExamples.test_battery_end_window_coverage_changes_only_the_record_field`; 1 test, 1 failure, exit 1, 0.001 s unittest / 0.731 s process. Failure: `AssertionError: True is not False`. Log `/tmp/bat3f1r2/M24.log`; result `/tmp/bat3f1r2/mutations.jsonl`. Copy removed; clone never mutated.
+- M22 and M23 pending; same runner has their exact mutations and killing test names ready. Run at most three mutants per slice.
 
 ## BIT-IDENTITY (round b)
 
@@ -56,7 +79,7 @@ Next-slice test inventory from grep: BatteryRulingWorkedExamples, MeterWorkedExa
 
 ## OPEN ISSUES (round b)
 
-- Findings 2–4 and remaining RUN list pending; complete before marking round b complete.
+- Findings 2–4 implemented; campaign validation and remaining RUN list pending; complete before marking round b complete.
 - Residual finding-3 case: a released run's [d1, d1 + τ) window can still read a held-out run starting within τ of d1. This is the ruling §4 reopen condition; H's smallest gap was 45.0 s. The filter must preserve required selected-span windows, not alter the arithmetic.
 - Director re-runs H's real-data reductions and fault shapes, checks the final diff, commits/pushes lane and same head to CI PR #544. This worker reads no H data and claims no new live validation.
 - BY-TWIN-BAT owns parity; BY-MERGE owns conflicts and merged-tree cold passes. Finding 5 remains intentionally unchanged.
