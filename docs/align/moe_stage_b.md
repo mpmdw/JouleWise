@@ -35,13 +35,39 @@ variance q²/12 per reading; the former same-sign q*T bound is an alternative
 and cannot decide the verdict. Current synthetic outcomes appear below.
 Hardware must record token timing, sensor phase, supply and throttling events.
 
-Round 1's affirmative counterfactual no-upload-stall result is withdrawn pending
-re-execution with within-condition nuisance fits. PR #526 is the draft CI vehicle.
-A printed "no" is a scenario comparison, not a measured absence of signal:
-the nominal cross-validated Fisher interval is not null-calibrated (F6).
-The marginal Stage A requirement does not establish conditional design power
-(F4). Energy-only and forecast columns use simulator baseline truth, unavailable
-on hardware (F5).
+**The former affirmative counterfactual no-upload-stall INA result is now
+inconclusive:** the fixed within-condition fit gives r=0.735609 [0.625652,
+0.816906], down from 0.893842. The default blocking-upload E2E INA scenario gives
+0.048994 [-0.156278, 0.250209], nominally no. These results were executed in
+[CI 39739338982](https://github.com/mpmdw/JouleWise/actions/runs/39739338982).
+PR #526 remains a draft CI vehicle.
+
+**The stalled-world verdict depends on between-episode timing spread.** At the
+base ±2 ms token jitter, within-condition SD of episode-mean decode time is
+0.368832 ms/token and the verdict is no. Independent episode compute factors
+±2.5% give 0.868869 ms/token and inconclusive; ±5% give 1.575544 ms/token and
+yes (r=0.761929 [0.660779, 0.835898]). The scenario transition is bracketed by
+those grid points, not identified as a physical threshold. The ±10% and ±20%
+points also give yes. Token jitter ±10 ms gives inconclusive and ±25 ms gives
+yes. Per-token jitter averages down across hundreds of tokens; it cannot stand
+for context/DVFS variation across episodes. The full sweep is below.
+
+The no-upload-stall worlds are **counterfactuals**: the pinned llama.cpp blocks
+dependent expert work on uploads. Their sensor-isolation results do not describe
+the pinned hardware configuration. Even their six INA seeds vary from 0.722260
+to 0.783327, splitting between yes and inconclusive under the fixed comparison.
+
+The permitted fallbacks limit every table and verdict here. **F4:** required
+r=0.647120 comes from the marginal Stage A effect, so it does not establish the
+conditional increment's design power; a timing-conditional Stage A effect is
+needed. **F5:** energy-only and forecast columns subtract the simulator's true
+running level, unavailable on hardware. A stuck 12.5 W sensor consequently gives
+energy-only yes while its primary increment is undefined/inconclusive.
+**F6:** the nominal cross-validated Fisher interval is not null-calibrated and
+can be biased negative without signal. The reviewer measured noise-only
+r=-0.20 [-0.39, 0.003] and default NVML r=-0.589 [-0.81, -0.21]; the fixed
+noise-only probe is -0.205398 [-0.392680, -0.001760]. Thus no is not a measured
+absence of signal, and yes is not demonstrated hardware design power.
 
 These are conditional design decisions, not findings that sabotage is detectable.
 Stage A effect size, within-condition routing spread, transfer energy, sensor noise,
@@ -264,8 +290,9 @@ finite-sample t-test or a registered scientific threshold.
 
 ```text
 signal_sd_J_per_token = |energy_slope_J_per_token_per_stat| * within_condition_stat_sd
-white_noise_J = sqrt((noise_std_W^2 + q^2/12) * decode_duration_s * effective_sample_interval_s)
-rounding_contrast_SD_J = sqrt(2 * (q^2/12) * decode_duration_s * effective_sample_interval_s / n)
+rounding_contribution_W2 = Fourier error-square bound + noise/rounding covariance bound
+white_noise_J = sqrt((noise_std_W^2 + rounding_contribution_W2) * decode_duration_s * effective_sample_interval_s)
+rounding_contrast_SD_J = sqrt(2 * rounding_contribution_W2 * decode_duration_s * effective_sample_interval_s / n)
 noise_sd_J_per_token = hypot(white_noise_J/decode_tokens,
     phase_bias_std_J/decode_tokens, routing_energy_residual_std_J_per_token)
 model_r = signal_sd / hypot(signal_sd, noise_sd)
@@ -532,8 +559,30 @@ condition labels.
 
 ### Fix round 2: executed synthetic outcomes
 
-Re-execution of all round-2 reviewer worlds is pending. The final report will
-retain baseline and fixed outputs; prior-round numbers are historical.
+The following outcomes come from the real traffic -> sensor -> extraction ->
+group-held-out recovery chain at 0e5f17335, executed in CI 39739338982.
+Default worlds have 24 episodes; E2E worlds have 96. Intervals are nominal and
+verdicts compare with the marginal-effect scenario requirement (F4/F6 above).
+The energy column and fitted energy forecast use simulator running truth (F5).
+
+| World / sensor | Energy r [95% CI], simulator running level (F5) | Timing r [95% CI] | Mean power r [95% CI] | Increment r [95% CI] | Stage B scenario comparison |
+|---|---|---|---|---|---|
+| Default stalled INA | 0.774001 [0.523083, 0.901446] | 0.843815 [0.655352, 0.933370] | 0.847834 [0.663334, 0.935165] | 0.156939 [-0.294722, 0.551283] | no |
+| Default stalled NVML | 0.634586 [0.290765, 0.833261] | 0.843815 [0.655352, 0.933370] | 0.673615 [0.351958, 0.852979] | -0.532326 [-0.783882, -0.130658] | no |
+| E2E stalled INA | 0.784768 [0.692217, 0.851924] | 0.821391 [0.742314, 0.877902] | 0.844028 [0.773729, 0.893794] | 0.048994 [-0.156278, 0.250209] | no |
+| E2E stalled NVML | 0.274987 [0.076636, 0.452400] | 0.821391 [0.742314, 0.877902] | 0.279720 [0.081732, 0.456469] | 0.133760 [-0.071911, 0.328520] | no |
+| E2E counterfactual no-stall INA | 0.724566 [0.611759, 0.808490] | -0.010303 [-0.212480, 0.192720] | 0.723570 [0.610448, 0.807764] | 0.735609 [0.625652, 0.816906] | inconclusive |
+| E2E counterfactual no-stall NVML | 0.120411 [-0.084265, 0.315338] | -0.010303 [-0.212480, 0.192720] | 0.120470 [-0.084206, 0.315392] | 0.097389 [-0.108475, 0.295243] | no |
+| E2E counterfactual no-stall INA, contiguous 6.6 ms alternative | 0.810716 [0.727619, 0.870364] | -0.010303 [-0.212480, 0.192720] | 0.808374 [0.724406, 0.868706] | 0.821912 [0.742523, 0.878529] | yes |
+
+
+Hash-shaped IDs give bit-identical increment results in all four reviewer
+worlds; they no longer crash the runner. A condition-offset-only sensor gives
+no in all four counterfactual cases and inconclusive in the stalled case.
+Independent random timing covariates pass all three lead probes; worst changes
+0.008362, 0.046779 and 0.014352 are below their respective constant-covariate
+95% half-widths 0.096817, 0.201692 and 0.077526. These bars are the lead's
+printed-uncertainty rule, not tuned bounds.
 
 A counterfactual no-upload-stall world does not describe the pinned llama.cpp:
 the pinned implementation blocks on expert uploads (source discussion above).
@@ -556,8 +605,38 @@ Uniform +/-20% has SD 20%/sqrt(3)=11.55% of mean compute time,
 exceeding the requested 5% reach even after the scenario upload stalls. The measured sweep axis is within-condition
 SD of episode-mean decode time (mean of the two condition population SDs).
 
-The scenario grid will be printed by the round-2 regression test. Verdicts
-and the transition point will be updated from that execution.
+Executed by test_between_episode_timing_sweep in the round-2 regression module:
+
+#### Blocking-upload INA
+
+| Scenario input (grid point) | Within-condition SD of episode-mean decode time (ms/token) | Increment r [nominal 95% CI] | Scenario verdict |
+|---|---:|---|---|
+| Token jitter ±2 ms | 0.368832 | 0.048994 [-0.156278, 0.250209] | no |
+| Token jitter ±10 ms | 0.447588 | 0.543588 [0.382200, 0.672798] | inconclusive |
+| Token jitter ±25 ms | 0.816151 | 0.757955 [0.655447, 0.833042] | yes |
+| Episode factor ±0% (token jitter ±2 ms) | 0.368832 | 0.048994 [-0.156278, 0.250209] | no |
+| Episode factor ±2.5% (token jitter ±2 ms) | 0.868869 | 0.686035 [0.560681, 0.780649] | inconclusive |
+| Episode factor ±5% (token jitter ±2 ms) | 1.575544 | 0.761929 [0.660779, 0.835898] | yes |
+| Episode factor ±10% (token jitter ±2 ms) | 3.043434 | 0.796699 [0.707873, 0.860719] | yes |
+| Episode factor ±20% (token jitter ±2 ms) | 6.010339 | 0.772448 [0.674944, 0.843439] | yes |
+
+#### Counterfactual no-upload-stall INA
+
+| Scenario input (grid point) | Within-condition SD of episode-mean decode time (ms/token) | Increment r [nominal 95% CI] | Scenario verdict |
+|---|---:|---|---|
+| Token jitter ±2 ms | 0.071625 | 0.735609 [0.625652, 0.816906] | inconclusive |
+| Token jitter ±10 ms | 0.292804 | 0.755908 [0.652705, 0.831569] | yes |
+| Token jitter ±25 ms | 0.779390 | 0.788357 [0.696502, 0.854791] | yes |
+| Episode factor ±0% (token jitter ±2 ms) | 0.071625 | 0.735609 [0.625652, 0.816906] | inconclusive |
+| Episode factor ±2.5% (token jitter ±2 ms) | 0.757150 | 0.764849 [0.664703, 0.837994] | yes |
+| Episode factor ±5% (token jitter ±2 ms) | 1.499974 | 0.781413 [0.687071, 0.849844] | yes |
+| Episode factor ±10% (token jitter ±2 ms) | 2.988072 | 0.774920 [0.678282, 0.845207] | yes |
+| Episode factor ±20% (token jitter ±2 ms) | 5.965506 | 0.787803 [0.695748, 0.854397] | yes |
+
+The final stalled grid point reaches 6.010339 ms/token SD at mean 54.403347
+ms/token (11.05%); the counterfactual final point reaches 5.965506 at mean
+48.915798 (12.20%). Both exceed the lead's required 5% sweep reach.
+Grid values are scenarios, not measured variance estimates or acceptance bars.
 
 The original shunt-slice acquisition, cold cache guard and device-fit arithmetic
 are unchanged. One dropped reading retains numeric coverage and flags; blind
