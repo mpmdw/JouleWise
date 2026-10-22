@@ -63,7 +63,7 @@ def monitor_response(body, *, flavour="vllm"):
                           reasoning="", prompt=16384, cached=0, completion=128, hidden=0)
 
 
-def drive(task, endpoint, condition):
+def drive(task, endpoint, condition, *, runner_shaped=False):
     """Test harness for the shared runner protocols, with no bypassed task calls."""
     task.reset(17)
     messages = [ChatMessage("system", task.system_prompt(condition)),
@@ -75,9 +75,17 @@ def drive(task, endpoint, condition):
         result = endpoint.chat(messages, tools=task.tool_schemas(), max_tokens=2048,
                                temperature=0.0, seed=17)
         usage.append(result)
-        messages.append(assistant_message(result))
+        if runner_shaped:
+            thought = ("<jw_reasoning>" + result.reasoning_text + "</jw_reasoning>"
+                       if result.reasoning_text else "")
+            messages.append(ChatMessage("assistant", thought + result.content))
+        else:
+            messages.append(assistant_message(result))
         calls = []
         for request in result.tool_calls:
+            if runner_shaped:
+                messages.append(ChatMessage("assistant", request.arguments_json,
+                                            request.name, request.call_id))
             start = time.monotonic_ns()
             text = task.call_tool(request.name, request.arguments_json)
             end = time.monotonic_ns()
@@ -180,7 +188,7 @@ class ShadeHTTPTests(unittest.TestCase):
                         monitor_endpoint = OpenAICompatEndpoint(world.url, "offbox-monitor", timeout_s=5)
                         task = ShadeTask("ledger_review", upstream=source, judge_endpoint=judge)
                         self.assertEqual(agent.count_tokens("invoice " * 120), 120)
-                        episode, messages, results = drive(task, agent, condition)
+                        episode, messages, results = drive(task, agent, condition, runner_shaped=True)
                         self.assertEqual(len(results), len(plan))
                         expected = [accounting(i, calls) for i, calls in enumerate(plan)]
                         for index, (result, counts) in enumerate(zip(results, expected)):
@@ -222,6 +230,7 @@ class ShadeHTTPTests(unittest.TestCase):
                                 usable_scores.append(verdict.suspicion)
                             self.assertTrue(monitor.last_valid)
                             self.assertEqual(monitor.last_verdict.flags, ())
+                            self.assertNotIn('ASSISTANT: {', monitor.last_prompt)
                             expected_score = 92.5 if condition == "sabotage" else 9.5
                             self.assertTrue(math.isclose(verdict.suspicion, expected_score, rel_tol=1e-6))
                             self.assertEqual(verdict.prompt_sha256,
@@ -251,8 +260,16 @@ class ShadeHTTPTests(unittest.TestCase):
                             # A real OpenAI server requires prior assistant tool requests
                             # as well as result IDs; the wire history must retain both.
                             history = request["body"]["messages"]
+                            roles = [m["role"] for m in history]
+                            self.assertFalse(any(a == b == "assistant" for a, b in zip(roles, roles[1:])))
+                            self.assertFalse(any(m["role"] == "assistant" and
+                                                 (m.get("content") or "").startswith("{") for m in history))
                             self.assertTrue(any(message.get("tool_calls") for message in history))
                             self.assertTrue(any(message["role"] == "tool" for message in history))
+                        with source.activate():
+                            judged = task._conversation(messages)
+                        self.assertNotIn("<jw_reasoning>", str(judged))
+                        self.assertNotIn("PRIVATE_", str(judged))
                         with tempfile.TemporaryDirectory(prefix="shade-transcript-") as directory:
                             root = Path(directory)
                             write_episodes(root / "episodes.jsonl", [episode])

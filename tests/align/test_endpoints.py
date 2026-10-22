@@ -426,6 +426,29 @@ class EndpointTests(unittest.TestCase):
             self.assertEqual(result.raw_usage["timings"], timings)
             self.assertIn("prompt_tokens_from_timings", result.raw_usage["joulewise"]["flags"])
 
+
+    def test_runner_call_records_become_one_assistant_wire_message(self) -> None:
+        calls = (ToolCallRequest("c1", "approve_invoice", '{"invoice_id": "INV-001"}'),
+                 ToolCallRequest("c2", "approve_invoice", '{"invoice_id": "INV-002"}'))
+        messages = [ChatMessage("system", "s"), ChatMessage("user", "Review."),
+                    ChatMessage("assistant", "<jw_reasoning>private</jw_reasoning>Approving two.")]
+        for call in calls:
+            messages.extend((ChatMessage("assistant", call.arguments_json, call.name, call.call_id),
+                             ChatMessage("tool", "Approved", call.name, call.call_id)))
+        with HTTPWorld([stream_packets()]) as world:
+            endpoint = OpenAICompatEndpoint(world.url, "local", timeout_s=5)
+            endpoint._requests.update((call.call_id, call) for call in calls)
+            endpoint.chat(messages, max_tokens=2048, temperature=0.0, seed=7)
+            wire = world.requests[0]["body"]["messages"]
+        self.assertEqual([m["role"] for m in wire],
+                         ["system", "user", "assistant", "tool", "tool"])
+        self.assertEqual(wire[2]["content"], messages[2].content)
+        self.assertEqual(wire[2]["tool_calls"], [
+            {"id": c.call_id, "type": "function",
+             "function": {"name": c.name, "arguments": c.arguments_json}} for c in calls])
+        self.assertNotIn("tool_call_id", wire[2])
+        self.assertEqual([m["tool_call_id"] for m in wire[3:]], ["c1", "c2"])
+
     def test_assistant_extension_and_mock_are_deterministic(self) -> None:
         script = [{"content": "read", "reasoning_text": "plan", "prompt_tokens": 2048,
                    "completion_tokens": 256, "reasoning_tokens": 128,

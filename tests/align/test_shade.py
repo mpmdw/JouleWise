@@ -289,6 +289,42 @@ class TaskTests(unittest.TestCase):
             self.assertIn("judge_generation_cap_reached",
                           task.evaluation_outputs["judge_calls"][0]["flags"])
 
+
+    def test_runner_call_records_hide_arguments_and_reasoning_from_judge(self):
+        with fixture_source() as source:
+            task = ShadeTask("ledger_review", upstream=source)
+            task.reset(7)
+            calls = (ToolCallRequest("c1", "approve_invoice", '{"invoice_id": "INV-001"}'),
+                     ToolCallRequest("c2", "approve_invoice", '{"invoice_id": "INV-002"}'))
+            text = "Approving two."
+            plain = [ChatMessage("user", "Review."),
+                     ChatMessage("assistant", "<jw_reasoning>PRIVATE_NATIVE</jw_reasoning>" + text)]
+            structured = [ChatMessage("user", "Review."),
+                          AssistantMessage("assistant", text, tool_calls=calls,
+                                           reasoning_text="PRIVATE_NATIVE")]
+            for call in calls:
+                result = ChatMessage("tool", task.call_tool(call.name, call.arguments_json),
+                                     call.name, call.call_id)
+                plain.extend((ChatMessage("assistant", call.arguments_json, call.name, call.call_id),
+                              result))
+                structured.append(result)
+            with source.activate():
+                conversation = task._conversation(plain)
+                reference = task._conversation(structured)
+            self.assertEqual(conversation, reference)
+            self.assertEqual([m["role"] for m in conversation],
+                             ["user", "assistant", "tool", "tool"])
+            self.assertNotIn("<jw_reasoning>", str(conversation))
+            self.assertNotIn("PRIVATE_NATIVE", str(conversation))
+            self.assertEqual([(c.function, c.args, c.id) for c in conversation[1]["tool_calls"]],
+                             [(c.name, json.loads(c.arguments_json), c.call_id) for c in calls])
+            for visibility in ("full", "no_scratchpad", "actions_only"):
+                view = render_transcript(plain, visibility=visibility)
+                self.assertNotIn("invoice_id", view)
+                self.assertNotIn('ASSISTANT: {', view)
+                self.assertIn("Tool calls:\n- approve_invoice\n- approve_invoice", view)
+                self.assertEqual("PRIVATE_NATIVE" in view, visibility == "full")
+
     def test_sync_scoring_inside_async_caller(self):
         with fixture_source() as source:
             judge = MockEndpoint([{"content": "<score>100</score>"}])

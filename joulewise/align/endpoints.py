@@ -37,6 +37,38 @@ def assistant_message(result: ChatResult) -> AssistantMessage:
                             reasoning_text=result.reasoning_text)
 
 
+def _coalesce_assistant_calls(messages: Sequence[ChatMessage]) -> list[ChatMessage]:
+    """Fold the runner's per-call records into their assistant turn.
+
+    A plain assistant message with tool_call_id contains arguments, never
+    visible text. Results can be interleaved with these call records; collect
+    all calls on the preceding assistant and leave its results in order.
+    Structured AssistantMessage transcripts already have the desired shape.
+    """
+    output: list[ChatMessage] = []
+    assistant_index: int | None = None
+    for message in messages:
+        if message.role == "assistant" and message.tool_call_id is not None:
+            if assistant_index is None:
+                assistant_index = len(output)
+                output.append(AssistantMessage("assistant", ""))
+            previous = output[assistant_index]
+            call = ToolCallRequest(message.tool_call_id, message.name or "", message.content)
+            calls = list(getattr(previous, "tool_calls", ()))
+            if call not in calls:
+                calls.append(call)
+            output[assistant_index] = AssistantMessage(
+                "assistant", previous.content, previous.name, previous.tool_call_id,
+                tuple(calls), getattr(previous, "reasoning_text", ""))
+            continue
+        output.append(message)
+        if message.role == "assistant":
+            assistant_index = len(output) - 1
+        elif message.role != "tool":
+            assistant_index = None
+    return output
+
+
 class _Reader:
     def __init__(self, reader: Any, received: list[int]) -> None:
         self.reader, self.received = reader, received
@@ -191,6 +223,7 @@ class OpenAICompatEndpoint:
                 flags.append("connection_retry")
 
     def _messages(self, messages: Sequence[ChatMessage], flags: list[str]) -> list[dict[str, Any]]:
+        messages = _coalesce_assistant_calls(messages)
         output = []
         for index, message in enumerate(messages):
             value: dict[str, Any] = {"role": message.role, "content": message.content}

@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Sequence
 
+from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.align.records import MonitorVerdict, Visibility
 from joulewise.align.shade.upstream import PinnedUpstream
@@ -18,14 +19,17 @@ def strip_scratchpad(text: str) -> str:
     """Match the pin's closed, case-sensitive thinking/system_instructions rule.
 
     Unclosed tags remain visible, as upstream does. Local <think> tags are not
-    upstream scratchpads. Whitespace is collapsed after removing closed pairs.
+    upstream scratchpads. Runner jw_reasoning spans are a native reasoning
+    channel. Whitespace is collapsed after removing closed pairs.
     """
+    text = re.sub(r"<jw_reasoning>.*?</jw_reasoning>", "", text, flags=re.DOTALL)
     text = re.sub(r"<(thinking|system_instructions)>.*?</\1>", "", text, flags=re.DOTALL)
     return re.sub(r"\s+", " ", text).strip()
 
 
 def render_transcript(transcript: Sequence[ChatMessage], *, visibility: Visibility) -> str:
     """SHADE's names-only tool view; arguments remain hidden in every visibility."""
+    transcript = _coalesce_assistant_calls(transcript)
     lines = []
     for index, message in enumerate(transcript):
         if message.role == "system":

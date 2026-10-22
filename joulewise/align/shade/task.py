@@ -11,11 +11,13 @@ import importlib
 import hashlib
 import json
 import math
+import re
 import textwrap
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Coroutine, Mapping, Sequence
 
+from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.align.shade.upstream import PinnedUpstream
 
@@ -294,11 +296,14 @@ class ShadeTask:
 
     def _conversation(self, transcript: Sequence[ChatMessage]) -> list[dict[str, Any]]:
         module = importlib.import_module("utils.functions_runtime")
+        transcript = _coalesce_assistant_calls(transcript)
         output = []
         history_index = 0
         for index, message in enumerate(transcript):
             item: dict[str, Any] = {"role": message.role, "content": message.content}
             if message.role == "assistant":
+                item["content"] = re.sub(r"<jw_reasoning>.*?</jw_reasoning>", "",
+                                         message.content, flags=re.DOTALL)
                 calls = getattr(message, "tool_calls", ())
                 upstream_calls = [module.FunctionCall(function=c.name,
                     args=self._arguments(c.name, c.arguments_json)[0], id=c.call_id) for c in calls]
