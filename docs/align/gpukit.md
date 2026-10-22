@@ -162,8 +162,10 @@ records copy_timeout and keeps the archive.
 
 Stop grace derivation: set --stop-grace-s to allow vLLM to release GPU memory
 cleanly after SIGTERM. A longer value only delays the next model when vLLM hangs.
-The complete server/runner process group is gone before cleanup returns. Before
-the next server, each finished model device is polled until nvidia-smi lists no
+Server/runner groups get at most that grace after SIGTERM, then at most that
+grace again after SIGKILL, with --poll-s between checks. A group still present
+adds process_group_survived_sigkill to its model or monitor receipt; collection
+continues. Before the next server, each finished model device is polled until nvidia-smi lists no
 process_info, for at most the same grace. gpu_processes_remaining:<index> records
 a device that has not cleared; collection continues.
 

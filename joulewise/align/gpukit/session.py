@@ -326,8 +326,9 @@ def _enable_child_reaping() -> None:
             raise OSError(ctypes.get_errno(), "PR_SET_CHILD_SUBREAPER")
 
 
-def _stop_group(process: subprocess.Popen, *, grace_s: float) -> None:
-    """Return only after the complete group is gone, including worker children."""
+def _stop_group(process: subprocess.Popen, *, grace_s: float,
+                poll_s: float) -> tuple[str, ...]:
+    """Bound both signal waits; record a group stuck in a driver call."""
     _enable_child_reaping()
     pgid = process.pid
 
@@ -346,27 +347,22 @@ def _stop_group(process: subprocess.Popen, *, grace_s: float) -> None:
         except ProcessLookupError:
             return False
 
-    deadline = time.monotonic() + grace_s
-    try:
-        os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
-        process.wait()
-        return
-    try:
-        process.wait(timeout=grace_s)
-    except subprocess.TimeoutExpired:
-        pass
-    while alive() and time.monotonic() < deadline:
-        # Yield to exiting children; zero is a scheduler yield, not a time bar.
-        time.sleep(0)
-    if alive():
+    for stop_signal in (signal.SIGTERM, signal.SIGKILL):
         try:
-            os.killpg(pgid, signal.SIGKILL)
+            os.killpg(pgid, stop_signal)
         except ProcessLookupError:
-            pass
-    process.wait()
-    while alive():
-        time.sleep(0)
+            process.poll()
+            return ()
+        deadline = time.monotonic() + grace_s
+        while alive():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            # Operator cadence is a wait, not a scientific comparison bar.
+            time.sleep(min(poll_s, remaining))
+        else:
+            return ()
+    return ("process_group_survived_sigkill",) if alive() else ()
 
 
 def _wait_gpu_clear(devices: Sequence[int], *, directory: Path,
@@ -404,7 +400,7 @@ def _wait_gpu_clear(devices: Sequence[int], *, directory: Path,
 
 
 def _runner_command(argv: Sequence[str], log: Path, *, timeout_s: float,
-                    grace_s: float) -> tuple[int, bool]:
+                    grace_s: float, poll_s: float) -> tuple[int, bool, tuple[str, ...]]:
     """A runner owns a process group; a timeout must stop its samplers too."""
     _enable_child_reaping()
     with log.open("wb") as handle:
@@ -417,8 +413,8 @@ def _runner_command(argv: Sequence[str], log: Path, *, timeout_s: float,
             timed_out = True
             code = -1
         finally:
-            _stop_group(process, grace_s=grace_s)
-    return code, timed_out
+            stop_flags = _stop_group(process, grace_s=grace_s, poll_s=poll_s)
+    return code, timed_out, stop_flags
 
 
 def _serve_argv(options: SessionOptions, model: dict[str, Any], port: int) -> list[str]:
@@ -702,9 +698,11 @@ def run_session(options: SessionOptions, *,
                                 "device_indices": json.dumps(devices),
                                 "session_id": receipt["session_id"]}
                             command = [part.format_map(mapping) for part in runner_command]
-                            code, timed_out = _runner_command(
+                            code, timed_out, stop_flags = _runner_command(
                                 command, model_dir / "runner.log",
-                                timeout_s=options.runner_timeout_s, grace_s=options.stop_grace_s)
+                                timeout_s=options.runner_timeout_s, grace_s=options.stop_grace_s,
+                                poll_s=options.poll_s)
+                            model_receipt["flags"].extend(stop_flags)
                             model_receipt["runner_returncode"] = code
                             if code:
                                 model_receipt["flags"].append("runner_command_failed")
@@ -721,7 +719,8 @@ def run_session(options: SessionOptions, *,
                     model_receipt["flags"].append(f"model_run_failed:{type(exc).__name__}")
                 finally:
                     if process is not None:
-                        _stop_group(process, grace_s=options.stop_grace_s)
+                        model_receipt["flags"].extend(_stop_group(
+                            process, grace_s=options.stop_grace_s, poll_s=options.poll_s))
                         model_receipt["server_returncode"] = process.returncode
                         model_receipt["flags"].extend(_wait_gpu_clear(
                             devices, directory=model_dir, options=options))
@@ -748,7 +747,10 @@ def run_session(options: SessionOptions, *,
         receipt["data_complete"] = False
     finally:
         if monitor_process is not None:
-            _stop_group(monitor_process, grace_s=options.stop_grace_s)
+            stop_flags = _stop_group(monitor_process, grace_s=options.stop_grace_s,
+                                     poll_s=options.poll_s)
+            receipt["monitor_server"].setdefault("flags", []).extend(stop_flags)
+            flags.extend(stop_flags)
             receipt["monitor_server"]["returncode"] = monitor_process.returncode
         if monitor_log is not None:
             monitor_log.close()

@@ -1161,18 +1161,65 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
             "Path(sys.argv[1]).write_text('ready'); time.sleep(30)", str(ready)],
             start_new_session=True)
-        self.addCleanup(lambda: process.poll() is None and _stop_group(process, grace_s=0.05))
+        self.addCleanup(lambda: process.poll() is None and _stop_group(process, grace_s=0.05, poll_s=0.01))
         # Existing 30 s fixture setup budget, no timing assertion on scheduler latency.
         import time
         deadline = time.monotonic() + 30
         while not ready.exists() and time.monotonic() < deadline:
             time.sleep(0.01)  # Existing fixture readiness polling cadence.
         self.assertTrue(ready.exists())
-        _stop_group(process, grace_s=0.05)  # Operator-selected cleanup policy for this stub.
+        _stop_group(process, grace_s=0.05, poll_s=0.01)  # Operator-selected cleanup policy for this stub.
         self.assertEqual(process.returncode, -signal.SIGKILL)
         with self.assertRaises(ProcessLookupError):
             os.killpg(process.pid, 0)
 
+
+
+    def test_stop_group_bounds_sigkill_survival_without_busy_wait(self):
+        from unittest.mock import Mock, patch
+        from joulewise.align.gpukit import session
+        process = Mock(pid=12345)
+        clock = [0.0]
+
+        def sleep(seconds):
+            self.assertGreater(seconds, 0)  # No scheduler-yield busy loop.
+            clock[0] += seconds
+
+        # Explicit cleanup policy: two 50 ms phases, 10 ms cadence. This
+        # injected clock tests a scheduling bound, not a measured quantity.
+        grace_s, poll_s = 0.05, 0.01
+        with patch.object(session, "_enable_child_reaping"), \
+             patch.object(session.os, "waitpid", side_effect=ChildProcessError), \
+             patch.object(session.os, "killpg"), \
+             patch.object(session.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(session.time, "sleep", side_effect=sleep) as sleeps:
+            flags = session._stop_group(process, grace_s=grace_s, poll_s=poll_s)
+        self.assertEqual(flags, ("process_group_survived_sigkill",))
+        self.assertLessEqual(clock[0], 2 * grace_s + poll_s)
+        self.assertTrue(sleeps.called)
+        process.wait.assert_not_called()
+
+    def test_group_cleanup_flags_reach_model_runner_and_monitor_receipts(self):
+        from unittest.mock import patch
+        from joulewise.align.gpukit import session
+        original = session._stop_group
+        stopped = []
+
+        def stop(process, **policy):
+            flags = original(process, **policy)
+            stopped.append(process.pid)
+            return (*flags, "process_group_survived_sigkill")
+
+        with patch.object(session, "_stop_group", side_effect=stop):
+            result = run_session(self._options("cleanup-flags", monitor_placement="gpu",
+                                               monitor_gpu_index=1, monitor_port=8001))
+        self.assertEqual(len(stopped), 5)  # Two runners, two agents, one monitor.
+        self.assertTrue(result["data_complete"])  # Cleanup observations are flags only.
+        self.assertIn("process_group_survived_sigkill", result["flags"])
+        for model in result["models"]:
+            # Runner and server each contribute a cleanup observation.
+            self.assertEqual(model["flags"].count("process_group_survived_sigkill"), 2)
+        self.assertIn("process_group_survived_sigkill", result["monitor_server"]["flags"])
 
     def test_different_served_checkpoint_fails_before_hardware(self):
         from unittest.mock import patch
