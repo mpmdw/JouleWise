@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import time
+import http.client
 import unittest
 from collections import deque
 from contextlib import AbstractContextManager
@@ -20,34 +22,40 @@ def stream_packets(*, flavour: str = "vllm", content: str = "Done.",
                    reasoning: str = "Plan carefully.", calls: tuple[dict, ...] = (),
                    prompt: int = 4096, cached: int = 3072, completion: int = 512,
                    hidden: int = 384) -> dict[str, Any]:
-    """A production-sized accounting record; all counts are exact fixture integers."""
+    """Wire fields from the vLLM/llama.cpp source excerpts in shade_port.md.
+
+    Counts are exact scripted integers. llama.cpp does not report reasoning
+    counts, even when it emits separated reasoning text.
+    """
     chunks = [
         {"choices": [{"index": 0, "delta": {"role": "assistant"}}]},
-        {"choices": [{"index": 0, "delta": {"reasoning_content": reasoning}}]},
+        {"choices": [{"index": 0, "delta": {"reasoning" if flavour == "vllm" else "reasoning_content": reasoning}}]},
         {"choices": [{"index": 0, "delta": {"content": content}}]},
     ]
     for index, call in enumerate(calls):
         name = call["name"]
         arguments = json.dumps(call["arguments"])
-        # Split both function name and JSON across SSE records, as servers do.
+        # Server identifiers are complete fields; JSON arguments stream in pieces.
         split = len(arguments) // 2
         chunks.extend([
             {"choices": [{"index": 0, "delta": {"tool_calls": [
                 {"index": index, "id": call["id"], "type": "function",
-                 "function": {"name": name[:len(name) // 2], "arguments": arguments[:split]}}]}}]},
+                 "function": {"name": name, "arguments": arguments[:split]}}]}}]},
             {"choices": [{"index": 0, "delta": {"tool_calls": [
-                {"index": index, "function": {"name": name[len(name) // 2:],
-                                             "arguments": arguments[split:]}}]}}]},
+                {"index": index, "function": {"arguments": arguments[split:]}}]}}]},
         ])
     final = {"choices": [], "usage": {
         "prompt_tokens": prompt, "completion_tokens": completion,
         "prompt_tokens_details": {"cached_tokens": cached},
-        "completion_tokens_details": {"reasoning_tokens": hidden},
     }}
+    if flavour == "vllm":
+        final["usage"]["completion_tokens_details"] = {"reasoning_tokens": hidden}
     if flavour == "llamacpp":
-        # llama.cpp supplies timings alongside OpenAI usage; preserve every field.
+        # tools/server/server-task.cpp puts timings on the final usage chunk.
         final["timings"] = {"cache_n": cached, "prompt_n": prompt - cached,
                             "predicted_n": completion, "prompt_ms": 240.5, "predicted_ms": 8640.25}
+    chunks.append({"choices": [{"index": 0, "delta": {},
+                                "finish_reason": "tool_calls" if calls else "stop"}]})
     chunks.append(final)
     return {"chunks": chunks}
 
@@ -59,6 +67,7 @@ class HTTPWorld(AbstractContextManager):
         self.packets = deque(packets)
         self.requests: list[dict[str, Any]] = []
         self.errors: list[BaseException] = []
+        self.emitted_ns: list[int] = []
         world = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -81,6 +90,7 @@ class HTTPWorld(AbstractContextManager):
                         self.wfile.flush()
                         self.connection.shutdown(socket.SHUT_RDWR)
                         return
+                    time.sleep(packet.get("header_delay_s", 0))
                     self.send_response(packet.get("status", 200))
                     is_json = "json" in packet
                     self.send_header("Content-Type", "application/json" if is_json else "text/event-stream")
@@ -89,7 +99,9 @@ class HTTPWorld(AbstractContextManager):
                         self.wfile.write(json.dumps(packet["json"]).encode())
                     else:
                         self.wfile.write(b": heartbeat\n\n")
-                        for chunk in packet.get("chunks", []):
+                        for index, chunk in enumerate(packet.get("chunks", [])):
+                            time.sleep(packet.get("delays_s", {}).get(index, 0))
+                            world.emitted_ns.append(time.monotonic_ns())
                             self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode())
                             self.wfile.flush()
                         if not packet.get("omit_done"):
@@ -137,7 +149,7 @@ class EndpointTests(unittest.TestCase):
                 # Server counters are integers, so bit identity is the accounting property.
                 self.assertEqual((result.prompt_tokens, result.cached_prompt_tokens,
                                   result.completion_tokens, result.reasoning_tokens),
-                                 (4096, 3072, 512, 384))
+                                 (4096, 3072, 512, 384 if flavour == "vllm" else 0))
                 self.assertEqual(result.reasoning_text, "Plan carefully.")
                 self.assertEqual(result.content, "Done.")
                 self.assertEqual(result.tool_calls[0], ToolCallRequest(
@@ -145,7 +157,8 @@ class EndpointTests(unittest.TestCase):
                 self.assertEqual(len(result.tool_calls), 2)
                 self.assertLessEqual(result.start_ns, result.first_token_ns)
                 self.assertLessEqual(result.first_token_ns, result.end_ns)
-                self.assertEqual(result.raw_usage["joulewise"]["flags"], [])
+                self.assertEqual(result.raw_usage["joulewise"]["flags"],
+                                 [] if flavour == "vllm" else ["reasoning_tokens_unreported"])
                 if flavour == "llamacpp":
                     # Exact equality compares untouched JSON, not independent measurements.
                     self.assertEqual(result.raw_usage["timings"],
@@ -161,11 +174,29 @@ class EndpointTests(unittest.TestCase):
                 self.assertEqual([c["id"] for c in sent], ["call_read", "call_list"])
                 self.assertTrue(world.requests[0]["body"]["stream_options"]["include_usage"])
 
-    def test_first_token_is_reasoning_or_content_never_role_or_tool(self) -> None:
-        with HTTPWorld([stream_packets(content="", reasoning="", hidden=0, calls=(
-                {"id": "only", "name": "end_task", "arguments": {}},))]) as world:
-            result = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5))
-            self.assertIsNone(result.first_token_ns)
+    def test_first_token_tracks_reasoning_and_tool_generation(self) -> None:
+        # This is the reviewer's timing world: 200 ms prefill, then six
+        # reasoning deltas 100 ms apart. A 50 ms bar is half the smallest
+        # wrong-delta offset (100 ms); stamping role is about 200 ms early.
+        for flavour in ("vllm", "llamacpp"):
+            for thinking, tool in ((True, False), (True, True), (False, True), (False, False)):
+                key = "reasoning" if flavour == "vllm" else "reasoning_content"
+                generated = ([{key: "step %d of the private plan. " % n} for n in range(6)]
+                             if thinking else [])
+                generated.append({"tool_calls": [{"index": 0, "id": "c",
+                    "function": {"name": "end_task", "arguments": "{}"}}]} if tool else {"content": "Done."})
+                packet = stream_packets(flavour=flavour, hidden=42 if thinking else 0)
+                packet["chunks"] = (
+                    [{"choices": [{"index": 0, "delta": {"role": "assistant"}}]}]
+                    + [{"choices": [{"index": 0, "delta": d}]} for d in generated]
+                    + packet["chunks"][-2:])
+                packet["delays_s"] = {1: 0.20, **{i: 0.10 for i in range(2, len(generated) + 1)}}
+                with self.subTest(flavour=flavour, thinking=thinking, tool=tool), HTTPWorld([packet]) as world:
+                    result = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5))
+                    self.assertIsNotNone(result.first_token_ns)
+                    self.assertLess(abs(result.first_token_ns - world.emitted_ns[1]), 50_000_000)
+                    self.assertEqual(len(result.reasoning_text), 168 if thinking else 0)
+                    self.assertEqual(len(result.tool_calls), int(tool))
 
     def test_empty_reasoning_delta_is_not_unreported_work(self) -> None:
         cases = (
@@ -181,13 +212,15 @@ class EndpointTests(unittest.TestCase):
                                   hidden=hidden):
                     packet = stream_packets(flavour=flavour, reasoning=reasoning, hidden=hidden)
                     if not reported:
-                        del packet["chunks"][-1]["usage"]["completion_tokens_details"]
+                        packet["chunks"][-1]["usage"].pop("completion_tokens_details", None)
                     with HTTPWorld([packet]) as world:
                         client = OpenAICompatEndpoint(world.url, "local", timeout_s=5)
                         result = self.chat(client)
                     self.assertEqual(result.reasoning_text, reasoning)
                     # Exact server integers; missing counts retain the contract's zero.
-                    self.assertEqual(result.reasoning_tokens, hidden)
+                    expected = hidden if flavour == "vllm" and reported else 0
+                    self.assertEqual(result.reasoning_tokens, expected)
+                    flagged = bool(reasoning) and expected == 0
                     self.assertEqual("reasoning_tokens_unreported" in
                                      result.raw_usage["joulewise"]["flags"], flagged)
                     self.assertEqual("reasoning_tokens_unreported" in client.flags, flagged)
@@ -195,8 +228,12 @@ class EndpointTests(unittest.TestCase):
     def test_tokenize_both_shapes(self) -> None:
         worlds = [
             ([{"json": {"count": 120, "tokens": list(range(120))}}], 1),
-            ([{"status": 400, "json": {"error": "content required"}},
+            ([{"respond": lambda body: {"json": {"tokens": list(range(
+                len(body.get("content", "").split())))}}}], 1),
+            ([{"json": {"tokens": []}},
               {"json": {"tokens": [{"id": n, "piece": "x"} for n in range(120)]}}], 2),
+            ([{"status": 422, "json": {"error": "schema"}},
+              {"json": {"tokens": list(range(120))}}], 2),
         ]
         for packets, count in worlds:
             with HTTPWorld(packets) as world:
@@ -204,12 +241,14 @@ class EndpointTests(unittest.TestCase):
                 self.assertEqual(client.count_tokens("invoice " * 120), 120)
                 self.assertEqual(len(world.requests), count)
                 self.assertTrue(all(r["path"] == "/tokenize" for r in world.requests))
+                self.assertEqual(world.requests[0]["body"]["content"], "invoice " * 120)
+                self.assertTrue(any(flag.startswith("tokenize_shape:") for flag in client.flags))
                 if count == 2:
                     self.assertEqual(world.requests[-1]["body"], {"content": "invoice " * 120})
 
     def test_retry_only_before_any_response_byte(self) -> None:
         cases = [
-            ([{"disconnect": True}, stream_packets()], 2, True),
+            ([{"disconnect": True}], 1, False),
             ([{"partial_header": b"HTTP/1.1 "}], 1, False),
             ([{"status": 503, "json": {"error": "unavailable"}}], 1, False),
             ([{**stream_packets(), "omit_done": True}], 1, False),
@@ -224,6 +263,54 @@ class EndpointTests(unittest.TestCase):
                     self.assertEqual(result.raw_usage["joulewise"]["retries"][0]["received_bytes"], 0)
                 else:
                     self.assertIn("stream_missing_done", result.raw_usage["joulewise"]["flags"])
+
+    def test_retry_connect_failure_but_never_a_sent_request_timeout(self) -> None:
+        connect = http.client.HTTPConnection.connect
+        attempts = []
+
+        def fail_first(conn):
+            attempts.append(True)
+            if len(attempts) == 1:
+                raise ConnectionRefusedError("synthetic failed connect")
+            return connect(conn)
+
+        with HTTPWorld([stream_packets()]) as world:
+            with patch.object(http.client.HTTPConnection, "connect", fail_first):
+                client = OpenAICompatEndpoint(world.url, "local", timeout_s=5)
+                result = self.chat(client)
+            self.assertEqual(len(world.requests), 1)
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(len(result.raw_usage["joulewise"]["retries"]), 1)
+        # Operator transport budgets: delay exceeds timeout to force the
+        # post-send failure. Only exact request/retry counts are asserted.
+        with HTTPWorld([{**stream_packets(), "header_delay_s": 0.15}]) as world:
+            client = OpenAICompatEndpoint(world.url, "local", timeout_s=0.05)
+            result = self.chat(client)
+            self.assertEqual(len(world.requests), 1)
+            self.assertEqual(client.retries, [])
+            self.assertIn("request_timeout_after_connect", result.raw_usage["joulewise"]["flags"])
+
+    def test_repeated_identifiers_conflicts_and_generation_caps(self) -> None:
+        chunks = [
+            {"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0,
+                "id": "c1", "function": {"name": "end_task", "arguments": "{"}}]}}]},
+            {"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0,
+                "id": "c1", "function": {"name": "end_task", "arguments": "}"}}]}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "length"}]},
+            {"choices": [], "usage": {"prompt_tokens": 4096, "completion_tokens": 512}},
+        ]
+        conflicting = json.loads(json.dumps(chunks))
+        conflicting[1]["choices"][0]["delta"]["tool_calls"][0].update(
+            id="other", function={"name": "other", "arguments": "}"})
+        with HTTPWorld([{"chunks": chunks}, {"chunks": conflicting}]) as world:
+            client = OpenAICompatEndpoint(world.url, "local", timeout_s=5)
+            first, second = self.chat(client), self.chat(client)
+            self.assertEqual(first.tool_calls, (ToolCallRequest("c1", "end_task", "{}"),))
+            self.assertNotIn("tool_call_id_conflict", first.raw_usage["joulewise"]["flags"])
+            self.assertIn("tool_call_id_conflict", second.raw_usage["joulewise"]["flags"])
+            self.assertIn("tool_call_name_conflict", second.raw_usage["joulewise"]["flags"])
+            self.assertEqual(first.raw_usage["joulewise"]["finish_reason"], "length")
+            self.assertIn("generation_cap_reached", first.raw_usage["joulewise"]["flags"])
 
     def test_missing_counts_and_unsafe_url_are_flags(self) -> None:
         with HTTPWorld([{"chunks": [{"choices": [{"delta": {"content": "partial"}}]}]}]) as world:
