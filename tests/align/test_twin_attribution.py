@@ -462,6 +462,11 @@ class ProductionWorldAgreement(unittest.TestCase):
             self.assertEqual("segment.shorter_than_period" in g.flags,
                              t1 - t0 < trace.nominal_interval_ns)
             expected = lane_reading_half_width(trace, mapping, t0, t1)
+            if g is got.total and trace.unit == "W" and trace.averaging_window_ns is None:
+                # Independent per-tile reconstruction retains all point phase
+                # edges. The episode takes max(own, summed tile bounds).
+                expected = max(expected, math.fsum(lane_reading_half_width(
+                    trace, mapping, s.start_ns, s.end_ns) for s in ref.segments))
             width_bar = 1e-6 * max(1.0, expected)  # No printed uncertainty: 1e-6 rule.
             self.assertLessEqual(abs(g.half_width_j - expected), width_bar, (t0, t1, g))
             if expected > 0:

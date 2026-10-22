@@ -251,7 +251,7 @@ The remaining center error for coefficient d is
 
     (d/i) * sum_edges o_edge*(P_out_edge-b_edge)
 
-Its boundary bound is the sum of (d/i)*o_edge*R_base_edge, in seconds times
+Its deconvolution edge term is the sum of (d/i)*o_edge*R_base_edge, in seconds times
 watts. R_base_edge is the observed range of fully outside baseline readings
 on that side of that replay. Preserve outside_idle_baseline_assumed and
 outside_baseline_stationarity_assumed: outside power during the straddle must
@@ -262,11 +262,17 @@ bounds instantaneous power in [0,B], both outside power and y lie in [0,B],
 so that portion contributes (d/i)*o_edge*B. Without B its boundary term is
 infinite. Preserve the energy and all flags in either case.
 
-The old center is retained as boundary_uncorrected_joules; the old
-inside/outside local-range width is boundary_observed_range_bound_j. The
-boundary_start_range_w/end_range_w and boundary_range_fallback_global flags
-refer to that old diagnostic. They do not set the corrected boundary width.
-This audit path permits comparison with the independent, unchanged twin.
+The old center is retained as boundary_uncorrected_joules. The boundary
+width is max(boundary_deconvolution_bound_j,
+boundary_observed_range_bound_j), taking the max of the two total terms.
+The latter is the inside/outside local-range width, using
+boundary_start_range_w/end_range_w and boundary_range_fallback_global.
+boundary_monotone_transition_assumed records its assumption that
+outside-adjacent power stays within the near-edge reading range, as for a
+monotone decay or rise between inside and baseline levels. The center stays
+unchanged. The narrow deconvolution term may replace the max only after a
+pilot measures the board's post-run tail. The raw-center audit path permits
+comparison with the independent legacy twin.
 A known original-window timing half-width h contributes
 (d/i)*min(h,w)*R after deconvolution. Coverage and timing use observed global
 ranges and their stated assumptions. Preserve observed_range_bounds_assumed.
@@ -274,7 +280,9 @@ The combined half-width adds nominal 95% repeatability and additive
 sensitivity bounds; it is not an unconditional confidence interval for
 arbitrary unobserved work. Hardware calibration remains PROVISIONAL.
 
-Numeric flags expose observed_reading_range_w, coverage_bound_j, boundary_bound_j, boundary_start_range_w, boundary_end_range_w,
+Numeric flags expose observed_reading_range_w, coverage_bound_j,
+boundary_deconvolution_bound_j, boundary_observed_range_bound_j,
+boundary_bound_j, boundary_start_range_w, boundary_end_range_w,
 timing_bound_j, unreplicated_phase_bound_j, repeatability_half_width_j,
 resolution_bound_j and auxiliary_center_bound_j (each followed by =<value>).
 Preserve them beside the result. A supplied instantaneous power_bound_w also supports missing-baseline
@@ -336,6 +344,12 @@ Attribution half-widths are additive bounds. Use
 energy_residual.turn_energy_from_attribution and pass
 uncertainty_kind="additive_bound" for whole-episode scores and divergence.
 Bounds read in SD formulas retain their values and flags. Normal-theory
-hidden-token power is a labelled conservative upper value to print beside
-calibrated power. A failed bound-fed frontier gate returns diverges=None:
+hidden-token power is labelled uncertainty.normal_theory_uncalibrated and
+printed beside H_cal. Reading turn bounds as SDs inflates measurement
+variance in the fit and makes the Paule-Mandel sigma2 estimate too small.
+In the cold replay, bound-fed H_min was conservative only with an episode
+half-width equal to the linear sum of turn bounds (detection 0.8705 at target
+0.80); independent 2 J episode bounds gave below-target detection, 0.6975
+and 0.7665 in the two turn-bound worlds. It is not a guaranteed upper value.
+A failed bound-fed frontier gate returns diverges=None:
 it cannot establish no divergence. A positive bound-fed gate remains True.
