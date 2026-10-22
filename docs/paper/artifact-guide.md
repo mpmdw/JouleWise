@@ -67,7 +67,7 @@ Every bundle also carries a schema version and clock-anchor method. `joulewise/u
 
 ### Pulse-projection deadline
 
-Run one complete multi-pulse accepted-region projection—the search that encloses every pulse-edge lag pair permitted by the fit's loss limit—with the frozen default work limits. The primary reproducible limit is 1,710,000 evaluated cells (`joulewise/powermetrics_fiducial.py:77-90`; raised from 165,000 on 2026-09-30 under CAP-RULE-25G83-1: ten times the largest number of cells any capture needed to finish in the replay of 88 retained captures that sized it, 170,965 cells, rounded up to the next 10,000). The code calls the second limit the “FROZEN supplementary host-safety deadline” and fixes it at 120.0 s; it “only catches unexpected per-cell cost or host pathologies that a cell count cannot bound” (`joulewise/powermetrics_fiducial.py:91-94`). One cell counter and one monotonic-clock deadline are shared across every pulse in the detection attempt. Before evaluating another cell, the detector checks the cell limit first and then the 120 s deadline (`joulewise/powermetrics_fiducial.py:524-552`). If either limit is exhausted, discard every partial pulse fit and issue invalid evidence with `detection_nonconvergent`, no fitted pulses, and no `b_fiducial_s`; never retain a truncated accepted region as a calibration result (`joulewise/powermetrics_fiducial.py:976-1010`).
+Run one complete multi-pulse accepted-region projection—the search that encloses every pulse-edge lag pair permitted by the fit's loss limit—with the frozen default work limits. The primary reproducible limit is 1,710,000 evaluated cells (`joulewise/powermetrics_fiducial.py:77-90`; raised from 165,000 on 2026-09-30 under CAP-RULE-25G83-1: ten times the largest number of cells any capture needed to finish in the replay of 88 retained captures that sized it, 170,965 cells, rounded up to the next 10,000). The code calls the second limit the “FROZEN supplementary host-safety deadline” and fixes it at 120.0 s; it “only catches unexpected per-cell cost or host pathologies that a cell count cannot bound” (`joulewise/powermetrics_fiducial.py:91-94`). One cell counter and one monotonic-clock deadline are shared across every pulse in the detection attempt. Before evaluating another cell, the detector checks the cell limit first and then the 120 s deadline (`joulewise/powermetrics_fiducial.py:526-552`). If either limit is exhausted, discard every partial pulse fit and issue invalid evidence with `detection_nonconvergent`, no fitted pulses, and no `b_fiducial_s`; never retain a truncated accepted region as a calibration result (`joulewise/powermetrics_fiducial.py:978-1012`).
 
 ### Reference repeatability and whole-window drift allowance
 
@@ -297,10 +297,10 @@ A.3.6 bound and validity
 - Worked B_fiducial_v3 = 0.030067931757111657 and difference 0.0289329345611147592: r4-derivation.json (`b_fiducial_v3_s`) minus `effective_clock_anchor_bound_s`, verified with `decimal`.
 
 A.3.7 budget
-- Cell budget 1 710 000 (CAP-RULE-25G83-1, commit 34bfea7c9; 165 000 before 2026-09-30), recalibration note, wall budget 120 s: pf:77–94. Shared across pulses: pf:524–531, 976–979. Consume-before-evaluate and cell-check-before-wall: pf:533–552, 670.
-- Pre-cell deadline semantics (checked in `consume_cell` only): pf:533–550.
-- Clock origin = `time.monotonic()` at budget construction (pf:530), constructed at pf:976–979 after `_baseline_stats` (pf:975) and before the fit loop (pf:980–991).
-- Exhaustion discards all fits, `detection_nonconvergent`: pf:992–1010; reproducibility labelling pf:1525–1545. Example evaluated count 122 859: r4-derivation.json.
+- Cell budget 1 710 000 (CAP-RULE-25G83-1, commit 34bfea7c9; 165 000 before 2026-09-30), recalibration note, wall budget 120 s: pf:77–94. Shared across pulses: pf:526–533, 978–981. Consume-before-evaluate and cell-check-before-wall: pf:535–552, 670.
+- Pre-cell deadline semantics (checked in `consume_cell` only): pf:535–552.
+- Clock origin = `time.monotonic()` at budget construction (pf:532), constructed at pf:978–981 after `_baseline_stats` (pf:977) and before the fit loop (pf:982–993).
+- Exhaustion discards all fits, `detection_nonconvergent`: pf:994–1012; reproducibility labelling pf:1527–1547. Example evaluated count 122 859: r4-derivation.json.
 
 ### 10.2 Known gaps and caveats
 
