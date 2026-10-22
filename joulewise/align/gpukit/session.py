@@ -1,8 +1,8 @@
 """Run a provider-neutral GPU session and preserve every outcome in a bundle.
 
-The runner command is an argv template, not shell text. It consumes this lane's
-matrix format and writes shared Episode JSONL. This adapter keeps a missing
-runner, sampler or router capture visible while the parallel lanes integrate.
+A custom runner command is an argv template, not shell text. The default uses
+the provisional runner-format adapter and documented CLI. Missing runner,
+sampler or router capture stays visible while the parallel lanes integrate.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from joulewise.align.gpukit.matrix import load_matrix
+from joulewise.align.gpukit.runner_adapter import write_runner_matrix
 from joulewise.align.records import read_episodes
 
 VLLM_VERSION = "0.10.2"  # Operator-selected reproducibility pin; no hardware compatibility claim.
@@ -49,6 +50,7 @@ class SessionOptions:
     port: int = 8000
     destination: str | None = None
     copy_kind: str = "rsync"
+    runner_settings: Path | None = None
 
 
 def whole_gpu(*, gpu_index: int, timeout_s: float) -> dict[str, Any]:
@@ -251,9 +253,22 @@ def run_session(options: SessionOptions, *,
     try:
         matrix, matrix_flags = load_matrix(options.matrix)
         flags.extend(matrix_flags)
-        if not options.runner_command:
-            flags.append("runner_command_missing")
-            matrix_flags = (*matrix_flags, "runner_command_missing")
+        runner_command = options.runner_command
+        settings: dict[str, Any] = {}
+        if not runner_command:
+            # The runner CLI is documented on its lane, pending spine integration.
+            runner_command = (sys.executable, "-m", "joulewise.align", "run",
+                              "--matrix", "{runner_matrix}")
+            try:
+                settings = json.loads(options.runner_settings.read_text(encoding="utf-8")) if options.runner_settings else {}
+                if not isinstance(settings, dict):
+                    settings = {}
+                    flags.append("runner_settings_invalid")
+            except (OSError, ValueError) as exc:
+                flags.append(f"runner_settings_unreadable:{type(exc).__name__}")
+            if not settings:
+                flags.append("runner_settings_missing")
+                matrix_flags = (*matrix_flags, "runner_settings_missing")
         if _command([sys.executable, "-m", "pip", "freeze"], output / "packages.log",
                     timeout_s=options.command_timeout_s):
             flags.append("package_provenance_unavailable")
@@ -287,6 +302,15 @@ def run_session(options: SessionOptions, *,
                 endpoint = f"http://127.0.0.1:{options.port}"
                 model_receipt: dict[str, Any] = {"model": model["id"], "flags": []}
                 receipt["models"].append(model_receipt)
+                runner_path = model_dir / "runner-matrix.json"
+                if not options.runner_command:
+                    adapter_flags = write_runner_matrix(
+                        runner_path, matrix, model=model["id"], endpoint=endpoint,
+                        output_dir=model_dir, settings=settings)
+                    model_receipt["flags"].extend(adapter_flags)
+                    if any(f != "runner_adapter_provisional" for f in adapter_flags):
+                        flags.extend(model_receipt["flags"])
+                        continue
                 argv = [*options.vllm_command, "serve", model["id"],
                         "--host", "127.0.0.1", "--port", str(options.port),
                         "--served-model-name", model["id"],
@@ -309,11 +333,12 @@ def run_session(options: SessionOptions, *,
                         model_receipt["flags"].extend(ready)
                         if not ready:
                             mapping = {"matrix": str(output / "matrix.json"), "model": model["id"],
+                                       "runner_matrix": str(runner_path),
                                        "endpoint": endpoint,
                                        "output": str(model_dir / "episodes.jsonl"),
                                        "sample_interval_ns": str(matrix["sampling"]["interval_ns"]),
                                        "router_logging": str(matrix["kind"] == "moe_stage_a").lower()}
-                            command = [part.format_map(mapping) for part in options.runner_command]
+                            command = [part.format_map(mapping) for part in runner_command]
                             if command:
                                 code = _command(command, model_dir / "runner.log",
                                                 timeout_s=options.command_timeout_s)
@@ -355,7 +380,8 @@ def run_session(options: SessionOptions, *,
             flags.append("output_symlink_omitted")
         receipt["data_complete"] = bool(
             matrix and not matrix_flags and len(receipt["models"]) == len(matrix["models"])
-            and all(not any(f.startswith(("endpoint_", "runner_", "episode_", "model_run_failed"))
+            and all(not any(f.startswith(("endpoint_", "runner_", "episode_", "model_run_failed", "budget_runner_"))
+                            and f != "runner_adapter_provisional"
                             for f in model["flags"]) for model in receipt["models"]))
         if receipt["status"] != "refused":
             receipt["status"] = "completed_with_flags" if flags else "completed"
@@ -387,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("matrix", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--runner-command", type=_argv, default=())
+    parser.add_argument("--runner-settings", type=Path)
     parser.add_argument("--preflight-command", type=_argv, default=())
     parser.add_argument("--ready-command", type=_argv, default=())
     parser.add_argument("--vllm-command", type=_argv, default=("vllm",))

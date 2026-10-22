@@ -18,6 +18,7 @@ import unittest
 
 from joulewise.align.gpukit.cost import estimate, printable, work_counts
 from joulewise.align.gpukit.throughput import ceilings
+from joulewise.align.gpukit.runner_adapter import runner_matrix, write_runner_matrix
 from joulewise.align.gpukit.matrix import expand, load_matrix, validate
 from joulewise.align.gpukit.session import (
     IsolationError, SessionOptions, package_results, run_session, verify_manifest, whole_gpu,
@@ -133,6 +134,10 @@ class MatrixTests(unittest.TestCase):
         # No uncertainty on arithmetic: prescribed 1e-6 relative agreement.
         self.assertTrue(math.isclose(prefill, (1979e12 / 2) / (2 * 3.3e9), rel_tol=1e-6))
         self.assertTrue(math.isclose(decode, 3.35e12 / (2 * 3.3e9), rel_tol=1e-6))
+        # MoE total weights occupy 30.5B * 2 bytes, above L40S's 48GB,
+        # while the ceiling calculation correctly uses only active weights.
+        l40 = estimate(matrix, "L40S-PCIe-48GB")
+        self.assertIn("model_bf16_weights_exceed_device_memory:Qwen/Qwen3-30B-A3B", l40.flags)
         matrix["gpu_classes"]["H100-SXM-80GB"]["hardware"]["memory_bandwidth_bytes_s"]["value"] = None
         result = estimate(matrix, "H100-SXM-80GB")
         self.assertIn("throughput_source_unavailable", result.flags)
@@ -146,6 +151,48 @@ class MatrixTests(unittest.TestCase):
         for episodes, monitors in work_counts(matrix).values():
             self.assertEqual(episodes, 32 * (3 + 3 * 7 * 2))
             self.assertEqual(monitors, 32 * 3 * 11)
+
+
+class RunnerAdapterTests(unittest.TestCase):
+    def test_documented_matrix_keys_and_round_trip(self):
+        matrix, _ = load_matrix(CONFIG / "moe_stage_a.json")
+        # Run limits/order are explicit synthetic inputs, not production cutoffs.
+        settings = dict(task_factory="fixture.task", endpoint_factory="fixture.endpoint",
+                        monitor_factory="fixture.monitor", sampler_factory="fixture.power",
+                        token_counter_factory="fixture.tokens", max_turns=12,
+                        max_tokens=8000, order_seed=0, temperature=0.0,
+                        imports=["fixture.factories"], endpoint_config={"custom": "retained"})
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "model-0"
+            value, flags = runner_matrix(matrix, model=matrix["models"][0]["id"],
+                                         endpoint="http://127.0.0.1:8000", output_dir=output,
+                                         settings=settings)
+            self.assertEqual(flags, ("runner_adapter_provisional",))
+            self.assertEqual(set(value), {
+                "matrix_id", "order_seed", "task_pairs", "conditions", "seeds", "endpoints",
+                "monitors", "samplers", "token_counter", "max_turns", "max_tokens",
+                "temperature", "output_dir", "imports"})
+            self.assertEqual(len(value["task_pairs"]) * len(value["conditions"]) * len(value["seeds"]), 30)
+            self.assertEqual([x["task_pair"] for x in value["task_pairs"]], matrix["tasks"])
+            self.assertEqual(value["monitors"][0]["visibilities"], matrix["monitor_visibilities"])
+            self.assertEqual(value["samplers"][0]["config"]["interval_ns"], matrix["sampling"]["interval_ns"])
+            self.assertTrue(value["endpoints"][0]["config"]["router_logging"])
+            self.assertEqual(value["endpoints"][0]["config"]["custom"], "retained")
+            path = Path(temporary) / "runner-matrix.json"
+            written = write_runner_matrix(path, matrix, model=matrix["models"][0]["id"],
+                                           endpoint="http://127.0.0.1:8000", output_dir=output,
+                                           settings=settings)
+            self.assertEqual(written, flags)
+            self.assertEqual(json.loads(path.read_text()), value)  # Exact serialization identity.
+
+    def test_missing_factories_and_budget_are_flags(self):
+        matrix, _ = load_matrix(CONFIG / "budget.json")
+        value, flags = runner_matrix(matrix, model=matrix["models"][0]["id"],
+                                     endpoint="http://127.0.0.1:8000", output_dir=Path("."),
+                                     settings={})
+        self.assertEqual(value, {})
+        self.assertIn("budget_runner_adapter_required", flags)
+        self.assertIn("runner_adapter_factory_missing:endpoint", flags)
 
 
 @unittest.skipUnless(shutil.which("bash"), "bootstrap requires Bash")
@@ -354,6 +401,48 @@ raise SystemExit(1)
         self.assertEqual(len(episodes), 5 * 2 * 3)  # All requested integer trial rows.
         self.assertTrue(all(e.router_log is None and e.power_traces for e in episodes))
         self.assertEqual(moe["models"][0]["runner_returncode"], 0)
+
+    def test_default_runner_emits_matrix_and_missing_settings_are_flags(self):
+        missing = run_session(self._options("settings-missing", runner_command=()))
+        self.assertIn("runner_settings_missing", missing["flags"])
+        self.assertFalse(missing["data_complete"])
+        self.assertEqual(verify_manifest(self.base / "settings-missing"), ())
+        settings = self.base / "runner-settings.json"
+        settings.write_text(json.dumps(dict(
+            task_factory="fixture.task", endpoint_factory="fixture.endpoint",
+            monitor_factory="fixture.monitor", sampler_factory="fixture.power",
+            token_counter_factory="fixture.tokens", max_turns=12, max_tokens=8000,
+            order_seed=0, temperature=0.0)), encoding="utf-8")
+        # The runner lane is absent on the spine. Its CLI should be attempted
+        # through the real subprocess path, preserving failure and translated
+        # matrices. If an integrated checkout has it, unknown fixture factories
+        # still yield flagged episodes rather than scientific data.
+        options = self._options("default-runner", runner_command=(), runner_settings=settings)
+        receipt = run_session(options)
+        self.assertIn("runner_adapter_provisional", receipt["flags"])
+        self.assertFalse(receipt["data_complete"])
+        for path in sorted(options.output.glob("model-*/runner-matrix.json")):
+            value = json.loads(path.read_text())
+            self.assertEqual(value["output_dir"], str(path.parent))
+            self.assertEqual(value["samplers"][0]["factory"], "fixture.power")
+        self.assertEqual(len(list(options.output.glob("model-*/runner-matrix.json"))), 2)
+        self.assertEqual(verify_manifest(options.output), ())
+
+    def test_default_budget_keeps_requested_conditions_as_flags(self):
+        settings = self.base / "budget-settings.json"
+        settings.write_text(json.dumps(dict(
+            task_factory="fixture.task", endpoint_factory="fixture.endpoint",
+            monitor_factory="fixture.monitor", sampler_factory="fixture.power",
+            token_counter_factory="fixture.tokens", max_turns=12, max_tokens=8000,
+            order_seed=0, temperature=0.0)), encoding="utf-8")
+        options = self._options("budget-default", matrix=CONFIG / "budget.json",
+                                runner_command=(), runner_settings=settings)
+        receipt = run_session(options)
+        self.assertIn("budget_runner_adapter_required", receipt["flags"])
+        self.assertFalse(receipt["data_complete"])
+        kept = json.loads((options.output / "matrix.json").read_text())
+        self.assertIn("thinking_on", kept["conditions"])
+        self.assertEqual(verify_manifest(options.output), ())
 
     def test_readiness_failure_still_seals_evidence(self):
         self._script("vllm", "#!/usr/bin/env python3\nraise SystemExit(1)\n")

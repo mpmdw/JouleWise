@@ -19,8 +19,10 @@ Power counts work; it cannot identify what one forward pass computes.
   generation episodes including calibration and paired no-hint generations,
   and 4,224 monitor calls. Deletion reuses generation energy.
 - gpukit/matrix.schema.json describes the lane-local input format;
-  matrix.validate adds expansion-count checks. No runner format exists
-  on the spine at the build base.
+  matrix.validate adds expansion-count checks. The format is v2 after replacing
+  invented rates with source-derived ceilings; the shared records are unchanged.
+- runner_adapter.py writes one provisional runner-format matrix per model;
+  the documented runner CLI is the default session command.
 - bootstrap.sh and session.py install and orchestrate serial campaigns.
 - cost.py calculates serial wall time, GPU-hours and a supplied hourly price.
 
@@ -31,45 +33,74 @@ spam_filter_update. No upstream source is vendored.
 
 ## Estimate and approval
 
-All throughput, setup, model-load, token-volume, tool-wait and router-overhead
-values are operator-editable planning parameters authored on 2026-10-22.
-They are NOT measured performance or vendor claims. Each parameter group has
-a source string saying this. Replace them using the approved hardware profile
-and preflight observations; preserve the plan and actual receipt.
+The configs derive optimistic, single-stream BF16 ceilings from the exact SKU
+specifications and model-card active parameter counts. Every physical input
+carries its URL, access date (2026-10-22), units and derivation:
 
-For each model the estimate is:
+- [NVIDIA A100 datasheet](https://images.nvidia.com/data-center/a100/a100-datasheet.pdf),
+  page 1: A100 SXM4 80GB has 2,039 GB/s bandwidth and 312 dense BF16 TFLOPS.
+- [NVIDIA H100 datasheet, hosted by Dell](https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf),
+  page 1: H100 SXM 80GB has 3.35 TB/s bandwidth. Its 1,979 sparse BF16 TFLOPS
+  become 989.5 dense TFLOPS by the datasheet's divide-by-two footnote.
+  These match the [NVIDIA specification table](https://www.nvidia.com/en-us/data-center/h100/).
+- [NVIDIA L40S datasheet, hosted by KRinfra](https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf),
+  page 2: L40S PCIe 48GB has 864 GB/s GDDR6 bandwidth and 362.05 dense BF16 TFLOPS.
+  Use the printed dense column, not half its inconsistent sparse column.
+  The [NVIDIA table](https://www.nvidia.com/en-us/data-center/l40s/) agrees.
+- Hugging Face cards give Qwen3 [4B](https://huggingface.co/Qwen/Qwen3-4B)
+  4.0B, [8B](https://huggingface.co/Qwen/Qwen3-8B) 8.2B,
+  [14B](https://huggingface.co/Qwen/Qwen3-14B) 14.8B and
+  [30B-A3B](https://huggingface.co/Qwen/Qwen3-30B-A3B) 30.5B total /
+  3.3B active parameters. [Phi-3.5-mini](https://huggingface.co/microsoft/Phi-3.5-mini-instruct)
+  is dense with 3.8B parameters. Dense models use total as active.
 
-    fresh episodes * (prefill tokens / prefill tokens per second
-                      + decode tokens / decode tokens per second
-                      + tool wait seconds + host overhead seconds)
+For active parameter count P, BF16 uses two bytes per weight and a multiply-add
+uses two FLOPs. The ceiling rates are bandwidth/(2P) decoded tokens/s and
+dense BF16 FLOP/s/(2P) prefill tokens/s. They omit KV reads and attention FLOPs,
+which increase with context, as well as launch and serving overheads. These
+are the brief's idealized full-weight-read bounds for serial single-stream BF16;
+they do not describe batching, quantization, speculative decode or cache reuse.
+The model-card counts are rounded inputs, not exact tensor inventories.
+Total resident parameters determine weight fit, even for MoE: 30.5B * 2 bytes
+already exceeds a 48GB L40S before KV cache. That profile needs another serving
+configuration; this condition is a flag, never a discarded requested row.
 
-Stage A multiplies that by 1 + router_overhead_fraction. Add monitor calls
-at their own model's throughput, setup, and (2 * model count + 1) model loads.
-The latter is a conservative serial agent/monitor swap plan. Actual runner
-scheduling can differ; it must not run a competing monitor on the sampled GPU
-during an agent episode. Multiply wall seconds by every allocated GPU and
-divide by 3,600 for billed GPU-hours. No batching, overlap or free installation
-is assumed.
+The lower bound sums prefill_tokens / prefill_ceiling and
+decode_tokens / decode_ceiling for all fresh generations and monitor calls.
+It excludes setup, model loading, tool waiting, host overhead and router overhead,
+whose current allowances are explicit operator inputs, not established minima.
 
-The committed scenario gives these hours on one GPU, rounded for planning.
-These are model calculations, not hardware evidence.
+Each model/GPU entry also has an efficiency fraction of the ceiling.
+No suitable measurement is established in this build: efficiency and its source
+are null, planning_wall_seconds is null, and throughput_efficiency_not_supplied
+is recorded. A supplied efficiency must carry a public measurement URL and date
+for the matching workload. Do not substitute an unrelated aggregate benchmark.
+With sourced efficiencies, cost.estimate divides each inference term by its
+efficiency, adds wait/host allowances, applies Stage A's router-overhead allowance,
+adds monitor work, setup and (2 * model count + 1) model loads. This is the
+retained serial swap policy. gpu_count multiplies billed time; it does not imply
+tensor-parallel acceleration.
 
-| Matrix | A100 80 GB | H100 80 GB | L40S 48 GB |
+The API retains full arithmetic precision. Configs and the cost CLI print two
+significant digits, matching the least precise active counts (4.0B and 3.3B).
+Lower bounds round down to preserve direction; planning values round to nearest.
+A lower bound cannot be used as Ed's rental budget.
+
+| Matrix | A100 SXM4 80GB lower bound (s) | H100 SXM 80GB lower bound (s) | L40S PCIe 48GB lower bound (s) |
 |---|---:|---:|---:|
-| SHADE | 4.16 | 2.93 | 4.44 |
-| MoE Stage A | 2.90 | 2.09 | 3.09 |
-| Budget | 61.27 | 37.37 | 66.69 |
+| SHADE | 2,800 | 1,700 | 6,500 |
+| MoE Stage A | 830 | 490 | 1,800 |
+| Budget | 91,000 | 54,000 | 210,000 |
 
-Use exact seconds from the estimator for approval. The budget scenario is
-large enough to require an explicit pilot-size choice. Its 32 slots and
-three seeds are editable inputs, not statistical recommendations.
-The attention baseline may not obey Qwen-specific thinking controls;
-unsupported controls remain flags.
+These are calculations on configured token-volume inputs, not observed run times.
+Budget pilot size and workload allowances remain explicit operator parameters.
+Its 32 slots and three seeds are not statistical recommendations. Unsupported
+thinking controls on the attention comparison model remain flags.
 
 Example prices are empty. Supply an actual quote:
 
     python3 -m joulewise.align.gpukit.cost configs/align/shade.json \
-      --gpu-class H100-80GB --usd-per-gpu-hour "$APPROVED_HOURLY_USD"
+      --gpu-class H100-SXM-80GB --usd-per-gpu-hour "$APPROVED_HOURLY_USD"
 
 Ed approves the provider/region, whole-GPU class/count, storage and return
 destination; immutable repo/model/dataset revisions and pilot size; a dated
@@ -86,12 +117,38 @@ python -m joulewise.align.power.preflight by module name, expecting the NVML
 lane's module. Stdout/stderr and return code are retained in preflight.log.
 A nonzero code becomes nvml_preflight_failed; evidence is retained.
 
-Pass the integrated runner as --runner-command, a JSON argv array. Session
-substitutes these fields, one model at a time:
+The default runner command is:
+
+    <session-python> -m joulewise.align run --matrix {runner_matrix}
+
+Supply --runner-settings with an operator-authored JSON object. It requires
+task_factory, endpoint_factory, monitor_factory, sampler_factory,
+token_counter_factory (registered names), order_seed, max_turns, max_tokens
+and temperature. Optional task_config, endpoint_config, monitor_config,
+sampler_config, token_counter_config dictionaries and an imports list pass
+through to the runner. Names and run limits are required parameters; no
+unmerged lane's factory names or production cutoffs are guessed here.
+
+The adapter injects task_pair, model/revision, loopback base_url ending /v1,
+sampling interval_ns and router_logging into the appropriate factory config.
+Factories must implement those parameters; the router request is not evidence
+that routing was captured. The per-model runner-matrix.json is bundled for review.
+Missing settings or unavailable factories remain flags and preserve the bundle.
+
+The adapter follows docs/align/runner.md on lane/2026-10-21-align-runner and
+remains PROVISIONAL until that lane merges and the real factories are rehearsed.
+It supports SHADE and MoE Stage A. Budget effort conditions require the budget
+driver: default translation records budget_runner_adapter_required, retains
+the requested matrix, and does no generation. Supply its integrated command
+with --runner-command; no budget conditions are relabeled.
+
+A custom --runner-command remains a JSON argv array. Session substitutes these
+fields, one model at a time:
 
 | Placeholder | Meaning |
 |---|---|
 | {matrix} | Absolute path to bundled normalized gpukit matrix |
+| {runner_matrix} | Per-model runner-format matrix (default adapter path only) |
 | {model} | Model ID to select from that matrix |
 | {endpoint} | Loopback vLLM base URL |
 | {output} | Required shared-record Episode JSONL output |
@@ -105,10 +162,9 @@ and no-hint generations, never duplicated deletion views. Keep trial journals
 and monitor outputs beside {output}; packaging includes them automatically.
 All cross-lane outputs use the shared records.
 
-The command adapter avoids inventing the absent runner CLI. Its concrete argv
-must be rehearsed on an integrated checkout before rental. Missing commands,
-preflight, power, output or router logs remain recorded flags. No runner command
-means no endpoint work.
+The concrete factories and argv must be rehearsed on an integrated checkout
+before rental. Missing runner, preflight, power, output or router logs remain
+recorded flags. Missing default-runner settings produce no endpoint work.
 
 The current MoE lane hooks target Hugging Face eager execution, not vLLM
 workers. A vLLM router-capture bridge remains a MoE/runner integration dependency.
@@ -138,20 +194,25 @@ the brief. Unknown/unavailable isolation information is flagged. Provider
 confirmation and NVML preflight must complete the tenancy check. Session
 checks the selected GPU; bootstrap's preliminary check uses GPU 0.
 
-After the integrated offline rehearsal and Ed's approval, supply RUNNER_ARGV_JSON
-as the concrete argv above and timeouts from the approved loading/campaign plan:
+After the integrated offline rehearsal and Ed's approval, supply RUNNER_SETTINGS
+as the path to the reviewed factory/limit settings JSON and timeouts from the
+approved loading/campaign plan. Budget uses --runner-command instead:
 
     bash joulewise/align/gpukit/bootstrap.sh configs/align/shade.json \
       --output /data/campaign-unique-id \
-      --runner-command "$RUNNER_ARGV_JSON" \
+      --runner-settings "$RUNNER_SETTINGS" \
       --ready-timeout-s "$APPROVED_MODEL_LOAD_TIMEOUT_S" \
       --command-timeout-s "$APPROVED_COMMAND_TIMEOUT_S" \
       --poll-s "$APPROVED_READINESS_POLL_S" \
       --destination return-host:/approved/results/ --copy-kind rsync
 
 Bootstrap creates .gpukit-venv (JOULEWISE_VENV overrides it), installs
-vllm==0.10.2 and this checkout, then enters session.py. --skip-install reuses
-a prepared environment; JOULEWISE_PYTHON selects the initial interpreter.
+vllm==0.10.2 and this checkout, then enters session.py. --skip-install selects
+$JOULEWISE_VENV/bin/python (default .gpukit-venv/bin/python) when executable
+and exports its bin directory so vllm resolves from the same environment.
+Without an existing venv it uses JOULEWISE_PYTHON or python3; that fallback
+requires an already prepared interpreter. JOULEWISE_PYTHON chooses the creator
+interpreter for a fresh installation; an existing venv wins on --skip-install.
 No CUDA install has been tested by this build.
 
 Session starts one agent endpoint on loopback, polls /health, invokes the

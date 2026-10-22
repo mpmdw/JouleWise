@@ -98,6 +98,12 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
 
     monitor_calls = 0
     for model, (episodes, monitors) in counts.items():
+        total = matrix["model_parameters"][model]["total_parameters"]
+        memory = gpu["hardware"]["memory_bytes"]["value"]
+        # Fit uses total resident BF16 weights, not the MoE active subset.
+        # Two bytes/weight is a physical storage conversion, before KV/allocator use.
+        if total is not None and memory is not None and 2 * total > memory:
+            flags.append("model_bf16_weights_exceed_device_memory:" + model)
         bound, plan = duration(model, work["prefill_tokens"], work["decode_tokens"])
         bounds.append(episodes * bound)
         plan += work["tool_wait_s"] + work["host_overhead_s"]
