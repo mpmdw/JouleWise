@@ -50,6 +50,9 @@ class StageAResult:
     predictions: dict[str, tuple[float, ...]]
     auc_gain: float
     auc_gain_interval: tuple[float, float]
+    auc_gain_fixed_prediction_interval: tuple[float, float]
+    auc_gain_interval_method: str
+    n_auc_gain_bootstrap_valid: int
     n_bootstrap: int
     confidence: float
     seed: int
@@ -192,8 +195,11 @@ def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
 
     Resample whole task groups with replacement, preserving every episode in a
     chosen group. Percentile intervals use the caller's bootstrap budget.
-    AUC intervals resample fixed out-of-fold predictions and are conditional on
-    those fitted models; they do not account for classifier-refitting uncertainty.
+    The gain interval refits both classifiers in every group-bootstrap draw.
+    Every copy of an original task group is held out together. Individual AUC
+    intervals and the separately named fixed-prediction gain interval remain
+    descriptive, conditional on the original fits. Confidence defaults to the
+    brief's conventional 95%; no data-dependent significance level is chosen.
     Both undefined and valid bootstrap replicate counts are disclosed.
     """
     episode_ids, labels, groups = [], [], []
@@ -290,11 +296,14 @@ def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
     statistics = {name: StatisticResult(**{**asdict(result), "p_holm": adjusted.get(name, math.nan)})
                   for name, result in raw.items()}
     predictions = {}
+    matrices = {}
     aucs = {}
     intervals = {}
+    flags.append("auc_intervals_fixed_predictions_descriptive")
     for name, columns in (("metadata", METADATA_FEATURES), ("routing", keys),
                           ("combined", METADATA_FEATURES + keys)):
         matrix = [tuple(row[column] for column in columns) for row in features]
+        matrices[name] = matrix
         scores, local_flags = _held_out_scores(matrix, labels, groups)
         flags.extend(f"{name}:{flag}" for flag in local_flags)
         predictions[name] = scores
@@ -309,10 +318,31 @@ def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
                               [labels[i] for i in indices])
              - mann_whitney_auc([predictions["metadata"][i] for i in indices],
                                [labels[i] for i in indices]) for indices in bootstrap]
-    return StageAResult(tuple(episode_ids), labels, groups, tuple(features),
-                        statistics, aucs, intervals, predictions, aucs["combined"] - aucs["metadata"],
-                        _interval(gains, confidence), n_bootstrap, confidence, seed,
-                        tuple(dict.fromkeys(flags)))
+    refitted_gains = []
+    for indices in bootstrap:
+        draw_labels = tuple(labels[i] for i in indices)
+        # Use original group identities, never a draw/copy index: otherwise
+        # duplicated tasks could leak into both training and evaluation folds.
+        draw_groups = tuple(groups[i] for i in indices)
+        draw_aucs = {}
+        for name in ("metadata", "combined"):
+            draw_scores, _ = _held_out_scores(
+                [matrices[name][i] for i in indices], draw_labels, draw_groups)
+            draw_aucs[name] = mann_whitney_auc(draw_scores, draw_labels)
+        refitted_gains.append(draw_aucs["combined"] - draw_aucs["metadata"])
+    n_valid = sum(math.isfinite(x) for x in refitted_gains)
+    if n_valid != n_bootstrap:
+        flags.append(f"undefined_refit_gain_bootstrap_replicates:{n_bootstrap - n_valid}")
+    return StageAResult(
+        episode_ids=tuple(episode_ids), labels=labels, groups=groups,
+        episode_features=tuple(features), statistics=statistics, aucs=aucs,
+        auc_intervals=intervals, predictions=predictions,
+        auc_gain=aucs["combined"] - aucs["metadata"],
+        auc_gain_interval=_interval(refitted_gains, confidence),
+        auc_gain_fixed_prediction_interval=_interval(gains, confidence),
+        auc_gain_interval_method="group_bootstrap_refit_percentile",
+        n_auc_gain_bootstrap_valid=n_valid, n_bootstrap=n_bootstrap,
+        confidence=confidence, seed=seed, flags=tuple(dict.fromkeys(flags)))
 
 
 def _json_safe(value):
