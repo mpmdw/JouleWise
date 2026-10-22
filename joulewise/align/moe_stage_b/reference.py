@@ -101,11 +101,11 @@ def reference_transfers(
             raise ValueError("unknown RouterLog phase")
         moved = 0
         for layer, experts in zip(log.layers, token):
-            wanted = {
-                (layer, expert)
-                for expert in experts
+            wanted_order = list(dict.fromkeys(
+                (layer, expert) for expert in experts
                 if (layer, expert) not in config.resident
-            }
+            ))
+            wanted = set(wanted_order)
             request_bytes = size_of(tuple(wanted))
             bypass = phase == "prefill" and config.prefill_mode == "bypass"
             if (
@@ -117,7 +117,7 @@ def reference_transfers(
                 continue
 
             before = set(probation) | set(protected)
-            hits = sorted(wanted & before)
+            hits = [key for key in wanted_order if key in before]
             misses = sorted(wanted - before)
             moved += size_of(misses)
 
