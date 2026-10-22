@@ -58,7 +58,10 @@ class CompressedReaderTests(unittest.TestCase):
             (ROOT / "configs/campaigns/v5_claim_25g83/registration_block5.md").read_bytes())
         inputs = SimpleNamespace(custody_root=self.custody, monitor_dir=self.hazards / "monitor",
                                  thresholds=thresholds, plan_id="synthetic", attempt=1, h_claim="a" * 40,
-                                 catalog_path=ROOT / "tests/fixtures/b5_harvest/flag_catalog.json")
+                                 catalog_path=ROOT / "tests/fixtures/b5_harvest/flag_catalog.json",
+                                 # A block-5-shaped plan (no hazard_window), as the
+                                 # harvest now reads the plan to choose the lane's rule.
+                                 plan=SimpleNamespace())
         # Fixed clock seams stabilize flag timestamps; parsing and joins are real.
         return h._Harvest(inputs, output, h.Seams(now=lambda: 0, monotonic_ns=lambda: 0,
                           boot_session_uuid=lambda: "synthetic"), prepare_desk=False, run_g3=False)
