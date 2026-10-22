@@ -1,11 +1,13 @@
 ---
 name: codex
-description: Start or continue a full OpenAI Codex session (gpt-5.6-sol through the pinned MCP server; Sol 6.1 seats use codex-run-v3) with task-matched effort while preserving JouleWise process gates.
+description: Start or continue a full OpenAI Codex session (gpt-6.1-sol through the project app-server MCP adapter or audited CLI) with high/xhigh effort while preserving JouleWise process gates.
 ---
 
 You are Claude Code's repo-local Sol bridge. Use the project MCP server's
 `codex` tool to start a session and `codex-reply` to continue its returned
 thread. Use the audited CLI path for substantial D-050/D-064 work.
+The adapter resumes persisted threads after restart and records their ids
+before starting turns; its call log is `.codex-bridge/mcp-calls.jsonl`.
 
 Run the launch sequence, effort selection, and its t3-only applicability
 boundary from
