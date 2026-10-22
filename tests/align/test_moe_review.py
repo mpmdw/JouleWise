@@ -7,14 +7,18 @@ verified Qwen3 topology and SHADE-shaped episode scenarios.
 from __future__ import annotations
 
 import math
+import os
 import random
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+import tempfile
 import time
 import tracemalloc
 import unittest
 from dataclasses import replace
+from unittest.mock import patch
 
 from joulewise.align.records import RouterLog
 from joulewise.align.moe import stats as S
@@ -72,36 +76,112 @@ class CostTests(unittest.TestCase):
                     rows.append(tuple(tuple(rng.sample(range(E), K)) for _ in range(L)))
         log = RouterLog("rev", E, K, tuple(range(L)), tuple(phases), tuple(rows))
         self.compare_paths(log)
-        # Analytic uniform-independent reuse is K/E. r1 prints three decimals;
-        # this fixture checks the same rounded production quantity, not a new
-        # numerical agreement tolerance on the random sampling realization.
+        # For independent uniform top-K draws, overlap is hypergeometric
+        # (E population, K marked, K drawn). Dividing by K gives mean K/E
+        # and variance sigma_squared below. Adjacent overlaps are independent
+        # conditional on their common set, with a set-independent law, so the
+        # mean over L*(T-1) pair-layer terms has this standard error.
+        # Five SE gives a normal-tail false failure probability below 6e-7;
+        # at E=128,K=8,L=48,T=52500 the bar is about 2.62e-4.
         result = S.episode_stats(log)
-        assert_close(self, round(result["both_reuse_fraction"], 3), round(K / E, 3))
+        T = len(log.experts)
+        sigma_squared = (1 / E) * ((E - K) / E) * ((E - K) / (E - 1))
+        bar = 5 * math.sqrt(sigma_squared / (L * (T - 1)))
+        self.assertLessEqual(abs(result["both_reuse_fraction"] - K / E), bar)
+        print("MOE_REVIEW_R2_REUSE_BAR", {"reuse": result["both_reuse_fraction"],
+                                        "expectation": K / E, "bar": bar}, flush=True)
 
+
+
+def run_twin_from_local_ref(root: Path) -> tuple[str, subprocess.CompletedProcess[str]]:
+    """Run locally available independent tests without changing the checkout."""
+    git = shutil.which("git")
+    if git is None:
+        raise unittest.SkipTest("independent MoE twin needs git")
+    ref = "origin/lane/2026-10-21-align-moe-twin"
+    resolved = subprocess.run([git, "rev-parse", "--verify", ref], cwd=root,
+                              capture_output=True, text=True)
+    if resolved.returncode:
+        raise unittest.SkipTest(f"independent MoE twin local ref unavailable: {ref}")
+    revision = resolved.stdout.strip()
+    paths = ("tests/align/twins/moe_twin.py",
+             "tests/align/twins/test_moe_twin_selfcheck.py",
+             "tests/align/test_twin_moe.py")
+    with tempfile.TemporaryDirectory() as directory:
+        target = Path(directory)
+        for package in ("tests", "tests/align", "tests/align/twins"):
+            (target / package).mkdir(exist_ok=True)
+            (target / package / "__init__.py").touch()
+        # At the round-2 twin revision, imports use only stdlib, joulewise,
+        # and these twin modules; no checkout test helpers need copying.
+        for path in paths:
+            blob = subprocess.run([git, "show", f"{revision}:{path}"], cwd=root,
+                                  check=True, capture_output=True, text=True).stdout
+            (target / path).write_text(blob, encoding="utf-8")
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join((directory, str(root))),
+                   PYTHONDONTWRITEBYTECODE="1")
+        process = subprocess.run(
+            [sys.executable, "-m", "unittest", "tests.align.test_twin_moe",
+             "tests.align.twins.test_moe_twin_selfcheck", "-v"],
+            cwd=target, env=env, capture_output=True, text=True)
+    return revision, process
 
 class ReviewerWorldTests(unittest.TestCase):
     def test_independent_twin_from_local_review_ref(self):
-        # Full-history CI checkout fetches public branches. Read the reviewer's
-        # files from that local ref; tests make no network requests and do not
-        # commit the fetched twin. The brief authorizes these untracked paths.
+        # CI checkout supplies the public ref; the test never fetches network data.
         root = Path(__file__).resolve().parents[2]
-        ref = "origin/lane/2026-10-21-align-moe-twin"
-        revision = subprocess.run(["git", "rev-parse", ref], cwd=root,
-                                  check=True, capture_output=True, text=True).stdout.strip()
-        paths = ("tests/align/twins/moe_twin.py",
-                 "tests/align/twins/test_moe_twin_selfcheck.py",
-                 "tests/align/test_twin_moe.py")
-        target = root / "tests/align/twins"
-        target.mkdir(exist_ok=True)
-        (target / "__init__.py").touch()
-        for path in paths:
-            blob = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=root,
-                                  check=True, capture_output=True, text=True).stdout
-            (root / path).write_text(blob, encoding="utf-8")
-        process = subprocess.run([sys.executable, "-m", "unittest", "tests.align.test_twin_moe", "-v"],
-                                 cwd=root, capture_output=True, text=True)
+        revision, process = run_twin_from_local_ref(root)
         print("MOE_TWIN_REVIEW_REF", revision, process.stdout, process.stderr, flush=True)
         self.assertEqual(process.returncode, 0)  # Every independent agreement test must pass.
+
+
+    def test_independent_twin_missing_git_or_ref_skips(self):
+        root = Path(__file__).resolve().parents[2]
+        with patch("shutil.which", return_value=None):
+            with self.assertRaisesRegex(unittest.SkipTest, "needs git"):
+                run_twin_from_local_ref(root)
+        missing = subprocess.CompletedProcess(["git"], 128, "", "unknown revision")
+        with patch("shutil.which", return_value="git"), patch("subprocess.run", return_value=missing):
+            with self.assertRaisesRegex(unittest.SkipTest, "local ref unavailable"):
+                run_twin_from_local_ref(root)
+
+    def test_independent_twin_preserves_checkout_files(self):
+        # Port the reviewer's local-edit repro into an isolated fake checkout.
+        # Only local git reads are mocked; the real Python subprocess imports
+        # the temporary twin package and the checkout's production package.
+        checkout = Path(__file__).resolve().parents[2]
+        real_run = subprocess.run
+        captured = []
+        fixture = (
+            "import unittest\n"
+            "from joulewise.align.moe.stats import episode_stats\n"
+            "class ImportTest(unittest.TestCase):\n"
+            "    def test_import(self):\n"
+            "        self.assertTrue(callable(episode_stats))\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "joulewise").symlink_to(checkout / "joulewise", target_is_directory=True)
+            local = root / "tests/align/test_twin_moe.py"
+            local.parent.mkdir(parents=True)
+            local.write_text("# local edit\n", encoding="utf-8")
+            before = sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+
+            def run(args, **kwargs):
+                if args[0] == "git":
+                    blob = "local-fixture-revision\n" if args[1] == "rev-parse" else fixture
+                    return subprocess.CompletedProcess(args, 0, blob, "")
+                captured.append(Path(kwargs["cwd"]))
+                self.assertNotEqual(Path(kwargs["cwd"]), root)
+                return real_run(args, **kwargs)
+
+            with patch("shutil.which", return_value="git"), patch("subprocess.run", side_effect=run):
+                _, process = run_twin_from_local_ref(root)
+            self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+            self.assertEqual(local.read_text(encoding="utf-8"), "# local edit\n")
+            self.assertEqual(sorted(str(p.relative_to(root)) for p in root.rglob("*")), before)
+            self.assertTrue(captured)
+            self.assertTrue(all(not p.exists() for p in captured))  # Temporary tests were removed.
 
     def test_review_r3_complete_missing_and_empty_decode(self):
         world = make_world(seed=11, f=0.25, count_ratio=1.3, L=8, E=64, K=6)
