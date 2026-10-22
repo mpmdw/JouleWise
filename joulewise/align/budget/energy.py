@@ -47,6 +47,11 @@ def episode_energy(episode: Episode, *,
         return Energy(None, flags=("energy_channel_missing",))
     values, bounds, flags = [], [], []
     for trace in traces:
+        if (trace.resolution is not None
+                and (not math.isfinite(trace.resolution) or trace.resolution < 0)):
+            return Energy(None, flags=("energy_resolution_invalid",))
+        if trace.averaging_window_ns is not None and trace.averaging_window_ns < 0:
+            return Energy(None, flags=("energy_averaging_window_invalid",))
         offset, uncertainty_ns = 0, 0
         if trace.clock_domain != episode.clock_domain:
             mappings = [m for m in episode.clock_mappings
