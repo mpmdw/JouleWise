@@ -84,9 +84,8 @@ from joulewise.align import metadata_baseline as mb
 from tests.align.test_metadata_baseline import synthetic_world
 
 
-def strip_hidden(ep):
-    return replace(ep, turns=tuple(replace(t, decode_tokens=t.decode_tokens - t.hidden_tokens,
-                                          hidden_tokens=0) for t in ep.turns))
+def zero_hidden_annotation(ep):
+    return replace(ep, turns=tuple(replace(t, hidden_tokens=0) for t in ep.turns))
 
 
 def add_scratchpad(ep, rng, lo, hi):
@@ -117,12 +116,12 @@ class _TimedCase(unittest.TestCase):
 
 class ReviewReproTests(_TimedCase):
     def assert_same_log_scores(self, episodes, *, l2):
-        stripped = [strip_hidden(e) for e in episodes]
-        for a, b in zip(episodes, stripped):
+        unannotated = [zero_hidden_annotation(e) for e in episodes]
+        for a, b in zip(episodes, unannotated):
             # Bit identity is the property: the logged integer feature inputs coincide.
             self.assertEqual(mb.features(a), mb.features(b))
         a = [s for _, s in mb.grouped_cv_scores(episodes, l2=l2)]
-        b = [s for _, s in mb.grouped_cv_scores(stripped, l2=l2)]
+        b = [s for _, s in mb.grouped_cv_scores(unannotated, l2=l2)]
         self.assertEqual(a, b)
         lab = [int(e.condition == "sabotage") for e in episodes]
         result = (mb.auc(a, lab), mb.delong_ci(a, lab))
@@ -144,11 +143,10 @@ class ReviewReproTests(_TimedCase):
                 turns.append(replace(t, tool_calls=calls, decode_tokens=dec))
             h.append(replace(ep, turns=tuple(turns)))
         for name, episodes in (("visible", eps), ("hidden_only", h)):
-            lane, stripped = self.assert_same_log_scores(episodes, l2=2)
+            lane, unannotated = self.assert_same_log_scores(episodes, l2=2)
             print(f"R2_SOLWORLD {name} lane_auc={lane[0]:.9f} "
-                  f"lane_delong_conditional_on_fitted_fold_models={tuple(lane[1])} "
-                  f"stripped_auc={stripped[0]:.9f} "
-                  f"stripped_delong_conditional_on_fitted_fold_models={tuple(stripped[1])}", flush=True)
+                  f"unannotated_auc={unannotated[0]:.9f} "
+                  f"identical={lane == unannotated}", flush=True)
 
     def test_r2_leak_exact_equality(self):
         # Ten worlds and 50-200 hidden tokens/turn replay the reviewer's compute budget.
@@ -172,9 +170,8 @@ class ReviewReproTests(_TimedCase):
                 results.append(self.assert_same_log_scores(eps2, l2=1.0))
             print(f"R2_LEAK timing={'held_fixed' if keep_time else 'physical'} "
                   f"lane_mean={statistics.mean(a[0] for a, b in results):.9f} "
-                  f"stripped_mean={statistics.mean(b[0] for a, b in results):.9f} "
-                  f"lane_first_delong_conditional_on_fitted_fold_models={tuple(results[0][0][1])} "
-                  f"stripped_first_delong_conditional_on_fitted_fold_models={tuple(results[0][1][1])}",
+                  f"unannotated_mean={statistics.mean(b[0] for a, b in results):.9f} "
+                  f"identical={all(a == b for a, b in results)}",
                   flush=True)
 
 
