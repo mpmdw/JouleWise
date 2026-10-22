@@ -8,6 +8,7 @@
 - No earlier BY-LOOP lane branch existed when checked.
 - Governing block-6 and BYTES registration texts were read; a dedicated BYTES root is the implementation choice below.
 - Item 48's live yield notice is built inside the sealed block-5 driver; the authorized known-false-alarm disposition is recorded.
+- The duplicate close notice is traced to the magistrate's manual step; loop wake remains the chosen single owner.
 - No production code, registrations, measurement state, or sealed file has changed.
 - Tests, rehearsal, guard measurement, stage-success fix and leak fix remain unexecuted.
 
@@ -49,7 +50,11 @@ Not fixed or reproduced: executor unavailable. Read `tests/b6/test_s3_cold_fixes
 
 ### 6. Duplicate block-6 close mail
 
-Source investigation in progress; no mail sent or mailer changed.
+**Recorded; no mailer change. Loop wake is the single owner of the close notice.**
+
+`docs/process_traces/2026-10-21-magistrate-283e9802/RECORD.md`, “Block 6 closed” and “Pruning list”, explicitly identifies the magistrate's manual “email the verdict” instruction as the second sender. `RUN_STATE.md` items 59 and 60 also distinguish the loop wake and that activation. `Loop._next` has one close event; the scoped `joulewise/b6/mailer.py` provides outbox delivery and issue closing, and has no magistrate-specific close dispatcher to prune.
+
+This is a manual orchestration-instruction duplication, so changing the shared mailer would affect the existing loop delivery rather than removing the magistrate's instruction. The historical prose is evidence, not a second executable mailer. No in-scope magistrate sender was identified. The lead should carry loop-wake ownership into the external activation instructions; the requested record-only disposition is used here. No message was sent by this seat.
 
 ## REHEARSAL
 
@@ -73,16 +78,19 @@ No test count, exit code, skip count or environmental test failure is claimed. I
 
 ## SEALED INVENTORY
 
-The base inventory contains **682 paths**, listed verbatim below. No sealed file has been edited. A local `git -C /workspace/JouleWise diff --name-only bda481d5a HEAD` has not run because the executor is unavailable; connected-GitHub comparison will verify the report-only checkpoint.
+The base inventory contains **682 paths**, listed verbatim below. No sealed file has been edited. A local `git -C /workspace/JouleWise diff --name-only bda481d5a HEAD` has not run because the executor is unavailable; connected-GitHub compare of base to checkpoint `46ed133ad8cb3bf50b6785d35a817b6b85996f8b` returned exactly `.codex-report/BY-LOOP.md`, with no overlap against all 682 inventory paths. The final checkpoint must be compared again after this report update. This is API evidence, not a claim that the required local Git command ran.
 
 ## CI
 
-Not started at this checkpoint. No code-readiness result is claimed.
+Draft PR **#542**, `ci/2026-10-22-bytes-loop` against main, titled “CI: BYTES loop readiness (BY-LOOP)”: https://github.com/mpmdw/JouleWise/pull/542.
+
+Initial head `46ed133ad8cb3bf50b6785d35a817b6b85996f8b` mirrors the lane checkpoint. The CI and gate-ledger workflows were both observed in progress immediately after opening the draft (run IDs 39743305170 and 39743305168). No code-readiness result is claimed; the PR body explicitly says implementation and execution remain blocked. After committing this report update, fast-forward the CI branch to the lane's same head. Do not merge.
 
 ## DECISIONS I MADE
 
 - Use a dedicated BYTES root rather than reopening the replication loop, for the governing reasons above; implementation remains pending.
 - Record item 48's known live LOW false alarm under the brief's explicit sealed-driver exception.
+- Keep loop wake as the single owner of close notification; record the external/manual magistrate duplication without changing the shared mailer.
 - Preserve source findings in the only authorized report path through connected GitHub while filesystem execution is unavailable.
 - Do not substitute unit-only, remote source-reading or historical evidence for the required synthetic real-entry-point rehearsal.
 
@@ -90,9 +98,8 @@ Not started at this checkpoint. No code-readiness result is claimed.
 
 - Cloud executor unavailable; seat setup, filesystem inspection and local Git setup have not run.
 - Items 1, 2, 4 and 5 need implementation and focused verification.
-- Item 6 disposition needs completion.
 - Rehearsal, no-Python DONE measurement, fails-before / passes-after checks, hazard registries and sealed-inventory local diff check remain outstanding.
-- CI and the director's local repetition remain outstanding.
+- CI completion and the director's local repetition remain outstanding.
 
 ## NEEDS_RULING
 
