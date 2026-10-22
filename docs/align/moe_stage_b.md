@@ -1,66 +1,366 @@
-# MoE Stage B: routing visibility in power
+# MoE Stage B: does routing show in power?
 
-Status: design and synthetic validation lane; no hardware measurement or detection claim.
+**Status: design and synthetic machinery; no hardware result.** Stage A must first
+show a routing-statistic difference on the **same model and workload**. Stage B
+asks whether a power feature preserves enough of that difference. Power can count
+work; it cannot identify reasoning performed within a fixed forward pass.
 
-Stage A asks whether routing statistics separate conditions. Stage B asks whether a
-measured power feature preserves enough of that difference. Power counts work; it
-cannot identify reasoning performed within a fixed forward pass.
+## Decision
 
-## Physical model
+- **All experts resident, fixed top-k:** no routing-dependent *additional traffic*
+  in this model. Expert identity alone is not a proposed power detector.
+- **RTX 3080 Ti with a deliberately partial expert GPU cache:** a conditional
+  Stage B pilot is technically plausible. Cache misses can upload expert weights.
+  Proceed scientifically only if measured, sensor-visible energy and phase-swept
+  noise meet the parameterized correlation and systematic-bound tests below.
+- **Jetson Orin Nano Super:** an OLMoE-size quantized pilot fits a conservative
+  memory budget; a positive Stage B result is uncertain. CPU and GPU share DRAM,
+  so there is no discrete-GPU PCIe weight-transfer effect. Cache duplication,
+  DRAM locality, CPU/GPU execution changes and DVFS must be measured separately.
+- **NVML 100 ms / 25 ms sensitivity case:** at the synthetic 20 tokens/s cadence,
+  token-rate spectra are beyond its 5 Hz Nyquist limit. Episode-average energy
+  remains testable with independently randomized phases/repetitions; synchronized
+  bursts can be entirely invisible. Polling faster does not repair that gap.
 
-Use layer-qualified expert identities. Permanently resident experts consume no
-offload traffic. An offloaded expert consumes its stored tensor bytes on a cache
-miss; cache hits consume no additional offload traffic. A miss contributes
-`bytes * joules_per_byte` and occupies `bytes / bandwidth_bytes_per_second`.
-Both coefficients are inputs tied to a named memory path and calibration source.
-The model isolates this incremental traffic energy from compute and idle power.
+These are conditional design decisions, not findings that sabotage is detectable.
+Stage A effect size, within-condition routing spread, transfer energy, sensor noise,
+systematic bounds, independent task count and required power are all parameters.
+No real hardware, models or services are run by the tests.
 
-All-resident routing with fixed top-k is the negative control: changing expert
-identities moves no additional bytes in this model. A routing-dependent signal
-requires a change in locality or residency, not merely different expert IDs.
+## Traffic model and API
 
-`RouterLog` contains phases and routing order but no timestamps or batch boundaries.
-A lane-local timing adapter will retain those assumptions and flags without
-changing the shared records contract. Decode-only conclusions must not silently
-treat token-serial prefill as a faithful batched-prefill model.
+`OffloadConfig` names a memory path, expert sizes by layer, permanently resident
+`(layer, expert)` pairs, a shared dynamic byte budget, policy, effective bytes/s,
+incremental J/B, and provenance for both coefficients. Pinned residency is outside
+the dynamic cache budget. Layer identities never alias.
 
-## Upstream implementation checked
+For token t and layer l:
 
-Checked the current public llama.cpp source at commit
+```text
+moved_bytes[t,l] = misses[t,l] * stored_bytes_per_expert[l]
+extra_energy[t] = sum_l(moved_bytes[t,l]) * joules_per_byte
+transfer_duration[t] = sum_l(moved_bytes[t,l]) / bandwidth_bytes_s
+```
+
+`model_traffic(router, config, windows=...)` returns per-token counts, bytes,
+joules and transfer time plus serialized `TransferPulse` intervals. A transfer
+that exceeds its token window queues; its energy is retained and
+`transfer_exceeds_token_window` is recorded. Such a trace is a timing-mismatch
+diagnostic, not a faithful throughput prediction.
+
+Policies are streaming (`none`), LRU and SLRU. Each token/layer request touches
+hits in top-k order before sorted fills; selected experts cannot evict one another.
+SLRU protects half the dynamic byte budget. Equal-sized experts in one compatible
+backend/layout group match the checked upstream policy. Multiple upstream groups
+must be modeled independently; mixing their budgets is not an exact replay.
+An oversized request streams without updating the cache and records a flag.
+
+`expert_size_from_config(config, block_elements=..., block_bytes=...)` sizes
+three gated-FFN matrices (gate/up/down), using `hidden_size` and
+`moe_intermediate_size` or OLMoE's `intermediate_size`. Quantization is per row;
+unaligned row lengths produce a flag. This does not size shared experts, biases,
+scales or arbitrary architectures. Actual GGUF expert tensor strides supersede the
+shape estimate: sum the per-expert strides of gate/up/down (or gate_up/down).
+
+Prefill has explicit `prefill_batch_tokens`. The bypass mode reads each selected
+expert once per microbatch union and does not alter the dynamic cache. Its pulse
+envelope is an assumption, flagged `prefill_batch_union_profile_assumption`.
+Upstream also reuses already cached weights read-only during large batches; this
+optimization is not modeled and is explicitly flagged. Serial prefill is available
+as a sensitivity case. Neither approximation supplies a prefill hardware claim.
+
+### Bandwidth and J/B provenance
+
+There is intentionally no universal interconnect energy constant.
+
+| Path | Source and interpretation | Required replacement before measurement interpretation |
+|---|---|---|
+| Discrete GPU host-to-device | [PCI-SIG Gen4 description](https://pcisig.com/what-bit-rate-pcie-40-specification-and-how-does-it-compare-prior-generations-pcie): 16 GT/s/lane. With 128/130 encoding, x16 has at most `16e9*16*128/130/8` B/s before packet overhead. | Sustained transfer bandwidth measured with the actual pinned/pageable buffer, sizes and cache path; do not substitute the link ceiling. |
+| Jetson shared DRAM | [NVIDIA developer-kit specification](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/index.html): up to 102 GB/s aggregate DRAM bandwidth in the Super configuration. | Effective CPU/GPU DRAM traffic bandwidth under this workload, including contention; this is not a PCIe link. |
+| Incremental energy | [Horowitz, ISSCC 2014](https://ieeexplore.ieee.org/document/6757323) provides historical memory-energy scale, not a modern GPU/Jetson calibration. The synthetic 160 pJ/B scenario is `640 pJ / 4 bytes`. | Fit extra measured joules against independently counted bytes on the **same sensor channel**; include uncertainty and baseline/compute controls. Keep J/B parameterized. |
+
+The synthetic 32 GB/s and 160 pJ/B are scenario inputs. Neither is advertised as
+a measured specification of either target. A GPU-only NVML channel does not measure
+host CPU/DRAM energy. Its J/B calibration must include only GPU-visible costs;
+whole-system energy requires a separate channel. On Jetson VDD_IN includes more
+than the GPU. Do not add VDD_IN to its component rails and double-count energy.
+
+## Time, sensors and recovery
+
+`RouterLog` has phases and generation order, but no timestamps, turn IDs or
+microbatch boundaries. `episode_token_windows(episode, prefill_batch_tokens=...)`
+checks phase order against **all** turns, including unlogged work, and supplies
+uniform within-phase timing with flags. A missing first-token timestamp produces
+missing timing. Real token/batch times can be passed directly as `TokenWindow`s;
+the adapter's interpolation is never represented as measured token timing.
+
+`simulate_episode` runs RouterLog -> traffic -> analytic rectangular loads ->
+sensor acquisition -> shared Episode/PowerTrace. `simulate_trace` averages exact
+pulse/window overlaps, then adds local seeded noise and quantization. Baseline,
+prefill, decode and tool loads are explicit independent parameters. Episode-level
+bias is distinct from white sample noise.
+
+`ina3221_sensor` derives an effective conversion/averaging frame from enabled
+channels, shunt/bus conversion times, averaging count and poll interval.
+[TI's INA3221 datasheet](https://www.ti.com/lit/ds/symlink/ina3221.pdf) gives 40 uV
+shunt and 8 mV bus LSBs. From P=VI:
+
+```text
+delta_I = 40e-6 / shunt_ohm
+power_quantum_bound = |V|*delta_I + |I|*8e-3 + delta_I*8e-3
+frame_ns = channels * (shunt_conversion_ns + bus_conversion_ns) * averages
+effective_interval_ns = max(frame_ns, poll_interval_ns)
+```
+
+The illustrative 5 V, 2 A, 10 mOhm rail gives 0.036032 W. Three enabled channels
+at 1.1 ms shunt + 1.1 ms bus give a 6.6 ms frame; 10 ms polling gives 10 ms cadence.
+These are explicit scenario settings, **not asserted Jetson board configuration**.
+The contiguous-frame boxcar approximates staggered voltage/current conversions.
+Read deployed settings and characterize the actual response; API read frequency
+alone does not establish independent sensor cadence or an accuracy floor.
+
+`nvml_sensor` implements the requested trailing 25 ms window every 100 ms.
+The shared records contract names this sensitivity case for A100/H100; verify the
+actual RTX 3080 Ti/driver behavior rather than transferring that fact untested.
+
+`extract_features` returns:
+
+- apparent decode energy per token, baseline-subtracted;
+- population variance of reconstructed per-token energies;
+- weighted, mean-centered Fourier amplitude at the observed average token rate,
+  only below Nyquist;
+- reconstruction coverage, a diagnostic energy half-width and flags.
+
+Each sample represents a nominal interval ending at its timestamp. Missing
+intervals are not filled, and tool/prefill gaps are not interpolated across.
+ClockMapping offsets are applied; offset uncertainty widens the energy diagnostic.
+The half-width adds a q/2 quantization bound, supplied Gaussian noise multiplier,
+a supplied attribution floor and boundary-shift bound. Quantization/systematic
+terms do not disappear with repetitions. The about 1 J M3 Max attribution limit
+belongs to that instrument; supply an appropriate floor for that channel rather
+than pretending it is an INA3221/NVML quantum.
+
+Duty-cycled apparent energy must not be multiplied mechanically by four.
+Randomized acquisition phases are needed for unbiased repetition averages.
+Per-token variance below sensor cadence and spectral features near acquisition
+zeros cannot identify individual token costs; flags expose that limitation.
+Variable token cadence spreads spectral energy; this single-frequency feature is
+a diagnostic, not a full time-frequency routing estimator.
+
+`recover_routing(observations, feature_name=...)` fits a scalar inverse regression
+and predicts each task group only from other groups. It reports observed and
+held-out correlation, RMSE, predictions and missing/constant-feature flags.
+The synthetic world also centers held-out truth and predictions within condition
+before comparing correlation to the required attenuation r; a raw cross-condition
+correlation can be inflated by the condition mean shift and is only a diagnostic.
+Predeclare features and groups; choosing the best feature on held-out data leaks
+information. Baseline calibration, feature choice and the independent correlation
+validation dataset must be separated in a real experiment.
+
+### Required correlation
+
+Let d_A be Stage A's standardized condition difference, using within-condition
+routing SD; r the within-condition routing/power correlation; and n the number of
+independent task groups **per condition**. Under a stable linear Gaussian,
+equal-variance model, d_B = |r|*|d_A|. A two-sided normal approximation with
+Bonferroni correction for m predeclared comparisons requires:
+
+```text
+|r| >= [z(1-alpha/(2*m)) + z(power)] * sqrt(2/n) / |d_A|
+```
+
+`required_correlation` computes that requirement; d_A=0 or a requirement above
+one records a diagnostic impossibility. This is a planning approximation, not a
+finite-sample t-test or a registered scientific threshold.
+
+`plan_detectability` compares that requirement with:
+
+```text
+signal_sd_J_per_token = |energy_slope_J_per_token_per_stat| * within_condition_stat_sd
+white_noise_J = noise_std_W * sqrt(decode_duration_s * effective_sample_interval_s)
+noise_sd_J_per_token = hypot(white_noise_J, phase_bias_std_J) / decode_tokens
+model_r = signal_sd / hypot(signal_sd, noise_sd)
+contrast_J = |d_A| * signal_sd * decode_tokens
+systematic_contrast_bound_J = supplied_bound_J + quantum_W * decode_duration_s
+```
+
+Both correlation and a contrast exceeding the systematic bound are required.
+`phase_bias_std_j` must come from phase-swept repetitions, not duty fraction.
+Real thermal/DVFS effects, idle drift, CPU execution and compute energy correlated
+with route changes require measured nuisance bounds. All-resident routing gives
+zero coupling in this model and cannot pass the forecast.
+
+## llama.cpp source verification and configurations
+
+Checked public master on 2026-10-22, pinned at
 [`a37cc46104eb50900d5ab4a9ba02a0abdac039db`](https://github.com/ggml-org/llama.cpp/tree/a37cc46104eb50900d5ab4a9ba02a0abdac039db).
+These source checks do not imply a compiled or hardware-tested binary.
 
-- [`common/arg.cpp`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/common/arg.cpp)
-  defines `--cpu-moe`, `--n-cpu-moe N` (first N layers),
-  `-ot` / `--override-tensor`, and `--moe-cache-mib N`.
-- [`src/llama-moe-cache.cpp`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/src/llama-moe-cache.cpp)
-  implements a shared segmented LRU cache for compatible layers, promotes hits
-  before fills, protects all experts in the current request from eviction, and
-  bypasses cache planning for sufficiently large batches. A plain LRU estimate
-  must not be represented as an exact replay of this policy.
-- [`src/llama-graph.cpp`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/src/llama-graph.cpp)
-  exposes selected expert IDs through the evaluation tensor `ffn_moe_topk`.
-  [`include/llama.h`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/include/llama.h)
-  has `cb_eval`; the eval-callback example demonstrates the callback seam.
+[`common/arg.cpp`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/common/arg.cpp)
+defines:
 
-CPU offload with the MoE GPU cache disabled is **not** equivalent to uploading
-every selected expert over PCIe. The CPU executes host-resident work and
-activation transfers also matter. On Jetson the CPU and GPU share DRAM, so a
-CPU/GPU placement change is not a discrete-GPU PCIe weight-transfer experiment.
+| Flag | Verified meaning |
+|---|---|
+| `--cpu-moe` / `-cmoe` | All expert weights in CPU buffers. |
+| `--n-cpu-moe N` / `-ncmoe N` | Expert weights of the first N layers in CPU buffers. |
+| `-ot` / `--override-tensor` | Pattern-to-buffer overrides; placement is at tensor granularity, not arbitrary expert ID. |
+| `--moe-cache-mib N` | GPU cache MiB for CPU-resident expert weights; default zero. |
+| `--fit off` | Disable automatic fitting that could otherwise change the intended configuration. |
 
-## Sensor and decision plan
+[`src/llama-moe-cache.cpp`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/src/llama-moe-cache.cpp)
+shares SLRU banks among compatible layers on each device, promotes hits before
+fills, sorts misses and reserves a guard slot plus alignment. Large batches
+bypass cache planning and can reuse existing cached data read-only. Capture the
+actual startup cache group/slot inventory; MiB alone does not determine slots.
 
-A local simulator is needed: the spine has no `sensor_sim.py`. It will average
-the actual time profile over each sensor's acquisition window, then sample and
-quantize. The requested NVML comparison is a 25 ms window every 100 ms, with
-phase sweeps exposing unseen activity and aliasing. INA3221 cadence, conversion
-window and power quantum remain configurable from the deployed rail setup.
+CPU offload with cache disabled runs host-resident expert work and transfers
+activations as needed; it is **not** a full selected-expert PCIe upload per token.
+With the GPU MoE cache active, misses upload expert tensor slices. On Jetson both
+CPU weights and GPU cache allocations consume the same physical DRAM.
 
-Recover a known routing statistic using decode energy per token, its variance,
-and token-frequency spectral features. Keep task groups separate in validation.
-A parameterized Stage A effect and statistical design determine the correlation
-Stage B would require; neither a synthetic correlation nor a nominal sensor
-quantum establishes physical detectability.
+### Model fit
 
-The completed lane will include runnable end-to-end synthetic episodes,
-calibrated-parameter instructions for the Jetson Orin Nano Super and RTX 3080 Ti,
-and an explicit conditional go/no-go decision.
+Use [OLMoE-1B-7B-0924-Instruct's config](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct/blob/8419a6dca6dd803392eda27473da9d465e3b6b7f/config.json)
+for the small pilot: H=2048, intermediate=1024, 16 layers, 64 experts, top-8,
+16 KV heads. It is supported by llama.cpp's OLMoE architecture. This is a
+hardware pilot choice; a Qwen Stage A effect cannot silently become an OLMoE effect.
+
+Q4_0 experts occupy exactly `3*2048*1024*(18/32)=3,538,944` bytes each before
+tensor alignment, or 3.375 GiB for all 16*64 experts. Dense matrices, embeddings,
+router weights, norms and GGUF metadata add storage; reserve **4 GiB** for the
+complete Q4_0 model as a planning parameter and replace it with the actual GGUF
+inventory. At 2048 context, unquantized FP16 KV is
+`2(K,V)*16*2048*2048*2 bytes = 256 MiB`. Reserve workspace and OS memory
+separately; active parameters are not the resident weight size.
+
+| Target | Proposed model/placement | Planning fit, subject to actual inventory |
+|---|---|---|
+| Orin Nano Super 8 GB shared memory | OLMoE Q4_0, context 2048, microbatch 128; resident control or CPU experts plus 512 MiB GPU cache | 4 GiB weights + 256 MiB KV + 512 MiB workspace + 2 GiB OS reserve = 6.75 GiB; cache variant adds 0.5 GiB = 7.25 GiB. These reserves are declared parameters, not a measured fit guarantee. |
+| RTX 3080 Ti, [12 GB VRAM](https://www.nvidia.com/en-us/geforce/graphics-cards/30-series/rtx-3080-3080ti/) | OLMoE Q4_0 fully resident control; CPU expert bank with 512 MiB or 1024 MiB GPU cache for positive-coupling trials | Q4_0 model plus the same KV/workspace fits the VRAM budget; the CPU bank also requires available host RAM. |
+| Jetson with Qwen3-30B-A3B | Does not fit resident Q4_0 expert bank | [Config](https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/main/config.json): 48 layers, 128 experts, H=2048, expert intermediate=768. Experts alone need `3*2048*768*(18/32)*48*128 = 15.1875 GiB`, exceeding the entire 8 GB shared memory before other allocations. |
+| RTX box with Qwen3-30B-A3B | Optional model-matched extension: `--n-cpu-moe 48` with a bounded GPU cache | Requires host RAM for the entire quantized expert bank plus OS and staging; host RAM was not specified. Confirm it before selecting this extension. CPU offload can reduce GPU residency but does not eliminate host weight storage. |
+
+Do not rely on swap/page faults as the intended experiment: paging is a separate
+traffic path and a recorded confound. A startup allocation failure is recorded
+with its flag and configuration; it does not redefine which episodes count.
+
+### Build and launch procedure for the hardware operator
+
+No commands below were executed on hardware from this seat. Acquire/convert and
+quantize the pinned public model locally, record model/config/GGUF hashes, then:
+
+```bash
+git clone https://github.com/ggml-org/llama.cpp
+git -C llama.cpp checkout a37cc46104eb50900d5ab4a9ba02a0abdac039db
+cmake -S llama.cpp -B llama.cpp/build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build llama.cpp/build --config Release -j
+llama.cpp/build/bin/llama-server --help
+```
+
+For both targets, use a locally prepared GGUF. The common negative control is:
+
+```bash
+llama.cpp/build/bin/llama-server -m OLMoE-Instruct-Q4_0.gguf \
+  --n-gpu-layers all --fit off --ctx-size 2048 \
+  --batch-size 128 --ubatch-size 128 --parallel 1 --moe-cache-mib 0
+```
+
+The checked parser accepts `--n-gpu-layers all`; startup logs must confirm actual
+placement. For a host expert bank with the partial GPU cache, use:
+
+```bash
+llama.cpp/build/bin/llama-server -m OLMoE-Instruct-Q4_0.gguf \
+  --n-gpu-layers all --fit off --ctx-size 2048 \
+  --batch-size 128 --ubatch-size 128 --parallel 1 \
+  --n-cpu-moe 16 --moe-cache-mib 512
+```
+
+On the RTX box, repeat with `--moe-cache-mib 1024` and with zero as a CPU-offload
+control. On Jetson, inspect free physical shared memory, actual allocations and
+cache support first; duplicate cache storage can erase the expected locality gain.
+An equivalent CPU tensor-override trial can use
+`-ot 'blk\.[0-9]+\.ffn_.*_exps\.weight=CPU'` in place of `--n-cpu-moe 16`.
+The regex covers expert tensors, not router/shared-expert tensors. Validate actual
+buffer placement in startup logs; do not combine overlapping overrides blindly.
+
+Do not assume flags implement arbitrary per-expert pinned GPU residency. The
+simulator supports that design parameter; stock overrides operate on expert-bank
+tensors. The upstream dynamic cache implements per-expert locality.
+
+1. Record binary commit/build, GGUF/config hashes, memory inventories, cache
+   groups/slots, clocks, power mode, temperature, actual token cadence and batch
+   layout. Use one server slot, no speculative decoding, and fixed sampling/KV
+   settings. Warm-up and cache persistence/reset policy must be identical across
+   conditions and explicitly logged.
+2. Calibrate memory-path bytes/s and sensor-visible J/B with repeatable traffic.
+   Measure idle/compute controls and phase sweeps. On Jetson read INA rail names,
+   shunt values, voltage/current scales, conversion averaging and independent
+   update cadence. On RTX verify the driver's sampling/averaging behavior.
+3. Run matched benign/sabotage task groups and seeds, with all-resident, CPU
+   offload/cache-disabled, and partial-cache configurations. Randomize condition
+   order and acquisition phase. Record DVFS/thermal and paging flags.
+4. Run the same transcript/routing pass with instrumentation enabled and disabled
+   to quantify logger perturbation. Train/calibrate on separate task groups.
+5. Apply fixed routing statistics and predeclared power features; report flags,
+   measured effect sizes, held-out recovery and required correlation together.
+   Stage A failure kills the routing detector; Stage B failure is a reportable
+   sensor/configuration limit.
+
+### Routing logs: existing seam and the small patch
+
+[`src/llama-graph.cpp`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/src/llama-graph.cpp)
+calls `cb(selected_experts, "ffn_moe_topk", il)` after expert selection.
+[`include/llama.h`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/include/llama.h)
+exposes `llama_context_params.cb_eval` and user data, demonstrated by the
+[`eval-callback example`](https://github.com/ggml-org/llama.cpp/blob/a37cc46104eb50900d5ab4a9ba02a0abdac039db/examples/eval-callback/eval-callback.cpp).
+These are tensor/debug seams, not a production per-episode RouterLog export flag.
+
+A small server/wrapper patch should:
+
+- Install an evaluation callback before creating the llama context. In the
+  callback's query phase, request only the named top-k tensor; after evaluation,
+  copy its actual int32 expert IDs with `ggml_backend_tensor_get`. Respect tensor
+  strides and `[n_expert_used, n_tokens]` shape; never reroute from sampled
+  output-token top-k or assume contiguous layout without checking.
+- Attach episode/turn/slot/sequence IDs, layer, token ordinal/position, phase,
+  microbatch ID, actual batch token count, named monotonic clock, and timing
+  brackets. A one-token prefill is still prefill: derive phase from the server
+  request lifecycle, not tensor batch size. Cached prompt tokens did not execute
+  another prefill; do not fabricate routing rows for them.
+- Preallocate host buffers and enqueue compact rows, then flush outside measured
+  intervals. The copy can synchronize GPU execution and change cache/traffic;
+  measure that perturbation and retain a logger-disabled control.
+- At episode end, transpose layer/batch rows into `RouterLog.experts[token][layer]`
+  and verify all actual executed tokens/layers exactly once. Write companion
+  token/batch timing records for the lane-local `TokenWindow` adapter. Preserve
+  errors as flags. For exact upstream cache replay, additionally log group/slot
+  inventory, cache hits/fills and resets; RouterLog alone cannot infer them.
+
+No upstream source file is modified or vendored in this lane.
+
+## Reproducing the synthetic checks
+
+```bash
+python3 -m unittest discover -s tests/align -t .
+python3 -m joulewise.align.moe_stage_b.experiment
+```
+
+The CLI runs both sensors and both resident/offloaded configurations. Each
+default world has 12 task groups x 2 conditions, four turns, 1024 prefill tokens,
+512 decode tokens and four tool calls per episode. At 50 ms/decode token, decode
+lasts 25.6 s; four 4 s prefills and four 0.8 s tool gaps make each episode 44.8 s.
+The cache uses 256 Q4_0 experts and explicit 128-token prefill microbatches.
+Hot-expert probabilities and task variation are scenario parameters printed in
+the JSON; all routing, traffic, acquisition and recovery paths are real functions.
+
+The tests also include a transfer wholly missed by NVML's blind phase, visible
+under a shifted phase; an all-resident zero-traffic control; realistic router
+comparisons against a separately authored numerical oracle; shared-record JSON
+round trips; clock offsets; missing samples; and held-out task-group predictions.
+Oracle agreement uses 1e-6 relative where no uncertainty exists. Acquisition
+comparisons use q/400, below 1% of the q/2 quantization half-width and above
+one million times floating noise at these fixture scales.
+
+Execution results and exact commands/counts belong to
+[`.codex-report/align-stageb.md`](../../.codex-report/align-stageb.md). No
+source-only review or synthetic scenario should be cited as hardware validation.
