@@ -83,7 +83,11 @@ Inference without an override uses sequence length and the KV cache: a fresh
 one-token prompt is prefill, and a cached one-token forward is decode. Override
 cached one-token tool-response prefill and multi-token speculative decode
 explicitly. Batched episodes, incomplete layers, unsupported topology, training
-mode, padding omission, and inference ambiguity are flags. Incomplete forwards
+mode, padding omission, and inference ambiguity are flags. An uncached multi-token
+forward after recorded work adds `uncached_reforward`: uncached generate repeats
+the growing prefix, and the log preserves that actual processed work rather than
+pretending those rows are newly generated tokens. A cached multi-token tool-result
+prefill does not trigger this flag. Incomplete forwards
 are not presented as complete token rows. Propagate recorder.flags to
 Episode.flags: RouterLog itself has no flags field.
 
@@ -105,8 +109,11 @@ execution needs separate capture-coverage validation.
   None and both select all rows. Filtering precedes adjacency and distance
   calculations; distances count positions in the filtered sequence.
 - Empty phases and undefined distances are NaN. routing_flags describes malformed
-  log topology or selections. Stage A keeps those episodes, flags missing data,
-  and prints non-finite values as JSON null.
+  log topology or selections. Stage A retains every episode in the aligned feature
+  report, but excludes non-finite values separately for each routing test before
+  permutation, effects and bootstrap. Each test flags the excluded episode IDs
+  and count, and any retained group with only one condition. Undefined report
+  fields print as JSON null.
 
 RouterLog contains no turn/sequence boundary offsets. Sequence statistics use its
 flat token order, including across turn/phase boundaries for the both view.
@@ -126,6 +133,10 @@ shrink the correction family. Effects include raw differences and pooled-SD
 standardized differences. Whole task groups are sampled with replacement for
 percentile intervals. Bootstrap count and confidence are parameters; the default
 confidence is the conventional 95%. Undefined replicates are counted and flagged.
+With only 12 to 17 task groups, the reviewer's independent-noise controls measured
+zero-effect coverage of 0.913 and 0.906 across statistic-world cells (120 worlds
+each), about 0.91 rather than 0.95. These effect percentile intervals retain that
+small-cluster limitation; permutation p-values supply the corresponding tests.
 
 ## Routing versus metadata comparison
 
@@ -143,11 +154,21 @@ label-informed feature selection. Local Mann-Whitney AUC awards half credit to
 ties; the spine has no metadata_baseline module/AUC to reuse.
 
 The deliverable reports each held-out AUC and the combined-minus-metadata AUC
-gain with a paired group-bootstrap interval. These AUC intervals resample fixed
-out-of-fold predictions and are conditional on the fitted folds; they do not
-include classifier-refitting uncertainty. A positive raw routing test alone does
-not establish added separation. No automatic hardware authorization or scientific
-decision threshold is embedded in the report.
+gain with a paired group-bootstrap interval that refits metadata and combined
+classifiers in every replicate. All copies of each original task group are held
+out together: duplicate bootstrap copies never cross a training/test boundary.
+The main `auc_gain_interval` is this refitted percentile interval; its method and
+valid replicate count are returned explicitly. Its calibration is tested against
+the two lane nulls and the reviewer's null A and counts-only null B.
+
+The individual `auc_intervals` and the separately labelled
+`auc_gain_fixed_prediction_interval` resample fixed original predictions. They
+are descriptive, conditional on fitted folds, and do not support a claim that
+routing adds separation. A within-group label permutation would test the joint
+null that neither feature set separates; it would not answer the gain question
+when counts already separate. Refitting the group bootstrap targets the gain
+under both kinds of null. A positive raw routing test alone does not establish
+added separation. No automatic hardware authorization is embedded in the report.
 
 Read shared Episode JSONL and print the analysis:
 
@@ -156,6 +177,12 @@ python3 -m joulewise.align.moe.stage_a episodes.jsonl --n-bootstrap 2000 --seed 
 ```
 
 The bootstrap budget is chosen by the analyst; it is not a hidden agreement bar.
+The CLI streams JSONL through the shared record decoder, reduces each episode
+to scalar features, and releases its router log before advancing. Library callers
+can pass any iterable to `analyze_stage_a`; retaining a list of Episodes in the
+caller still retains those logs. `episode_stats` validates once per aggregate
+call, while each standalone metric call validates independently. The shared
+eager `read_episodes` contract is unchanged.
 
 ## Generative synthetic controls
 
