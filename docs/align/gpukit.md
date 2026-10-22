@@ -361,3 +361,13 @@ Missing, unreadable or invalid matrices and session_failed:* exceptions seal a
 receipt with status failed, data_complete=false and exit 3. Physical isolation or
 instrument-readiness refusal keeps status refused and exit 2. completed and
 completed_with_flags exit 0; inspect data_complete and flags as well as the exit.
+
+### CUDA/NVML device order (R9)
+
+Both agent and monitor vLLM children receive CUDA_DEVICE_ORDER=PCI_BUS_ID alongside
+their explicit CUDA_VISIBLE_DEVICES list. This selects PCI bus order rather than
+CUDA's default FASTEST_FIRST heuristic for the numeric indices used by NVML.
+NVIDIA reference: https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
+(CUDA_DEVICE_ORDER); canonical reference supplied for operators, not fetched by
+this executor-less seat. Placement tests record the actual child's environment
+and require PCI_BUS_ID for both agent and monitor processes.

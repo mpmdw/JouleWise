@@ -501,7 +501,8 @@ def run_session(options: SessionOptions, *,
             try:
                 monitor_process = subprocess.Popen(
                     monitor_argv, stdout=monitor_log, stderr=subprocess.STDOUT,
-                    env=dict(os.environ, CUDA_VISIBLE_DEVICES=str(monitor_gpu)), start_new_session=True)
+                    env=dict(os.environ, CUDA_VISIBLE_DEVICES=str(monitor_gpu),
+                             CUDA_DEVICE_ORDER="PCI_BUS_ID"), start_new_session=True)
                 ready = wait_ready(monitor_process, monitor_endpoint,
                                    timeout_s=options.ready_timeout_s, poll_s=options.poll_s,
                                    ready_command=options.ready_command,
@@ -551,7 +552,8 @@ def run_session(options: SessionOptions, *,
                     with (model_dir / "server.log").open("wb") as server_log:
                         process = subprocess.Popen(
                             argv, stdout=server_log, stderr=subprocess.STDOUT,
-                            env=dict(os.environ, CUDA_VISIBLE_DEVICES=",".join(map(str, devices))),
+                            env=dict(os.environ, CUDA_VISIBLE_DEVICES=",".join(map(str, devices)),
+                                     CUDA_DEVICE_ORDER="PCI_BUS_ID"),
                             start_new_session=True)
                         ready = wait_ready(process, endpoint, timeout_s=options.ready_timeout_s,
                                            poll_s=options.poll_s, ready_command=options.ready_command,

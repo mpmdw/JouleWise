@@ -285,7 +285,7 @@ import os
 from pathlib import Path
 import time, json, sys
 with open(os.environ["GPUKIT_SERVER_CALLS"], "a") as handle:
-    handle.write(json.dumps({"argv": sys.argv[1:], "devices": os.environ["CUDA_VISIBLE_DEVICES"]}) + "\\n")
+    handle.write(json.dumps({"argv": sys.argv[1:], "devices": os.environ["CUDA_VISIBLE_DEVICES"], "device_order": os.environ.get("CUDA_DEVICE_ORDER")}) + "\\n")
 Path(os.environ["GPUKIT_READY"]).write_text("ready")
 while True:
     time.sleep(1)
@@ -722,6 +722,7 @@ raise SystemExit(1)
         result = run_session(options)
         self.assertTrue(result["data_complete"])
         calls = [json.loads(line) for line in (self.base / "servers.jsonl").read_text().splitlines()]
+        self.assertTrue(all(call["device_order"] == "PCI_BUS_ID" for call in calls))
         self.assertEqual([c["devices"] for c in calls].count("1"), 1)
         self.assertEqual([c["devices"] for c in calls].count("0"), 2)
         self.assertEqual({r["gpu_index"] for r in result["hardware"]}, {0, 1})
@@ -747,6 +748,7 @@ raise SystemExit(1)
         argv = result["preflight_argv"]
         self.assertEqual([argv[i + 1] for i, a in enumerate(argv) if a == "--device"], ["2", "4"])
         calls = [json.loads(line) for line in (self.base / "servers.jsonl").read_text().splitlines()]
+        self.assertTrue(all(call["device_order"] == "PCI_BUS_ID" for call in calls))
         self.assertEqual(calls[0]["devices"], "2,4")
         argv = calls[0]["argv"]
         self.assertEqual(argv[argv.index("--tensor-parallel-size") + 1], "2")
