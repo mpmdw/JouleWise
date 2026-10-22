@@ -264,6 +264,24 @@ class MatrixTests(unittest.TestCase):
             runner.run_matrix(spec)
             self.assertEqual(len(read_episodes(path)), 20)
 
+
+    def test_token_counter_factory_interrupt_keeps_current_record(self):
+        def interrupted(config, context):
+            raise KeyboardInterrupt
+        runner.register_token_counter_factory("test.interrupted_tokens", interrupted)
+        with tempfile.TemporaryDirectory() as directory:
+            spec = write_spec(directory, token_counter={"factory": "test.interrupted_tokens"})
+            path = runner.run_matrix(spec)
+            episodes = read_episodes(path)
+            self.assertEqual(len(episodes), 1)
+            self.assertIn("episode.interrupted", episodes[0].flags)
+            transcripts = [json.loads(line) for line in
+                           path.with_name("transcripts.jsonl").read_text().splitlines()]
+            self.assertEqual([row["episode_id"] for row in transcripts],
+                             [episodes[0].episode_id])
+            flags = json.loads(path.with_name("run.json").read_text())["flags"]
+            self.assertIn("matrix.interrupted", flags)
+
     def test_cli_run_and_tamper(self):
         with tempfile.TemporaryDirectory() as directory:
             spec = write_spec(directory, task_pairs=[{"factory": "mock.inbox", "task_pair": "cli"}],

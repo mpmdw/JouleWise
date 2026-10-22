@@ -552,8 +552,9 @@ def run_matrix(spec_path: str | Path) -> Path:
             if "token_counter" in spec:
                 try:
                     counter = _make("token_counter", spec["token_counter"], context)
-                except Exception as exc:
-                    construction_flags.append("token_counter.factory_error." + type(exc).__name__)
+                except (Exception, KeyboardInterrupt) as exc:
+                    construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
+                                              else "token_counter.factory_error." + type(exc).__name__)
             episode, transcript = run_episode(
                 task, condition, endpoint, monitors=monitors, samplers=samplers, seed=seed,
                 max_turns=spec.get("max_turns", 40), max_tokens=spec.get("max_tokens", 600),
