@@ -133,7 +133,10 @@ system_message_no_secondary_task. The monitor gets only user_query.
 
 ChatResult reports server prompt, cached, completion and reasoning counts
 unchanged as integers. Missing counts are zero with flags, never locally
-estimated. A llama.cpp timing block is preserved in raw_usage; when ordinary
+estimated. Empty reasoning_content deltas carry no generated reasoning text
+and do not raise reasoning_tokens_unreported. Nonempty separated reasoning
+with an absent, invalid or zero reasoning counter still raises that flag.
+A llama.cpp timing block is preserved in raw_usage; when ordinary
 usage is absent, prompt_n + cache_n and predicted_n are used and the fallback
 is flagged. first_token_ns uses the client's monotonic clock at the first
 nonempty content or reasoning_content delta; a role or tool-only delta does
