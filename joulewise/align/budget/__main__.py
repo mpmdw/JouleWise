@@ -24,7 +24,8 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--config", type=Path, help="JSON configuration for local serving endpoints")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path)
-    parser.add_argument("--count", type=int, default=200)
+    parser.add_argument("--count", type=int, default=200,
+                        help="item limit; config dataset.count takes precedence (default: 200)")
     parser.add_argument("--seeds", default="0")
     parser.add_argument("--sizes", default="4")
     args = parser.parse_args(argv)
@@ -47,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             batch = HubMMLUSource(**kwargs).load()
             # The selected roster is deterministic, fixed before any model runs,
             # and included byte-for-byte in the resume fingerprint.
-            count = source.get("count")
+            count = source.get("count", args.count)
             items = stratified_roster(batch, count, seed=source.get("roster_seed", source.get("seed", 0)))
             energy_options = config.get("energy", {})
             models = []
