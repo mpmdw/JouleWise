@@ -1,13 +1,15 @@
 ## PROGRESS
 
+- Done (slice 4): all twelve committed-fixed budgets match real native planner and precheck/arm integer boundaries; report R6, allowance sensitivity and committed-fixed tables refreshed.
 - Done (slice 1): finding 2 committed-fixed input/provenance, missing/malformed unavailable behavior, measured-unused disclosure; finding 7 exact measured_c assertion and imported WAIT constant.
 - Verified: 18 bytes_gates tests and 6 plan_inputs tests pass. Real augmented H main exits 2, writes /tmp/byc5f1/C5.json; all 12 P values exactly equal the director's committed-fixed targets. Reviewer re-derivation agrees. Sealed diff is empty.
 - Done (slice 2): finding 3 stops max()/mean arithmetic on a model without sizing observations; records model.observations_missing and unavailable model lines, pack disk/sizing/span/clock candidates. main repro covers all 21 qwen35-122b rows never-ran; exit 2 and file written. 19 bytes_gates tests pass.
 - Done (slice 3): finding 1 implementation shares sizing_label/valid_disk_terms with the native encoding. PRECHECK reads registered P, headroom zero; smoke adds ceil(2*B*m/n) retained bytes, disclosed in its receipt. Missing P skips disk judgment with disk.budget_missing. Eight plan_inputs tests pass, including twelve shapes at exact synthetic P/smoke boundaries; real run_precheck boundary/missing test passes.
-- Next: complete real-H twelve-pack updated-P planner/precheck evidence; findings 4/8 final report revisions and importer checks. Import-graph NULL is confirmed environmental: arm-debug-step3.log reports sysmond service not found / pgrep Cannot get process list in instrument group census; director rerun required.
+- Next: finish required importer checks, all-twelve run_precheck coverage where feasible, and final report cleanup. Twelve updated-H planner/precheck threshold boundaries now pass. Findings 4/8 report revisions applied. Import-graph NULL is confirmed environmental: arm-debug-step3.log reports sysmond service not found / pgrep Cannot get process list in instrument group census; director rerun required.
 - Done (slice 3, finding 6): DriverLane smoke metadata records native 3*m*q+headroom as required_free_bytes, with pack_required_free_bytes/pack_member_count separately labelled. Real DriverLane + smoke.prepare/reducer integration passes (1 test, 15.219 s, exit 0; smoke-metadata-step3-final.log).
-- Open: director owns real replay, commits/push and PR #547 CI. No real session trees read. Slice 1 committed by director as 36b16f0d5; slice 2 committed as 1b70fa136; slice 3 edits uncommitted on local by-c5. HEAD movement was external, between slices. Intake disk available 44 GiB (>25 GiB gate).
+- Open: director owns real replay, commits/push and PR #547 CI. No real session trees read. Slice 1 committed by director as 36b16f0d5; slice 2 committed as 1b70fa136; slice 3 committed as dcceb8480 on local by-c5; slice 4 test/report edits uncommitted. HEAD movement was external, between slices. Intake disk available 44 GiB (>25 GiB gate).
 - Verified (slice 2): real H C5-step2.json equals slice-1 C5.json exactly; sealed-step2.log confirms all 682 paths have empty diff against bda481d5a, including working tree.
+- Slice 4 checks: all12-step4.log 1 pass; loop-step4.log 55 pass; smoke-step4.log 22 pass; lane-step4-physical.log 21 pass; session-step4.log 6 pass; planinputs-step4-final.log 8 pass. render-step4.log full module: 5 tests, 57.128 s, exit 0. Sealed-step4.log empty for 682 paths. Intake free=46 GiB.
 - Evidence /tmp/byc5f1/: C5.json, H-C5.stdout, rederive.log, step1-tests.log, plan-inputs-tests.log, sealed.log. run.py gives each invocation a fresh TMPDIR and deletes it afterward.
 
 ## SUMMARY
@@ -18,23 +20,40 @@ The measured 1,266,544,640 B partial-session allocation is labelled unused discl
 The committed source path, SHA-256 and JSON pointer are recorded in C5.
 Missing or malformed committed fixed input makes all disk lines unavailable, never a measured fallback.
 All twelve augmented-H P values match the director's exact byte targets.
-Findings 3 and 7 are fixed; finding 1 implementation and synthetic boundary checks are in place. Finding 6 smoke metadata is fixed and tested. Final report/real-H planner/check evidence remain in progress.
+Findings 3 and 7 are fixed; finding 1 implementation and synthetic boundary checks are in place. Finding 6 smoke metadata is fixed and tested. All twelve committed-fixed planner/precheck threshold/arm boundaries now pass. Required importer checks and final handoff remain in progress.
 
 ## FIX LOG
 
 | Finding | Disposition / evidence |
 |---|---|
-| 1 major | Implementation fixed in plan_inputs.sizing_label/valid_disk_terms/registered_disk_terms/member_count and precheck.thresholds_for/run_precheck. Tests: DiskBudgetTests twelve-shape boundaries and non-BYTES identity; PrecheckTests.test_bytes_disk_bar_and_missing_record_through_run_precheck. Real-H integrated evidence pending. Desk wait registered in hazard_refusals.json desk_wait_sites. |
-| 2 major | Code fixed in bytes_gates.committed_fixed/calculate/main. GatesTests.test_committed_fixed_source_override_and_missing_never_fallback checks integer delta, provenance, invalid types, missing CLI input and no fallback. Real H targets agree; planner equality pending. |
+| 1 major | Implementation fixed in plan_inputs.sizing_label/valid_disk_terms/registered_disk_terms/member_count and precheck.thresholds_for/run_precheck. Tests: DiskBudgetTests twelve-shape boundaries and non-BYTES identity; PrecheckTests.test_bytes_disk_bar_and_missing_record_through_run_precheck. All twelve updated-H integer P values verified through real planner/arm/precheck thresholds, all12-step4.log (1 test, 6.007 s, exit 0). Desk wait registered in hazard_refusals.json desk_wait_sites. |
+| 2 major | Code fixed in bytes_gates.committed_fixed/calculate/main. GatesTests.test_committed_fixed_source_override_and_missing_never_fallback checks integer delta, provenance, invalid types, missing CLI input and no fallback. Real H targets agree; all twelve native planner requirements equal P exactly (all12-step4.log). |
 | 3 minor | Fixed in bytes_gates.calculate: guard absent model observations, record model.observations_missing; mark dependent packs unavailable. StoppedSessionTests.test_model_never_ran_cli_writes_unavailable_dependent_packs runs main on all 21 qwen35-122b rows never-ran and checks exit 2, JSON output, five unavailable model lines, s6 dependent null candidates, unaffected packs and llama clock. Full module 19 tests passes. |
-| 4 minor | Form unchanged as directed; final R6 text/sensitivity disclosure pending. |
+| 4 minor | Form unchanged as directed; R6 now states both allowances, check/soak-only margin and reference terms, and requires recomputation if BY-SLOTS changes form. Re-derived per-model-max-nonrequest P deltas: s1 0; s2 +486,009,912; s3 +271,803,398; s4 0; s5 0; s6 +497,717,866 B (variants-step4.log, exit 0). Reference spread 0.022169313982700597 < margin 0.03325233382759357. No code form change. |
 | 5 nit | No change needed: maximum of two whole summed bases; reviewer rederive confirms stated deltas. |
 | 6 nit | Fixed in DriverLane.prepare_session after real smoke reduction: native requirement and count replace full-pack values; pack_required_free_bytes and pack_member_count preserve derivation labels. ProductionPlanRenderTests.test_bytes_pack_p_through_real_planner_and_disk_hazard executes the real DriverLane smoke path and checks metadata/notes against native count, q and headroom; exit 0. |
 | 7 nit | Fixed: ReplayTests.test_nine_plus_h_replay_and_integer_boundaries uses exact int/int equality; plan_inputs imports SESSION_WAIT_BUDGET_S from sealed plan, unchanged. |
-| 8 nit | Partial report correction; full final report refresh pending. Scope grant acknowledged for native raw-byte producer. |
+| 8 nit | Thermal/completeness and committed-fixed report/R6/table corrections applied; final PROGRESS cleanup pending importer checks. Scope grant acknowledged for native raw-byte producer. |
 | BY-MERGE | No change needed in this lane; hand-forward recorded below. |
 
 ## PRECHECK END TO END
+
+Updated-H terms: ProductionPlanRenderTests.test_all_twelve_committed_fixed_budgets_through_native_planner_and_precheck uses all twelve real pack shapes with H-derived B/WAIT/committed fixed, synthetic timing/identity/launch seams, real DriverLane/plan_inputs/plan.write_window_plan, real thresholds_for and disk.measure/judge. Each native arm refuses P−1 and passes P. Each precheck disk boundary refuses bar−1 and passes bar with and without smoke. Run_precheck decision coverage is separately exercised by the s6 test; these are synthetic proofs, not live hardware evidence.
+
+```text
+bytes-s1-p1 P 73814147037 n 125 q 116714296 headroom 30046286037 smoke_retained 1400571562 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s1-p2 P 73814147037 n 125 q 116714296 headroom 30046286037 smoke_retained 1400571562 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s2-p1 P 75981813519 n 125 q 122494740 headroom 30046286019 smoke_retained 1469936889 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s2-p2 P 75981813519 n 125 q 122494740 headroom 30046286019 smoke_retained 1469936889 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s3-p1 P 79464395095 n 125 q 131781624 headroom 30046286095 smoke_retained 1581379500 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s3-p2 P 79464395095 n 125 q 131781624 headroom 30046286095 smoke_retained 1581379500 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s4-p1 P 85140886637 n 125 q 146918935 headroom 30046286012 smoke_retained 1763027229 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s4-p2 P 85140886637 n 125 q 146918935 headroom 30046286012 smoke_retained 1763027229 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s5-p1 P 75849013177 n 75 q 203567677 headroom 30046285852 smoke_retained 1832109098 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s5-p2 P 75849013177 n 75 q 203567677 headroom 30046285852 smoke_retained 1832109098 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s6-p1 P 62811368483 n 75 q 145622589 headroom 30046285958 smoke_retained 1310603310 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+bytes-s6-p2 P 62811368483 n 75 q 145622589 headroom 30046285958 smoke_retained 1310603310 planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states
+```
 
 Synthetic terms B=1,000,001 B, WAIT=7,200 B, fixed=19 B imply P=2,014,421 B exactly. All twelve production pack trees pass at P and refuse at P-1 via thresholds_for and real disk.measure/judge; same boundaries hold at P+ceil(2*B*m/n) with smoke. The real run_precheck test covers WAIT/START with and without smoke and START plus disk.budget_missing at zero free bytes when P is absent. Driver remains responsible for its pre-existing missing-budget LaneMissing hold.
 
@@ -44,6 +63,8 @@ Reviewer probe command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/h
 
 ## P PER SUB-PACK (committed fixed)
 
+All planner equality cells below are now verified through the real writer. q/headroom/native count and smoke retention are printed above. Every model count and allowance from the exact-rational C5 source follows; decimals are display only, no tolerance applied to bytes.
+
 Source: configs/campaigns/bytes_mac_check/registration/sizing_b5.json at /packs/bytes-mac-check/disk_derivation/fixed_retained_bytes.
 Real H C5 input and exact rational allowances are preserved in /tmp/byc5f1/C5.json; stdout /tmp/byc5f1/H-C5.stdout.
 Rates r_s=1,805,538.5168827055 B/s; r_w=1,285,759.0452694688 B/s.
@@ -52,22 +73,58 @@ c=2; measured c=0.8020750916018277 (disclosure).
 
 | pack | stream basis | wall basis | B | P | planner equality |
 |---|---:|---:|---:|---:|---|
-| bytes-s1-p1 | 21883930645 | 21697490999 | 21883930645 | 73814147037 | pending updated-P run |
-| bytes-s1-p2 | 21883930645 | 21697490999 | 21883930645 | 73814147037 | pending updated-P run |
-| bytes-s2-p1 | 22841465166 | 22967763886 | 22967763886 | 75981813519 | pending updated-P run |
-| bytes-s2-p2 | 22841465166 | 22967763886 | 22967763886 | 75981813519 | pending updated-P run |
-| bytes-s3-p1 | 24053464961 | 24709054674 | 24709054674 | 79464395095 | pending updated-P run |
-| bytes-s3-p2 | 24053464961 | 24709054674 | 24709054674 | 79464395095 | pending updated-P run |
-| bytes-s4-p1 | 27547300445 | 26855538139 | 27547300445 | 85140886637 | pending updated-P run |
-| bytes-s4-p2 | 27547300445 | 26855538139 | 27547300445 | 85140886637 | pending updated-P run |
-| bytes-s5-p1 | 22901363715 | 21700998244 | 22901363715 | 75849013177 | pending updated-P run |
-| bytes-s5-p2 | 22901363715 | 21700998244 | 22901363715 | 75849013177 | pending updated-P run |
-| bytes-s6-p1 | 14585071383 | 16382541368 | 16382541368 | 62811368483 | pending updated-P run |
-| bytes-s6-p2 | 14585071383 | 16382541368 | 16382541368 | 62811368483 | pending updated-P run |
+| bytes-s1-p1 | 21883930645 | 21697490999 | 21883930645 | 73814147037 | yes, all12-step4.log |
+| bytes-s1-p2 | 21883930645 | 21697490999 | 21883930645 | 73814147037 | yes, all12-step4.log |
+| bytes-s2-p1 | 22841465166 | 22967763886 | 22967763886 | 75981813519 | yes, all12-step4.log |
+| bytes-s2-p2 | 22841465166 | 22967763886 | 22967763886 | 75981813519 | yes, all12-step4.log |
+| bytes-s3-p1 | 24053464961 | 24709054674 | 24709054674 | 79464395095 | yes, all12-step4.log |
+| bytes-s3-p2 | 24053464961 | 24709054674 | 24709054674 | 79464395095 | yes, all12-step4.log |
+| bytes-s4-p1 | 27547300445 | 26855538139 | 27547300445 | 85140886637 | yes, all12-step4.log |
+| bytes-s4-p2 | 27547300445 | 26855538139 | 27547300445 | 85140886637 | yes, all12-step4.log |
+| bytes-s5-p1 | 22901363715 | 21700998244 | 22901363715 | 75849013177 | yes, all12-step4.log |
+| bytes-s5-p2 | 22901363715 | 21700998244 | 22901363715 | 75849013177 | yes, all12-step4.log |
+| bytes-s6-p1 | 14585071383 | 16382541368 | 16382541368 | 62811368483 | yes, all12-step4.log |
+| bytes-s6-p2 | 14585071383 | 16382541368 | 16382541368 | 62811368483 | yes, all12-step4.log |
 
 Reviewer rederive command (exit 0):
 `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/rederive.log /Users/edr/night-archive/forward-20261021/BY-C5/review-r1/rederive.py /Users/edr/code/JouleWise-by-c5 /tmp/byc5f1/MEASUREMENTS.raw.json /tmp/byc5f1/bytes-h-20261021T185555335572Z-calibration.runs.csv 4046531103`
 Compare P_committed_fixed column; its P column deliberately uses measured-fixed as the old baseline.
+
+
+| pack | model | count | stream allowance s | member-wall allowance s |
+|---|---|---:|---:|---:|
+| bytes-s1-p1 | qwen3-1p7b | 50 | 95.936319908860 | 133.421011684801 |
+| bytes-s1-p1 | qwen3-4b | 50 | 99.592648097569 | 138.716749210070 |
+| bytes-s1-p1 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s1-p2 | qwen3-1p7b | 50 | 95.936319908860 | 133.421011684801 |
+| bytes-s1-p2 | qwen3-4b | 50 | 99.592648097569 | 138.716749210070 |
+| bytes-s1-p2 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s2-p1 | qwen3-30b-a3b | 50 | 100.460336723753 | 145.758197295419 |
+| bytes-s2-p1 | qwen3-8b | 50 | 105.675267597787 | 146.138676196654 |
+| bytes-s2-p1 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s2-p2 | qwen3-30b-a3b | 50 | 100.460336723753 | 145.758197295419 |
+| bytes-s2-p2 | qwen3-8b | 50 | 105.675267597787 | 146.138676196654 |
+| bytes-s2-p2 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s3-p1 | qwen3-14b | 50 | 115.960714413045 | 158.620031791883 |
+| bytes-s3-p1 | qwen3-next-80b | 50 | 103.600245103200 | 160.362644346979 |
+| bytes-s3-p1 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s3-p2 | qwen3-14b | 50 | 115.960714413045 | 158.620031791883 |
+| bytes-s3-p2 | qwen3-next-80b | 50 | 103.600245103200 | 160.362644346979 |
+| bytes-s3-p2 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s4-p1 | qwen3-32b | 50 | 147.706179398033 | 199.223982318429 |
+| bytes-s4-p1 | qwen3-8b-8bit | 50 | 110.556092238560 | 153.147274264739 |
+| bytes-s4-p1 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s4-p2 | qwen3-32b | 50 | 147.706179398033 | 199.223982318429 |
+| bytes-s4-p2 | qwen3-8b-8bit | 50 | 110.556092238560 | 153.147274264739 |
+| bytes-s4-p2 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s5-p1 | llama-70b | 50 | 206.799102208280 | 272.192316152822 |
+| bytes-s5-p1 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s5-p2 | llama-70b | 50 | 206.799102208280 | 272.192316152822 |
+| bytes-s5-p2 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s6-p1 | qwen35-122b | 50 | 114.679302443784 | 189.463644769154 |
+| bytes-s6-p1 | reference | 25 | 93.759871867767 | 130.734032387328 |
+| bytes-s6-p2 | qwen35-122b | 50 | 114.679302443784 | 189.463644769154 |
+| bytes-s6-p2 | reference | 25 | 93.759871867767 | 130.734032387328 |
 
 ## STOPPED-EARLY C5
 
@@ -76,6 +133,11 @@ Finding 3 synthetic main output: completeness:qwen35-122b:check: fail; completen
 Real H main exits 2 because completeness and thermal lines fail (thermal_level 1), not a program fault.
 
 ## TESTS RUN
+
+Slice 4 (standard environment and fresh TMPDIR via run.py):
+- `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/all12-step4.log -m unittest tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_all_twelve_committed_fixed_budgets_through_native_planner_and_precheck`: 1 test, 6.007 s, exit 0.
+- `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/variants-step4.log /Users/edr/night-archive/forward-20261021/BY-C5/review-r1/variants.py /Users/edr/code/JouleWise-by-c5 /tmp/byc5f1/MEASUREMENTS.raw.json /tmp/byc5f1/bytes-h-20261021T185555335572Z-calibration.runs.csv`: exit 0, reviewer sensitivity reproduced.
+- lane-step4.log: 21 tests, exit 1; two /tmp versus /private/tmp path-alias assertions. Runner corrected to physical /private/tmp for subsequent runs; production code unchanged. lane-step4-physical.log rerun: 21 tests, 0.299 s, exit 0. smoke-step4.log: 22 tests, 47.403 s, exit 0. Physical /private/tmp is the same fresh mktemp directory via its canonical macOS alias, deleted after each module.
 
 All runs set JW_B5_SYNTHETIC_ONLY=1 and PYTHONDONTWRITEBYTECODE=1, use /opt/homebrew/bin/python3.13 -B, and get a fresh /tmp/jwtmp-byc5f1.* TMPDIR removed after completion.
 
@@ -123,7 +185,7 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 
 ## OPEN ISSUES
 
-- Remaining authorized fix-round work listed in PROGRESS; no completion claim. Slice 3 finding 6 integration passed in /tmp/byc5f1/smoke-metadata-step3-final.log (earlier attempts needed venv fixture setup).
+- Remaining authorized work: finish tests.b6.test_precheck by test name, tests.test_bytes_h_session by class/test, tests.b6.test_bytes_packs, importer modules from the rg list below, and final report/probe registered-P evidence. No completion claim. Slice 3 finding 6 integration passed in /tmp/byc5f1/smoke-metadata-step3-final.log (earlier attempts needed venv fixture setup).
 - BY-MERGE: pass1 ancestors carry changes to sealed files relative to main (plan.py, driver.py, hazards/clock.py and others); resolve in BY-MERGE, never in this lane.
 - Director re-runs real replay with updated fixed from C5; prior 0/10 evidence uses old fixed. Reviewer reports committed-fixed also 0/10; worker has not read real session trees.
 - Draft PR #547, last supplied CI: 20 pass, gate-ledger fails at cf716ce00. No network/CI query attempted.
@@ -137,3 +199,16 @@ Slice 3 sealed recheck: /tmp/byc5f1/sealed-step3.log, all 682 paths, exit 0, emp
 Slice 3 finding 6 exact test command (standard synthetic environment/fresh TMPDIR): `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/smoke-metadata-step3-final.log -m unittest tests.b6.test_b6_plan_render.ProductionPlanRenderTests.test_bytes_pack_p_through_real_planner_and_disk_hazard`: 1 test, 15.219 s, exit 0. No real arm/install executed; installer seam is fake.
 
 Director commit handoff: proposed `BY-C5 fix1 slice 3: PRECHECK shares registered P and smoke retention; smoke metadata records native requirement`. Push would be to lane/2026-10-22-bytes-c5-gates only; worker performed no Git writes.
+
+Slice 4 additional exact commands, all standard JW_B5_SYNTHETIC_ONLY/PYTHONDONTWRITEBYTECODE environment and fresh TMPDIR per final module run:
+- `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/loop-step4.log -m unittest tests.test_b6_loop.LoopTests`: 55 tests, 4.770 s, exit 0.
+- `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/session-step4.log -m unittest tests.b6.test_session_wrapper`: 6 tests, 0.081 s, exit 0.
+- `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/planinputs-step4-final.log -m unittest tests.b6.test_plan_inputs`: 8 tests, 0.035 s, exit 0.
+- Earlier combined inputs-session-step4.log: 14 tests, exit 0; superseded by separate per-module TMPDIR runs above.
+- `/opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/render-step4.log -m unittest tests.b6.test_b6_plan_render`: 5 tests, 57.128 s, exit 0, no skips.
+- `git diff --name-only bda481d5a -- <all 682 sealed inventory paths>`: exit 0, empty stdout and stderr, /tmp/byc5f1/sealed-step4.log, including uncommitted work.
+- `git diff --check`: exit 0.
+
+Required importer census command: `rg -n 'from joulewise.b6 import.*(precheck|plan_inputs|driver_lane)|from joulewise.b6.(precheck|plan_inputs|driver_lane)' tests --glob '*.py'`. Besides touched/requested modules, this names hazards.test_clock, hazards.test_arm, test_b6_machine_test, b6.test_cold_pass_fixes, b6.test_round2_review_fixes, b6.test_capture_screen_reachability, b6.test_desk_resume_finalize, b6.test_s3_cold_fixes, b6.test_integration_seams, b6.test_loop_round_desk. Existing environmental hazards reruns remain director-owned; inspect broader support/round_support importers as appropriate.
+
+Slice 4 handoff: local branch by-c5, HEAD dcceb8480bf9a7094b640e4ac57eade16b9e0666. Proposed director commit/push: `BY-C5 fix1 slice 4: verify all twelve committed-fixed native/precheck budgets; correct R6 and tables`, destination lane/2026-10-22-bytes-c5-gates, draft PR #547. No Git writes by worker. No real session reads. No COMPLETE marker until remaining authorized checks/report work finishes.

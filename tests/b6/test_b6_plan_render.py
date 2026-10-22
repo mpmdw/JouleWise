@@ -15,7 +15,7 @@ from unittest import mock
 from joulewise import calibration_ledger as ledger, night_agent_install, night_gate
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 from joulewise.b5 import driver, plan
-from joulewise.b6 import archive, compose, plan_inputs, queue
+from joulewise.b6 import archive, compose, plan_inputs, precheck, queue
 from joulewise.b6.driver_lane import DriverLane, read
 from joulewise.b6.pack_registration import Registration
 from tests.b6.support import DeskCase, ROOT, document, write_json
@@ -193,6 +193,59 @@ class ProductionPlanRenderTests(DeskCase):
                     checked = self.check_plan(prepared)
                     self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
                     self.check_readers(prepared, written)
+
+    def test_all_twelve_committed_fixed_budgets_through_native_planner_and_precheck(self):
+        # Ruling-derived H B maxima and committed fixed bytes; exact integer
+        # identity is the property. Timing/launch evidence below is synthetic.
+        bs = (21883930645, 22967763886, 24709054674, 27547300445, 22901363715, 16382541368)
+        expected_ps = (73814147037, 75981813519, 79464395095, 85140886637, 75849013177, 62811368483)
+        reg = self.measurement / "configs/b6/registration"
+        sizing = reg / "sizing_b5.json"
+        value = read(sizing)
+        for slot, (b, required) in enumerate(zip(bs, expected_ps), 1):
+            for partition in (1, 2):
+                pack_id = f"bytes-s{slot}-p{partition}"
+                terms = dict(B_bytes=b, extra_wait_raw_bytes=12999877322,
+                    fixed_retained_bytes=4046531103, peak_copies=2,
+                    session_wait_budget_s=plan.SESSION_WAIT_BUDGET_S, required_free_bytes=required)
+                self.assertEqual(required, 2 * (b + 12999877322) + 4046531103)
+                value["packs"][pack_id] = dict(pack_id=pack_id, programmed_span_s=3600,
+                    T_stream_max_s=100, disk_derivation=terms)
+                write_json(sizing, value)
+                path = self.measurement / "configs/campaigns" / pack_id / "plan_tree.json"
+                tree = read(path)
+                launch = read(self.measurement / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json")["arm_attachments"]["launch"]
+                for row in launch["bindings"]:
+                    if row["name"] in ("claim_runs_root", "bound_runs_root"):
+                        row["leaf"] = tree["roots"][row["name"].replace("runs_root", "root_leaf")]
+                tree["arm_attachments"]["launch"] = launch
+                write_json(path, tree)
+                prepared, written, _ = self.render(pack_id, False)
+                window = written["hazard_window"]
+                budget = read(Path(prepared.plan_path).parent.parent / "session.json")["disk_budget"]
+                limits = precheck.thresholds_for(self.measurement, pack_id, reg)["disk"]
+                self.assertEqual(limits["largest_session_bytes"], required)
+                self.assertEqual(limits["headroom_bytes"], 0)
+                targets = driver.disk_targets(window, arm=True)
+                def judge(free, targets, thresholds):
+                    measured = disk.measure(base.Context(), targets=targets,
+                        statvfs=lambda path: SimpleNamespace(f_bavail=free, f_frsize=1, f_blocks=2*required),
+                        stat=lambda path: SimpleNamespace(st_dev=1))
+                    return disk.judge(measured, thresholds)
+                for free, status in ((required-1, base.REFUSE), (required, base.PASS)):
+                    verdict = judge(free, targets, window["thresholds"]["disk"])
+                    self.assertEqual(verdict.observed["volumes"][0]["required_bytes"], required)
+                    self.assertEqual(verdict.status, status)
+                for smoke in (False, True):
+                    bar = required + (limits["smoke_bytes"] if smoke else 0)
+                    for free, status in ((bar-1, base.REFUSE), (bar, base.PASS)):
+                        verdict = judge(free, [{"path": str(self.root), "copies": 1}],
+                            {"planned_bytes": bar, "headroom_bytes": 0})
+                        self.assertEqual(verdict.observed["volumes"][0]["required_bytes"], bar)
+                        self.assertEqual(verdict.status, status)
+                print(pack_id, "P", required, "n", budget["member_count"],
+                    "q", budget["bytes_per_member"], "headroom", budget["headroom_bytes"],
+                    "smoke_retained", limits["smoke_bytes"], "planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states")
 
     def test_bytes_pack_p_through_real_planner_and_disk_hazard(self):
         # Synthetic integer receipts: P is bit-identical, no float tolerance.

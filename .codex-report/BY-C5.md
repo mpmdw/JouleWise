@@ -1,9 +1,6 @@
 ## PROGRESS
 
-Fix round 1 is in progress; current status and evidence are in [BY-C5-fix1.md](BY-C5-fix1.md).
-Findings 2, 3 and 7 are committed; slice 3 implements shared PRECHECK P validation and smoke retention (finding 1) and tests smoke native-requirement metadata (finding 6). Updated real-H planner/precheck evidence and final report refresh remain. The historical tables below use the earlier measured fixed term and are superseded by the committed-fixed table in the fix-round report until the final refresh.
-H C5 exit 2 reflects both completeness failures and the thermal line (thermal_level 1), not completeness alone.
-Native raw-byte producer changes were authorized under the recorded director grant; no further scope action required.
+Fix round findings 1–3, 6–7 implemented; finding 4 form retained and R6 corrected; finding 5 no change. Finding 8 committed-fixed tables and thermal/completeness text corrected. Twelve updated budgets pass real planner/arm/precheck boundary tests. Importer checks/final handoff remain; see BY-C5-fix1.md. No completion claim yet.
 
 ## SUMMARY
 
@@ -12,7 +9,7 @@ C5 now replaces the 150 GiB reserve with H-DISK-RULING exact rational P.
 Rates derive from one raw bundle's allocated byte receipts, without altering retained_bytes.
 All twelve pass packs print both bases, per-model counts and allowances, WAIT, fixed, c and P.
 Missing raw receipts flag disk.raw_bytes_missing; no available rates makes disk unavailable.
-All 17 bytes_gates tests pass; H rates agree with disk_h at the required 1e-6 relative bar.
+All 19 bytes_gates tests pass in fix round; H rates agree with disk_h at the required 1e-6 relative bar.
 Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
 Native producer now emits one-copy raw allocated-byte receipts; fully observed native-export C5 integration passes.
 All twelve H P values equal the actual planner and disk-hazard requirement, as exact integers.
@@ -28,28 +25,30 @@ Baseline 8386706f2 preserves the author of 66b330b15, as directed. Evidence dire
 
 ## P PER SUB-PACK
 
+Updated for committed fixed in fix round: all twelve requirements below verified through the real planner and disk hazard, and real precheck thresholds with smoke/no-smoke boundaries (all12-step4.log). C5 provenance records the source path, SHA-256 and JSON pointer. Measured fixed=1,266,544,640 B is unused disclosure.
+
 Slice 2 real-H command (extracted data files only in TMPDIR):
 
 `/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py --runs /tmp/jwtmp-byc5-disk-03yxkpvg/bytes-h-20261021T185555335572Z-calibration.runs.csv --measurements /tmp/jwtmp-byc5-disk-03yxkpvg/MEASUREMENTS.raw.json --disk-evidence /tmp/jwtmp-byc5-disk-03yxkpvg/disk_h.json --out /tmp/jwtmp-byc5-disk-03yxkpvg/C5.json`
 
-Exit 2 from stopped completeness gates; empty stderr; no ConversionSyntax. Rates use exact fractions of raw allocated bytes over measured decimal seconds. Agreement bar is 1e-6 relative per director ruling 1: stream 1805538.5168827055 vs disk_h 1805538.5168827053 B/s (relative difference 2.220446049250313e-16), wall 1285759.0452694688 vs 1285759.0452694688 B/s (relative difference 0). Optional --disk-evidence discloses BY-0 c_implied_alloc alongside c=2, hashes the additional source, and changes no P or refusal. With no evidence file, measured_c=null explicitly leaves the measurement unavailable.
+Exit 2 from stopped completeness gates and thermal_level 1; empty stderr; no ConversionSyntax. Rates use exact fractions of raw allocated bytes over measured decimal seconds. Agreement bar is 1e-6 relative per director ruling 1: stream 1805538.5168827055 vs disk_h 1805538.5168827053 B/s (relative difference 2.220446049250313e-16), wall 1285759.0452694688 vs 1285759.0452694688 B/s (relative difference 0). Optional --disk-evidence discloses BY-0 c_implied_alloc alongside c=2, hashes the additional source, and changes no P or refusal. With no evidence file, measured_c=null explicitly leaves the measurement unavailable.
 
 All twelve exact fraction records, rates, allowances and source hashes remain in `/Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json`; the bulky JSON dump is omitted here. All byte cells below are integers. Both p variants have identical terms. c=2 is operative; measured c=0.8020750916018277 is disclosure only.
 
 | pack | members n | stream basis B_s | wall basis B_w | B (winner) | WAIT | fixed | c | measured c | P | q | headroom | encoded requirement == P |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|
-| bytes-s1-p1 | 125 | 21,883,930,645 | 21,697,490,999 | 21,883,930,645 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 71,034,160,574 | 116,714,296 | 27,266,299,574 | yes |
-| bytes-s1-p2 | 125 | 21,883,930,645 | 21,697,490,999 | 21,883,930,645 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 71,034,160,574 | 116,714,296 | 27,266,299,574 | yes |
-| bytes-s2-p1 | 125 | 22,841,465,166 | 22,967,763,886 | 22,967,763,886 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,201,827,056 | 122,494,740 | 27,266,299,556 | yes |
-| bytes-s2-p2 | 125 | 22,841,465,166 | 22,967,763,886 | 22,967,763,886 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,201,827,056 | 122,494,740 | 27,266,299,556 | yes |
-| bytes-s3-p1 | 125 | 24,053,464,961 | 24,709,054,674 | 24,709,054,674 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 76,684,408,632 | 131,781,624 | 27,266,299,632 | yes |
-| bytes-s3-p2 | 125 | 24,053,464,961 | 24,709,054,674 | 24,709,054,674 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 76,684,408,632 | 131,781,624 | 27,266,299,632 | yes |
-| bytes-s4-p1 | 125 | 27,547,300,445 | 26,855,538,139 | 27,547,300,445 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 82,360,900,174 | 146,918,935 | 27,266,299,549 | yes |
-| bytes-s4-p2 | 125 | 27,547,300,445 | 26,855,538,139 | 27,547,300,445 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 82,360,900,174 | 146,918,935 | 27,266,299,549 | yes |
-| bytes-s5-p1 | 75 | 22,901,363,715 | 21,700,998,244 | 22,901,363,715 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,069,026,714 | 203,567,677 | 27,266,299,389 | yes |
-| bytes-s5-p2 | 75 | 22,901,363,715 | 21,700,998,244 | 22,901,363,715 (stream) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 73,069,026,714 | 203,567,677 | 27,266,299,389 | yes |
-| bytes-s6-p1 | 75 | 14,585,071,383 | 16,382,541,368 | 16,382,541,368 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 60,031,382,020 | 145,622,589 | 27,266,299,495 | yes |
-| bytes-s6-p2 | 75 | 14,585,071,383 | 16,382,541,368 | 16,382,541,368 (wall) | 12,999,877,322 | 1,266,544,640 | 2 | 0.8020750916018277 | 60,031,382,020 | 145,622,589 | 27,266,299,495 | yes |
+| bytes-s1-p1 | 125 | 21,883,930,645 | 21,697,490,999 | 21,883,930,645 (stream) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 73,814,147,037 | 116,714,296 | 30,046,286,037 | yes |
+| bytes-s1-p2 | 125 | 21,883,930,645 | 21,697,490,999 | 21,883,930,645 (stream) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 73,814,147,037 | 116,714,296 | 30,046,286,037 | yes |
+| bytes-s2-p1 | 125 | 22,841,465,166 | 22,967,763,886 | 22,967,763,886 (wall) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 75,981,813,519 | 122,494,740 | 30,046,286,019 | yes |
+| bytes-s2-p2 | 125 | 22,841,465,166 | 22,967,763,886 | 22,967,763,886 (wall) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 75,981,813,519 | 122,494,740 | 30,046,286,019 | yes |
+| bytes-s3-p1 | 125 | 24,053,464,961 | 24,709,054,674 | 24,709,054,674 (wall) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 79,464,395,095 | 131,781,624 | 30,046,286,095 | yes |
+| bytes-s3-p2 | 125 | 24,053,464,961 | 24,709,054,674 | 24,709,054,674 (wall) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 79,464,395,095 | 131,781,624 | 30,046,286,095 | yes |
+| bytes-s4-p1 | 125 | 27,547,300,445 | 26,855,538,139 | 27,547,300,445 (stream) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 85,140,886,637 | 146,918,935 | 30,046,286,012 | yes |
+| bytes-s4-p2 | 125 | 27,547,300,445 | 26,855,538,139 | 27,547,300,445 (stream) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 85,140,886,637 | 146,918,935 | 30,046,286,012 | yes |
+| bytes-s5-p1 | 75 | 22,901,363,715 | 21,700,998,244 | 22,901,363,715 (stream) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 75,849,013,177 | 203,567,677 | 30,046,285,852 | yes |
+| bytes-s5-p2 | 75 | 22,901,363,715 | 21,700,998,244 | 22,901,363,715 (stream) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 75,849,013,177 | 203,567,677 | 30,046,285,852 | yes |
+| bytes-s6-p1 | 75 | 14,585,071,383 | 16,382,541,368 | 16,382,541,368 (wall) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 62,811,368,483 | 145,622,589 | 30,046,285,958 | yes |
+| bytes-s6-p2 | 75 | 14,585,071,383 | 16,382,541,368 | 16,382,541,368 (wall) | 12,999,877,322 | 4,046,531,103 | 2 | 0.8020750916018277 | 62,811,368,483 | 145,622,589 | 30,046,285,958 | yes |
 
 Per-model allowances below are seconds, displayed to nine decimals for readability; arithmetic uses the exact fractions in C5.json. The count applies to each p variant. Global r_s=1805538.5168827055 B/s and r_w=1285759.0452694688 B/s apply to every pack.
 
@@ -84,6 +83,8 @@ The production-shaped synthetic test supplies the omitted launch declaration in 
 
 ## REPLAY PROGRAM
 
+Historical real replay table below uses fixed=1,266,544,640 B and largest-pass P=82,360,900,174 B. It is retained as prior executed evidence, not the current committed-fixed replay. Current replay consumes C5 fixed=4,046,531,103 B and largest-pass P=85,140,886,637 B; director must re-run real sessions. Reviewer independently reported 0/10 even with committed fixed. Worker tests only synthetic replay receipts.
+
 Implemented as `scripts/bytes_gates.py replay --c5 <C5.json> --measurements <MEASUREMENTS.raw.json> --out <replay.json> <session-root>...`. It prints one JSON row per session and a final refusal_count/session_count, unavailable_count and largest-pass refusal count. JSON includes an empty refusal_census. Exit codes: 2 any measured free<P, 1 unavailable rows with no refusal, 0 all available rows pass. This desk subcommand never arms a session.
 
 Inputs: B6 free-at-arm is the minimum valid target on the session st_dev (ignoring measurement/target errors and foreign devices), free-at-desk is compression-summary.free_bytes_before, and B is summed compression.jsonl compress/runs size. These logical compressed-file sizes are a lower bound on one raw copy (implied c an upper bound), as BY-0 documents. H uses desk.json disk free values and the sum of timed augmented raw_allocated_bytes; never-ran null receipts enter no sum. WAIT and fixed are the committed terms already disclosed in C5 disk:kit, reused without adding margins. Each row discloses the byte basis, B, WAIT, fixed, c=2, P, both free readings, D, measured c, refusal, largest pass P and its refusal. Missing/malformed inputs remain flagged rows, never dropped or refused.
@@ -116,7 +117,7 @@ Director real replay at d49f11fb3: source `/Users/edr/night-archive/forward-2026
 
 Refusal count: 0 of 10 available sessions (9 block-6 + H); 1 unavailable (r2-alpha, inputs absent).
 
-Director C5 command: `/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py --runs <data-branch runs.csv> --measurements /Users/edr/night-archive/forward-20261021/BY-C5/MEASUREMENTS.raw.json --disk-evidence <data-branch disk_h.json> --out /Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json` — exit 2 (stopped-session completeness), empty stderr.
+Director C5 command: `/opt/homebrew/bin/python3.13 -B scripts/bytes_gates.py --runs <data-branch runs.csv> --measurements /Users/edr/night-archive/forward-20261021/BY-C5/MEASUREMENTS.raw.json --disk-evidence <data-branch disk_h.json> --out /Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json` — exit 2 (stopped-session completeness and thermal_level 1), empty stderr.
 
 Director replay command is the exact template above with C5_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay/C5.json and REPLAY_JSON=/Users/edr/night-archive/forward-20261021/BY-C5/replay/replay.json — exit 1 for the unavailable r2-alpha row. All ten available rows pass; largest-pass refusal count is also 0. Worker read these replay outputs only, never the real session trees.
 
@@ -251,17 +252,21 @@ Exit 0; 11 tests in 1.132 seconds; OK, no skips or environmental failures. This 
 
 ## R6 DRAFT
 
-For each BYTES pass session the sole disk refusal is measured session-volume free bytes, statvfs f_bavail multiplied by f_frsize with purgeable bytes excluded, below P. P = 2(B + WAIT) + fixed. B is the larger of ceil(r_s times the sum of model count times that model’s stream allowance) and ceil(r_w times the sum of model count times that model’s member-wall allowance). Rates are maxima over timed H members of one raw bundle tree’s inode-deduplicated POSIX st_blocks times 512 divided by stream seconds or member-wall seconds respectively. Each model uses its own measured allowances including the measured request max/min margin; the stream allowance includes mean request time plus maximum stream-minus-request time. Each full basis rounds up once in exact rational arithmetic. WAIT=ceil(r_s times 7200 seconds), fixed is the committed fixed-artifact allocation, and two copies count raw plus the partitioned rsync backups; the harvest APFS clone adds no copy. No reserve or further margin is added. All terms, P, free bytes and the measured whole-window implied copy count are disclosed; missing inputs are flags. The native three-target budget encodes P exactly with q=floor(2B/(3n)) and headroom=(2B-3nq)+2WAIT+fixed, where n is the writer’s actual members-plus-spares count; disk.budget_encoded_from_p names that encoding. H gives r_s=1,805,538.5168827055 B/s, r_w=1,285,759.0452694688 B/s, WAIT=12,999,877,322 B, and fixed=1,266,544,640 B. With c=2, P for each p1/p2 session is s1=71,034,160,574 B; s2=73,201,827,056 B; s3=76,684,408,632 B; s4=82,360,900,174 B; s5=73,069,026,714 B; s6=60,031,382,020 B. Each B, winning basis, allowance, q and headroom is in the tables above. BY-SLOTS fills these pack-specific values; the stopped-session sizing remains PROVISIONAL.
+For each BYTES pass session the sole disk refusal is measured session-volume free bytes, statvfs f_bavail multiplied by f_frsize with purgeable bytes excluded, below P. P = 2(B + WAIT) + fixed. B is the larger of ceil(r_s times the sum of model count times that model’s stream allowance) and ceil(r_w times the sum of model count times that model’s member-wall allowance). Rates are maxima over timed H members of one raw bundle tree’s inode-deduplicated POSIX st_blocks times 512 divided by stream seconds or member-wall seconds respectively. The margin is the largest request-time max/min-minus-one spread over check and soak groups only. Each model’s stream allowance is (mean request seconds + maximum stream-minus-request seconds) × (1 + margin); its member-wall allowance is mean member-wall seconds × (1 + margin), the same time used by C5 span sizing. Reference members use the reference’s own terms. If BY-SLOTS registers a different allowance form, P is recomputed from that form. Each full basis rounds up once in exact rational arithmetic. WAIT=ceil(r_s times 7200 seconds), fixed is the committed fixed-artifact allocation, and two copies count raw plus the partitioned rsync backups; the harvest APFS clone adds no copy. No reserve or further margin is added. All terms, P, free bytes and the measured whole-window implied copy count are disclosed; missing inputs are flags. The native three-target budget encodes P exactly with q=floor(2B/(3n)) and headroom=(2B-3nq)+2WAIT+fixed, where n is the writer’s actual members-plus-spares count; disk.budget_encoded_from_p names that encoding. H gives r_s=1,805,538.5168827055 B/s, r_w=1,285,759.0452694688 B/s, WAIT=12,999,877,322 B, and fixed=4,046,531,103 B. With c=2, P for each p1/p2 session is s1=73,814,147,037 B; s2=75,981,813,519 B; s3=79,464,395,095 B; s4=85,140,886,637 B; s5=75,849,013,177 B; s6=62,811,368,483 B. Each B, winning basis, allowance, q and headroom is in the tables above. BY-SLOTS fills these pack-specific values; the stopped-session sizing remains PROVISIONAL.
 
 Slice-6 intake df: 87,373,108 KiB available = 89,470,062,592 B, exceeding all P values at that instant; later reading 82,383,072 KiB = 84,360,265,728 B, also above all P. These desk readings are not a future arm receipt.
 
 Lead disk-state fact: the director observed about 67 GiB (~72 GB) free at 07:5x UTC, at which s3/s4 would physically refuse while s1/s2/s5 were within a few GB. This slice re-ran `df -k /Users/edr`: `/dev/disk3s5 971350180 902869204 44779048 96% ... /System/Volumes/Data`. Available=44,779,048 KiB=45,853,745,152 B (~42.7 GiB), above the 10 GiB stop gate but below all six P values, so every sub-pack would physically refuse at this reading. These are correct free<P refusals, not a defect; free space is time-dependent.
 
+The committed fixed source is configs/campaigns/bytes_mac_check/registration/sizing_b5.json, pointer /packs/bytes-mac-check/disk_derivation/fixed_retained_bytes (SHA-256 42bd19f9b4387944b919346ac946f0b996bf694f5f9af084f15adff4d35622c6). The stopped-session measured 1,266,544,640 B is unused disclosure. PRECHECK uses P with zero headroom; with smoke due it adds only ceil(2 B m/n) retained smoke member bytes. Missing P is flagged, without an inherited reserve; DriverLane retains its registration hold. Smoke metadata labels its actual native requirement separately from full-pack P.
+
 ## CI
 
-Director creates draft PR and reads CI under the local route. Draft PR number and CI state unavailable to this worker; no remote operation attempted. Current local branch by-c5, intake/current committed HEAD 98ed69513; uncommitted slice-6 diff is ready for the director to commit and push to lane/2026-10-22-bytes-c5-gates. Proposed commit: BY-C5 slice 6: native raw-byte producer and full planner equality evidence.
+Draft PR #547; latest supplied CI at cf716ce00: 20 pass, gate-ledger fails. Current local HEAD dcceb8480 on by-c5; director commits/pushes fix slices to lane/2026-10-22-bytes-c5-gates. No network query or Git writes by worker.
 
 ## DECISIONS I MADE
+
+Fix round: PRECHECK and arm share disk-term validity and pack lookup. A missing P contributes no disk wait; DriverLane keeps LaneMissing. Smoke retention is ceil(2 B m/n), derived from registered pack B and real member counts. Full pack metadata and smoke native requirements are separately labelled. C5 absent-model observations make dependent model/disk/sizing lines unavailable and still write JSON with exit 2. Measured-c equality is exact int/int division; WAIT imports sealed SESSION_WAIT_BUDGET_S.
 
 Slice 6 scope grant: emit raw_allocated_bytes natively with a fresh raw seen-set for each run, independent of archive/retained accounting; no raw tree yields null. Keep retained_bytes unchanged. This supersedes the earlier BY-H2 producer handoff. Only the authorized measurement lines, derivation, fixture and report change in this slice.
 
@@ -273,7 +278,7 @@ Slice 3: registered disk terms live in sizing_b5.json packs[label].disk_derivati
 Director ruling 1: per-run raw_allocated_bytes is the only disk-rate byte source (allocated st_blocks*512, raw-only tree, inode-deduplicated). Missing raw byte receipts enter no rate, are counted in disk.raw_bytes_missing; no rate makes disk unavailable. Never halve retained_bytes. Rates compare at 1e-6 relative; derived integer bytes compare exactly. Director slice-6 scope grant authorizes the minimal native producer addition implemented below. Synthetic never-ran receipts carry raw_allocated_bytes=null.
 
 
-Applied director precedence: H ruling and committed disk_terms win over the paraphrase; B is the maximum of two summed bases, each rounded once using exact rational arithmetic. c=2; measured c is disclosure. WAIT uses stream rate for registered 7200 seconds; fixed comes unchanged from disk.fixed_retained_bytes. Local route overrides cloud setup, commits and PR operations.
+Applied director precedence: H ruling and committed disk_terms win over the paraphrase; B is the maximum of two summed bases, each rounded once using exact rational arithmetic. c=2; measured c is disclosure. WAIT uses stream rate for registered 7200 seconds; fixed comes solely from committed H sizing at /packs/bytes-mac-check/disk_derivation/fixed_retained_bytes; the partial measured fixed is unused disclosure (fix-round disposition 2 supersedes old item 5). Local route overrides cloud setup, commits and PR operations.
 
 ## Clause map
 
@@ -296,6 +301,8 @@ The production/test map below records the governing numerical clauses. Counterfa
 | Brief rule 8, missing replay row retained as flag | scripts/bytes_gates.py:383 replay_disk | tests/test_bytes_gates.py:138 test_missing_inputs_are_listed_never_refused | Drop missing row: unavailable/session-count assertion fails. |
 
 ## OPEN ISSUES
+
+BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Required importer checks and final report cleanup continue in fix-round PROGRESS.
 
 Native producer support is implemented and the fully observed native-export integration passes under the explicit slice-6 scope grant: raw-only POSIX st_blocks*512, independent per-run seen-set, null absent raw trees; retained_bytes unchanged. Synthetic full raw/archive copies assert retained_bytes == 2*raw_allocated_bytes. No BY-H2 producer blocker remains.
 
