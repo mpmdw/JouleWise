@@ -1,27 +1,26 @@
-"""Provisional translation to the runner lane's factory-based matrix format.
+"""Translate campaign rows into the runner's factory/config format.
 
-Based on docs/align/runner.md from lane/2026-10-21-align-runner. No runner
-implementation is copied here. Budget effort trials still need their own driver.
+Only operator-requested config keys cross this seam. Placeholders substitute
+session bindings without assuming a factory constructor signature.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import uuid
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from joulewise.align.gpukit.matrix import validate
 
 
 def runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str,
-                  output_dir: Path, settings: Mapping[str, Any]) -> tuple[dict[str, Any], tuple[str, ...]]:
-    """Translate one model with caller-supplied factory names and run limits.
-
-    Settings require task/endpoint/monitor/sampler/token_counter_factory,
-    order_seed, max_turns, max_tokens and temperature. Optional *_config objects
-    and imports are passed to the runner. Unavailable integrations stay flags.
-    """
+                  output_dir: Path, settings: Mapping[str, Any],
+                  session_id: str | None = None, monitor_endpoint: str | None = None,
+                  judge_endpoint: str | None = None,
+                  device_indices: Sequence[int] = ()) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Bind explicit *_config placeholders; pass optional clock settings through."""
     flags = list(validate(matrix))
     flags.append("runner_adapter_provisional")
     if matrix.get("kind") == "budget":
@@ -29,7 +28,10 @@ def runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str,
     models = {m["id"]: m for m in matrix.get("models", ())}
     if model not in models:
         flags.append("runner_adapter_model_unknown")
-    for kind in ("task", "endpoint", "monitor", "sampler", "token_counter"):
+    kinds = ("task", "endpoint", "sampler", "token_counter")
+    if monitor_endpoint is not None:
+        kinds += ("monitor",)
+    for kind in kinds:
         if not isinstance(settings.get(kind + "_factory"), str) or not settings[kind + "_factory"]:
             flags.append("runner_adapter_factory_missing:" + kind)
         if not isinstance(settings.get(kind + "_config", {}), dict):
@@ -49,46 +51,64 @@ def runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str,
     if any(f != "runner_adapter_provisional" for f in flags):
         return {}, tuple(sorted(set(flags)))
 
-    def component(kind: str, **extra: Any) -> dict[str, Any]:
-        return {"factory": settings[kind + "_factory"],
-                "config": {**settings.get(kind + "_config", {}), **extra}}
+    def api(url: str | None) -> str | None:
+        return url.rstrip("/").removesuffix("/v1") + "/v1" if url else None
 
-    model_spec = models[model]
-    result = {
-        "matrix_id": matrix["name"] + ":" + model,
-        "order_seed": settings["order_seed"],
-        "task_pairs": [component("task", task_pair=task) for task in matrix["tasks"]],
-        "conditions": list(matrix["conditions"]),
-        "seeds": list(matrix["seeds"]),
-        "endpoints": [component("endpoint", model=model, revision=model_spec.get("revision"),
-                                base_url=endpoint.rstrip("/") + "/v1",
-                                router_logging=matrix["kind"] == "moe_stage_a")],
-        "monitors": [{**component("monitor", model=matrix["monitor_model"]),
-                      "visibilities": list(matrix["monitor_visibilities"])}],
-        "samplers": [component("sampler", interval_ns=matrix["sampling"]["interval_ns"])],
-        "token_counter": component("token_counter", model=model,
-                                   revision=model_spec.get("revision"),
-                                   base_url=endpoint.rstrip("/") + "/v1"),
-        "max_turns": settings["max_turns"],
-        "max_tokens": settings["max_tokens"],
-        "temperature": temperature,
-        "output_dir": str(output_dir.resolve()),
+    bindings = {
+        "agent_model": model, "agent_base_url": api(endpoint),
+        "agent_revision": models[model].get("revision"),
+        "monitor_model": matrix["monitor_model"], "monitor_base_url": api(monitor_endpoint),
+        "judge_model": matrix.get("judge_model", matrix["monitor_model"]),
+        "judge_base_url": api(judge_endpoint),
+        "interval_ns": matrix["sampling"]["interval_ns"],
+        "device_indices": list(device_indices),
+        "router_logging": matrix["kind"] == "moe_stage_a",
     }
-    # Runner also reads the task_pair at the component's outer level when
-    # deriving coordinates; its factory receives config unchanged.
-    for task, name in zip(result["task_pairs"], matrix["tasks"]):
-        task["task_pair"] = name
+
+    def fill(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: fill(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [fill(v) for v in value]
+        if isinstance(value, str):
+            for key, replacement in bindings.items():
+                if value == "{" + key + "}":
+                    return replacement
+            # Ordinary text/braces are preserved; only named placeholders expand.
+            for key, replacement in bindings.items():
+                value = value.replace("{" + key + "}", str(replacement))
+        return value
+
+    def component(kind: str) -> dict[str, Any]:
+        return {"factory": settings[kind + "_factory"],
+                "config": fill(settings.get(kind + "_config", {}))}
+
+    result = {
+        "matrix_id": matrix["name"] + ":" + model + ":" + (session_id or uuid.uuid4().hex),
+        "order_seed": settings["order_seed"],
+        "task_pairs": [{**component("task"), "task_pair": task} for task in matrix["tasks"]],
+        "conditions": list(matrix["conditions"]), "seeds": list(matrix["seeds"]),
+        "endpoints": [component("endpoint")],
+        "monitors": ([{**component("monitor"), "visibilities": list(matrix["monitor_visibilities"])}]
+                     if monitor_endpoint is not None else []),
+        "samplers": [component("sampler")], "token_counter": component("token_counter"),
+        "max_turns": settings["max_turns"], "max_tokens": settings["max_tokens"],
+        "temperature": temperature, "output_dir": str(output_dir.resolve()),
+    }
     if imports:
         result["imports"] = list(imports)
+    for key in ("clock", "clock_domain"):
+        if key in settings:
+            result[key] = fill(settings[key])
     return result, tuple(flags)
 
 
 def write_runner_matrix(path: Path, matrix: Mapping[str, Any], *, model: str,
-                        endpoint: str, output_dir: Path,
-                        settings: Mapping[str, Any]) -> tuple[str, ...]:
-    """Write a translated matrix for review, preserving adapter flags separately."""
+                        endpoint: str, output_dir: Path, settings: Mapping[str, Any],
+                        **bindings: Any) -> tuple[str, ...]:
+    """Write the translated matrix and return its integration flags."""
     value, flags = runner_matrix(matrix, model=model, endpoint=endpoint,
-                                 output_dir=output_dir, settings=settings)
+                                 output_dir=output_dir, settings=settings, **bindings)
     Path(path).write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n",
                           encoding="utf-8")
     return flags

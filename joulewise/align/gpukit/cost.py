@@ -111,12 +111,9 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
             plan *= 1 + gpu["router_overhead_fraction"]
         plans.append(episodes * plan)
         monitor_calls += monitors
-    bound, plan = duration(matrix["monitor_model"], work["monitor_prefill_tokens"],
-                           work["monitor_decode_tokens"])
-    bounds.append(monitor_calls * bound)
-    plans.append(monitor_calls * plan)
+    # Monitor/judge execute off the measured GPU; never bill their tokens here.
     # Serial swap policy is an explicit planning parameter, not a physical bound.
-    plans.extend((gpu["setup_s"], (2 * len(counts) + 1) * gpu["model_load_s"]))
+    plans.extend((gpu["setup_s"], len(counts) * gpu["model_load_s"]))
     lower = math.fsum(bounds) if bound_available else None
     seconds = math.fsum(plans) if plan_available else None
     # 3600 seconds/hour; all allocated GPUs accrue the same serial wall time.

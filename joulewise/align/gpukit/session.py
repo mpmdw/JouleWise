@@ -18,6 +18,7 @@ import sys
 import tarfile
 import time
 import xml.etree.ElementTree as ET
+import uuid
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +45,8 @@ class SessionOptions:
     ready_timeout_s: float
     poll_s: float
     command_timeout_s: float
+    runner_timeout_s: float
+    monitor_placement: str
     preflight_command: tuple[str, ...] = ()
     ready_command: tuple[str, ...] = ()
     vllm_command: tuple[str, ...] = ("vllm",)
@@ -52,6 +55,11 @@ class SessionOptions:
     destination: str | None = None
     copy_kind: str = "rsync"
     runner_settings: Path | None = None
+    gpu_indices: tuple[int, ...] = ()
+    monitor_base_url: str | None = None
+    judge_base_url: str | None = None
+    monitor_gpu_index: int | None = None
+    monitor_port: int | None = None
 
 
 def whole_gpu(*, gpu_index: int, timeout_s: float) -> dict[str, Any]:
@@ -285,73 +293,148 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
     return tuple(sorted(set(flags)))
 
 
+def _stop_group(process: subprocess.Popen, *, grace_s: float) -> None:
+    """Terminate the serving/runner session including children of an exited parent."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=grace_s)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        pass
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
+def _runner_command(argv: Sequence[str], log: Path, *, timeout_s: float,
+                    grace_s: float) -> tuple[int, bool]:
+    """A runner owns a process group; a timeout must stop its samplers too."""
+    with log.open("wb") as handle:
+        process = subprocess.Popen(list(argv), stdout=handle, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+        timed_out = False
+        try:
+            code = process.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            code = -1
+        finally:
+            _stop_group(process, grace_s=grace_s)
+    return code, timed_out
+
+
+def _serve_argv(options: SessionOptions, model: dict[str, Any], port: int) -> list[str]:
+    argv = [*options.vllm_command, "serve", model.get("checkpoint", model["id"]),
+            "--host", "127.0.0.1", "--port", str(port),
+            "--served-model-name", model["id"],
+            "--tensor-parallel-size", str(model.get("tensor_parallel_size", 1)),
+            "--dtype", "bfloat16", "--enable-auto-tool-choice",
+            "--tool-call-parser", "hermes"]
+    if model.get("weight_precision", "bf16") == "fp8":
+        argv += ["--quantization", "fp8"]
+    if model["id"].startswith("Qwen/"):
+        argv += ["--reasoning-parser", "qwen3"]
+    if model.get("revision"):
+        argv += ["--revision", model["revision"]]
+    return argv
+
+
 def run_session(options: SessionOptions, *,
                 probe: Callable[[str, float], bool] = _healthy) -> dict[str, Any]:
-    """Run serial model campaigns, preflight, bundle and optional copy-back.
+    """Run serial agent models with an explicitly placed, unsampled monitor.
 
-    Every operational failure is a flag and is packaged. MIG/vGPU is the explicit
-    isolation refusal required by the brief. This function never rents hardware.
+    MIG/vGPU and absent/refused NVML preflight refuse before any model starts.
+    Other unavailable integration is recorded and raw results are still sealed.
     """
     output = options.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     flags: list[str] = []
-    receipt: dict[str, Any] = {"schema": "joulewise.align.gpukit.session.v1",
-                             "status": "incomplete", "flags": flags,
-                             "models": [], "data_complete": False,
-                             "start_ns": time.monotonic_ns(),
-                             "data_complete_meaning": "Every planned coordinate exactly once per model, usable turns without runner failures, and non-mock power covering each episode; scoring may be deferred."}
+    receipt: dict[str, Any] = {
+        "schema": "joulewise.align.gpukit.session.v2", "status": "incomplete",
+        "session_id": uuid.uuid4().hex, "flags": flags, "models": [],
+        "data_complete": False, "start_ns": time.monotonic_ns(),
+        "data_complete_meaning": "Every planned coordinate exactly once per model, usable turns without runner failures, and non-mock power covering every measured device and episode; scoring may be deferred.",
+        "monitor_placement": options.monitor_placement,
+    }
+    monitor_process = None
+    monitor_log = None
     try:
         matrix, matrix_flags = load_matrix(options.matrix)
         flags.extend(matrix_flags)
-        runner_command = options.runner_command
         settings: dict[str, Any] = {}
-        if not runner_command:
-            # The runner CLI is documented on its lane, pending spine integration.
-            runner_command = (sys.executable, "-m", "joulewise.align", "run",
-                              "--matrix", "{runner_matrix}")
+        if options.runner_settings:
             try:
-                settings = json.loads(options.runner_settings.read_text(encoding="utf-8")) if options.runner_settings else {}
+                settings = json.loads(options.runner_settings.read_text(encoding="utf-8"))
                 if not isinstance(settings, dict):
                     settings = {}
                     flags.append("runner_settings_invalid")
             except (OSError, ValueError) as exc:
                 flags.append(f"runner_settings_unreadable:{type(exc).__name__}")
-            if not settings:
-                flags.append("runner_settings_missing")
-                matrix_flags = (*matrix_flags, "runner_settings_missing")
-        if _command([sys.executable, "-m", "pip", "freeze"], output / "packages.log",
-                    timeout_s=options.command_timeout_s):
-            flags.append("package_provenance_unavailable")
-        if _command(["git", "rev-parse", "HEAD"], output / "repository-head.log",
-                    timeout_s=options.command_timeout_s):
-            flags.append("repository_provenance_unavailable")
+        runner_command = options.runner_command or (
+            sys.executable, "-m", "joulewise.align", "run", "--matrix", "{runner_matrix}")
+        if not options.runner_command and not settings:
+            flags.append("runner_settings_missing")
+            matrix_flags = (*matrix_flags, "runner_settings_missing")
+        for argv, name in (([sys.executable, "-m", "pip", "freeze"], "packages"),
+                           (["git", "rev-parse", "HEAD"], "repository-head")):
+            if _command(argv, output / (name + ".log"), timeout_s=options.command_timeout_s):
+                flags.append(name + "_provenance_unavailable")
         if matrix:
             _json(output / "matrix.json", matrix)
             flags.extend(matrix.get("flags", ()))
+        maximum = max((m.get("tensor_parallel_size", 1) for m in matrix.get("models", [])), default=1)
+        measured = list(options.gpu_indices or tuple(range(options.gpu_index, options.gpu_index + maximum)))
+        receipt["measured_gpu_indices"] = measured
+        if len(set(measured)) != len(measured) or len(measured) < maximum:
+            flags.append("runner_measured_gpu_layout_invalid")
+            matrix_flags = (*matrix_flags, "runner_measured_gpu_layout_invalid")
+        placement = options.monitor_placement
+        monitor_endpoint = None
+        judge_endpoint = None
+        monitor_gpu = options.monitor_gpu_index
+        monitor_model = {"id": matrix.get("monitor_model", ""), "tensor_parallel_size": 1}
+        if placement == "external":
+            monitor_endpoint = options.monitor_base_url
+            judge_endpoint = options.judge_base_url or monitor_endpoint
+            if not monitor_endpoint:
+                flags.append("monitor_external_url_missing")
+        elif placement == "gpu":
+            if monitor_gpu is None or options.monitor_port is None or options.monitor_port == options.port:
+                flags.append("monitor_gpu_settings_missing")
+            elif monitor_gpu in measured:
+                flags.append("monitor_measured_gpu_overlap")
+            else:
+                monitor_endpoint = f"http://127.0.0.1:{options.monitor_port}"
+                judge_endpoint = monitor_endpoint
+        elif placement != "none":
+            flags.append("monitor_placement_unknown")
+        inventory = []
+        indices = measured + ([monitor_gpu] if placement == "gpu" and monitor_gpu is not None else [])
         try:
-            receipt["hardware"] = whole_gpu(gpu_index=options.gpu_index,
-                                             timeout_s=options.command_timeout_s)
-            flags.extend(receipt["hardware"]["flags"])
+            for device in dict.fromkeys(indices):
+                row = whole_gpu(gpu_index=device, timeout_s=options.command_timeout_s)
+                inventory.append(row)
+                flags.extend(row["flags"])
         except IsolationError as exc:
             flags.append("whole_gpu_required")
-            receipt["isolation_reason"] = str(exc)
-            receipt["status"] = "refused"
-            matrix_flags = (*matrix_flags, "isolation_refused")
+            receipt.update(status="refused", isolation_reason=str(exc))
+        receipt["hardware"] = inventory
         preflight_path = output / "preflight.json"
         preflight = [*(options.preflight_command or (
-            sys.executable, "-m", "joulewise.align.power.preflight")),
-            "--out", str(preflight_path), "--device", str(options.gpu_index)]
+            sys.executable, "-m", "joulewise.align.power.preflight")), "--out", str(preflight_path)]
+        for device in measured:
+            preflight += ["--device", str(device)]
         receipt["preflight_argv"] = preflight
         if receipt["status"] != "refused":
-            code = _command(preflight, output / "preflight.log",
-                            timeout_s=options.command_timeout_s)
+            code = _command(preflight, output / "preflight.log", timeout_s=options.command_timeout_s)
             receipt["preflight_returncode"] = code
             try:
                 report = json.loads(preflight_path.read_text(encoding="utf-8"))
                 if not isinstance(report, dict) or type(report.get("refused")) is not bool:
                     raise ValueError("preflight verdict missing")
-                receipt["preflight"] = {k: report.get(k) for k in
-                                        ("refused", "measurement_ready", "flags")}
+                receipt["preflight"] = {k: report.get(k) for k in ("refused", "measurement_ready", "flags")}
                 flags.extend(report.get("flags", ()))
                 if report["refused"]:
                     flags.append("nvml_preflight_refused")
@@ -361,60 +444,84 @@ def run_session(options: SessionOptions, *,
             except (OSError, ValueError, TypeError):
                 flags.append("nvml_preflight_unavailable")
                 receipt["status"] = "refused"
-        if matrix and not matrix_flags and receipt["status"] != "refused":
+        executable = bool(matrix and not matrix_flags and receipt["status"] != "refused")
+        if executable and placement == "gpu" and monitor_endpoint is not None:
+            monitor_log = (output / "monitor-server.log").open("wb")
+            monitor_argv = _serve_argv(options, monitor_model, options.monitor_port)
+            receipt["monitor_server"] = {"argv": monitor_argv, "gpu_index": monitor_gpu}
+            try:
+                monitor_process = subprocess.Popen(
+                    monitor_argv, stdout=monitor_log, stderr=subprocess.STDOUT,
+                    env=dict(os.environ, CUDA_VISIBLE_DEVICES=str(monitor_gpu)), start_new_session=True)
+                ready = wait_ready(monitor_process, monitor_endpoint,
+                                   timeout_s=options.ready_timeout_s, poll_s=options.poll_s,
+                                   ready_command=options.ready_command,
+                                   log=output / "monitor-readiness.log", probe=probe)
+                flags.extend("monitor_" + f for f in ready)
+                if ready:
+                    monitor_endpoint = judge_endpoint = None
+            except OSError as exc:
+                flags.append("monitor_server_failed:" + type(exc).__name__)
+                monitor_endpoint = judge_endpoint = None
+        receipt["monitor_base_url"] = monitor_endpoint
+        receipt["judge_base_url"] = judge_endpoint
+        if monitor_endpoint is None:
+            flags.extend(("monitoring_deferred", "judging_deferred"))
+        if executable:
             for index, model in enumerate(matrix["models"]):
                 model_dir = output / f"model-{index}"
                 model_dir.mkdir()
+                devices = measured[:model.get("tensor_parallel_size", 1)]
                 endpoint = f"http://127.0.0.1:{options.port}"
-                model_receipt: dict[str, Any] = {"model": model["id"], "flags": []}
+                model_receipt: dict[str, Any] = {
+                    "model": model["id"], "flags": [], "measured_gpu_indices": devices}
                 receipt["models"].append(model_receipt)
                 runner_path = model_dir / "runner-matrix.json"
                 if not options.runner_command:
                     adapter_flags = write_runner_matrix(
                         runner_path, matrix, model=model["id"], endpoint=endpoint,
-                        output_dir=model_dir, settings=settings)
+                        output_dir=model_dir, settings=settings, session_id=receipt["session_id"],
+                        monitor_endpoint=monitor_endpoint, judge_endpoint=judge_endpoint,
+                        device_indices=devices)
                     model_receipt["flags"].extend(adapter_flags)
                     if any(f != "runner_adapter_provisional" for f in adapter_flags):
                         flags.extend(model_receipt["flags"])
                         continue
-                argv = [*options.vllm_command, "serve", model["id"],
-                        "--host", "127.0.0.1", "--port", str(options.port),
-                        "--served-model-name", model["id"],
-                        "--enable-auto-tool-choice", "--tool-call-parser", "hermes"]
-                if model["id"].startswith("Qwen/"):
-                    argv += ["--reasoning-parser", "qwen3"]
-                if model.get("revision"):
-                    argv += ["--revision", model["revision"]]
-                else:
+                argv = _serve_argv(options, model, options.port)
+                model_receipt["server_argv"] = argv
+                if not model.get("revision"):
                     model_receipt["flags"].append("model_revision_unpinned")
                 process = None
                 try:
-                    env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(options.gpu_index))
                     with (model_dir / "server.log").open("wb") as server_log:
-                        process = subprocess.Popen(argv, stdout=server_log,
-                                                   stderr=subprocess.STDOUT, env=env, start_new_session=True)
+                        process = subprocess.Popen(
+                            argv, stdout=server_log, stderr=subprocess.STDOUT,
+                            env=dict(os.environ, CUDA_VISIBLE_DEVICES=",".join(map(str, devices))),
+                            start_new_session=True)
                         ready = wait_ready(process, endpoint, timeout_s=options.ready_timeout_s,
                                            poll_s=options.poll_s, ready_command=options.ready_command,
                                            log=model_dir / "readiness.log", probe=probe)
                         model_receipt["flags"].extend(ready)
                         if not ready:
-                            mapping = {"matrix": str(output / "matrix.json"), "model": model["id"],
-                                       "runner_matrix": str(runner_path),
-                                       "endpoint": endpoint,
-                                       "output": str(model_dir / "episodes.jsonl"),
-                                       "sample_interval_ns": str(matrix["sampling"]["interval_ns"]),
-                                       "router_logging": str(matrix["kind"] == "moe_stage_a").lower()}
+                            mapping = {
+                                "matrix": str(output / "matrix.json"), "model": model["id"],
+                                "runner_matrix": str(runner_path), "endpoint": endpoint,
+                                "output": str(model_dir / "episodes.jsonl"),
+                                "sample_interval_ns": str(matrix["sampling"]["interval_ns"]),
+                                "router_logging": str(matrix["kind"] == "moe_stage_a").lower(),
+                                "monitor_base_url": monitor_endpoint or "",
+                                "judge_base_url": judge_endpoint or "",
+                                "device_indices": json.dumps(devices),
+                                "session_id": receipt["session_id"]}
                             command = [part.format_map(mapping) for part in runner_command]
-                            if command:
-                                code = _command(command, model_dir / "runner.log",
-                                                timeout_s=options.command_timeout_s)
-                                model_receipt["runner_returncode"] = code
-                                if code:
-                                    model_receipt["flags"].append("runner_command_failed")
-                            else:
-                                model_receipt["flags"].append("runner_command_missing")
-                            # Budget drivers must export fresh generation episodes, not
-                            # reused deletion trial views, to avoid counting energy twice.
+                            code, timed_out = _runner_command(
+                                command, model_dir / "runner.log",
+                                timeout_s=options.runner_timeout_s, grace_s=options.poll_s)
+                            model_receipt["runner_returncode"] = code
+                            if code:
+                                model_receipt["flags"].append("runner_command_failed")
+                            if timed_out:
+                                model_receipt["flags"].append("runner_timeout")
                             expected = matrix.get("measured_episode_count", matrix["episode_count"])
                             expected //= len(matrix["models"])
                             model_receipt["flags"].extend(_validate_output(
@@ -426,20 +533,7 @@ def run_session(options: SessionOptions, *,
                     model_receipt["flags"].append(f"model_run_failed:{type(exc).__name__}")
                 finally:
                     if process is not None:
-                        if process.poll() is None:
-                            os.killpg(process.pid, signal.SIGTERM)
-                            try:
-                                process.wait(timeout=options.poll_s)
-                            except subprocess.TimeoutExpired:
-                                os.killpg(process.pid, signal.SIGKILL)
-                                process.wait()
-                        # A serving parent can exit before worker processes. Signal
-                        # the group even after reaping the parent, without touching
-                        # unrelated system processes.
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
+                        _stop_group(process, grace_s=options.poll_s)
                         model_receipt["server_returncode"] = process.returncode
                 flags.extend(model_receipt["flags"])
         elif receipt["status"] != "refused":
@@ -447,24 +541,28 @@ def run_session(options: SessionOptions, *,
         if any(p.is_symlink() for p in output.rglob("*")):
             flags.append("output_symlink_omitted")
         receipt["data_complete"] = bool(
-            matrix and receipt["status"] != "refused" and not matrix_flags and len(receipt["models"]) == len(matrix["models"])
-            and all(not any(_incomplete_flag(f) for f in model["flags"])
-                    for model in receipt["models"]))
+            executable and len(receipt["models"]) == len(matrix["models"])
+            and all("runner_returncode" in m and not any(_incomplete_flag(f) for f in m["flags"])
+                    for m in receipt["models"]))
         if receipt["status"] != "refused":
             receipt["status"] = "completed_with_flags" if flags else "completed"
     except Exception as exc:
         flags.append(f"session_failed:{type(exc).__name__}")
+    finally:
+        if monitor_process is not None:
+            _stop_group(monitor_process, grace_s=options.poll_s)
+            receipt["monitor_server"]["returncode"] = monitor_process.returncode
+        if monitor_log is not None:
+            monitor_log.close()
     receipt["end_ns"] = time.monotonic_ns()
     receipt["flags"] = sorted(set(flags))
     _json(output / "receipt.json", receipt)
     archive, checksum = package_results(output)
-    # Transfer happens after sealing. Keep its receipt beside the immutable bundle.
     transfer_flags = (copy_back((archive, checksum), kind=options.copy_kind,
                                destination=options.destination, log=archive.with_suffix(".copy.log"),
                                timeout_s=options.command_timeout_s)
                       if options.destination else ("copy_destination_not_supplied",))
-    _json(archive.with_suffix(".transfer.json"), {"flags": transfer_flags,
-                                                "archive": archive.name})
+    _json(archive.with_suffix(".transfer.json"), {"flags": transfer_flags, "archive": archive.name})
     return {**receipt, "archive": str(archive), "transfer_flags": transfer_flags}
 
 
@@ -488,13 +586,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ready-timeout-s", type=float, required=True)
     parser.add_argument("--command-timeout-s", type=float, required=True)
     parser.add_argument("--poll-s", type=float, required=True)
+    parser.add_argument("--runner-timeout-s", type=float, required=True)
+    parser.add_argument("--monitor-placement", choices=("external", "gpu", "none"), required=True)
+    parser.add_argument("--monitor-base-url")
+    parser.add_argument("--judge-base-url")
+    parser.add_argument("--monitor-gpu-index", type=int)
+    parser.add_argument("--monitor-port", type=int)
+    parser.add_argument("--gpu-indices", type=lambda s: tuple(int(i) for i in s.split(",")), default=())
     parser.add_argument("--gpu-index", type=int, default=0)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--destination")
     parser.add_argument("--copy-kind", choices=("rsync", "s3", "local"), default="rsync")
     args = parser.parse_args(argv)
     if any(not (0 < x < float("inf")) for x in (
-            args.ready_timeout_s, args.command_timeout_s, args.poll_s)):
+            args.ready_timeout_s, args.command_timeout_s, args.runner_timeout_s, args.poll_s)):
         parser.error("timeouts and poll cadence must be finite and positive")
     options = SessionOptions(**vars(args))
     result = run_session(options)
