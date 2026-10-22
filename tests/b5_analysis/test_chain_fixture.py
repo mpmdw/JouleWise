@@ -510,6 +510,15 @@ class ChainTests(unittest.TestCase):
             archives=[open_archive(selected[p],seal_pins=self.pins) for p in PACK_IDS]
             require_ledger_copies_are_prefixes(archives,
                 self.fixture.windows['gamma'].measurement/'runs/calibration_observation_ledger.jsonl')
+    def test_04_fixture_survives_worker_process(self):
+        original_index = self.fixture.index.read_bytes()
+        # One real worker is enough to exercise fork's atexit-registry reset.
+        with ProcessPoolExecutor(max_workers=1) as pool:
+            self.assertNotEqual(pool.submit(os.getpid).result(), os.getpid())
+        self.assertTrue(self.fixture.root.is_dir(),
+                        'worker cleanup removed the parent-owned S10 fixture')
+        self.assertEqual(self.fixture.index.read_bytes(), original_index)
+
     def test_10_c1_alpha(self):self.check_members('C1','alpha')
     def test_11_c1_beta(self):self.check_members('C1','beta')
     def test_12_c1_gamma(self):self.check_members('C1','gamma')
@@ -616,3 +625,40 @@ class ChainTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class SyntheticStageChainTests(unittest.TestCase):
+    """Small arithmetic join; the complete S10 CLI/reader run remains opt-in."""
+    @classmethod
+    def setUpClass(cls):
+        from tests.b5_analysis.joined_s10 import replay_synthetic_stages
+        cls.temporary = tempfile.TemporaryDirectory(prefix='s10-synthetic-stages-')
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.result = replay_synthetic_stages(Path(cls.temporary.name))
+
+    def test_real_mint_dependency_closeout_verdict_and_fill_validators(self):
+        result = self.result
+        self.assertEqual(len(result.components), 2)
+        self.assertEqual(len(result.floor['cells']), 4)
+        self.assertEqual(set(result.dependencies), {'decode:A', 'decode:B', 'prefill:A', 'prefill:B'})
+        self.assertIsNone(result.closeout_error)
+        self.assertEqual(result.validation, [])
+        self.assertEqual(len(result.fill['gamma']['contrasts']), 2)
+        for name in ('floor-mint-pinset.json', 'floor.json', 'single-count.md', 'replay.json',
+                     'manifest.json', 'verdicts.json', 'fill.json'):
+            self.assertTrue((result.root/name).is_file(), name)
+
+    def test_real_floor_operands_and_sources_reach_every_fill_row(self):
+        result = self.result
+        cells = {cell['cell_id']: cell for cell in result.floor['cells']}
+        for issued, copied in zip(result.verdict['contrasts'], result.fill['gamma']['contrasts'], strict=True):
+            self.assertEqual(copied['floor'], issued['floor'])
+            self.assertEqual(copied['floor_source_cell_ids'], issued['floor']['floor_row_ids'])
+            for resolution in issued['floor']['resolutions']:
+                self.assertEqual(resolution['status'], 'exact')
+                self.assertEqual(len(resolution['source_cell_ids']), 1)
+                cell = cells[resolution['source_cell_ids'][0]]
+                # Exact copies of the same emitted operands, no numerical bar.
+                for key in ('floor_abs_j', 'floor_cmp_j', 'floor_gate_j'):
+                    self.assertEqual(resolution[key], cell[key])
+        self.assertEqual(result.fill['gamma']['limitations'], result.verdict['inputs']['limitations'])
