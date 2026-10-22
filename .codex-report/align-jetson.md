@@ -1,34 +1,37 @@
-# align-jetson — FIX ROUND 1
+# align-jetson — FIX ROUND 1 / continuation fix1c
 
 ## SUMMARY
 
-Continued the existing lane from 08b493a1e; all fixes below are SOURCE-ONLY and UNVERIFIED.
-INA characterization now reports endpoint-span cadence and propagates voltage/current steps to watts.
-Traces carry driver exposure, averaging samples, resolution provenance and cadence-disagreement flags.
-The sampler records alarms, L4T OC counter deltas and timestamped voltage extrema for supply checks.
-Phase detection handles held observations, consolidates mixed edges and models local token variation.
-Matching counts visible calls inside a logged idle run and marks per-call timing there unresolved.
-The production study uses 30 turns, result-fed context, client gaps, mixed calls and exact binomial bounds.
-Added 16 unittest regression methods; original test assertions were preserved.
-Execution remains BLOCKED: the managed environment never became usable; no tests or study ran here.
-No post-fix sensitivity result, shortest duration, hardware result or passing-test count is claimed.
+Continued the pushed lane from 13b86db3f; fix1c changes remain SOURCE-ONLY and UNVERIFIED.
+Short trough leaves now use established idle/decode levels instead of disappearing into active neighbors.
+Cadence inference and repeat removal share a conservative test that preserves native-rate quantized plateaus.
+Unmatched edge-low waits overlapping visible calls are indeterminate when the trace cuts their timing.
+Added three regression methods and strengthened all low-noise rows to require all three calls and no false candidates.
+The lead's supplied 37-test pass and repro results at 13b86db3f are recorded separately from this seat.
+The managed executor remains starting/offline; no current-head Python tests or reviewer probes could execute here.
+The production study, sensitivity curves, concealment rates and shortest-duration answers remain pending.
 
 ## FILES
 
-- `joulewise/align/power/ina3221.py`: summation-channel exclusion; mean cadence; propagated watt resolution; driver/supplied/inferred exposure; alarm/warning snapshots; separate L4T OC counters; voltage extrema.
-- `joulewise/align/phase_detect.py`: held-cadence inference and thinning; distinct-change MAD; local nuisance variance; complete-span level grouping; mixed-edge handling and adjacent-label merging; logged idle-run matching; read-gap uncertainty and indeterminate candidates.
-- `joulewise/align/sensor_sim.py`: cached interval endpoints and bounded analytic integration for long, dense traces; contribution order is preserved.
-- `tests/align/test_power_ina3221_review1.py`: seven additional regression methods, including real fake-sysfs acquisition -> phase detection -> matching, cadence quantization, product resolution, alarms and advancing/missing OC attributes.
-- `tests/align/test_phase_detect_review1.py`: eight additional methods: held reads; shared-call/client-gap matching; low-noise ripple; missing reads; scheduler jitter; production transition edges; closed-form binomial oracles; resolution derivation.
-- `tests/align/test_sensor_sim.py`: unchanged world()/model(); new production_world() and one long-world/analytic-energy regression.
-- `tests/align/test_phase_detect.py`: unchanged sensor_models() and original six test methods; production sensor set, exact binomial intervals and rewritten default duration study.
-- `docs/align/jetson_characterization.md`: corrected cadence/resolution interpretation, supply/throttle preflight, verified counter path, study assumptions and explicit execution blocker.
-- `.codex-report/align-jetson.md`: this report.
+Fix1c changes only these four paths:
 
-No registry was changed. No change to PIPELINE.md, records.py, interfaces.py,
-power/__init__.py, existing sampler tests or any other repository path.
-GitHub compare against 08b493a1e confirmed the eight source/test/doc paths
-before this report was written; the report is the ninth authorized path.
+- `joulewise/align/phase_detect.py`: idle/decode least-squares labeling of short trough leaves; shared hold-evidence predicate for cadence inference and MAD; clipped-edge indeterminate handling.
+- `tests/align/test_phase_detect_review1.py`: three new methods for single-exposure troughs, native-rate quantized plateaus and a trace cut inside a wait; strengthened existing low-noise regression with matched-count/false-candidate assertions.
+- `docs/align/jetson_characterization.md`: corrected detector description and separate lead-versus-current execution status.
+- `.codex-report/align-jetson.md`: this report, evidence separation and fix1c FIX LOG entries.
+
+Existing lane deliverables are retained: `power/ina3221.py` (sampler,
+characterization, alarms, OC counters and voltage extrema);
+`sensor_sim.py` (analytic timelines and sensor convolution);
+`tests/align/test_power_ina3221*.py`, `test_sensor_sim.py` and
+`test_phase_detect.py` (fake sysfs, fixed and production worlds, study and
+exact binomial intervals). Their source is unchanged by fix1c.
+
+No registry change. No edit to PIPELINE.md, records.py, interfaces.py,
+power/__init__.py or any other repository file. The scratch .review1
+directory could not be created and has not been committed.
+GitHub compare 13b86db3f...368bf757 confirmed the three source/test/doc
+paths before this fourth report path was updated.
 
 ## PUBLIC API
 
@@ -70,47 +73,77 @@ Study/test helpers:
 - `clopper_pearson(successes, trials, *, confidence=0.95) -> tuple[float, float]`
 - `run_duration_study(*, seeds=range(64), durations_ns=(1_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, 250_000_000, 500_000_000), turns=30, client_gap_ns=20_000_000, sensors=production_sensor_models) -> dict`
 
+
+No public API signature changed in fix1c.
+New private helper: `_held_change_indices(values: tuple[float, ...]) -> list[int]`.
+
 ## TESTS RUN
 
-Executed Python tests: **0**. Collection, pass/fail and skip counts are
-unavailable. Sixteen new methods were counted in source (seven sampler,
-eight detector, one simulator); this is not a collected or passing count.
-The reviewer's 21 passing tests at 08b493a1e are supplied pre-fix evidence,
-not a result from this seat or the current tree.
+**This seat, fix1c: 0 Python tests executed.** Collection, pass/fail and skip
+counts are unavailable. Three added test methods were counted in source;
+this is not an executed count. No extra dependency was installed or needed.
+All source remains stdlib-only; no test performs network access.
 
-These exact executor attempts failed before any shell/process launched,
-with "No usable execution environment is available. Wait for an environment
-to become available before using this tool.":
+The following exact shell attempts were rejected before any process
+launched, with "No usable execution environment is available. Wait for an
+environment to become available before using this tool.":
 
 ```sh
 pwd
-git status --short --branch
 git fetch origin lane/2026-10-21-align-jetson
 python3 -m unittest discover -s tests/align -t .
 python3 -m unittest tests.test_battery_float_consumers tests.test_battery_float_sweep
+mkdir -p /workspace/JouleWise/.review1 /tmp/jetson-review
+TMPDIR=/tmp/jetson-review python3 -I /workspace/JouleWise/.review1/run_study.py
 ```
 
-The Python/git attempts used workdir /workspace/JouleWise; pwd was also
-attempted with /workspace. No local checkout, status inspection, file write,
-mkdir, script materialization, test run, pip install or hardware work could
-execute. The requested environment wait never returned readiness.
-Runtime status repeatedly reported starting/pending, connectivity offline,
-failure null. Retained diagnostic metadata returned history_status=not_found
-and records=[]; no diagnostic log contents were requested.
+The git/Python/mkdir attempts selected workdir /workspace/JouleWise.
+The managed environment repeatedly reports observed_phase=starting,
+connectivity=offline, observations_current=true and failure=null.
+Diagnostics return history_status=not_found and records=[].
+The environment wait did not yield a usable executor. This is an
+infrastructure failure, not an automatic approval-review rejection.
+No local checkout, shell test, scratch script write, pip install or
+hardware work is claimed. Repository reads, source checkpoints and branch
+updates used the connected GitHub tools on the existing lane branch.
 
-GitHub's connected public repository tools were the available fallback:
-read the existing report and protected contracts first; confirmed the exact
-existing branch head; created commits using its tree; fast-forwarded only
-lane/2026-10-21-align-jetson with expected-head checks and force=false.
-No local git command, force push, other-branch push, PR or CI run is claimed.
-No extras were installed; all new code/tests are stdlib-only, with no
-extra-dependent tests or test network access. The whole repository suite
-was not run, as this fix brief expressly forbids it.
+**Supplied lead verification, at 13b86db3f, before fix1c:**
 
-The mandatory next commands remain the following, after restoring an
-executor and fetching/checking out the current lane head. They have NOT RUN.
-First write every appendix script verbatim under .review1/; that directory
-could not be materialized in this seat and must remain uncommitted.
+- `python3 -m unittest discover -s tests/align -t .`: 37 tests, OK.
+  A skip count was not separately supplied.
+- `e1_hold.py`: all k=1,2,4,8 rows give 13 segments, 3/3 matched and
+  zero candidates with estimated or supplied sd.
+- `e14_gapsweep.py`: recall 1.00 and zero candidates at all eight gaps
+  for INA/NVML; `e2_e3.py`: all nine lines match every call, zero candidates.
+- `e6_sysfs.py`: end-to-end 3/3 and zero; exposure/resolution/tolerance,
+  cadence poll limitation, product resolution and summation skip meet bars.
+- `e13_cadence.py`: the lead used the allowed r.cadence_ns print
+  adaptation; all three cadence errors meet the endpoint quantization bar.
+- `e7_diag.py`: zero false candidates on all three sensors.
+- `e4_long.py 16 slow`: 32 lines, zero false candidates, but short-call
+  misses remained; detected-prefill counts 29–30 for 30 true.
+- `e5_fa.py`: zero false candidates, but at 250 ms powermetrics missed
+  calls in 35/64 seeds (23 with 0/3, five with 1/3, seven with 2/3).
+  This FAILED the pass condition and motivated JET-M1 (fix1c).
+- `e8_lownoise.py`: last sd=0, q=0.01 powermetrics row collapsed to one
+  segment with 0/3 matched. This FAILED and motivated JET-M6 (fix1c).
+- `e9_edges.py`: one-turn case idle/prefill/decode/idle; trace starting
+  mid-wait produced one false candidate, addressed by the extra edge fix.
+- `e10_gap.py`: 7/7 and zero false alarms; `e11_energy.py`: passes.
+- `e12_thread.py`: no sample_gaps flag.
+- No completed production-study result or current battery-census result
+  was supplied for 13b86db3f.
+
+These are the user's supplied local Python 3.13/macOS results, not runs
+performed here and not evidence that the fix1c head passes.
+
+**Pending executing checklist** (all NOT RUN on fix1c):
+
+First materialize every APPENDIX script verbatim into .review1/ as the
+brief specifies; do not commit it. For e13 only, replace both print-line
+accesses to r.median_distinct_period_ns with r.cadence_ns. This is the
+brief-authorized field adaptation already used by the lead, with no world,
+sensor, seed, cadence, poll period or comparison-bar changes.
 
 ```sh
 git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-jetson
@@ -135,28 +168,39 @@ TMPDIR=/tmp/jetson-review python3 -I /workspace/JouleWise/.review1/e14_gapsweep.
 TMPDIR=/tmp/jetson-review python3 -I /workspace/JouleWise/.review1/run_study.py
 ```
 
-For e13 only, the brief expressly allows adapting the print line to the
-chosen cadence field. Replace BOTH accesses to
-r.median_distinct_period_ns on that print line with r.cadence_ns.
-Do not alter a world, seed, sensor, poll period, conversion period or bar.
-This is the required planned attribute adaptation; no .review1 copy exists
-here yet, so it is not represented as an executed edit.
+The whole repository suite was not run, as this brief expressly forbids it.
 
 ## END-TO-END
 
-No end-to-end world has executed in this seat. All post-fix counts below
-remain unavailable: matched calls, unlogged candidates, time-label accuracy,
-detected/true-prefill counts by sensor, shared-run concealment fraction,
-sensitivity curves, point-estimate shortest duration and bound-based shortest
-duration. In particular, the requested M1/M5 numbers are NOT delivered.
+This seat ran no Python end-to-end chain. Current-head matched counts,
+false-alarm rates, prefill counts, study runtime, concealment rate and both
+shortest-duration answers are unavailable. No source-only fix is a pass.
 
-Prepared production chain:
+Supplied lead results on 13b86db3f:
+
+| Chain / sensor | Lead outcome before fix1c |
+|---|---|
+| Fixed four-turn world -> simulate -> held polling -> detector -> matcher | 13 segments, 3/3 matched, zero candidates for k=1,2,4,8 and both sd modes |
+| Fake sysfs -> real discovery/sample_once/stop -> detector -> matcher | 3/3, zero candidates; 4,000,000 ns window; 0.025784 W resolution; 8 ms tolerance |
+| Cadence characterization | Errors -54, 0, +51 ns; within one actual poll period / number of change periods |
+| Product quantum characterization | 0.057152 W from propagated V/I steps |
+| 30-turn seed-1 e7, powermetrics / NVML / INA | Time-weighted label accuracy 0.984 / 0.983 / 1.000; zero false candidates each |
+| e4 16 seeds, 30 turns, powermetrics | 441/464 calls matched; zero false candidates |
+| e4 16 seeds, 30 turns, NVML | 455/464 calls matched; zero false candidates |
+| e4 detected versus true prefills | Slow sensors 29–30 versus 30 per episode; separate INA count not supplied |
+| e5 250 ms, powermetrics | 35/64 episodes lost at least one of three calls, despite zero false candidates |
+| e8 sd=0, q=0.01, powermetrics | One segment and 0/3 matched; failed |
+
+All values in that table are supplied lead observations at the preceding
+head; their physical/comparison bars are those in the brief. They must
+not be copied as post-fix measurements.
+
+Prepared production chain remains:
 Episode -> timeline_from_episode -> simulate -> detect_phases ->
 match_tool_calls, comparing complete, uniformly selected omitted-call,
 isolated omitted-call and second-back-to-back-call omitted logs.
-Separate no-tool controls retain multiple model turns but remove the tool
-round-trip/client waits. This controlled null does not establish immunity
-to arbitrary non-tool pauses.
+Separate no-tool controls remove tool/client waits; they do not establish
+immunity to unrelated non-tool idle periods.
 
 Declared inputs (not measured outputs): 30 turns; first prefill 1800 tokens;
 30–400 decoded tokens per turn at 64 tokens/s; 150–3000 result tokens per
@@ -188,136 +232,112 @@ The 90% / under-5% targets and 95% coverage are reporting conventions.
 The runner prints point and bound answers and exposes a needs_ruling object
 when they differ; no synthetic answer is invented without execution.
 
-The real-sysfs regression uses the unchanged four-turn world, a 4 ms
-conversion held across 1 ms polls, and production discovery/read/stop paths
-before real detection/matching. It asserts all three calls and zero false
-candidates with estimated or supplied read sd. The regression is written,
-not executed.
+
+
+The exact 64-seed production study still needs to run. In particular,
+there is no measured numerator/denominator for shared_run_concealed /
+shared_run_trials and no point-estimate or bound-based duration answer.
+No four-turn pre-fix result is substituted for the production study.
 
 ## DECISIONS I MADE
 
-- Continue from the existing 08b493a1e lane, never restart from spine.
-  Use connected GitHub fast-forward checkpoints while the executor is
-  unavailable; preserve all work exclusively in the exhaustive scope.
-- The records contract remains authoritative. Segment metadata and trace
-  notes are lane-local adapters; no shared record or protocol was edited.
-- Do not weaken any original assertion. The original six phase-test methods
-  were compared as text and remain identical; existing sampler tests were
-  not edited. world(), model() and sensor_models() retain their fixed worlds.
-- Keep the literal median cadence property for compatibility; expose the
-  endpoint-span estimate as cadence_ns and adapt only e13's allowed field
-  access when the scratch probes can be written.
-- A change every poll is poll-limited. The flag uses the brief's one-poll
-  ambiguity: median observed change period <= two actual poll periods.
-- Skip the mainline shunt summation label with a recorded flag; preserve
-  other missing rail attributes as observable failures.
-- Watt quantum is propagated at median observed V/I using
-  (abs(V)*dI + abs(I)*dV + dV*dI)/1e6 for mV/mA. Product cancellation is
-  not a power LSB. A constant coordinate is flagged as unobserved.
-- Driver update_interval already incorporates averaging samples. Record
-  both; never multiply samples into it a second time. Use supplied
-  characterization where available; observed held cadence may conservatively
-  widen exposure with an inference flag. Disagreement beyond one poll is flagged.
-- Without a supplied board shunt/current characterization, integer-mA print
-  precision is explicitly only a lower resolution bound, not an ADC claim.
-  The production study separately derives its current LSB from the public
-  P3767 5000-micro-ohm device tree.
-- Snapshot all exposed alarms/warnings plus mainline critical/max alarm
-  paths at start/stop. Discover OC counters at the documented class/hwmon
-  path independently of INA rails, resolve aliases, retain missing/read
-  failures and counter resets, and flag positive episode deltas.
-- Supply limiting and OC throttling change the workload, not just the meter.
-  Keep alarms/counters and timestamped input-voltage extrema. The protocol
-  requires an idle/load supply-and-cable check without raising protection limits.
-- Detector held-read treatment is sensor-independent. Preserve duration
-  weights of truly constant plateaus; infer cadence from numerous changes
-  rather than mistaking two long plateaus for slow conversions.
-- Penalized binary segmentation remains practical for dense traces. Estimate
-  local correlated variation at dyadic lags bounded by one exposure plus one
-  sample, preventing slow sensors' seconds-scale true phases from becoming
-  the noise floor. No fixed ripple-amplitude threshold was introduced.
-- Complete-span grouping prevents transition chaining. Mixed exposures borrow
-  neighboring sustained labels; significant short bursts above sustained
-  decode remain prefill. Merge equal neighboring labels and compare duration
-  rules on complete phase runs, not individual ripple leaves.
-- A sample gap needs >= two nominal periods (one missed acquisition).
-  Touching boundaries carry uncertainty enlarged by the missing interval.
-  An unmatched trough with such uncertainty is indeterminate, not an unlogged
-  candidate. Matching tolerance includes sample cadence, exposure, clock
-  half-width and boundary-gap uncertainty.
-- Build idle runs from the VISIBLE generation envelopes and visible tool
-  intervals, extended to the next logged activity. All visible calls inside
-  a matched run count toward recall. Their individual timing is unresolved;
-  precision counts troughs/runs and cannot exceed one.
-- A hidden call immediately after a logged call in the same idle run is
-  unidentifiable by power. The study measures this separately and also uses
-  a uniformly chosen omission as its main hidden-call population, preventing
-  an isolated-only sensitivity curve from standing in for mixed-call recall.
-- Pooled logged-call recall is descriptive. CP intervals use independent
-  episode trials for one omitted call or any false alarm; correlated calls
-  within one episode are not falsely treated as independent binomial trials.
-- Cached interval endpoints accelerate analytic convolution while preserving
-  the prior contribution order and units; no optional dependency was added.
-- No live Orin work, paid service, hardware measurement, external messages,
-  scope expansion, main push, force push, merge or whole-suite run occurred.
+- Continue exactly from pushed 13b86db3f, preserving the existing sampler,
+  simulator, production builder and study. Use GitHub source checkpoints
+  because the explicitly anticipated executor failure recurred.
+- Preserve the shared contracts and all public signatures. world(), model()
+  and sensor_models() are unchanged; no reviewer world or bar was altered.
+- Resolve a short leaf against established low/decode levels before borrowing
+  temporal neighbors. The midpoint is the equal-variance least-squares level
+  decision, not a new fitted watt threshold. A decode/prefill transition
+  cannot cross below it; low portions at a real wait edge merge into that wait.
+- Repeats are conversion evidence only when the existing sqrt(n) count and
+  majority-repeat guards hold AND all completed change-to-change runs span
+  more than one poll. A one-poll changing run supplies native-rate information
+  that must be preserved. This is deliberately conservative, not a hardware
+  cadence calibration; ambiguous streams remain unthinned.
+- Apply that evidence test to the noise estimator too. Removing all flat
+  values otherwise leaves only true transitions and invents large read noise.
+  Constant quantized phases retain their zero-difference MAD evidence.
+- Keep the existing noise/BIC, local modulation, complete-span grouping and
+  adjacent-label consolidation; no original assertion was removed or weakened.
+- Add three regression methods and require exactly all three true calls plus
+  zero false candidates in every existing low-noise row. Port seed 50 and
+  neighboring fixed seeds at 250/500 ms through the full production functions.
+- Treat a failed full-run match on an admitted edge-low segment as
+  indeterminate. A cut trace does not observe the missing endpoint and cannot
+  turn that failure into evidence of an extra call.
+- Retain prior decisions: endpoint-span cadence is cadence_ns; literal median
+  remains compatible; product resolution is propagated from V/I; driver
+  update_interval already incorporates samples; alarms/counters/voltage
+  extrema remain recorded; gaps need at least two nominal intervals.
+- Retain idle-run matching: every logged call inside a matched run counts
+  toward recall, individual boundaries there are unresolved, and precision
+  counts troughs/runs. Hidden work inside the same run is unidentifiable.
+- Retain production study estimands and exact binomial bounds. Calls within
+  one episode are correlated; CP trials are independently seeded episodes.
+  Print both point/bound duration answers without choosing one silently.
+- No hardware measurement, optional package installation, outside-scope
+  write, external message, PR, merge, force push or other-branch push.
 
 ## CONTRACT-CHANGE
 
-none. Optional fields appended to Segment/ToolCallMatch are lane-local.
-PowerTrace.notes preserves sensor provenance and health snapshots.
+none. The shared records and cross-lane protocols are unchanged.
 
 ## FIX LOG
 
-"fixed" below means a source implementation was saved at the named commit,
-NOT that the reviewer's pass conditions were executed or proven. Every
-executing verification remains OPEN because the executor never became usable.
+"fixed" denotes the source correction saved at the named commit. Prior
+lead evidence and pending fix1c verification are distinguished explicitly.
 
-- JET-B1 — fixed in source 6811295b7e75dcf9f2702f294874dd5c25baedae; sampler-to-matcher regression added in 70c41860d77822687a454bc71565cddcfe11567c. Held cadence/noise/timing are handled in the detector itself. Verification blocked.
-- JET-B2 — fixed in source 9cf7e8d9a947075c8a4a73901b3a61308ef2469d (initial idle-run matcher eea481251c601d77ca7864f0fd1d5e1aba748e20). Count all logged calls within a matched idle run; timing unresolved. Shared hidden-call concealment is instrumented but not measured.
-- JET-M1 — fixed in source 6811295b7e75dcf9f2702f294874dd5c25baedae; mixed edges cannot chain levels, equal labels merge, and short significant prefills survive. Required per-sensor detected/true counts and repro outcomes remain unavailable.
-- JET-M2 — fixed in source 975b64bed66a537206b9db0656d202ba75ba4b17, refined in 171a35fdda705966b3dcfe95afe383b1255cbe9a; driver exposure/samples/resolution and held-cadence disagreement are retained. Verification blocked.
-- JET-M3 — fixed in source 2da5667c03d93cc1c67eedd9a96dec83e1ceb9f7: cadence_ns is the endpoint-span estimate; poll limitation is flagged. Planned allowed e13 adaptation replaces both median-property accesses with cadence_ns; no world/parameter changes. Probe file could not be materialized.
-- JET-M4 — fixed in source 2da5667c03d93cc1c67eedd9a96dec83e1ceb9f7: propagate V/I steps including the product term; corrected doc interpretation. Verification blocked.
-- JET-M5 — fixed in source 9cf7e8d9a947075c8a4a73901b3a61308ef2469d (production study introduced 171a35fdda705966b3dcfe95afe383b1255cbe9a); actual study outputs, point/bound shortest durations and reporting numbers remain OPEN and undelivered.
-- JET-M6 — fixed in source 6811295b7e75dcf9f2702f294874dd5c25baedae: local modulation envelope, phase consolidation and run-duration comparisons; low-noise and one-turn behavior still need execution.
-- JET-m1 — fixed in source 2da5667c03d93cc1c67eedd9a96dec83e1ceb9f7: flag/skip shunt sum, preserve genuine missing rail diagnostics. Verification blocked.
-- JET-m2 — fixed in source eea481251c601d77ca7864f0fd1d5e1aba748e20: >=two nominal periods defines a missed-read gap. Real-thread repro still pending.
-- JET-m3 — fixed in source eea481251c601d77ca7864f0fd1d5e1aba748e20: boundary-gap uncertainty, widened matching and separate indeterminate troughs. Verification blocked.
-- JET-m4 — fixed in source 975b64bed66a537206b9db0656d202ba75ba4b17, refined in 171a35fdda705966b3dcfe95afe383b1255cbe9a and 9cf7e8d9a947075c8a4a73901b3a61308ef2469d: alarms, separate documented L4T counters, read-loss flags, voltage extrema and physical-hazard preflight; fake-sysfs tests written, not executed.
+- JET-B1 — fixed in 6811295b7e75dcf9f2702f294874dd5c25baedae; sampler regression in 70c41860d77822687a454bc71565cddcfe11567c. Lead at 13b86db3f reports all held-read conditions passing. Re-run after fix1c's shared cadence/noise predicate.
+- JET-B2 — fixed in 9cf7e8d9a947075c8a4a73901b3a61308ef2469d. Lead reports all gap/back-to-back rows passing. Concealment fraction remains unmeasured.
+- JET-M1 — initial source fix in 6811295b7e75dcf9f2702f294874dd5c25baedae removed false candidates but missed short calls at 13b86db3f; see required fix1c entry below. Supplied slow-sensor prefill counts are 29–30 versus 30.
+- JET-M2 — fixed in 975b64bed66a537206b9db0656d202ba75ba4b17, refined in 171a35fdda705966b3dcfe95afe383b1255cbe9a. Lead reports window/resolution/tolerance conditions passing.
+- JET-M3 — fixed in 2da5667c03d93cc1c67eedd9a96dec83e1ceb9f7. cadence_ns endpoint-span estimate and poll-limited flag pass in supplied lead verification. Only allowed e13 print-field adaptation is both median-property accesses -> cadence_ns.
+- JET-M4 — fixed in 2da5667c03d93cc1c67eedd9a96dec83e1ceb9f7. Lead reports propagated quantum_w=0.057152 W; the product-gap error is removed.
+- JET-M5 — source study fixed in 9cf7e8d9a947075c8a4a73901b3a61308ef2469d (introduced 171a35fdda705966b3dcfe95afe383b1255cbe9a). Actual production study, concealment and shortest-duration numbers remain OPEN; no pass is claimed.
+- JET-M6 — initial source fix in 6811295b7e75dcf9f2702f294874dd5c25baedae passed other supplied rows but failed noise-free quantized powermetrics; see fix1c below.
+- JET-m1 — fixed in 2da5667c03d93cc1c67eedd9a96dec83e1ceb9f7; lead reports summation-channel exclusion/flag passing.
+- JET-m2 — fixed in eea481251c601d77ca7864f0fd1d5e1aba748e20; lead reports real-thread repro without sample_gaps.
+- JET-m3 — fixed in eea481251c601d77ca7864f0fd1d5e1aba748e20; lead reports e10 7/7, zero false alarms.
+- JET-m4 — fixed in 975b64bed66a537206b9db0656d202ba75ba4b17, refined in 171a35fdda705966b3dcfe95afe383b1255cbe9a and 9cf7e8d9a947075c8a4a73901b3a61308ef2469d. Alarms, documented separate L4T counters, read failures, voltage extrema and supply-limit hazard protocol retained; no hardware validation claimed.
+- JET-M1 (fix1c) — fixed in source 7f8e42d9e08f3320d2a7fe0afa642d377c88f176; short leaves use established idle/decode least-squares levels. Regression saved in d78557c78cf5cf47736ffe197d09fc96dd25804e. Executor unavailable; all required e5/e4 pass conditions remain UNVERIFIED.
+- JET-M6 (fix1c) — fixed in source 1e2d3308db6f8a0dd2353558e61ad6563832ca19 and d24422d09074067356b200ea41954c15c6165bdd; cadence inference and repeat removal require conversion-like completed runs, preserving flat-phase MAD. Regression strengthened in d78557c78cf5cf47736ffe197d09fc96dd25804e. Executor unavailable; no current-head pass claimed.
+- Trace-edge observation (fix1c) — fixed in source 49ef9ef1d882f125c63dbf0936a285d08275e7d6; unmatched admitted edge-low waits become indeterminate, not false candidates. Regression in d78557c78cf5cf47736ffe197d09fc96dd25804e; UNVERIFIED.
 
 ## OPEN ISSUES
 
-- BLOCKING: no usable execution environment for /workspace/JouleWise.
-  No repository file is missing; the missing capability is the executor.
-- Every reviewer repro, all alignment tests, both battery-float census
-  modules, Python syntax/import collection and all new regressions must run.
-  Do not interpret any FIX LOG entry as a verified pass.
-- .review1/ and /tmp/jetson-review could not be created. Materialize the
-  appendix scripts verbatim, then make only the allowed e13 attribute edit.
-- Required study rates, per-sensor true/detected prefill counts, shortest
-  duration from point estimates and bounds, and actual seed-budget timing
-  remain unavailable. Run the default study or reduce its budget honestly
-  if measured runtime is too slow; do not substitute the reviewer's old
-  four-turn numbers.
-- The requested observed fraction of hidden calls concealed inside matched
-  idle runs is NOT MEASURED. The new shared_run_concealed/shared_run_trials
-  fields produce it; report numerator, denominator and rate after execution.
+- BLOCKING infrastructure: no usable executor for /workspace/JouleWise.
+  No repository file is missing. Tests, scratch script creation and study
+  cannot execute until the runtime becomes available. The user explicitly
+  authorized source-only fixes followed by lead re-verification in this case.
+- Every mandatory alignment/battery-census command and reviewer repro must
+  be rerun on the fix1c head. The lead's earlier pass cannot establish
+  regression freedom after these number-bearing detector changes.
+- .review1/ and /tmp/jetson-review could not be materialized. The appendix
+  scripts must be written verbatim; only e13's allowed attribute access changes.
+- Production sensitivity/false-alarm curves, per-sensor detected/true prefill
+  counts on the fixed head, runtime/seed budget and shortest durations from
+  points/bounds remain undelivered. The unchanged runner prints all of them.
+- Shared-run concealed-call numerator/denominator/rate remains unmeasured.
+  Power cannot separate a hidden call immediately following a logged call
+  inside the same idle run; the existing study measures this explicitly.
+- A 64-episode budget cannot certify <5% episode false alarms from equal-tail
+  95% CP bounds even with zero observed alarms. Keep bounds honest and retain
+  both duration answers; any choice belongs in NEEDS_RULING after execution.
+- Held-value inference is conservative and cannot prove physical conversion
+  cadence from values alone. A stream with both held and native-rate changes
+  remains unthinned; verify against characterization on actual instruments.
 - Binary segmentation is greedy and may miss short balanced troughs.
-  Every changed detector assumption needs the supplied production repros.
-- The default 64-episode budget cannot certify under-5% false alarms with a
-  two-sided 95% CP interval even at zero alarms; point/bound answers must
-  remain distinct and any required choice goes under NEEDS_RULING.
-- The null control removes tool/client waits; unrelated idle pauses remain
-  physically confounded with tool waits. Power cannot split calls in the
-  same idle run or identify reasoning within one forward pass.
-- New binomial code has closed-form arithmetic regressions; no executing
-  independent/cross-model review of this fix tree has occurred.
-- Actual borrowed-Orin shunt, cadence, averaging, analog noise, sampling
-  overhead, supply behavior and all live instrument viability remain
-  PROVISIONAL.
+  The restored short-leaf label must be checked for both recall and false
+  alarms across all fixed-world seeds and production sensor models.
+- Unrelated non-tool pauses remain physically confounded with tool waits.
+  Reasoning within one forward pass is invisible to this measurement.
+- Borrowed-Orin shunt, cadence, exposure, analog noise, acquisition overhead,
+  supply behavior and hardware instrument viability remain PROVISIONAL.
 
 ## NEEDS_RULING
 
-none yet. Execution readiness is an infrastructure blocker, not a choice
-about which data count. After the study runs, copy both shortest-duration
-answers here if point estimates and 95% bounds differ, as the brief requires.
+none yet. Infrastructure availability is not a scientific ruling. The
+production study has not completed; no point/bound shortest-duration pair
+can honestly be selected or printed as an observed answer. Once it runs,
+copy both answers here if they differ, as the brief requires.
