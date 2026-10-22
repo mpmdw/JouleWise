@@ -155,6 +155,16 @@ class PhaseDetectTest(unittest.TestCase):
         self.assertEqual(low[0].end_ns, split * 1_000_000)
         self.assertEqual(len(high), 1)
 
+    def test_inverted_duration_order_is_flagged(self):
+        # Deliberately violate the synthetic rule: the highest level lasts
+        # twice as long as the middle level, so the labels are ambiguous.
+        values = (5.0,) * 10 + (13.0,) * 20 + (21.0,) * 40 + (5.0,) * 10
+        trace = PowerTrace("mock", "x", "host.monotonic",
+                           tuple((i + 1) * 1_000_000 for i in range(len(values))),
+                           values, "W", 1_000_000, 1_000_000)
+        self.assertTrue(any("level_duration_model_mismatch" in s.flags
+                            for s in detect_phases(trace, noise_sd_w=0)))
+
     def test_noise_estimator_and_failure_flags(self):
         import random
         rng = random.Random(42)

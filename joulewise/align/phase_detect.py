@@ -164,6 +164,8 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
                             labels[i] = "prefill"
                     else:
                         flags.append("level_duration_model_mismatch")
+            if "prefill" not in labels:
+                flags.append("level_duration_model_mismatch")
     else:
         flags.append("unidentified_single_level")
     if len(groups) > 3:
