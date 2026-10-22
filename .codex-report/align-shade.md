@@ -117,6 +117,7 @@ continuation:
     python3 -m unittest discover -s tests
     python3 scripts/quick_suite.py --tier touched --since origin/lane/2026-10-21-align-spine
     python3 -m pip --version
+    python3 scripts/fixture_orphan_census.py --fail-on-orphans
 
 Each returned: "No usable execution environment is available. Wait for an
 environment to become available before using this tool." Repeated pwd and
@@ -128,7 +129,12 @@ reported observations_current=true, observed_phase=starting,
 connectivity=offline, failure=null. environment_diagnostics returned an empty
 history (history_status=not_found). wait_for_environment was also invoked;
 the runtime was given continued opportunity to start while the remote code
-was inspected and the fix was committed.
+was inspected and the fix was committed. Recorded UTC probes span
+2026-10-22 01:22:12 through 01:35:10, in addition to the initial setup attempts.
+At the final probe the shell still rejected pwd and the align suite, and the
+status still reported starting/offline/failure=null. The pending wait was then
+terminated; the environment itself was not modified. The orphan census also
+could not start, so there is no census count or observation to report.
 
 Lead-supplied baseline, not execution evidence from this seat: the run at
 2a87f4da6 on macOS/Python 3.13 discovered 22 methods; the HTTP test failed
