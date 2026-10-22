@@ -9,7 +9,7 @@ AUC handles ties; inference includes logit DeLong CIs, paired tests, and cluster
 Undefined analyses and compute-budget limits carry output flags without excluding episodes.
 The visible 300-episode synthetic world scores AUC 0.785022222; its invisible control scores 0.5.
 Shared records, interfaces, and the pipeline plan are unchanged; no hardware was contacted.
-The 9,894-test source verification passed; two corrected metadata test bars await rerun.
+All 20 new tests and the 9,894-test repository CI suite passed (145 existing skips).
 Verification used CI because the managed environment never supplied a local shell.
 
 ## FILES
@@ -49,14 +49,11 @@ the base container does not automatically include that attribute.
 
 ## TESTS RUN
 
-Completed [CI run 39705032319](https://github.com/mpmdw/JouleWise/actions/runs/39705032319)
-on code/test head 757f5db4d0ff6c2ba7444c6e74df33ab072f1b66, CPython 3.13.16,
+Completed [CI run 39708018448](https://github.com/mpmdw/JouleWise/actions/runs/39708018448)
+on code/test head 0a533c2b12c1a358b9f2f781b5530faf39d79d1e, CPython 3.13.16,
 merged with the spine (not current main). All 20 CI jobs passed.
-Production modules are identical to this tested head. Final review found two
-metadata test helpers still had a unit-scale floor; they have now been
-corrected to the brief's relative bar (with the documented zero allowance).
-A CI rerun on that assertion-only revision is pending. Statistics comment
-spelling was also corrected; no production behavior changed.
+The final commit changes this report only; production modules and all test
+code are identical to the tested head.
 
 - New lane: 20 tests, zero failures/errors/skips (metadata 7; statistics 13).
 - Shared records: 4 tests, zero failures/errors/skips.
@@ -254,8 +251,13 @@ All 145 skips are pre-existing suite conditions, not lane-test skips. Their
 | 1 | the gate-prune inventory is not on this machine |
 | 1 | the real kern.bootsessionuuid exists only on macOS |
 | 1 | the two pilot-night archives are not on this machine |
-| 1 | this file system gave the replacement lock the inode number of the lock just unlinked (9437192); the reclaimer tells the two apart by device and inode number only, so here it cannot (known limit of scripts/run_campaign.py _hazard_reclaim_stale_campaign_lock; APFS on the measurement Mac does not reuse numbers) |
+| 1 | this file system gave the replacement lock the inode number of the lock just unlinked (4522118); the reclaimer tells the two apart by device and inode number only, so here it cannot (known limit of scripts/run_campaign.py _hazard_reclaim_stale_campaign_lock; APFS on the measurement Mac does not reuse numbers) |
 | 1 | window-B quarantine custody path is absent |
+
+Earlier checks and findings: The previous complete source run 39705032319
+passed 9,894 tests with 145 skips at 757f5db. Final review caught two metadata
+helpers retaining unit-scale agreement floors. The current run above verifies
+the corrected relative bars as well; the production modules did not change.
 
 Earlier checks and findings: CI run 39703953473 failed only its
 tests.test_shard_tests discovery inventory (212 quick modules, one failing
@@ -278,7 +280,7 @@ Requested commands NOT RUN locally:
 - python3 -m unittest discover -s tests/align -t .
 - python3 -m unittest discover -s tests
 
-No optional dependency is used or required. No extra was installed, and there
+No optional dependency is used or required. No JouleWise optional extra was installed, and there
 are no extra-dependent tests or skips in this lane.
 
 ## END-TO-END
@@ -286,7 +288,8 @@ are no extra-dependent tests or skips in this lane.
 Real shared Episode/Turn/ToolCall construction -> to_json -> from_json ->
 features -> five leave-one-task-pair-out fits -> held-out probabilities ->
 AUC -> logit DeLong CI -> automatic whole-group bootstrap CI -> paired AUC test.
-Five task pairs, two conditions, 30 seeds each: 300 episodes; each fold trains
+Five task pairs, two conditions, 30 seeds each: 300 episodes per world
+(600 across both controls); each fold trains
 on 240 and predicts 60. Runs last 220–320 s with 8–12 model/tool turns.
 Decode counts follow a lognormal distribution with median 500 and log SD 0.5;
 prefill counts are 500–1500 per turn, and ordinary tool counts are 0–2 per turn.
@@ -308,8 +311,8 @@ Python coverage: 200 seeded Normal-score worlds, true AUC 0.689691026781155,
 100 task-pair groups per world, three observations per class per group,
 explicit B=799. DeLong covered truth in 190/200 worlds and cluster bootstrap
 in 190/200, both 0.95; the requested one-binomial-SE bar is 0.0154110350.
-The statistics module's 13 tests passed in 62.709 s; the metadata module's
-7 tests passed in 1.299 s. These are synthetic verification, not hardware data.
+The statistics module's 13 tests passed in 57.566 s; the metadata module's
+7 tests passed in 2.497 s. These are synthetic verification, not hardware data.
 
 ## DECISIONS I MADE
 
@@ -344,7 +347,7 @@ and the invisible fixture; no frozen contract was edited.
 
 ## OPEN ISSUES
 
-- The assertion-only revision after 757f5db requires its CI rerun to complete. The production modules already passed the full suite above.
+- All functional checks above passed on 0a533c2. The final report-only commit will automatically queue another CI run; those duplicate jobs are not claimed complete.
 - Direct requested local commands and the touched quick tier remain unavailable without a usable executor.
 - Independent twin comparison and merge reviews belong to the lead; this draft is not offered as merge-approved.
 - DeLong is asymptotic and does not cluster task pairs. The bootstrap is the group-aware interval; five pilot groups give limited population information. The coverage experiment exercises a larger asymptotic setting, not a claim of exact five-group coverage.
