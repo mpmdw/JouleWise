@@ -250,7 +250,9 @@ class BudgetConditionTests(OfflineTest):
             # Real servers sometimes omit reasoning-token details: exercise tokenizer accounting.
             return {"choices": [{"message": {"content": reply.content, "reasoning_content": reply.reasoning_text}}],
                     "usage": {"prompt_tokens": reply.prompt_tokens, "completion_tokens": reply.completion_tokens}}
-        endpoint = LocalEndpoint("http://localhost:8000", "mock-qwen", "vllm", 30, transport=transport)
+        # Core limits must override base extras so a configured endpoint cannot bypass the cap.
+        endpoint = LocalEndpoint("http://localhost:8000", "mock-qwen", "vllm", 30,
+                                 options={"max_tokens": 8192}, transport=transport)
         model = ModelSpec("mock-qwen", 4.0, "vllm", endpoint.identity, endpoint, endpoint.configured)
         result = run_matrix(items, (model,), (Condition("budget", "budget", 0.6),), seeds=(2,),
                             settings=Settings(1536, 32), monitor=HintMonitor(ScriptedMonitor()))
@@ -350,8 +352,12 @@ class BudgetEnergyTests(OfflineTest):
         on = {r.size_b: r for r in rows if r.condition == "thinking_on"}
         for row in on.values():
             self.close_number(row.mean_decode_tokens, 1026.0)  # 1024 reasoning + two answer tokens.
-        self.assertLess(on[4.0].mean_joules, on[8.0].mean_joules)
-        self.assertLess(on[8.0].mean_joules, on[14.0].mean_joules)
+        # Scripted 4B/8B/14B costs are ~1658/4124/9363 J (P * [prefill + tokens/rate]).
+        # Require separation after each sensor quantization bound, not merely float ordering.
+        self.assertLess(on[4.0].mean_joules + on[4.0].max_measurement_uncertainty_j,
+                        on[8.0].mean_joules - on[8.0].max_measurement_uncertainty_j)
+        self.assertLess(on[8.0].mean_joules + on[8.0].max_measurement_uncertainty_j,
+                        on[14.0].mean_joules - on[14.0].max_measurement_uncertainty_j)
         for trial in result.trials:
             trace = trial.episode.power_traces[0]
             # Independent rectangular-plus-slope integration on raw 100 ms samples.
@@ -399,7 +405,7 @@ class BudgetEnergyTests(OfflineTest):
 
 class BudgetEndToEndTests(OfflineTest):
     def test_five_configurations_times_200_with_deletion_control(self):
-        result = run_synthetic(count=200, seeds=(11,), with_power=True)
+        result = run_synthetic(count=200, seeds=(0,), with_power=True)
         self.assertEqual(len(result.trials), 5 * 200)
         self.assertEqual(len(result.calibrations), 200)
         by_key = {(t.item_id, t.condition.name): t for t in result.trials}
@@ -421,7 +427,12 @@ class BudgetEndToEndTests(OfflineTest):
         # Demand separation by their own 95% Wilson intervals, not an invented margin.
         self.assertGreater(rows["deletion_0.6"].catch_rate.interval[0],
                            rows["budget_0.6"].catch_rate.interval[1])
-        self.assertGreater(rows["deletion_0.6"].mean_joules, rows["budget_0.6"].mean_joules)
+        # Removing 410 generated tokens saves 8.2 s minus the extra 0.2 s prefill:
+        # at 80 W this is 640 J, far above the two sensor half-widths (~1.7 J total).
+        self.assertGreater(rows["deletion_0.6"].mean_joules
+                           - rows["deletion_0.6"].max_measurement_uncertainty_j,
+                           rows["budget_0.6"].mean_joules
+                           + rows["budget_0.6"].max_measurement_uncertainty_j)
         for name, fraction in (("budget_0.6", 614 / 1024), ("budget_0.4", 409 / 1024),
                                ("budget_0.3", 307 / 1024), ("deletion_0.6", 614 / 1024)):
             probability = fraction if name.startswith("deletion") else fraction ** 2
@@ -439,12 +450,12 @@ class BudgetEndToEndTests(OfflineTest):
                     visible_mentions += "HINT_RELIANCE" in trial.generation.reasoning.split()
             self.assertEqual(rows[name].catch_rate.successes, visible_mentions)
             self.assertEqual(rows[name].catch_rate.trials, len(positives))
-        print("\nSYNTHETIC five configurations x 200 items (seed 11):\n"
+        print("\nSYNTHETIC five configurations x 200 items (seed 0):\n"
               + summary_table(tuple(rows.values())))
 
     def test_wilson_nominal_coverage_across_independent_seeds(self):
         coverage = {c.name: 0 for c in FIVE_CONFIGURATIONS if c.mode != "on"}
-        count = 40  # Test design: 40 independent seeds, 200 items/configuration/seed.
+        count = 80  # Test design: 80 independent seeds, 200 items/configuration/seed.
         for seed in range(count):
             rows = summarize(run_synthetic(count=200, seeds=(seed,), with_power=False).trials)
             for row in rows:
@@ -460,7 +471,7 @@ class BudgetEndToEndTests(OfflineTest):
             interval = wilson(successes, count, confidence=0.99).interval
             self.assertLessEqual(interval[0], 0.95, (name, successes))
             self.assertGreaterEqual(interval[1], 0.95, (name, successes))
-        print("SYNTHETIC Wilson coverage / 40 seeds:", coverage)
+        print("SYNTHETIC Wilson coverage / 80 seeds:", coverage)
 
 
 if __name__ == "__main__":
