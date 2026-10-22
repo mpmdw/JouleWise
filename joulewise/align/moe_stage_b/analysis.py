@@ -38,6 +38,7 @@ class RoutingObservation:
     group: str
     routing_statistic: float
     features: PowerFeatures
+    condition: str | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,27 @@ def pearson(x: Sequence[float], y: Sequence[float]) -> float | None:
     return max(-1.0, min(1.0, value))
 
 
+def rounding_uncertainty(quantum_w: float, noise_std_w: float) -> tuple[float, float]:
+    """Continuous Gaussian rounding-bias and second-moment upper bounds.
+
+    With a=2*pi^2*sigma^2/q^2, the Fourier bias series is at most
+    q/pi * exp(-a)/(1-exp(-3*a)): k^2 >= 1+3*(k-1), 1/k <= 1.
+    Cap by q/2. The error-square series has coefficients q^2/(pi^2*k^2),
+    giving the same geometric majorant plus q^2/12, capped by q^2/4.
+    The second moment bounds variance conservatively; no sigma=q/2 switch.
+    """
+    if quantum_w == 0:
+        return 0.0, 0.0
+    a = 2*math.pi**2*(noise_std_w/quantum_w)**2
+    if a == 0:
+        return quantum_w/2, quantum_w**2/4  # Continuous limits as sigma -> 0.
+    geometric = math.exp(-a)/(-math.expm1(-3*a))
+    bias = min(quantum_w/2, quantum_w/math.pi*geometric)
+    second_moment = min(quantum_w**2/4,
+                        quantum_w**2*(1/12+geometric/math.pi**2))
+    return bias, second_moment
+
+
 def extract_features(
     episode: Episode, trace: PowerTrace, *, baseline_w: float,
     noise_std_w: float, noise_multiplier: float, attribution_floor_j: float,
@@ -131,8 +153,8 @@ def extract_features(
     Energy is the observed baseline-subtracted integral, including stalls.
     The deprecated reference argument is flagged and ignored: simulator truth
     never enters a feature. Missing cells remain missing and coverage is printed.
-    With noise SD >= q/2, rounding is treated as dithered uniform noise; otherwise
-    q/2 times observed duration remains a labelled conservative feature bound.
+    Gaussian rounding carries a continuous Fourier bias bound and a conservative
+    second-moment bound, tending to q^2/12 for strongly dithered readings.
     """
     flags = list(episode.flags)
     count = sum(t.decode_tokens for t in episode.turns)
@@ -215,16 +237,11 @@ def extract_features(
         flags.append("unknown_power_resolution")
         half_width = None
     else:
-        # Uniform rounding on [-q/2,q/2] has variance q^2/12. A noise
-        # SD of at least q/2 is the declared dither scenario criterion;
-        # hardware must validate this assumption or supply a measured bound.
-        dithered = noise_std_w >= quantum/2
-        quantization_bound = 0.0 if dithered else quantum/2 * sum(cell_weights_s)
-        rounding_variance = quantum**2/12 if dithered else 0.0
+        bias_w, rounding_variance = rounding_uncertainty(quantum, noise_std_w)
+        quantization_bound = bias_w*sum(cell_weights_s)
         independent_noise = noise_multiplier*math.sqrt(
             (noise_std_w**2+rounding_variance)*math.fsum(w*w for w in cell_weights_s))
-        flags.append("dithered_rounding_uncertainty" if dithered
-                     else "undithered_rounding_bound")
+        flags.append("gaussian_rounding_fourier_bound")
         # A clock shift moves both boundaries of each disjoint observed decode
         # interval. Explicit token timing may contain multiple intervals per turn.
         intervals: list[tuple[int, int]] = []
@@ -322,55 +339,73 @@ def recover_routing(
 
 
 def recover_power_increment(observations: Sequence[RoutingObservation]) -> RoutingRecovery:
-    """Group-held-out energy recovery after controlling for decode seconds/token.
+    """Group-held-out, condition-fixed-effect power increment over timing.
 
-    Other task groups fit timing -> routing and timing -> energy, then routing
-    residuals against energy residuals. Evaluate held-out residual routing and
-    prediction. No condition label trains a fit; no simulator reference is used.
+    Each fold estimates condition means and all three slopes using other task
+    groups only. The target uses its condition's training means. No ID string
+    supplies a label and no held-out outcome estimates a training coefficient.
     """
-    valid = [o for o in observations if all(
-        value is not None and math.isfinite(value) for value in
-        (o.routing_statistic, o.features.energy_per_decode_token_j,
-         o.features.decode_seconds_per_token))]
     flags: list[str] = []
+    valid = []
+    for item in observations:
+        if item.condition not in ("benign", "sabotage"):
+            flags.append("missing_or_unknown_condition")
+        elif all(value is not None and math.isfinite(value) for value in
+                 (item.routing_statistic, item.features.energy_per_decode_token_j,
+                  item.features.decode_seconds_per_token)):
+            valid.append(item)
+        else:
+            flags.append("missing_observations")
     predictions = []
     truth, predicted, labels = [], [], []
-
-    def line(xs: Sequence[float], ys: Sequence[float]) -> tuple[float, float, float]:
-        mx, my = statistics.fmean(xs), statistics.fmean(ys)
-        xx = math.fsum((v-mx)**2 for v in xs)
-        slope = math.fsum((x-mx)*(y-my) for x, y in zip(xs, ys))/xx if xx else 0.0
-        return mx, my, slope
-
-    for observation in observations:
-        train = [o for o in valid if o.group != observation.group]
+    for target in observations:
         prediction = None
-        if observation in valid and len(train) >= 2:
-            times = [o.features.decode_seconds_per_token for o in train]
-            energy = [o.features.energy_per_decode_token_j for o in train]
-            routing = [o.routing_statistic for o in train]
-            mt, me, se = line(times, energy)
-            _, mr, sr = line(times, routing)
-            er = [e-me-se*(t-mt) for e, t in zip(energy, times)]
-            rr = [r-mr-sr*(t-mt) for r, t in zip(routing, times)]
-            _, _, slope = line(er, rr)
-            variance = math.fsum((e-statistics.fmean(er))**2 for e in er)
-            # Centering/projecting N binary64 inputs accumulates O(N) ulps.
-            # Residuals below that arithmetic scale are a constant, not signal.
-            arithmetic_sd = len(train)*math.ulp(max(map(abs, energy)))
-            if math.sqrt(variance/len(train)) > arithmetic_sd:
-                t = observation.features.decode_seconds_per_token
-                prediction = slope*(observation.features.energy_per_decode_token_j-me-se*(t-mt))
-                truth.append(observation.routing_statistic-mr-sr*(t-mt))
+        train = [o for o in valid if o.group != target.group]
+        by_condition = {c: [o for o in train if o.condition == c]
+                        for c in ("benign", "sabotage")}
+        if target in valid and all(by_condition.values()):
+            means = {c: (
+                statistics.fmean(o.features.decode_seconds_per_token for o in rows),
+                statistics.fmean(o.features.energy_per_decode_token_j for o in rows),
+                statistics.fmean(o.routing_statistic for o in rows))
+                for c, rows in by_condition.items()}
+            times, energy, routing = [], [], []
+            for o in train:
+                mt, me, mr = means[o.condition]
+                times.append(o.features.decode_seconds_per_token-mt)
+                energy.append(o.features.energy_per_decode_token_j-me)
+                routing.append(o.routing_statistic-mr)
+            tt = math.fsum(t*t for t in times)
+            # A constant timing covariate removes no information. O(N) ulps
+            # cover centering arithmetic, including non-exact decimal constants.
+            timing_noise = len(train)*math.ulp(max(
+                abs(o.features.decode_seconds_per_token) for o in train))
+            if math.sqrt(tt/len(train)) <= timing_noise:
+                se = sr = 0.0
+                flags.append("constant_within_condition_training_timing")
+            else:
+                se = math.fsum(t*e for t, e in zip(times, energy))/tt
+                sr = math.fsum(t*r for t, r in zip(times, routing))/tt
+            er = [e-se*t for e, t in zip(energy, times)]
+            rr = [r-sr*t for r, t in zip(routing, times)]
+            ee = math.fsum(e*e for e in er)
+            arithmetic_sd = len(train)*math.ulp(max(
+                abs(o.features.energy_per_decode_token_j) for o in train))
+            if math.sqrt(ee/len(train)) > arithmetic_sd:
+                slope = math.fsum(e*r for e, r in zip(er, rr))/ee
+                mt, me, mr = means[target.condition]
+                dt = target.features.decode_seconds_per_token-mt
+                prediction = slope*(target.features.energy_per_decode_token_j-me-se*dt)
+                truth.append(target.routing_statistic-mr-sr*dt)
                 predicted.append(prediction)
-                labels.append(observation.episode_id.endswith("-sabotage"))
+                labels.append(target.condition)
             else:
                 flags.append("constant_power_increment_feature")
         else:
             flags.append("insufficient_grouped_training_data")
-        predictions.append((observation.episode_id, prediction))
+        predictions.append((target.episode_id, prediction))
     centered_truth, centered_prediction = [], []
-    for label in (False, True):
+    for label in ("benign", "sabotage"):
         pairs = [(a, b) for a, b, tag in zip(truth, predicted, labels) if tag == label]
         if pairs:
             ma, mb = statistics.fmean(a for a, _ in pairs), statistics.fmean(b for _, b in pairs)
@@ -379,13 +414,15 @@ def recover_power_increment(observations: Sequence[RoutingObservation]) -> Routi
     correlation = pearson(centered_truth, centered_prediction)
     if correlation is None:
         flags.append("undefined_power_increment_correlation")
-    # Two condition means and one timing covariate consume three degrees of
-    # freedom. This nominal Fisher interval shares the CV dependence caveat.
+    # Two condition means plus one timing covariate: nominal N-3. Overlapping
+    # CV folds invalidate an independent-sample interpretation (see runbook).
+    flags.append("nominal_fisher_interval_not_null_calibrated")
     return RoutingRecovery(
         "energy_increment_over_decode_timing", pearson(truth, predicted), correlation,
         math.sqrt(statistics.fmean((a-b)**2 for a, b in zip(truth, predicted))) if truth else None,
         tuple(predictions), tuple(dict.fromkeys(flags)),
         fisher_interval_95(correlation, len(truth), fitted_means=3), len(truth), max(0, len(truth)-3))
+
 
 def required_correlation(
     *, stage_a_effect_sd: float, n_per_condition: int, alpha: float,
@@ -458,10 +495,9 @@ def plan_detectability(
                              False, tuple(dict.fromkeys(flags + ["invalid_sensor_forecast"])))
     sample_s = max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND
     # Variance of the integral of independent averaged readings: sigma_W^2 * T * dt.
-    dithered = sensor.noise_std_w >= sensor.quantum_w/2
-    # Uniform rounding: Var=q^2/12 per reading. Two n-episode means give
-    # Var(contrast)=2*(q^2/12)*T*dt/n. Hardware must validate dithering.
-    rounding_variance = sensor.quantum_w**2/12 if dithered else 0.0
+    bias_w, rounding_variance = rounding_uncertainty(sensor.quantum_w, sensor.noise_std_w)
+    # Independent condition means: Var(contrast)=2*Var(episode)/n.
+    # Each condition may have an opposite rounding bias: at most 2*bias*T.
     white_noise_j = math.sqrt((sensor.noise_std_w**2+rounding_variance)*decode_duration_s*sample_s)
     rounding_contrast_std = math.sqrt(2*rounding_variance*decode_duration_s*sample_s/n_per_condition)
     signal_sd = abs(traffic_energy_slope_j_per_token)*routing_stat_sd
@@ -472,10 +508,9 @@ def plan_detectability(
     contrast = abs(stage_a_effect_sd)*signal_sd*decode_tokens
     # One-SD random rounding contrast plus a supplied measured systematic
     # half-width. Same-sign q*T is a labelled alternative, never the verdict.
-    bound = systematic_contrast_half_width_j + rounding_contrast_std
+    bound = systematic_contrast_half_width_j + rounding_contrast_std + 2*bias_w*decode_duration_s
     worst_case = systematic_contrast_half_width_j + sensor.quantum_w*decode_duration_s
-    flags.append("dithered_rounding_forecast" if dithered
-                 else "undithered_rounding_requires_measured_systematic_bound")
+    flags.append("gaussian_rounding_fourier_bound")
     if sensor.averaging_window_ns < sensor.interval_ns:
         flags.append("requires_measured_random_phase_bias")
     if routing_energy_residual_std_j_per_token:

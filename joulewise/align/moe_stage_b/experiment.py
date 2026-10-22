@@ -17,7 +17,7 @@ from typing import Any
 from joulewise.align.records import Episode, RouterLog, ToolCall, Turn
 from joulewise.align.moe_stage_b.analysis import (
     RoutingObservation, extract_features, pearson, plan_detectability, recover_routing,
-    required_correlation, fisher_interval_95, recover_power_increment,
+    required_correlation, fisher_interval_95, recover_power_increment, rounding_uncertainty,
 )
 from joulewise.align.moe_stage_b.simulation import (
     SensorModel, ina3221_sensor, nvml_sensor, simulate_episode,
@@ -45,6 +45,7 @@ class WorldConfig:
     prefill_batch_tokens: int = 128
     decode_token_period_ns: int = 50_000_000
     decode_step_jitter_ns: int = 2_000_000  # Uniform +/- input scenario, not measured jitter.
+    decode_episode_factor_half_width: float = 0.0  # Uniform scenario half-width, not a measured bound.
     decode_miss_stalls: bool = True
     tool_duration_ns: int = 800_000_000
     layers: int = 16
@@ -153,6 +154,11 @@ def synthetic_token_schedule(
             or not 0 <= jitter < config.decode_token_period_ns):
         return (replace(episode, flags=(*episode.flags, "invalid_decode_step_jitter")),
                 ())
+    spread = config.decode_episode_factor_half_width
+    if not math.isfinite(spread) or not 0 <= spread < 1:
+        return (replace(episode, flags=(*episode.flags, "invalid_episode_timing_spread")), ())
+    factor = (random.Random(f"episode-timing-{episode.seed}").uniform(1-spread, 1+spread)
+              if spread else 1.0)
     rng = random.Random(f"timing-{episode.seed}")
     windows: list[TokenWindow] = []
     turns: list[Turn] = []
@@ -169,6 +175,8 @@ def synthetic_token_schedule(
         cursor = boundary
         for _ in range(turn.decode_tokens):
             duration = config.decode_token_period_ns+rng.randint(-jitter, jitter)
+            if spread:
+                duration = max(1, round(duration*factor))  # Integer-ns shared clock contract.
             windows.append(TokenWindow(len(windows), cursor, cursor+duration))
             cursor += duration
         delta = cursor-turn.end_ns
@@ -179,7 +187,9 @@ def synthetic_token_schedule(
         cursor = max((call.end_ns for call in calls), default=cursor)
     timing_flags = (("variable_decode_step_timing",) if jitter
                     else ("fixed_compute_step_timing",))
-    if jitter == 0 and not config.decode_miss_stalls:
+    if spread:
+        timing_flags += ("between_episode_decode_timing_spread",)
+    if jitter == 0 and spread == 0 and not config.decode_miss_stalls:
         timing_flags += ("synchronized_bursts",)
     return (replace(episode, turns=tuple(turns), end_ns=cursor,
                     flags=(*episode.flags, *timing_flags)), tuple(windows))
@@ -266,9 +276,12 @@ def run_world(
                 outcome["episode"] = asdict(simulated.episode)
                 outcome["estimates"] = None
                 continue
-            condition_statistics[condition].append(statistic)
+            if simulated.episode.condition in condition_statistics:
+                condition_statistics[simulated.episode.condition].append(statistic)
+            else:
+                flags.add("missing_or_unknown_condition")
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
-                                                   statistic, features))
+                                                   statistic, features, condition=simulated.episode.condition))
             decode_extra = math.fsum(t.incremental_energy_j for t in simulated.traffic.tokens
                                      if t.phase == "decode")
             actual_extra.append(decode_extra/decode_count)
@@ -291,11 +304,9 @@ def run_world(
     names = ("energy_per_decode_token_j", "token_energy_variance_j2", "token_rate_amplitude_w",
              "decode_seconds_per_token", "mean_decode_power_w")
     recovery = {name: asdict(recover_routing(observations, feature_name=name)) for name in names}
-    # The attenuation r in d_B=r*d_A is WITHIN-condition. Held-out
-    # predictions stay blind to condition; condition labels are used only to
-    # evaluate residual correlations after prediction, never to train them.
-    condition_by_id = {o.episode_id: ("sabotage" if o.episode_id.endswith("-sabotage")
-                                     else "benign") for o in observations}
+    # Scalar candidates use pooled prediction followed by within-condition
+    # evaluation. The primary increment below instead trains condition fixed effects.
+    condition_by_id = {o.episode_id: o.condition for o in observations}
     truth_by_id = {o.episode_id: o.routing_statistic for o in observations}
     for name, values in recovery.items():
         values["timing_only_recovery_feature"] = "decode_seconds_per_token"
@@ -317,6 +328,7 @@ def run_world(
         values["within_condition_held_out_effective_n"] = max(0, len(truth_residuals)-2)
         values["within_condition_held_out_interval_95"] = fisher_interval_95(
             values["within_condition_held_out_correlation"], len(truth_residuals), fitted_means=2)
+    flags.add("requirement_uses_marginal_stage_a_effect_not_timing_conditional")
     requirement = required_correlation(stage_a_effect_sd=stage_a_effect_sd,
                                        n_per_condition=n_per_condition, alpha=alpha,
                                        power=power, comparisons=comparisons)
@@ -325,6 +337,9 @@ def run_world(
     for condition in ("benign", "sabotage"):
         selected = [(o.routing_statistic, y) for o, y in zip(observations, transfer_only_extra)
                     if condition_by_id[o.episode_id] == condition]
+        if not selected:
+            flags.add("missing_condition_for_forecast")
+            continue
         mx = statistics.fmean(a for a, _ in selected)
         my = statistics.fmean(b for _, b in selected)
         centered_x.extend(a-mx for a, _ in selected)
@@ -334,20 +349,21 @@ def run_world(
     # Routing reuse is an imperfect proxy for traffic: retain that residual
     # variance in the linear forecast instead of treating traffic as exact.
     routing_residual_sd = math.sqrt(statistics.fmean(
-        (y-slope*x)**2 for x, y in zip(centered_x, centered_y)))
+        (y-slope*x)**2 for x, y in zip(centered_x, centered_y))) if centered_x else 0.0
     error_j = [(a-b)*decode_count for a, b in zip(estimated_extra, transfer_only_extra)]
     # Fitted from these SAME episodes, so forecast agreement is descriptive,
     # not independent validation. Hardware must use separate calibration data.
     error_std = statistics.pstdev(error_j)
     decode_duration_s = statistics.fmean(decode_durations_s)
-    white_variance_j2 = ((sensor.noise_std_w**2+(sensor.quantum_w**2/12
-                           if sensor.noise_std_w >= sensor.quantum_w/2 else 0.0)) * decode_duration_s
+    _, rounding_second_moment = rounding_uncertainty(sensor.quantum_w, sensor.noise_std_w)
+    white_variance_j2 = ((sensor.noise_std_w**2+rounding_second_moment) * decode_duration_s
                          * max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND)
     phase_bias = math.sqrt(max(0.0, error_std**2-white_variance_j2))
     # Stage A d uses WITHIN-condition SD. Pooled between-condition spread would
     # inflate the planning signal and yield an optimistic detectability claim.
     within_sd = math.sqrt(statistics.fmean(
-        statistics.pvariance(values) for values in condition_statistics.values()))
+        statistics.pvariance(values) for values in condition_statistics.values() if values)
+        ) if any(condition_statistics.values()) else 0.0
     forecast = plan_detectability(
         sensor, stage_a_effect_sd=stage_a_effect_sd, n_per_condition=n_per_condition,
         alpha=alpha, power=power, comparisons=comparisons, routing_stat_sd=within_sd,
@@ -383,12 +399,23 @@ def run_world(
     if increment_meets is None:
         flags.add("power_increment_inconclusive_at_cohort_size")
     flags.add("forecast_phase_bias_fitted_on_evaluation_episodes")
+    flags.add("energy_and_forecast_use_simulator_running_level")
     energy_interval = recovery["energy_per_decode_token_j"]["within_condition_held_out_interval_95"]
     forecast_agrees = (energy_interval[0] <= forecast.model_correlation <= energy_interval[1]
                        if energy_interval is not None and forecast.model_correlation is not None
                        else None)
     return {
         "sensor": asdict(sensor), "all_resident": all_resident,
+        "timing_scenario": ("blocking_uploads" if config.decode_miss_stalls
+                            else "counterfactual_no_upload_stalls"),
+        "within_condition_sd_episode_mean_decode_ms": statistics.fmean(
+            statistics.pstdev([o.features.decode_seconds_per_token for o in observations
+                               if o.condition == c])*1000
+            for c in ("benign", "sabotage") if any(o.condition == c for o in observations)
+        ) if any(o.condition in ("benign", "sabotage") for o in observations) else None,
+        "requirement_effect_provenance": "marginal_stage_a_not_timing_conditional",
+        "energy_baseline_provenance": "simulator_running_level_unavailable_on_hardware",
+        "increment_null_calibration": "none_nominal_fisher_not_measured_absence",
         "empirical_recovery_meets_requirement": empirical_meets,
         "stage_b_detectable_under_assumptions": increment_meets,
         "stage_b_verdict": increment["verdict"],
@@ -421,6 +448,40 @@ def run_world(
         "requirement": asdict(requirement), "forecast": asdict(forecast),
         "recovery": recovery, "flags": sorted(flags),
     }
+
+
+def timing_spread_sweep(
+    config: WorldConfig, sensor: SensorModel, *,
+    jitter_points_ns: tuple[int, ...] = (2_000_000, 10_000_000, 25_000_000),
+    episode_factor_half_widths: tuple[float, ...] = (0.0, 0.025, 0.05, 0.10),
+    stage_a_effect_sd: float, n_per_condition: int, alpha: float,
+    power: float, comparisons: int,
+) -> list[dict[str, Any]]:
+    """Scenario grid, not acceptance bars, on episode-mean timing spread.
+
+    +/-10% uniform episode factors have SD 10%/sqrt(3), reaching beyond
+    5% of mean compute time. Jitter points reproduce reviewer q3 exactly.
+    Power stays at the same running watts for the changed compute duration;
+    bytes and transfer J are unchanged, while sensor acquisition phase changes.
+    """
+    scenarios = [("per_token_jitter", replace(config, decode_step_jitter_ns=j,
+                   decode_episode_factor_half_width=0.0)) for j in jitter_points_ns]
+    scenarios += [("episode_factor", replace(config, decode_step_jitter_ns=2_000_000,
+                   decode_episode_factor_half_width=s)) for s in episode_factor_half_widths]
+    rows = []
+    for axis, world in scenarios:
+        result = run_world(world, sensor, all_resident=False,
+            stage_a_effect_sd=stage_a_effect_sd, n_per_condition=n_per_condition,
+            alpha=alpha, power=power, comparisons=comparisons)
+        inc = result["power_increment_over_timing"]
+        rows.append(dict(scenario_axis=axis, timing_scenario=result["timing_scenario"],
+            jitter_ns=world.decode_step_jitter_ns,
+            episode_factor_half_width=world.decode_episode_factor_half_width,
+            within_condition_sd_episode_mean_decode_ms=result[
+                "within_condition_sd_episode_mean_decode_ms"],
+            increment_r=inc["held_out_correlation"], interval_95=inc["held_out_interval_95"],
+            verdict=result["stage_b_verdict"]))
+    return rows
 
 
 def main() -> None:

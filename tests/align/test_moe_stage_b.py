@@ -508,7 +508,7 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         # rounding and a 1.1ms shunt slice. The fixed design bar is unchanged.
         for result in (self.gapped_ina, self.synchronized):
             self.assertEqual(result["sensor"]["averaging_window_ns"], 1_100_000)
-            self.assertIn("dithered_rounding_forecast", result["forecast"]["flags"])
+            self.assertIn("gaussian_rounding_fourier_bound", result["forecast"]["flags"])
             self.assertIn("power_increment_over_timing", result)
         required = self.synchronized["requirement"]["minimum_absolute_correlation"]
         negative = self.synchronized["recovery"]["energy_per_decode_token_j"]

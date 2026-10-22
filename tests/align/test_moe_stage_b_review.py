@@ -236,7 +236,7 @@ class TestMoeStageBReview(unittest.TestCase):
         def capture(episode, trace, **kw):
             features = real_extract(episode, trace, **kw)
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
-                                ex.decode_reuse(episode.router_log), features))
+                                ex.decode_reuse(episode.router_log), features, condition=episode.condition))
             return features
         with patch.object(ex, "extract_features", capture):
             ex.run_world(ex.WorldConfig(groups=4, turns=2), ex.default_sensors()[0],

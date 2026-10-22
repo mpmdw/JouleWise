@@ -35,10 +35,13 @@ variance q²/12 per reading; the former same-sign q*T bound is an alternative
 and cannot decide the verdict. Current synthetic outcomes appear below.
 Hardware must record token timing, sensor phase, supply and throttling events.
 
-Executed decision: default stalled INA/NVML do not show a power increment beyond
-timing under the chosen residualized criterion. No-stall INA does clear it,
-while mean-power and energy-only readings can give different conclusions.
-The outcome table below and NEEDS_RULING in the report preserve those alternatives.
+Round 1's affirmative counterfactual no-upload-stall result is withdrawn pending
+re-execution with within-condition nuisance fits. PR #526 is the draft CI vehicle.
+A printed "no" is a scenario comparison, not a measured absence of signal:
+the nominal cross-validated Fisher interval is not null-calibrated (F6).
+The marginal Stage A requirement does not establish conditional design power
+(F4). Energy-only and forecast columns use simulator baseline truth, unavailable
+on hardware (F5).
 
 These are conditional design decisions, not findings that sabotage is detectable.
 Stage A effect size, within-condition routing spread, transfer energy, sensor noise,
@@ -200,12 +203,15 @@ actual RTX 3080 Ti/driver behavior rather than transferring that fact untested.
 Each sample represents a nominal interval ending at its timestamp. Missing
 intervals are not filled, and tool/prefill gaps are not interpolated across.
 ClockMapping offsets are applied; offset uncertainty widens the energy diagnostic.
-The half-width combines independent noise and dithered rounding in quadrature,
-then adds attribution and clock bounds. Uniform rounding on [-q/2,q/2] has
-variance q²/12. Noise SD >= q/2 is the declared dither-scenario criterion;
-otherwise the feature keeps a q/2 times covered-duration bound and flags the
-need for systematic calibration. Hardware must validate dithering. Correlated
-systematic errors are not assumed to average away. The about 1 J M3 Max attribution limit
+The half-width combines independent noise and a rounding second-moment bound
+in quadrature, then adds rounding bias, attribution and clock bounds. For
+a=2*pi²*sigma²/q², let G=exp(-a)/(1-exp(-3a)). The Gaussian Fourier series
+gives |rounding bias| <= min(q/2, q*G/pi), continuous down to sigma=0.
+Here k² >= 1+3(k-1) bounds the series by a geometric sum. The error-square
+series similarly gives E(error²) <= min(q²/4, q²/12 + q²*G/pi²), a
+conservative variance bound approaching q²/12 under strong dithering.
+There is no switch at sigma=q/2. Hardware must validate Gaussian noise and
+reading independence; correlated systematic errors do not average away. The about 1 J M3 Max attribution limit
 belongs to that instrument; supply an appropriate floor for that channel rather
 than pretending it is an INA3221/NVML quantum.
 
@@ -239,6 +245,13 @@ Bonferroni correction for m predeclared comparisons requires:
 |r| >= [z(1-alpha/(2*m)) + z(power)] * sqrt(2/n) / |d_A|
 ```
 
+**F4 limitation:** this is the marginal Stage A condition effect. The primary
+increment controls timing, so it requires the condition effect remaining after
+timing control. The supplied marginal d_A cannot identify that conditional effect
+without the joint timing/routing distribution. The printed 0.647120 requirement
+is a scenario comparison only and does not establish the stated design power for
+the conditional increment; obtain a prospective conditional Stage A estimate.
+
 `required_correlation` computes that requirement; d_A=0 or a requirement above
 one records a diagnostic impossibility. This is a planning approximation, not a
 finite-sample t-test or a registered scientific threshold.
@@ -253,14 +266,17 @@ noise_sd_J_per_token = hypot(white_noise_J/decode_tokens,
     phase_bias_std_J/decode_tokens, routing_energy_residual_std_J_per_token)
 model_r = signal_sd / hypot(signal_sd, noise_sd)
 contrast_J = |d_A| * signal_sd * decode_tokens
-contrast_half_width_J = supplied_measured_systematic_bound_J + rounding_contrast_SD_J
+contrast_half_width_J = supplied_measured_systematic_bound_J + rounding_contrast_SD_J + 2*bias_W*T
 labelled_worst_case_alternative_J = supplied_bound_J + quantum_W * decode_duration_s
 ```
 
 For dithered readings, integral rounding variance is (q²/12)*T*dt per episode;
 two n-episode condition means give 2*(q²/12)*T*dt/n. The supplied systematic
 half-width is measured or a declared scenario input (zero here). This forecast
-is an energy-only diagnostic, requiring its correlation and contrast bound;
+is an energy-only diagnostic using the simulator’s true 12 W running level,
+which hardware cannot reproduce. This F5 fallback also applies to the energy-only
+column below: its value is not an analyst-estimated hardware baseline. It requires
+its correlation and contrast bound;
 it does not decide Stage B. The synthetic forecast fits its slope within
 condition and includes the true routing-to-energy residual SD: adjacent reuse
 does not uniquely determine cache traffic. Sensor errors and mapping residuals
@@ -269,11 +285,17 @@ violate that approximation. phase_bias_std_j is fitted from the **same episodes'
 Forecast agreement is a descriptive fitted check, not independent validation
 or a substitute for held-out recovery.
 
-The primary criterion fits timing -> energy and timing -> routing on other
-task groups, then predicts routing residuals from energy residuals. Only held-out
-residual routing and incremental predictions are scored. Condition labels center
-held-out results for evaluation and never train a fit. Energy-only and mean-power
-candidates are printed beside timing.
+The primary criterion uses condition fixed effects in every training fit.
+For each held-out task group, estimate timing, energy and routing means in each
+condition from training rows alone. Fit timing -> energy, timing -> routing,
+and residual energy -> residual routing on those within-condition centred rows.
+Centre the target on its own condition's training means before applying slopes;
+finally centre held-out truth and predictions within condition for scoring.
+A constant training timing covariate removes no term and records a flag.
+RoutingObservation.condition comes from Episode.condition; IDs are opaque.
+Unknown/missing conditions keep unavailable predictions and flags and are omitted
+from within-condition statistics. Energy-only and mean-power candidates remain
+diagnostics beside timing.
 
 Energy-only/timing/mean-power n_eff = N-2 for two fitted condition means.
 Increment n_eff = N-3 also accounts for one timing covariate.
@@ -285,6 +307,11 @@ The energy forecast and its quantization alternative cannot create a yes.
 
 These are nominal episode-level Fisher intervals, not demonstrated coverage
 under paired task conditions and overlapping cross-validation training fits.
+**F6 fallback:** no null calibration is shipped. The reviewer found noise-only
+r=-0.20 [-0.39, 0.003] and default NVML r=-0.589 [-0.81, -0.21];
+the nominal cross-validated increment interval is biased negative with no signal.
+Thus a printed "no" is not a measured absence of signal. Report a calibrated
+within-condition task-group permutation/null distribution before a measured claim.
 Real design validation needs independent groups/repetitions and dependence-aware
 uncertainty. A synthetic cohort does not establish 50-group design power.
 `phase_bias_std_j` must come from phase-swept repetitions, not duty fraction.
@@ -475,7 +502,7 @@ No upstream source file is modified or vendored in this lane.
 ## Reproducing the synthetic checks
 
 ```bash
-python3 -m unittest discover -s tests/align -t .
+JW_B5_SYNTHETIC_ONLY=1 python3 -m unittest discover -s tests/align -t .
 python3 -m joulewise.align.moe_stage_b.experiment
 ```
 
@@ -499,83 +526,37 @@ r=0.647120 (rounded here; full precision is retained in JSON).
 These choices are supplied design parameters, not estimates from the synthetic
 condition labels.
 
-### Fix round 1: executed synthetic outcomes
+### Fix round 2: executed synthetic outcomes
 
-The fixed code at dfe3436e10c07a57ed65f086b7228b213009ba35 executed 42
-alignment tests successfully (zero failures/errors/skips). The core 34-test
-module took 159.159s; the reviewer port took 289.657s, including every p1--p5
-world and the extra noise-seed comparison. Records took 0.008s. This is
-448.824s summed module elapsed time, not an unrun local discovery wall time.
-CI run 39726492085 was subsequently superseded by report-only work; its module
-PASS lines and numeric evidence are retained in the report. Final-head CI runs
-through draft PR #526 and is not a merge-ready claim.
+Re-execution of all round-2 reviewer worlds is pending. The final report will
+retain baseline and fixed outputs; prior-round numbers are historical.
 
-E2E means 48 groups/condition, three turns, 768 prefill and 384 decode tokens
-with three tool calls per episode (N=96). Default means 12 groups/condition,
-four turns, 1024 prefill and 512 decode tokens (N=24). The first four rows use
-blocking stalls. The p3 rows use the same E2E world with stalls disabled.
-INA acquisition is the 1.1ms shunt slice; the 6.6ms row is an alternative.
-The requirement remains r=0.6471202066782847.
+A counterfactual no-upload-stall world does not describe the pinned llama.cpp:
+the pinned implementation blocks on expert uploads (source discussion above).
+It isolates sensor recovery when upload duration is not an extra routing proxy.
+All such worlds below, including earlier p2/p3 labels, are counterfactual.
 
-| World / sensor | Energy r [95% CI] | Timing-only r [95% CI] | Mean-power r [95% CI] | Increment r [95% CI] | Stage B |
-|---|---|---|---|---|---|
-| e2e ina3221 | 0.7847682385203254 [0.6922172578618175, 0.8519241883004665] | 0.8213906829904342 [0.7423138889988465, 0.8779015354109604] | 0.844028133904538 [0.7737286721887902, 0.8937942788319294] | 0.03878094817615853 [-0.16624431709872659, 0.24059214797596737] | no |
-| e2e nvml_100ms_25ms | 0.274986590911851 [0.07663600667060576, 0.45240035809789975] | 0.8213906829904342 [0.7423138889988465, 0.8779015354109604] | 0.2797199163562553 [0.08173163642031049, 0.45646919101002054] | 0.13023441275020084 [-0.07548000626420594, 0.32531560352046] | no |
-| default ina3221 | 0.7740006547148806 [0.5230834994984437, 0.9014464496892164] | 0.8438154771382044 [0.6553517606446033, 0.9333699301483963] | 0.8478338120759732 [0.6633335569803914, 0.9351652157432788] | 0.1734304799794651 [-0.2791638835042857, 0.5629748878035307] | no |
-| default nvml_100ms_25ms | 0.6345858161086284 [0.29076507775888405, 0.8332611577713871] | 0.8438154771382044 [0.6553517606446033, 0.9333699301483963] | 0.6736148880248951 [0.35195791312058256, 0.8529787790146469] | -0.5886004907339206 [-0.8135700110924684, -0.21035765763800887] | no |
-| p3 shunt_slice_1.1ms | 0.7245660029010135 [0.611758967778493, 0.8084904919807115] | -0.010303124188217116 [-0.21248013030776805, 0.19271978742984244] | 0.7235703428110349 [0.6104476360084228, 0.8077643915236326] | 0.8938423135247563 [0.8437692437918409, 0.9284890626614218] | yes |
-| p3 contiguous_6.6ms (alternative) | 0.8107156206127827 [0.7276193778957244, 0.8703636017948386] | -0.010303124188217116 [-0.21248013030776805, 0.19271978742984244] | 0.8083738802855257 [0.7244060763277498, 0.8687062918438864] | 0.9270878135830587 [0.891800255448484, 0.9511640036403203] | yes |
+### Episode timing sensitivity
 
-Both blind sensors, in both E2E and default worlds, have zero observed extra
-energy, constant mean-power/increment flags, undefined power correlations and
-"inconclusive at this cohort size" verdicts. All 96/24 episodes remain.
-Timing-only recovery is unchanged by blinding: E2E r=0.8213906829904342 and
-default r=0.8438154771382044.
+WorldConfig.decode_episode_factor_half_width is a scenario half-width of one
+uniform factor per episode, independent of routing and of per-token jitter.
+It multiplies every compute-only decode duration before blocking uploads are
+added. Running watts remain constant for the changed duration; transferred bytes
+and J/B stay fixed. Longer compute changes background energy and acquisition
+alignment. Its zero default preserves existing worlds. Independent per-token
+jitter averages down across 384 tokens and cannot substitute for this factor.
 
-The default stalled worlds do not clear the chosen increment criterion:
-routing is visible in decode timing; the sensor adds no detected conditional
-increment in those worlds. The no-stall shunt INA world does clear it at
-r=0.8938423135247563 [0.8437692437918409, 0.9284890626614218].
-Its energy-only and mean-power intervals remain inconclusive. Controlling timing
-can remove nuisance variation as well as timing signal; this residualized
-criterion is not interchangeable with mean-power recovery. The mean-power
-criterion would instead give yes for stalled INA (both cohorts). These different
-readings are printed for a prospective lead ruling; no registration is installed.
-Nominal intervals, shared CV fits and nuisance estimation need independent
-repetition before a physical detectability claim.
+timing_spread_sweep prints the reviewer +/-2, 10 and 25 ms jitter scenarios
+then factor half-widths 0, 2.5%, 5%, 10%. These are scenario points, not bars.
+Uniform +/-10% has SD 10%/sqrt(3)=5.77% of the mean compute time, exceeding
+the requested 5% scenario reach. The measured sweep axis is within-condition
+SD of episode-mean decode time (mean of the two condition population SDs).
 
-For p2, real q and fine q now both give yes under the chosen increment
-criterion. Their energy-only r values are 0.7245660029010135 and
-0.7245426207698503. The random rounding contrast SD is
-0.0009114822446086623J (real q), versus the labelled q*T alternative
-0.6917183744201088J. Contrast is 0.5982422458787154J. The former "negative
-physical result" was the assumed same-sign bound and is withdrawn.
-Measured rounding differences have SD 0.004324237908642516J per episode and
-condition-mean difference 0.00097816833854091J.
+The scenario grid will be printed by the round-2 regression test. Verdicts
+and the transition point will be updated from that execution.
 
-One dropped reading remains a finite feature with incomplete_decode_coverage:
-INA p4 changes by -0.000001355000000001494J/token at coverage
-0.9993467110604671; NVML changes by -0.0002519531250000026J/token at
-coverage 0.9934671106046709. The p5 stalled world stays ok with 24 episodes,
-energy recovery r=0.7740014099210382 and verdict no. Its dropped episode
-changes from 0.009750006204274273 to 0.009750032454274273J/token
-(delta 2.6250000000060947e-8J/token); the gap is flagged, never filled.
-
-Small-prefill policy alone moves default traffic/energy numbers by zero:
-all default prefills consist of full 128-token microbatches. Noise seeding
-does move sampled numbers; the exact legacy-noise ablation and all before/after
-probe outputs are in the report. Physical true_extra ranges and actual decode
-duration ranges remain unchanged; the observed extra now subtracts running
-baseline over actual covered time, with no nominal compute reference.
-
-The tests also include a transfer wholly missed by NVML's blind phase, visible
-under a shifted phase; an all-resident zero-traffic control; realistic router
-comparisons against a separately authored numerical oracle; shared-record JSON
-round trips; clock offsets; missing samples; and held-out task-group predictions.
-Oracle agreement uses 1e-6 relative where no uncertainty exists. Acquisition
-comparisons use q/400, below 1% of the q/2 quantization half-width and above
-one million times floating noise at these fixture scales.
-
-Execution results and exact commands/counts belong to
-[`.codex-report/align-stageb.md`](../../.codex-report/align-stageb.md). No
-source-only review or synthetic scenario should be cited as hardware validation.
+The original shunt-slice acquisition, cold cache guard and device-fit arithmetic
+are unchanged. One dropped reading retains numeric coverage and flags; blind
+sensors retain the full cohort. No source-only review or synthetic scenario is
+hardware validation. Exact execution evidence and prior-round history are in
+[`.codex-report/align-stageb.md`](../../.codex-report/align-stageb.md).

@@ -209,6 +209,10 @@ class TestMoeStageBRound2(unittest.TestCase):
                 if o.episode_id.endswith("-sabotage") == c]) for c in (False, True))
             emit(f"q6_leak {mode} {sensor_i} {jitter}", dict(shipped=(result["r"], result["ci"], result["verdict"]),
                  within_condition_nuisance_fit=(expected, ci), within_sd_timing_ms=tsd*1000))
+            from joulewise.align.moe_stage_b.reference import reference_power_increment
+            oracle, count = reference_power_increment(cap)
+            emit(f"reference {mode} {sensor_i} {jitter}", dict(r=oracle, count=count))
+            checks.append(("independent pairwise reference agrees", abs(oracle-result["r"]) < .01*(ci[1]-ci[0])/2))
             # Rule 3: 1% of the sketch's printed 95% half-width.
             checks.append(("within-condition sketch agrees", abs(expected-result["r"]) < .01*(ci[1]-ci[0])/2))
         # q7 + q8: within each condition this sensor observes noise only.
@@ -219,4 +223,38 @@ class TestMoeStageBRound2(unittest.TestCase):
             checks.append(("condition-offset sensor gives no yes", result["verdict"] != "yes"))
             if mode == "e2e_nostall" and offset == .3:
                 emit("q8_fixcheck", dict(shipped=result["r"], within_condition_fit=within_fit(cap)))
+        # Unknown/missing labels are excluded only from within-condition stats.
+        _, cap = run()
+        for label in (None, "unknown"):
+            unknown = [replace(cap[0], condition=label), *cap[1:]]
+            out = recover_power_increment(unknown)
+            emit("unknown_condition "+str(label), dict(flags=out.flags, episodes=out.held_out_episodes))
+            checks.append(("unknown condition records a flag", "missing_or_unknown_condition" in out.flags))
+            checks.append(("unknown condition retains an unavailable prediction", out.predictions[0][1] is None))
+            checks.append(("unknown condition omitted from within stats", out.held_out_episodes == len(cap)-1))
         emit("checks", checks)
+        for label, passed in checks:
+            with self.subTest(criterion=label):
+                self.assertTrue(passed)
+
+    def test_between_episode_timing_sweep(self):
+        with patch.dict(os.environ, {"JW_B5_SYNTHETIC_ONLY": "1"}):
+            for stalls in (True, False):
+                rows = ex.timing_spread_sweep(
+                    ex.WorldConfig(groups=48, turns=3, decode_miss_stalls=stalls),
+                    ex.default_sensors()[0], **DESIGN)
+                emit("timing_spread_sweep "+("stalled" if stalls else "counterfactual_no_stall"), rows)
+                # Grid rows are supplied scenario points, not scientific bars.
+                self.assertEqual(len(rows), 7)
+                self.assertTrue(all(row["within_condition_sd_episode_mean_decode_ms"] > 0 for row in rows))
+
+    def test_continuous_rounding_bound(self):
+        from joulewise.align.moe_stage_b.analysis import rounding_uncertainty
+        q = ex.default_sensors()[0].quantum_w
+        below = rounding_uncertainty(q, q/2*(1-1e-6))
+        above = rounding_uncertainty(q, q/2*(1+1e-6))
+        # The +/-1e-6 probe points are scenario inputs. Agreement bar:
+        # 1% of the displayed q/2 uncertainty, per rule 3.
+        self.assertLess(abs(below[0]-above[0]), .01*q/2)
+        self.assertEqual(rounding_uncertainty(q, 0), (q/2, q*q/4))
+        self.assertEqual(rounding_uncertainty(0, q), (0, 0))

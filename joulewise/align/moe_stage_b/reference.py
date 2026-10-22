@@ -474,14 +474,22 @@ def reference_detection_forecast(
     signal = abs(slope) * routing
     dt = max(interval_ns, window_ns)/1_000_000_000
     # Integral is dt*sum(readings), so rounding Var=q^2/12*T*dt.
-    rounding_j2 = quantum**2/12*duration*dt if sensor_sigma >= quantum/2 else 0.0
+    import math
+    if quantum and sensor_sigma:
+        exponent = 2*math.pi**2*(sensor_sigma/quantum)**2
+        series_bound = math.exp(-exponent)/(-math.expm1(-3*exponent))
+        bias = min(quantum/2, quantum/math.pi*series_bound)
+        moment = min(quantum**2/4, quantum**2/12+quantum**2/math.pi**2*series_bound)
+    else:
+        bias, moment = quantum/2, quantum**2/4
+    rounding_j2 = moment*duration*dt
     white_sigma_j = sqrt(sensor_sigma**2*duration*dt+rounding_j2)
     noise = hypot(white_sigma_j, phase_sigma) / decode_tokens
     denominator = hypot(signal, noise)
     correlation = signal / denominator if denominator else None
     contrast = abs(effect) * signal * decode_tokens
     # Independent means of n readings of episode energy: Var(diff)=2*Var/n.
-    bound = systematic + sqrt(2*rounding_j2/n_per_condition)
+    bound = systematic + sqrt(2*rounding_j2/n_per_condition) + 2*bias*duration
     return ReferenceDetectionForecast(correlation, contrast, bound)
 
 
@@ -533,41 +541,59 @@ def reference_residual_adjusted_correlation(
 
 
 def reference_power_increment(observations) -> tuple[float | None, int]:
-    """Review-round oracle using pairwise OLS and explicit projection vectors.
+    """Separate fixed-effect derivation using within-stratum pair differences.
 
-    Revised in this fix seat, not a new independent-model implementation.
-    Groups are held out together; conditions center evaluation, never training.
+    A centred cross-product in a stratum of n rows equals the sum of
+    (x_i-x_j)(y_i-y_j) over unordered pairs, divided by n. Use this identity
+    for the nuisance slopes and residual slope, without production helpers.
     """
+    import math
+    valid = [o for o in observations if o.condition in ("benign", "sabotage")
+             and all(v is not None and math.isfinite(v) for v in
+                     (o.features.decode_seconds_per_token,
+                      o.features.energy_per_decode_token_j, o.routing_statistic))]
     residuals = []
-    for target in observations:
-        training = [item for item in observations if item.group != target.group]
-        if len(training) < 2:
+    for target in valid:
+        strata = [[o for o in valid if o.group != target.group and o.condition == c]
+                  for c in ("benign", "sabotage")]
+        if not all(strata):
             continue
-        z = [item.features.decode_seconds_per_token for item in training]
-        x = [item.features.energy_per_decode_token_j for item in training]
-        y = [item.routing_statistic for item in training]
-        tz = [target.features.decode_seconds_per_token]
-        all_z = z+tz
-        fitted_x = reference_linear_prediction(z, x, all_z)
-        fitted_y = reference_linear_prediction(z, y, all_z)
-        rx = [value-fit for value, fit in zip(x, fitted_x)]
-        ry = [value-fit for value, fit in zip(y, fitted_y)]
-        xx, _, _ = _pairwise_sums(rx, ry)
-        if not xx:
+        vectors = [[(o.features.decode_seconds_per_token,
+                     o.features.energy_per_decode_token_j, o.routing_statistic)
+                    for o in rows] for rows in strata]
+        means = [tuple(fsum(row[k] for row in rows)/len(rows) for k in range(3))
+                 for rows in vectors]
+        def cross(left, right, rows):
+            return fsum((a[left]-b[left])*(a[right]-b[right])
+                        for i, a in enumerate(rows) for b in rows[i+1:])/len(rows)
+        denominator = fsum(cross(0, 0, rows) for rows in vectors)
+        n = sum(map(len, vectors))
+        timing_noise = n*math.ulp(max(abs(row[0]) for rows in vectors for row in rows))
+        slopes = ([fsum(cross(0, k, rows) for rows in vectors)/denominator
+                   for k in (1, 2)] if math.sqrt(denominator/n) > timing_noise else [0.0, 0.0])
+        projected = [[(row[1]-mean[1]-slopes[0]*(row[0]-mean[0]),
+                        row[2]-mean[2]-slopes[1]*(row[0]-mean[0]))
+                       for row in rows] for rows, mean in zip(vectors, means)]
+        ee = fsum(a*a for rows in projected for a, b in rows)
+        arithmetic = n*math.ulp(max(abs(row[1]) for rows in vectors for row in rows))
+        if math.sqrt(ee/n) <= arithmetic:
             continue
-        tx = target.features.energy_per_decode_token_j-fitted_x[-1]
-        predicted = reference_linear_prediction(rx, ry, [tx])[0]
-        residuals.append((target.episode_id.endswith("-sabotage"),
-                          target.routing_statistic-fitted_y[-1], predicted))
+        coefficient = fsum(a*b for rows in projected for a, b in rows)/ee
+        mean = means[("benign", "sabotage").index(target.condition)]
+        t = target.features.decode_seconds_per_token-mean[0]
+        residuals.append((target.condition,
+            target.routing_statistic-mean[2]-slopes[1]*t,
+            coefficient*(target.features.energy_per_decode_token_j-mean[1]-slopes[0]*t)))
     truth, prediction = [], []
-    for label in (False, True):
-        selected = [(a, b) for tag, a, b in residuals if tag == label]
-        if selected:
-            ma, mb = fsum(a for a, _ in selected)/len(selected), fsum(b for _, b in selected)/len(selected)
-            truth.extend(a-ma for a, _ in selected)
-            prediction.extend(b-mb for _, b in selected)
+    for condition in ("benign", "sabotage"):
+        pairs = [(a, b) for c, a, b in residuals if c == condition]
+        if pairs:
+            ma = fsum(a for a, _ in pairs)/len(pairs)
+            mb = fsum(b for _, b in pairs)/len(pairs)
+            truth.extend(a-ma for a, _ in pairs)
+            prediction.extend(b-mb for _, b in pairs)
     try:
-        correlation = reference_pearson(truth, prediction)
+        result = reference_pearson(truth, prediction)
     except ValueError:
-        correlation = None
-    return correlation, len(truth)
+        result = None
+    return result, len(truth)

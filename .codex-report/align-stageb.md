@@ -1,3 +1,19 @@
+# Round 2 execution checkpoint
+
+Continued from 932719cfc5f73c7029048f38696d17d08ec2833b.
+The test-only baseline checkpoint is e229ff9b9eb405c7dd705b7f2835c8132f7b4bae.
+The managed environment has not supplied a shell. The explicit no-shell CI
+fallback ports all listed worlds/pass conditions into test_moe_stage_b_round2.
+F1/F2 implement condition fixed effects and explicit Episode.condition.
+F3 adds an independent per-episode compute-duration factor and a sweep.
+F8 replaces the dither switch by continuous Gaussian Fourier bounds.
+F4/F5/F6 use the brief's permitted limitations; F7 is deferred to the lead.
+Execution and a final evidence-based decision are pending; the prior report
+below is historical and its affirmative counterfactual no-stall conclusion
+is withdrawn pending the fixed run.
+
+---
+
 # align-stageb lane report
 
 ## SUMMARY
