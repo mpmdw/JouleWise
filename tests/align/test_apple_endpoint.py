@@ -134,10 +134,18 @@ class AppleEndpointTests(unittest.TestCase):
                 measured_stack, _ = derive_model_runtime_config_from_metadata(
                     config.to_dict(), measured
                 )
+                self.assertEqual(
+                    measured["workload_provenance"]["output_policy"]["emitted_tokens"],
+                    measured["workload_observed"]["output_token_count"],
+                )  # exact integer count from the measured member
                 for key in ("model", "sampler", "output_policy"):
+                    recorded = measured["workload_provenance"][key]
+                    if key == "output_policy":
+                        # Readiness has no realized output; all fixed fields
+                        # still agree, as must the governed stack below.
+                        recorded = {k: v for k, v in recorded.items() if k != "emitted_tokens"}
                     self.assertEqual(
-                        metadata["workload_provenance"][key],
-                        measured["workload_provenance"][key],
+                        metadata["workload_provenance"][key], recorded,
                     )  # the readiness and bundle identity must be bit-identical
                 stack, pins = derive_model_runtime_config_from_metadata(config.to_dict(), metadata)
                 self.assertEqual(

@@ -354,7 +354,12 @@ class EpisodeRuntimeAdapter:
                 "tokenizer": endpoint.tokenizer_provenance,
                 "model": identity["model"],
                 "sampler": identity["sampler"],
-                "output_policy": identity["output_policy"],
+                "output_policy": {
+                    **identity["output_policy"],
+                    # Strict bundle validation requires the realized count; the
+                    # governed identity projects only the fixed policy fields.
+                    "emitted_tokens": outcome["emitted_tokens"],
+                },
                 "episode_outcome": outcome,
                 "episode_spec_sha256": hashlib.sha256(
                     (config.workload_profile.prompt_text or "").encode("utf-8")

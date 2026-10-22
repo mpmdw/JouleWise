@@ -415,14 +415,27 @@ class AppleCampaignTests(unittest.TestCase):
                     provenance["model"]["artifact_identity"],
                     metadata["adapters"]["runtime"]["prepare_metadata"]["model_artifact_identity"],
                 )
-                self.assertNotIn("emitted_tokens", provenance["output_policy"])
+                # Token counts are integers and must match the observed member.
+                self.assertEqual(
+                    provenance["output_policy"]["emitted_tokens"],
+                    metadata["workload_observed"]["output_token_count"],
+                )
+                self.assertEqual(
+                    provenance["output_policy"]["stop_condition"],
+                    "episode_returns_or_turn_budget_reached",
+                )
                 probe = _runtime_probe_metadata(config)
                 projected, _ = derive_model_runtime_config_from_metadata(config.to_dict(), probe)
                 self.assertEqual(
                     projected["sampler_output_policy"], stack["sampler_output_policy"]
                 )  # exact identity projection, with no episode outcome in it
                 for key in ("model", "sampler", "output_policy"):
-                    self.assertEqual(probe["workload_provenance"][key], provenance[key])
+                    recorded = provenance[key]
+                    if key == "output_policy":
+                        # Readiness precedes generation; compare every fixed
+                        # field, with the realized count checked above.
+                        recorded = {k: v for k, v in recorded.items() if k != "emitted_tokens"}
+                    self.assertEqual(probe["workload_provenance"][key], recorded)
             self.assertEqual(outcomes[0]["stop_condition"], "episode_returned")
             self.assertEqual(outcomes[1]["stop_condition"], "turn_budget_reached")
             self.assertEqual(stacks[0], stacks[1])  # same governed identity, different outcomes
