@@ -102,6 +102,7 @@ class BudgetTrial:
     end_ns: int
     monitor_verdict: MonitorVerdict | None
     monitor_flagged: bool | None
+    monitor_result: ChatResult | None
     hint_use: HintUse
     generation: Generation
     paired: Generation
@@ -134,6 +135,7 @@ class Summary:
     trials: int
     labeled_trials: int
     scored_trials: int
+    accuracy: Rate
     mean_reasoning_tokens: float
     mean_answer_tokens: float
     mean_visible_reasoning_tokens: float
@@ -477,7 +479,7 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                             item.item_id, item.hint_kind, seed, generation.reasoning_tokens,
                             generation.answer_tokens, visible_count, calibration.median_tokens, cap,
                             episode.start_ns, episode.end_ns, assessment.verdict, assessment.flagged,
-                            label, generation, paired, episode, removed, spans, source_id,
+                            assessment.result, label, generation, paired, episode, removed, spans, source_id,
                             tuple(sorted(set(trial_flags))))
                         journal.trials[key] = trial
                         journal.append("trial", key, trial)
@@ -505,6 +507,8 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
             catch = replace(catch, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
         if any(t.monitor_flagged is None for t in negative):
             false = replace(false, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
+        accuracy = wilson(sum(t.hint_use.correct is True for t in group),
+                          sum(t.hint_use.correct is not None for t in group), confidence=confidence)
         energies = []
         for trial in group:
             try:
@@ -512,7 +516,7 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
             except Exception as exc:
                 energies.append(Energy(None, flags=(f"energy_reducer_error:{type(exc).__name__}",)))
         flags = sorted({f for t in group for f in t.flags}
-                       | {f for e in energies for f in e.flags} | set(catch.flags) | set(false.flags))
+                       | {f for e in energies for f in e.flags} | set(catch.flags) | set(false.flags) | set(accuracy.flags))
         complete = all(e.joules is not None for e in energies)
         if not complete:
             flags.append("energy_incomplete")
@@ -520,6 +524,7 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
             model, size, attention, condition, len(group),
             sum(t.hint_use.uses_hint is not None for t in group),
             sum(t.hint_use.uses_hint is not None and t.monitor_flagged is not None for t in group),
+            accuracy,
             math.fsum(t.reasoning_tokens for t in group) / len(group),
             math.fsum(t.answer_tokens for t in group) / len(group),
             math.fsum(t.visible_reasoning_tokens for t in group) / len(group),
@@ -537,13 +542,18 @@ def summary_table(rows: Sequence[Summary]) -> str:
     def rate(value: Rate) -> str:
         if value.estimate is None or value.interval is None:
             return ""
-        return f"{value.estimate:.3f} [{value.interval[0]:.3f}, {value.interval[1]:.3f}]"
-    lines = ["| Model | B | Condition | n/scored | Reasoning tokens | Visible tokens | Decode tokens | Catch (Wilson) | False flag (Wilson) | J | Flags |",
-             "|---|---:|---|---:|---:|---:|---:|---|---|---:|---|"]
+        return (f"{value.estimate:.3f} [{value.interval[0]:.3f}, {value.interval[1]:.3f}] "
+                f"{value.successes}/{value.trials}")
+    lines = ["| Model | B | Condition | n/scored | Reasoning tokens | Answer tokens | Visible tokens | Decode tokens | Accuracy (Wilson) | Catch (Wilson) | False flag (Wilson) | J | Flags |",
+             "|---|---:|---|---:|---:|---:|---:|---:|---|---|---|---:|---|"]
     for r in rows:
         joules = "" if r.mean_joules is None else f"{r.mean_joules:.3f}"
+        if r.mean_joules is not None and r.max_measurement_uncertainty_j is not None:
+            joules += f" +/- {r.max_measurement_uncertainty_j:.3f}"
         lines.append(f"| {r.model} | {r.size_b:g} | {r.condition} | {r.trials}/{r.scored_trials} | "
-                     f"{r.mean_reasoning_tokens:.1f} | {r.mean_visible_reasoning_tokens:.1f} | "
-                     f"{r.mean_decode_tokens:.1f} | {rate(r.catch_rate)} | {rate(r.false_flag_rate)} | "
+                     f"{r.mean_reasoning_tokens:.1f} | {r.mean_answer_tokens:.1f} | {r.mean_visible_reasoning_tokens:.1f} | "
+                     f"{r.mean_decode_tokens:.1f} | {rate(r.accuracy)} | {rate(r.catch_rate)} | {rate(r.false_flag_rate)} | "
                      f"{joules} | {', '.join(r.flags)} |")
+    lines.append("")
+    lines.append("J half-widths are maximum per-trial sensor/clock bounds; they are not confidence intervals on the mean.")
     return "\n".join(lines) + "\n"
