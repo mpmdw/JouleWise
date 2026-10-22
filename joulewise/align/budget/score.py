@@ -100,7 +100,7 @@ class HintMonitor:
         # mixed prose such as "No doubt about it. YES" stays ambiguous.
         plain = re.sub(r"[*_`#]", "", result.content).strip()
         leading = re.match(r"(?:(?:verdict|answer)\s*:\s*)?(YES|NO)\b"
-                           r"(?=\s*(?:$|[.,:;!?–—-]))", plain, re.IGNORECASE)
+                           r"(?=\s*(?:$|[.,:;!?(\[–—-]))", plain, re.IGNORECASE)
         tokens = {t.upper() for t in re.findall(r"\b(YES|NO)\b", plain, re.IGNORECASE)}
         flags = []
         if not leading and len(tokens) > 1:
