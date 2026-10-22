@@ -1,0 +1,503 @@
+"""NVIDIA board-power sampling without a required Python NVML package.
+
+Each device owns one worker and four separate channels. Trace notes are JSON:
+call brackets bound query timing, capabilities identify the measurement, and
+counter discontinuities remain visible rather than being silently repaired.
+The supplied alignment contract's slice model is provisional until checked on
+the rented device; an NVML output average is not a single physical window.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import json
+import math
+import os
+import re
+import socket
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Any, Callable, Sequence
+
+from joulewise.align.records import PowerTrace
+
+# ABI, field IDs and output semantics:
+# https://github.com/NVIDIA/go-nvml/blob/main/pkg/nvml/nvml.h
+POWER_AVERAGE_FIELD = 185
+POWER_INSTANT_FIELD = 186
+ARCHITECTURES = {
+    2: "kepler", 3: "maxwell", 4: "pascal", 5: "volta", 6: "turing",
+    7: "ampere", 8: "ada", 9: "hopper", 10: "blackwell",
+}
+# Keyed by architecture, and restricted to the named devices: do not extend
+# an A100 observation to every Ampere GPU. Source is the supplied records
+# contract, not a new hardware measurement or a vendor accuracy guarantee.
+SENSOR_FACTS = {
+    "ampere": {
+        "model_pattern": r"\bA100\b", "averaging_window_ns": 25_000_000,
+        "period_ns": 100_000_000, "duty_fraction": 0.25,
+        "source": "joulewise/align/records.py:PowerTrace (A100 slice assumption)",
+    },
+    "hopper": {
+        "model_pattern": r"\bH100\b", "averaging_window_ns": 25_000_000,
+        "period_ns": 100_000_000, "duty_fraction": 0.25,
+        "source": "joulewise/align/records.py:PowerTrace (H100 slice assumption)",
+    },
+}
+
+
+class NvmlError(RuntimeError):
+    """An unavailable NVML entry point or an unsuccessful driver call."""
+
+
+class _Value(ctypes.Union):
+    _fields_ = [
+        ("dVal", ctypes.c_double), ("uiVal", ctypes.c_uint),
+        ("ulVal", ctypes.c_ulong), ("ullVal", ctypes.c_ulonglong),
+        ("sllVal", ctypes.c_longlong), ("siVal", ctypes.c_int),
+        ("usVal", ctypes.c_ushort),
+    ]
+
+
+class _FieldValue(ctypes.Structure):
+    _fields_ = [
+        ("fieldId", ctypes.c_uint), ("scopeId", ctypes.c_uint),
+        ("timestamp", ctypes.c_longlong), ("latencyUsec", ctypes.c_longlong),
+        ("valueType", ctypes.c_int), ("nvmlReturn", ctypes.c_int), ("value", _Value),
+    ]
+
+
+def _field_number(value: Any) -> float:
+    names = {0: "dVal", 1: "uiVal", 2: "ulVal", 3: "ullVal",
+             4: "sllVal", 5: "siVal", 6: "usVal"}
+    if value.valueType not in names:
+        raise NvmlError(f"unknown NVML valueType {value.valueType}")
+    return float(getattr(value.value, names[value.valueType]))
+
+
+class CtypesNvml:
+    """Small pynvml-shaped binding; library may be a ctypes-shaped test stub."""
+
+    def __init__(self, library: Any | None = None) -> None:
+        self.library = library if library is not None else ctypes.CDLL(
+            "nvml.dll" if os.name == "nt" else "libnvidia-ml.so.1"
+        )
+
+    def _call(self, names: str | tuple[str, ...], args: tuple[Any, ...] = (),
+              types: tuple[Any, ...] = ()) -> None:
+        choices = (names,) if isinstance(names, str) else names
+        function = next((getattr(self.library, name) for name in choices
+                         if hasattr(self.library, name)), None)
+        if function is None:
+            raise NvmlError(f"entry point unavailable: {choices[0]}")
+        # Actual ctypes functions get an ABI declaration. Plain Python stubs
+        # accept the same pointer objects but need no function attributes.
+        if isinstance(function, ctypes._CFuncPtr):
+            function.argtypes = list(types)
+            function.restype = ctypes.c_int
+        status = function(*args)
+        if status != 0:  # NVML_SUCCESS is the ABI integer zero.
+            raise NvmlError(f"{choices[0]} returned NVML status {status}")
+
+    def nvmlInit(self) -> None:
+        self._call(("nvmlInit_v2", "nvmlInit"))
+
+    def nvmlShutdown(self) -> None:
+        self._call("nvmlShutdown")
+
+    def _uint(self, name: str | tuple[str, ...], handle: Any | None = None,
+              wide: bool = False, signed: bool = False) -> int:
+        scalar = ctypes.c_ulonglong if wide else (ctypes.c_int if signed else ctypes.c_uint)
+        output = scalar()
+        args = (ctypes.byref(output),) if handle is None else (handle, ctypes.byref(output))
+        types = (ctypes.POINTER(scalar),) if handle is None else (
+            ctypes.c_void_p, ctypes.POINTER(scalar))
+        self._call(name, args, types)
+        return int(output.value)
+
+    def _text(self, name: str, handle: Any | None = None) -> str:
+        # 96 bytes covers the header's 96-byte device-name buffer, as well as
+        # its shorter driver/NVML-version, UUID and VBIOS strings.
+        buffer = ctypes.create_string_buffer(96)
+        args = (buffer, len(buffer)) if handle is None else (handle, buffer, len(buffer))
+        types = (ctypes.c_char_p, ctypes.c_uint) if handle is None else (
+            ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint)
+        self._call(name, args, types)
+        return buffer.value.decode("utf-8", errors="replace")
+
+    def nvmlDeviceGetCount(self) -> int:
+        return self._uint(("nvmlDeviceGetCount_v2", "nvmlDeviceGetCount"))
+
+    def nvmlDeviceGetHandleByIndex(self, index: int) -> Any:
+        handle = ctypes.c_void_p()
+        self._call(("nvmlDeviceGetHandleByIndex_v2", "nvmlDeviceGetHandleByIndex"),
+                   (index, ctypes.byref(handle)),
+                   (ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p)))
+        return handle
+
+    def nvmlSystemGetDriverVersion(self) -> str:
+        return self._text("nvmlSystemGetDriverVersion")
+
+    def nvmlSystemGetNVMLVersion(self) -> str:
+        return self._text("nvmlSystemGetNVMLVersion")
+
+    def nvmlSystemGetCudaDriverVersion(self) -> int:
+        return self._uint(("nvmlSystemGetCudaDriverVersion_v2",
+                           "nvmlSystemGetCudaDriverVersion"), signed=True)
+
+    def nvmlDeviceGetName(self, handle: Any) -> str:
+        return self._text("nvmlDeviceGetName", handle)
+
+    def nvmlDeviceGetUUID(self, handle: Any) -> str:
+        return self._text("nvmlDeviceGetUUID", handle)
+
+    def nvmlDeviceGetVbiosVersion(self, handle: Any) -> str:
+        return self._text("nvmlDeviceGetVbiosVersion", handle)
+
+    def nvmlDeviceGetArchitecture(self, handle: Any) -> int:
+        return self._uint("nvmlDeviceGetArchitecture", handle)
+
+    def nvmlDeviceGetVirtualizationMode(self, handle: Any) -> int:
+        return self._uint("nvmlDeviceGetVirtualizationMode", handle)
+
+    def nvmlDeviceIsMigDeviceHandle(self, handle: Any) -> int:
+        return self._uint("nvmlDeviceIsMigDeviceHandle", handle)
+
+    def nvmlDeviceGetMigMode(self, handle: Any) -> tuple[int, int]:
+        current, pending = ctypes.c_uint(), ctypes.c_uint()
+        self._call("nvmlDeviceGetMigMode", (handle, ctypes.byref(current), ctypes.byref(pending)),
+                   (ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint)))
+        return int(current.value), int(pending.value)
+
+    def nvmlDeviceGetPowerUsage(self, handle: Any) -> int:
+        return self._uint("nvmlDeviceGetPowerUsage", handle)
+
+    def nvmlDeviceGetTotalEnergyConsumption(self, handle: Any) -> int:
+        return self._uint("nvmlDeviceGetTotalEnergyConsumption", handle, wide=True)
+
+    def nvmlDeviceGetFieldValues(self, handle: Any, fields: Sequence[int]) -> list[Any]:
+        values = (_FieldValue * len(fields))()
+        for value, field_id in zip(values, fields):
+            value.fieldId = field_id
+        self._call("nvmlDeviceGetFieldValues", (handle, len(values), values),
+                   (ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(_FieldValue)))
+        return list(values)
+
+
+def open_nvml(*, library: Any | None = None, prefer_pynvml: bool = False) -> Any:
+    """Return an uninitialized binding; optional pynvml is imported only here."""
+    if library is not None:
+        return CtypesNvml(library)
+    if prefer_pynvml:
+        import pynvml
+        return pynvml
+    try:
+        return CtypesNvml()
+    except OSError:
+        try:
+            import pynvml
+        except ImportError as exc:
+            raise NvmlError("NVML library unavailable; optional pynvml is not installed") from exc
+        return pynvml
+
+
+def _decoded(value: Any) -> Any:
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+
+
+def device_inventory(nvml: Any, index: int) -> dict[str, Any]:
+    """Read device identity and isolation evidence, retaining unavailable fields."""
+    result: dict[str, Any] = {"index": index, "flags": []}
+    try:
+        handle = nvml.nvmlDeviceGetHandleByIndex(index)
+    except Exception as exc:
+        result["flags"].append(f"device_unavailable: {exc}")
+        return result
+    methods = {
+        "name": "nvmlDeviceGetName", "uuid": "nvmlDeviceGetUUID",
+        "architecture_id": "nvmlDeviceGetArchitecture", "vbios": "nvmlDeviceGetVbiosVersion",
+        "mig_mode": "nvmlDeviceGetMigMode", "is_mig_slice": "nvmlDeviceIsMigDeviceHandle",
+        "virtualization_mode": "nvmlDeviceGetVirtualizationMode",
+    }
+    for key, method in methods.items():
+        try:
+            result[key] = _decoded(getattr(nvml, method)(handle))
+        except Exception as exc:
+            result[key] = None
+            result["flags"].append(f"{key}_unavailable: {exc}")
+    result["architecture"] = ARCHITECTURES.get(result.get("architecture_id"), "unknown")
+    facts = SENSOR_FACTS.get(result["architecture"])
+    if facts is not None and re.search(facts["model_pattern"], result.get("name") or ""):
+        result["sensor_facts"] = dict(facts)
+    else:
+        result["sensor_facts"] = None
+        result["flags"].append("sensor_averaging_unknown")
+    return result
+
+
+@dataclass
+class _Channel:
+    kind: str
+    source: str
+    unit: str
+    supported: bool | None = None
+    times: list[int] = field(default_factory=list)
+    values: list[float] = field(default_factory=list)
+    brackets: list[int] = field(default_factory=list)
+    raw_mj: list[int] = field(default_factory=list)
+    field_timestamps_us: list[int] = field(default_factory=list)
+    flags: list[str] = field(default_factory=list)
+    discontinuities: list[dict[str, Any]] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    duplicate_field_reads: int = 0
+
+
+@dataclass
+class _Device:
+    index: int
+    handle: Any
+    inventory: dict[str, Any]
+    channels: list[_Channel]
+    lock: Any = field(default_factory=threading.Lock)
+    thread: Any = None
+
+
+class NvmlSampler:
+    """Implement PowerSampler with one background worker per device.
+
+    interval_ns is a polling choice, not a claim about sensor update rate.
+    resolution is the NVML integer mW/mJ quantum, not an accuracy guarantee.
+    power_bound_w, when provided, is a caller-justified bound on instantaneous
+    board power, including transients; an enforced *average* power limit alone
+    does not establish such a bound.
+    """
+
+    def __init__(self, device_indices: Sequence[int] | None = None, *,
+                 interval_ns: int = 10_000_000, clock_domain: str | None = None,
+                 nvml: Any | None = None, library: Any | None = None,
+                 power_bound_w: float | None = None,
+                 clock_ns: Callable[[], int] = time.monotonic_ns,
+                 stop_timeout_s: float = 5.0) -> None:
+        self.device_indices = tuple(device_indices) if device_indices is not None else None
+        self.interval_ns = interval_ns
+        self.clock_domain = clock_domain or f"{socket.gethostname()}:monotonic"
+        self._nvml = nvml
+        self._library = library
+        self.power_bound_w = power_bound_w
+        self._clock = clock_ns
+        self._stop_timeout_s = stop_timeout_s
+        self._event = threading.Event()
+        self._devices: list[_Device] = []
+        self._flags: list[str] = []
+        self._initialized = False
+        self._started = False
+        self._result: tuple[PowerTrace, ...] | None = None
+
+    @staticmethod
+    def _channels() -> list[_Channel]:
+        return [_Channel("power_usage", "nvml_power", "W"),
+                _Channel("power_instant", "nvml_power", "W"),
+                _Channel("power_average", "nvml_power", "W"),
+                _Channel("energy", "nvml_energy", "J_cumulative")]
+
+    def start(self) -> None:
+        if self._started and self._result is None:
+            self._flags.append("start_while_running")
+            return
+        if self._result is not None:
+            self._flags.append("sampler_instance_already_stopped")
+            return
+        self._started = True
+        try:
+            if not isinstance(self.interval_ns, int) or self.interval_ns <= 0:
+                raise NvmlError("interval_ns must be a positive integer")
+            if self.power_bound_w is not None and (
+                    not math.isfinite(self.power_bound_w) or self.power_bound_w <= 0):
+                self._flags.append("invalid_power_bound_ignored")
+                self.power_bound_w = None
+            if self._nvml is None:
+                self._nvml = open_nvml(library=self._library)
+            self._nvml.nvmlInit()
+            self._initialized = True
+            indices = self.device_indices
+            if indices is None:
+                indices = tuple(range(self._nvml.nvmlDeviceGetCount()))
+            if not indices:
+                self._flags.append("no_devices")
+            for index in dict.fromkeys(indices):
+                inventory = device_inventory(self._nvml, index)
+                try:
+                    handle = self._nvml.nvmlDeviceGetHandleByIndex(index)
+                except Exception as exc:
+                    self._flags.append(f"gpu{index}_unavailable: {exc}")
+                    handle = None
+                device = _Device(index, handle, inventory, self._channels())
+                self._devices.append(device)
+                if handle is not None:
+                    # Probe each capability before starting the worker. The
+                    # probe is also retained as the first real observation.
+                    self._sample(device, probe=True)
+                    device.thread = threading.Thread(
+                        target=self._worker, args=(device,), daemon=True,
+                        name=f"joulewise-nvml-gpu{index}")
+                    device.thread.start()
+        except Exception as exc:
+            self._flags.append(f"sampler_unavailable: {exc}")
+
+    def _read(self, device: _Device, channel: _Channel) -> tuple[int, int | None]:
+        if channel.kind == "energy":
+            return int(self._nvml.nvmlDeviceGetTotalEnergyConsumption(device.handle)), None
+        if channel.kind == "power_usage":
+            return int(self._nvml.nvmlDeviceGetPowerUsage(device.handle)), None
+        field_id = POWER_INSTANT_FIELD if channel.kind == "power_instant" else POWER_AVERAGE_FIELD
+        value = self._nvml.nvmlDeviceGetFieldValues(device.handle, [field_id])[0]
+        if value.nvmlReturn != 0:
+            raise NvmlError(f"field {field_id} returned NVML status {value.nvmlReturn}")
+        return _field_number(value), int(value.timestamp)
+
+    def _sample(self, device: _Device, *, probe: bool = False) -> None:
+        for channel in device.channels:
+            if channel.supported is False:
+                continue
+            before = self._clock()
+            try:
+                raw, field_timestamp = self._read(device, channel)
+            except Exception as exc:
+                after = self._clock()
+                with device.lock:
+                    if probe:
+                        channel.supported = False
+                    # Keep distinct failure reasons, without growing a trace
+                    # indefinitely on every failed poll of a lost GPU.
+                    message = str(exc)
+                    if message not in channel.failures:
+                        channel.failures.append(message)
+                    channel.flags.append("read_failed") if "read_failed" not in channel.flags else None
+                continue
+            after = self._clock()
+            midpoint = (before + after) // 2
+            # ceil(bracket/2) covers the odd-nanosecond integer midpoint.
+            half_width = (after - before + 1) // 2
+            with device.lock:
+                channel.supported = True
+                if not math.isfinite(raw) or raw < 0:
+                    channel.flags.append("invalid_reading")
+                    continue
+                if channel.times and midpoint <= channel.times[-1]:
+                    channel.flags.append("nonincreasing_call_clock")
+                    continue
+                if field_timestamp is not None and field_timestamp > 0:
+                    if channel.field_timestamps_us and field_timestamp == channel.field_timestamps_us[-1]:
+                        channel.duplicate_field_reads += 1
+                        continue
+                    if channel.field_timestamps_us and field_timestamp < channel.field_timestamps_us[-1]:
+                        channel.flags.append("field_timestamp_reset")
+                if channel.kind == "energy":
+                    if channel.raw_mj and raw < channel.raw_mj[-1]:
+                        # A drop over half the uint64 range has a unique
+                        # shorter modular forward increment: wrap candidate.
+                        # Smaller drops are reset candidates; no continuity is
+                        # invented, because the cause is not identifiable.
+                        kind = ("counter_wrap_candidate" if channel.raw_mj[-1] - raw > 2**63
+                                else "counter_reset_or_driver_reload")
+                        channel.flags.append(kind)
+                        channel.discontinuities.append({
+                            "index": len(channel.values), "kind": kind,
+                            "before_mj": channel.raw_mj[-1], "after_mj": raw})
+                    channel.raw_mj.append(raw)
+                if field_timestamp is not None:
+                    channel.field_timestamps_us.append(field_timestamp)
+                channel.times.append(midpoint)
+                channel.brackets.append(half_width)
+                # NVML exposes mW and mJ; dividing by 1000 converts SI prefixes.
+                channel.values.append(raw / 1000.0)
+
+    def _worker(self, device: _Device) -> None:
+        try:
+            while not self._event.wait(self.interval_ns / 1_000_000_000):
+                self._sample(device)
+        except Exception as exc:
+            with device.lock:
+                for channel in device.channels:
+                    channel.flags.append(f"worker_failed: {exc}")
+
+    def _trace(self, device: _Device, channel: _Channel) -> PowerTrace:
+        facts = device.inventory.get("sensor_facts") or {}
+        flags = list(self._flags) + list(device.inventory.get("flags", ())) + channel.flags
+        is_power = channel.unit == "W"
+        output_average = channel.kind == "power_average" or (
+            channel.kind == "power_usage" and device.inventory.get("architecture_id", 0) >= 7
+            and not (device.inventory.get("architecture") == "ampere" and facts))
+        if is_power:
+            flags.append("resolution_is_quantum_not_accuracy")
+            if output_average:
+                flags.append("output_average_not_single_window")
+            if channel.kind == "power_usage":
+                flags.append("sensor_update_phase_unreported")
+            else:
+                flags.append("driver_field_timestamp_is_wall_clock")
+        notes = {
+            "format": "joulewise.align.nvml.v1", "measurement": channel.kind,
+            "supported": channel.supported, "flags": sorted(set(flags)),
+            "failures": list(channel.failures),
+            "timing_half_width_ns": list(channel.brackets),
+            "timing_rule": "monotonic call midpoint; bracket excludes unknown sensor age",
+            "sensor_facts": facts or None,
+            "output_averaging_window_ns": 1_000_000_000 if output_average else None,
+            "duplicate_field_reads": channel.duplicate_field_reads,
+            "field_timestamps_us": list(channel.field_timestamps_us),
+            "counter_discontinuities": list(channel.discontinuities),
+            "raw_energy_mj": list(channel.raw_mj) if not is_power else None,
+            "power_bound_w": self.power_bound_w,
+            "device": device.inventory,
+        }
+        return PowerTrace(
+            source=channel.source, channel=f"gpu{device.index}:{channel.kind}",
+            clock_domain=self.clock_domain, t_ns=tuple(channel.times),
+            values=tuple(channel.values), unit=channel.unit,
+            nominal_interval_ns=self.interval_ns,
+            averaging_window_ns=facts.get("averaging_window_ns") if is_power else None,
+            duty_fraction=facts.get("duty_fraction") if is_power else None,
+            resolution=0.001,  # Integer mW or mJ NVML API quantum, converted to SI.
+            notes=json.dumps(notes, sort_keys=True, allow_nan=False))
+
+    def stop(self) -> tuple[PowerTrace, ...]:
+        """Return measurements or explanatory empty traces; never raise on failure."""
+        if self._result is not None:
+            return self._result
+        self._event.set()
+        try:
+            if not self._started:
+                self._flags.append("not_started")
+            for device in self._devices:
+                if device.thread is not None:
+                    device.thread.join(timeout=self._stop_timeout_s)
+                    if device.thread.is_alive():
+                        self._flags.append(f"gpu{device.index}_worker_stop_timeout")
+            if self._initialized:
+                try:
+                    self._nvml.nvmlShutdown()
+                except Exception as exc:
+                    self._flags.append(f"shutdown_failed: {exc}")
+                self._initialized = False
+            if not self._devices:
+                self._devices.append(_Device(
+                    0, None, {"flags": ["no_device_measurement"]}, self._channels()))
+            traces = []
+            for device in self._devices:
+                with device.lock:
+                    traces.extend(self._trace(device, channel) for channel in device.channels)
+            self._result = tuple(traces)
+        except Exception as exc:
+            # Even a malformed injected backend or clock cannot turn stop()
+            # into a runner crash. No fabricated samples escape this fallback.
+            self._result = (PowerTrace(
+                "nvml_power", "unavailable", self.clock_domain, (), (), "W",
+                self.interval_ns, notes=json.dumps({
+                    "flags": self._flags + ["stop_failed"], "reason": str(exc)})),)
+        return self._result
+
+
+__all__ = ["NvmlSampler", "CtypesNvml", "NvmlError", "open_nvml",
+           "device_inventory", "SENSOR_FACTS", "POWER_INSTANT_FIELD", "POWER_AVERAGE_FIELD"]
