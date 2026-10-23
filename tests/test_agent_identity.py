@@ -21,6 +21,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from joulewise import agent_identity, night_gate
 from joulewise.hazards import arm, base
@@ -335,6 +336,46 @@ class AgentIdentityTests(unittest.TestCase):
         self.assertFalse(census["clean"])
         self.assertIn(str(pid), census["detail"])
         self.assertEqual(line, census["stdout"])
+
+
+class CodexAppServerCensusTests(unittest.TestCase):
+    """Fixture census rows; these do not launch Codex or a measurement."""
+
+    def test_mcp_adapter_and_app_server_are_agent_presence(self):
+        adapter = "/checkout/scripts/codex-mcp-server.mjs"
+        cases = (
+            ("/opt/homebrew/bin/node", ("node", adapter)),
+            ("/opt/homebrew/bin/codex", ("codex", "app-server")),
+            # An npm-installed CLI can also have a Node launcher process.
+            ("/opt/homebrew/bin/node", ("node", "/opt/homebrew/bin/codex", "app-server")),
+        )
+        original_filter = agent_identity.filter_census
+        for executable, argv in cases:
+            with self.subTest(executable=executable, argv=argv):
+                # Keep the fixture PID distinct from the caller's tree root.
+                pid = os.getpid() + 1
+                info = agent_identity.ProcessInfo(pid, 1, pid, executable, argv)
+                inspector = lambda pid: info if pid == info.pid else None
+                stdout = f"{info.pid} {' '.join(argv)}\n"
+                self.assertRegex(stdout, arm.AGENT_CENSUS_ARGV[-1])
+                self.assertEqual("agent", agent_identity.identify(executable, argv))
+                decided = original_filter(stdout, inspector=inspector)
+                self.assertEqual(stdout, decided.kept_text)
+                self.assertEqual("agent_executable", decided.kept[0]["reason"])
+
+                def run(command, timeout):
+                    self.assertEqual(arm.AGENT_CENSUS_ARGV, command)
+                    return base.Completed(tuple(command), 0, stdout.encode(), b"")
+
+                context = SimpleNamespace(run=run, stamp=lambda: SimpleNamespace(to_json=lambda: {}))
+                # Supply an exact kernel row to the real shared filter. The
+                # fixture is foreign to this test's own tree and stays a hit.
+                with mock.patch.object(agent_identity, "filter_census", side_effect=lambda text, **kw:
+                                       original_filter(text, inspector=inspector, **kw)):
+                    census = arm.agent_census(context)
+                self.assertFalse(census["clean"])
+                self.assertEqual(stdout, census["stdout"])
+                self.assertIn("agent process present", census["detail"])
 
 
 # The census as the driver and the hazard arm run it, from inside a process
