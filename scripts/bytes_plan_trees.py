@@ -11,6 +11,7 @@ import argparse
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
+from fractions import Fraction
 import importlib.util
 import json
 import re
@@ -21,8 +22,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.b6 import compose, queue
+from joulewise.b5.plan import declared_bindings, resolve_stage_dispatches
 from joulewise.b6.pack_registration import Registration, validate
 from joulewise.flags.catalog import load_catalog
+from joulewise.identity_pins import (
+    IDENTITY_PIN_DERIVATION_CONTRACT, IDENTITY_PIN_PROJECTION_WORK_ORDER,
+    MODEL_RUNTIME_CONFIG_FIELDS, validate_identity_pin_projection,
+)
+from joulewise.schemas import BenchmarkConfig
 
 spec = importlib.util.spec_from_file_location("bytes_configs", ROOT / "configs/campaigns/bytes_v1/generate_configs.py")
 configs = importlib.util.module_from_spec(spec)
@@ -30,17 +37,25 @@ spec.loader.exec_module(configs)
 GROUPS = (("qwen3-1p7b", "qwen3-4b"), ("qwen3-8b", "qwen3-30b-a3b"),
           ("qwen3-14b", "qwen3-next-80b"), ("qwen3-32b", "qwen3-8b-8bit"),
           ("llama-70b",), ("qwen35-122b",))
-# Planning only, from the pilot workload time + inherited 57.6 s idle and
-# 5 s settle per run, x50, x1.2 margin. R8 Mac sizing supersedes these.
+SIZING_PATH = Path("configs/b6/registration/sizing_b5.json")
 
-def estimate_minutes(model_id):
-    pilot = next(s[3] for s in configs.ROSTER if s[0] == model_id)
-    if pilot is None:
-        return 150.0  # R1's explicit planning estimate for 8B-8bit
-    value = json.loads((ROOT / "docs/design/bytes_pilot" / pilot).read_bytes())
-    runs = value["runs"]
-    seconds = max(r["total_s"] for r in runs)
-    return round((seconds + 57.6 + 5.0) * 50 * 1.2 / 60, 3)
+
+def module_estimate(model_id, number, repo_root):
+    """Use C5's own per-model member allowance, without a second margin.
+
+    Module minutes exclude shared reference/calibration/custody overhead;
+    the native writer consumes the row's full programmed_span_s separately.
+    Pass two uses the same model costs, in reversed order.
+    """
+    raw = (Path(repo_root) / SIZING_PATH).read_bytes()
+    label = f"bytes-s{number}-p1"
+    row = json.loads(raw)["packs"][label]["disk_derivation"]["allowances_by_model"][model_id]
+    seconds = row["member_allowance_s"]
+    minutes = Fraction(seconds["numerator"], seconds["denominator"]) * row["count"] / 60
+    return {"est_minutes": float(minutes), "est_minutes_source": {
+        "path": SIZING_PATH.as_posix(), "sha256": configs.sha(raw),
+        "source_pointer": f"/packs/{label}/disk_derivation/allowances_by_model/{model_id}",
+        "formula": "count * member_allowance_s / 60; no additional margin"}}
 
 
 # Registration section 13: one library, three stage entry points. Version stays
@@ -52,7 +67,110 @@ ESTIMATORS = [{"name": name, "library": "joulewise.bytes_analysis", "function": 
                                      ("bytes_held_out_evaluation", "evaluate"))]
 
 
-def registration(number, pass_number):
+def launch_declaration(tree, repo_root):
+    """Reuse the production floor declaration, as the non-claim H author does.
+
+    These are typed declarations, not session destinations. DriverLane binds
+    the latter through session_paths using loop_bytes.json at preparation.
+    """
+    floor = Path(repo_root) / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json"
+    launch = deepcopy(json.loads(floor.read_bytes())["arm_attachments"]["launch"])
+    for row in launch["bindings"]:
+        if row["name"] == "claim_runs_root":
+            row["leaf"] = tree["roots"]["claim_root_leaf"]
+        elif row["name"] == "bound_runs_root":
+            row["leaf"] = tree["roots"]["bound_root_leaf"]
+    declared_bindings({"arm_attachments": {"launch": launch}})
+    return launch
+
+
+def identity_projection(tree, directory, repo_root):
+    """Bind every dispatched config, including auxiliary references, as in H.
+
+    The projection reader requires regular files inside the pack. Copy the
+    exact source bytes and relocate manifests and science locators together;
+    no scientific config, member order or count changes. A no-model-load desk
+    build cannot issue a frozen execution receipt: its pins remain null.
+    """
+    root = Path(repo_root)
+    roster = json.loads((root / configs.PACK / "roster.json").read_bytes())
+    names = {row["model"]["source"]: row["model_id"] for row in roster["models"]}
+    external = {row["manifest"]["path"]: row["external_input_id"]
+                for row in tree["external_inputs"]["manifests"]}
+    science = {row["run_id"] for row in tree["science"]}
+    dispatches = {d.stage_id: d for d in resolve_stage_dispatches(tree, root)}
+    units, files, relocated, manifests = {}, {}, {}, []
+    for stage in tree["stage_graph"]:
+        if stage["kind"] != "campaign_collection":
+            continue
+        dispatch = dispatches[stage["stage_id"]]
+        if dispatch.error:
+            raise ValueError(dispatch.error)
+        source = Path(dispatch.config_dir) / "order_manifest.json"
+        manifest = json.loads((root / source).read_bytes())
+        if len(manifest["executed_order"]) != stage["expected_count"]:
+            raise ValueError("dispatched member count differs: " + stage["stage_id"])
+        local = directory / "members" / stage["stage_id"]
+        members = []
+        for row in manifest["executed_order"]:
+            origin = source.parent / row["config"]
+            raw = (root / origin).read_bytes()
+            digest = configs.sha(raw)
+            if row.get("config_sha256", digest) != digest:
+                raise ValueError("source config digest differs: " + origin.as_posix())
+            target = local / origin.name
+            files[target] = raw
+            relative = target.as_posix()
+            relocated[origin.as_posix()] = relative
+            if "config_path" in row:
+                row["config_path"] = relative
+            row.update(config=target.name, config_sha256=digest)
+            typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
+            model, hardware = typed["model"], typed["hardware_target"]
+            unit_id = names.get(model["source"], "neg8_reference")
+            declared = {"hardware_target": hardware["id"], "runtime_backend": hardware["runtime_backend"],
+                "telemetry_backend": hardware["telemetry_backend"], "model_name": model["name"],
+                "model_source": model["source"], "model_revision": model.get("revision"),
+                "quantization": typed["quantization"], "workload_profile": typed["workload_profile"]}
+            unit = units.setdefault(unit_id, {"identity_unit_id": unit_id,
+                "producer_plan_reference": {"plan_id": tree["window_identity"]["window_id"],
+                                            "path": "collection_plan.json"},
+                "consumer_bindings": [{"arm": unit_id, "family": unit_id,
+                                       "measurement_arm": typed["workload_profile"]["name"]}],
+                "declared_identity": declared, "config_inventory": [],
+                "model_runtime_config": dict.fromkeys(MODEL_RUNTIME_CONFIG_FIELDS)})
+            if unit["declared_identity"] != declared:
+                raise ValueError("dispatched configs disagree on identity: " + unit_id)
+            unit["config_inventory"].append({"path": target.relative_to(directory).as_posix(), "sha256": digest})
+            if row["run_id"] not in science:
+                members.append({"run_id": row["run_id"], "ordinal": row.get("index"),
+                                "path": relative, "sha256": digest})
+        manifest_path = local / "order_manifest.json"
+        raw = configs.raw_json(manifest)
+        files[manifest_path] = raw
+        ref = {"kind": "manifest", "path": manifest_path.as_posix(),
+               "manifest_id": manifest["manifest_id"], "sha256": configs.sha(raw)}
+        stage["input"] = ref
+        stage["launch"]["commands"][0]["argv_template"]["arguments"][0] = {
+            "kind": "repo_path", "value": local.as_posix()}
+        if members:
+            manifests.append({"external_input_id": external[source.as_posix()], "manifest": dict(ref),
+                              "expected_count": len(members), "members": members})
+    for row in tree["science"]:
+        row["config_path"] = relocated[row["config_path"]]
+    for unit in units.values():
+        unit["config_inventory"].sort(key=lambda row: row["path"])
+    tree["external_inputs"]["manifests"] = manifests
+    tree["arm_attachments"]["identity_pin_projection"] = validate_identity_pin_projection({
+        "work_order": IDENTITY_PIN_PROJECTION_WORK_ORDER, "mode": "derive_never_operator_enter",
+        "state": "unprojected", "required_before_arm": True,
+        "derivation_contract": IDENTITY_PIN_DERIVATION_CONTRACT,
+        "identity_units": [units[name] for name in sorted(units)],
+        "projection_receipt": None, "supersedes": []})
+    return files
+
+
+def registration(number, pass_number, repo_root=ROOT):
     pack_id = f"bytes-s{number}-p{pass_number}"
     path = Path("configs/campaigns") / pack_id
     value = json.loads((ROOT / "configs/b6/registration_template.json").read_bytes())
@@ -65,7 +183,7 @@ def registration(number, pass_number):
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
     value["modules"] = [{"module_id": "bytes-" + model_id, "kind": "floor", "phase": "decode",
                          "config_dirs": configs.config_dirs(model_id), "run_count": 50,
-                         "est_minutes": estimate_minutes(model_id)} for model_id in GROUPS[number - 1]]
+                         **module_estimate(model_id, number, repo_root)} for model_id in GROUPS[number - 1]]
     if pass_number == 2:
         value["modules"].reverse()
     value["pack_unit"] = [m["module_id"] for m in value["modules"]]
@@ -74,18 +192,18 @@ def registration(number, pass_number):
     value["flag_effects"] = {code: catalog.entry(code)["effect"] for code in sorted(catalog.codes)}
     value["draft_notes"] = [
         "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
-        "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
+        "C6/C7 use blinding_group=bytes. Group keys: <pack_records_root>/bytes/blinding; withheld rows: <pack_records_root>/bytes/withheld/<pack_id>/<session_id>.runs.csv; missing-store flag: bytes.withheld_missing. The stage1-commit interface is validated now; its actual prediction hash is supplied at held-out release (BYTES-P0 ruling 7). Runtime config: configs/b6/loop_bytes.json.",
         "Lead blinding ruling 2026-10-20 (registration section 11): held-out configuration rows stay out of the analysis export, blinded in a withheld store, until the stage-1 prediction hash is recorded; rows visible before that carry no clock stamps.",
         "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
         "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
-        "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
+        "C5 uses the six H/BY-H2 sizing rows in configs/b6/registration/sizing_b5.json, including measured T_stream_max_s and P = 2(B+WAIT)+fixed without an added reserve. C4 file and installed runtime evidence is in configs/b6/registration/identity_pins.json; full model stacks and frozen projection receipts remain unobserved.",
         "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
         "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
-        "Model sources include HF cache snapshot directories; C4 identity pins must hash through their symlinks. model.context_window is unused by the runtime; tokenizer and chat-template pins remain C4.",
-        "Qwen3-8B-8bit revision is pending; group_size=64 is assumed and unverified against the eventual checkpoint.",
+        "Model sources include HF cache snapshot directories; C4 file hashes follow their symlinks and bind tokenizer/config files and checkpoint quantization separately from observed installed packages. model.context_window is unused by the runtime. The desk build does not load a model or freeze an execution stack.",
+        "Qwen3-8B-8bit file evidence records revision 48a0b75b1ae72503e21e1558d040bc227510ff06 and verifies bits=8, group_size=64. Its source roster/config revision field remains null for the BY-FILL seat to synchronize; generated config copies preserve those exact source bytes.",
         "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
-        "Fixed packs bypass the 265-minute science cap. Sub-pack s4 is planned at 254 minutes, leaving 11 minutes on planning numbers only.",
-        "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints.",
+        "Fixed packs bypass the 265-minute science cap. The native window maximum comes from the C5 programmed span plus the existing stage, pause and session-wait allowances, not the former s4 pilot estimate.",
+        "Module minutes = C5 count * own member_allowance_s / 60, using the exact rational sizing operands and no additional margin. Shared references, calibration and custody stay in the full programmed span. Pass two reuses the same measured model costs in reverse order.",
     ]
     return value
 
@@ -138,15 +256,17 @@ def tree_files(value, repo_root):
                 arm_attachments={}, bytes_pass=pass_number, blinding_group="bytes",
                 module_order=[m["module_id"] for m in working["modules"]],
                 draft_notes=value["draft_notes"])
+    tree["arm_attachments"]["launch"] = launch_declaration(tree, repo_root)
     tree["attempt_policy"] = {"science_member_replacements": 0, "outcome_dependent_top_up": "forbidden",
                               "minimum_kept_units_per_stratum": 5, "authority": "R6; Block-6 catalog unchanged"}
+    projected = identity_projection(tree, directory, repo_root)
     # The bracket reservation authenticates plan id/digest, without requiring
     # the old floor-plan schema. Bind BYTES membership, never BETA's plan.
     collection = {"schema_version": "joulewise.bytes_collection_plan.v1", "status": "draft",
                   "plan_id": pack_id, "pack_id": pack_id,
                   "pass": pass_number, "modules": working["modules"], "corpus": value["corpus"],
                   "minimum_kept_units_per_stratum": 5, "science": tree["science"],
-                  "draft_notes": ["Draft collection membership; analysis/estimator contracts remain R8 items 3-4 and registration remains item 8."]}
+                  "draft_notes": ["Draft collection membership and C5 module allowances; estimator versions remain null until the agreeing SHA, registration cold gate and smoke fingerprints remain before first t0."]}
     collection_raw = configs.raw_json(collection)
     collection_path = directory / "collection_plan.json"
     tree["plan"] = {"path": "collection_plan.json", "plan_id": collection["plan_id"],
@@ -190,7 +310,7 @@ def tree_files(value, repo_root):
                     arg["value"] = collection_path.as_posix()
     files["collection_plan.json"] = collection_raw
     files["plan_tree.json"] = configs.raw_json(tree)
-    return {directory / path: raw for path, raw in files.items()}, keep
+    return {**{directory / path: raw for path, raw in files.items()}, **projected}, keep
 
 
 def build_files(repo_root=ROOT):
@@ -202,7 +322,7 @@ def build_files(repo_root=ROOT):
               "2": [f"bytes-s{n}-p2" for n in range(6, 0, -1)]}
     for number in range(1, 7):
         for pass_number in (1, 2):
-            value = registration(number, pass_number)
+            value = registration(number, pass_number, repo_root)
             errors = validate(Registration(value), catalog, root=repo_root)
             if errors:
                 raise ValueError(f"{value['pack_id']}: {errors}")
