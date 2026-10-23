@@ -323,14 +323,20 @@ class RegisteredRehearsalTests(unittest.TestCase):
         archived = json.loads((R18 / 'withheld/meter.json').read_text())['members']
         recomputed = out['disclosures']['whole_machine']['windows']['ALPHA']['members']
         self.assertEqual(len(archived), 53)
+        compared = 0
         for rid, record in archived.items():
             with self.subTest(member=rid):
                 ours = recomputed[rid]['phases']['request']
                 expected = record['machine']
                 if rid == 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1':
-                    self.assertEqual(ours['recorded_comparison']['mismatched_fields'], ['rail_delta_J'])
-                else:
-                    self.assertTrue(ours['recorded_comparison']['matches'], ours['recorded_comparison'])
+                    # FIX-571 ruling 4: this archived anchor is unknown, so its
+                    # machine record is not independently compared.
+                    self.assertEqual(ours['recorded_comparison'], {
+                        'status': 'not_compared', 'matches': None, 'reason': 'anchor_unbounded'})
+                    self.assertIsNone(ours['delta_J'])
+                    continue
+                compared += 1
+                self.assertTrue(ours['recorded_comparison']['matches'], ours['recorded_comparison'])
                 for keys in (('delta_J',), ('meter', 'energy_J'), ('meter', 'baseline_W')):
                     value = r.get(expected, *keys)
                     assert_values_agree(self, r.get(ours, *keys), value)
@@ -339,6 +345,5 @@ class RegisteredRehearsalTests(unittest.TestCase):
                 self.assertEqual(ours['battery']['n'], expected['battery']['n'])
                 self.assertEqual(ours['window_ns'], expected['window_ns'])
         mismatches = [f for f in out['flags'] if f['code'] == 'meter_request_mismatch']
-        self.assertEqual(len(mismatches), 1)
-        self.assertEqual(mismatches[0]['scope'], 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1')
-        self.assertIn('anchor unknown', mismatches[0]['detail']['cause'])
+        self.assertEqual(compared, 52)
+        self.assertEqual(mismatches, [])

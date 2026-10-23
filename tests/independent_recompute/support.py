@@ -29,7 +29,7 @@ def archive_available(path):
 
 
 def agreement_bar(expected, *, ratio=False, half_width=None):
-    # COMMON: 1% of the smallest printed half-width, when provided. Otherwise
+    # Script-header agreement policy: 1% of the smallest printed half-width, when provided. Otherwise
     # 1e-6 relative / 1e-6 column units near zero. Both exceed 1e6 x double
     # noise (2.2e-16, hence 2.2e-10 relative). Four-decimal rho uses 1e-6
     # absolute, 1% of its 1e-4 printed resolution.

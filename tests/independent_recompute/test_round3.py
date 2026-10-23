@@ -75,9 +75,9 @@ class Round3ArithmeticTests(unittest.TestCase):
         self.assertEqual(summary['consistency'], 'consistent')
         clean = r.request_cross_check({'ALPHA': request_line('clean', 1., values)})
         summary = clean['windows']['ALPHA']['models']['model']
-        assert_values_agree(self, summary['rho_median'], .80)
-        assert_values_agree(self, (summary['rho_min'], summary['rho_max']), (.77, .83))
-        assert_values_agree(self, summary['rho_iqr'], [.7925, .81])
+        assert_values_agree(self, summary['rho_median'], .80, ratio=True)
+        assert_values_agree(self, (summary['rho_min'], summary['rho_max']), (.77, .83), ratio=True)
+        assert_values_agree(self, summary['rho_iqr'], [.7925, .81], ratio=True)
         self.assertEqual(clean['boundary'], r.MACHINE_BOUNDARY)
 
     def test_first_clean_is_chronological_later_k_of_n_and_no_clean(self):
@@ -425,21 +425,22 @@ class Round3RehearsalTests(unittest.TestCase):
         assert_values_agree(self, row['rail_delta_J'], 52.395579790360834)
         archived = json.loads((R18 / 'withheld/meter.json').read_text())['members']
         mismatches = {f['scope']: f for f in self.out['flags'] if f['code'] == 'meter_request_mismatch'}
-        self.assertEqual(set(mismatches), {'d117fq31p7-df-cmp-abba-ph-decode-b01-b1'})
-        self.assertIn('anchor unknown', next(iter(mismatches.values()))['detail']['cause'])
-        # The cross-check's +9.88 J used round 2's trace-idle baseline.
-        # REG 5.8's corrected rich-idle baseline adds another .40633 J.
-        assert_values_agree(self, next(iter(mismatches.values()))['detail']['rail_difference_J'], 10.286329575567528)
+        self.assertEqual(mismatches, {})
+        unbounded = 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1'
+        self.assertEqual(line['members'][unbounded]['phases']['request']['recorded_comparison'], {
+            'status': 'not_compared', 'matches': None, 'reason': 'anchor_unbounded'})
         self.assertEqual(len(line['members']), 53)
         for run_id, record in archived.items():
             for field in ('rail_delta_J', 'rho'):
                 with self.subTest(member=run_id, field=field):
-                    own = line['members'][run_id]['phases']['request'][field]
-                    if run_id not in mismatches:
+                    own = line['members'][run_id]['phases']['request'].get(field)
+                    if run_id == unbounded:
+                        self.assertIsNone(own)
+                    else:
                         assert_values_agree(self, own, record[field], ratio=field == 'rho')
         summary = self.out['disclosures']['whole_machine']['request_cross_check']['windows']['ALPHA']['models']
         self.assertEqual(set(summary), {'Qwen3-1.7B-4bit', 'Qwen2.5-1.5B-Instruct-4bit'})
-        self.assertEqual(sum(m['n_members'] for m in summary.values()), 53)
+        self.assertEqual(sum(m['n_members'] for m in summary.values()), 52)
 
     def test_R18_gross_meter_phase_and_edge_corners(self):
         line = self.out['disclosures']['whole_machine']['windows']['ALPHA']
@@ -570,6 +571,18 @@ class Round3SyntheticArchiveTests(unittest.TestCase):
             args.extend(('--extra-beta', str(archive), str(claim), str(S10 / 'beta/custody/runs_bound')))
         _, changed, _ = run_cli(self.archives, self.root / 'extra.json', (*self.roots, '--member-detail', *args))
         inclusive = changed['disclosures'].pop('beta_including_removed_sessions')
+        extra_comparison = changed['comparison'].pop('extra_beta')
+        self.assertEqual(set(extra_comparison['members']), {'0', '1'})
+        # Extra sessions load selected inputs; primary --member-detail also
+        # loads excluded roster members. These two cloned extras have the
+        # same comparison membership and statuses despite the power edit.
+        self.assertEqual(extra_comparison['members']['0'], extra_comparison['members']['1'])
+        baseline = list(extra_comparison['members']['0'].values())
+        for status in ('compared', 'not_compared'):
+            self.assertEqual(extra_comparison['summary'][status + '_runs'],
+                             2 * sum(row['status'] == status for row in baseline))
+        # Extra-session disclosure/reporting is additive; primary counts and
+        # stop status stay identical to the registered invocation.
         self.assertEqual(changed, self.out)
         self.assertEqual(inclusive['label'], r.BETA_INCLUSIVE_LABEL)
         self.assertEqual([s['attempt'] for s in inclusive['sessions']], [1, 4])

@@ -1,7 +1,7 @@
 """Opt-in archive rehearsals, disabled before archive access in synthetic-only runs.
 
-Unrounded energies, envelopes and records use COMMON's agreement bars;
-printed witnesses match exact decimal words.
+Unrounded energies and envelopes use the script header's agreement policy;
+identical-sample records and printed decimal words compare exactly.
 """
 import json
 import math
@@ -59,7 +59,7 @@ class RehearsalTests(unittest.TestCase):
         plist=r.plist_records((path/'raw/powermetrics.plist').read_bytes(),anchor)
         csv=r.csv_records((path/'power_trace.csv').read_bytes())
         self.assertEqual(len(plist),696)
-        assert_values_agree(self, plist, csv)
+        self.assertEqual(plist, csv)
 
     @unittest.skipUnless(archive_available(R18),'R18 rehearsal unavailable')
     def test_R18_registered_bop_allowance_and_minimum(self):

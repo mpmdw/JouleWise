@@ -210,7 +210,8 @@ class ArchiveTests(unittest.TestCase):
         flags=[]
         member=r.Member(path,"fixture-r01",r.Reader("ALPHA",flags),.045)
         self.assertFalse(member.usable)
-        self.assertTrue(any(f["code"]=="archive_file_missing" for f in flags))
+        self.assertEqual(member.comparison["reason"], "trace_plist_unreadable")
+        self.assertTrue(any(f["code"]=="trace_plist_unreadable" for f in flags))
 
     def test_not_estimable_contrast_keeps_holm_family(self):
         row=r.finish_contrast(r.contrast_stats([3.,3.1,2.9,3.2]),.001,1.)

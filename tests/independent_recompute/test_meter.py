@@ -68,7 +68,8 @@ class MeterTests(unittest.TestCase):
                     self.assertTrue(any(f['code'] == 'meter_battery_unavailable' for f in self.flags))
                 self.assertEqual(row['boundary'], r.MACHINE_BOUNDARY)
                 self.assertEqual(row['metadata_idle_baseline_power_w_mean'], .047)
-                assert_values_agree(self, row['baseline_ns'], [1_001_000_000_000., 1_003_000_000_000.])
+                # Identical quantized clock inputs, independent of uptime.
+                self.assertEqual(row['baseline_ns'], [1_001_000_000_000, 1_003_000_000_000])
 
     def test_offset_disagreement_over_one_ms_uses_nearest_journal(self):
         path = self.root / 'stream-001.jsonl'
@@ -136,13 +137,13 @@ class MeterTests(unittest.TestCase):
         stream = r.MeterStream(path, self.reader)
         self.assertEqual(stream.fit['duplicates_dropped'], 1)
         self.assertEqual(len(stream.times), 4000)
-        assert_values_agree(self, stream.times[-1] - stream.times[0], 79.98e9)
+        self.assertEqual(stream.times[-1] - stream.times[0], 79_980_000_000)
         rows = [json.loads(x) for x in path.read_text().splitlines()]
         # Retain polls around a 40-second gap, including the 16-bit wrap.
         rows = [x for x in rows if x.get('k') != 'b' or x['rx'] < 10**12 + 20e9 or x['rx'] >= 10**12 + 60e9]
         path.write_text(''.join(json.dumps(x) + '\n' for x in rows))
         stream = r.MeterStream(path, self.reader)
-        assert_values_agree(self, stream.times[-1] - stream.times[0], 79.98e9)
+        self.assertEqual(stream.times[-1] - stream.times[0], 79_980_000_000)
 
     def test_bin_minima_fit_and_residual_are_rederived(self):
         path = self.root / 'stream-001.jsonl'
