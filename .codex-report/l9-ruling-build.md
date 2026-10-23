@@ -256,6 +256,8 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 Earlier L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Current lane integration merge `ee98a1a8f56f718ceff0092363a48aa32fc7bd68` contains concurrent lane `507bd16e2` and main `7c23ea4b7`. This main update changes analysis_engine/distributions.py, and the concurrent lane changes S10 Git initialization. All ten cloud modules are being rerun; rows show their actual execution anchors and do not assert new-head acceptance for an old-head result. The two prior-head real-driver diagnostics remain isolated in /workspace/JouleWise at detached 3f9d512fe; current lane work uses /workspace/JouleWise-L9-1. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
+1/10 cloud modules have completed on the current integrated source; old-head rows remain historical evidence until their reruns finish.
+
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
 | Module | Tests | Failures | Errors | Skips | Exit | Wall seconds | Where it ran | Log SHA-256 |
@@ -264,7 +266,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.b5_analysis.test_release_equality | 12 | 2 | 0 | 0 | 1 | 47231.364 | Codex Cloud @ `500f7ad3d` | `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559` |
 | tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud @ `54da41a5e` | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
 | tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud @ `54da41a5e` | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
-| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud @ `01aac454c` | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
+| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.008 | Codex Cloud @ `d09ed9205` | `9d490b2979e1955cd8bfebf4cc49c273f23dc29c42c5db1db590b86856063cac` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.801 | Codex Cloud @ `8987dffb3` | `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud @ `54da41a5e` | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
 | tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud @ `38ff2a7fe` | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
@@ -301,6 +303,7 @@ Completed cloud logs and test failures:
   - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_release_after_dry_run_passes
   - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_two_custody_roots_have_identical_output_digests
 - `tests.test_docs_freshness` at `8987dffb30943d10451c2d95bf956e70f1d38e06`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 0.801 s. Log `/workspace/l9-1/checks-main-2/logs/tests_test_docs_freshness.log`, SHA-256 `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568`.
+- `tests.test_authentication_io` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 2.008 s. Log `/workspace/l9-1/checks-4/logs/tests_test_authentication_io.log`, SHA-256 `9d490b2979e1955cd8bfebf4cc49c273f23dc29c42c5db1db590b86856063cac`.
 
 Additional logs (not completed acceptance modules):
 
