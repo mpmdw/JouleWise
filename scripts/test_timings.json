@@ -4,6 +4,8 @@
   "_unknown_module_weight_rationale": "Arithmetic MEAN of the 293 hosted median weights of ordinary modules (exclusive modules excluded), rounded to milliseconds. Reserves the cost of an average module for a module that discovery finds but this map does not yet weigh; discovery still determines coverage. Legacy default_module_weight() callers retain the median fallback.",
   "_zero_observation_floor": "Hosted medians that round to 0.000 s are floored to 0.001 s for load_timing_map positivity: ['tests.test_audit_clock', 'tests.test_audit_report', 'tests.test_midcampaign_cure_generation_docs', 'tests.test_scored_packer_fuzz'].",
   "_local_observations_2026_10_06_gate_prune": "ADDED 2026-10-06 for the gate-prune integration branch (feat/2026-10-05-gate-prune, merge of origin/main 7cd23b91 into 027fd793): the 52 modules new on that branch (block-4 v5-qualification lanes and gate-prune lanes L1-L8) had no hosted observation, so each carries ONE LOCAL observation instead: the 'MODULE PASS <module> ... seconds=S' line from scripts/shard_tests.run_shard, six concurrent processes of nine or eight modules, /opt/homebrew/bin/python3.13 (Python 3.13, no venv) on the Apple M3 Max MacBook Pro, JOULEWISE_FULL_CORPUS unset, all 52 passing. Local Mac seconds are not hosted medians and likely understate a hosted runner's cost; they are scheduling hints only, to be replaced by hosted medians at the next CI harvest. Modules: tests.flags.test_flags_catalog, tests.flags.test_flags_collect, tests.flags.test_flags_exclusions, tests.flags.test_flags_identity_pins, tests.flags.test_flags_import_graph, tests.flags.test_flags_review_regressions, tests.flags.test_flags_schema, tests.flags.test_flags_sink, tests.flags.test_number_coverage, tests.hazards.test_arm, tests.hazards.test_battery, tests.hazards.test_clock, tests.hazards.test_contention, tests.hazards.test_disk, tests.hazards.test_import_graph, tests.hazards.test_instrument, tests.hazards.test_monitor, tests.hazards.test_physics_coverage, tests.hazards.test_thermal, tests.test_b5_chain, tests.test_b5_driver, tests.test_b5_plan, tests.test_capture_t0_anchor_positive_control, tests.test_capture_t0_anchor_positive_control_g10, tests.test_digest_pin_census, tests.test_g10_clock_step_control, tests.test_gate_prune_integration, tests.test_harvest_b5_window, tests.test_harvest_v5_g2b_window, tests.test_harvest_v5_qualification, tests.test_kernel_clock, tests.test_repin, tests.test_t0_anchor_positive_control, tests.test_v5_arm_abort, tests.test_v5_block4_clock, tests.test_v5_block4_composed, tests.test_v5_block4_replay, tests.test_v5_block4_x1, tests.test_v5_block4_x10, tests.test_v5_block4_x12a, tests.test_v5_block4_x12b, tests.test_v5_block4_x16, tests.test_v5_block4_x2, tests.test_v5_block4_x4, tests.test_v5_block4_x6, tests.test_v5_block4_x7, tests.test_v5_block4_x9, tests.test_v5_pack_rehearsal, tests.test_v5_qualification_plan, tests.test_v5_s1_desk_closeout, tests.test_v5_s1_qualification, tests.test_window_lineage.",
+  "_local_observation_2026_10_14_b6_busy_fraction_desk": "tests.test_b6_busy_fraction_desk: one local Python 3.13 unittest run, 6 tests in 0.026 s; scheduling hint, not hardware evidence.",
+  "_local_observation_2026_10_15_b6_round_desk": "tests.b6.test_loop_round_desk: one local /opt/homebrew/bin/python3.13 unittest run on the M3 Max, 4 end-to-end scenarios in 160.727 s with the real harvest CLI's two-worker pool, JW_B5_SYNTHETIC_ONLY=1 and subprocess audit guarding; part of the run overlapped the required desk suite. Six strict bundles per session, four per smoke; all validators and reductions run. Scheduling hint only, not a hosted median or hardware evidence.",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
       "seconds": 820.019,
@@ -55,9 +57,24 @@
       },
       "remainder_weight_seconds": 310.224,
       "_attribution_note": "The module ran whole (one shard) in all 5 runs. The heavy test's seconds are the GitHub log timestamp of its verbose result line minus that of the preceding result line; the remainder is the module's MODULE PASS seconds minus the heavy test, per run; median of each."
+    },
+    "tests.b6.test_cold_pass_fixes": {
+      "granularity": "test",
+      "reason": "Each FullRoundTests method owns an isolated TemporaryDirectory and synthetic measurement/loop roots. The process-local primary-byte seed and reference template are built once and only cloned thereafter; no method mutates them. All five methods pass individually from fresh processes. Split the five full-shape desk methods; the nine pure/short regressions stay in the computed remainder.",
+      "declared": {
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_completed_full_alpha": 274.632,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_lost_start_reference_without_spare_counts": 251.568,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_gamma_lost_midpoint_counts_and_overrides_b5_claim": 257.262,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_physical_and_opening_no_bound_stops_rotate": 217.043,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_exit4_and_acceptance_unavailable_reharvest_into_new_archive": 697.303
+      },
+      "remainder_weight_seconds": 0.3,
+      "_attribution_note": "Local /opt/homebrew/bin/python3.13 synthetic-only desk observations, five isolated unittest processes scheduled by three concurrent workers. Per-method seconds include fixture setup, real harvest, acceptance, structure, compression and loop control; the reharvest method covers both exits 4 and 6. The nine short regressions took 0.232 s. Module weight 1800 s conservatively exceeds the sum of the isolated observations. Scheduling hints, not hosted medians or hardware evidence. No count, catalog threshold, validator or reducer is lowered."
     }
   },
   "seconds_by_module": {
+    "tests.b6.test_cold_pass_fixes": 1800.0,
+    "tests.b6.test_loop_round_desk": 160.727,
     "tests.flags.test_flags_catalog": 0.005,
     "tests.flags.test_flags_collect": 28.678,
     "tests.flags.test_flags_exclusions": 0.007,
@@ -129,6 +146,7 @@
     "tests.test_b5_chain": 6.03,
     "tests.test_b5_driver": 29.004,
     "tests.test_b5_plan": 2.28,
+    "tests.test_b6_busy_fraction_desk": 0.026,
     "tests.test_battery_float": 143.248,
     "tests.test_battery_float_consumers": 23.719,
     "tests.test_battery_float_sweep": 3.181,

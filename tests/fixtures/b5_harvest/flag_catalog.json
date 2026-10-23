@@ -1,5 +1,29 @@
 {
   "codes": {
+    "agent.capture_overlap": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "agent.pause_marker_stale": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "agent.presence": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS"
+    },
+    "agent.presence_overlap": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS"
+    },
     "battery.accumulator_activity": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -395,6 +419,48 @@
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER"
+    },
+    "idle.busy_fraction_exceeded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "idle.wait_budget_exhausted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "idle.wait_budget_skip": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS"
+    },
+    "idle.wait_budget_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "idle.wait_ledger_unwritable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION"
+    },
+    "idle.wait_cap_skip": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS"
+    },
+    "idle.waited": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
     },
     "instrument.binary_identity_rederived": {
       "blinding": "STRUCTURE",
@@ -941,6 +1007,42 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER"
+    },
+    "sleep.assertion_lost": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "sleep.assertion_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "sleep.between_runs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "sleep.in_chain": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
+    "sleep.in_run": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS"
+    },
+    "sleep.reading_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
     },
     "stage.members_refused_pre_bundle_identical": {
       "blinding": "STRUCTURE",

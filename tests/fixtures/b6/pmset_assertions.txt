@@ -1,0 +1,28 @@
+2026-10-14 06:40:41 -0700 
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   1
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             1
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+   pid 892(caffeinate): [0x0000004200018110] 34:59:37 PreventUserIdleSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+   pid 892(caffeinate): [0x000000420007811f] 34:59:37 PreventSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+   pid 415(WindowServer): [0x0000003d0009804b] 17:49:37 UserIsActive named: "com.apple.iohideventsystem.queue.tickle serviceID:100000d1a service:AppleHIDKeyboardEventDriverV2 product:Apple Internal Keyboard / Trackpad eventType:3"  
+   pid 355(powerd): [0x0000003a00018007] 34:59:45 PreventUserIdleSystemSleep named: "Powerd - Prevent sleep while display is on"  
+   pid 355(powerd): [0x0000003a00098008] 34:59:45 UserIsActive named: "com.apple.powerd.ws.initialize"  
+   pid 40370(caffeinate): [0x0001ebc80001a2aa] 00:02:27 PreventUserIdleSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting for 300 secs
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+	Timeout will fire in 153 secs Action=TimeoutActionRelease
+Kernel Assertions: 0x104=USB,MAGICWAKE
+   id=579  level=255 0x4=USB creat=10/12/26, 19:54 description=com.apple.usb.externaldevice.02100000 owner=POWER-Z KM003C
+   id=583  level=255 0x100=MAGICWAKE creat=10/12/26, 19:44 description=en0 owner=IOSkywalkNetworkBSDClient
