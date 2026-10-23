@@ -65,6 +65,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.aggregate import student_t_critical_95
+
 STEP_MS = {0: 500, 1: 100, 2: 20, 3: 1}
 SAMPLE = struct.Struct("<HHiiHHHH")
 RESPONSE_CAP = 63
@@ -77,7 +79,7 @@ DROP_LIMIT = 0.005                  # meter.drops_excess above 0.5 %
 # Audit F7 (2026-10-22), capture/verify-capture-C2/blind_slope.py's 12
 # pooled-session sources, recomputed without rounding individual slopes:
 # mean 0.9681264838730295, sample SD 0.0033525440726185764 (n-1).
-# Mean +/- 5 SD = (0.9513637635099366, 0.9848892042361224), rounded below
+# Mean +/- 5 SD = (0.9513637635099366, 0.9848892042361224), rounded half-even below
 # to six decimals (less than 1e-6 relative change). This is an engineering
 # margin, not a confidence interval. The probe's 0.955 is 0.003636 above
 # the lower edge, and the cold Opus replay's lagged probe slope 0.95437
@@ -532,15 +534,27 @@ def pdtr_gain(stream: Stream, bin_ns: int = PDTR_BIN_NS) -> dict[str, Any]:
         return {**result, "reason": "slope_undetermined"}
     result["slope_se"] = slope_se
     # OLS with an intercept estimates residual variance as SSE/(n-2), hence
-    # SE(slope) = sqrt(SSE/(n-2)/sxx). Two SE is approximately 95% normal
-    # coverage. The check exists to see a meter gain fault of
-    # PDTR_FAULT_FRACTION (audit F7); a gain fault g moves the slope to
-    # slope/(1+g), about slope*g. If the 95% half-width exceeds that shift,
-    # this stream cannot resolve the fault; it remains DISCLOSE, never a
-    # refusal. On the 27 real streams of the F7 replay the largest 2 SE is
-    # 0.028 against about 0.048, so no healthy stream is marked; the cold
-    # passes' idle-only stream (2 SE above 1) is.
-    if 2 * slope_se > PDTR_FAULT_FRACTION * abs(slope):
+    # SE(slope) = sqrt(SSE/(n-2)/sxx); its two-sided 95 % half-width is
+    # t(0.975, n-2) * SE (Student t, joulewise.aggregate's table; 2 SE would
+    # under-cover badly at the few-bin n this runs at: t = 4.303 at 2 df).
+    # The check exists to see a meter gain fault of PDTR_FAULT_FRACTION
+    # (audit F7). A fault g moves a healthy slope c to c/(1+g) or c/(1-g),
+    # and the flag fires only once that lands outside the band, so the fit
+    # must resolve the fault's distance beyond the band edge, not the raw
+    # shift (cold Fable delta A1). With c the band centre (the healthy
+    # reference, about 0.968): d = min(lo - c/(1+g), c/(1-g) - hi), about
+    # 0.029. The distance is a property of the band, not of the observed
+    # slope: an idle-dominated stream's slope is biased by meter noise in x,
+    # so its own value cannot vouch for itself. If the 95 % half-width is
+    # not below d the stream cannot tell a healthy meter from a faulted
+    # one: slope_undetermined, DISCLOSE, never a refusal.
+    lo, hi = PDTR_GAIN_BAND
+    g = PDTR_FAULT_FRACTION
+    centre = (lo + hi) / 2
+    distance = min(lo - centre / (1 + g), centre / (1 - g) - hi)
+    half_width = student_t_critical_95(len(pairs) - 2) * slope_se
+    result["slope_half_width_95"] = half_width
+    if not half_width < distance:
         return {**result, "reason": "slope_undetermined"}
     return result
 

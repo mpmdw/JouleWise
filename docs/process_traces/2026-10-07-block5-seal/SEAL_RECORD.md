@@ -661,13 +661,18 @@ sensor offset that invalidated the idle-dominated median ratio.
 The record now carries `r`, `sxx` (W²), `meter_power_range_W` (the minimum and maximum
 paired bin-mean meter powers), and `slope_se`. For n paired bins,
 `SE(slope) = sqrt(SSE / (n - 2) / sxx)`, with residuals from the fitted intercept
-and slope. Two SE is approximately 95% normal coverage. The cross-check exists to see a meter gain
-fault of 5 % (`PDTR_FAULT_FRACTION`, audit F7), which moves the slope by about 0.05 × slope.
-When `2 * slope_se` exceeds `0.05 * |slope|`, the stream cannot resolve that fault: the reason is
-`slope_undetermined`, and the flag discloses unconfirmed agreement even when the fitted slope lies
-inside the band. (The seat first used the band half-width, 0.0168, as the bar; on the real streams
-that marked 11 healthy short smokes whose slopes were all inside the band and which all still
-detected both ±5 % faults, so the lead tied the bar to the fault size instead.) Two bins
+and slope. Its two-sided 95 % half-width is `t(0.975, n - 2) × SE` (Student t; the record carries it
+as `slope_half_width_95`). The cross-check exists to see a meter gain fault of 5 % (`PDTR_FAULT_FRACTION`,
+audit F7). Such a fault moves a healthy slope c to c/1.05 or c/0.95, and the flag fires only once that
+lands outside the band, so the fit must resolve the fault's distance beyond the band edge: with c the
+band centre (0.968), d = min(0.951364 − c/1.05, c/0.95 − 0.984889) ≈ 0.029. When the 95 % half-width is
+not below d, the stream cannot tell a healthy meter from a faulted one: the reason is `slope_undetermined`,
+and the flag discloses unconfirmed agreement even when the fitted slope lies inside the band. The distance
+is taken at the band centre, not at the observed slope, because an idle-dominated stream's slope is biased
+by meter noise and cannot vouch for itself. (History of this bar: the seat first compared 2 SE with the
+band half-width, which marked 11 healthy short smokes; the lead then compared 2 SE with the raw 5 % shift;
+a cold Fable delta check showed that bar let a faulted 4-bin stream read clear and that 2 SE under-covers
+at few bins, so the final bar is the t half-width against the distance beyond the band.) Two bins
 leave zero residual degrees of freedom, so also give `slope_undetermined`. The fitted
 slope remains in the diagnostic record. Exact `sxx == 0` is only a division guard;
 near-constant power is judged by slope uncertainty. Other unavailable/nonfinite
@@ -695,7 +700,7 @@ also has margin. A ±5% meter gain error still moves the observed extremes outsi
 replay gave 0.9674 at a 1 s PDTR refresh lag and 0.9534 at 2 s, a shape-dependent
 shift of about −0.014 slope per extra second; added lag can still disclose.
 
-File to pin: `joulewise/external/km003c_parse.py`, SHA-256 `19d913c1330ecb83b9553f2cf667109cd35d881d22fdb1ab0b5af772a0151920`, in the commit that appends this addendum (branch `fix/2026-10-22-audit-f7-meter`, PR #565).
+File to pin: `joulewise/external/km003c_parse.py`, SHA-256 `7d51ed8ebdfad76fdd58f6dd9df90d118576153ce22619ab62a35b512f4f7cbf`, in the commit that appends this addendum (branch `fix/2026-10-22-audit-f7-meter`, PR #565).
 
 ### Verification and replay
 
@@ -711,9 +716,9 @@ The replay reads only complete session/smoke meter hazard records. Compressed in
 are decompressed in memory; custody files are never written. Every stream source
 directory named by the audit meter census contains exactly one stream file. The
 census names **27 streams**, two more than F7's stated 25-stream target; all 27 were
-replayed. Under the final rule **0 of 27** real streams fire (largest 2 SE 0.0282, against
-about 0.048 for a 5 % shift), and both ±5% meter-gain counterfactuals fire on **27/27**
-streams, always DISCLOSE. The slope and r agree with an independent
+replayed. Under the final rule **0 of 27** healthy real streams fire (each 95 % half-width is below the
+~0.029 distance), and both ±5% meter-gain counterfactuals disclose on **27/27** streams (one −5 % case as
+`slope_undetermined`, the rest out of band), always DISCLOSE. The slope and r agree with an independent
 copy of the audit formula within COMMON's 1e-6 relative fallback bar.
 
 The script and per-stream outputs are kept off the repository at

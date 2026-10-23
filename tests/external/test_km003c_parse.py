@@ -490,7 +490,7 @@ class PDTRSlopeTests(unittest.TestCase):
         self.assertIsNotNone(gain["slope"])
         self.assertIsNotNone(gain["r"])
         self.assertEqual(gain["reason"], "slope_undetermined")
-        self.assertGreater(2 * gain["slope_se"], kp.PDTR_FAULT_FRACTION * abs(gain["slope"]))
+        self.assertGreaterEqual(gain["slope_half_width_95"], 0.029)
         flag, = self.gain_flags(stream)
         self.assertEqual(flag["effect"], "DISCLOSE")
         self.assertEqual(flag["observed"]["reason"], "slope_undetermined")
@@ -504,17 +504,42 @@ class PDTRSlopeTests(unittest.TestCase):
         self.assertEqual(gain["reason"], "slope_undetermined")
         self.assertEqual(self.gain_flags(stream)[0]["effect"], "DISCLOSE")
 
-    def test_short_healthy_stream_with_moderate_se_stays_clear(self):
-        # Shape of the F7 replay's short real streams: in-band slope, 2 SE about
-        # 0.028, below the 5 % fault shift (about 0.048): the fit can see the
-        # fault it exists for, so no disclosure. Residuals (e,-e,-e,e) give
-        # SE = 2e/sqrt(2*sxx) with sxx = 5 for levels 1..4 W: e = 0.0221 -> SE 0.014.
+    def test_four_bins_cannot_resolve_the_fault_beyond_the_band(self):
+        # Residuals (e,-e,-e,e) are orthogonal to intercept and x, so the slope
+        # stays exactly 0.968; SE = e*sqrt(4/2/5) = 0.632e. At e = 0.0221,
+        # SE = 0.0140 and the 95 % half-width t(0.975, 2)*SE = 4.303*0.0140 =
+        # 0.060 exceeds the fault's distance beyond the band (about 0.029):
+        # undetermined, although the old 2 SE (0.028) looked resolved.
         stream = self.stream(levels=(1.0, 2.0, 3.0, 4.0))
         for row, residual in zip(stream.smc, (0.0221, -0.0221, -0.0221, 0.0221)):
             row["PDTR"] += residual
         gain = kp.pdtr_gain(stream)
         self.assertTrue(kp.PDTR_GAIN_BAND[0] <= gain["slope"] <= kp.PDTR_GAIN_BAND[1])
-        self.assertLess(2 * gain["slope_se"], kp.PDTR_FAULT_FRACTION * gain["slope"])
+        self.assertGreater(gain["slope_half_width_95"], 0.029)
+        self.assertEqual(gain["reason"], "slope_undetermined")
+        self.assertEqual(self.gain_flags(stream)[0]["effect"], "DISCLOSE")
+
+    def test_cold_counterexample_faulted_four_bins_is_not_clear(self):
+        # Cold Fable delta A1 repro: meter gain +5 %, residuals (-.04,-.04,.04,.04);
+        # the old bar called this slope (0.9524, in band) CLEAR.
+        stream = self.stream(levels=(1.0, 2.0, 3.0, 4.0), slope=0.968 / 1.05)
+        for row, residual in zip(stream.smc, (-0.04, -0.04, 0.04, 0.04)):
+            row["PDTR"] += residual
+        gain = kp.pdtr_gain(stream)
+        self.assertEqual(gain["reason"], "slope_undetermined")
+        self.assertEqual(len(self.gain_flags(stream)), 1)
+
+    def test_twelve_bins_with_small_residuals_resolve_and_stay_clear(self):
+        # Levels 1..12 W, residual pattern (e,-e,-e,e) x3 (orthogonal to x and
+        # intercept): sxx = 143, SE = e*sqrt(12/10/143) = 0.0916e; e = 0.05 gives
+        # SE 0.00458 and half-width t(0.975, 10)*SE = 2.228*0.00458 = 0.0102,
+        # below the ~0.029 fault distance: clear.
+        stream = self.stream(levels=tuple(float(w) for w in range(1, 13)))
+        for row, residual in zip(stream.smc, (0.05, -0.05, -0.05, 0.05) * 3):
+            row["PDTR"] += residual
+        gain = kp.pdtr_gain(stream)
+        self.assertAlmostEqual(gain["slope"], 0.968, delta=0.968e-6)
+        self.assertLess(gain["slope_half_width_95"], 0.029)
         self.assertIsNone(gain.get("reason"))
         self.assertEqual(self.gain_flags(stream), [])
 
