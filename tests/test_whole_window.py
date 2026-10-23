@@ -259,6 +259,37 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
                 consumption_session=session,
             )
 
+    def test_validator_accepts_writer_busy_only_cpu_with_member_admission(self) -> None:
+        from tests.test_hazard_whole_window_verdict import busy_only_core_fixture
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            member, result = busy_only_core_fixture(root)
+            row = self._verdict_fixture(root, schema_version="joulewise.campaign_provenance.v2", attest=True)
+            row["idle_admission_core"]["members"] = result.core["members"]
+            self.assertEqual(self._validate(row, root), (True, ()))
+            metadata = member.metadata
+            metadata["environment_admission"]["attempts"][-1].pop("busy_fraction_admitted")
+            (member.bundle_path / "metadata.json").write_text(json.dumps(metadata))
+            valid, reasons = self._validate(row, root)
+            self.assertFalse(valid)
+            self.assertIn("cpu_admission_core_failed", reasons)
+            metadata["environment_admission"]["attempts"][-1]["busy_fraction_admitted"] = True
+            metadata["environment_admission"]["attempts"][-1]["admitted"] = False
+            (member.bundle_path / "metadata.json").write_text(json.dumps(metadata))
+            self.assertIn("cpu_admission_core_failed", self._validate(row, root)[1])
+            metadata["environment_admission"]["attempts"][-1]["admitted"] = True
+            raw_cpu = metadata["environment_admission"]["attempts"][-1].pop("cpu_admission")
+            (member.bundle_path / "metadata.json").write_text(json.dumps(metadata))
+            self.assertIn("cpu_admission_core_failed", self._validate(row, root)[1])
+            metadata["environment_admission"]["attempts"][-1]["cpu_admission"] = raw_cpu
+            # A marker cannot excuse another failed CPU condition in the core.
+            metadata["environment_admission"]["attempts"][-1]["busy_fraction_admitted"] = True
+            (member.bundle_path / "metadata.json").write_text(json.dumps(metadata))
+            row["idle_admission_core"]["members"][0]["cpu_admission"]["conditions"].append(
+                "processor_combined_power_w_p95_exceeded")
+            self.assertIn("cpu_admission_core_failed", self._validate(row, root)[1])
+
     def test_attested_v2_source_passes_beside_poisoned_sibling(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
