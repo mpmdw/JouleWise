@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 from scripts import sample_quiet_predicate_evidence as harness
 from joulewise import battery_float
+from tests.live_hw import live_hw_only
 from tests import test_battery_float as battery_float_tests
 from tests.test_battery_float import UPDATE, raw as battery_raw
 
@@ -869,6 +870,7 @@ class CollectionTests(NetworkTimeOffMixin, unittest.TestCase):
     @unittest.skipUnless(sys.platform == "darwin", "real collect subprocess runs the macOS census and "
                          "power-policy probes (pmset, sysctl); on Linux every round errors and, since fix "
                          "round 4, an all-error session exits 1 by design")
+    @live_hw_only
     def test_real_collect_no_power_reaps_all_recorded_workers(self):
         with tempfile.TemporaryDirectory() as tmp:
             # One second is the minimum top sampling interval; use one interval.
