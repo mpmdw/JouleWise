@@ -698,6 +698,8 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
                 "elapsed_s": values["elapsed_s"],
                 "clean_intervals": sum(1 for item in intervals if item["clean"] is True),
                 "unclean_intervals": len(dirty),
+                # Intervals carrying an error; overlaps unclean_intervals when an
+                # errored interval also measured contention (not a partition term).
                 "unmeasured_intervals": sum(1 for item in intervals if item["error"]),
                 "other_unmeasured_intervals": sum(
                     1 for item in intervals if item["clean"] is not True and not _measured_contention(item)
