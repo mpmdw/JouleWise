@@ -227,7 +227,7 @@ def _sysctl(name: str) -> str | None:
     return value if result.returncode == 0 and value else None
 
 
-def check(tree: Mapping[str, Any], *, pack_root: Path, measurement_root: Path, bindings: Mapping[str, str],
+def check(tree: Mapping[str, Any], *, pack_root: Path, measurement_root: Path, bindings: Mapping[str, Any],
           plan_mode: bool, identity_epoch_path: Path | None = None, live_identity: bool = True,
           sysctl: Callable[[str], str | None] | None = None) -> dict[str, Any]:
     """Every check over one rendered chain; the report (never raises on a finding)."""
@@ -354,7 +354,7 @@ def check(tree: Mapping[str, Any], *, pack_root: Path, measurement_root: Path, b
             "checks": checks, "findings": findings, "errors": len(errors), "clean": not errors}
 
 
-def _from_plan(path: Path) -> tuple[Mapping[str, Any], Path, Path, dict[str, str]]:
+def _from_plan(path: Path) -> tuple[Mapping[str, Any], Path, Path, dict[str, Any]]:
     plan = _read_json(path)
     window = plan.get("hazard_window") if isinstance(plan, Mapping) else None
     pack = window.get("pack") if isinstance(window, Mapping) else None
@@ -364,7 +364,7 @@ def _from_plan(path: Path) -> tuple[Mapping[str, Any], Path, Path, dict[str, str
     if not (isinstance(bindings, Mapping) and isinstance(measurement, str) and isinstance(pack_root, str)):
         raise InputError(f"{path} is not a HAZARD_PACK window plan (hazard_window.pack, bindings, measurement_root)")
     tree = _read_json(Path(pack_root) / "plan_tree.json")
-    return tree, Path(pack_root), Path(measurement), {str(key): str(value) for key, value in bindings.items()}
+    return tree, Path(pack_root), Path(measurement), dict(bindings)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -195,7 +195,8 @@ class InstallNightAgentTests(unittest.TestCase):
 
     def _run(self, plan: Path, *, uninstall: bool = False,
              python: str | None = sys.executable, script: Path = SCRIPT_PATH,
-             render_only: bool = True, seed_probe: bool = True) -> subprocess.CompletedProcess[str]:
+             render_only: bool = True, seed_probe: bool = True,
+             extra: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
         if not render_only and not uninstall and seed_probe:
             self._prepare_receipt(plan, python or str(self.measurement_root / ".venv/bin/python"))
         argv = [
@@ -212,6 +213,7 @@ class InstallNightAgentTests(unittest.TestCase):
             argv.append("--uninstall")
         elif python is not None:
             argv.extend(["--python", python])
+        argv.extend(extra)
         self.fake.expect_plists(self.root / "home/Library/LaunchAgents", uninstall=uninstall)
         return run_fixture_process(argv, env=self.environment, text=True)
 
@@ -534,7 +536,7 @@ class InstallNightAgentTests(unittest.TestCase):
         usage = (" --plan PLAN.json [--python ABS_PATH] "
                  "[--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] "
                  "[--hour H] [--minute M] [--uninstall] "
-                 "[--render-only DIR] [--launchctl-bin PATH]\n")
+                 "[--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH]\n")
         # Exercise both real entrypoints; the shell already had this contract.
         for entrypoint in (["/bin/zsh", str(SCRIPT_PATH)],
                            [sys.executable, "-B", "-m", "joulewise.night_agent_install"]):
@@ -576,7 +578,7 @@ class InstallNightAgentTests(unittest.TestCase):
             "[--python ABS_PATH] [--launchd-probe] [--probe-timeout-s S] "
             "[--probe-max-age-s S] [--hour H] [--minute M] "
             "[--uninstall] [--render-only DIR] "
-            "[--launchctl-bin PATH]\n", result.stderr)
+            "[--launchctl-bin PATH] [--courier-bin ABS_PATH]\n", result.stderr)
         self.assertEqual([], self.fake.calls())
         self.assertEqual(before, snapshot())
 
@@ -588,7 +590,7 @@ class InstallNightAgentTests(unittest.TestCase):
 
     def test_other_empty_option_values_refuse_without_effects(self) -> None:
         # Hour/minute remain unsupported; even empty values cannot enable them.
-        for flag in ("--plan", "--python", "--launchctl-bin", "--hour", "--minute"):
+        for flag in ("--plan", "--python", "--launchctl-bin", "--hour", "--minute", "--courier-bin"):
             with self.subTest(flag=flag):
                 self._assert_empty_option_refused(flag)
 
@@ -721,6 +723,37 @@ class InstallNightAgentTests(unittest.TestCase):
         outside = self.root / "outside.json"
         outside.write_bytes(original.read_bytes())
         self._assert_refused_without_outputs(self._run(outside, render_only=False), "plan_outside_custody_root")
+
+    def test_courier_bin_names_a_program_courier_instead_of_claude(self) -> None:
+        # Block 6 (design 3.1, 6.4): the smoke and the loop's sessions mail through a program.
+        program = self.root / "program-courier/bin/smoke-courier"
+        program.parent.mkdir(parents=True)
+        program.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        program.chmod(0o755)
+        completed = self._run(self._write_plan(), extra=("--courier-bin", str(program)))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        for label in LABELS:
+            payload = plistlib.loads((self.rendered / (label + ".plist")).read_bytes())
+            argv = payload["ProgramArguments"]
+            if "--courier-bin" in argv:
+                self.assertEqual(str(program), argv[argv.index("--courier-bin") + 1])
+        night = plistlib.loads((self.rendered / (LABELS[0] + ".plist")).read_bytes())
+        self.assertIn("--courier-bin", night["ProgramArguments"])
+        self.assertTrue(night["EnvironmentVariables"]["PATH"].startswith(str(program.parent) + ":"))
+        self.assertNotIn(str(self.courier), json.dumps(night))
+        self.assertEqual([], self.fake.calls())
+
+    def test_courier_bin_must_be_an_absolute_executable_file(self) -> None:
+        plan = self._write_plan()
+        missing = self.root / "no-such-courier"
+        not_executable = self.root / "plain-file"
+        not_executable.write_text("x", encoding="utf-8")
+        for value in (str(missing), str(not_executable)):
+            with self.subTest(value=value):
+                completed = self._run(plan, extra=("--courier-bin", value))
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertIn("--courier-bin must name an absolute executable file", completed.stderr)
+                self.assertEqual([], self.fake.calls())
 
     def test_render_only_accepts_staged_stub_and_names_published_plan(self) -> None:
         from dataclasses import replace
