@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
 import plistlib
 
@@ -20,6 +21,43 @@ D = [.10, -.05, .20, .00, -.10, .05, .15, -.05, .10, .00]
 CONTRAST = [3.1, 2.9, 3.3, 3.0, 2.8, 3.2, 3.1, 2.9, 3.0, 2.7]
 CORPUS = [99.62, 99.71, 99.80, 99.88, 99.93, 99.97, 100.04, 100.09, 100.15, 100.22, 100.31, 100.38]
 KINDS = (.010, .000, .050)
+
+
+def archive_available(path):
+    # Short circuit before even inspecting an external archive in synthetic-only runs.
+    return os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1" and path.exists()
+
+
+def agreement_bar(expected, *, ratio=False, half_width=None):
+    # Script-header agreement policy: 1% of the smallest printed half-width, when provided. Otherwise
+    # 1e-6 relative / 1e-6 column units near zero. Both exceed 1e6 x double
+    # noise (2.2e-16, hence 2.2e-10 relative). Four-decimal rho uses 1e-6
+    # absolute, 1% of its 1e-4 printed resolution.
+    if half_width is not None:
+        return .01 * half_width
+    return 1e-6 if ratio else max(1e-6, abs(expected) * 1e-6)
+
+
+def assert_printed(case, actual, expected, digits):
+    # These witnesses specify a rounded printed word, not an unrounded value.
+    # Exact words at the stated decimal precision require no agreement slack.
+    case.assertEqual(f"{actual:.{digits}f}", f"{expected:.{digits}f}")
+
+
+def assert_values_agree(case, actual, expected, *, ratio=False, half_width=None):
+    """Unrounded numeric witnesses; keep integer counts and labels exact."""
+    if isinstance(expected, dict):
+        case.assertEqual(actual.keys(), expected.keys())
+        for key, value in expected.items():
+            assert_values_agree(case, actual[key], value, ratio=ratio, half_width=half_width)
+    elif isinstance(expected, (list, tuple)):
+        case.assertEqual(len(actual), len(expected))
+        for value, target in zip(actual, expected):
+            assert_values_agree(case, value, target, ratio=ratio, half_width=half_width)
+    elif isinstance(expected, float) or isinstance(actual, float):
+        case.assertAlmostEqual(actual, expected, delta=agreement_bar(expected, ratio=ratio, half_width=half_width))
+    else:
+        case.assertEqual(actual, expected)
 
 
 def dump(path, value):

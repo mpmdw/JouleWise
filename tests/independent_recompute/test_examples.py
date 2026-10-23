@@ -2,15 +2,15 @@
 import math
 from types import SimpleNamespace
 import unittest
-from .support import recompute as r, R, B, D, CONTRAST, CORPUS, KINDS
+from .support import (assert_values_agree, assert_printed, recompute as r, R, B, D, CONTRAST, CORPUS, KINDS)
 
 
 class WorkedExamples(unittest.TestCase):
     def close(self, actual, expected, digits):
-        self.assertAlmostEqual(actual, expected, delta=.5 * 10 ** -digits)
+        assert_printed(self, actual, expected, digits)
 
     def test_E1_overlap(self):
-        self.assertAlmostEqual(r.overlap([(9.90,10.03,20.),(10.03,10.16,30.),(10.16,10.29,30.)],10.,10.25)[0],7.2,delta=1e-9)
+        assert_values_agree(self, r.overlap([(9.90,10.03,20.),(10.03,10.16,30.),(10.16,10.29,30.)],10.,10.25)[0], 7.2)
 
     def example_envelope(self, off):
         records = [(9.95+i*.13, 9.95+(i+1)*.13, p) for i,p in enumerate([2]+[30]*7+[20,4])]
@@ -19,12 +19,12 @@ class WorkedExamples(unittest.TestCase):
     def test_E2_envelope(self):
         e = self.example_envelope(11.055)
         for key,value in (("point_j",28.730),("max_abs_delta_j",1.048),("lower_j",27.682),("upper_j",29.778)):
-            self.assertAlmostEqual(e[key],value,delta=1e-9)
+            assert_values_agree(self, e[key], value)
 
     def test_E3_crossing(self):
         e = self.example_envelope(11.)
-        self.assertAlmostEqual(e["point_j"],27.630,delta=1e-9)
-        self.assertAlmostEqual(e["max_abs_delta_j"],1.428,delta=1e-9)
+        assert_values_agree(self, e["point_j"], 27.630)
+        assert_values_agree(self, e["max_abs_delta_j"], 1.428)
 
     def test_E4_full_reported(self):
         e = r.reported_estimate(R,B,KINDS,R+[x for b in B for x in [b]*4])
@@ -80,13 +80,13 @@ class WorkedExamples(unittest.TestCase):
     def test_E12_contrast(self):
         d = CONTRAST[:3]+CONTRAST[4:]
         e = r.finish_contrast(r.contrast_stats(d,.05),.01,1.2)
-        self.assertEqual(e["n"],9); self.assertEqual(e["t_star"],2.306)
+        self.assertEqual(e["n"],9); assert_printed(self, e["t_star"], 2.306, 3)
         for key,val,digits in (("dbar_j",3.,9),("s_d_j",.19365,5),("se_j",.064550,6),("t_stat",46.4758,4)):
             self.close(e[key],val,digits)
         for pair,expected in ((e["metrology_interval_j"],[2.8511,3.1489]),(e["decision_interval_j"],[2.8011,3.1989])):
             for actual,val in zip(pair,expected): self.close(actual,val,4)
-        self.assertAlmostEqual(e["p"],5.077e-11,delta=.0005e-11)
-        self.assertAlmostEqual(max(abs(x["dbar_j"]-3.) for x in e["loo"]),.0375,delta=1e-9)
+        self.assertEqual(f'{e["p"]:.3e}', "5.077e-11")  # Exact printed scientific-notation word.
+        assert_values_agree(self, max(abs(x["dbar_j"]-3.) for x in e["loo"]), .0375)
         self.assertEqual(e["outcome"],"direction_supported"); self.assertEqual(e["ceiling"],"L2")
 
     def test_E13_load_sensitivity(self):
@@ -100,7 +100,7 @@ class WorkedExamples(unittest.TestCase):
 
     def test_E15_assist_contrast(self):
         e = r.contrast_stats([v for i,v in enumerate(CONTRAST) if i not in (2,3)])
-        self.assertEqual(e["n"],8); self.assertEqual(e["t_star"],2.365)
+        self.assertEqual(e["n"],8); assert_printed(self, e["t_star"], 2.365, 3)
         for key,val,digits in (("dbar_j",2.9625,4),("s_d_j",.16850,5),("se_j",.059574,6)):
             self.close(e[key],val,digits)
         for actual,val in zip(e["metrology_interval_j"],[2.8216,3.1034]): self.close(actual,val,4)
@@ -109,14 +109,14 @@ class WorkedExamples(unittest.TestCase):
         for ns,ne,val in ((3,3,.5933),(3,2,.6383),(2,2,.6800)):
             e = r.neg8_bound(CORPUS,ns,ne)
             self.close(e["bound_j"],val,4); self.close(e["s_j"],.2353,4)
-            self.assertEqual(e["t"],2.201)
+            assert_printed(self, e["t"], 2.201, 3)
         start = sum([100.02,99.91,99.95])/3
         spread,allowance = r.drift_allowance(start,100.20,sum([100.26,100.19])/2,r.neg8_bound(CORPUS,3,2)["bound_j"])
         self.close(allowance,.6383,4); self.close(allowance/2,.3192,4)
 
     def test_E17_neg8_spread(self):
         spread,allowance = r.drift_allowance(20.10,19.90,20.35,.40)
-        self.assertAlmostEqual(spread,.45,delta=1e-9); self.assertAlmostEqual(allowance/2,.225,delta=1e-9)
+        assert_values_agree(self, spread, .45); assert_values_agree(self, allowance/2, .225)
 
     def test_E18_attribution(self):
         # Exercise the reporting layer, including ordinal first-on-tie attribution.
@@ -128,35 +128,35 @@ class WorkedExamples(unittest.TestCase):
                   tokens={"decode":512},op={"decode":{"max_abs_delta_j":1.95}}) for p in r.POSITIONS]) for i in range(1,6)]
         w = SimpleNamespace(pack="ALPHA",exclusion_cells={},neg8={"allowance_j":.1})
         e = r.make_reported(w,"df-ph-decode-qwen3-1p7b",repeats,quads)
-        self.assertEqual(e["attribution_floor"],{"value_j":2.36,"attained_by":"fixture-r02","minimum_j":1.95})
+        assert_values_agree(self, e["attribution_floor"], {"value_j":2.36,"attained_by":"fixture-r02","minimum_j":1.95})
 
     def test_E19_quantiles(self):
         literals = [12.706204736174705,4.302652729749464,3.1824463052837095,2.7764451051977943,
                     2.5705818356363155,2.44691185114497,2.364624251592785,2.306004135204166,2.262157162798205]
         for df,expected in enumerate(literals,1):
-            with self.subTest(df=df): self.assertAlmostEqual(r.student_quantile(df),expected,delta=1e-12)
+            with self.subTest(df=df): assert_values_agree(self, r.student_quantile(df), expected)
 
     def test_S1_overlap(self):
         e,n = r.overlap([(0,.1,10),(.1,.2,50),(.2,.3,10)],.05,.25)
-        self.assertAlmostEqual(e,6.,delta=1e-9); self.assertEqual(n,3)
+        assert_values_agree(self, e, 6.); self.assertEqual(n,3)
 
     def test_S2_inside_record(self):
         e = r.shift_envelope([(-10,10,40)],0,1,.046,0,.002)
         for key,val in (("max_abs_delta_j",3.68),("lower_j",36.32),("upper_j",43.68)):
-            self.assertAlmostEqual(e[key],val,delta=1e-9)
+            assert_values_agree(self, e[key], val)
 
     def test_S3_minimum_reported(self):
         e = r.reported_estimate([1,2,3,4,5],[2,2.1,1.9,2,2],(.1,0,.2))
         for actual,expected in ((e["mean_j"],2.2),(e["interval"]["variance"],.02064),
                                (e["interval"]["h_j"],.3988815),(e["lower_j"],1.5011185),(e["upper_j"],2.8988815)):
-            self.assertAlmostEqual(actual,expected,delta=5e-8)
+            assert_values_agree(self, actual, expected)
 
     def test_S4_minimum_absolute(self):
         f = r.floor_estimate([1,2,3,4,5],[.5]*5,"absolute")
         for key,val in (("prediction_j",4.808173),("corner_widened_unguarded_floor_j",6.305860),
                         ("guarded_floor_j",9.458790),("R",1.311488)):
             self.close(f[key],val,6)
-        self.assertEqual(f["guard"],1.5)
+        assert_values_agree(self, f["guard"], 1.5)
 
     def test_S5_minimum_comparative(self):
         f = r.floor_estimate([.1,-.1,.2,0,.3],[.2]*5,"comparative")
@@ -179,7 +179,7 @@ class WorkedExamples(unittest.TestCase):
                 residual={"prefill":r.shift_envelope(records,0,.5,0,.0003,.001)}))
         split=r.common_width(members,"prefill",.045)
         for key,val in (("shared_j",.9),("local_j",.018),("width_j",.918)):
-            self.assertAlmostEqual(split[key],val,delta=1e-9)
+            assert_values_agree(self, split[key], val)
 
     def test_S8_pvalue(self):
         e=r.contrast_stats([1,2,3,4,5])

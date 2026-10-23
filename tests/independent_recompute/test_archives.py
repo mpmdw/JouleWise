@@ -10,7 +10,7 @@ import statistics
 import sys
 import tempfile
 import unittest
-from .support import recompute as r, SCRIPT, full_pack, remove_member, dump, run_cli, bundle
+from .support import (assert_values_agree, recompute as r, SCRIPT, full_pack, remove_member, dump, run_cli, bundle)
 
 
 class ArchiveTests(unittest.TestCase):
@@ -54,12 +54,14 @@ class ArchiveTests(unittest.TestCase):
         self.assertNotIn("fixture-decode-b04",wrong["reported_cells"][cid]["kept_units"]["quad"])
         kept=[i for i in range(1,11) if i not in (3,4)]
         expected=.2*statistics.fmean(10+.1*i for i in range(1,11))+.8*statistics.fmean(10+.1*i+.2+.025*i for i in kept)
-        self.assertAlmostEqual(wrong["reported_cells"][cid]["mean_j"],expected,delta=1e-9)
+        assert_values_agree(self, wrong["reported_cells"][cid]["mean_j"], expected)
 
     def test_S13_full_three_pack_closed_form(self):
         archives={p:full_pack(self.root,p) for p in ("ALPHA","BETA","GAMMA")}
         _,out,_=run_cli(archives,self.root/"all.json",("--member-detail",))
-        self.assertEqual(out["flags"],[])
+        # This rail-only fixture has no meter; each absent machine line is disclosed.
+        self.assertEqual([(f["pack"], f["code"]) for f in out["flags"]],
+                         [(p, "meter_absent") for p in ("ALPHA", "BETA", "GAMMA")])
         for pack,model_tag,model,extra in (("ALPHA","qwen3-1p7b",r.MODELS["ALPHA"],0.),
                                          ("BETA","qwen3-8b",r.MODELS["BETA"],2.)):
             for arm,phase in (("decode","decode"),("prefill-p2048","prefill")):
@@ -68,15 +70,15 @@ class ArchiveTests(unittest.TestCase):
                 means=[10+extra+.1*i+.2+.025*i for i in range(1,11)]
                 expected=statistics.fmean(repeats+[v for mean in means for v in [mean]*4])
                 cell=out["reported_cells"][cid]
-                self.assertAlmostEqual(cell["mean_j"],expected,delta=1e-9)
+                assert_values_agree(self, cell["mean_j"], expected)
                 self.assertEqual((cell["n_r"],cell["n_b"],cell["n_bundles"]),(10,10,50))
                 h=2.262157162798205*math.sqrt(.04*statistics.variance(repeats)/10+.64*statistics.variance(means)/10)
                 kind=.2*statistics.fmean(2*v*.0453 for v in repeats)+.8*statistics.fmean(
                     2*v*.0453 for i in range(1,11) for v in [10+extra+.1*i+.2]*2+[10+extra+.1*i+.2+.05*i]*2)
                 allowance=out["windows"][pack]["neg8"]["allowance_j"]
-                self.assertAlmostEqual(cell["interval"]["kind_averages_j"][0],kind,delta=1e-9)
-                self.assertAlmostEqual(cell["lower_j"],expected-h-kind-allowance/2,delta=1e-9)
-                self.assertAlmostEqual(cell["per_token"]["j_per_token"],expected/(512 if phase=="decode" else 2048),delta=1e-9)
+                assert_values_agree(self, cell["interval"]["kind_averages_j"][0], kind)
+                assert_values_agree(self, cell["lower_j"], expected-h-kind-allowance/2)
+                assert_values_agree(self, cell["per_token"]["j_per_token"], expected/(512 if phase=="decode" else 2048))
                 for form in ("absolute","comparative"):
                     if form=="absolute":
                         values=repeats; widths=[2*v*.0453 for v in values]
@@ -93,25 +95,25 @@ class ArchiveTests(unittest.TestCase):
                     corner=max(direct_floor([v+s*w for v,s,w in zip(values,signs,widths)])
                                for signs in itertools.product((-1,1),repeat=10))
                     floor=out["floors"][f"{model}/{phase}/{form}"]
-                    self.assertAlmostEqual(floor["point_unguarded_floor_j"],point,delta=1e-9)
-                    self.assertAlmostEqual(floor["guarded_floor_j"],corner,delta=1e-9)
+                    assert_values_agree(self, floor["point_unguarded_floor_j"], point)
+                    assert_values_agree(self, floor["guarded_floor_j"], corner)
                     ratio=out["dominance"]["ratios"][f"{model}/{phase}/{form}"]
-                    self.assertAlmostEqual(ratio["R"],corner/point,delta=1e-9)
+                    assert_values_agree(self, ratio["R"], corner/point)
         for arm,phase in (("decode","decode"),("prefill-p2048","prefill")):
             cid=f"ctr-d117-{arm}-qwen3-1p7b-vs-qwen3-8b"
             contrast=out["contrasts"][cid]
             d=[3+.02*i for i in range(1,11)]
-            self.assertAlmostEqual(contrast["dbar_j"],3.11,delta=1e-9)
+            assert_values_agree(self, contrast["dbar_j"], 3.11)
             se=statistics.stdev(d)/math.sqrt(10)
-            self.assertAlmostEqual(contrast["se_j"],se,delta=1e-9)
-            self.assertAlmostEqual(contrast["metrology_interval_j"][0],3.11-2.262*se,delta=1e-9)
+            assert_values_agree(self, contrast["se_j"], se)
+            assert_values_agree(self, contrast["metrology_interval_j"][0], 3.11-2.262*se)
             logs=[math.log((10+.1*i+3+.02*i)/(10+.1*i)) for i in range(1,11)]
             desc=out["descriptive"][cid]
-            self.assertAlmostEqual(desc["ratio"],math.exp(statistics.fmean(logs)),delta=1e-9)
-            self.assertAlmostEqual(desc["ratio_interval"][0],math.exp(statistics.fmean(logs)-
-                2.262157162798205*statistics.stdev(logs)/math.sqrt(10)),delta=1e-9)
+            assert_values_agree(self, desc["ratio"], math.exp(statistics.fmean(logs)))
+            assert_values_agree(self, desc["ratio_interval"][0], math.exp(statistics.fmean(logs)-
+                2.262157162798205*statistics.stdev(logs)/math.sqrt(10)))
             terms=contrast["D_terms_j"]
-            self.assertAlmostEqual(terms[2],out["windows"]["GAMMA"]["neg8"]["allowance_j"],delta=1e-9)
+            assert_values_agree(self, terms[2], out["windows"]["GAMMA"]["neg8"]["allowance_j"])
         self.assertEqual(len(out["dominance"]["ratios"]),8)
         self.assertEqual(len(out["dominance"]["common_mode"]),4)
         self.assertEqual(out["dominance"]["branch"],"B" if out["dominance"]["failed"] else "A")
@@ -156,7 +158,7 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual((battery["n_r"],battery["n_b"]),(8,8))
         self.assertEqual(battery["assist_members_by_stratum"],{"repeat":1,"quad":1})
 
-    def test_csv_fallback_and_primary_plist(self):
+    def test_missing_plist_stops_comparison_and_primary_plist_stays_independent(self):
         root=self.root/"runs"; path=bundle(root,"fixture-r01")
         flags=[]; reader=r.Reader("ALPHA",flags)
         primary=r.Member(path,"fixture-r01",reader,.045)
@@ -167,7 +169,9 @@ class ArchiveTests(unittest.TestCase):
         self.assertTrue(any(f["code"]=="trace_csv_plist_mismatch" for f in flags))
         (path/"raw/powermetrics.plist").unlink()
         fallback=r.Member(path,"fixture-r01",reader,.045)
-        self.assertEqual(fallback.energies["decode"],20.)
+        self.assertEqual(fallback.energies,{})
+        self.assertFalse(fallback.usable)
+        self.assertEqual(fallback.comparison["status"], "not_compared")
         self.assertTrue(any(f["code"]=="trace_plist_missing" for f in flags))
 
     def test_missing_malformed_data_is_zero_exit(self):
@@ -206,13 +210,14 @@ class ArchiveTests(unittest.TestCase):
         flags=[]
         member=r.Member(path,"fixture-r01",r.Reader("ALPHA",flags),.045)
         self.assertFalse(member.usable)
-        self.assertTrue(any(f["code"]=="archive_file_missing" for f in flags))
+        self.assertEqual(member.comparison["reason"], "trace_plist_unreadable")
+        self.assertTrue(any(f["code"]=="trace_plist_unreadable" for f in flags))
 
     def test_not_estimable_contrast_keeps_holm_family(self):
         row=r.finish_contrast(r.contrast_stats([3.,3.1,2.9,3.2]),.001,1.)
         self.assertEqual(row["outcome"],"not_estimable")
-        self.assertEqual(row["p"],1.)
-        self.assertEqual(r.holm([.001,row["p"]]),[.002,1.])
+        assert_values_agree(self, row["p"], 1.)
+        assert_values_agree(self, r.holm([.001,row["p"]]), [.002,1.])
 
     def test_malformed_run_id_cannot_escape_runs_root(self):
         from unittest.mock import patch
@@ -240,7 +245,7 @@ class ArchiveTests(unittest.TestCase):
                 energies={"decode":r.overlap(records,0,.5)[0]},
                 residual={"decode":{"max_abs_delta_j":0.}}))
         split=r.common_width(members,"decode",.01)
-        self.assertAlmostEqual(split["shared_j"],.0396,delta=1e-9)
+        assert_values_agree(self, split["shared_j"], .0396)
 
     def test_token_mismatch_preserves_energy(self):
         alpha=full_pack(self.root,"ALPHA",5)
