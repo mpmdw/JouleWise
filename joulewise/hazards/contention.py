@@ -10,8 +10,9 @@ powermetrics, caffeinate, the monitor and the probes themselves.
 Arm, the dwell (plan §2.3): 30 s intervals; an interval is clean when no
 process outside the tree exceeds 0.05 CPU-s/s (5 % of one core).  READY after
 180 s of consecutive clean intervals (``HAZARD_ARM_CLEAN_S``; gate prune 2,
-A1); if none appears within 2700 s, REFUSE (the window is NULL).  ``kernel_task`` is included at the dwell, where the Mac
-should be idle.  An interval whose snapshot failed is UNMEASURED and breaks
+A1); if none appears within 2700 s, REFUSE only when an interval measured
+contention, otherwise UNMEASURED. ``kernel_task`` is included at the dwell,
+where the Mac should be idle. An interval whose snapshot failed is UNMEASURED and breaks
 the clean run. An interval unmeasured solely because an outside CPU counter
 regressed without previous over-limit evidence is skipped: it neither breaks
 nor extends the clean run, and the number skipped is disclosed.
@@ -338,7 +339,11 @@ def tree_identities(rows: Iterable[Mapping[str, Any]], roots: Iterable[int]) -> 
 
 def pin_roots(snapshot: Snapshot, roots: Iterable[int],
               identities: dict[int, tuple[int, str]]) -> None:
-    """Remember each root's first observed identity for the collector's lifetime."""
+    """Pin each root's first observed identity for the collector's lifetime.
+
+    A member restarted under the same PID with a new identity is charged as
+    outside; it is never re-admitted as a root within this collector.
+    """
 
     roots = set(roots)
     for identity in snapshot.rows:
@@ -549,11 +554,18 @@ def _mid(snapshot: Snapshot, field: str) -> int:
 REGRESSED_COUNTER_ERROR = "outside process CPU counter regressed without a previous over-limit rate"
 
 
+def _measured_contention(result: Mapping[str, Any]) -> bool:
+    return (result.get("clean") is False or bool(result.get("outside_over_limit"))
+            or bool(result.get("aggregate_over_limit")))
+
+
 class Dwell:
-    """Clean intervals until ``clean_s`` (READY) or ``cap_s`` (REFUSE).
+    """Clean intervals until ``clean_s`` (READY) or ``cap_s``.
 
     Unproven regressed outside counters alone neither add clean time nor
     reset it. Every other failed or dirty interval resets the run.
+    At the cap, measured contention makes the verdict REFUSE; missing
+    evidence alone makes it UNMEASURED.
     """
 
     def __init__(self, thresholds: Mapping[str, Any], *, started_ns: int) -> None:
@@ -601,14 +613,15 @@ class Dwell:
                   "regressed_counter_intervals": self.regressed_counter_intervals,
                   "started_monotonic_ns": self.started_ns}
         error = None
-        if (self.intervals and all(item["error"] for item in self.intervals)
-                and not any(item.get("outside_over_limit") or item.get("aggregate_over_limit")
-                            for item in self.intervals)):
-            # An unread counter cannot hide another process's measured
-            # hazard behind the all-errors UNMEASURED shortcut.
-            error = "every dwell interval failed to measure"
-        elif not self.intervals:
+        if not self.intervals:
             error = "no dwell interval was measured"
+        elif not self.ready and not any(_measured_contention(item) for item in self.intervals):
+            # Missing evidence alone cannot refuse an arm, even when some
+            # clean time was measured. An errored interval can still carry
+            # measured contention and must not take this shortcut.
+            error = ("every dwell interval failed to measure"
+                     if all(item["error"] for item in self.intervals)
+                     else "dwell ended without a qualifying clean run or measured contention")
         return Measurement(MODULE, "dwell", values, (), started, finished, error)
 
 
@@ -678,23 +691,26 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
         raise ValueError("contention.judge received another module's measurement")
     if measurement.kind != "dwell":
         raise ValueError("the arm judges contention on a dwell, not a single snapshot")
-    if measurement.error:
-        return Verdict(MODULE, UNMEASURED, (measurement.error,), limits)
     values = measurement.values
     intervals = values["intervals"]
+    dirty = [item for item in intervals if _measured_contention(item)]
     observed = {"intervals": len(intervals), "clean_run_s": values["clean_run_s"],
                 "elapsed_s": values["elapsed_s"],
-                "unclean_intervals": sum(1 for item in intervals if item["clean"] is False),
+                "clean_intervals": sum(1 for item in intervals if item["clean"] is True),
+                "unclean_intervals": len(dirty),
                 "unmeasured_intervals": sum(1 for item in intervals if item["error"]),
+                "other_unmeasured_intervals": sum(
+                    1 for item in intervals if item["clean"] is not True and not _measured_contention(item)
+                ) - values["regressed_counter_intervals"],
                 "regressed_counter_intervals": values["regressed_counter_intervals"]}
+    if measurement.error:
+        return Verdict(MODULE, UNMEASURED, (measurement.error,), limits, observed)
     if values["ready"]:
         return Verdict(MODULE, PASS, (), limits, observed)
-    last_dirty = next((item for item in reversed(intervals) if not item["clean"]), None)
+    last_dirty = dirty[-1] if dirty else None
     detail = ""
     if last_dirty is not None:
-        if last_dirty["error"]:
-            detail = f"; last failed interval: {last_dirty['error']}"
-        elif last_dirty.get("outside_over_limit"):
+        if last_dirty.get("outside_over_limit"):
             worst = max(last_dirty["outside_over_limit"], key=lambda item: item["cpu_s_per_s"])
             detail = (f"; last dirty interval: {worst['command']} (pid {worst['pid']}) at "
                       f"{worst['cpu_s_per_s']:.3f} CPU-s/s"

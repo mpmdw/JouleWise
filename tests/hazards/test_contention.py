@@ -128,6 +128,8 @@ class DwellTests(unittest.TestCase):
 
     def test_zombie_without_previous_rate_is_unmeasured_for_the_request(self):
         clocks, table, ctx = machine()
+        # 12.5 CPU-s = 1250 ps TIME quanta (0.01 s), a positive counter
+        # with no previous measured rate; any such counter must expose a reset.
         table.processes[330].cpu = 12.5
         before = contention.take_snapshot(ctx, host_reader=None)
         clocks.sleep(30)
@@ -564,12 +566,16 @@ class RootPinDwellTests(unittest.TestCase):
                 table.processes.pop(root)
                 state['removed'] = True
             if elapsed >= 45 and not state['reused']:
+                # 1.2 CPU-s/s = 24 x the registered 0.05 limit, so both
+                # reused processes visibly contend when charged as outside.
                 table.add(Process(root, 1, 'impostor', start_epoch=clocks.wall_s,
                                   cpu0=0.0, cpu_per_s=1.2))
                 table.add(Process(5001, root, 'impostor_child', start_epoch=clocks.wall_s,
                                   cpu0=0.0, cpu_per_s=1.2))
                 state['reused'] = True
 
+        # 210 s = seven 30 s intervals: six for the 180 s clean target,
+        # plus one interval exposing the missing-root/reuse boundary.
         limits = {**contention.DEFAULT_THRESHOLDS, 'cap_s': 210}
         measurement = contention.run_dwell(ctx, limits, tree_roots=[DRIVER, root],
                                            on_tick=tick, host_reader=table.host_cpu)
@@ -580,6 +586,85 @@ class RootPinDwellTests(unittest.TestCase):
 
 
 class RegressedCounterTests(unittest.TestCase):
+    def capped_dwell(self, results):
+        limits = contention.DEFAULT_THRESHOLDS
+        width = limits['interval_s'] * 10**9
+        count = limits['cap_s'] // limits['interval_s']
+        self.assertEqual(len(results), count)
+        dwell = contention.Dwell(limits, started_ns=0)
+        for index, result in enumerate(results):
+            dwell.add({**result, 'interval': {'monotonic_ns': [index * width, (index + 1) * width]}})
+        self.assertTrue(dwell.expired(count * width))
+        measurement = dwell.measurement(
+            started=base.Stamp(wall_ns=0, monotonic_ns=0, monotonic_raw_ns=0),
+            finished=base.Stamp(wall_ns=count * width, monotonic_ns=count * width,
+                                monotonic_raw_ns=count * width))
+        return measurement, contention.judge(measurement, limits)
+
+    def test_cap_without_measured_contention_is_unmeasured_with_counts(self):
+        regression = self.interval()
+        count = contention.DEFAULT_THRESHOLDS['cap_s'] // contention.DEFAULT_THRESHOLDS['interval_s']
+        cases = [
+            (regression, count - 1, 0),
+            ({'clean': None, 'error': 'ps failed'}, 0, count - 1),
+            ({'clean': None, 'error': None}, 0, count - 1),
+        ]
+        for missing, skipped, other in cases:
+            with self.subTest(error=missing['error']):
+                measurement, verdict = self.capped_dwell(
+                    [{'clean': True, 'error': None}] + [missing] * (count - 1))
+                self.assertEqual(verdict.status, base.UNMEASURED)
+                self.assertIsNotNone(measurement.error)
+                self.assertEqual(verdict.observed['intervals'], count)
+                self.assertEqual(verdict.observed['clean_intervals'], 1)
+                self.assertEqual(verdict.observed['unclean_intervals'], 0)
+                self.assertEqual(verdict.observed['regressed_counter_intervals'], skipped)
+                self.assertEqual(verdict.observed['other_unmeasured_intervals'], other)
+                self.assertLess(verdict.observed['clean_run_s'], contention.DEFAULT_THRESHOLDS['clean_s'])
+
+    def test_all_missing_intervals_keep_counts_on_unmeasured_verdict(self):
+        count = contention.DEFAULT_THRESHOLDS['cap_s'] // contention.DEFAULT_THRESHOLDS['interval_s']
+        for missing, skipped in ((self.interval(), count), ({'clean': None, 'error': 'ps failed'}, 0)):
+            with self.subTest(error=missing['error']):
+                _, verdict = self.capped_dwell([missing] * count)
+                self.assertEqual(verdict.status, base.UNMEASURED)
+                self.assertEqual(verdict.observed['clean_intervals'], 0)
+                self.assertEqual(verdict.observed['regressed_counter_intervals'], skipped)
+                self.assertEqual(verdict.observed['other_unmeasured_intervals'], count - skipped)
+
+    def test_refusal_names_last_measured_contention_before_missing_intervals(self):
+        count = contention.DEFAULT_THRESHOLDS['cap_s'] // contention.DEFAULT_THRESHOLDS['interval_s']
+        regression = self.interval()
+        process = self.interval(contender=True)
+        aggregate = self.interval(hidden=1.0, aggregate_limit=contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s'])
+        for hazard in (process, aggregate):
+            for missing in (regression, {'clean': None, 'error': 'ps failed'}):
+                with self.subTest(aggregate=hazard['aggregate_over_limit'], missing=missing['error']):
+                    # A different, earlier contender must not supply the reason.
+                    earlier = {**process, 'outside_over_limit': [
+                        {**process['outside_over_limit'][0], 'command': 'earlier_contender'}]}
+                    _, verdict = self.capped_dwell([earlier, hazard] + [missing] * (count - 2))
+                    self.assertEqual(verdict.status, base.REFUSE)
+                    self.assertEqual(verdict.observed['unclean_intervals'], 2)
+                    reason = verdict.reasons[0]
+                    self.assertNotIn('earlier_contender', reason)
+                    self.assertNotIn('last failed interval', reason)
+                    self.assertNotIn(missing['error'], reason)
+                    if hazard['outside_over_limit']:
+                        worst = max(hazard['outside_over_limit'], key=lambda row: row['cpu_s_per_s'])
+                        self.assertIn(f"{worst['command']} (pid {worst['pid']})", reason)
+                    else:
+                        self.assertIn('host CPU outside the tree', reason)
+
+    def test_clean_false_with_an_error_is_still_measured_contention(self):
+        count = contention.DEFAULT_THRESHOLDS['cap_s'] // contention.DEFAULT_THRESHOLDS['interval_s']
+        measurement, verdict = self.capped_dwell(
+            [{'clean': False, 'error': 'partial probe error'}]
+            + [{'clean': None, 'error': 'ps failed'}] * (count - 1))
+        self.assertIsNone(measurement.error)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertEqual(verdict.observed['unclean_intervals'], 1)
+
     def interval(self, *, hidden=0.0, host=True, seconds=None, outside_count=0,
                  contender=False, aggregate_limit=None):
         clocks, table, ctx = machine()
@@ -587,9 +672,13 @@ class RegressedCounterTests(unittest.TestCase):
         if contender:
             table.processes[340].cpu_per_s = 2 * contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']
         for index in range(outside_count):
+            # One hour old predates both snapshots, so this is an existing
+            # process whose TIME difference is used, not a newborn's counter.
             table.add(Process(10000 + index, 1, 'idle_helper', cpu_per_s=0.0,
                               start_epoch=clocks.wall_s - 3600))
         process = table.processes[330]
+        # 12.5 CPU-s = 1250 ps TIME quanta (0.01 s): an exactly represented
+        # positive counter, reset below without any previous measured rate.
         process.cpu = 12.5
         reader = table.host_cpu if host else None
         before = contention.take_snapshot(ctx, host_reader=reader)
@@ -667,6 +756,10 @@ class RegressedCounterTests(unittest.TestCase):
         state = {'cycle': 0, 'pid': 9700}
         def tick():
             elapsed = clocks.wall_s - start
+            # Five 30 s intervals make a 150 s cycle. Reset at 140 = 150 - 10
+            # so the closing snapshot sees zero, then replace the zombie.
+            # One skipped interval per five leaves four measured clean ones;
+            # another two reach 180 s clean at 210 s, within the 2700 s cap.
             if elapsed >= state['cycle'] + 140 and state['pid'] in table.processes:
                 table.ps(contention.PS_ARGV)
                 p = table.processes[state['pid']]
@@ -676,6 +769,11 @@ class RegressedCounterTests(unittest.TestCase):
                 state['cycle'] += 150
                 state['pid'] += 1
             if state['pid'] not in table.processes:
+                # 0.001 CPU-s/s = one 0.01 s TIME quantum per 10 s (three
+                # per dwell interval), below the 0.05 limit. cpu0=0.5 is
+                # 50 quanta of prior CPU, ensuring a visible reset to zero.
+                # One hour old predates the dwell: use differences, not the
+                # whole-counter rule for a process born inside an interval.
                 table.add(Process(state['pid'], 1, 'mdworker_shared', cpu_per_s=0.001,
                                   cpu0=0.5, start_epoch=clocks.wall_s - 3600))
         tick()

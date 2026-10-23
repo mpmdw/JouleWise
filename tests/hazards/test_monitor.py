@@ -822,21 +822,24 @@ class RootPinLifetimeTests(unittest.TestCase):
             mac.table.add(Process(root, DRIVER, 'member_pgid_leader', cpu_per_s=0.0))
             instance = mac.monitor()
             instance.tree_roots = (*instance.tree_roots, root)
+            cadence_s = monitor.DEFAULT_CADENCE['contention_s']  # registered 10 s window cadence
             try:
                 instance._contention()
-                mac.clocks.sleep(10)
+                mac.clocks.sleep(cadence_s)
                 mac.table.ps(contention.PS_ARGV)
                 mac.table.processes.pop(root)
                 instance._contention()
-                mac.clocks.sleep(5)
+                mac.clocks.sleep(cadence_s / 2)  # reuse at the next interval's midpoint
                 mac.table.ps(contention.PS_ARGV)
                 for pid, parent, command in ((root, 1, 'impostor'),
                                              (5001, root, 'impostor_child')):
+                    # 1.2 CPU-s/s = 24 x the registered 0.05 limit, exposing
+                    # either impostor if PID reuse admits it into the tree.
                     mac.table.add(Process(pid, parent, command, start_epoch=mac.clocks.wall_s,
                                           cpu0=0.0, cpu_per_s=1.2))
-                mac.clocks.sleep(5)
+                mac.clocks.sleep(cadence_s / 2)  # finish the 10 s interval
                 instance._contention()  # Opus B: root absent from before
-                mac.clocks.sleep(10)
+                mac.clocks.sleep(cadence_s)
                 instance._contention()  # Opus C: reused root in both
             finally:
                 instance.close_session('test')

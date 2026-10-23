@@ -2712,7 +2712,8 @@ class JoinTests(unittest.TestCase):
                 journal = L1Journal('clock')
                 for second in range(21):
                     values = clock_values(second * NS + RAW_OFFSET_NS, 10**15, frequency=False)
-                    values['frequency'] = frequency_probe(0) if second % 5 == 0 else None
+                    values['frequency'] = (frequency_probe(0)
+                                           if second % monitor.DEFAULT_CADENCE['frequency_s'] == 0 else None)
                     errors = []
                     if second == rejected:
                         # Twice the registered read-skew bound rejects an anchor.
@@ -2721,7 +2722,8 @@ class JoinTests(unittest.TestCase):
                         values['anchor'] = None
                         errors.append('clock.unmeasured: anchor read skew above bound on all reads')
                     if (second == failed or failed == 'every'
-                            or (failed == 'after_first' and second >= 10 and second % 5 == 0)):
+                            or (failed == 'after_first' and second >= 10
+                                and second % monitor.DEFAULT_CADENCE['frequency_s'] == 0)):
                         values['frequency'] = None
                         errors.append('OSError: frequency read failed')
                     journal.write('reading', second * NS - 600, second * NS,
