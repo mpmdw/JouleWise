@@ -47,6 +47,8 @@ def acknowledge_durable_custody(
     directory entries are synced as well. On macOS one final F_FULLFSYNC on
     the receipt flushes the drive cache after those writes; any sync failure
     propagates instead of authorizing cleanup.
+    A receipt file on disk alone does not prove the barrier completed; the
+    return value is the acknowledgement.
     """
 
     if not isinstance(token, str) or not token:

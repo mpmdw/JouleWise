@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -63,10 +64,11 @@ class CustodyDurabilityTests(unittest.TestCase):
             events.append(("fullfsync", self._fd_path(fd)))
 
         with (
-            patch("joulewise.interfaces.sys.platform", platform),
+            # Patch the modules directly: the pre-F14 code did not import them.
+            patch.object(sys, "platform", platform),
             # Darwin's kernel command is 51; provide it on Linux test hosts.
             patch.object(fcntl, "F_FULLFSYNC", 51, create=True),
-            patch("joulewise.interfaces.fcntl.fcntl", side_effect=full_synced),
+            patch.object(fcntl, "fcntl", side_effect=full_synced),
             patch("os.fsync", side_effect=synced),
             patch("os.replace", side_effect=replaced),
         ):
@@ -155,14 +157,15 @@ class CustodyDurabilityTests(unittest.TestCase):
                     return real_fsync(fd)
 
                 with (
-                    patch("joulewise.interfaces.sys.platform", "darwin"),
+                    patch.object(sys, "platform", "darwin"),
                     patch.object(fcntl, "F_FULLFSYNC", 51, create=True),
                     patch(
                         "os.fsync",
                         side_effect=failing_sync if failure != "drive_cache" else real_fsync,
                     ),
-                    patch(
-                        "joulewise.interfaces.fcntl.fcntl",
+                    patch.object(
+                        fcntl,
+                        "fcntl",
                         side_effect=OSError("drive cache sync failed"),
                     ),
                 ):
