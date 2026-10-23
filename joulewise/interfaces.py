@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,7 +43,12 @@ def acknowledge_durable_custody(
     Merely holding artifact bytes or a temporary collection directory does
     not satisfy this contract.  Every named artifact must already exist under
     the bundle, and the acknowledgement itself is flushed and atomically
-    replaced before it is returned to a cleanup caller.
+    replaced before it is returned to a cleanup caller. Artifact and receipt
+    directory entries are synced as well. On macOS one final F_FULLFSYNC on
+    the receipt flushes the drive cache after those writes; any sync failure
+    propagates instead of authorizing cleanup.
+    A receipt file on disk alone does not prove the barrier completed; the
+    return value is the acknowledgement.
     """
 
     if not isinstance(token, str) or not token:
@@ -62,6 +69,7 @@ def acknowledge_durable_custody(
     if not artifacts:
         raise ValueError("custody acknowledgement requires at least one artifact")
 
+    directories = {bundle.parent}
     for artifact in artifacts:
         candidates = (
             [path for path in artifact.rglob("*") if path.is_file()]
@@ -69,6 +77,10 @@ def acknowledge_durable_custody(
             else [artifact]
         )
         for candidate in candidates:
+            directory = candidate.parent
+            while directory.is_relative_to(bundle):
+                directories.add(directory)
+                directory = directory.parent
             file_descriptor = os.open(candidate, os.O_RDONLY)
             try:
                 os.fsync(file_descriptor)
@@ -102,11 +114,28 @@ def acknowledge_durable_custody(
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary_path, ack_path)
-        directory_fd = os.open(ack_dir, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        directory = ack_dir
+        while directory.is_relative_to(bundle):
+            directories.add(directory)
+            directory = directory.parent
+        # Persist children before their parents, including newly created
+        # logs/custody and the bundle's entry in its containing directory.
+        for directory in sorted(
+            directories, key=lambda path: (len(path.parts), str(path)), reverse=True
+        ):
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        if sys.platform == "darwin":
+            # fsync alone does not flush macOS drive caches. One barrier per
+            # receipt suffices after all preceding file and directory syncs.
+            receipt_fd = os.open(ack_path, os.O_RDONLY)
+            try:
+                fcntl.fcntl(receipt_fd, fcntl.F_FULLFSYNC)
+            finally:
+                os.close(receipt_fd)
     finally:
         temporary_path.unlink(missing_ok=True)
     return DurableCustodyAcknowledgement(token, ack_path, tuple(artifacts))
