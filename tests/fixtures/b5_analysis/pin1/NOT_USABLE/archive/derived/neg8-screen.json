@@ -1,0 +1,38 @@
+{
+  "bound_derived_from": "registered_corpus",
+  "bound_formula": "max(max(mean(largest_n_start)-mean(smallest_n_end),mean(largest_n_end)-mean(smallest_n_start)),t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))",
+  "bound_used": "corpus_physics_clean",
+  "clean_bound": {
+    "corpus_manifest": {
+      "path": "derived/neg8-clean-corpus.json",
+      "sha256": "bc57c2f01e9049c50608ba47f6a9f07c9672b9f18b54f69dfd69810fad4c59a2"
+    },
+    "path": "withheld/neg8-clean-bound.json",
+    "sha256": "f8ba1132f9ec8f8115a3d798bfcef3bbc72669c72b47fb0bd5a3c2219169ff64"
+  },
+  "harvest_reference_losses": {},
+  "rescreen": {
+    "conditions": [],
+    "decision": "passed",
+    "evaluated": true,
+    "evaluated_at_source": "evaluation_scope.completed_at",
+    "freshness": {
+      "decision": "fresh",
+      "triggers": []
+    },
+    "problems": [],
+    "survivors": {
+      "endpoint_protocol": "replicated_endpoints_with_midpoint"
+    },
+    "verdict_authenticated": true
+  },
+  "schema": "joulewise.b5_neg8_screen.v1",
+  "stored": {
+    "conditions_beyond_bound_underived": [],
+    "decision": "passed"
+  },
+  "survivor_bracket": {
+    "path": "withheld/neg8-rescreen-bracket.json",
+    "sha256": "c5e7dab4aee52fe99ec79f5cf65d2ddd0211474e580f62114cd59a6f22e54f2c"
+  }
+}

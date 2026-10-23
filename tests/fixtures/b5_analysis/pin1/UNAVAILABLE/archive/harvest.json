@@ -1,0 +1,101 @@
+{
+  "archive_root": "/private/tmp/b5-s0-alpha-pin1-3_mz2d2n/archive",
+  "attempt": 1,
+  "claim_usable": false,
+  "exclude_window_reasons": [
+    "exclusions.function_unavailable"
+  ],
+  "faults": [],
+  "flags": 30,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "f68e53d4e84292c182772a20edf2e3649c7470a7113ff87ebdec6f91208c9bc2",
+      "joulewise/whole_window.py": "ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "7e6158d669cbb6fb35761aee18abf363f07c5d36",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin1",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_assessed": 13,
+  "outputs": {
+    "derived/bracket-binding.json": "06b8a9b48bbd6af6693caaa701fca583378e2bc375841527e3229f441341df99",
+    "derived/code-identity.json": "6f4973b987029f8ed164b5e0342afc74226719b8c56dbea4043014f56624a7c5",
+    "derived/exclusions.json": "00c3a7da52ecbaa28e8f47dfa3f3764e1553dfc3005441e2706c0b1490e6508a",
+    "derived/flags.jsonl": "52c4e6117b030242da1504de1ff221ae923e47584288d31769dda9d47c62b9ac",
+    "derived/harvest-thresholds.json": "6b7703144aed0f83fb1e362f9cea9849fa084287e3b94b992eddf5b6b1e2f6f7",
+    "derived/historical-custody.json": "001cad382fc752421b47fead977290cdc39e900bca24f28d6c636f1b5c5efd6f",
+    "derived/neg8-allowance.json": "7c5d64b69c21096623de33e722019cf40fa0b74b9d156fbddb623e1565bd38e8",
+    "derived/neg8-bound.json": "40166d00c7972a4969080aeea41df4c611a652ffaba0bb095fc23e577888b3a5",
+    "derived/neg8-corpus-physics.json": "af3b1cc25373f4a667a633879c69e38d6798cef24f2724d61d4dcb22498d6e62",
+    "derived/neg8-screen.json": "642cb02144c164084d4d65333349d3541cb93f6f0c45ac3b115f6b28cb84f916",
+    "derived/roster.json": "70b466810c53efacd1eae63e681456a2a9d15e9f0586af1593e35a8184aeaf44",
+    "derived/terminal-boundary.json": "561b427ddadc6fa636c430b9afaa7bf1e6abea1dca545a9e3b9677ceb696ef7c",
+    "derived/terminal-pin.json": "f74397f2ebd32fba409e67d3e281a3c148fcdca691744f4f3f1c5f4d22d8b960",
+    "derived/window_flags.json": "6eeb91418fd51b09b1bf83843375fd0c0a820308d6acdbf16f5ea73d537fcbdf",
+    "derived/yield.json": "d02585e036a514494d361d3ca88bc8ee0df7a4e926d216e5491eb8d178df7578"
+  },
+  "pack_id": "s0_alpha_mock_v5",
+  "plan_id": "s0-alpha-plan",
+  "runs_root_overrides": [],
+  "schema": "joulewise.harvest_b5_window.v1",
+  "verdict": "COLLECTED",
+  "yield": {
+    "j3_failed_stages": [],
+    "per_collection_stage": [],
+    "per_roster_stage": [
+      {
+        "planned": 2,
+        "present": 2,
+        "raw_valid": 2,
+        "stage_id": "01_abs",
+        "strict_deferred": 0,
+        "succeeded": 2
+      },
+      {
+        "planned": 4,
+        "present": 4,
+        "raw_valid": 4,
+        "stage_id": "02_abba",
+        "strict_deferred": 0,
+        "succeeded": 4
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "end_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      },
+      {
+        "planned": 1,
+        "present": 1,
+        "raw_valid": 1,
+        "stage_id": "midpoint_reference",
+        "strict_deferred": 0,
+        "succeeded": 1
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "start_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      }
+    ],
+    "planned": 13,
+    "present": 13,
+    "raw_valid": 13,
+    "schema": "joulewise.b5_harvest_yield.v1",
+    "stage_journal": null,
+    "strict_deferred": 0,
+    "succeeded": 13,
+    "unresolved_collection_stages": [],
+    "window_stage_yield": null
+  }
+}

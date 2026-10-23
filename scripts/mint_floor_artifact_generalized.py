@@ -65,6 +65,10 @@ PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
 PINSET_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pinset.v2"
 PIN_REQUIREMENTS_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pin_requirements.v2"
 V2_MINT_TOOL_VERSION = "joulewise.floor_mint.generalized.v2"
+V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT = (
+    "No cell of this floor artifact carries the attribution-limited floor of D-078 "
+    "clause 11; the single-count discipline does not apply to it.\n"
+)
 
 
 def allowance_rule_for(acceptance_id: str) -> str | None:
@@ -96,7 +100,6 @@ V2_ASSURANCE_PROFILE = {
         "resistance to coordinated prepublication rewrite",
     ],
 }
-RETIRED_OPERATIVE_FLOOR_LITERAL = "7.377086"
 _ORIGINAL_MINT_PATH = Path(__file__).with_name("mint_floor_artifact.py")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
@@ -109,6 +112,232 @@ _SEMANTICS_IDS = {
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 }
 _CORE_SEQUENCE = itertools.count()
+BLOCK5_PRODUCERS: dict[str, Any] = {}
+BLOCK5_INPUT_SCHEMA = "joulewise.floor_mint_inputs.block5.v1"
+
+
+@dataclass(frozen=True)
+class Block5Producer:
+    window: Any
+    archive: Any
+    archive_context: Any
+    kept_units: Any
+    ledger_snapshot: Any
+    pack_path: Path
+    verdict_row: Mapping[str, Any]
+    producer_plan_id: str
+    window_bracket: Any
+
+
+def compose_indexed_producers(window_index: Path, *, seal_pins=None, pack_table=None,
+                              test_only_allow_synthetic_binding: bool = False,
+                              repo_root: Path = REPO_ROOT,
+                              packs: Sequence[str] = ("alpha", "beta"),
+                              include_consumer: bool = False) -> Mapping[str, Any]:
+    """Open sealed windows through the same stage S0/S1/S2/S3 readers as extraction."""
+    if active_v2_authentication_session() is None:
+        with V2AuthenticationReadSession():
+            return compose_indexed_producers(window_index, seal_pins=seal_pins, pack_table=pack_table,
+                test_only_allow_synthetic_binding=test_only_allow_synthetic_binding,
+                repo_root=repo_root, packs=packs, include_consumer=include_consumer)
+    from joulewise.b5_analysis.windows import AnalysisRefusal, SealPins, load_window_index, select_analysed_attempts, sealed_pack_table
+    from joulewise.b5_analysis.archive import open_attempt_record, open_archive
+    from joulewise.b5_analysis.kept_units import load_kept_units, _strict_json
+    from joulewise.b5_analysis import bracket as wb
+    from joulewise.b5_analysis.context import build_context
+    from joulewise.whole_window import canonical_sha256, NEG8_HARVEST_ALLOWANCE_RECORD
+
+    pins = seal_pins or SealPins.load()
+    table = sealed_pack_table(seal_pins=pins) if pack_table is None else pack_table
+    index = load_window_index(window_index, seal_pins=pins, pack_table=table)
+    records = tuple(open_attempt_record(entry, seal_pins=pins, pack_table=table) for entry in index.entries)
+    windows = select_analysed_attempts(index, records, seal_pins=pins)
+    result = {}
+    for pack in packs:
+        window = windows[pack]
+        prefix = f"sources/repo/configs/campaigns/{window.pack_id}/"
+        synthetic_digest = (hashlib.sha256(read_authentication_input(window.archive_root / (prefix + "plan_tree.json"),
+                            grammar="json", label="synthetic archived plan tree")).hexdigest()
+                            if test_only_allow_synthetic_binding is True else None)
+        archive = open_archive(window, seal_pins=pins, pack_table=table, synthetic_plan_tree_sha256=synthetic_digest)
+        local_pack = Path(repo_root) / "configs/campaigns" / window.pack_id
+        _allow_governed_extraction_spec(local_pack / "extraction_spec.json")
+        # These paths are sealed inputs, never manifest-controlled paths.
+        for name in ("calibration_plan.json", "calibration_plan.sha256", "extraction_spec.json", "order_manifest.json"):
+            if read_authentication_input(local_pack / name, grammar="raw", label="sealed mint pack input") != archive.source_bytes(prefix + name):
+                raise AnalysisRefusal(name.replace(".", "_") + "_differs_from_archive")
+        spec = _strict_json(read_authentication_input(local_pack / "extraction_spec.json", grammar="json", label="sealed extraction spec"), "extraction_spec_invalid")
+        planned = {}
+        for cell in spec["cells"]:
+            stratum = "repeat" if cell["kind"] == "absolute" else "quad"
+            planned.setdefault(cell["condition_family_id"], {})[stratum] = (
+                {m["bundle_id"]: (m["bundle_id"],) for m in cell["members"]} if stratum == "repeat" else
+                {b["block_id"]: tuple(b["members"][p] for p in ("A1", "B1", "B2", "A2")) for b in cell["blocks"]})
+        producer_plan_id = _producer_plan_identity(local_pack, archive, prefix)
+        kept = load_kept_units(archive, sealed_catalog_sha256=pins.sealed["catalog_sha256"], planned_units=planned)
+        bracket = wb.evaluate_window_bracket(archive, repo_root=Path(repo_root))
+        allowance = _strict_json(archive.output_bytes(NEG8_HARVEST_ALLOWANCE_RECORD), "neg8_allowance_record_invalid")
+        claim_prefix = ("night-custody/" + window.claim_runs_root.relative_to(window.custody_root).as_posix() + "/"
+                        if window.claim_runs_root.is_relative_to(window.custody_root) else "claim-runs/")
+        row = _strict_json(archive.source_bytes("sources/" + claim_prefix + allowance["verdict"]["path"]),
+                           "whole_window_verdict_provenance_invalid")
+        if (canonical_sha256(row) != allowance["verdict"]["row_sha256"]
+                or row["evaluation_basis"]["sha256"] != allowance["verdict"]["evaluation_basis_sha256"]):
+            raise AnalysisRefusal("whole_window_verdict_provenance_invalid")
+        context = build_context(archive, kept, bracket, row, test_only_allow_synthetic_binding=test_only_allow_synthetic_binding)
+        from joulewise.b5_analysis.steps import require_primary_context
+        require_primary_context(context)
+        # Reuse the bracket reader's authenticated archived copy and prefix loader.
+        ledger_inputs = wb._Inputs(archive)
+        _raw, ledger_prefix, terminal_pin = wb._copy(ledger_inputs)
+        acceptance = _strict_json(ledger_inputs.source("sources/inputs/acceptance.json"), "window_bracket_not_passed")
+        snapshot = wb._snapshot(ledger_prefix, terminal_pin, repo_root=Path(repo_root), cutoff=acceptance["ledger_cutoff"])
+        result[pack] = Block5Producer(window, archive, context, kept, snapshot, local_pack, row, producer_plan_id, bracket)
+    if include_consumer:
+        from types import SimpleNamespace
+        window = windows["gamma"]
+        prefix = f"sources/repo/configs/campaigns/{window.pack_id}/"
+        digest = (hashlib.sha256(read_authentication_input(window.archive_root / (prefix + "plan_tree.json"),
+                  grammar="json", label="synthetic archived consumer plan tree")).hexdigest()
+                  if test_only_allow_synthetic_binding is True else None)
+        archive = open_archive(window, seal_pins=pins, pack_table=table, synthetic_plan_tree_sha256=digest)
+        local_pack = Path(repo_root) / "configs/campaigns" / window.pack_id
+        for name in ("plan_tree.json", "analysis_manifest_v3.json"):
+            if read_authentication_input(local_pack / name, grammar="json", label="sealed consumer pack input") != archive.source_bytes(prefix + name):
+                raise AnalysisRefusal("consumer_pack_differs_from_archive")
+        result["gamma"] = SimpleNamespace(window=window, archive=archive, pack_path=local_pack)
+    return result
+
+
+def _producer_plan_identity(pack: Path, archive: Any, prefix: str) -> str:
+    from joulewise.b5_analysis.windows import AnalysisRefusal
+    from joulewise.b5_analysis.kept_units import _strict_json
+
+    plan = _strict_json(archive.source_bytes(prefix + "calibration_plan.json"), "producer_plan_identity_mismatch")
+    tree = _strict_json(archive.source_bytes(prefix + "plan_tree.json"), "producer_plan_identity_mismatch")
+    plan_id = plan.get("plan_id")
+    declarations = [tree.get("plan")]
+    synthetic = getattr(archive, "plan_tree_binding_kind", None) == "synthetic"
+    tree_path = pack / "plan_tree.json"
+    if tree_path.exists():
+        if read_authentication_input(tree_path, grammar="json", label="sealed producer plan tree") != archive.source_bytes(prefix + "plan_tree.json"):
+            raise AnalysisRefusal("producer_plan_identity_mismatch")
+    elif not synthetic:
+        raise AnalysisRefusal("producer_plan_identity_mismatch")
+    contract_path = pack / "producer_contract.json"
+    if contract_path.exists():
+        raw = read_authentication_input(contract_path, grammar="json", label="sealed producer contract")
+        if raw != archive.source_bytes(prefix + "producer_contract.json"):
+            raise AnalysisRefusal("producer_plan_identity_mismatch")
+        declarations.append(_strict_json(raw, "producer_plan_identity_mismatch").get("plan"))
+    elif not synthetic:
+        raise AnalysisRefusal("producer_plan_identity_mismatch")
+    if (not isinstance(plan_id, str) or not plan_id
+            or any(not isinstance(item, Mapping) or item.get("plan_id") != plan_id for item in declarations)):
+        raise AnalysisRefusal("producer_plan_identity_mismatch")
+    return plan_id
+
+
+def _authenticate_archive_input(entry: Any, relative: str, raw: bytes) -> None:
+    from joulewise.b5_analysis.windows import AnalysisRefusal
+    try:
+        authenticated = (entry.archive.source_bytes(relative) if relative.startswith("sources/")
+                         else entry.archive.output_bytes(relative))
+    except AnalysisRefusal as exc:
+        raise MintError("archive_input_changed_after_authentication: " + relative) from exc
+    if raw != authenticated:
+        raise MintError("archive_input_changed_after_authentication: " + relative)
+
+
+def _read_block5_archive_input(entry: Any, relative: str, label: str, *, path: Path | None = None) -> bytes:
+    try:
+        raw = read_authentication_input(path or entry.window.archive_root / relative, grammar="json", label=label)
+    except (V2AuthenticationInputError, OSError) as exc:
+        raise MintError("archive_input_changed_after_authentication: " + relative) from exc
+    _authenticate_archive_input(entry, relative, raw)
+    return raw
+
+
+def _producer_by_plan_id(plan_id: str) -> Any:
+    matches = [entry for entry in BLOCK5_PRODUCERS.values() if entry.producer_plan_id == plan_id]
+    if len(matches) != 1:
+        raise MintError("block5 producer plan_id is not uniquely registered")
+    return matches[0]
+
+
+def _producer_by_pack(pack: str) -> Any:
+    matches = [entry for entry in BLOCK5_PRODUCERS.values() if entry.window.pack == pack]
+    if len(matches) != 1:
+        raise MintError("block5 producer pack is not uniquely registered")
+    return matches[0]
+
+
+def _expand_block5_manifest(manifest: Mapping, *, manifest_dir: Path = Path(".")) -> Mapping:
+    root = _object(manifest, "block5 input manifest", {"schema_version", "producer_plans"})
+    if root["schema_version"] != BLOCK5_INPUT_SCHEMA:
+        raise MintError("window_index_conflicting_arguments")
+    rows = root["producer_plans"]
+    if not isinstance(rows, list) or len(rows) != 2:
+        raise MintError("block5 input manifest must contain two producer plans")
+    entries = {entry.window.pack: entry for entry in BLOCK5_PRODUCERS.values()}
+    if set(entries) != {"alpha", "beta"}:
+        raise MintError("window_index_required")
+    expanded, seen = [], set()
+    for value in rows:
+        row = _object(value, "block5 producer", {"plan_id", "pack", "exclusions_sha256", "report", "cells"})
+        pack = row["pack"]
+        if pack not in entries or pack in seen:
+            raise MintError("block5 producer pack mismatch")
+        seen.add(pack)
+        entry = entries[pack]
+        if row["plan_id"] != entry.producer_plan_id:
+            raise MintError("block5 producer plan_id mismatch")
+        if row["exclusions_sha256"] != entry.kept_units.exclusions_sha256:
+            raise MintError("floor_mint_kept_unit_mismatch: manifest exclusions_sha256 differs from archive")
+        relative = Path(_string(row["report"], "block5 report"))
+        directory = Path(manifest_dir).resolve()
+        report = directory / relative
+        if (relative.is_absolute() or ".." in relative.parts
+                or not report.resolve().is_relative_to(directory)):
+            raise MintError("floor_mint_input_path_not_relative")
+        cells = row["cells"]
+        if not isinstance(cells, list) or len(cells) != 2:
+            raise MintError("block5 producer must contain two cells")
+        projected, roles = [], set()
+        for value in cells:
+            cell = _object(value, "block5 cell", {"role", "allowed_consumer_condition_families"})
+            if cell["role"] not in ("decode", "prefill") or cell["role"] in roles:
+                raise MintError("block5 producer input cells must be decode and prefill")
+            roles.add(cell["role"])
+            if not isinstance(cell["allowed_consumer_condition_families"], list):
+                raise MintError("block5 allowed families must be an array")
+            paths = {"evidence_root": str(entry.window.claim_runs_root), "report": str(report),
+                     "spec": str(entry.pack_path / "extraction_spec.json"), "order_manifest": str(entry.pack_path / "order_manifest.json")}
+            projected.append({**cell, "absolute": dict(paths), "comparative": dict(paths)})
+        for relative in ("sources/inputs/acceptance.json", "derived/bracket-binding.json"):
+            _read_block5_archive_input(entry, relative, "block5 archive input")
+        expanded.append({"plan_id": row["plan_id"], "calibration_plan": str(entry.pack_path / "calibration_plan.json"),
+                         "calibration_plan_sidecar": str(entry.pack_path / "calibration_plan.sha256"),
+                         "bracket_binding": str(entry.window.archive_root / "derived/bracket-binding.json"), "cells": projected})
+    first = entries["alpha"]
+    return {"schema_version": "joulewise.floor_mint_inputs.v2", "producer_plans": expanded,
+            "calibration_acceptance": str(first.window.archive_root / "sources/inputs/acceptance.json"),
+            "calibration_ledger": str(first.window.archive_root / "sources/ledger/calibration_observation_ledger.jsonl"),
+            "calibration_ledger_head_pin": str(first.window.archive_root / "derived/terminal-pin.json")}
+
+
+def _producer_ledger(snapshot: Any, plan_id: str) -> Any:
+    if isinstance(snapshot, Mapping):
+        if plan_id not in snapshot:
+            raise MintError("postcollection_evidence_mismatch: producer ledger snapshot missing " + plan_id)
+        return snapshot[plan_id]
+    return snapshot
+
+
+def _require_block5_floor_directory(pinset: Path, floor: Path) -> None:
+    if (Path(pinset).resolve().parent != Path(floor).resolve().parent
+            or Path(pinset).resolve().is_relative_to(REPO_ROOT / "scripts/floor_mint_pinsets")):
+        raise MintError("floor_pinset_not_beside_floor")
 _CORE_CONFIG_GLOBALS = frozenset(
     {
         "MINT_TOOL_VERSION",
@@ -138,6 +367,7 @@ _CORE_CONFIG_GLOBALS = frozenset(
         "CALIBRATION_SCOPE",
         "PLAN_DECLARED_SCOPE",
         "SOURCE_CLASS",
+        "BLOCK5_PRODUCERS",
     }
 )
 _CORE_SIGNATURES = {
@@ -331,6 +561,7 @@ class V2CellRecomputation:
     block_inputs: tuple[Any, ...] | None = None
     calibration_bracket: Mapping[str, Any] | None = None
     shared_edge_bound_s: float | None = None
+    diagnostics: tuple[Mapping[str, str], ...] = ()
 
 
 def _object(
@@ -451,10 +682,6 @@ def _decimal_text(value: object, label: str) -> Decimal:
 def _six_decimal(value: object, label: str) -> str:
     if not isinstance(value, str) or _SIX_DECIMAL_RE.fullmatch(value) is None:
         raise MintError(f"{label} must be a nonnegative six-decimal literal")
-    if value == RETIRED_OPERATIVE_FLOOR_LITERAL:
-        raise MintError(
-            f"{label} reuses retired literal {RETIRED_OPERATIVE_FLOOR_LITERAL}"
-        )
     return value
 
 
@@ -861,10 +1088,14 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
                     "comparative",
                     "postcollection",
                 } | ({"scientific_config_identity_sha256"}
-                     if isinstance(cell_value, Mapping) and "scientific_config_identity_sha256" in cell_value else set()),
+                     if isinstance(cell_value, Mapping) and "scientific_config_identity_sha256" in cell_value else set())
+                  | ({"runtime_identity_sha256"}
+                     if isinstance(cell_value, Mapping) and "runtime_identity_sha256" in cell_value else set()),
             )
             if "scientific_config_identity_sha256" in cell:
                 _sha256(cell["scientific_config_identity_sha256"], f"{cell_label}.scientific_config_identity_sha256")
+            if "runtime_identity_sha256" in cell:
+                _sha256(cell["runtime_identity_sha256"], f"{cell_label}.runtime_identity_sha256")
             role = _string(cell["role"], f"{cell_label}.role")
             roles.append(role)
             expected_metric = {
@@ -974,6 +1205,7 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
             raise MintError(f"{label}.cells must contain one decode and one prefill role")
         try:
             detection_floor.floor_mint_producer_config_set(producer)
+            detection_floor.floor_mint_producer_runtime_set(producer)
         except ValueError as exc:
             raise MintError(f"{label}: {exc}") from exc
         if len(set(producer_custody_pins)) != 1:
@@ -1515,6 +1747,7 @@ def _fresh_original_core() -> ModuleType:
     sys.modules[name] = module
     try:
         spec.loader.exec_module(module)
+        module.BLOCK5_PRODUCERS = BLOCK5_PRODUCERS
         _assert_core_interface(module)
     except Exception:
         sys.modules.pop(name, None)
@@ -1974,6 +2207,27 @@ def _v2_gate_component(
     metric: str,
     window_class: str,
 ) -> None:
+    entry = BLOCK5_PRODUCERS.get(str(Path(actual.report.get("runs_root", "")).resolve()))
+    if entry is not None:
+        core = _fresh_original_core()
+        try:
+            bindings, _ids = core._authenticate_kept_binding(actual.report, actual.spec, entry)
+        except core.MintError as exc:
+            raise MintError(str(exc)) from exc
+        binding = bindings[actual.calibration_cell_id]
+        if binding["minimum"] is None:
+            raise MintError("floor_mint_cell_not_a_target")
+        if pins["expected_n"] != binding["n_kept"]:
+            raise MintError("floor_mint_kept_unit_mismatch: expected_n differs from kept n")
+        try:
+            rows, _widths = core._report_members(actual.cell, actual.spec_cell, actual.kind,
+                removed_unit_ids=frozenset(binding["removed_unit_ids"]))
+        except core.MintError as exc:
+            raise MintError(str(exc)) from exc
+        kept_members = [row["bundle_id"] for row in rows]
+        if ([member.bundle_id for member in actual.members] != kept_members
+                or [member["bundle_id"] for member in pins["members"]] != kept_members):
+            raise MintError("floor_mint_kept_unit_mismatch: pinned members differ from kept members")
     if actual.evidence_root_id != pins["evidence_root_id"]:
         raise MintError(f"{label}: evidence root id mismatch")
     if actual.calibration_cell_id != pins["calibration_cell_id"]:
@@ -2222,6 +2476,8 @@ def _v2_allowance_projection(
     inputs: V2ProducerInputs,
     pre: Any,
     post: Any,
+    *,
+    diagnostics: list[Mapping[str, str]] | None = None,
 ) -> Mapping[str, Any]:
     projection = issued_calibration_allowance_projection(
         inputs.calibration_acceptance,
@@ -2248,6 +2504,33 @@ def _v2_allowance_projection(
     pin_projection["allowance_rule"] = (
         f"max(observed_drift_s,{pin_projection['bracket_screen_s']})"
     )
+    entry = BLOCK5_PRODUCERS.get(str(inputs.evidence_root.resolve()))
+    if entry is not None:
+        bracket = entry.archive_context.window_bracket or {}
+        try:
+            allowance_matches = (
+                float(Decimal(pin_projection["applied_allowance_s"]))
+                == bracket.get("calibration_drift_allowance_s")
+            )
+        except (InvalidOperation, ValueError, OverflowError):
+            allowance_matches = False
+        if not allowance_matches and diagnostics is not None:
+            # This is a non-refusing observation. The endpoint-derived allowance
+            # remains authoritative; carry the observation into artifact diagnostics.
+            diagnostics.append({
+                "code": "allowance_differs_from_window_bracket",
+                "producer_plan_id": inputs.plan["plan_id"],
+                "derived_allowance_s": pin_projection["applied_allowance_s"],
+                "window_bracket_allowance_s": str(
+                    bracket.get("calibration_drift_allowance_s")
+                ),
+            })
+        for role, observation in (("pre", pre), ("post", post)):
+            endpoint = bracket.get(role) or {}
+            for field, attribute in (("attempt_id", "attempt_id"), ("ledger_receipt_digest", "receipt_digest"),
+                                     ("content_id", "content_id")):
+                if endpoint.get(field) != _mapping_attribute(observation, attribute):
+                    raise MintError("postcollection_evidence_mismatch: allowance endpoint differs from window bracket")
     return pin_projection
 
 
@@ -2256,6 +2539,7 @@ def _v2_authenticate_bracket_binding(
     producer: Mapping[str, Any],
     inputs: V2ProducerInputs,
     ledger_snapshot: Any,
+    diagnostics: list[Mapping[str, str]] | None = None,
 ) -> tuple[Any, Any, Mapping[str, Any]]:
     label = f"producer {producer['plan']['plan_id']!r}"
     binding = inputs.bracket_binding
@@ -2279,7 +2563,9 @@ def _v2_authenticate_bracket_binding(
             f"postcollection_evidence_mismatch: {label} bracket binding failed authenticated validation"
         )
     pre, post = resolved
-    return pre, post, _v2_allowance_projection(inputs, pre, post)
+    return pre, post, _v2_allowance_projection(
+        inputs, pre, post, diagnostics=diagnostics
+    )
 
 
 def _v2_gate_producer_inventory(
@@ -2362,8 +2648,21 @@ def _v2_gate_producer_inventory(
     runtime_pins = producer["model_runtime_config"]
     if model_hashes != {runtime_pins["model_artifact_sha256"]}:
         raise MintError(f"producer {plan_id!r}: model artifact inventory mismatch")
-    if runtime_hashes != {runtime_pins["runtime_identity_sha256"]}:
-        raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
+    try:
+        runtime_set = detection_floor.floor_mint_producer_runtime_set(producer) if "cells" in producer else None
+    except ValueError as exc:
+        raise MintError(f"producer {plan_id!r}: {exc}") from exc
+    if runtime_set is None:
+        if runtime_hashes != {runtime_pins["runtime_identity_sha256"]}:
+            raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
+    else:
+        for cell_pin in producer["cells"]:
+            cell_inputs = inputs.cells[cell_pin["role"]]
+            for component in (cell_inputs.absolute, cell_inputs.comparative):
+                observed = derive_model_runtime_config(component.source_regime.get("stack_identity", {}),
+                    component.scientific_config_identity_sha256)
+                if observed["runtime_identity_sha256"] != cell_pin["runtime_identity_sha256"]:
+                    raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
     try:
         config_set = detection_floor.floor_mint_producer_config_set(producer) if "cells" in producer else None
     except ValueError as exc:
@@ -2400,6 +2699,7 @@ def _v2_gate_postcollection(
         except detection_floor.SingleCountDisciplineError as exc:
             raise MintError(str(exc)) from exc
     post = cell_pins["postcollection"]
+    diagnostics: list[Mapping[str, str]] = []
     if (
         producer_inputs.authenticated_pre_observation is not None
         and producer_inputs.authenticated_post_observation is not None
@@ -2436,6 +2736,7 @@ def _v2_gate_postcollection(
             producer_inputs,
             pre,
             post_observation,
+            diagnostics=diagnostics,
         )
         if dict(producer_inputs.calibration_allowance_projection) != dict(
             allowance_projection
@@ -2450,6 +2751,7 @@ def _v2_gate_postcollection(
                 producer=producer,
                 inputs=producer_inputs,
                 ledger_snapshot=ledger_snapshot,
+                diagnostics=diagnostics,
             )
         )
 
@@ -2500,6 +2802,8 @@ def _v2_gate_postcollection(
             calibration_bracket_binding=producer_inputs.bracket_binding,
         )
     except ValueError as exc:
+        if str(exc).startswith("operative_bound_not_the_window_bracket"):
+            raise MintError(str(exc)) from exc
         raise MintError(
             "postcollection_evidence_mismatch: comparative estimator "
             f"recomputation refused: {exc}"
@@ -2671,6 +2975,7 @@ def _v2_gate_postcollection(
             else None
         ),
         shared_edge_bound_s=getattr(recomputed, "shared_edge_bound_s", None),
+        diagnostics=tuple(diagnostics),
     )
 
 
@@ -2804,6 +3109,16 @@ def _common_minted_artifact_launch_lineage(
     return copy.deepcopy(dict(lineages[0])) if lineages else None
 
 
+def _v2_minimum_claim_n(core: ModuleType, absolute: Any, comparative: Any, pins: Mapping) -> int:
+    if core._component_block5_producer(absolute) is None:
+        return pins["absolute"]["expected_n"]
+    minima = [component.report["kept_units_binding"]["cells"][component.calibration_cell_id]["minimum"]
+              for component in (absolute, comparative)]
+    if type(minima[0]) is not int or type(minima[1]) is not int or minima[0] != minima[1]:
+        raise MintError("floor_mint_kept_unit_mismatch: component minima differ")
+    return minima[0]
+
+
 def _mint_v2_cell_artifact(
     *,
     core: ModuleType,
@@ -2869,7 +3184,7 @@ def _mint_v2_cell_artifact(
         },
         eligibility={
             "use_role": "primary_claim_gate",
-            "minimum_claim_n": cell_pins["absolute"]["expected_n"],
+            "minimum_claim_n": _v2_minimum_claim_n(core, absolute, comparative, cell_pins),
             "status": "claim_ready",
             "claim_usable": True,
             "reason_codes": [],
@@ -2917,7 +3232,7 @@ def _mint_v2_cell_artifact(
                 origin_main_contains_head
             ),
             "head_pin_commit_contained_in_origin_main": (
-                head_pin_commit_contained_in_origin_main
+                None if core._component_block5_producer(absolute) is not None else head_pin_commit_contained_in_origin_main
             ),
             "python_package": "joulewise",
         },
@@ -2934,6 +3249,8 @@ def _mint_v2_cell_artifact(
         )
     if launch_lineage is not None:
         provenance["launch_lineage"] = copy.deepcopy(dict(launch_lineage))
+    if recomputation.diagnostics:
+        provenance["diagnostics"] = copy.deepcopy(list(recomputation.diagnostics))
     artifact = core.build_floor_artifact(
         artifact_id=producer["component_artifact"]["artifact_id"],
         calibration_scope=plan_pins["artifact_calibration_scope"],
@@ -2985,6 +3302,7 @@ def _build_v2_artifacts(
     for producer_index, producer in enumerate(pinset.value["producer_plans"]):
         plan_pins = producer["plan"]
         plan_id = plan_pins["plan_id"]
+        producer_snapshot = _producer_ledger(calibration_ledger_snapshot, plan_id)
         inputs = producer_inputs.get(plan_id)
         if inputs is None:
             raise MintError(f"missing authenticated producer inputs for {plan_id!r}")
@@ -3027,7 +3345,7 @@ def _build_v2_artifacts(
                 cell_pins=cell_pins,
                 cell_inputs=inputs.cells[role],
                 producer_inputs=inputs,
-                ledger_snapshot=calibration_ledger_snapshot,
+                ledger_snapshot=producer_snapshot,
             )
             if recomputation_sink is not None:
                 recomputation_sink[cell_pins["cell_id"]] = recomputations[role]
@@ -3057,7 +3375,7 @@ def _build_v2_artifacts(
                     comparative=cell_inputs.comparative,
                     recomputation=recomputations[role],
                     calibration_ledger_snapshot=(
-                        calibration_ledger_snapshot
+                        producer_snapshot
                     ),
                     project_commit=project_commit,
                     project_tree_state=project_tree_state,
@@ -3075,6 +3393,11 @@ def _build_v2_artifacts(
                 cell_pins["allowed_consumer_condition_families"],
                 label=f"producer[{producer_index}].cells[{cell_index}].allowlist",
             )
+            source_family = group["allowed_consumer_condition_families"][0]
+            if not any((row["condition_family_id"], row["condition_family_sha256"]) ==
+                       (source_family["condition_family_id"], source_family["condition_family_sha256"])
+                       for row in allowed):
+                allowed.insert(0, source_family)
             group["allowed_consumer_condition_families"] = allowed
             producer_cells.append(cell)
             producer_groups.append(group)
@@ -3135,6 +3458,10 @@ def _build_v2_artifacts(
         "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
         "implementation": implementation,
     }
+    diagnostics = [observation for component in component_artifacts
+                   for observation in component["provenance"].get("diagnostics", [])]
+    if diagnostics:
+        aggregate_provenance["diagnostics"] = copy.deepcopy(diagnostics)
     config_sets = [record for producer in pinset.value["producer_plans"]
                    if (record := detection_floor.floor_mint_producer_config_set(producer)) is not None]
     if config_sets:
@@ -3146,12 +3473,18 @@ def _build_v2_artifacts(
         aggregate_provenance["calibration_custody_store"] = copy.deepcopy(
             custody_store_provenance
         )
-    aggregate_launch_lineage = _common_minted_artifact_launch_lineage(
-        component_artifacts,
-        label="aggregate components",
-    )
-    if aggregate_launch_lineage is not None:
-        aggregate_provenance["launch_lineage"] = aggregate_launch_lineage
+    # A producer remains one window; the aggregate inventories independently
+    # authenticated producer windows instead of requiring them to be identical.
+    producer_lineages = [component["provenance"].get("launch_lineage")
+                         for component in component_artifacts]
+    if all(lineage == producer_lineages[0] for lineage in producer_lineages):
+        if producer_lineages[0] is not None:
+            aggregate_provenance["launch_lineage"] = copy.deepcopy(producer_lineages[0])
+    else:
+        aggregate_provenance["producer_launch_lineages"] = [
+            {"plan_id": plan["plan_id"], "launch_lineage": copy.deepcopy(lineage)}
+            for plan, lineage in zip(producer_plan_records, producer_lineages, strict=True)
+        ]
     artifact = {
         **copy.deepcopy(component_artifacts[0]),
         "artifact_id": aggregate["artifact_id"],
@@ -3297,6 +3630,11 @@ def _validate_v2_artifact_binding(
             if roots != {producer["evidence_root_id"]}:
                 errors.append(f"cells[{cell_pin['cell_id']}]: evidence-root pin mismatch")
             group = group_by_id.get(cell_pin["transport_group_id"])
+            expected_allowed = [(row["condition_family_id"], row["condition_family_sha256"])
+                                for row in cell_pin["allowed_consumer_condition_families"]]
+            source_family = (cell_pin["condition_family_id"], cell_pin["condition_family_sha256"])
+            if source_family not in expected_allowed:
+                expected_allowed.insert(0, source_family)
             if not isinstance(group, Mapping) or group.get("source_cell_ids") != [
                 cell_pin["cell_id"]
             ]:
@@ -3307,10 +3645,7 @@ def _validate_v2_artifact_binding(
                 (row.get("condition_family_id"), row.get("condition_family_sha256"))
                 for row in group.get("allowed_consumer_condition_families", [])
                 if isinstance(row, Mapping)
-            ] != [
-                (row["condition_family_id"], row["condition_family_sha256"])
-                for row in cell_pin["allowed_consumer_condition_families"]
-            ]:
+            ] != expected_allowed:
                 errors.append(f"cells[{cell_pin['cell_id']}]: transport allowlist mismatch")
 
             aggregate_entry = next(
@@ -3356,6 +3691,19 @@ def _validate_v2_artifact_binding(
                 component["provenance"]["calibration_custody_store"] = (
                     copy.deepcopy(provenance["calibration_custody_store"])
                 )
+            lineage = provenance.get("launch_lineage")
+            if "producer_launch_lineages" in provenance:
+                inventory = provenance["producer_launch_lineages"]
+                if (not isinstance(inventory, list)
+                    or [row.get("plan_id") for row in inventory if isinstance(row, Mapping)]
+                       != [plan["plan_id"] for plan in expected_producer_plans]):
+                    errors.append("artifact.provenance: producer lineage inventory mismatch")
+                    continue
+                lineage = inventory[value["producer_plans"].index(producer)].get("launch_lineage")
+            if lineage is not None:
+                # Rebuilding the digest-pinned component also binds its carrier;
+                # altered numbers or source membership still fail this digest.
+                component["provenance"]["launch_lineage"] = copy.deepcopy(lineage)
             component["cells"] = [
                 copy.deepcopy(cell_by_id[cell_id])
                 for cell_id in producer_cell_ids
@@ -3438,6 +3786,8 @@ def _load_v2_input_manifest(path: Path) -> Mapping[str, Any]:
             f"v2 input manifest cannot be read: {exc.strerror or type(exc).__name__}"
         ) from exc
     value = _strict_json_value(raw, "v2 input manifest")
+    if isinstance(value, Mapping) and value.get("schema_version") == BLOCK5_INPUT_SCHEMA:
+        return value
     root = _object(
         value,
         "v2 input manifest",
@@ -3596,6 +3946,9 @@ def _authenticate_v2_inputs(
         if input_manifest is not None
         else _load_v2_input_manifest(input_manifest_path)
     )
+    block5 = manifest.get("schema_version") == BLOCK5_INPUT_SCHEMA
+    if block5:
+        manifest = _expand_block5_manifest(manifest, manifest_dir=input_manifest_path.parent)
     rows = manifest["producer_plans"]
     if len(rows) != len(pinset.value["producer_plans"]):
         raise MintError("v2 input manifest must contain every producer plan exactly once")
@@ -3625,9 +3978,11 @@ def _authenticate_v2_inputs(
             "v2 input manifest.calibration_acceptance",
         )
     )
-    acceptance_value, acceptance_raw = _strict_json_file(
-        acceptance_path, "v2 calibration acceptance"
-    )
+    if block5:
+        acceptance_raw = _read_block5_archive_input(_producer_by_pack("alpha"), "sources/inputs/acceptance.json", "v2 calibration acceptance")
+        acceptance_value = _strict_json_value(acceptance_raw, "v2 calibration acceptance")
+    else:
+        acceptance_value, acceptance_raw = _strict_json_file(acceptance_path, "v2 calibration acceptance")
     if not isinstance(acceptance_value, Mapping):
         raise MintError("v2 calibration acceptance must be an object")
     acceptance = evidence_core.load_calibration_acceptance_bound(acceptance_path)
@@ -3661,38 +4016,41 @@ def _authenticate_v2_inputs(
             "v2 input manifest.calibration_ledger_head_pin",
         )
     )
-    ledger_raw = _strict_json_lines_file(ledger_path, "v2 calibration ledger")
-    head_value, head_raw = _strict_json_file(
-        head_pin_path, "v2 calibration ledger head pin"
-    )
-    if not isinstance(head_value, Mapping):
-        raise MintError("v2 calibration ledger head pin must be an object")
-    ledger_snapshot = _load_v2_ledger_snapshot(
-        evidence_core,
-        acceptance=acceptance,
-        ledger_path=ledger_path,
-        head_pin_path=head_pin_path,
-        calibration_custody_store=calibration_custody_store,
-    )
-    if not bool(getattr(ledger_snapshot, "valid", False)):
-        raise MintError("v2 calibration ledger snapshot is not authenticated")
-    try:
-        ledger_after = read_authentication_input(
-            ledger_path,
-            grammar="jsonl",
-            label="v2 calibration ledger re-read",
+    if block5:
+        ledger_snapshot = _producer_by_pack("alpha").ledger_snapshot
+    else:
+        ledger_raw = _strict_json_lines_file(ledger_path, "v2 calibration ledger")
+        head_value, head_raw = _strict_json_file(
+            head_pin_path, "v2 calibration ledger head pin"
         )
-        head_after = read_authentication_input(
-            head_pin_path,
-            grammar="json",
-            label="v2 calibration ledger head-pin re-read",
+        if not isinstance(head_value, Mapping):
+            raise MintError("v2 calibration ledger head pin must be an object")
+        ledger_snapshot = _load_v2_ledger_snapshot(
+            evidence_core,
+            acceptance=acceptance,
+            ledger_path=ledger_path,
+            head_pin_path=head_pin_path,
+            calibration_custody_store=calibration_custody_store,
         )
-        if ledger_after != ledger_raw or head_after != head_raw:
-            raise MintError("v2 calibration ledger changed during authentication")
-    except V2AuthenticationInputError as exc:
-        raise MintError(str(exc)) from exc
-    except OSError as exc:
-        raise MintError("v2 calibration ledger cannot be re-read") from exc
+        if not bool(getattr(ledger_snapshot, "valid", False)):
+            raise MintError("v2 calibration ledger snapshot is not authenticated")
+        try:
+            ledger_after = read_authentication_input(
+                ledger_path,
+                grammar="jsonl",
+                label="v2 calibration ledger re-read",
+            )
+            head_after = read_authentication_input(
+                head_pin_path,
+                grammar="json",
+                label="v2 calibration ledger head-pin re-read",
+            )
+            if ledger_after != ledger_raw or head_after != head_raw:
+                raise MintError("v2 calibration ledger changed during authentication")
+        except V2AuthenticationInputError as exc:
+            raise MintError(str(exc)) from exc
+        except OSError as exc:
+            raise MintError("v2 calibration ledger cannot be re-read") from exc
 
     result: dict[str, V2ProducerInputs] = {}
     evidence_roots: dict[str, Path] = {}
@@ -3701,6 +4059,16 @@ def _authenticate_v2_inputs(
         manifest_row = by_plan_id.get(plan_id)
         if manifest_row is None:
             raise MintError(f"v2 input manifest is missing producer {plan_id!r}")
+        if block5:
+            entry = _producer_by_plan_id(plan_id)
+            acceptance_raw = _read_block5_archive_input(entry, "sources/inputs/acceptance.json", "block5 calibration acceptance")
+            acceptance_value = _strict_json_value(acceptance_raw, "block5 calibration acceptance")
+            acceptance = evidence_core.load_calibration_acceptance_bound(
+                entry.window.archive_root / "sources/inputs/acceptance.json")
+            if not isinstance(acceptance, Mapping):
+                raise MintError("v2 calibration acceptance evidence is not authenticated")
+            acceptance_sha256 = hashlib.sha256(acceptance_raw).hexdigest()
+            ledger_snapshot = entry.ledger_snapshot
         plan_path = Path(
             _string(
                 manifest_row["calibration_plan"],
@@ -3754,9 +4122,11 @@ def _authenticate_v2_inputs(
                 f"v2 input manifest producer {plan_id}.bracket_binding",
             )
         )
-        bracket_binding, bracket_raw = _strict_json_file(
-            bracket_path, f"producer {plan_id!r} bracket binding"
-        )
+        if block5:
+            bracket_raw = _read_block5_archive_input(entry, "derived/bracket-binding.json", f"producer {plan_id!r} bracket binding", path=bracket_path)
+            bracket_binding = _strict_json_value(bracket_raw, f"producer {plan_id!r} bracket binding")
+        else:
+            bracket_binding, bracket_raw = _strict_json_file(bracket_path, f"producer {plan_id!r} bracket binding")
         if not isinstance(bracket_binding, Mapping):
             raise MintError(f"producer {plan_id!r} bracket binding must be an object")
         cells = manifest_row["cells"]
@@ -3798,6 +4168,12 @@ def _authenticate_v2_inputs(
                     cell_row[component_name],
                     f"producer {plan_id}.{role}.{component_name}",
                 )
+                # Refuse an unindexed hazard root before reading any report or bundle.
+                try:
+                    if hasattr(evidence_core, "_block5_producer"):
+                        evidence_core._block5_producer(paths.evidence_root)
+                except evidence_core.MintError as exc:
+                    raise MintError(str(exc)) from exc
                 component_paths[(role, component_name)] = paths
                 root_id = cell_pins[component_name]["evidence_root_id"]
                 existing_root = evidence_roots.get(root_id)
@@ -3917,7 +4293,8 @@ def _authenticate_v2_inputs(
             authenticated_post_observation=authenticated_post,
             calibration_allowance_projection=dict(allowance_projection),
         )
-    return result, evidence_roots, ledger_snapshot
+    snapshots = {entry.producer_plan_id: entry.ledger_snapshot for entry in BLOCK5_PRODUCERS.values()}
+    return result, evidence_roots, snapshots if block5 else ledger_snapshot
 
 
 def _recomputation_json_value(value: object) -> object:
@@ -3996,9 +4373,20 @@ def _write_v2_artifact_outputs(
     artifact_payload = (
         json.dumps(artifact, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")
-    statement_payload = output_core.render_single_count_statement(artifact).encode(
-        "utf-8"
-    )
+    try:
+        disciplines = detection_floor.read_single_count_profile(
+            artifact, profile="floor", where="artifact"
+        )
+    except detection_floor.SingleCountDisciplineError:
+        disciplines = None  # the renderer below reports the canonical refusal
+    # The statement is convenience prose about the clause-11 discipline. A
+    # floor with no attribution-limited cell carries no discipline object; the
+    # claim side then reads none, and the statement says that it does not apply.
+    statement_payload = (
+        V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT
+        if disciplines == ()
+        else output_core.render_single_count_statement(artifact)
+    ).encode("utf-8")
     sidecar_payload = (
         json.dumps(sidecar, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")
@@ -4033,9 +4421,40 @@ def mint_multi_cell_floor_artifact(
     consumption_semantics_id: str | None = None,
     calibration_custody_store: Path | None = None,
     d165_replay_out: Path | None = None,
+    window_index: Path | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
     _refuse_custody_override_mint()
+
+    if window_index is not None:
+        if calibration_custody_store is not None or consumption_semantics_id is not None:
+            raise MintError("window_index_conflicting_arguments")
+        if BLOCK5_PRODUCERS:
+            raise MintError("block5_producer_registry_already_active")
+        try:
+            entries = compose_indexed_producers(window_index)
+            BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in entries.values()})
+            manifest = _load_v2_input_manifest(input_manifest_path)
+            if manifest.get("schema_version") != BLOCK5_INPUT_SCHEMA:
+                raise MintError("window_index_conflicting_arguments")
+            _require_block5_floor_directory(pinset_path, floor_path)
+            return mint_multi_cell_floor_artifact(
+                pinset_path=pinset_path, pinset_sha256=pinset_sha256,
+                input_manifest_path=input_manifest_path, floor_path=floor_path, statement_path=statement_path,
+                project_commit=project_commit, project_tree_state=project_tree_state,
+                strict_validator=strict_validator, d165_replay_out=d165_replay_out)
+        finally:
+            BLOCK5_PRODUCERS.clear()
+
+    if not BLOCK5_PRODUCERS:
+        # Only the new schema changes dispatch. Defer every legacy parse/input
+        # failure to its original call site so its refusal ordering is retained.
+        try:
+            candidate = _load_v2_input_manifest(input_manifest_path)
+        except MintError:
+            candidate = None
+        if isinstance(candidate, Mapping) and candidate.get("schema_version") == BLOCK5_INPUT_SCHEMA:
+            raise MintError("window_index_required")
 
     if active_v2_authentication_session() is not None:
         return _mint_multi_cell_floor_artifact_active(
@@ -4098,7 +4517,12 @@ def _mint_multi_cell_floor_artifact_active(
         raise MintError("multi-cell floor mint requires a final v2 pinset")
     _validate_v2_pin_hashes(loaded)
     input_manifest = _load_v2_input_manifest(input_manifest_path)
-    head_pin_path = Path(
+    block5 = input_manifest.get("schema_version") == BLOCK5_INPUT_SCHEMA
+    if block5 and not BLOCK5_PRODUCERS:
+        raise MintError("window_index_required")
+    if block5:
+        _require_block5_floor_directory(pinset_path, floor_path)
+    head_pin_path = None if block5 else Path(
         _string(
             input_manifest["calibration_ledger_head_pin"],
             "v2 input manifest.calibration_ledger_head_pin",
@@ -4117,7 +4541,7 @@ def _mint_multi_cell_floor_artifact_active(
     # The path has now participated in successful ledger authentication;
     # derive its last-changing commit only after that domain owner accepts it.
     head_pin_commit_contained = (
-        _head_pin_commit_containment_in_origin_main(head_pin_path)
+        None if block5 else _head_pin_commit_containment_in_origin_main(head_pin_path)
     )
     gate_recomputations: dict[str, V2CellRecomputation] = {}
     artifact, components = _build_v2_artifacts(
@@ -4196,7 +4620,7 @@ def _mint_multi_cell_floor_artifact_active(
                     declared_calibration_scope=producer["plan"][
                         "declared_calibration_scope"
                     ],
-                    calibration_ledger_snapshot=ledger_snapshot,
+                    calibration_ledger_snapshot=_producer_ledger(ledger_snapshot, producer["plan"]["plan_id"]),
                     calibration_bracket_binding=(
                         producer_input.bracket_binding
                     ),
@@ -4246,6 +4670,7 @@ def _mint_multi_cell_floor_artifact_active(
             artifact,
             bind_recomputations,
         )
+        _validate_block5_sidecar(sidecar, loaded, inputs)
         _write_v2_artifact_outputs(
             output_core=output_core,
             artifact=artifact,
@@ -4261,6 +4686,27 @@ def _mint_multi_cell_floor_artifact_active(
     return artifact
 
 
+def _validate_block5_sidecar(sidecar: Mapping, pinset: V2Pinset, inputs: Mapping) -> None:
+    sidecar_cells = {cell["cell_id"]: cell for cell in sidecar.get("cells", [])}
+    for producer in pinset.value["producer_plans"]:
+        source = inputs[producer["plan"]["plan_id"]]
+        if str(source.evidence_root.resolve()) not in BLOCK5_PRODUCERS:
+            continue
+        for pins in producer["cells"]:
+            component = source.cells[pins["role"]].comparative
+            binding = component.report["kept_units_binding"]["cells"][component.calibration_cell_id]
+            expected = [block["block_id"] for block in component.spec_cell["blocks"]
+                        if block["block_id"] in binding["kept_unit_ids"]]
+            replay = sidecar_cells.get(pins["cell_id"], {}).get("comparative", {}).get("common_mode_replay")
+            # Default-estimator cells carry independent blocks in the sidecar.
+            if replay is None:
+                blocks = sidecar_cells.get(pins["cell_id"], {}).get("comparative", {}).get("independent", {}).get("blocks", [])
+            else:
+                blocks = replay.get("inputs", {}).get("blocks", [])
+            if [block.get("block_id") for block in blocks] != expected:
+                raise MintError("floor_mint_kept_unit_mismatch: replay sidecar blocks differ from kept quads")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pinset", required=True, type=Path)
@@ -4270,6 +4716,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--single-count-out", required=True, type=Path)
     parser.add_argument("--d165-replay-out", type=Path)
     parser.add_argument("--v2-input-manifest", type=Path)
+    parser.add_argument("--window-index", type=Path)
     parser.add_argument("--calibration-custody-store", type=Path)
     parser.add_argument("--calibration-plan", type=Path)
     parser.add_argument("--calibration-plan-relative-path")
@@ -4302,7 +4749,15 @@ def main(argv: list[str] | None = None) -> int:
     from joulewise.cli import validate_bundle
 
     args = _parser().parse_args(argv)
+    from joulewise.b5_analysis.windows import AnalysisRefusal
     try:
+        if args.window_index is not None and (args.v2_input_manifest is None or any(
+                value is not None for value in (args.artifact_id, args.calibration_custody_store, args.calibration_plan,
+                    args.calibration_plan_relative_path, args.absolute_root, args.absolute_report,
+                    args.absolute_spec, args.absolute_order_manifest, args.comparative_root,
+                    args.comparative_report, args.comparative_spec, args.comparative_order_manifest,
+                    args.consumption_semantics_id))):
+            raise MintError("window_index_conflicting_arguments")
         if args.v2_input_manifest is not None:
             with V2AuthenticationReadSession():
                 loaded = load_pinset(args.pinset, args.pinset_sha256)
@@ -4326,6 +4781,7 @@ def main(argv: list[str] | None = None) -> int:
                         args.calibration_custody_store
                     ),
                     d165_replay_out=args.d165_replay_out,
+                    window_index=args.window_index,
                 )
             return 0
         loaded = load_pinset(args.pinset, args.pinset_sha256)
@@ -4388,6 +4844,9 @@ def main(argv: list[str] | None = None) -> int:
             ),
             consumption_semantics_id=args.consumption_semantics_id,
         )
+    except AnalysisRefusal as exc:
+        print(f"error: {exc.code}", file=sys.stderr)
+        return 2
     except (MintError, V2AuthenticationInputError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -1,0 +1,31 @@
+{
+  "bound_derived_from": "registered_corpus",
+  "bound_formula": "max(max(mean(largest_n_start)-mean(smallest_n_end),mean(largest_n_end)-mean(smallest_n_start)),t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))",
+  "bound_used": "corpus_physics_clean",
+  "clean_bound": {
+    "corpus_manifest": {
+      "path": "derived/neg8-clean-corpus.json",
+      "sha256": "bc57c2f01e9049c50608ba47f6a9f07c9672b9f18b54f69dfd69810fad4c59a2"
+    },
+    "path": "withheld/neg8-clean-bound.json",
+    "sha256": "97b949598cf983fdaf8cf9f99f3bba008168f1b16c1447d8ae5b5564607ec68e"
+  },
+  "harvest_reference_losses": {},
+  "rescreen": {
+    "conditions": [],
+    "decision": null,
+    "evaluated": false,
+    "evaluated_at_source": "evaluation_scope.completed_at",
+    "freshness": null,
+    "problems": [
+      "evaluation_basis_invalid"
+    ],
+    "verdict_authenticated": true
+  },
+  "schema": "joulewise.b5_neg8_screen.v1",
+  "stored": {
+    "conditions_beyond_bound_underived": [],
+    "decision": "passed"
+  },
+  "survivor_bracket": null
+}

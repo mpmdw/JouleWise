@@ -1,0 +1,790 @@
+"""Regressions for production defects the S10 chain fixture found in the floor mint."""
+from __future__ import annotations
+
+import copy
+from dataclasses import replace
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+
+from tests import test_mint_floor_artifact_generalized as g
+
+generalized = g.generalized
+
+
+def _lineage_bearing_artifacts(lineage_for_index):
+    """Build the synthetic v2 aggregate with each producer's components on a lineage.
+
+    Returns the artifact, its components and the pinset value whose component
+    pins are the components' own digests (as the pinset emitter writes them).
+    """
+    pinset, inputs, snapshot = g.synthetic_v2_fixture()
+    for producer_index, producer in enumerate(pinset["producer_plans"]):
+        lineage = lineage_for_index(producer_index)
+        plan_id = producer["plan"]["plan_id"]
+        report = copy.deepcopy(inputs[plan_id].cells["decode"].absolute.report)
+        if lineage is not None:
+            report["launch_lineage"] = copy.deepcopy(lineage)
+            for report_cell in report["cells"]:
+                for member_row in report_cell["members"]:
+                    member_row["launch_lineage"] = copy.deepcopy(lineage)
+        g._reattach_producer_report(pinset, inputs, producer_index, report)
+        producer_input = inputs[plan_id]
+        inputs[plan_id] = replace(producer_input, cells={
+            role: replace(cell,
+                          absolute=replace(cell.absolute, launch_lineage=copy.deepcopy(lineage)),
+                          comparative=replace(cell.comparative, launch_lineage=copy.deepcopy(lineage)))
+            for role, cell in producer_input.cells.items()})
+    g._repair_v2_pinset_self_hashes(pinset)
+    # The window authentication (stubbed exactly as the existing lineage test
+    # stubs it) returns the lineage of the producer whose runs root it opens.
+    by_root = {Path(inputs[producer["plan"]["plan_id"]].evidence_root): lineage_for_index(producer_index)
+               for producer_index, producer in enumerate(pinset["producer_plans"])}
+
+    def authenticate(runs_root, _member_ids, **_kwargs):
+        return copy.deepcopy(by_root[Path(runs_root)])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path, digest = g.write_pinset(Path(tmp), pinset)
+        loaded = generalized.load_pinset(path, digest)
+        with mock.patch.object(generalized.mint_estimator, "authenticate_window_launch_lineage",
+                               side_effect=authenticate):
+            artifact, components = generalized._build_v2_artifacts(
+                pinset=loaded, pinset_path=path, pinset_sha256=digest, producer_inputs=inputs,
+                calibration_ledger_snapshot=snapshot, project_commit="0" * 40, project_tree_state="clean")
+    for producer, entry, component in zip(pinset["producer_plans"], pinset["aggregate"]["component_artifacts"],
+                                          components, strict=True):
+        producer["component_artifact"]["sha256"] = generalized._artifact_sha256(component)
+        entry["sha256"] = producer["component_artifact"]["sha256"]
+    g._repair_v2_pinset_self_hashes(pinset)
+    artifact["provenance"]["calibration_plan"]["sha256"] = pinset["aggregate"]["producer_set_sha256"]
+    return artifact, components, pinset
+
+
+class PostBindComponentLineageTests(unittest.TestCase):
+    """The post-bind check rebuilds each component from the aggregate; it must carry the lineage."""
+
+    def test_single_lineage_components_pass_post_bind_component_hash_check(self):
+        lineage = g.launch_lineage()
+        artifact, components, pinset = _lineage_bearing_artifacts(lambda _index: lineage)
+        self.assertEqual(artifact["provenance"]["launch_lineage"], lineage)
+        self.assertTrue(all(c["provenance"]["launch_lineage"] == lineage for c in components))
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = g.write_pinset(Path(tmp), pinset)
+            errors = generalized._validate_v2_artifact_binding(artifact, generalized.load_pinset(path, digest))
+        self.assertFalse([e for e in errors if "component artifact hash mismatch" in e], errors)
+
+    def test_component_hash_still_binds_every_other_byte(self):
+        lineage = g.launch_lineage()
+        artifact, _components, pinset = _lineage_bearing_artifacts(lambda _index: lineage)
+        tampered = copy.deepcopy(artifact)
+        tampered["provenance"]["launch_lineage"] = {**tampered["provenance"]["launch_lineage"],
+                                                    "schema_version": "tampered"}
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = g.write_pinset(Path(tmp), pinset)
+            errors = generalized._validate_v2_artifact_binding(tampered, generalized.load_pinset(path, digest))
+        self.assertTrue([e for e in errors if "component artifact hash mismatch" in e], errors)
+
+
+class SingleCountStatementTests(unittest.TestCase):
+    """The v2 writer's convenience statement for a floor with no attribution-limited cell."""
+
+    def write(self, artifact, root):
+        paths = {name: Path(root) / name for name in ("floor.json", "single-count.md", "replay.json")}
+        generalized._write_v2_artifact_outputs(
+            output_core=generalized._fresh_original_core(), artifact=artifact, sidecar={"replay": True},
+            floor_path=paths["floor.json"], statement_path=paths["single-count.md"],
+            d165_replay_out=paths["replay.json"])
+        return paths
+
+    def test_floor_without_attribution_limited_cell_writes_the_not_applicable_statement(self):
+        artifact = {"cells": [{"cell_id": "c1", "absolute": {}, "comparative": {}}], "transport_groups": []}
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.write(artifact, root)
+            self.assertEqual(paths["single-count.md"].read_text(),
+                             generalized.V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT)
+            self.assertTrue(paths["floor.json"].is_file() and paths["replay.json"].is_file())
+
+    def test_non_canonical_discipline_still_refuses(self):
+        artifact = {"cells": [{"cell_id": "c1", "single_count_discipline": {"rule_id": "tampered"}}],
+                    "transport_groups": []}
+        with tempfile.TemporaryDirectory() as root, self.assertRaisesRegex(Exception, "single-count discipline is not canonical"):
+            self.write(artifact, root)
+
+
+class ClaimGateFloorSpecReaderTests(unittest.TestCase):
+    """block5_claim_gate_inputs reads each floor pack's sealed spec only for its planned units."""
+
+    SPEC = g.ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json" \
+        if hasattr(g, "ROOT") else Path(__file__).resolve().parents[2] / \
+        "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json"
+
+    def test_sealed_floor_spec_declares_registration_and_is_read_as_governed(self):
+        from joulewise.analysis_engine import inputs
+        import inspect
+        raw = self.SPEC.read_bytes()
+        with self.assertRaisesRegex(inputs.AnalysisInputError, "forbidden key 'estimator_registration'"):
+            inputs._strict_json_admission_bytes(raw, "floor spec")
+        spec = inputs._strict_json_admission_bytes(raw, "floor spec", governed_extraction_spec=True)
+        self.assertTrue(any("estimator_registration" in cell for cell in spec["cells"]))
+        source = inspect.getsource(inputs.block5_claim_gate_inputs)
+        self.assertIn('"floor spec",\n', source)
+        self.assertIn("governed_extraction_spec=True", source)
+
+    def test_other_inputs_still_refuse_registration_vocabulary(self):
+        from joulewise.analysis_engine import inputs
+        with self.assertRaisesRegex(inputs.AnalysisInputError, "forbidden key"):
+            inputs._strict_json_admission_bytes(b'{"contrasts":[{"estimator_registration":{}}]}', "analysis manifest")
+
+
+class ClaimSideIndexedRunsRootTests(unittest.TestCase):
+    """analyze-claims authenticates the block-5 runs root by the window index, as finalization does."""
+
+    def setUp(self):
+        import json
+        from joulewise.analysis_engine import inputs
+        self.inputs = inputs
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name).resolve()
+        self.custody, self.runs, self.other = root / "custody", root / "gamma-runs", root / "other-runs"
+        for path in (self.custody, self.runs, self.other):
+            path.mkdir()
+        (self.custody / "bracket.json").write_text(json.dumps({"runs_root": str(self.runs)}))
+        self.manifest = {"schema_version": inputs.ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA,
+                         "evidence": {"bracket_binding": {"path": "bracket.json"}}}
+        self.path = self.custody / "am.finalized.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_without_the_index_a_root_outside_custody_still_refuses(self):
+        with self.assertRaisesRegex(self.inputs.AnalysisInputError, "escapes custody"):
+            self.inputs._finalized_runs_root(self.manifest, self.path, self.runs)
+
+    def test_indexed_root_outside_custody_is_admitted(self):
+        self.assertEqual(self.inputs._finalized_runs_root(self.manifest, self.path, self.runs,
+                                                          indexed_runs_root=self.runs), self.runs)
+
+    def test_another_root_than_the_indexed_one_refuses(self):
+        for supplied, indexed in ((self.other, self.runs), (self.runs, self.other)):
+            with self.subTest(supplied=supplied.name, indexed=indexed.name), \
+                 self.assertRaisesRegex(self.inputs.AnalysisInputError, "runs_root_not_the_indexed_window"):
+                self.inputs._finalized_runs_root(self.manifest, self.path, supplied, indexed_runs_root=indexed)
+
+
+def _window_lineage(index):
+    lineage = g.launch_lineage()
+    lineage["window_id"] = f"window-{index + 1}"
+    lineage["plan_id"] = f"plan-{index + 1}"
+    return lineage
+
+
+def _hazard_window_lineage(index):
+    from joulewise.window_lineage import HAZARD_LINEAGE_SCHEMA, validate_lineage
+    root = f"/synthetic/l9-window-{index + 1}"
+    lineage = {
+        "schema_version": HAZARD_LINEAGE_SCHEMA,
+        "collection_boot_session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "pack_id": f"pack-{index + 1}", "plan_id": f"plan-{index + 1}",
+        "window_id": f"window-{index + 1}", "bracket_session_id": f"bracket-{index + 1}",
+        "pack_root": root + "/pack", "pack_sha256": "a" * 64,
+        "plan_tree_sha256": "b" * 64,
+        "window_context": {
+            "pre_attempt_id": "pre", "post_attempt_id": "post",
+            "claim_runs_root": root + "/claim", "bound_runs_root": root + "/bound",
+            "custody_root": root + "/custody", "night_dir": root + "/night",
+        },
+        "launch_record": {"path": root + "/launch.json", "sha256": "c" * 64},
+    }
+    validate_lineage(lineage)
+    return lineage
+
+
+class QLineageRulingTests(unittest.TestCase):
+    def test_raw_lineage_locators_preserve_both_carrier_shapes(self):
+        from joulewise.analysis_engine.inputs import _assert_floor_artifact_path_independent
+        for factory in (_window_lineage, _hazard_window_lineage):
+            for common in (False, True):
+                with self.subTest(schema=factory(0)["schema_version"], common=common):
+                    floor, _components, _pinset = _lineage_bearing_artifacts(
+                        lambda index: factory(0 if common else index))
+                    _assert_floor_artifact_path_independent(floor)
+
+    def test_lineage_locator_exception_keeps_other_paths_closed(self):
+        from joulewise.analysis_engine.inputs import _assert_floor_artifact_path_independent
+        floor, _components, _pinset = _lineage_bearing_artifacts(_hazard_window_lineage)
+        changed = copy.deepcopy(floor)
+        changed["cells"][0]["provenance"]["absolute"]["campaign_log"]["relative_path"] = "/synthetic/foreign-log.jsonl"
+        with self.assertRaisesRegex(ValueError, r"cells\[0\].*campaign_log.relative_path"):
+            _assert_floor_artifact_path_independent(changed)
+        changed = copy.deepcopy(floor)
+        changed["provenance"]["producer_launch_lineages"][0]["launch_lineage"]["window_context"]["foreign_root"] = "/synthetic/foreign-root"
+        with self.assertRaisesRegex(ValueError, r"window_context.foreign_root: absolute paths"):
+            _assert_floor_artifact_path_independent(changed)
+
+    def test_two_windows_inventory_and_component_hashes(self):
+        artifact, components, pinset = _lineage_bearing_artifacts(_window_lineage)
+        self.assertNotIn("launch_lineage", artifact["provenance"])
+        self.assertEqual(artifact["provenance"]["producer_launch_lineages"], [
+            {"plan_id": p["plan"]["plan_id"], "launch_lineage": c["provenance"]["launch_lineage"]}
+            for p, c in zip(pinset["producer_plans"], components, strict=True)])
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = g.write_pinset(Path(tmp), pinset)
+            loaded = generalized.load_pinset(path, digest)
+            self.assertEqual(generalized._validate_v2_artifact_binding(artifact, loaded), [])
+            changed = copy.deepcopy(artifact)
+            changed["provenance"]["producer_launch_lineages"][0]["launch_lineage"]["window_id"] = "other"
+            self.assertTrue(any("component artifact hash mismatch" in e
+                                for e in generalized._validate_v2_artifact_binding(changed, loaded)))
+            changed = copy.deepcopy(artifact)
+            changed["cells"][0]["floor_gate_j"] += 1.0
+            self.assertTrue(any("component artifact hash mismatch" in e
+                                for e in generalized._validate_v2_artifact_binding(changed, loaded)))
+
+    def test_split_producer_and_mixed_producer_still_refuse(self):
+        for second in (_window_lineage(1), None):
+            with self.subTest(mixed=second is None), self.assertRaisesRegex(generalized.MintError, "launch_lineage_conflict: producer"):
+                generalized._common_minted_artifact_launch_lineage(
+                    [{"provenance": {"launch_lineage": _window_lineage(0)}},
+                     {"provenance": {} if second is None else {"launch_lineage": second}}], label="producer 'p' cells")
+
+    def test_mixed_aggregate_records_absent_producer(self):
+        from joulewise.analysis_engine.inputs import authenticate_floor_artifact_bytes
+        import json
+        artifact, components, pinset = _lineage_bearing_artifacts(lambda i: _window_lineage(0) if i == 0 else None)
+        absent = pinset["producer_plans"][1]["plan"]["plan_id"]
+        self.assertIsNone(artifact["provenance"]["producer_launch_lineages"][1]["launch_lineage"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = g.write_pinset(Path(tmp), pinset)
+            loaded = authenticate_floor_artifact_bytes(json.dumps(artifact).encode(), pinset_path=path,
+                                                       expected_pinset_sha256=digest)
+        self.assertEqual(loaded.limitations, (
+            "floor_launch_lineage_unauthenticated:" + pinset["producer_plans"][0]["plan"]["plan_id"],
+            "floor_producer_lineage_absent:" + absent))
+
+
+
+class OrderManifestBesidePlanCopyTests(unittest.TestCase):
+    """C9: the claim gate's floor binder resolves each producer plan copy's order
+    manifest beside it (multi-producer branch); the indexed emitter wrote only the
+    plan copies, so every floor cell refused component_evidence_root_disagreement
+    (producer order manifest path_resolution_refused) and no contrast floor resolved."""
+
+    def test_emitter_writes_each_order_manifest_where_the_binder_resolves_it(self):
+        import json
+        from scripts import emit_floor_mint_pinset as emit
+        from joulewise.analysis_engine import inputs as ai
+        with tempfile.TemporaryDirectory(prefix="s10-order-") as tmp:
+            out = Path(tmp) / "mint"
+            out.mkdir()
+            plans = {p: json.dumps({"order_manifest": "order_manifest.json", "pack": p}).encode() for p in ("alpha", "beta")}
+            orders = {p: json.dumps({"executed_order": [{"run_id": p + "-r01"}]}).encode() for p in plans}
+            emit._write_block5_outputs(out, {"pins": "synthetic"}, {"inputs": "synthetic"}, plans, orders)
+            for pack in plans:
+                resolved = ai._lexical_child_path(out / pack, json.loads(plans[pack])["order_manifest"],
+                                                  label="producer order manifest", require_directory=False)
+                self.assertEqual(resolved.read_bytes(), orders[pack])
+
+    def test_order_manifests_must_cover_both_plans(self):
+        from scripts import emit_floor_mint_pinset as emit, mint_floor_artifact_generalized as mint
+        with tempfile.TemporaryDirectory(prefix="s10-order-") as tmp:
+            with self.assertRaises(mint.MintError):
+                emit._write_block5_outputs(Path(tmp), {}, {}, {"alpha": b"{}", "beta": b"{}"}, {"alpha": b"{}"})
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_indexed_emitter_hands_the_order_manifests_to_the_writer(self):
+        import inspect
+        from scripts import emit_floor_mint_pinset as emit
+        source = inspect.getsource(emit.emit_indexed_pinset)
+        self.assertIn("_write_block5_outputs(out_dir, value, manifest, plans, orders)", source)
+
+
+class ClaimCustodyManifestRootTests(unittest.TestCase):
+    """Joined run, step 9b: the claim-evidence custody gate validated the finalized
+    manifest with the custody's runs root as its custody root, while the driver
+    finalizes into its own subdirectory (restricted/finalized), so every attachment
+    path missed; the refusals were records, not codes, and surfaced as
+    paper_custody_not_issuable."""
+
+    def gate(self, refusals):
+        import json
+        from joulewise import paper_custody as c
+        from joulewise import analysis_manifest_v3 as v3
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix="s10-claim-custody-") as tmp:
+            runs = Path(tmp) / "restricted"
+            (runs / "finalized").mkdir(parents=True)
+            binding = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                   c.InputRole.FINALIZED_MANIFEST, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: json.dumps({"inputs": {}}).encode(),
+                    c.InputRole.FLOOR_ARTIFACT: b"{}", c.InputRole.CLAIM_SIDE_BOUND: b"{}"}
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (binding,), (), raws,
+                                 V2AuthenticationReadSession())
+
+            def validate(manifest, **kwargs):
+                seen.update(kwargs)
+                return refusals
+
+            from joulewise.analysis_engine import artifact, claim_side_bound
+            with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", validate), \
+                 mock.patch.object(artifact, "validate_claim_verdicts", return_value=()), \
+                 mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()):
+                replay = c._claim_issuance_gate(ctx)
+            return replay, seen, runs
+
+    def test_manifest_is_validated_in_its_own_custody_root(self):
+        replay, seen, runs = self.gate(())
+        self.assertEqual(seen["custody_root"], runs / "finalized")
+        self.assertEqual(seen["manifest_path"], runs / "finalized" / "am-x.finalized.json")
+
+    def test_block5_verdict_replay_authenticates_the_floor_with_its_sibling_pinset(self):
+        # Joined run, step 9b, next refusal: validate_claim_verdicts authenticated the
+        # embedded block-5 floor against the registered pinsets only.
+        import json
+        from joulewise import paper_custody as c
+        from joulewise import analysis_manifest_v3 as v3
+        from joulewise import analysis_engine as engine
+        from joulewise.analysis_engine import artifact, claim_side_bound, inputs
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix="s10-claim-pinset-") as tmp:
+            runs = Path(tmp) / "restricted"
+            (runs / "mint").mkdir(parents=True)
+            manifest = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                    c.InputRole.FINALIZED_MANIFEST, "generated")
+            floor = c._BoundFile("runs_root", Path("mint/d-aggregate-floor.json"), "0" * 64,
+                                 c.InputRole.FLOOR_ARTIFACT, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: json.dumps({"inputs": {}}).encode(),
+                    c.InputRole.FLOOR_ARTIFACT: b"{}", c.InputRole.CLAIM_SIDE_BOUND: b"{}",
+                    c.InputRole.CLAIM_REPLAY_REQUEST: b"{}"}
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (manifest, floor), (), raws,
+                                 V2AuthenticationReadSession())
+            sibling = runs / "mint" / "floor-mint-pinset.json"
+
+            def verdicts(value, **kwargs):
+                seen.update(kwargs)
+                return []
+
+            with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", return_value=()), \
+                 mock.patch.object(engine, "sibling_floor_pinset", side_effect=lambda path: (seen.setdefault("floor", path), sibling)[1]), \
+                 mock.patch.object(artifact, "validate_claim_verdicts", verdicts), \
+                 mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()):
+                c._claim_issuance_gate(ctx)
+        self.assertEqual(seen["floor"], runs / "mint" / "d-aggregate-floor.json")
+        self.assertEqual(seen["floor_pinset_path"], sibling)
+
+    def test_block5_manifest_replay_runs_outside_the_custody_read_session(self):
+        # Joined run, step 9b, next refusal (paper_custody_binding_mismatch): the
+        # window-index replay of the finalized manifest read about 3,000 archive and
+        # bundle files inside the custody session, outside the census. Like the claim
+        # replay, it now runs in a fresh context; the owner's own reads stay bound.
+        import json
+        from joulewise import paper_custody as c, authentication_io as aio
+        from joulewise import analysis_manifest_v3 as v3
+        from joulewise import analysis_engine as engine
+        from joulewise.analysis_engine import artifact, claim_side_bound, inputs
+        observed = []
+        with tempfile.TemporaryDirectory(prefix="s10-claim-session-") as tmp:
+            runs = Path(tmp) / "restricted"
+            manifest = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                    c.InputRole.FINALIZED_MANIFEST, "generated")
+            floor = c._BoundFile("runs_root", Path("mint/d-aggregate-floor.json"), "0" * 64,
+                                 c.InputRole.FLOOR_ARTIFACT, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: json.dumps({"inputs": {}}).encode(),
+                    c.InputRole.FLOOR_ARTIFACT: b"{}", c.InputRole.CLAIM_SIDE_BOUND: b"{}",
+                    c.InputRole.CLAIM_REPLAY_REQUEST: b"{}"}
+            session = aio.V2AuthenticationReadSession()
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (manifest, floor), (), raws, session)
+
+            def validate(value, **kwargs):
+                observed.append(aio._ACTIVE_SESSION.get())
+                return ()
+
+            with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", validate), \
+                 mock.patch.object(engine, "sibling_floor_pinset", return_value=runs / "mint" / "floor-mint-pinset.json"), \
+                 mock.patch.object(artifact, "validate_claim_verdicts", return_value=[]), \
+                 mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()), session:
+                self.assertIs(aio._ACTIVE_SESSION.get(), session)
+                c._claim_issuance_gate(ctx)
+        self.assertEqual(observed, [None])
+
+    def test_claim_replay_loads_the_block5_floor_with_its_sibling_pinset(self):
+        # Joined run, step 9b, next refusal (claim_verdicts_replay_refused): the replay
+        # read the floor's evidence roots through the registered pinsets only.
+        import hashlib
+        from types import SimpleNamespace
+        from joulewise import paper_custody as c, analysis_engine as engine
+        from joulewise.analysis_engine import inputs
+        from joulewise.b5_analysis import windows, archive
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        calls = []
+        with tempfile.TemporaryDirectory(prefix="s10-claim-replay-") as tmp:
+            runs = Path(tmp) / "restricted"
+            manifest = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                    c.InputRole.FINALIZED_MANIFEST, "generated")
+            floor = c._BoundFile("runs_root", Path("mint/d-aggregate-floor.json"), "0" * 64,
+                                 c.InputRole.FLOOR_ARTIFACT, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: b"{}", c.InputRole.FLOOR_ARTIFACT: b"{}"}
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (manifest, floor), (), raws,
+                                 V2AuthenticationReadSession())
+            digest = hashlib.sha256(b"{}").hexdigest()
+            request = {"claim_verdicts_sha256": digest, "analysis_manifest_sha256": digest, "floor_artifact_sha256": digest,
+                       "window_index_sha256": hashlib.sha256(b"index").hexdigest(), "evidence_roots": {"root-a": "alpha"}}
+
+            def load(path, *, require_sibling_pinset=False):
+                calls.append((Path(path), require_sibling_pinset))
+                return SimpleNamespace(file_sha256=digest, root_ids={"root-other"})
+
+            with mock.patch.object(c, "_check_claim_replay_request"), \
+                 mock.patch.object(c, "_tracked_window_index", return_value=Path(tmp) / "index.json"), \
+                 mock.patch.object(c, "_git_blob", return_value=b"index"), \
+                 mock.patch.object(windows, "load_window_index", return_value=SimpleNamespace(entries=())), \
+                 mock.patch.object(archive, "open_attempt_record"), \
+                 mock.patch.object(windows, "select_analysed_attempts", return_value={}), \
+                 mock.patch.object(engine, "sibling_floor_pinset", return_value=runs / "mint" / "floor-mint-pinset.json"), \
+                 mock.patch.object(inputs, "load_floor_artifact", side_effect=load), \
+                 self.assertRaises(c._ClaimReplayRefused):
+                c._replay_claim_verdicts(ctx, request)
+        self.assertEqual(calls, [(runs / "mint" / "d-aggregate-floor.json", True)])
+
+    def test_manifest_refusals_become_reason_codes(self):
+        from joulewise.analysis_manifest_v3 import ManifestRefusal
+        replay, _seen, _runs = self.gate((ManifestRefusal("analysis_manifest_lineage_mismatch", "synthetic"),))
+        self.assertFalse(replay.authentic)
+        self.assertIn("analysis_manifest_lineage_mismatch", replay.validator_codes)
+        self.assertTrue(all(type(code) is str for code in replay.validator_codes))
+
+
+class CustodyGovernedExtractionSpecTests(unittest.TestCase):
+    """Joined run, step 10: the reported-energy custody read the registered copy of the
+    sealed floor pack's extraction spec with the strict grammar that forbids
+    estimator_registration, and refused paper_custody_parse_invalid:extraction_spec."""
+
+    def read(self, role):
+        import hashlib, json
+        from joulewise import paper_custody as c
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        raw = json.dumps({"cells": [{"cell_id": "x", "estimator_registration": {"id": "synthetic"}}]}).encode()
+        with tempfile.TemporaryDirectory(prefix="s10-governed-spec-") as tmp:
+            runs = Path(tmp)
+            (runs / "spec.json").write_bytes(raw)
+            binding = c._BoundFile("runs_root", Path("spec.json"), hashlib.sha256(raw).hexdigest(), role, "generated")
+            with V2AuthenticationReadSession() as session:
+                return c._read_once(session, Path(tmp) / "repository", runs, binding, head="a" * 40, bindings=(binding,)), raw
+
+    def test_extraction_spec_role_admits_the_governed_vocabulary(self):
+        from joulewise import paper_custody as c
+        value, raw = self.read(c.InputRole.EXTRACTION_SPEC)
+        self.assertEqual(value, raw)
+
+    def test_other_roles_still_refuse_the_vocabulary(self):
+        from joulewise import paper_custody as c
+        with self.assertRaises(c.PaperCustodyRefusal) as caught:
+            self.read(c.InputRole.EXTRACTION_REPORT)
+        self.assertEqual(caught.exception.code, "paper_custody_parse_invalid")
+
+
+class PaperSourcesBlockFiveFloorTests(unittest.TestCase):
+    """Joined run, step 6: the close-out's paper-source replay authenticated the block-5
+    aggregate floor against the registered pinsets only, which name no block-5 floor, and
+    refused d165_closeout_driver_paper_sources_invalid (d165_paper_floor_artifact_invalid)."""
+
+    def check(self, *, floor_bytes=None, window_index=True):
+        import hashlib
+        import json
+        from types import SimpleNamespace
+        from joulewise import dominance_closeout as dc
+        with tempfile.TemporaryDirectory(prefix="s10-paper-floor-") as tmp:
+            root = Path(tmp)
+            floor = root / "mint" / "x-aggregate-floor.json"
+            floor.parent.mkdir()
+            floor.write_bytes(b'{"floor": "synthetic"}\n')
+            manifest = {"evidence": {"aggregate_floor_artifact": {"path": "mint/x-aggregate-floor.json"}}}
+            seen = []
+
+            def load(path, *, require_sibling_pinset=False):
+                seen.append(("sibling", Path(path), require_sibling_pinset))
+                return SimpleNamespace(file_sha256=hashlib.sha256(floor.read_bytes()).hexdigest())
+
+            def registered_only(raw):
+                seen.append(("registered",))
+                raise dc.AnalysisInputError("invalid floor artifact: artifact.pinset: no pinset matches artifact family identity")
+
+            with mock.patch.object(dc, "load_floor_artifact", load), \
+                 mock.patch.object(dc, "authenticate_floor_artifact_bytes", registered_only), \
+                 mock.patch.object(dc, "validate_finalized_analysis_manifest_v3", return_value=()), \
+                 mock.patch.object(dc, "validate_d165_replay_sidecar", return_value=()), \
+                 mock.patch.object(dc, "validate_d165_closeout", return_value=()):
+                codes = dc.validate_d165_paper_sources(
+                    closeout={}, finalized_manifest_bytes=json.dumps(manifest).encode(),
+                    finalized_manifest_path=root / "am.finalized.json", custody_root=root,
+                    floor_artifact_bytes=floor.read_bytes() if floor_bytes is None else floor_bytes,
+                    replay_sidecar_bytes=b"{}", window_index=root / "index.json" if window_index else None)
+            return codes, seen, floor
+
+    def test_block5_floor_authenticates_against_its_sibling_pinset(self):
+        codes, seen, floor = self.check()
+        self.assertEqual(codes, ())
+        self.assertEqual(seen, [("sibling", floor, True)])
+
+    def test_block5_other_bytes_than_the_attachment_refuse(self):
+        codes, _seen, _floor = self.check(floor_bytes=b'{"floor": "other"}\n')
+        self.assertIn("d165_paper_floor_artifact_invalid", codes)
+
+    def test_without_a_window_index_the_registered_pinset_path_is_unchanged(self):
+        codes, seen, _floor = self.check(window_index=False)
+        self.assertEqual(seen, [("registered",)])
+        self.assertIn("d165_paper_floor_artifact_invalid", codes)
+
+
+class FillInputBlockFiveFloorTests(unittest.TestCase):
+    """Joined run, step 11, after the disclosures: the fill input refused
+    results_fill_manifest_mismatch because the adapter re-validated the verdicts'
+    embedded block-5 floor against the registered pinsets only."""
+
+    def test_adapter_validates_the_embedded_floor_with_the_given_pinset(self):
+        import json
+        from joulewise import results_fill_adapter as a
+        seen = []
+
+        def validate(artifact, **kwargs):
+            seen.append(kwargs.get("floor_pinset_path"))
+            return ["stop here"]
+
+        pinset = Path("/synthetic/mint/floor-mint-pinset.json")
+        with mock.patch.object(a, "validate_claim_verdicts", validate), self.assertRaises(a.ResultsFillAdapterError):
+            a.adapt_claim_verdicts(json.dumps({"contrasts": []}).encode(), campaigns={}, finalized_manifest_raw=b"{}",
+                                   floor_pinset_path=pinset)
+        self.assertEqual(seen, [pinset])
+
+    def test_builder_finds_the_sibling_pinset_and_keeps_the_legacy_path(self):
+        import json
+        from scripts import build_results_fill_input as b
+        with tempfile.TemporaryDirectory(prefix="s10-fill-pinset-") as tmp:
+            mint = Path(tmp) / "mint"
+            mint.mkdir()
+            floor = mint / "d-aggregate-floor.json"
+            floor.write_text(json.dumps({"provenance": {"calibration_plan": {"relative_path": "floor-mint-pinset.json"}}}))
+            self.assertIsNone(b._sibling_pinset_or_none(floor))
+            (mint / "floor-mint-pinset.json").write_text("{}")
+            self.assertEqual(b._sibling_pinset_or_none(floor), mint / "floor-mint-pinset.json")
+
+
+class QRendererProductionTests(unittest.TestCase):
+    """Q-RENDERER: the Window-A Results renderer cannot render a block-5 fill input."""
+
+    BLOCK5_INPUT = {
+        "schema_version": "joulewise.results_fill_input.v1",
+        "campaigns": {"alpha": {"plan_id": "a", "attempt": 1}, "beta": {"plan_id": "b", "attempt": 1}},
+        "gamma": {"contrasts": []},
+        "characterization": {"funded": False, "run": False, "verdict": None},
+    }
+
+    def _run(self, main, argv):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_real_renderer_stops_on_the_block5_fill_input_shape(self):
+        import json
+        from scripts import render_results_fills as render
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fill.json"
+            path.write_text(json.dumps(self.BLOCK5_INPUT))
+            code, out, err = self._run(render.main, [str(path)])
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("REFUSAL_REASON_1p5B_floor_window", err)
+
+    def test_step11_never_calls_renderer_and_records_registered_flag(self):
+        from types import SimpleNamespace
+        from joulewise.b5_analysis import dry_run as dry
+        from scripts import render_results_fills as render
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / 'disclosures').mkdir()
+            for name in ('record.json', 'view.released.txt', 'view.unreleased.txt'):
+                (root / 'disclosures' / name).write_text('{}')
+            from scripts import produce_b5_disclosures as disclosures
+            outputs = {role: {'name': role, 'sha256': 'a'*64} for role in disclosures.ROLES}
+            state = SimpleNamespace(outputs=outputs, restricted=root, index_path=root/'index.json',
+                write=mock.Mock(), register=mock.Mock(), rehash=mock.Mock(),
+                output=lambda role: root/role, path=lambda name: root/name,
+                invoke=mock.Mock(return_value=(None, None, None, 0)),
+                record=lambda step, **kwargs: kwargs)
+            with mock.patch.object(dry, '_internal_step', return_value=[SimpleNamespace(status='ok')]), \
+                 mock.patch.object(render, 'main', side_effect=AssertionError('renderer called')):
+                rows = dry.step_11(state, None)
+            self.assertEqual(state.invoke.call_count, 2)
+            self.assertEqual(rows[0]['flags'], ('results_rendering_not_run_no_block5_template',))
+            self.assertFalse((root/'outputs/results-fills.md').exists())
+
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class ExactStackRulingTests(unittest.TestCase):
+    @staticmethod
+    def case():
+        import json
+        from joulewise import detection_floor as df
+        from joulewise.analysis_engine import inputs as ai
+        from tests.test_analysis_inputs import _bundle_evidence, _stack_metadata_for
+        from tests.test_detection_floor import make_artifact, make_cell, make_regime
+        root = Path(__file__).resolve().parents[2]
+        pack = root / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
+        tree = json.loads((pack / 'plan_tree.json').read_bytes())
+        unit = tree['arm_attachments']['identity_pin_projection']['identity_units'][0]
+        config = json.loads((pack / unit['config_inventory'][0]['path']).read_bytes())
+        metadata = _stack_metadata_for(config)
+        stack = ai.floor_stack_identity(config, metadata)
+        family = json.loads((pack / 'condition_families/condition_family_sw_decode_a_qwen3-1p7b.json').read_bytes())
+        admitted = {'condition_family_id': family['condition_family_id'],
+                    'condition_family_definition': family,
+                    'condition_family_sha256': df.canonical_domain_sha256(df.CONDITION_FAMILY_DOMAIN, family)}
+        source = copy.deepcopy(family); source['condition_family_id'] = 'df-source'
+        cell = make_cell(cell_id='df-source-cell', regime=make_regime(stack_identity=stack),
+                         condition='df-source', metric='phase_energy_j.decode')
+        artifact = make_artifact([cell]); artifact['calibration_scope'] = 'production_window'
+        cell = artifact['cells'][0]
+        cell['key'].update(condition_family_definition=source,
+            condition_family_sha256=df.canonical_domain_sha256(df.CONDITION_FAMILY_DOMAIN, source), window_class='phase')
+        group = artifact['transport_groups'][0]
+        group.update(window_class='phase', allowed_consumer_condition_families=[admitted])
+        evidence = [_bundle_evidence('synthetic-consumer', config, metadata)]
+        sha = cell['source_regime']['stack_identity_sha256']
+        binding = ai.FloorEvidenceBinding(frozenset({cell['cell_id']}), {cell['cell_id']: 'f'*64},
+                    {cell['cell_id']: sha}, frozenset(), {}, ())
+        contrast = {'contrast_id': 'gamma-shaped', 'measurement_arm': 'decode',
+                    'condition_a_id': family['condition_family_id'], 'condition_b_id': 'unused-B',
+                    'floor_selector': {'backend': 'from_bundle', 'metric': 'phase_energy_j.decode',
+                      'window_class': 'phase', 'floor_field': 'floor_gate_j',
+                      'condition_family_ids': [family['condition_family_id']]}}
+        contrast['floor_dependency'] = {'floor_selector': contrast['floor_selector'], 'transport': {
+            'mode': 'exact_stack_only', 'transport_groups': [{'transport_group_id': group['transport_group_id'],
+             'condition_family_id': family['condition_family_id'], 'condition_domain_sha256': admitted['condition_family_sha256'],
+             'group_rule_id': group['rule_id']}]}}
+        # The close-out contract inventories four floor cells. The other three
+        # have independent group ids and do not serve this consumer family.
+        for index in range(3):
+            peer = copy.deepcopy(cell)
+            peer['cell_id'] = f'other-cell-{index}'
+            peer['transport_group_id'] = f'other-group-{index}'
+            artifact['cells'].append(peer)
+        return ai, artifact, cell, admitted, stack, binding, contrast, evidence
+
+    def test_real_source_resolves_at_request_finalizer_closeout_and_resolver(self):
+        from joulewise import analysis_manifest_v3 as v3, dominance_closeout as closeout
+        ai, artifact, cell, admitted, stack, binding, contrast, evidence = self.case()
+        family = admitted['condition_family_id']
+        request = ai._floor_request_or_refusal(artifact, binding, contrast, family, evidence)
+        self.assertIsInstance(request, ai.FloorRequest)
+        self.assertEqual(request.consumer_stress, {})
+        self.assertNotEqual(binding.cell_scientific_identity_sha256[cell['cell_id']],
+                            ai.canonical_json_sha256(ai.scientific_config_identity(evidence[0].raw_config)))
+        resolution = ai.resolve_floor(artifact, '0'*64, request, evidence_binding=binding)
+        self.assertEqual((resolution.status, resolution.source_cell_ids), ('exact', (cell['cell_id'],)))
+        # Singleton max copies the same operand: identity, no measured tolerance.
+        self.assertEqual(resolution.floor_gate_j, cell['floor_gate_j'])
+        prospective = {'condition_families': [{'condition_family_id': family,
+                       'canonical_domain_sha256': admitted['condition_family_sha256']}], 'contrasts': [contrast]}
+        contexts = {family: ('powermetrics', request.stack_identity_sha256, stack)}
+        with mock.patch.object(v3, '_floor_consumer_contexts', return_value=contexts):
+            arms = v3._authenticate_floor_dependencies(prospective, artifact, bundle_paths={})
+        self.assertEqual(arms['decode:A']['floor_cell_id'], cell['cell_id'])
+        finalized = {'arms': [{'arm_id': 'decode:'+arm, 'floor_cell_id': cell['cell_id'],
+                      'condition_family_id': family, 'condition_family_sha256': admitted['condition_family_sha256'],
+                      'floor_stack_identity': stack} for arm in ('A', 'B')], 'contrasts': [contrast]}
+        sidecar = {'cells': [{'cell_id': cell['cell_id'], 'comparative': {
+                   'estimator': 'common_mode', 'common_mode_replay': {}}}]}
+        self.assertIsNone(closeout._contrast_floor_binding_error(finalized, artifact, sidecar))
+
+    def test_kept_applicability_refusals_at_all_three_sites(self):
+        from joulewise import analysis_manifest_v3 as v3, dominance_closeout as closeout
+        from joulewise.detection_floor import exact_stack_serving_cell, canonical_domain_sha256, CONDITION_FAMILY_DOMAIN
+        for variant in ('other-stack', 'unadmitted-family', 'two-sources', 'zero-sources', 'wrong-family-sha',
+                        'phase', 'prompt-length', 'output-length', 'ineligible'):
+            with self.subTest(variant=variant):
+                ai, artifact, cell, admitted, stack, binding, contrast, evidence = self.case()
+                family = admitted['condition_family_id']; sha = admitted['condition_family_sha256']
+                group = artifact['transport_groups'][0]
+                if variant == 'other-stack': cell['source_regime']['stack_identity_sha256'] = '9'*64
+                elif variant == 'unadmitted-family': group['allowed_consumer_condition_families'] = []
+                elif variant == 'two-sources': group['source_cell_ids'].append('another-cell')
+                elif variant == 'zero-sources': group['source_cell_ids'] = []
+                elif variant == 'wrong-family-sha': group['allowed_consumer_condition_families'][0]['condition_family_sha256'] = '9'*64
+                elif variant == 'ineligible': cell['eligibility']['claim_usable'] = False
+                else:
+                    definition = cell['key']['condition_family_definition']
+                    if variant == 'phase': definition['measurement_target']['metric'] = 'phase_energy_j.prefill'
+                    else: definition['workload_profile']['prompt_tokens' if variant == 'prompt-length' else 'output_tokens'] += 1
+                    cell['key']['condition_family_sha256'] = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+                stack_sha = ai.canonical_domain_sha256(ai.STACK_IDENTITY_DOMAIN, stack)
+                self.assertIsNone(exact_stack_serving_cell(artifact, backend='powermetrics',
+                    metric='phase_energy_j.decode', window_class='phase', condition_family_id=family,
+                    condition_family_sha256=sha, stack_identity_sha256=stack_sha))
+                self.assertNotIsInstance(ai._floor_request_or_refusal(artifact, binding, contrast, family, evidence), ai.FloorRequest)
+                prospective = {'condition_families': [{'condition_family_id': family, 'canonical_domain_sha256': sha}], 'contrasts': [contrast]}
+                with mock.patch.object(v3, '_floor_consumer_contexts', return_value={family: ('powermetrics', stack_sha, stack)}), \
+                     self.assertRaisesRegex(v3.AnalysisManifestFinalizationError, 'analysis_finalization_floor_dependency_unsatisfied'):
+                    v3._authenticate_floor_dependencies(prospective, artifact, bundle_paths={})
+                finalized = {'arms': [{'arm_id': 'decode:'+arm, 'floor_cell_id': cell['cell_id'],
+                    'condition_family_id': family, 'condition_family_sha256': sha, 'floor_stack_identity': stack}
+                    for arm in ('A', 'B')], 'contrasts': [contrast]}
+                self.assertEqual(closeout._contrast_floor_binding_error(finalized, artifact, {}), 'floor_cell_unresolved')
+
+
+class RuledLimitationFillReplayTests(unittest.TestCase):
+    def test_all_new_limitation_codes_survive_real_mint_verdict_and_fill_validation(self):
+        import base64
+        import hashlib
+        import json
+        from joulewise.analysis_engine.inputs import authenticate_floor_artifact_bytes
+        from joulewise.analysis_engine.artifact import calculate_claim_verdicts_id, validate_claim_verdicts, render_claim_verdicts
+        from joulewise.results_fill_adapter import adapt_claim_verdicts, validate_results_fill_projection
+        from tests.test_analysis_claims import minimal_artifact
+        # Two actual producer windows; one carrier is unreadable here and the
+        # other producer is legacy. Component bytes and numbers still bind.
+        floor, _components, pinset = _lineage_bearing_artifacts(lambda i: _window_lineage(0) if i == 0 else None)
+        raw = json.dumps(floor).encode()
+        with tempfile.TemporaryDirectory() as td:
+            path, digest = g.write_pinset(Path(td), pinset)
+            authenticated = authenticate_floor_artifact_bytes(raw, pinset_path=path, expected_pinset_sha256=digest)
+            verdict = minimal_artifact()
+            verdict['inputs']['floor_artifact'] = {'artifact_id': floor['artifact_id'],
+                'file_sha256': hashlib.sha256(raw).hexdigest(), 'embedded_bytes_base64': base64.b64encode(raw).decode()}
+            family = verdict['contrasts'][0]['conditions']['condition_a_id']
+            notes = list(authenticated.limitations) + [
+                'consumer_identity_set_unauthenticated:' + family,
+                'consumer_identity_recording_difference:' + family,
+                'floor_cell_from_floor_pack:' + family + ':' + floor['cells'][0]['cell_id'] + ':no_envelope_comparison',
+            ]
+            verdict['inputs']['limitations'] = notes
+            roots = {}
+            for cell in floor['cells']:
+                for kind in ('absolute', 'comparative'):
+                    component = cell['provenance'][kind]
+                    roots.setdefault(component['evidence_root_id'], set()).add(component['campaign_log']['sha256'])
+            verdict['supersession_audit'] = [verdict['supersession_audit'][0]] + [
+                {'scope': 'floor_evidence', 'evidence_root_id': root,
+                 'authenticated_basis': {'kind': 'floor_component_campaign_log_sha256', 'sha256s': sorted(hashes)},
+                 'raw_count': 0, 'validated_count': 0, 'status': 'clean'} for root, hashes in roots.items()]
+            verdict['claim_verdicts_id'] = calculate_claim_verdicts_id(verdict)
+            self.assertEqual(validate_claim_verdicts(verdict, floor_pinset_path=path), [])
+            fill = adapt_claim_verdicts(render_claim_verdicts(verdict), campaigns={'alpha': {}, 'beta': {}}, floor_pinset_path=path)
+            self.assertEqual(fill['gamma']['limitations'], notes)
+            self.assertEqual(fill['gamma']['contrasts'][0]['limitations'], notes)
+            self.assertEqual({note.split(':')[0] for note in notes}, {
+                'floor_launch_lineage_unauthenticated', 'floor_producer_lineage_absent',
+                'consumer_identity_set_unauthenticated', 'consumer_identity_recording_difference', 'floor_cell_from_floor_pack'})
+            validate_results_fill_projection(fill, verdict)

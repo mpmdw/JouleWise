@@ -111,7 +111,8 @@ A `results-fill-registry.md` row is **custody-bound** when its supplier column n
 `paper_custody` family and role as `<family>/<supply role>`. Every claim-bearing row must
 be custody-bound before its value renders; a row naming no family and role is
 `STOP_FILL`. The table below enumerates every custody-bound row and is the only such
-enumeration. (Today it is empty: all five roles are fixtures.)
+enumeration. (Today it is empty: the three production roles of the supply map
+have no registry row yet, and the fixture roles never render.)
 
 | Registry row | Family / supply role |
 |---|---|
@@ -196,23 +197,56 @@ Lookup is exact and mechanical:
    root. No public binding, inventory, receipt, path, digest, validator, or
    source-digest parameter exists.
 
-The fixed map currently registers five synthetic roles only. Their bytes carry
+**The binding-census form (lane L9, 2026-10-13).** *Forcing problem:* the
+inputs of a block-5 production role (an extraction report, a verdict file, a
+finalized manifest, a floor artifact) are written by the analysis itself, after
+the analysis code and this map are pinned by commit. Neither their digests nor
+their file names, which carry a digest, can be in a tracked file that may not
+change after the pin. So a production entry may instead have exactly the keys
+`family`, `validator`, `mode` (`production` only), `issuance_gate_id`,
+`subjects` and `binding_census`, where `binding_census` is
+`{"base": "runs_root", "path": "<relative POSIX path>"}`. The file it names is
+the role's *binding census*: strict JSON, schema
+`joulewise.paper_supply_census.v1`, exact keys `schema_version`, `supply_role`,
+`inputs`, `inventory`, `receipt`, `source_census`, the last four in exactly the
+formats of the classic entry above. Lookup reads it once without following a
+symlink, requires `supply_role` to equal the role asked for, merges its four
+binding keys into the entry, and continues as for a classic entry. An entry
+with both forms, a fixture-mode entry with `binding_census`, a census naming
+another role, or an unreadable census is `paper_custody_supply_map_invalid`.
+
+The census is itself a binding of the role, with the SHA-256 of the bytes just
+read as its expected digest. It is in the identity-uniqueness check, the set of
+allowed reads, the reopen step and the evidence's input records. It is in no
+digest list: not the inventory's `files`, not the receipt's `inputs`, not its
+own `source_census`. (If it were, the census would have to name the inventory's
+digest while the inventory named the census's.) A census whose own path is one
+of the bindings it lists is `paper_custody_evidence_ambiguous`.
+
+What then protects a number is not the census: each production gate recomputes
+its numbers from the analysed windows, which it reaches through the tracked
+window index `configs/analysis/b5/analysed_windows.json` (read as the anchored
+commit's blob, never a caller's path) and each window's authenticated harvest
+archive. A wrong census can only make a gate refuse, or compare its
+recomputation with a different file.
+
+The committed map registers three production roles in this form and no pending
+role: `production.reported_energy_parents.qwen3-1p7b.v5` and
+`production.reported_energy_parents.qwen3-8b.v5` (gate `reported-energy.v1`;
+subjects the decode and prefill-p2048 reported cells of that model, never p42;
+census `supply-census/reported-energy-alpha.json` and `...-beta.json`), and
+`production.claim_evidence.gamma.v5` (gate `claim-evidence.v1`; subjects the
+two registered contrasts; census `supply-census/claim-evidence-gamma.json`).
+The map holds no digest of any window's file. The analysis driver writes each
+census, with its inventory and receipt, into the analysis custody root.
+
+The synthetic fixture roles are computed at test time
+(`tests/fixtures/paper_custody/repin.py`) and are not in the committed map. Their bytes carry
 `synthetic-no-measurement-value`; map and inventory modes must agree on
 `test_fixture_non_issuing`, gate ID must be null, and subjects must be empty.
 Each returns its distinct `Fixture*` type. The reported-energy fixture exercises
 a repository `git_blob` extraction spec, and every fixture has a transitive
 source read in its census. These are synthetic authentication controls.
-
-Both production roles `production.reported_energy_parents.qwen3-1p7b.v5` and
-`production.reported_energy_parents.qwen3-8b.v5` are **pending**, recorded only
-in `pending_roles`, which grants no lookup or issuance authority. The 8b role
-is included by the S2 fix ruling because both models are cells of the D-179
-registration. Their prospective `EXTRACTION_SPEC` blobs are respectively
-`configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` and
-`configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json`. Desk-day
-registration must use each real reviewed/committed blob and full production
-census under D-138/D-166 successor naming; a fixture or old pack cannot replace
-it. Production Git-blob coverage remains unfulfilled until that registration.
 
 
 ## Family censuses
@@ -234,8 +268,11 @@ the reported-energy input names below.
 | Transfer | `transfer_result`, `reviewed_capture`, `plan`, `pre_data_receipt`, `pulse_bound_source`, `bundle_inventory` |
 
 Production D-165 and claim inputs append `floor_acceptance` to their fixed
-census. Every map entry also pins its complete transitive `source_census`;
-unmapped owner reads refuse.
+census; production claim inputs then append `claim_replay_request`. Every map
+entry also pins its complete transitive `source_census`; unmapped owner reads
+refuse. (The two block-5 gates that recompute from the analysed windows do so
+outside the read session, so those reads need no `source_census` row; see
+"Family replay requirements".)
 
 Every family additionally reads its `custody_inventory` and
 `validator_receipt` locators from the same map entry.
@@ -290,20 +327,21 @@ Whole-window issuance, admitted or non-admitted, remains stopped until a registe
 
 ## Family replay requirements
 
-The separate D-179 projection contract is `docs/contracts/paper_reported_energy.md`.
-Its executable registrations and non-issuing synthetic kernel are installed;
-production joins remain pending. The future reported-energy gate must replay `validate_extraction_spec` and
-`validate_d117_mint_consumption_report`. Its production entry must also
-inventory the full ordered extraction-spec `reported_energy_cells[].members` universe and every
-strict-bundle input consumed by the projection. The closed mint-consumption
+The separate D-179 projection contract is `docs/contracts/paper_reported_energy.md`;
+its section "Custody and the production issuer" is the normative description of
+the reported-energy gate `reported-energy.v1`. In short: the gate replays
+`validate_extraction_spec`, the registered-spec census and
+`validate_d117_mint_consumption_report` on the supplied bytes, identifies the
+pack by its sealed extraction spec, runs the issuer again through the tracked
+window index, checks the three parent inputs against the projection's binding
+digests, and grants `cell` per issued subject. The closed mint-consumption
 report is unchanged; computed results belong to the separate typed frozen field
 `reported_energy_projection` on both reported-energy result types, never to an
-invented report field. The new owner module, phase-ratio validator, bundle
-reader and typed whole-window owner are
-in the transitive source census. Optional fixture `projection_input` is
-synthetic-only and cannot issue a cell. D-179 fixes the fifty-member mean,
-stratified t9 interval and observed ratio of totals, but authentic production
-replay and registration-before-spec proof still gate issuance.
+invented report field. The issuer's gate, the owner module, the phase-ratio
+validator, the bundle reader and the typed whole-window owner are in the
+transitive source census. Optional fixture `projection_input` is synthetic-only
+and cannot issue a cell. Registration-before-spec proof still runs before every
+dispatch of this gate.
 
 D-165 replays the finalized-manifest validator, floor authentication,
 `validate_d165_replay_sidecar`, and `validate_d165_closeout`. The adapter and
@@ -325,15 +363,49 @@ byte equality, floor acceptance and `validate_claim_side_bound`. The adopted
 [claim-side contract](paper_claim_side_bound.md) owns the copy-only v2 producer,
 verdict-resolution ordered join, required anchor kind, typed complete widening
 and exact numeral-byte equality for bounds, components and both intervals.
-The gate regenerates that projection from authenticated verdict bytes and
-reevaluates claims from verdict fields only. Outcome grants require each
-selected contrast to be current, confirmatory and structurally valid; L2
-additionally needs reevaluated readiness/ceiling. Mixed subjects never share
-licensing. This registration adds no production supply-map role or renderer;
-X6/X7 remain PROPOSED_STOP_FILL pending the later post-S2 rendering seat.
+The gate regenerates that projection from authenticated verdict bytes. Outcome
+grants require each selected contrast to be current, confirmatory and
+structurally valid; L2 additionally needs reevaluated readiness/ceiling. Mixed
+subjects never share licensing. `evidence_class` is read at
+`inputs.evidence_class`, where the claim engine writes it and its validator
+requires it; a top-level key is rejected by that validator.
 
-Reported-energy joins, whole-window F6 and transfer acceptance are incomplete,
-so their gates remain unregistered.
+**The claim replay (lane L9, 2026-10-13).** *Forcing problem:* reevaluating a
+claim from the verdict file's own fields shows only that the stored outcome
+follows from the stored estimate. A verdict file whose estimate, intervals and
+digests were all shifted together stays internally consistent and would be
+admitted. So the gate runs the claim engine (`analyze_claims`) again and
+requires the bytes it would write to equal the supplied verdict file's bytes:
+a difference is `claim_verdicts_replay_mismatch`; a replay that cannot run is
+`claim_verdicts_replay_refused`, which carries no engine message. Equality is
+on the whole file's bytes, so no tolerance exists to choose; a file with the
+same numbers in another key order was not written by the engine and refuses.
+
+The replay's inputs come from the production input `claim_replay_request`
+(schema `joulewise.claim_replay_request.v1`; exact keys `schema_version`,
+`claim_verdicts_sha256`, `analysis_manifest_sha256`, `floor_artifact_sha256`,
+`window_index_sha256`, `evidence_roots`, `legacy_l1_mechanics`). The three
+digests must equal those of the supplied verdicts, finalized manifest and
+floor; `window_index_sha256` must equal the digest of the tracked window
+index; `evidence_roots` maps each evidence-root ID the floor artifact declares
+to a pack name, `alpha` or `beta`, never a path; `legacy_l1_mechanics` must be
+false. The gate resolves each pack name to that pack's analysed window through
+the index and runs the engine exactly as the `analyze-claims` command runs it
+on a block-5 root (kept units and one archive context per window from
+`block5_claim_gate_inputs`). The engine runs outside the custody read session,
+so its bundle reads are neither recorded nor added to the role's census; it
+authenticates each bundle against the finalized manifest and each window
+through the index. With a request present the finalized-manifest validator is
+given the tracked window index, which a finalized block-5 manifest requires.
+The replay runs only when every earlier validator passed, and before floor
+acceptance.
+
+X6/X7 remain PROPOSED_STOP_FILL pending the later rendering seat: the
+production claim role exists so that the blind dry run exercises this gate, not
+to print a placement.
+
+Whole-window F6 and transfer acceptance are incomplete, so their gates remain
+unregistered.
 The whole-window typed validator remains in the source census; no flattened
 empty-code result can replace its authenticity/admission semantics. F6 and its
 empirical non-admission renderer are not implemented in Round 5.

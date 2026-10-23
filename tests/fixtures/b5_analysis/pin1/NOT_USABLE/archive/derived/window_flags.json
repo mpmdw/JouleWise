@@ -1,0 +1,337 @@
+{
+  "catalog": {
+    "path": "/private/tmp/b5-s0-alpha-pin1-xrawp5_r/measurement/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+    "sha256": "5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d"
+  },
+  "collector_errors": [],
+  "exclusions": {
+    "cells": [
+      {
+        "cell_id": "df-b5t-family",
+        "dropped_units": [
+          {
+            "codes": [
+              "member.whole_window_member_failure"
+            ],
+            "positions": [
+              2,
+              3,
+              4,
+              5
+            ],
+            "run_ids": [
+              "s0-alpha-b01-a1",
+              "s0-alpha-b01-a2",
+              "s0-alpha-b01-b1",
+              "s0-alpha-b01-b2"
+            ],
+            "stratum": "quad",
+            "unit_id": "s0-alpha-b01"
+          },
+          {
+            "codes": [
+              "member.whole_window_member_failure"
+            ],
+            "positions": [
+              0
+            ],
+            "run_ids": [
+              "s0-alpha-r01"
+            ],
+            "stratum": "repeat",
+            "unit_id": "s0-alpha-r01"
+          },
+          {
+            "codes": [
+              "member.whole_window_member_failure"
+            ],
+            "positions": [
+              1
+            ],
+            "run_ids": [
+              "s0-alpha-r02"
+            ],
+            "stratum": "repeat",
+            "unit_id": "s0-alpha-r02"
+          }
+        ],
+        "kept_units": {
+          "quad": [],
+          "repeat": []
+        },
+        "minimum": {
+          "quad": 5,
+          "repeat": 5
+        },
+        "n_kept": {
+          "quad": 0,
+          "repeat": 0
+        },
+        "n_quads": 0,
+        "n_repeats": 0,
+        "planned": {
+          "quad": 1,
+          "repeat": 2
+        },
+        "resolvable": false,
+        "target": true
+      }
+    ],
+    "claim_usable": false,
+    "members_excluded": [
+      {
+        "codes": [
+          "member.whole_window_member_failure"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 0,
+        "run_id": "s0-alpha-r01"
+      },
+      {
+        "codes": [
+          "member.whole_window_member_failure"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 1,
+        "run_id": "s0-alpha-r02"
+      },
+      {
+        "codes": [
+          "member.whole_window_member_failure"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 2,
+        "run_id": "s0-alpha-b01-a1"
+      },
+      {
+        "codes": [
+          "member.whole_window_member_failure"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 3,
+        "run_id": "s0-alpha-b01-b1"
+      },
+      {
+        "codes": [
+          "member.whole_window_member_failure"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 4,
+        "run_id": "s0-alpha-b01-b2"
+      },
+      {
+        "codes": [
+          "member.whole_window_member_failure"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 5,
+        "run_id": "s0-alpha-b01-a2"
+      }
+    ],
+    "reasons": [
+      "calibration.binding_failed",
+      "cell.below_minimum"
+    ],
+    "release_blocked": false,
+    "unclassified": []
+  },
+  "flags": {
+    "by_code": {
+      "calibration.binding_failed": 1,
+      "diagnostic.s1_structural": 3,
+      "g3.not_applicable": 1,
+      "lineage.locator_unreadable": 2,
+      "member.whole_window_member_failure": 6,
+      "neg8.corpus_member_dropped": 1,
+      "roster.not_in_plan": 12,
+      "thermal.battery_temperature_unmeasured": 2,
+      "thermal.os_level_nonzero": 1,
+      "whole_window.not_passed": 1
+    },
+    "by_effect": {
+      "DISCLOSE": 10,
+      "EXCLUDE_MEMBER": 19,
+      "EXCLUDE_WINDOW": 1
+    },
+    "by_family": {
+      "CALIBRATION": 1,
+      "DIAGNOSTIC": 6,
+      "MEMBER_VALIDITY": 6,
+      "NEG8": 2,
+      "PHYSICS_IN_SPAN": 1,
+      "RECORDS": 2,
+      "ROSTER": 12
+    },
+    "total": 30,
+    "unclassified": []
+  },
+  "hazards": {
+    "battery": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "battery",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "clock": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "clock",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "contention": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "contention",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "disk": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "disk",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "instrument": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "instrument",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "thermal": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "thermal",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    }
+  },
+  "schema": "joulewise.window_flags.v1",
+  "window": {
+    "attempt": 1,
+    "boot_session_uuid": "B5-S0-MOCK-BOOT",
+    "custody_root": "/private/tmp/b5-s0-alpha-pin1-xrawp5_r/custody",
+    "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "pack_id": "s0_alpha_mock_v5",
+    "plan_id": "s0-alpha-plan",
+    "t0_epoch_s": 1791500000
+  },
+  "yield": {
+    "j3_failed_stages": [],
+    "per_collection_stage": [],
+    "per_roster_stage": [
+      {
+        "planned": 2,
+        "present": 2,
+        "raw_valid": 2,
+        "stage_id": "01_abs",
+        "strict_deferred": 0,
+        "succeeded": 2
+      },
+      {
+        "planned": 4,
+        "present": 4,
+        "raw_valid": 4,
+        "stage_id": "02_abba",
+        "strict_deferred": 0,
+        "succeeded": 4
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "end_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      },
+      {
+        "planned": 1,
+        "present": 1,
+        "raw_valid": 1,
+        "stage_id": "midpoint_reference",
+        "strict_deferred": 0,
+        "succeeded": 1
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "start_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      }
+    ],
+    "planned": 13,
+    "present": 13,
+    "raw_valid": 13,
+    "schema": "joulewise.b5_harvest_yield.v1",
+    "stage_journal": null,
+    "strict_deferred": 0,
+    "succeeded": 13,
+    "unresolved_collection_stages": [],
+    "window_stage_yield": null
+  }
+}

@@ -247,7 +247,7 @@
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 876,
+    "line": 878,
     "phrase": "common-time",
     "reason": "Replay docstring begins here and explicitly denies proven conservatism for common-time motion."
   },

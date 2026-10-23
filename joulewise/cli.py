@@ -2080,6 +2080,23 @@ def _cmd_analyze_claims(args: argparse.Namespace) -> int:
     from joulewise.analysis_engine.artifact import ClaimArtifactError
 
     try:
+        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs
+        from joulewise.window_lineage import is_hazard_runs_root
+        window_index = getattr(args, "window_index", None)
+        block5 = is_hazard_runs_root(Path(args.runs_root))
+        if block5 and window_index is None:
+            raise AnalysisInputError("window_index_required")
+        if not block5 and window_index is not None:
+            raise AnalysisInputError("kept_units_not_a_block5_root")
+        archive_inputs = {}
+        if block5:
+            if args.neg8_harvest_archive is None:
+                raise AnalysisInputError("neg8_harvest_archive_required")
+            built = block5_claim_gate_inputs(Path(window_index), Path(args.analysis_manifest),
+                                            Path(args.runs_root), args.evidence_roots)
+            if Path(args.neg8_harvest_archive).resolve() != built["gamma_archive"].window.archive_root.resolve():
+                raise AnalysisInputError("neg8_archive_differs_from_window_index")
+            archive_inputs = {key: built[key] for key in ("kept_units", "archive_contexts", "gamma_archive")}
         artifact = analyze_claims(
             Path(args.analysis_manifest),
             Path(args.runs_root),
@@ -2087,10 +2104,11 @@ def _cmd_analyze_claims(args: argparse.Namespace) -> int:
             strict_validator=validate_bundle,
             evidence_roots=args.evidence_roots,
             output_path=Path(args.output),
+            **archive_inputs,
             legacy_l1_mechanics=args.legacy_l1_mechanics,
             legacy_allowlist=_STRICT_LEGACY_BUNDLE_IDENTITIES,
             neg8_harvest_archive=(
-                Path(args.neg8_harvest_archive)
+                built["gamma_archive"].window.archive_root if block5 else Path(args.neg8_harvest_archive)
                 if args.neg8_harvest_archive is not None
                 else None
             ),
@@ -2403,6 +2421,7 @@ def build_parser() -> argparse.ArgumentParser:
             "(required for a HAZARD runs root)"
         ),
     )
+    analyze.add_argument("--window-index", default=None, help="authenticated block-5 window index")
     analyze.set_defaults(func=_cmd_analyze_claims)
 
     report = subparsers.add_parser(

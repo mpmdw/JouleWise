@@ -304,6 +304,71 @@ class _FamilyFixture:
         self._temporary.cleanup()
 
 
+class BindingCensusProductionTests(unittest.TestCase):
+    """T17b exercises the real open/reopen boundary with only the gate stubbed."""
+
+    def production_fixture(self):
+        family="whole_window_verdict"
+        key=(family,"synthetic-census.v1")
+        def gate(ctx):
+            return custody._FamilyReplay(True,True,
+                tuple(custody._RenderGrant("positive",subject) for subject in ctx.subjects),())
+        patch=mock.patch.dict(custody._ISSUANCE_GATES,{key:gate})
+        patch.start();self.addCleanup(patch.stop)
+        fixture=_FamilyFixture(family);self.addCleanup(fixture.close)
+        entry=copy.deepcopy(fixture.entry)
+        entry.update(mode="production",issuance_gate_id=key[1],subjects=["synthetic-window"])
+        inventory_path=fixture.runs_root/entry["inventory"]["path"]
+        inventory=json.loads(inventory_path.read_bytes());inventory["mode"]="production"
+        inventory_raw=_json_bytes(inventory);inventory_path.write_bytes(inventory_raw)
+        entry["inventory"]["expected_sha256"]=_sha(inventory_raw)
+        keys=("inputs","inventory","receipt","source_census")
+        census={"schema_version":"joulewise.paper_supply_census.v1","supply_role":fixture.role,
+                **{key:entry[key] for key in keys}}
+        path=fixture.runs_root/"supply-census/window.json";path.parent.mkdir()
+        raw=_json_bytes(census);path.write_bytes(raw)
+        dynamic={key:value for key,value in entry.items() if key not in keys}
+        dynamic["binding_census"]={"base":"runs_root","path":"supply-census/window.json"}
+        supply_map=copy.deepcopy(fixture.supply_map);supply_map["roles"][fixture.role]=dynamic
+        (fixture.anchor_root/custody._SUPPLY_MAP_PATH).write_bytes(_json_bytes(supply_map))
+        subprocess.run(["git","add","."],cwd=fixture.anchor_root,check=True,capture_output=True)
+        subprocess.run(["git","commit","-qm","synthetic production census"],
+                       cwd=fixture.anchor_root,check=True,capture_output=True)
+        fixture.head=subprocess.check_output(["git","rev-parse","HEAD"],cwd=fixture.anchor_root,text=True).strip()
+        return fixture,path,raw,census
+
+    def test_T17b_production_open_records_independent_census(self):
+        fixture,path,raw,census=self.production_fixture()
+        result=custody.open_paper_input(fixture.ref)
+        self.assertIs(type(result),custody.VerifiedWholeWindowVerdict)
+        self.assertTrue(result.evidence.issuance_authorized)
+        record=next(record for record in result.evidence.inputs
+                    if record.relative_path=="supply-census/window.json")
+        self.assertEqual(record.role,custody.InputRole.AUTHENTICATED_SOURCE)
+        self.assertEqual(record.sha256,_sha(raw))
+        for name,rows in [("inventory",json.loads((fixture.runs_root/census["inventory"]["path"]).read_bytes())["files"]),
+                          ("receipt",json.loads((fixture.runs_root/census["receipt"]["path"]).read_bytes())["inputs"]),
+                          ("census",census["source_census"])]:
+            with self.subTest(list=name):self.assertNotIn("supply-census/window.json",[row["path"] for row in rows])
+
+    def test_T17b_changed_census_between_gate_and_reopen_refuses(self):
+        fixture,path,raw,census=self.production_fixture()
+        with mock.patch.object(custody,"_after_validator_replay",side_effect=lambda state:path.write_bytes(raw+b" ")):
+            with self.assertRaises(custody.PaperCustodyRefusal) as cm:
+                custody.open_paper_input(fixture.ref)
+        self.assertEqual(cm.exception.code,"paper_custody_input_changed")
+        self.assertEqual(cm.exception.input_role,custody.InputRole.AUTHENTICATED_SOURCE)
+
+    def test_T17b_census_inventory_digest_disagreement_refuses(self):
+        fixture,path,raw,census=self.production_fixture()
+        census["inventory"]["expected_sha256"]="0"*64
+        path.write_bytes(_json_bytes(census))
+        with self.assertRaises(custody.PaperCustodyRefusal) as cm:
+            custody.open_paper_input(fixture.ref)
+        self.assertEqual(cm.exception.code,"paper_custody_digest_mismatch")
+        self.assertEqual(cm.exception.input_role,custody.InputRole.CUSTODY_INVENTORY)
+
+
 class PaperCustodyCensusTests(unittest.TestCase):
     def _fixture(self, family: str) -> _FamilyFixture:
         fixture = _FamilyFixture(family)
@@ -604,7 +669,10 @@ class PaperCustodyApiTests(unittest.TestCase):
 
     def test_malformed_pending_roles_refuse_every_fixture_family(self) -> None:
         supply_map = fixture_repin.fixture_supply_map()
-        role, pending = next(iter(supply_map["pending_roles"].items()))
+        role = "production.reported_energy_parents.qwen3-1p7b.v5"
+        pending = {"status": "pending_desk_day", "family": "reported_energy_parents", "input_role": "extraction_spec",
+                   "base": "repository", "authority": "git_blob",
+                   "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json"}
         malformed = [
             None, 7, [], "pending_desk_day",
             *({key: pending} for key in ("", "UPPERCASE", "pending/role")),
@@ -646,7 +714,7 @@ class PaperCustodyApiTests(unittest.TestCase):
             and value.__module__ == custody.__name__
             and not name.startswith("_")
         }
-        self.assertEqual(public_functions, {"open_paper_input"})
+        self.assertEqual(public_functions, {"open_paper_input", "claim_replay_request"})
         self.assertNotIn("BoundFile", custody.__all__)
         self.assertNotIn("ReceiptRef", custody.__all__)
 
@@ -810,7 +878,8 @@ class RoundFiveTests(unittest.TestCase):
 
     def test_closed_gate_registry(self):
         self.assertEqual(set(custody._ISSUANCE_GATES), {("d165_closeout", "d165-closeout.v1"),
-                                                            ("claim_evidence", "claim-evidence.v1")})
+                                                            ("claim_evidence", "claim-evidence.v1"),
+                                                            ("reported_energy_parents", "reported-energy.v1")})
         ctx = self.context()
         for gate_id in (None, "unknown.v1", "reported-energy.v1"):
             self.assert_code("paper_custody_issuance_gate_unregistered", custody._run_issuance_gate,
@@ -891,8 +960,8 @@ class RoundFiveTests(unittest.TestCase):
         unsupported["multiplicity"]["rejected"] = False  # Deliberately lying ready flag.
         demoted = copy.deepcopy(supported); demoted["contrast_id"] = "demoted"
         demoted["sampling"]["confirmatory_status"] = "exploratory"
-        artifact = {"evidence_class": "current", "contrasts": [supported, unsupported, demoted],
-                    "inputs": {"floor_artifact": {"embedded_bytes_base64": ""}}}
+        artifact = {"contrasts": [supported, unsupported, demoted],
+                    "inputs": {"evidence_class": "current", "floor_artifact": {"embedded_bytes_base64": ""}}}
         for row in artifact["contrasts"]:
             row["floor"]["resolutions"] = [{"status": "exact", "source_cell_ids": [row["contrast_id"]]}]
         floor = {"artifact_id": "synthetic-floor",
@@ -909,6 +978,8 @@ class RoundFiveTests(unittest.TestCase):
         ctx.raws[custody.InputRole.CLAIM_SIDE_BOUND] = sidecar_raw
         ctx.raws[custody.InputRole.FLOOR_ACCEPTANCE] = self.acceptance(ctx)
         with ExitStack() as stack:
+            # Replay is mocked here; tests/b5_analysis/test_claim_replay.py tests it.
+            stack.enter_context(mock.patch.object(custody, "_replay_claim_verdicts", return_value=ctx.raws[custody.InputRole.CLAIM_VERDICTS]))
             owner = stack.enter_context(mock.patch("joulewise.analysis_engine.artifact.validate_claim_verdicts", return_value=[]))
             disk = stack.enter_context(mock.patch("joulewise.analysis_manifest_v3.validate_finalized_analysis_manifest_v3", return_value=[]))
             side = stack.enter_context(mock.patch.object(claim_side_bound, "validate_claim_side_bound", wraps=claim_side_bound.validate_claim_side_bound))
@@ -990,19 +1061,14 @@ class RoundFiveTests(unittest.TestCase):
         for model in ("qwen3-1p7b", "qwen3-8b"):
             role = f"production.reported_energy_parents.{model}.v5"
             path = f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
-            if role not in supply["roles"]:
-                self.assertEqual(supply["pending_roles"][role], {
-                    "status": "pending_desk_day", "family": "reported_energy_parents", "input_role": "extraction_spec",
-                    "base": "repository", "authority": "git_blob", "path": path})
-                self.assertTrue(all(entry["mode"] == "test_fixture_non_issuing" for entry in supply["roles"].values()))
-                print("PENDING production Git-blob role: fixture coverage is not production coverage")
-            else:
-                entry = supply["roles"][role]
-                self.assertEqual(entry["mode"], "production")
-                row = next(row for row in entry["inputs"] if row["role"] == "extraction_spec")
-                self.assertEqual((row["base"], row["authority"], row["path"]), ("repository", "git_blob", path))
-                self.assertEqual(_sha(custody._git_blob(ROOT, "HEAD", path)), row["expected_sha256"])
-                self.assertTrue(entry["source_census"])
+            entry = supply["roles"][role]
+            self.assertEqual(entry["mode"], "production")
+            pack = "alpha" if model == "qwen3-1p7b" else "beta"
+            self.assertEqual(entry["binding_census"], {"base": "runs_root", "path": f"supply-census/reported-energy-{pack}.json"})
+            self.assertEqual(entry["issuance_gate_id"], "reported-energy.v1")
+            self.assertEqual(entry["subjects"], [f"d117-reported-mean-ph-{phase}-{model}" for phase in ("decode", "prefill-p2048")])
+        self.assertEqual(supply["pending_roles"], {})
+        self.assertIn("production.claim_evidence.gamma.v5", supply["roles"])
 
     def test_git_blob_dispatch_checks_blob_before_parse_and_worktree(self):
         fixture = self.fixture("reported_energy_parents")
