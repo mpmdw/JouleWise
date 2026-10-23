@@ -226,6 +226,10 @@ class ExitedProcessTests(unittest.TestCase):
 
     def check_regressed_zombie(self, *, unknown_counter=False):
         clocks, table, ctx = machine()
+        if unknown_counter:
+            # One unlisted core keeps the residual above the per-process
+            # limit plus tick/TIME resolution, so the other counter is unmeasured.
+            table.hidden_cpu_per_s = 1.0
         # 0.6 CPU-s/s is twelve times the registered 5% of one-core limit;
         # a 10 s monitor interval measures 6 CPU-s before TIME resets.
         process = table.add(Process(9600, 1, "outside_zombie", cpu_per_s=0.6))
@@ -540,6 +544,102 @@ class PsFormatTests(unittest.TestCase):
                                      include_kernel_task=True, limit=0.05)
         self.assertIsNone(result["error"])
         self.assertGreaterEqual(result["tree_process_count"], 1)
+
+
+class RootPinDwellTests(unittest.TestCase):
+    def test_root_identity_survives_absence_and_reuse_in_later_intervals(self):
+        clocks, table, ctx = machine()
+        root = 5000
+        table.add(Process(root, DRIVER, 'member_pgid_leader', cpu_per_s=0.0))
+        start = clocks.wall_s
+        state = {'removed': False, 'reused': False}
+
+        def tick():
+            elapsed = clocks.wall_s - start
+            # Root absent at the first closing snapshot; impostor appears
+            # halfway through interval two (Opus B), then persists (C).
+            if elapsed >= 15 and not state['removed']:
+                table.ps(contention.PS_ARGV)
+                table.processes.pop(root)
+                state['removed'] = True
+            if elapsed >= 45 and not state['reused']:
+                table.add(Process(root, 1, 'impostor', start_epoch=clocks.wall_s,
+                                  cpu0=0.0, cpu_per_s=1.2))
+                table.add(Process(5001, root, 'impostor_child', start_epoch=clocks.wall_s,
+                                  cpu0=0.0, cpu_per_s=1.2))
+                state['reused'] = True
+
+        limits = {**contention.DEFAULT_THRESHOLDS, 'cap_s': 210}
+        measurement = contention.run_dwell(ctx, limits, tree_roots=[DRIVER, root],
+                                           on_tick=tick, host_reader=table.host_cpu)
+        self.assertEqual(contention.judge(measurement, limits).status, base.REFUSE)
+        for result in measurement.values['intervals'][1:3]:
+            self.assertEqual({entry['command'] for entry in result['outside_over_limit']},
+                             {'impostor', 'impostor_child'})
+
+
+class RegressedCounterBoundTests(unittest.TestCase):
+    def interval(self, *, hidden=0.0, host=True):
+        clocks, table, ctx = machine()
+        table.hidden_cpu_per_s = hidden
+        process = table.processes[330]
+        process.cpu = 12.5
+        reader = table.host_cpu if host else None
+        before = contention.take_snapshot(ctx, host_reader=reader)
+        clocks.sleep(contention.DEFAULT_THRESHOLDS['interval_s'])
+        table.ps(contention.PS_ARGV)  # retain host work before TIME resets
+        process.cpu = process.cpu_per_s = 0.0
+        after = contention.take_snapshot(ctx, host_reader=reader)
+        return contention.interval(before, after, tree_roots=[DRIVER], include_kernel_task=True,
+                                   limit=contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s'])
+
+    def test_quiet_regressed_counter_is_bounded_and_clean(self):
+        result = self.interval()
+        self.assertIs(result['clean'], True)
+        self.assertIsNone(result['error'])
+        entry = next(row for row in result['unaccounted'] if row['reason'] == 'counter regressed')
+        self.assertLessEqual(entry['bounded_by_unattributed_cpu_s_per_s'],
+                             contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']
+                             + result['unattributed_resolution_cpu_s_per_s'])
+        self.assertEqual(contention.span_findings([result], result['interval']), [])
+
+    def test_unattributed_above_limit_and_resolution_is_unmeasured(self):
+        # One unlisted core is 20 times the registered 0.05 CPU-s/s limit.
+        result = self.interval(hidden=1.0)
+        self.assertIsNone(result['clean'])
+        self.assertEqual([f['code'] for f in contention.span_findings([result], result['interval'])],
+                         ['contention.unmeasured'])
+        self.assertEqual(result['outside_over_limit'], [])
+
+    def test_unread_host_cannot_bound_a_regressed_counter(self):
+        result = self.interval(host=False)
+        self.assertIsNone(result['clean'])
+        self.assertIsNotNone(result['error'])
+        self.assertEqual(result['outside_over_limit'], [])
+
+    def test_quiet_zombie_every_150_s_through_the_dwell_passes(self):
+        clocks, table, ctx = machine()
+        start = clocks.wall_s
+        state = {'cycle': 0, 'pid': 9700}
+        def tick():
+            elapsed = clocks.wall_s - start
+            if elapsed >= state['cycle'] + 140 and state['pid'] in table.processes:
+                table.ps(contention.PS_ARGV)
+                p = table.processes[state['pid']]
+                p.cpu = p.cpu_per_s = 0.0
+            if elapsed >= state['cycle'] + 150:
+                table.processes.pop(state['pid'], None)
+                state['cycle'] += 150
+                state['pid'] += 1
+            if state['pid'] not in table.processes:
+                table.add(Process(state['pid'], 1, 'mdworker_shared', cpu_per_s=0.001,
+                                  cpu0=0.5, start_epoch=clocks.wall_s - 3600))
+        tick()
+        measurement = contention.run_dwell(ctx, contention.DEFAULT_THRESHOLDS, tree_roots=[DRIVER],
+                                           on_tick=tick, host_reader=table.host_cpu)
+        self.assertEqual(contention.judge(measurement, contention.DEFAULT_THRESHOLDS).status, base.PASS)
+        self.assertTrue(any(row['reason'] == 'counter regressed'
+                            for result in measurement.values['intervals'] for row in result['unaccounted']))
 
 
 if __name__ == "__main__":

@@ -475,7 +475,8 @@ def _frequency_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int) 
     """Missing/stale f evidence, without inventing a frequency expiry threshold.
 
     Anchor-only samples between scheduled f probes inherit the last read.
-    An error with no f invalidates it until a successful refresh. This uses
+    An error with no f invalidates it until a successful refresh, except
+    an anchor-skew-only error: that can occur without an f probe. This uses
     the recorded probe outcome, independent of the configured f cadence.
     """
 
@@ -484,12 +485,14 @@ def _frequency_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int) 
     for item in samples:
         a = item["started"]["monotonic_ns"]
         b = item["finished"]["monotonic_ns"]
+        failed = any(not part.startswith("clock.unmeasured: anchor read skew")
+                     for part in str(item.get("error") or "").split("; ") if part)
         if item.get("frequency") is not None:
             if missing_since is not None and missing_since <= stop and b >= start:
                 return [missing_since, b]
             missing_since = None
             have_frequency = True
-        elif item.get("error") or not have_frequency:
+        elif failed or not have_frequency:
             if missing_since is None:
                 missing_since = a
             have_frequency = False

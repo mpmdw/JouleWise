@@ -880,7 +880,8 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
       InstantAmperage/Amperage at a publication in force when B0AC does not
       cover the span; IsCharging not No or ExternalConnected not Yes at a
       publication in force (an unread state is not a pass); IsCharging Yes or
-      ExternalConnected No on any good registry read inside the span; a
+      ExternalConnected No on the latest good registry state at or before
+      the span's start, or on any good registry read inside the span; a
       charge-accumulator mean above 200 mA x Voltage.  No publication for
       more than ``max_unobserved_s`` overlapping the span is
       ``battery.unmeasured`` (EXCLUDE_MEMBER).

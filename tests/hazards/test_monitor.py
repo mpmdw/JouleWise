@@ -812,5 +812,42 @@ def _kill_quietly(supervisor: monitor.Supervisor) -> None:
         process.wait(timeout=5)
 
 
+class RootPinLifetimeTests(unittest.TestCase):
+    def test_root_reused_after_an_absent_snapshot_and_in_next_interval_is_outside(self):
+        from tests.hazards.fakes import Process
+
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+            mac = FakeMac(Path(directory))
+            root = 5000
+            mac.table.add(Process(root, DRIVER, 'member_pgid_leader', cpu_per_s=0.0))
+            instance = mac.monitor()
+            instance.tree_roots = (*instance.tree_roots, root)
+            try:
+                instance._contention()
+                mac.clocks.sleep(10)
+                mac.table.ps(contention.PS_ARGV)
+                mac.table.processes.pop(root)
+                instance._contention()
+                mac.clocks.sleep(5)
+                mac.table.ps(contention.PS_ARGV)
+                for pid, parent, command in ((root, 1, 'impostor'),
+                                             (5001, root, 'impostor_child')):
+                    mac.table.add(Process(pid, parent, command, start_epoch=mac.clocks.wall_s,
+                                          cpu0=0.0, cpu_per_s=1.2))
+                mac.clocks.sleep(5)
+                instance._contention()  # Opus B: root absent from before
+                mac.clocks.sleep(10)
+                instance._contention()  # Opus C: reused root in both
+            finally:
+                instance.close_session('test')
+            intervals = monitor.contention_intervals(monitor.load_journals(directory)['contention'])
+            for result in intervals[1:]:
+                with self.subTest(interval=result['interval']):
+                    self.assertEqual({row['command'] for row in result['outside_over_limit']},
+                                     {'impostor', 'impostor_child'})
+                    self.assertEqual([f['code'] for f in contention.span_findings([result], result['interval'])],
+                                     ['contention.request_overlap'])
+
+
 if __name__ == "__main__":
     unittest.main()

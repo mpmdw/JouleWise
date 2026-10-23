@@ -98,6 +98,7 @@ PS_ARGV = ("/bin/ps", "-Ao", "pid,ppid,lstart,time,ucomm")
 PROBE_TIMEOUT_S = 10.0
 KERNEL_TASK = "kernel_task"
 REPORT_FLOOR_CPU_S_PER_S = 0.005  # outside consumers below this are counted, not listed
+PS_TIME_QUANTUM_S = 0.01  # ps TIME renders cumulative CPU seconds to hundredths
 
 # The hazard arm's clean run (gate prune 2, A1).  Not prewindow.MIN_CLEAN_DWELL_S,
 # which stays 600 s for the legacy prewindow dwell.
@@ -333,10 +334,21 @@ def tree_identities(rows: Iterable[Mapping[str, Any]], roots: Iterable[int]) -> 
     return members
 
 
+def pin_roots(snapshot: Snapshot, roots: Iterable[int],
+              identities: dict[int, tuple[int, str]]) -> None:
+    """Remember each root's first observed identity for the collector's lifetime."""
+
+    roots = set(roots)
+    for identity in snapshot.rows:
+        if identity[0] in roots:
+            identities.setdefault(identity[0], identity)
+
+
 def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
              include_kernel_task: bool, limit: float,
              previous_over: Mapping[tuple[int, str], float] | None = None,
-             aggregate_limit: float | None = None) -> dict[str, Any]:
+             aggregate_limit: float | None = None,
+             root_identities: Mapping[int, tuple[int, str]] | None = None) -> dict[str, Any]:
     """CPU-s/s of every process between two snapshots, split by tree membership.
 
     Ported from ``quiet_admission.interval_metrics``: a process present in both
@@ -344,11 +356,17 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     the interval contributes its whole counter; one that exited has no
     measurable delta and is listed as unaccounted.
 
+    ``root_identities`` pins each root's (pid, start) on first sight across
+    the collector's lifetime; standalone callers default to these snapshots.
+    ``tree_process_count`` counts distinct tree identities across both
+    snapshots, including exited tree processes, rather than current live PIDs.
+
     ``previous_over`` maps (pid, start) to the rate of each outside process
     that was above ``limit`` in the previous interval (:func:`over_limit`); one
     of them that exited or regressed its counter inside this interval makes
     it dirty at that rate. A regressed outside counter without that previous
-    evidence leaves the interval unmeasured.
+    evidence is bounded by host CPU not attributed to measured counters;
+    an unread host or a bound above limit plus counter resolution is unmeasured.
     ``aggregate_limit`` (None: not judged) makes the interval dirty when the
     host's busy CPU outside the tree exceeds it; with a limit, an unread host
     term leaves the interval unmeasured.
@@ -368,8 +386,11 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     roots = set(tree_roots)
     # Pin each root to its first observed identity. A reused root PID must
     # not exempt its replacement, or that replacement's descendants.
-    root_identities = {identity[0]: identity for snapshot in (after, before)
-                       for identity in snapshot.rows if identity[0] in roots}
+    if root_identities is None:  # standalone callers have only these two snapshots
+        pins: dict[int, tuple[int, str]] = {}
+        for snapshot in (before, after):
+            pin_roots(snapshot, roots, pins)
+        root_identities = pins
     tree: set[tuple[int, str]] = set()
     for snapshot in (before, after):
         snapshot_roots = [pid for pid, identity in root_identities.items()
@@ -382,7 +403,8 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     outside: list[dict[str, Any]] = []
     unaccounted: list[dict[str, Any]] = []
     exited_over: list[dict[str, Any]] = []
-    regressed_outside = False
+    regressed_outside: list[dict[str, Any]] = []
+    ps_counter_reads = 0
     tree_cpu = 0.0
     kernel_task_cpu = None
     for identity in sorted(set(before.rows) | set(after.rows)):
@@ -412,8 +434,9 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
                         "cpu_s_per_s": previous_over[identity],
                         "basis": "counter regressed inside this interval; its rate over the previous interval"})
                 else:
-                    regressed_outside = True
+                    regressed_outside.append(unaccounted[-1])
             continue
+        ps_counter_reads += 2 if first is not None else 1
         rate = delta / elapsed_s
         if row["command"] == KERNEL_TASK and row["pid"] == 0:
             kernel_task_cpu = rate
@@ -433,6 +456,20 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     outside_aggregate = None if host_busy is None else host_busy - tree_cpu - excluded_kernel
     unattributed = (None if host_busy is None
                     else host_busy - tree_cpu - outside_total - excluded_kernel)
+    # Each subtracted ps counter has one TIME quantum of endpoint error.
+    # Host busy sums user/system/nice on every CPU, each with one host tick
+    # per endpoint. Divide each instrument's CPU-second resolution by its
+    # own measured interval; no additional acceptance margin is introduced.
+    ticks = host["host_ticks"]
+    resolution = (None if ticks is None else
+                  2 * 3 * ticks["cpus"] / ticks["ticks_per_s"] / ticks["elapsed_s"]
+                  + ps_counter_reads * PS_TIME_QUANTUM_S / elapsed_s)
+    regression_unmeasured = bool(regressed_outside) and (
+        unattributed is None or unattributed > limit + resolution)
+    if regressed_outside and not regression_unmeasured:
+        for entry in regressed_outside:
+            # CPU use is nonnegative; quantization can make the residual negative.
+            entry["bounded_by_unattributed_cpu_s_per_s"] = max(0.0, unattributed)
     aggregate_over = (aggregate_limit is not None and outside_aggregate is not None
                       and outside_aggregate > aggregate_limit)
     over = [item for item in outside if item["cpu_s_per_s"] > limit]
@@ -452,13 +489,15 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         **host,
         outside_aggregate_cpu_s_per_s=outside_aggregate,
         unattributed_cpu_s_per_s=unattributed,
+        unattributed_resolution_cpu_s_per_s=resolution,
         aggregate_limit_s_per_s=aggregate_limit,
         aggregate_over_limit=aggregate_over,
         unaccounted=unaccounted,
         raw=[ref.to_json() for ref in (before.raw, after.raw) if ref is not None],
     )
-    if regressed_outside:
-        result.update(error="outside process CPU counter regressed without a previous over-limit rate",
+    if regression_unmeasured:
+        result.update(error="outside process CPU counter regressed without a previous over-limit rate "
+                            "and host unattributed CPU does not bound it within the limit plus resolution",
                       clean=None)
     if aggregate_limit is not None and host_busy is None:
         result.update(error=f"host CPU unread, so the registered aggregate limit cannot be "
@@ -558,7 +597,7 @@ def _summary(result: Mapping[str, Any]) -> dict[str, Any]:
     keys = ("interval", "error", "clean", "elapsed_s", "max_outside", "outside_over_limit",
             "exited_over_limit", "outside_total_cpu_s_per_s", "outside_process_count",
             "tree_cpu_s_per_s", "kernel_task_cpu_s_per_s", "host_busy_cpu_s_per_s",
-            "outside_aggregate_cpu_s_per_s", "unattributed_cpu_s_per_s",
+            "outside_aggregate_cpu_s_per_s", "unattributed_cpu_s_per_s", "unattributed_resolution_cpu_s_per_s",
             "aggregate_limit_s_per_s", "aggregate_over_limit", "host_error", "unaccounted",
             "raw")
     return {key: result.get(key) for key in keys}
@@ -581,6 +620,8 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
     index = 0
     previous = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True,
                              host_reader=host_reader)
+    root_identities: dict[int, tuple[int, str]] = {}
+    pin_roots(previous, roots, root_identities)
     previous_over: dict[tuple[int, str], float] = {}
     next_snapshot_ns = previous.midpoint_ns + int(limits["interval_s"] * 1e9)
     while True:
@@ -589,9 +630,10 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
             index += 1
             current = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True,
                                     host_reader=host_reader)
+            pin_roots(current, roots, root_identities)
             result = interval(previous, current, tree_roots=roots, include_kernel_task=True,
                               limit=limits["cpu_limit_s_per_s"], previous_over=previous_over,
-                              aggregate_limit=aggregate)
+                              aggregate_limit=aggregate, root_identities=root_identities)
             previous_over = over_limit(result)
             dwell.add(result)
             previous = current

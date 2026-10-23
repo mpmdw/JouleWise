@@ -525,5 +525,43 @@ class LiveReadOnlyTests(LiveHardwareTestCase):
         self.assertLess(measurement.values["anchor"]["read_skew_ns"], 1_000_000)
 
 
+class AnchorSkewFrequencyCoverageTests(unittest.TestCase):
+    def journal(self, *, rejected_second, fail_frequency=False):
+        from joulewise.hazards.monitor import DEFAULT_CADENCE
+
+        clocks = FakeClocks()
+        reader = FrequencyReader(clocks)
+        ctx = base.Context(clocks=clocks)
+        samples = []
+        for second in range(16):
+            # Twice the registered anchor skew bound rejects every try.
+            clocks.preempt_ns = ([2 * clock.WINDOW_SKEW_MAX_NS] * clock.ANCHOR_TRIES
+                                 if second == rejected_second else [])
+            reader.fail = fail_frequency and second == rejected_second
+            samples.append(clock.sample(ctx, frequency_reader=(
+                reader if second % DEFAULT_CADENCE['frequency_s'] == 0 else None)))
+            clocks.preempt_ns = []
+            clocks.sleep(DEFAULT_CADENCE['clock_s'])
+        return samples
+
+    def test_anchor_only_skew_does_not_invalidate_last_successful_frequency(self):
+        samples = self.journal(rejected_second=7)
+        span = {'monotonic_ns': [samples[8]['finished']['monotonic_ns'],
+                                  samples[9]['finished']['monotonic_ns']]}
+        self.assertEqual(clock.span_findings(samples, span), [])
+        around = {'monotonic_ns': [samples[6]['finished']['monotonic_ns'], span['monotonic_ns'][1]]}
+        found = clock.span_findings(samples, around)
+        self.assertEqual([f['code'] for f in found], ['clock.unmeasured'])
+        self.assertEqual(found[0]['observed']['rule'], 'read_skew')
+
+    def test_rejected_anchor_and_failed_scheduled_frequency_still_invalidates(self):
+        samples = self.journal(rejected_second=10, fail_frequency=True)
+        span = {'monotonic_ns': [samples[11]['finished']['monotonic_ns'],
+                                  samples[14]['finished']['monotonic_ns']]}
+        found = clock.span_findings(samples, span)
+        self.assertEqual([f['code'] for f in found], ['clock.unmeasured'])
+        self.assertIn('failed refresh', found[0]['detail'])
+
+
 if __name__ == "__main__":
     unittest.main()
