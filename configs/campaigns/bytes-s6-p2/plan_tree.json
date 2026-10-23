@@ -545,7 +545,7 @@
     "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
     "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
     "Model sources include HF cache snapshot directories; C4 file hashes follow their symlinks and bind tokenizer/config files and checkpoint quantization separately from observed installed packages. model.context_window is unused by the runtime. The desk build does not load a model or freeze an execution stack.",
-    "Qwen3-8B-8bit file evidence records revision 48a0b75b1ae72503e21e1558d040bc227510ff06 and verifies bits=8, group_size=64. Its source roster/config revision field remains null for the BY-FILL seat to synchronize; generated config copies preserve those exact source bytes.",
+    "Qwen3-8B-8bit file evidence, source roster and configs pin revision 48a0b75b1ae72503e21e1558d040bc227510ff06 and verify bits=8, group_size=64. Generated config copies preserve those exact source bytes.",
     "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
     "Fixed packs bypass the 265-minute science cap. The native window maximum comes from the C5 programmed span plus the existing stage, pause and session-wait allowances, not the former s4 pilot estimate.",
     "Module minutes = C5 count * own member_allowance_s / 60, using the exact rational sizing operands and no additional margin. Shared references, calibration and custody stay in the full programmed span. Pass two reuses the same measured model costs in reverse order."
@@ -769,7 +769,7 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "9ad1ab934723fe93b89e3d758cdfea909580746ed21f59302935aba2e66537e3"
+    "sha256": "a9b32f2e0b263edc05cb56cfaa5072287a67016b1f76c64f015b7a04afd1082d"
   },
   "module_order": [
     "bytes-qwen35-122b"

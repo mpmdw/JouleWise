@@ -29,6 +29,14 @@ def git(*args, cwd=None):
 def measurement_copy(destination):
     """Commit a fixture pin only in the throwaway clone, as B6 render tests do."""
     git("clone", "--quiet", "--no-hardlinks", ROOT, destination)
+    # A build seat leaves its integrated inputs uncommitted. Reproduce those
+    # exact tracked bytes in the isolated clone, including the source configs
+    # and consumed identity file, before invoking the native plan writer.
+    patch = git("diff", "--binary", "HEAD", "--", "configs", "scripts/bytes_plan_trees.py",
+                "joulewise/b5/driver.py", cwd=ROOT).stdout
+    if patch:
+        subprocess.run(["git", "apply", "-"], input=patch, cwd=destination,
+                       check=True, capture_output=True, text=True)
     for relative, raw in bytes_plan_trees.build_files().items():
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -38,7 +46,8 @@ def measurement_copy(destination):
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(seed / "calibration_observation_ledger.jsonl", target)
     shutil.copyfile(seed / "calibration_ledger_head.json", destination / plan.HEAD_PIN_RELATIVE)
-    git("add", plan.HEAD_PIN_RELATIVE, cwd=destination)
+    git("add", "configs", "scripts/bytes_plan_trees.py", "joulewise/b5/driver.py",
+        plan.HEAD_PIN_RELATIVE, cwd=destination)
     git("-c", "user.name=BYTES render fixture", "-c", "user.email=fixture@invalid",
         "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "Synthetic ledger fixture pin", cwd=destination)
     return destination

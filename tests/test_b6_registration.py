@@ -36,7 +36,17 @@ class AcceptanceDirectoryTests(unittest.TestCase):
                         else:
                             self.assertEqual(current[key], value)
                 else:
-                    self.assertEqual((target / name).read_bytes(), original.read_bytes())
+                    # B6 adds BYTES identity evidence (new units, bytes_* fields,
+                    # bytes_c4); every block-5 field of every block-5 unit stays.
+                    current, baseline = json.loads((target / name).read_text()), json.loads(original.read_text())
+                    for key, value in baseline.items():
+                        if key != 'units':
+                            self.assertEqual(current[key], value, key)
+                    for unit, fields in baseline['units'].items():
+                        self.assertEqual({k: current['units'][unit][k] for k in fields}, fields, unit)
+                        self.assertTrue(all(k.startswith('bytes') for k in set(current['units'][unit]) - set(fields)),
+                                        unit)
+                    self.assertTrue(all(k.startswith('bytes') for k in set(current) - set(baseline)))
                 self.assertIsInstance(loader(target), dict)
         self.assertEqual(acceptance_registration.load_precheck_thresholds(target), {})
         loaded = acceptance_registration.load(target)
