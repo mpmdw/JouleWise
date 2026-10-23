@@ -1,0 +1,586 @@
+{
+  "schema_version": "joulewise.b5_sizing.v1",
+  "non_claim": true,
+  "status": "DRAFT_NOT_REGISTERED",
+  "registration_ready": false,
+  "provenance": {
+    "repository": "mpmdw/JouleWise",
+    "source_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+    "data_repository": "mpmdw/JouleWise-data",
+    "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+    "data_directory": "bytes-h-desk-20261022",
+    "timings": "MEASUREMENTS.json",
+    "raw_one_copy_allocations": "tables/indep_runs.json: raw_bytes (POSIX st_blocks*512, inode-deduplicated)",
+    "fixed_time": "tables/fixed_inputs.json (lower bound, verdict/backup unmeasured)",
+    "fixed_disk": "configs/campaigns/bytes_mac_check/registration/sizing_b5.json#/packs/bytes-mac-check/disk_derivation/fixed_retained_bytes",
+    "method": "Independent exact-rational re-derivation from original JSON decimal lexemes; not execution of Python production code"
+  },
+  "limitations": [
+    "The H session was stopped. 70B soak: 11/12 succeeded, 7 count after exclusions. 122B soak: 0/12. The current C5 planning arithmetic uses timed check/soak observations, including flagged completed runs; the global margin is incomplete.",
+    "programmed_span_s uses fixed_desk_s=1185 as a documented lower bound and collection_stage_overhead_s=44.44705606997013. Verdict/backup were not timed. This is a draft, not an approved final allowance.",
+    "C4 identities, launch bindings, registration status, estimator pins, matching ledger, cold gate and smoke are separate prerequisites.",
+    "No quiet measurement, real prepare, arm, install, test module, or Python production replay was run in this report seat; cloud workspace remained unavailable."
+  ],
+  "packs": {
+    "bytes-s1-p1": {
+      "pack_id": "bytes-s1-p1",
+      "programmed_span_s": 19164.70941512642,
+      "T_stream_max_s": 96.39069404196925,
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": false,
+      "registration_ready": false,
+      "programmed_span_derivation": {
+        "formula": "(sum(50*model mean member_wall_s)+25*reference mean member_wall_s)*(1+margin)+(collections+1)*SETTLE_S+collections*collection_stage_overhead_s+fixed_desk_s",
+        "collections": 10,
+        "reference_members": 25,
+        "science_members": 100,
+        "SETTLE_S": 60,
+        "collection_stage_overhead_s": 44.44705606997013,
+        "fixed_desk_s": 1185,
+        "fixed_desk_is_lower_bound": true,
+        "reference_source": "all timed exported members not labelled non-reference in collection_plan.json"
+      },
+      "clock_derivation": {
+        "formula": "abs(measured rate_ppm) <= 5000/T_stream_max_s - 0.25; registered 5 ms per-run budget, h=0, 0.25 ppm margin",
+        "hold_above_abs_ppm": 51.62222739389096
+      },
+      "disk_derivation": {
+        "stream_rate_bytes_per_s": {
+          "numerator": 1608417280000000000000,
+          "denominator": 890824130839901
+        },
+        "wall_rate_bytes_per_s": {
+          "numerator": 16084172800000000000000,
+          "denominator": 12509476685523987
+        },
+        "margin": {
+          "numerator": 135722362995148,
+          "denominator": 4081589090824127
+        },
+        "allowances_by_model": {
+          "qwen3-1p7b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 783145273507629421873856021669061,
+              "denominator": 8163178181648254000000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 10891394915588033884894765753299,
+              "denominator": 81631781816482540000000000000
+            }
+          },
+          "qwen3-4b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 40649626600132261505455935703143,
+              "denominator": 408158909082412700000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 2830923851452033592289994193241,
+              "denominator": 20407945454120635000000000000
+            }
+          },
+          "reference": {
+            "count": 25,
+            "stream_allowance_s": {
+              "numerator": 612302832276072613101668810902833,
+              "denominator": 6530542545318603200000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 426882080313251806367156893281,
+              "denominator": 3265271272659301600000000000
+            }
+          }
+        },
+        "stream_basis_bytes": 21883930645,
+        "wall_basis_bytes": 21697490999,
+        "B_bytes": 21883930645,
+        "extra_wait_raw_bytes": 12999877322,
+        "session_wait_budget_s": 7200,
+        "fixed_retained_bytes": 4046531103,
+        "peak_copies": 2,
+        "measured_c": 0.8020750916018277,
+        "required_free_bytes": 73814147037,
+        "bytes_source": "raw_allocated_bytes from independent raw_bytes receipts; never retained_bytes/2",
+        "formula": "P=2*(max(ceil(r_s*sum(count*stream_allowance)),ceil(r_w*sum(count*member_allowance)))+ceil(r_s*7200))+fixed; no reserve"
+      },
+      "native_encoding": {
+        "member_count": 125,
+        "native_targets": 3,
+        "bytes_per_member": 116714296,
+        "headroom_bytes": 30046286037,
+        "required_bytes": 73814147037,
+        "formula": "q=floor(2B/(3n)); headroom=(2B-3nq)+2WAIT+fixed; 3nq+headroom=P"
+      },
+      "smoke_precheck": {
+        "smoke_members": 4,
+        "retained_member_share_bytes": 1400571562,
+        "formula": "P + ceil(2B*m/n) when smoke due; smoke fixed files excluded from share"
+      },
+      "window_max_with_draft_span_s": 36900
+    },
+    "bytes-s2-p1": {
+      "pack_id": "bytes-s2-p1",
+      "programmed_span_s": 20152.665044986563,
+      "T_stream_max_s": 102.24723962508142,
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": false,
+      "registration_ready": false,
+      "programmed_span_derivation": {
+        "formula": "(sum(50*model mean member_wall_s)+25*reference mean member_wall_s)*(1+margin)+(collections+1)*SETTLE_S+collections*collection_stage_overhead_s+fixed_desk_s",
+        "collections": 10,
+        "reference_members": 25,
+        "science_members": 100,
+        "SETTLE_S": 60,
+        "collection_stage_overhead_s": 44.44705606997013,
+        "fixed_desk_s": 1185,
+        "fixed_desk_is_lower_bound": true,
+        "reference_source": "all timed exported members not labelled non-reference in collection_plan.json"
+      },
+      "clock_derivation": {
+        "formula": "abs(measured rate_ppm) <= 5000/T_stream_max_s - 0.25; registered 5 ms per-run budget, h=0, 0.25 ppm margin",
+        "hold_above_abs_ppm": 48.65107565088233
+      },
+      "disk_derivation": {
+        "stream_rate_bytes_per_s": {
+          "numerator": 1608417280000000000000,
+          "denominator": 890824130839901
+        },
+        "wall_rate_bytes_per_s": {
+          "numerator": 16084172800000000000000,
+          "denominator": 12509476685523987
+        },
+        "margin": {
+          "numerator": 135722362995148,
+          "denominator": 4081589090824127
+        },
+        "allowances_by_model": {
+          "qwen3-8b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 86264603879409717683237745499413,
+              "denominator": 816317818164825400000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 745597533139678689481931054499,
+              "denominator": 5101986363530158750000000000
+            }
+          },
+          "qwen3-30b-a3b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 8200756288643801927698276077861,
+              "denominator": 81631781816482540000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 349955922340690594900650014553,
+              "denominator": 2400934759308310000000000000
+            }
+          },
+          "reference": {
+            "count": 25,
+            "stream_allowance_s": {
+              "numerator": 612302832276072613101668810902833,
+              "denominator": 6530542545318603200000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 426882080313251806367156893281,
+              "denominator": 3265271272659301600000000000
+            }
+          }
+        },
+        "stream_basis_bytes": 22841465166,
+        "wall_basis_bytes": 22967763886,
+        "B_bytes": 22967763886,
+        "extra_wait_raw_bytes": 12999877322,
+        "session_wait_budget_s": 7200,
+        "fixed_retained_bytes": 4046531103,
+        "peak_copies": 2,
+        "measured_c": 0.8020750916018277,
+        "required_free_bytes": 75981813519,
+        "bytes_source": "raw_allocated_bytes from independent raw_bytes receipts; never retained_bytes/2",
+        "formula": "P=2*(max(ceil(r_s*sum(count*stream_allowance)),ceil(r_w*sum(count*member_allowance)))+ceil(r_s*7200))+fixed; no reserve"
+      },
+      "native_encoding": {
+        "member_count": 125,
+        "native_targets": 3,
+        "bytes_per_member": 122494740,
+        "headroom_bytes": 30046286019,
+        "required_bytes": 75981813519,
+        "formula": "q=floor(2B/(3n)); headroom=(2B-3nq)+2WAIT+fixed; 3nq+headroom=P"
+      },
+      "smoke_precheck": {
+        "smoke_members": 4,
+        "retained_member_share_bytes": 1469936889,
+        "formula": "P + ceil(2B*m/n) when smoke due; smoke fixed files excluded from share"
+      },
+      "window_max_with_draft_span_s": 37860
+    },
+    "bytes-s3-p1": {
+      "pack_id": "bytes-s3-p1",
+      "programmed_span_s": 21506.955177325985,
+      "T_stream_max_s": 112.22990612499416,
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": false,
+      "registration_ready": false,
+      "programmed_span_derivation": {
+        "formula": "(sum(50*model mean member_wall_s)+25*reference mean member_wall_s)*(1+margin)+(collections+1)*SETTLE_S+collections*collection_stage_overhead_s+fixed_desk_s",
+        "collections": 10,
+        "reference_members": 25,
+        "science_members": 100,
+        "SETTLE_S": 60,
+        "collection_stage_overhead_s": 44.44705606997013,
+        "fixed_desk_s": 1185,
+        "fixed_desk_is_lower_bound": true,
+        "reference_source": "all timed exported members not labelled non-reference in collection_plan.json"
+      },
+      "clock_derivation": {
+        "formula": "abs(measured rate_ppm) <= 5000/T_stream_max_s - 0.25; registered 5 ms per-run budget, h=0, 0.25 ppm margin",
+        "hold_above_abs_ppm": 44.30140499210019
+      },
+      "disk_derivation": {
+        "stream_rate_bytes_per_s": {
+          "numerator": 1608417280000000000000,
+          "denominator": 890824130839901
+        },
+        "wall_rate_bytes_per_s": {
+          "numerator": 16084172800000000000000,
+          "denominator": 12509476685523987
+        },
+        "margin": {
+          "numerator": 135722362995148,
+          "denominator": 4081589090824127
+        },
+        "allowances_by_model": {
+          "qwen3-14b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 47330398691245516925420598873141,
+              "denominator": 408158909082412700000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 6474217913479255592038768844679,
+              "denominator": 40815890908241270000000000000
+            }
+          },
+          "qwen3-next-80b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 16914145208797081356146249228721,
+              "denominator": 163263563632965080000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 6545344197423385472008594783023,
+              "denominator": 40815890908241270000000000000
+            }
+          },
+          "reference": {
+            "count": 25,
+            "stream_allowance_s": {
+              "numerator": 612302832276072613101668810902833,
+              "denominator": 6530542545318603200000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 426882080313251806367156893281,
+              "denominator": 3265271272659301600000000000
+            }
+          }
+        },
+        "stream_basis_bytes": 24053464961,
+        "wall_basis_bytes": 24709054674,
+        "B_bytes": 24709054674,
+        "extra_wait_raw_bytes": 12999877322,
+        "session_wait_budget_s": 7200,
+        "fixed_retained_bytes": 4046531103,
+        "peak_copies": 2,
+        "measured_c": 0.8020750916018277,
+        "required_free_bytes": 79464395095,
+        "bytes_source": "raw_allocated_bytes from independent raw_bytes receipts; never retained_bytes/2",
+        "formula": "P=2*(max(ceil(r_s*sum(count*stream_allowance)),ceil(r_w*sum(count*member_allowance)))+ceil(r_s*7200))+fixed; no reserve"
+      },
+      "native_encoding": {
+        "member_count": 125,
+        "native_targets": 3,
+        "bytes_per_member": 131781624,
+        "headroom_bytes": 30046286095,
+        "required_bytes": 79464395095,
+        "formula": "q=floor(2B/(3n)); headroom=(2B-3nq)+2WAIT+fixed; 3nq+headroom=P"
+      },
+      "smoke_precheck": {
+        "smoke_members": 4,
+        "retained_member_share_bytes": 1581379500,
+        "formula": "P + ceil(2B*m/n) when smoke due; smoke fixed files excluded from share"
+      },
+      "window_max_with_draft_span_s": 39240
+    },
+    "bytes-s4-p1": {
+      "pack_id": "bytes-s4-p1",
+      "programmed_span_s": 23176.384199541306,
+      "T_stream_max_s": 142.9448628750397,
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": false,
+      "registration_ready": false,
+      "programmed_span_derivation": {
+        "formula": "(sum(50*model mean member_wall_s)+25*reference mean member_wall_s)*(1+margin)+(collections+1)*SETTLE_S+collections*collection_stage_overhead_s+fixed_desk_s",
+        "collections": 10,
+        "reference_members": 25,
+        "science_members": 100,
+        "SETTLE_S": 60,
+        "collection_stage_overhead_s": 44.44705606997013,
+        "fixed_desk_s": 1185,
+        "fixed_desk_is_lower_bound": true,
+        "reference_source": "all timed exported members not labelled non-reference in collection_plan.json"
+      },
+      "clock_derivation": {
+        "formula": "abs(measured rate_ppm) <= 5000/T_stream_max_s - 0.25; registered 5 ms per-run budget, h=0, 0.25 ppm margin",
+        "hold_above_abs_ppm": 34.72852178410166
+      },
+      "disk_derivation": {
+        "stream_rate_bytes_per_s": {
+          "numerator": 1608417280000000000000,
+          "denominator": 890824130839901
+        },
+        "wall_rate_bytes_per_s": {
+          "numerator": 16084172800000000000000,
+          "denominator": 12509476685523987
+        },
+        "margin": {
+          "numerator": 135722362995148,
+          "denominator": 4081589090824127
+        },
+        "allowances_by_model": {
+          "qwen3-32b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 24115037219132903847314523041463,
+              "denominator": 163263563632965080000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 16263008657228787896484291177243,
+              "denominator": 81631781816482540000000000000
+            }
+          },
+          "qwen3-8b-8bit": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 9024890800101023766671030234691,
+              "denominator": 81631781816482540000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 12501684878568190919754877589643,
+              "denominator": 81631781816482540000000000000
+            }
+          },
+          "reference": {
+            "count": 25,
+            "stream_allowance_s": {
+              "numerator": 612302832276072613101668810902833,
+              "denominator": 6530542545318603200000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 426882080313251806367156893281,
+              "denominator": 3265271272659301600000000000
+            }
+          }
+        },
+        "stream_basis_bytes": 27547300445,
+        "wall_basis_bytes": 26855538139,
+        "B_bytes": 27547300445,
+        "extra_wait_raw_bytes": 12999877322,
+        "session_wait_budget_s": 7200,
+        "fixed_retained_bytes": 4046531103,
+        "peak_copies": 2,
+        "measured_c": 0.8020750916018277,
+        "required_free_bytes": 85140886637,
+        "bytes_source": "raw_allocated_bytes from independent raw_bytes receipts; never retained_bytes/2",
+        "formula": "P=2*(max(ceil(r_s*sum(count*stream_allowance)),ceil(r_w*sum(count*member_allowance)))+ceil(r_s*7200))+fixed; no reserve"
+      },
+      "native_encoding": {
+        "member_count": 125,
+        "native_targets": 3,
+        "bytes_per_member": 146918935,
+        "headroom_bytes": 30046286012,
+        "required_bytes": 85140886637,
+        "formula": "q=floor(2B/(3n)); headroom=(2B-3nq)+2WAIT+fixed; 3nq+headroom=P"
+      },
+      "smoke_precheck": {
+        "smoke_members": 4,
+        "retained_member_share_bytes": 1763027229,
+        "formula": "P + ceil(2B*m/n) when smoke due; smoke fixed files excluded from share"
+      },
+      "window_max_with_draft_span_s": 40920
+    },
+    "bytes-s5-p1": {
+      "pack_id": "bytes-s5-p1",
+      "programmed_span_s": 18854.09600981408,
+      "T_stream_max_s": 201.49829895899165,
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": false,
+      "registration_ready": false,
+      "programmed_span_derivation": {
+        "formula": "(sum(50*model mean member_wall_s)+25*reference mean member_wall_s)*(1+margin)+(collections+1)*SETTLE_S+collections*collection_stage_overhead_s+fixed_desk_s",
+        "collections": 7,
+        "reference_members": 25,
+        "science_members": 50,
+        "SETTLE_S": 60,
+        "collection_stage_overhead_s": 44.44705606997013,
+        "fixed_desk_s": 1185,
+        "fixed_desk_is_lower_bound": true,
+        "reference_source": "all timed exported members not labelled non-reference in collection_plan.json"
+      },
+      "clock_derivation": {
+        "formula": "abs(measured rate_ppm) <= 5000/T_stream_max_s - 0.25; registered 5 ms per-run budget, h=0, 0.25 ppm margin",
+        "hold_above_abs_ppm": 24.564105259606116
+      },
+      "disk_derivation": {
+        "stream_rate_bytes_per_s": {
+          "numerator": 1608417280000000000000,
+          "denominator": 890824130839901
+        },
+        "wall_rate_bytes_per_s": {
+          "numerator": 16084172800000000000000,
+          "denominator": 12509476685523987
+        },
+        "margin": {
+          "numerator": 135722362995148,
+          "denominator": 4081589090824127
+        },
+        "allowances_by_model": {
+          "llama-70b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 54020413412194470005471826214809,
+              "denominator": 261221701812744128000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 35551270022896312928786107333377,
+              "denominator": 130610850906372064000000000000
+            }
+          },
+          "reference": {
+            "count": 25,
+            "stream_allowance_s": {
+              "numerator": 612302832276072613101668810902833,
+              "denominator": 6530542545318603200000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 426882080313251806367156893281,
+              "denominator": 3265271272659301600000000000
+            }
+          }
+        },
+        "stream_basis_bytes": 22901363715,
+        "wall_basis_bytes": 21700998244,
+        "B_bytes": 22901363715,
+        "extra_wait_raw_bytes": 12999877322,
+        "session_wait_budget_s": 7200,
+        "fixed_retained_bytes": 4046531103,
+        "peak_copies": 2,
+        "measured_c": 0.8020750916018277,
+        "required_free_bytes": 75849013177,
+        "bytes_source": "raw_allocated_bytes from independent raw_bytes receipts; never retained_bytes/2",
+        "formula": "P=2*(max(ceil(r_s*sum(count*stream_allowance)),ceil(r_w*sum(count*member_allowance)))+ceil(r_s*7200))+fixed; no reserve"
+      },
+      "native_encoding": {
+        "member_count": 75,
+        "native_targets": 3,
+        "bytes_per_member": 203567677,
+        "headroom_bytes": 30046285852,
+        "required_bytes": 75849013177,
+        "formula": "q=floor(2B/(3n)); headroom=(2B-3nq)+2WAIT+fixed; 3nq+headroom=P"
+      },
+      "smoke_precheck": {
+        "smoke_members": 3,
+        "retained_member_share_bytes": 1832109098,
+        "formula": "P + ceil(2B*m/n) when smoke due; smoke fixed files excluded from share"
+      },
+      "window_max_with_draft_span_s": 36600
+    },
+    "bytes-s6-p1": {
+      "pack_id": "bytes-s6-p1",
+      "programmed_span_s": 14717.662440630691,
+      "T_stream_max_s": 111.03078095801175,
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": false,
+      "registration_ready": false,
+      "programmed_span_derivation": {
+        "formula": "(sum(50*model mean member_wall_s)+25*reference mean member_wall_s)*(1+margin)+(collections+1)*SETTLE_S+collections*collection_stage_overhead_s+fixed_desk_s",
+        "collections": 7,
+        "reference_members": 25,
+        "science_members": 50,
+        "SETTLE_S": 60,
+        "collection_stage_overhead_s": 44.44705606997013,
+        "fixed_desk_s": 1185,
+        "fixed_desk_is_lower_bound": true,
+        "reference_source": "all timed exported members not labelled non-reference in collection_plan.json"
+      },
+      "clock_derivation": {
+        "formula": "abs(measured rate_ppm) <= 5000/T_stream_max_s - 0.25; registered 5 ms per-run budget, h=0, 0.25 ppm margin",
+        "hold_above_abs_ppm": 44.78255724996511
+      },
+      "disk_derivation": {
+        "stream_rate_bytes_per_s": {
+          "numerator": 1608417280000000000000,
+          "denominator": 890824130839901
+        },
+        "wall_rate_bytes_per_s": {
+          "numerator": 16084172800000000000000,
+          "denominator": 12509476685523987
+        },
+        "margin": {
+          "numerator": 135722362995148,
+          "denominator": 4081589090824127
+        },
+        "allowances_by_model": {
+          "qwen35-122b": {
+            "count": 50,
+            "stream_allowance_s": {
+              "numerator": 93614757959574015959440446217137,
+              "denominator": 816317818164825400000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 7733127455975572891344203626737,
+              "denominator": 40815890908241270000000000000
+            }
+          },
+          "reference": {
+            "count": 25,
+            "stream_allowance_s": {
+              "numerator": 612302832276072613101668810902833,
+              "denominator": 6530542545318603200000000000000
+            },
+            "member_allowance_s": {
+              "numerator": 426882080313251806367156893281,
+              "denominator": 3265271272659301600000000000
+            }
+          }
+        },
+        "stream_basis_bytes": 14585071383,
+        "wall_basis_bytes": 16382541368,
+        "B_bytes": 16382541368,
+        "extra_wait_raw_bytes": 12999877322,
+        "session_wait_budget_s": 7200,
+        "fixed_retained_bytes": 4046531103,
+        "peak_copies": 2,
+        "measured_c": 0.8020750916018277,
+        "required_free_bytes": 62811368483,
+        "bytes_source": "raw_allocated_bytes from independent raw_bytes receipts; never retained_bytes/2",
+        "formula": "P=2*(max(ceil(r_s*sum(count*stream_allowance)),ceil(r_w*sum(count*member_allowance)))+ceil(r_s*7200))+fixed; no reserve"
+      },
+      "native_encoding": {
+        "member_count": 75,
+        "native_targets": 3,
+        "bytes_per_member": 145622589,
+        "headroom_bytes": 30046285958,
+        "required_bytes": 62811368483,
+        "formula": "q=floor(2B/(3n)); headroom=(2B-3nq)+2WAIT+fixed; 3nq+headroom=P"
+      },
+      "smoke_precheck": {
+        "smoke_members": 3,
+        "retained_member_share_bytes": 1310603310,
+        "formula": "P + ceil(2B*m/n) when smoke due; smoke fixed files excluded from share"
+      },
+      "window_max_with_draft_span_s": 32460
+    }
+  }
+}
