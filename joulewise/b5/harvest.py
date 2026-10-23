@@ -2203,14 +2203,29 @@ def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
 
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
+    from contextlib import ExitStack
+    from scripts.restore_run_to_scratch import readable_run
+
+    bundle = Path(task["bundle_path"])
+    with ExitStack() as stack:
+        try:
+            readable = stack.enter_context(readable_run(bundle))
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            return {"run_id": task["run_id"], "bundle_path": str(bundle),
+                    "present": bundle.is_dir(), "errors": {"restore": f"{type(exc).__name__}: {exc}"[:500]}}
+        return _assess_plain_member(task, readable)
+
+
+def _assess_plain_member(task: Mapping[str, Any], bundle: Path) -> dict[str, Any]:
+    """Assess plain primary bytes, retaining the original archive locator."""
     from joulewise import battery_float
     from joulewise.cli import validate_bundle
     from joulewise.identity_pins import derive_model_runtime_config_from_metadata
     from joulewise.reduce import reduce_bundle
     from joulewise.schemas import is_admissible_succeeded_summary
 
-    run_id, bundle = task["run_id"], Path(task["bundle_path"])
-    result: dict[str, Any] = {"run_id": run_id, "bundle_path": str(bundle), "present": bundle.is_dir(),
+    run_id = task["run_id"]
+    result: dict[str, Any] = {"run_id": run_id, "bundle_path": str(Path(task["bundle_path"])), "present": bundle.is_dir(),
                               "errors": {}}
     if not result["present"]:
         return result

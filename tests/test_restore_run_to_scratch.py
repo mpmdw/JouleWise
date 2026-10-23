@@ -75,6 +75,52 @@ class RestoreRunTests(unittest.TestCase):
         self.assertEqual(list(self.scratch.iterdir()), [])
         self.assertEqual(self.snapshot(self.run), expected)
 
+    def test_plain_reader_keeps_original_path_without_scratch(self):
+        # A stale compressed sibling must not override existing plain bytes.
+        (self.run / "metadata.json.zst").write_bytes(b"invalid stale sibling")
+        with mock.patch.object(restore, "restored_run", side_effect=AssertionError("unneeded restore")):
+            with restore.readable_run(self.run) as run:
+                self.assertEqual(run, self.run)
+
+    @unittest.skipUnless(ZSTD, "zstd is optional")
+    def test_reader_discovers_journal_and_cleans_scratch_on_success_and_error(self):
+        expected = self.snapshot(self.run)
+        self.compress()
+        before, journal = self.snapshot(self.archive), self.records.read_bytes()
+        with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(
+                free=restore.MIN_RESERVE_GIB * 1024**3 + sum(
+                    row["size"] for row in desk.status(self.record_dir)))):
+            for fail in (False, True):
+                with self.subTest(fail=fail):
+                    try:
+                        with restore.readable_run(self.run) as run:
+                            self.assertEqual(self.snapshot(run), expected)
+                            scratch = run.parent.parent
+                            self.assertNotIn(self.archive, scratch.parents)
+                            if fail:
+                                raise RuntimeError("reader failed")
+                    except RuntimeError as error:
+                        self.assertTrue(fail)
+                        self.assertEqual(str(error), "reader failed")
+                    self.assertFalse(scratch.exists())
+        self.assertEqual(self.snapshot(self.archive), before)
+        self.assertEqual(self.records.read_bytes(), journal)
+
+    @unittest.skipUnless(ZSTD, "zstd is optional")
+    def test_reader_requires_journal_and_accepts_explicit_nonstandard_location(self):
+        expected = self.snapshot(self.run)
+        self.compress()
+        moved = self.root / "nonstandard"
+        self.record_dir.rename(moved)
+        with self.assertRaisesRegex(ValueError, "compressed run requires compression.jsonl"):
+            with restore.readable_run(self.run):
+                self.fail("reader reached")
+        with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(
+                free=restore.MIN_RESERVE_GIB * 1024**3 + sum(row["size"] for row in desk.status(moved)))):
+            with restore.readable_run(self.run, compression_records=moved / "compression.jsonl") as run:
+                self.assertEqual(self.snapshot(run), expected)
+        self.assertFalse(run.exists())
+
     @unittest.skipUnless(ZSTD, "zstd is optional")
     def test_compressed_and_plain_archives_give_identical_bytes(self):
         with self.restored() as run:

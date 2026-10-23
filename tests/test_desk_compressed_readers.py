@@ -9,10 +9,12 @@ import shutil
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 from joulewise import desk_compress as desk
 from joulewise import authentication_io as auth, campaign_provenance as provenance
 from joulewise import whole_window
+from joulewise import bytes_analysis
 from joulewise.b6 import archive, export_runs, survivor_screen
 from joulewise.b5 import harvest as h
 from joulewise.bundle_read import BundleReader
@@ -20,6 +22,7 @@ from joulewise.cli import validate_bundle
 from joulewise.external import km003c_parse as kp
 from joulewise.hazards import monitor
 from joulewise.reduce import reduce_bundle
+from scripts import restore_run_to_scratch as restore
 from tests.external.test_km003c_parse import Synthetic, NS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,14 +201,33 @@ class CompressedReaderTests(unittest.TestCase):
 
         def read():
             reader = BundleReader(bundle)
-            reduced = reduce_bundle(bundle, reducer_version="0.5.2").to_dict()
-            problems = validate_bundle(bundle, strict=True)
+            # Direct CLI/strict/reference readers use the same verified
+            # restore interface as the automatic archive callers below.
+            with restore.readable_run(bundle) as plain_bundle:
+                reduced = reduce_bundle(plain_bundle, reducer_version="0.5.2").to_dict()
+                problems = validate_bundle(plain_bundle, strict=True)
+                self.assertTrue(whole_window._current_strict_summary(reduced, plain_bundle))
+                energy = whole_window._reference_energy_evidence_detail(plain_bundle)
             self.assertEqual(problems, [])
             self.assertTrue(reduced["window_evidence_precheck"]["gross_request"]["eligible"])
             self.assertTrue(reduced["window_evidence_precheck"]["idle_subtracted_request"]["eligible"])
-            self.assertTrue(whole_window._current_strict_summary(reduced, bundle))
-            energy = whole_window._reference_energy_evidence_detail(bundle)
             self.assertEqual(energy[2:], (None, None))
+            assessment = h.assess_member({"run_id": members[0]["run_id"], "bundle_path": str(bundle),
+                                          "withheld_dir": str(self.root / "assessment")})
+            # This fixture's mock runtime has no source-stack identity; its
+            # primary evidence still supports strict reduction and energies.
+            self.assertEqual(assessment["errors"], {
+                "identity": "ValueError: source stack identity fields are unavailable"})
+            self.assertTrue(assessment["strict_valid"])
+            self.assertEqual(assessment["files_missing"], [])
+            self.assertEqual(assessment["bundle_path"], str(bundle))
+            self.assertTrue(assessment["rereduced"]["identical_to_stored"])
+            # The two calls write identical derived bytes to this same path.
+            # Remove only the test-owned output so exclusive creation is real.
+            Path(assessment["rereduced"]["path"]).unlink()
+            operative = bytes_analysis.operative_summary(
+                bundle, {"calibration": {"operative_bound_s": ".092"}})
+            self.assertEqual(operative[1]["status"], "rereduced")
             result = survivor_screen.screen({"members": members}, {},
                 survivor_screen.archive_energy_of(self.archive),
                 {"neg8": {"corpus_minimum": 6, "corpus_cap": 6}})
@@ -214,7 +236,8 @@ class CompressedReaderTests(unittest.TestCase):
                     "events": reader.events(), "trace": reader.trace_rows(),
                     "raw": reader.raw_artifact_bytes("powermetrics.plist"),
                     "validation": reader.problems(), "strict": problems,
-                    "reduced": reduced, "energy": energy, "screen": result}
+                    "reduced": reduced, "energy": energy, "screen": result,
+                    "assessment": assessment, "operative": operative}
 
         plain = read()
         self.assertTrue((bundle / "instrument_calibration/manifest.json").is_file())
@@ -222,7 +245,17 @@ class CompressedReaderTests(unittest.TestCase):
         self.assertFalse((bundle / "raw/powermetrics.plist").exists())
         self.assertFalse((bundle / "instrument_calibration/manifest.json").exists())
         self.assertTrue((bundle / "instrument_calibration/manifest.json.zst").is_file())
-        self.assertEqual(read(), plain)
+        before = {p: p.read_bytes() for p in self.archive.rglob("*") if p.is_file()}
+        journal = Path(str(self.archive) + ".desk") / "compression.jsonl"
+        journal_before = journal.read_bytes()
+        # Exercise the unchanged reserve in small CI containers without
+        # requiring their filesystem to have 40 GiB of actual free space.
+        required = sum(row["size"] for row in desk.status(journal.parent))
+        with mock.patch.object(restore.shutil, "disk_usage", return_value=SimpleNamespace(
+                free=restore.MIN_RESERVE_GIB * 1024**3 + required)):
+            self.assertEqual(read(), plain)
+        self.assertEqual({p: p.read_bytes() for p in self.archive.rglob("*") if p.is_file()}, before)
+        self.assertEqual(journal.read_bytes(), journal_before)
 
     def test_plain_path_has_precedence_over_compressed_sibling_in_presence_checks(self):
         path = self.archive / "sources/fixture"

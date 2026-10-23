@@ -138,6 +138,32 @@ def restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=
         yield restored
 
 
+@contextmanager
+def readable_run(run_dir, *, compression_records=None):
+    """Keep plain runs in place; verify and restore compressed runs for readers.
+
+    The standard desk journal is ARCHIVE.desk/compression.jsonl. Callers
+    with a different journal location can name it explicitly. Scratch uses
+    the caller's TMPDIR and is removed before returning to archive work.
+    """
+    source = Path(run_dir)
+    if not any(not path.with_suffix("").is_file() for path in source.rglob("*.zst")):
+        yield source
+        return
+    if compression_records is None:
+        compression_records = next(
+            (journal for parent in source.resolve().parents
+             if (journal := Path(str(parent) + ".desk") / "compression.jsonl").is_file()),
+            None,
+        )
+    if compression_records is None:
+        raise ValueError("compressed run requires compression.jsonl; use restore_run_to_scratch.py "
+                         "with --compression-records for a nonstandard journal location")
+    with tempfile.TemporaryDirectory(prefix="joulewise-reader-") as scratch:
+        with restored_run(source, scratch, compression_records=compression_records) as restored:
+            yield restored
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, type=Path)

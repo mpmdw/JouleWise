@@ -523,14 +523,16 @@ def operative_summary(bundle, acceptance, *, synthetic=False, stored=None, physi
     output-free reducer seam owns re-derivation and rejects narrowed bounds.
     """
     from joulewise.reduce import _rederive_summary_for_authenticated_fiducial_bound
+    from scripts.restore_run_to_scratch import readable_run
     cal = acceptance.get("calibration") or {}
     value = cal.get("operative_bound_s")
     if value is None or isinstance(value, bool):
         raise AnalysisError("operative-bracket join missing: b6-acceptance.calibration.operative_bound_s")
     bound = number(float(value), "harvest operative bound", nonnegative=True)
-    summary = _rederive_summary_for_authenticated_fiducial_bound(
-        bundle, authenticated_fiducial_bound_s=bound,
-        _instrument_calibration_physics_cache=physics_cache)
+    with readable_run(bundle) as plain:
+        summary = _rederive_summary_for_authenticated_fiducial_bound(
+            plain, authenticated_fiducial_bound_s=bound,
+            _instrument_calibration_physics_cache=physics_cache)
     envelope = (summary.get("energy_anchor_shift_envelopes") or {}).get("/phase_energy_j/decode")
     # Mock telemetry has no native interval support, mint calibration, or
     # operative edge envelope. Only explicitly labelled simulation fixtures

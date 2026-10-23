@@ -2091,8 +2091,8 @@ class D078R01RegressionTests(unittest.TestCase):
     FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
     RAW_SHA256 = "cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81"
 
-    def test_d138_reduce_source_bytes_remain_at_reissued_pin(self) -> None:
-        """D-138 re-issue (2026-10-22, PR #573): preserve every source byte."""
+    def test_d138_reduce_source_bytes_remain_at_issued_pin(self) -> None:
+        """D-138: preserve the exact reducer bytes pinned by issued acceptances."""
 
         issued_pin = (
             "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
@@ -2110,15 +2110,13 @@ class D078R01RegressionTests(unittest.TestCase):
             ["joulewise/reduce.py"],
             issued_pin,
         )
-        # D-138 re-issue (2026-10-22, PR #573), authorized by FIX-573:
-        # 9d23e5b46 routed five reads through the authentication seam. The
-        # D078R01 golden regressions below preserve the numerical outputs;
-        # the integration arithmetic is unchanged. Keep the historical issued
-        # acceptance bytes above intact. Any further reduce.py edit must
-        # re-issue this BYTE pin; a subset of AST nodes misses call/key edits.
+        # Storage-only I/O edits also stale the issued acceptances. Restore
+        # compressed bundles to scratch before invoking this pinned reducer.
+        # Golden regressions and a subset of AST nodes cannot replace the
+        # source-byte invariant; D-138 governs any future estimator re-issue.
         self.assertEqual(
             hashlib.sha256((REPO_ROOT / "joulewise/reduce.py").read_bytes()).hexdigest(),
-            "2d4d0750e3a4299ce2d306cde77e3a082542f0661033872872efc33f69f6df9c",
+            issued_pin,
         )
 
     def test_half_gap_bound_takes_maximum_of_unequal_perturbations(self) -> None:

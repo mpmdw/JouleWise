@@ -150,6 +150,7 @@ def screen(roster: Mapping, member_effects: Mapping,
 def archive_energy_of(archive_root: Path | str, bundle_roots: tuple[Path, ...] = ()) -> Callable:
     """Call the owning reader; do not reproduce its energy arithmetic."""
     from joulewise import whole_window
+    from scripts.restore_run_to_scratch import readable_run
 
     helper = getattr(whole_window, "_neg8_writer_reference_energy", None)
 
@@ -168,11 +169,13 @@ def archive_energy_of(archive_root: Path | str, bundle_roots: tuple[Path, ...] =
             reader = "whole_window._neg8_writer_reference_energy"
         else:
             reader = "whole_window._reference_energy_evidence"
-            # Main's reader re-derives from a primary bundle. Keep its real
-            # location: relative calibration paths depend on the bundle's
-            # siblings. L9's summary reader above uses harvest reductions.
+            # Main's reader re-derives from primary bytes. The issued reducer
+            # needs plain files, including the bundle-contained calibration
+            # members. Keep the archive locator as the reported source.
             summary = bundle / "summary_metrics.json"
-            gross, idle, problem = whole_window._reference_energy_evidence(bundle)
+            journal = Path(str(root) + ".desk") / "compression.jsonl"
+            with readable_run(bundle, compression_records=journal if journal.is_file() else None) as plain:
+                gross, idle, problem = whole_window._reference_energy_evidence(plain)
             if problem is not None:
                 raise ValueError("NEG8 reference energy is unavailable")
         if gross is None or idle is None:
