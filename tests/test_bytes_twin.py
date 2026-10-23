@@ -38,9 +38,9 @@ def tearDownModule():
     WORLD["dir"].cleanup()
 
 
-def run_twin(world: Path, stage: str, *, archives=True, key_dir=True) -> dict:
+def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) -> dict:
     out = world / f"twin-{stage}.json"
-    argv = ["--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"),
+    argv = [*extra, "--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"),
             "--stage", stage, "--out", str(out)]
     if archives:
         for archive in sorted((world / "archives").iterdir()):
@@ -923,6 +923,340 @@ class PassIdentityTests(unittest.TestCase):
             self.assertEqual((row["word"], row["status"], row["flags"]), ("missing", "missing", ["rows_missing"]))
         self.assertEqual(result["h2"]["rails"]["passes_mean"]["n"], 9)        # fitted on the models with points
         self.assertEqual(result["cells"]["qwen3-1.7b-4bit"]["passes_mean"]["n_passes"], 1)   # still computed
+
+
+class MeterOffsetArithmeticTests(unittest.TestCase):
+    """Addendum 9 (NR1) by hand: C_j with an exact A, the M1 normalisation, the sensitivity's sign,
+    the L1/L2 flags."""
+
+    def test_a_matrix_and_coefficient_c_with_an_exact_design(self):
+        # y on [1, x], x = 0, 1, 2: X'X = [[3, 3], [3, 5]], (X'X)^-1 = [[5, -3], [-3, 3]] / 6, so
+        # A = (X'X)^-1 X' has rows (5, 2, -1) / 6 and (-1, 0, 1) / 2.
+        fit = bt.ols([[0.0], [1.0], [2.0]], [1.0, 2.0, 4.0])
+        for a, expected in zip(fit["A"], ([5 / 6, 2 / 6, -1 / 6], [-0.5, 0.0, 0.5])):
+            for v, e in zip(a, expected):
+                self.assertAlmostEqual(v, e, places=14)
+        # beta = A y: intercept 5/6 + 4/6 - 4/6 = 5/6, slope (4 - 1) / 2 = 1.5.
+        self.assertAlmostEqual(fit["coef"][0], 5 / 6, places=14)
+        self.assertAlmostEqual(fit["coef"][1], 1.5, places=14)
+        # C_j = sum_i |A_ji| bound_w_i with bounds (1.2, 0.6, 2.4) W: C_0 = (6 + 1.2 + 2.4) / 6 = 1.6,
+        # C_1 = 0.6 + 0 + 1.2 = 1.8 (the absolute value: the slope's weights have both signs).
+        # dbeta_j/ddelta = sum_i A_ji sens_i / T_i per second with sens (3, -6, 9) W over T (1, 2, 3) s,
+        # i.e. (3, -3, 3) W/s: slope (-1.5 + 0 + 1.5) / 1000 = 0; intercept (2.5 - 1 - 0.5) / 1000 = 1e-3.
+        points = [{"bound_w": 1.2, "sensitivity_w": 3.0, "T": 1.0}, {"bound_w": 0.6, "sensitivity_w": -6.0, "T": 2.0},
+                  {"bound_w": 2.4, "sensitivity_w": 9.0, "T": 3.0}]
+        iv = {"value": 1.5, "half_width": 0.5, "lower": 1.0, "upper": 2.0, "ols": {"half_width": 0.25}}
+        o = bt.offset_alternative(fit, 1, iv, points, "J/GB")
+        self.assertAlmostEqual(o["coefficient_C"], 1.8, places=14)
+        self.assertAlmostEqual(o["offset_lower"], 1.5 - 2.3, places=14)       # beta - (t SE + C)
+        self.assertAlmostEqual(o["offset_upper"], 1.5 + 2.3, places=14)
+        self.assertAlmostEqual(o["offset_ols_lower"], 1.5 - 2.05, places=14)
+        self.assertAlmostEqual(o["d_beta_d_delta_per_ms"], 0.0, places=14)
+        self.assertEqual((o["coefficient_decision"], o["offset_decision"], o["offset_ols_decision"]),
+                         ("positive", "contains zero", "contains zero"))
+        self.assertEqual(o["sensitivity_units"], "J/GB per ms")
+        self.assertIsNone(o["systematics_flag"])
+        self.assertIsNone(o["sensitivity_flag"])
+        o0 = bt.offset_alternative(fit, 0, {"value": 5 / 6, "half_width": 0.1, "lower": 5 / 6 - 0.1, "upper": 5 / 6 + 0.1,
+                                            "ols": {"half_width": 0.1}}, points, "W")
+        self.assertAlmostEqual(o0["coefficient_C"], 1.6, places=14)
+        self.assertAlmostEqual(o0["d_beta_d_delta_per_ms"], 1e-3, places=14)
+        self.assertEqual(o0["sensitivity_units"], "W per ms")
+        self.assertEqual(bt.offset_alternative(fit, 1, iv, points, "")["sensitivity_units"], "per ms")
+
+    def test_m1_normalisation_pass_averaged_joules_over_the_mean_decode_time(self):
+        # Cold disposition M1: the bound is carried in joules, averaged over the passes as B is, and
+        # divided by the point's mean decode time: (4 J + 2 J) / 2 over (2 s + 4 s) / 2 = 1.0 W, not
+        # the mean of the per-pass ratios (2 W + 0.5 W) / 2 = 1.25 W.
+        def pas(E, T, bound, sens):
+            return {"status": "ok", "E_dec_j": E, "T_dec_s": T, "e_j_per_step": E / 512, "tau_s_per_step": T / 512,
+                    "e_half_width_j_per_step": 0.01, "e_printed_j_per_token": E / 512,
+                    "meter_offset_bound_j": bound, "meter_offset_sensitivity_w": sens,
+                    "meter_offset_bound_flag": None, "meter_offset_sensitivity_flag": None}
+        q = bt.mean_of_passes([pas(20.0, 2.0, 4.0, -3.0), pas(20.0, 4.0, 2.0, -1.0)])
+        self.assertAlmostEqual(q["meter_offset_bound_j"], 3.0, places=14)
+        self.assertAlmostEqual(q["meter_offset_bound_w"], 1.0, places=14)
+        self.assertNotAlmostEqual(q["meter_offset_bound_w"], 1.25, places=6)
+        self.assertAlmostEqual(q["meter_offset_sensitivity_w"], -2.0, places=14)   # watts, pass mean
+        self.assertAlmostEqual(q["P_mean_w"], 20.0 / 3.0, places=14)               # the same ratio of means
+        # A flagged pass flags the point and withholds the bound; the sensitivity survives on its own.
+        flagged = {**pas(20.0, 2.0, None, -3.0), "meter_offset_bound_flag": "meter offset bound negative on run(s) r1"}
+        q = bt.mean_of_passes([flagged, pas(20.0, 4.0, 2.0, -1.0)])
+        self.assertIsNone(q["meter_offset_bound_w"])
+        self.assertIn("r1", q["meter_offset_bound_flag"])
+        self.assertAlmostEqual(q["meter_offset_sensitivity_w"], -2.0, places=14)
+
+    def test_sensitivity_sign_and_per_run_bound_from_the_meter_samples(self):
+        # Samples at 0, 100, ..., 400 ms: idle 0.2 W before 200 ms and after 400 ms, 5 W inside.  A
+        # decode window [150, 350) ms starts in idle and ends under load: a label offset delta > 0
+        # pulls the idle sample before the start in and pushes the loaded sample before the end out,
+        # so dE/ddelta = P_before-start - P_before-end = 0.2 - 5 = -4.8 W (energy falls with delta).
+        times = [t * 1_000_000 for t in (0, 100, 200, 300, 400)]
+        watts = [0.2, 0.2, 5.0, 5.0, 0.2]
+        window = (150_000_000, 350_000_000)
+        self.assertEqual(bt.before_edge_powers(times, watts, window), (0.2, 5.0))
+        self.assertEqual(bt.edge_powers(times, watts, window), (5.0, 5.0))      # D4: the larger neighbour
+        # The per-run bound is max(P_start, P_end)(r_max + dt): 5 W x (8 ms + 100 ms) = 0.54 J, half of
+        # u = (P_start + P_end)(r_max + dt) = 1.08 J when the two edge powers are equal.
+        p_start, p_end = bt.edge_powers(times, watts, window)
+        self.assertAlmostEqual(max(p_start, p_end) * (0.008 + 0.1), 0.54, places=14)
+        self.assertAlmostEqual((p_start + p_end) * (0.008 + 0.1), 1.08, places=14)
+        # The reverse window (load before the start, idle before the end) has the opposite sign.
+        self.assertEqual(bt.before_edge_powers(times, watts, (250_000_000, 450_000_000)), (5.0, 0.2))
+
+    def test_offset_terms_use_the_strata_weights_and_flag_bad_runs_without_refusing(self):
+        def member(i, bound, sens):
+            return {"id": f"m{i}", "E": 1.0, "T": 1.0, "bounds": {}, "offset": {"bound_j": bound, "sensitivity_w": sens}}
+        repeats = [member(i, 1.0, -1.0) for i in range(5)]
+        quads = [{"id": f"q{k}", "members": [member(f"{k}{j}", 2.0, -3.0) for j in range(4)]} for k in range(5)]
+        terms = bt.offset_terms(repeats, quads)
+        self.assertAlmostEqual(terms["bound_j"], 0.2 * 1.0 + 0.8 * 2.0, places=14)
+        self.assertAlmostEqual(terms["sensitivity_w"], 0.2 * -1.0 + 0.8 * -3.0, places=14)
+        self.assertEqual((terms["bound_flag"], terms["sensitivity_flag"], terms["n_runs"]), (None, None, 25))
+        # L1/L2: one negative bound flags the bound and names the run; one non-finite sensitivity
+        # flags the sensitivity; each leaves the other term computed and nothing refuses.
+        bad = bt.offset_terms([member(0, -0.5, -1.0), *repeats[1:]], quads)
+        self.assertIsNone(bad["bound_j"])
+        self.assertIn("m0", bad["bound_flag"])
+        self.assertAlmostEqual(bad["sensitivity_w"], -2.6, places=14)
+        bad = bt.offset_terms(repeats, [{"id": "q9", "members": [member("x", 2.0, float("nan"))] * 4}, *quads[1:]])
+        self.assertIsNone(bad["sensitivity_w"])
+        self.assertIn("mx", bad["sensitivity_flag"])
+        self.assertAlmostEqual(bad["bound_j"], 1.8, places=14)
+        bad = bt.offset_terms([member(0, None, -1.0), *repeats[1:]], quads)
+        self.assertIn("m0", bad["bound_flag"])
+        # Through the fit: a flagged point gives the systematics flag and keeps the registered interval.
+        fit = bt.ols([[0.0], [1.0], [2.0]], [1.0, 2.0, 4.0])
+        iv = {"value": 1.5, "half_width": 0.5, "lower": 1.0, "upper": 2.0, "ols": {"half_width": 0.25}}
+        points = [{"bound_w": 1.0, "sensitivity_w": 1.0, "T": 1.0}] * 2 + [{"bound_w": None, "sensitivity_w": float("inf"), "T": 1.0,
+                                                                            "bound_flag": bad["bound_flag"]}]
+        o = bt.offset_alternative(fit, 1, iv, points, "J/GB")
+        self.assertIsNone(o["coefficient_C"])
+        self.assertIsNone(o["offset_lower"])
+        self.assertIn("m0", o["systematics_flag"])
+        self.assertIsNotNone(o["sensitivity_flag"])
+        self.assertIsNone(o["d_beta_d_delta_per_ms"])
+        self.assertEqual(o["coefficient_decision"], "positive")      # the registered interval is kept
+
+    def test_rails_has_no_c_term_and_dc_and_rest_carry_the_alternative_on_the_synthetic_world(self):
+        result = run_twin(WORLD["two"], "2")
+        rails = result["h2"]["rails"]["passes_mean"]
+        self.assertNotIn("offset", rails["resident_extended"]["epsilon_j_per_GB"])
+        self.assertNotIn("offset_disclosure", rails)
+        self.assertEqual(rails["interval_scope"], bt.INTERVAL_SCOPE)
+        for boundary in ("dc_input", "rest"):
+            h2 = result["h2"][boundary]["passes_mean"]
+            self.assertIn("22 to 25 ms", h2["offset_disclosure"])
+            self.assertIn("M13", h2["offset_disclosure"])
+            self.assertEqual(h2["offset_delta_structural_bound_ms"], [22, 25])
+            for fit_name, terms in (("simple", ("P0", "epsilon_j_per_GB")), ("resident_extended", ("P0", "epsilon_j_per_GB", "rho_j_per_GB")),
+                                    ("tier", ("P0", "epsilon_j_per_GB", "rho_j_per_GB"))):
+                for term in terms:
+                    o = h2[fit_name][term]["offset"]
+                    self.assertGreater(o["coefficient_C"], 0.0)
+                    self.assertLess(o["offset_lower"], h2[fit_name][term]["lower"])
+                    self.assertGreater(o["offset_upper"], h2[fit_name][term]["upper"])
+                    self.assertIsNone(o["systematics_flag"])
+                    self.assertTrue(math.isfinite(o["d_beta_d_delta_per_ms"]))
+            self.assertIn("resident_adds_nothing_offset", h2["resident_extended"])
+            self.assertTrue(h2["resident_extended"]["resident_adds_nothing_offset"])   # rho is 0 in this world
+        rest = result["h2"]["rest"]["passes_mean"]["rest_model"]
+        self.assertEqual(rest["lambda"]["offset"]["sensitivity_units"], "per ms")
+        self.assertEqual(rest["c"]["offset"]["sensitivity_units"], "W per ms")
+        self.assertEqual(rest["epsilon_rest_j_per_GB"]["offset"]["sensitivity_units"], "J/GB per ms")
+        # Per point: the bound in W is the pass-averaged joules over the mean decode time (M1).
+        q = result["cells"]["qwen3-8b-4bit"]["passes_mean"]["boundaries"]["dc_input"]["quantities"]["gross"]
+        self.assertAlmostEqual(q["meter_offset_bound_w"], q["meter_offset_bound_j"] / q["T_dec_s"], places=14)
+        p1 = result["cells"]["qwen3-8b-4bit"]["pass1"]["boundaries"]["dc_input"]["gross"]["meter_offset"]
+        p2 = result["cells"]["qwen3-8b-4bit"]["pass2"]["boundaries"]["dc_input"]["gross"]["meter_offset"]
+        self.assertAlmostEqual(q["meter_offset_bound_j"], (p1["bound_j"] + p2["bound_j"]) / 2, places=12)
+        self.assertNotIn("meter_offset", result["cells"]["qwen3-8b-4bit"]["pass1"]["boundaries"]["rails"]["gross"])
+
+
+def withhold(world: Path, session_id: str, model: str, *, store_present: bool):
+    """Turn one of the twin's synthetic sessions into a grouped export (lead ruling 2026-10-20 item 1):
+    the model's science rows leave the public CSV for a withheld store under the custody root, and
+    the sidecar records the count-only locator.  store_present False removes the store afterwards."""
+    import csv
+    import hashlib
+    pack = f"bytes-{session_id.split('-')[1]}-p{session_id[1]}"
+    csv_path = world / "exports" / pack / (session_id + ".runs.csv")
+    with csv_path.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream)
+        columns, rows = reader.fieldnames, list(reader)
+    key = "bytes-decode-" + synth.canon(model)
+    kept = [r for r in rows if r["config_key"] != key]
+    withheld = [r for r in rows if r["config_key"] == key]
+    store = world / "withheld" / pack / (session_id + ".runs.csv")
+    for path, part in ((csv_path, kept), (store, withheld)):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(part)
+    sidecar = csv_path.with_name(session_id + ".session.json")
+    data = json.loads(sidecar.read_text())
+    data["blinding"]["withheld"] = {"path": "../../withheld/" + pack + "/" + session_id + ".runs.csv",
+                                    "row_count": len(withheld),
+                                    "config_key_sha256": {hashlib.sha256(key.encode()).hexdigest(): len(withheld)}}
+    sidecar.write_text(json.dumps(data))
+    if not store_present:
+        store.unlink()
+    return len(withheld)
+
+
+class WithheldStoreTests(unittest.TestCase):
+    """Lead ruling 2026-10-20 items 1 to 4 and B6 ruling Q1 on the twin's own two-pass world, with
+    Qwen3-30B-A3B's rows of each pass moved into a withheld store."""
+
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+        cls.tmp = tempfile.TemporaryDirectory(prefix="bytes-twin-withheld-")
+        cls.worlds = {}
+        for case, present in (("present", (True, True)), ("one", (True, False)), ("both", (False, False))):
+            world = Path(cls.tmp.name) / case
+            shutil.copytree(WORLD["two"], world)
+            for session_id, keep in zip(("p1-s2", "p2-s2"), present):
+                withhold(world, session_id, "Qwen3-30B-A3B-4bit", store_present=keep)
+            cls.worlds[case] = world
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_load_withheld_reads_the_store_or_names_the_missing_models_by_digest(self):
+        manifest = bt.read_manifest(self.worlds["one"] / "bytes_manifest.json")
+        self.assertEqual(manifest["qwen3-30b-a3b-4bit"]["config_key"], "bytes-decode-qwen3-30b-a3b-4bit")
+        path = self.worlds["one"] / "exports/bytes-s2-p1/p1-s2.runs.csv"
+        store = bt.load_withheld(path, bt.read_sidecar(path), manifest)
+        self.assertEqual((len(store["rows"]), store["missing"]), (50, {}))
+        path = self.worlds["one"] / "exports/bytes-s2-p2/p2-s2.runs.csv"
+        store = bt.load_withheld(path, bt.read_sidecar(path), manifest)
+        self.assertEqual(store["rows"], [])
+        self.assertEqual(set(store["missing"]), {"qwen3-30b-a3b-4bit"})
+        self.assertEqual(store["missing"]["qwen3-30b-a3b-4bit"]["row_count"], 50)
+        self.assertEqual(store["missing"]["qwen3-30b-a3b-4bit"]["config_row_count"], 50)
+        self.assertIsNone(bt.withheld_record(bt.read_sidecar(self.worlds["one"] / "exports/bytes-s1-p1/p1-s1.runs.csv")))
+
+    def test_withheld_rows_enter_only_after_the_commit(self):
+        world = self.worlds["present"]
+        blinded = run_twin(world, "blinded", key_dir=False)
+        self.assertNotIn("qwen3-30b-a3b-4bit", blinded["cells"])            # item 1: never before the commit
+        self.assertFalse(blinded["inputs"]["withheld_rows_read"])
+        stage1 = run_twin(world, "1")
+        self.assertNotIn("qwen3-30b-a3b-4bit", stage1["cells"])
+        out = world / "twin-post.json"
+        argv = ["--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"), "--stage", "blinded",
+                "--stage1-commit", "0" * 40, "--out", str(out)]
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(bt.main(argv), 0)
+            self.assertEqual(bt.main(argv[:-3] + ["not-a-hash", "--out", str(out)]), 1)   # refused: not a commit hash
+        post = json.loads(out.read_text())
+        self.assertTrue(post["inputs"]["withheld_rows_read"])
+        block = post["cells"]["qwen3-30b-a3b-4bit"]
+        self.assertEqual(sorted(block), ["pass1", "pass2", "passes_mean"])
+        self.assertEqual(block["pass1"]["boundaries"]["rails"]["gross"]["n_r"], 10)          # blinded rails only
+        self.assertEqual(block["pass1"]["boundaries"]["dc_input"]["status"], "no_archive_join")
+        two = run_twin(world, "2")
+        self.assertEqual(two["cells"]["qwen3-30b-a3b-4bit"]["passes_mean"]["boundaries"]["dc_input"]["quantities"]["gross"]["label"], "pass_mean")
+        self.assertTrue(any(f["flag"] == "rows_withheld" and f["store_read"] for f in two["flags"]))
+        self.assertEqual(two["h2"]["rails"]["passes_mean"]["n"], 10)
+
+    def test_a_store_also_named_with_export_is_read_once(self):
+        # The convention before the sidecar locator: the stage-2 caller names each withheld store
+        # with --export as well.  Named first, the store must neither double the model's rows nor
+        # hide the export's sidecar (tests.test_bytes_roster_drop's nine-model chain does this).
+        world = self.worlds["present"]
+        plain = run_twin(world, "2")
+        stores = sorted((world / "withheld").rglob("*.runs.csv"))
+        self.assertEqual(len(stores), 2)
+        named = run_twin(world, "2", extra=[a for s in stores for a in ("--export", str(s))])
+        self.assertEqual(named["sessions"], plain["sessions"])                          # row counts per session
+        self.assertEqual(named["cells"], plain["cells"])                                # same function, same rows
+        self.assertEqual(named["h2"], plain["h2"])
+        self.assertEqual(sorted(f["session_id"] for f in named["flags"] if f["flag"] == "rows_withheld" and f["store_read"]),
+                         ["p1-s2", "p2-s2"])
+        p1 = named["cells"]["qwen3-30b-a3b-4bit"]["pass1"]["boundaries"]["rails"]["gross"]
+        self.assertEqual((p1["n_r"], p1["n_b"]), (10, 10))       # 10 repeats, 10 quad units of 4: each run once
+
+    def test_one_withheld_file_missing_is_a_flag_on_the_pass_and_the_point_is_one_pass(self):
+        result = run_twin(self.worlds["one"], "2")
+        block = result["cells"]["qwen3-30b-a3b-4bit"]
+        self.assertEqual(block["pass2"]["status"], "missing")
+        self.assertEqual(block["pass2"]["session_id"], "p2-s2")
+        self.assertEqual(block["pass2"]["flags"], [bt.WITHHELD_MISSING])
+        self.assertEqual((block["pass2"]["withheld_row_count"], block["pass2"]["withheld_config_row_count"]), (50, 50))
+        for boundary in bt.BOUNDARIES:
+            cell = block["pass2"]["boundaries"][boundary]
+            self.assertEqual(cell["status"], "missing")
+            self.assertEqual(cell["quantities"]["gross"]["status"], "missing")
+            q = block["passes_mean"]["boundaries"][boundary]["quantities"]["gross"]
+            self.assertEqual((q["status"], q["label"], q["flags"], q["passes_collected"], q["passes_computed"]),
+                             ("ok", "one_pass", [bt.WITHHELD_MISSING], 2, 1))
+            self.assertTrue(q["one_pass_after_refusal"])
+            p1 = block["pass1"]["boundaries"][boundary]["quantities"]["gross"]
+            self.assertAlmostEqual(q["E_dec_j"], p1["E_dec_j"], places=12)                  # D9 (a): the surviving pass
+            h1 = result["h1"][boundary]["passes_mean"]["models"]["qwen3-30b-a3b-4bit"]
+            self.assertIsNotNone(h1["word"])
+            self.assertEqual((h1["label"], h1["flags"]), ("one_pass", [bt.WITHHELD_MISSING]))
+            self.assertEqual(result["h1"][boundary]["pass2"]["models"]["qwen3-30b-a3b-4bit"]["status"], "missing")
+            self.assertEqual(result["h1"][boundary]["pass1"]["models"]["qwen3-30b-a3b-4bit"]["label"], "one_pass")
+            moe = result["h1"][boundary]["passes_mean"]["active_or_resident"]
+            self.assertNotEqual(moe["answer"], "missing")                                  # three MoE points remain
+            self.assertEqual(moe["missing_models"], [])
+            h2 = result["h2"][boundary]["passes_mean"]
+            self.assertEqual(h2["n"], 10)                                                  # H2 uses the point
+            self.assertEqual(h2["one_pass_models"], ["qwen3-30b-a3b-4bit"])
+            self.assertEqual(h2["two_pass_sensitivity"]["n"], 9)                           # D9 (c)
+        self.assertIn({"flag": bt.WITHHELD_MISSING, "session_id": "p2-s2", "model": "qwen3-30b-a3b-4bit",
+                       "withheld_row_count": 50, "withheld_config_row_count": 50}, result["flags"])
+        self.assertEqual(result["multiplicity"]["H2"]["rest"]["passes_mean"]["k_primary_intervals"], 11)
+
+    def test_both_withheld_files_missing_prints_the_model_missing_with_no_point_and_no_word(self):
+        result = run_twin(self.worlds["both"], "2")
+        block = result["cells"]["qwen3-30b-a3b-4bit"]
+        self.assertEqual({k: block[k]["status"] for k in ("pass1", "pass2")}, {"pass1": "missing", "pass2": "missing"})
+        for boundary in bt.BOUNDARIES:
+            q = block["passes_mean"]["boundaries"][boundary]["quantities"]["gross"]
+            self.assertEqual((q["status"], q["label"], q["flags"], q["passes_computed"]), ("missing", "no_pass", [bt.WITHHELD_MISSING], 0))
+            self.assertNotIn("E_dec_j", q)
+            h1 = result["h1"][boundary]["passes_mean"]["models"]["qwen3-30b-a3b-4bit"]
+            self.assertEqual((h1["word"], h1["status"], h1["flags"]), (None, "missing", [bt.WITHHELD_MISSING]))
+            moe = result["h1"][boundary]["passes_mean"]["active_or_resident"]
+            self.assertEqual((moe["answer"], moe["missing_models"], moe["flags"]), ("missing", ["qwen3-30b-a3b-4bit"], [bt.WITHHELD_MISSING]))
+            h2 = result["h2"][boundary]["passes_mean"]
+            self.assertEqual((h2["status"], h2["n"]), ("ok", 9))                            # D9 (b): the models with points
+            self.assertEqual(h2["two_pass_sensitivity"]["n"], 9)                           # D9 (c)
+            self.assertEqual(h2["two_pass_sensitivity"]["excluded_models"], ["qwen3-30b-a3b-4bit"])
+        self.assertEqual(result["multiplicity"]["H2"]["rails"]["passes_mean"]["k_primary_intervals"], 9)
+
+    def test_genuinely_uncollected_optional_pass_is_one_pass_without_the_flag(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            world = Path(tmp) / "world"
+            shutil.copytree(WORLD["two"], world)
+            shutil.rmtree(world / "exports/bytes-s2-p2")         # the session was never collected (R6)
+            shutil.rmtree(world / "archives/p2-s2")
+            result = run_twin(world, "2")
+        for model in ("qwen3-30b-a3b-4bit", "qwen3-8b-4bit"):
+            block = result["cells"][model]
+            self.assertEqual(sorted(block), ["pass1", "passes_mean"])
+            q = block["passes_mean"]["boundaries"]["rails"]["quantities"]["gross"]
+            self.assertEqual((q["label"], q["flags"], q["passes_collected"], q["passes_computed"]), ("one_pass", [], 1, 1))
+            self.assertFalse(q["one_pass_after_refusal"])
+            self.assertEqual(result["h1"]["rails"]["passes_mean"]["models"][model].get("flags"), [])
+        self.assertEqual(result["h1"]["rails"]["passes_mean"]["models"]["qwen3-30b-a3b-4bit"]["label"], "one_pass")
+        self.assertEqual([f for f in result["flags"] if f["flag"] == bt.WITHHELD_MISSING], [])
+        h2 = result["h2"]["rails"]["passes_mean"]
+        self.assertEqual(h2["n"], 10)
+        # D9 (c) as the twin reads it: a point on fewer than two computed passes, however it came
+        # about, prints the two-pass sensitivity line beside the primary fit.
+        self.assertEqual(h2["two_pass_sensitivity"]["n"], 8)
+        self.assertEqual(h2["two_pass_sensitivity"]["excluded_models"], ["qwen3-8b-4bit", "qwen3-30b-a3b-4bit"])
+        self.assertNotIn("two_pass_sensitivity", run_twin(WORLD["one"], "2")["h2"]["rails"]["passes_mean"])
 
 
 if __name__ == "__main__":

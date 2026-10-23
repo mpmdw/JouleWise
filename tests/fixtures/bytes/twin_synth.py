@@ -441,7 +441,10 @@ def generate(out: Path, *, seed=1, passes=1, defects=True, models=None, refuse_p
     write_json(out / "bytes_manifest.json", {
         "schema": "joulewise.bytes_manifest.synthetic.v1", "note": "synthetic; every number is made up",
         "models": {name: {"revision": "synthetic", "W_bytes": w * GB, "KV_bytes": kv * GB, "R_bytes": r * GB,
-                          "tokenizer": "synthetic", "tied_embeddings": False}
+                          "tokenizer": "synthetic", "tied_embeddings": False,
+                          # the public configuration identity of the model's science rows (the key the
+                          # export sidecar's withheld digests name; lead ruling 2026-10-20 item 1)
+                          "config_key": "bytes-decode-" + canon(name)}
                    for name, (w, kv, r, _tps, _p) in world.models.items()}})
     truth = {"S_BYTES_j_per_GB": S_BYTES, "DC_BASE_w": DC_BASE, "DC_GAIN": DC_GAIN, "RAILS_IDLE_W": RAILS_IDLE_W,
              "refuse_pass": list(refuse_pass) if refuse_pass else None, "pass2_tau_factor": 1.03,

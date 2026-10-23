@@ -18,11 +18,20 @@ sidecar's ``pack_id`` (the registered per-pass sub-pack ``bytes-sN-pK``, Addendu
 A session with neither is flagged ``pass_identity_missing`` and ordered after the identified
 passes by session id.  ``run_start_utc`` and every other clock column are never read.
 
+Withheld rows (lead ruling of 2026-10-20, items 1 and 4; B6 ruling Q1): a grouped export keeps a
+held-out configuration's rows in the sidecar's ``blinding.withheld`` store, which the twin reads
+only at stage 2 or at ``--stage blinded --stage1-commit HASH`` (the post-commit blinded agreement
+run).  A missing store is the flag ``bytes.withheld_missing`` on that pass, never a refusal.
+
+Meter label offset (Addendum 9, NR1): beside every H2 coefficient at DC input and rest the twin
+prints the labelled alternative beta_j +/- (t SE_j + C_j), both zero/sign decisions, the
+sensitivity dbeta_j/ddelta per ms and the disclosure; rails has no C term.
+
 Usage::
 
     bytes_twin.py --export S1.runs.csv [--export ...] [--export-dir DIR]
                   --manifest bytes_manifest.json [--archive ARCHIVE_ROOT ...]
-                  [--key-dir BLINDING_DIR] --stage {blinded,1,2} --out twin.json
+                  [--key-dir BLINDING_DIR] --stage {blinded,1,2} [--stage1-commit HASH] --out twin.json
 """
 
 from __future__ import annotations
@@ -237,8 +246,12 @@ def ols(rows, y):
     meat = [[math.fsum(design[i][a] * weights[i] * design[i][b] for i in range(n)) for b in range(p)] for a in range(p)]
     half = [[math.fsum(inv[a][c] * meat[c][b] for c in range(p)) for b in range(p)] for a in range(p)]
     cov_hc3 = [[math.fsum(half[a][c] * inv[c][b] for c in range(p)) for b in range(p)] for a in range(p)]
+    # Addendum 9 item 3: A = (X'X)^-1 X' maps the points to the coefficients (beta = A y); row j of A
+    # is coefficient j's weights over the n points.
+    a_matrix = [[math.fsum(inv[a][c] * design[i][c] for c in range(p)) for i in range(n)] for a in range(p)]
     return {"coef": coef, "cov": cov, "cov_hc3": cov_hc3, "leverages": leverage,
-            "xtx_inv": inv, "s2": s2, "df": df, "n": n, "p": p, "rss": rss, "fitted": fitted, "residuals": resid}
+            "xtx_inv": inv, "A": a_matrix, "s2": s2, "df": df, "n": n, "p": p, "rss": rss,
+            "fitted": fitted, "residuals": resid}
 
 
 def ols_predict(fit, row):
@@ -274,6 +287,101 @@ def coef_interval(fit, index, alpha):
     half_ols = t * math.sqrt(max(fit["cov"][index][index], 0.0))
     out.update({"half_width": half, "lower": value - half, "upper": value + half,
                 "ols": {"se_method": "OLS", "half_width": half_ols, "lower": value - half_ols, "upper": value + half_ols}})
+    return out
+
+
+# ----------------------------------------------------------------------------
+# Addendum 9 (NR1): the meter label-offset alternative beside every H2 coefficient at DC input and rest.
+
+INTERVAL_SCOPE = "statistical; conditional on the mapped meter energies"            # Addendum 9 item 2
+OFFSET_SCOPE = "coherent meter label offset delta >= 0, a labelled alternative; regressors as observed"
+# Addendum 9 item 4 (registration 9, "Disclosure"): delta unmeasured (block-6 M13); its structural bound
+# is one sample period plus the poll round trip, 22 to 25 ms on the recorded 50 SPS streams.
+OFFSET_DELTA_BOUND_MS = (22, 25)
+OFFSET_DISCLOSURE = ("The meter-to-host label offset delta has not been measured (block-6 M13); its structural "
+                     "bound is one sample period plus the poll round trip, "
+                     f"{OFFSET_DELTA_BOUND_MS[0]} to {OFFSET_DELTA_BOUND_MS[1]} ms on the recorded 50 SPS streams. "
+                     "d_beta_d_delta_per_ms is the sensitivity of each coefficient to delta, so a later "
+                     "measurement of delta applies without a new rule.")
+
+
+def zero_sign_decision(lower, upper):
+    """The zero/sign statement an interval makes: positive, negative, or contains zero."""
+    if lower is None or upper is None:
+        return None
+    if lower > 0.0:
+        return "positive"
+    if upper < 0.0:
+        return "negative"
+    return "contains zero"
+
+
+def offset_alternative(fit, index, interval, points_offset, unit):
+    """Addendum 9 item 3: beta_j +/- (t SE_j + C_j), C_j = sum_i |A_ji| x bound_w_i, where bound_w_i is the
+    point's coherent-offset bound in watts (pass-averaged joules over the point's mean decode time, the
+    same ratio of means as its power; cold disposition M1), and item 4: dbeta_j/ddelta = sum_i A_ji x
+    sens_w_i / T_i per second, printed per ms.  points_offset: per point (in the fit's row order)
+    {"bound_w", "sensitivity_w", "T", "bound_flag", "sensitivity_flag"}.  A non-finite or missing
+    bound gives the systematics flag and keeps the registered interval (L1/L2); a non-finite
+    sensitivity gives the sensitivity flag; neither refuses."""
+    weights = fit["A"][index]
+    out = {"coefficient_C": None, "offset_lower": None, "offset_upper": None, "offset_decision": None,
+           "offset_ols_lower": None, "offset_ols_upper": None, "offset_ols_decision": None,
+           "d_beta_d_delta_per_ms": None, "sensitivity_units": (unit + " per ms").strip(),
+           "coefficient_decision": zero_sign_decision(interval.get("lower"), interval.get("upper")),
+           "systematics_flag": None, "sensitivity_flag": None}
+    bound_flags = [p["bound_flag"] for p in points_offset if p.get("bound_flag")]
+    if bound_flags:
+        out["systematics_flag"] = "; ".join(sorted(set(bound_flags)))
+    elif any(not is_number(p.get("bound_w")) or p["bound_w"] < 0 for p in points_offset):
+        out["systematics_flag"] = "meter offset bound missing or invalid for a point"
+    elif interval.get("half_width") is not None:
+        c = math.fsum(abs(w) * p["bound_w"] for w, p in zip(weights, points_offset))
+        value = interval["value"]
+        out.update({"coefficient_C": c,
+                    "offset_lower": value - (interval["half_width"] + c), "offset_upper": value + (interval["half_width"] + c),
+                    "offset_ols_lower": value - (interval["ols"]["half_width"] + c),
+                    "offset_ols_upper": value + (interval["ols"]["half_width"] + c)})
+        out["offset_decision"] = zero_sign_decision(out["offset_lower"], out["offset_upper"])
+        out["offset_ols_decision"] = zero_sign_decision(out["offset_ols_lower"], out["offset_ols_upper"])
+    sens_flags = [p["sensitivity_flag"] for p in points_offset if p.get("sensitivity_flag")]
+    if sens_flags:
+        out["sensitivity_flag"] = "; ".join(sorted(set(sens_flags)))
+    elif any(not is_number(p.get("sensitivity_w")) or not is_number(p.get("T")) or p["T"] <= 0 for p in points_offset):
+        out["sensitivity_flag"] = "meter offset sensitivity missing or non-finite for a point"
+    else:
+        out["d_beta_d_delta_per_ms"] = math.fsum(w * p["sensitivity_w"] / p["T"] for w, p in zip(weights, points_offset)) / 1000.0
+    return out
+
+
+def offset_terms(repeats, quads):
+    """The cell's coherent-offset terms over its kept units (Addendum 9 item 3, cold disposition M1):
+    the per-run bound max(P_start, P_end) x (r_max + dt) in joules and the per-run signed sensitivity
+    P_before-start - P_before-end in watts, each averaged with the strata weights as B is
+    (0.2 x mean over repeats + 0.8 x mean over quad members).  L1/L2: a run whose bound is missing,
+    non-finite or negative flags the bound (the registered cell is unchanged); a run whose sensitivity
+    is missing or non-finite flags the sensitivity.  Nothing refuses."""
+    members_r = [m.get("offset") or {} for m in repeats]
+    members_q = [m.get("offset") or {} for q in quads for m in q["members"]]
+    ids_r = [m["id"] for m in repeats]
+    ids_q = [m["id"] for q in quads for m in q["members"]]
+    out = {"bound_j": None, "sensitivity_w": None, "bound_flag": None, "sensitivity_flag": None,
+           "n_runs": len(members_r) + len(members_q)}
+    if not members_r or not members_q:
+        return out
+    bad = [i for i, m in zip(ids_r + ids_q, members_r + members_q)
+           if not is_number(m.get("bound_j")) or m["bound_j"] < 0]
+    if bad:
+        out["bound_flag"] = "meter offset bound missing, non-finite or negative on run(s) " + ", ".join(sorted(bad))
+    else:
+        out["bound_j"] = (0.2 * statistics.fmean(m["bound_j"] for m in members_r)
+                          + 0.8 * statistics.fmean(m["bound_j"] for m in members_q))
+    bad = [i for i, m in zip(ids_r + ids_q, members_r + members_q) if not is_number(m.get("sensitivity_w"))]
+    if bad:
+        out["sensitivity_flag"] = "meter offset sensitivity missing or non-finite on run(s) " + ", ".join(sorted(bad))
+    else:
+        out["sensitivity_w"] = (0.2 * statistics.fmean(m["sensitivity_w"] for m in members_r)
+                                + 0.8 * statistics.fmean(m["sensitivity_w"] for m in members_q))
     return out
 
 
@@ -543,7 +651,10 @@ def read_manifest(path):
         kv = kv if kv is not None else 0.0
         manifest[name] = {"model": entry.get("_name"), "W_bytes": w, "KV_bytes": kv, "R_bytes": r,
                           "b_GB": (w + kv) / GB, "R_GB": r / GB,
-                          "revision": entry.get("revision"), "kind": ROSTER.get(name, {}).get("kind")}
+                          "revision": entry.get("revision"), "kind": ROSTER.get(name, {}).get("kind"),
+                          # the public configuration identity (lead ruling 2026-10-20 item 1: the sidecar
+                          # lists withheld rows by the digest of this key)
+                          "config_key": entry.get("config_key")}
     return manifest
 
 
@@ -683,6 +794,15 @@ def edge_powers(times_ns, watts, window):
     return p_start, p_end
 
 
+def before_edge_powers(times_ns, watts, window):
+    """Addendum 9 item 4: at each edge of window, the power of the sample adjacent to the edge on its
+    before side (the last sample labelled before the edge).  A label offset delta >= 0 moves the
+    window earlier over the true samples by delta, so it gains samples from before the start edge
+    and loses the ones just before the end edge: dE/ddelta = P_before-start - P_before-end."""
+    lo, hi = bisect.bisect_left(times_ns, window[0]), bisect.bisect_left(times_ns, window[1])
+    return watts[max(lo - 1, 0)], watts[max(hi - 1, 0)]
+
+
 def integrate(times_ns, watts, t0, t1):
     """(energy J, samples): mean power of samples in [t0, t1) x duration, None without samples."""
     if t1 <= t0:
@@ -795,10 +915,16 @@ def dc_join(archive, run_id):
         p_start, p_end = edge_powers(host, watts, window)
         r_max_s = stream["fit"]["excess_latency_ms_absmax"] / 1e3   # Addendum 7 item 12: absolute
         dt_meter_s = stream["step_ms"] / 1e3
+        # Addendum 9 item 3: the per-run coherent-offset bound max(P_start, P_end)(r_max + dt_meter) in
+        # joules (the time factor is u's own); item 4: the signed sensitivity to delta in watts.
+        p_before_start, p_before_end = before_edge_powers(host, watts, window)
         result = {"status": "ok", "stream": stream["name"], "decode_energy_j": energy, "samples": n,
                   "decode_span_s": duration, "mean_power_w": mean_power,
                   "edge_bound_j": (p_start + p_end) * (r_max_s + dt_meter_s),
                   "edge_terms": {"P_start_w": p_start, "P_end_w": p_end, "r_max_s": r_max_s, "dt_meter_s": dt_meter_s},
+                  "offset_bound_j": max(p_start, p_end) * (r_max_s + dt_meter_s),
+                  "offset_before_edge_powers_w": {"P_before_start_w": p_before_start, "P_before_end_w": p_before_end},
+                  "offset_sensitivity_w": p_before_start - p_before_end,
                   "clock_fit": {key: stream["fit"][key] for key in
                                 ("excess_latency_ms_p95", "excess_latency_ms_max", "excess_latency_ms_min",
                                  "excess_latency_ms_absmax", "clock_rate_ppm")},
@@ -875,17 +1001,21 @@ def _member(row, boundary, dc, allowance_j):
         return {"id": row["run_id"], "E": e_rails, "T": t, "bounds": bounds, "idle_w": row.get("idle_power_w")}
     if dc is None or dc.get("status") != "ok":
         return None
+    # Addendum 9: the run's coherent-offset terms ride with its DC-input and rest members (the label
+    # offset moves the meter window; rails is not affected, so rest carries the same terms).
+    offset = {"bound_j": dc.get("offset_bound_j"), "sensitivity_w": dc.get("offset_sensitivity_w")}
     if boundary == "dc_input":
         return {"id": row["run_id"], "E": dc["decode_energy_j"], "T": t,
                 "bounds": {"E_meter_edge_bound_j": dc["edge_bound_j"], "E_whole_window_drift_allowance_j": allowance_j},
-                "idle_w": dc.get("idle_power_w")}
+                "idle_w": dc.get("idle_power_w"), "offset": offset}
     if not is_number(e_rails):
         return None
     idle_rails, idle_dc = row.get("idle_power_w"), dc.get("idle_power_w")
     return {"id": row["run_id"], "E": dc["decode_energy_j"] - e_rails, "T": t,
             "bounds": {"E_clock_anchor_shift_bound_j": anchor, "E_meter_edge_bound_j": dc["edge_bound_j"],
                        "E_whole_window_drift_allowance_j": allowance_j},
-            "idle_w": (idle_dc - idle_rails) if is_number(idle_dc) and is_number(idle_rails) else None}
+            "idle_w": (idle_dc - idle_rails) if is_number(idle_dc) and is_number(idle_rails) else None,
+            "offset": offset}
 
 
 def _idle_subtracted(member):
@@ -967,9 +1097,15 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
     scale = None
     cell = {"boundary": boundary, "kinds": list(kinds),
             "drift_allowance": gross_record, "drift_allowance_idle_family": idle_record}
+
+    def estimate(repeats, quads):
+        est = phase_estimate(repeats, quads, kinds, alpha=alpha)
+        if est["status"] == "ok" and boundary != "rails":
+            est["meter_offset"] = offset_terms(repeats, quads)    # Addendum 9: DC input and rest only
+        return est
     primary_rows = [row for row in rows]
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale))
-    cell["gross"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
+    cell["gross"] = estimate(repeats, quads)
     removed = [{"run_id": r["run_id"], "status": r["status"], "codes": r.get("exclusion_codes"),
                 "restorable": restorable(r)} for r in rows if not _kept(r)]
     cell["removed_members"] = removed
@@ -984,14 +1120,14 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
                 cell[name] = {"kind": kind, "value_j": max(values)[0], "member": max(values)[1],
                               "min_j": min(values)[0], "composed": False}
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale, True))
-    cell["idle_subtracted"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
+    cell["idle_subtracted"] = estimate(repeats, quads)
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale), restore=True)
-    cell["flagged_inclusive"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
+    cell["flagged_inclusive"] = estimate(repeats, quads)
     assist = [r["run_id"] for r in rows if "battery.assist" in (r.get("flag_codes") or "").split(";")]
     cell["assist_members"] = assist
     if assist:
         repeats, quads = _assemble(primary_rows, lambda r: build(r, scale), drop_assist=True)
-        cell["without_assisted"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
+        cell["without_assisted"] = estimate(repeats, quads)
     return cell
 
 
@@ -1023,17 +1159,22 @@ def pass_identity(session_id, listed_sessions, sidecar):
     return {"pass_id": None, "source": None, "flags": ["pass_identity_missing"]}
 
 
-def passes_by_model(sessions, identities):
+def passes_by_model(sessions, identities, withheld_missing=None):
     """Model -> ordered list of session ids: by registered pass id, pass 1 first.
 
     identities: {session_id: pass_identity record}.  Sessions without an identity come after
     every identified pass, ordered by session id (deterministic and clock-free).
+    withheld_missing: {session_id: {model: record}} of passes whose withheld file is missing; such
+    a pass has no rows but is a collected pass of the model (B6 ruling Q1).
     """
     order = {}
     for session_id, rows in sessions.items():
         for row in rows:
             if row["role"] == "science" and row.get("model_name"):
                 order.setdefault(canon(row["model_name"]), set()).add(session_id)
+    for session_id, models in (withheld_missing or {}).items():
+        for model in models:
+            order.setdefault(model, set()).add(session_id)
 
     def key(session_id):
         pass_id = identities.get(session_id, {}).get("pass_id")
@@ -1060,6 +1201,41 @@ def listed_sessions(manifest_path):
     return {str(s["session_id"]): s for s in entries if isinstance(s, dict) and s.get("session_id")}
 
 
+# ----------------------------------------------------------------------------
+# The withheld store (lead ruling of 2026-10-20, items 1 and 4; B6 ruling Q1).
+
+def withheld_record(sidecar):
+    """The sidecar's count-only locator of the session's withheld rows, or None for an ungrouped export."""
+    info = ((sidecar or {}).get("blinding") or {}).get("withheld")
+    return info if isinstance(info, dict) and info.get("path") else None
+
+
+def config_key_digest(key: str) -> str:
+    return hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+
+
+def load_withheld(export_path, sidecar, manifest):
+    """Rows of the session's withheld store, read only after the stage-1 commit (ruling item 1), or a
+    `missing` record naming the sidecar's withheld row count and, per model whose configuration digest
+    the sidecar lists, that model's row count.  Item 4 and B6 Q1: a missing file is a flag, never a refusal."""
+    info = withheld_record(sidecar)
+    if info is None:
+        return {"rows": [], "missing": {}}
+    store = Path(export_path).parent / info["path"]
+    try:
+        rows = read_export(store)
+    except OSError:
+        digests = info.get("config_key_sha256") or {}
+        missing = {}
+        for model, entry in manifest.items():
+            digest = config_key_digest(entry["config_key"]) if entry.get("config_key") else None
+            if digest in digests:
+                missing[model] = {"row_count": info.get("row_count"), "config_row_count": digests[digest],
+                                  "path": info["path"], "config_key_sha256": digest}
+        return {"rows": [], "missing": missing, "row_count": info.get("row_count")}
+    return {"rows": rows, "missing": {}, "row_count": len(rows)}
+
+
 def quantities(cell_block, manifest_entry):
     """e, tau, b, R, P, BW with intervals, from a computed cell (all three variants)."""
     out = {}
@@ -1082,8 +1258,25 @@ def quantities(cell_block, manifest_entry):
             q.update({"b_GB_per_step": manifest_entry["b_GB"], "R_GB": manifest_entry["R_GB"],
                       "BW_GB_per_s": manifest_entry["b_GB"] / q["tau_s_per_step"],
                       "R_over_tau_GB_per_s": manifest_entry["R_GB"] / q["tau_s_per_step"]})
+        offset = est.get("meter_offset")
+        if offset is not None:
+            # Addendum 9: the pass's coherent-offset bound (J) and sensitivity (W), with their L1/L2 flags.
+            q.update({"meter_offset_bound_j": offset["bound_j"], "meter_offset_sensitivity_w": offset["sensitivity_w"],
+                      "meter_offset_bound_flag": offset["bound_flag"],
+                      "meter_offset_sensitivity_flag": offset["sensitivity_flag"]})
         out[variant] = q
     return out
+
+
+WITHHELD_MISSING = "bytes.withheld_missing"
+
+
+def missing_pass_quantities(record):
+    """B6 ruling Q1 (registration 11 item 4): a pass whose withheld file is missing prints `missing`
+    with the flag and the sidecar's withheld row counts, on every boundary and variant."""
+    item = {"status": "missing", "flags": [WITHHELD_MISSING], "withheld_row_count": record.get("row_count"),
+            "withheld_config_row_count": record.get("config_row_count"), "withheld_path": record.get("path")}
+    return {variant: dict(item) for variant in ("gross", "idle_subtracted", "flagged_inclusive", "without_assisted")}
 
 
 def mean_of_passes(per_pass):
@@ -1091,22 +1284,45 @@ def mean_of_passes(per_pass):
 
     Addendum 7 item 12: P of the pass mean is mean E / mean T with half-width (mean h + mean B) / mean T.
     Addendum 7 D9 (a): when only one pass computes, the point is that pass, labelled one_pass.
+    B6 ruling Q1: a pass whose withheld file is missing is a collected pass that did not compute; the
+    flag is carried on the point.  Both passes missing: the model prints `missing` and has no point.
     """
     passes = [p for p in per_pass if p.get("status") == "ok"]
     collected = len(per_pass)
+    flags = sorted({f for p in per_pass for f in (p.get("flags") or [])})
+    statuses = [p.get("status") for p in per_pass]
     if not passes:
-        return {"status": "refused_no_pass_computed", "passes_collected": collected, "passes_computed": 0,
-                "pass_statuses": [p.get("status") for p in per_pass]}
+        if per_pass and all(s == "missing" for s in statuses):
+            return {"status": "missing", "label": "no_pass", "flags": flags, "passes_collected": collected,
+                    "passes_computed": 0, "pass_statuses": statuses}
+        return {"status": "refused_no_pass_computed", "label": "no_pass", "flags": flags,
+                "passes_collected": collected, "passes_computed": 0, "pass_statuses": statuses}
     keys = ("E_dec_j", "T_dec_s", "e_j_per_step", "tau_s_per_step", "e_half_width_j_per_step",
             "e_printed_j_per_token")
     out = {"status": "ok", "n_passes": len(passes), "passes_collected": collected, "passes_computed": len(passes),
-           "label": "one_pass" if len(passes) == 1 else "pass_mean",
-           # D9 (a): a point that rests on one pass because the other refused; a model collected once
-           # is labelled one_pass too (Addendum 6) but is not a degraded point.
+           "label": "one_pass" if len(passes) == 1 else "pass_mean", "flags": flags,
+           # D9 (a): a point that rests on one pass because the other refused or its withheld file is
+           # missing; a model collected once (R6's one-pass minimum) is labelled one_pass too.
            "one_pass_after_refusal": collected >= 2 and len(passes) == 1,
-           "pass_statuses": [p.get("status") for p in per_pass]}
+           "pass_statuses": statuses}
     for key in keys:
         out[key] = statistics.fmean(p[key] for p in passes)
+    # Addendum 9 (cold disposition M1): the bound is carried in joules, averaged over the available
+    # passes as B is, and divided by the point's mean decode time; the sensitivity likewise in watts.
+    if any("meter_offset_bound_j" in p for p in passes):
+        bound_flags = sorted({p["meter_offset_bound_flag"] for p in passes if p.get("meter_offset_bound_flag")})
+        sens_flags = sorted({p["meter_offset_sensitivity_flag"] for p in passes if p.get("meter_offset_sensitivity_flag")})
+        out["meter_offset_bound_flag"] = "; ".join(bound_flags) if bound_flags else None
+        out["meter_offset_sensitivity_flag"] = "; ".join(sens_flags) if sens_flags else None
+        if not bound_flags and all(is_number(p.get("meter_offset_bound_j")) for p in passes):
+            out["meter_offset_bound_j"] = statistics.fmean(p["meter_offset_bound_j"] for p in passes)
+            out["meter_offset_bound_w"] = out["meter_offset_bound_j"] / out["T_dec_s"]
+        else:
+            out["meter_offset_bound_j"] = out["meter_offset_bound_w"] = None
+        if not sens_flags and all(is_number(p.get("meter_offset_sensitivity_w")) for p in passes):
+            out["meter_offset_sensitivity_w"] = statistics.fmean(p["meter_offset_sensitivity_w"] for p in passes)
+        else:
+            out["meter_offset_sensitivity_w"] = None
     out["P_mean_w"] = out["E_dec_j"] / out["T_dec_s"]
     out["P_half_width_w"] = out["e_half_width_j_per_step"] * DECODE_STEPS / out["T_dec_s"]
     out["E_dec_lower_j"] = out["E_dec_j"] - out["e_half_width_j_per_step"] * DECODE_STEPS
@@ -1157,8 +1373,10 @@ def h1_predict(lines, hyp, x):
     return {"x": x, "central": central, "lower": min(values), "upper": max(values)}
 
 
-def h1_words(lines, models):
-    """models: {model: {"x": {hyp: v}, "e", "w", "kind"}} for every model with a number."""
+def h1_words(lines, models, missing=()):
+    """models: {model: {"x": {hyp: v}, "e", "w", "kind"}} for every model with a number; missing: the
+    models whose point is `missing` (B6 ruling Q1), which have no word and leave the active-or-resident
+    answer `missing` when one of them is an MoE model."""
     per_model = {}
     for name, point in models.items():
         measured = [point["e"] - point["w"], point["e"] + point["w"]]
@@ -1176,8 +1394,13 @@ def h1_words(lines, models):
                            "word": word if point["kind"] != "fit" else None,
                            "role": "held_out" if point["kind"] != "fit" else "fit_set"}
     moe_present = [n for n in MOE if n in per_model]
+    moe_missing = [n for n in MOE if n in missing and n not in per_model]
     answer, misses = "mixed", []
-    if len(moe_present) == 3:
+    if moe_missing:
+        # B6 ruling Q1: a `missing` MoE model leaves the three-model answer undrawable; it prints
+        # `missing` with the models, never `mixed` (which R5 draws from three evaluated models).
+        answer = "missing"
+    elif len(moe_present) == 3:
         if all(per_model[n]["checks"]["resident"]["miss"] == "prediction_above" for n in moe_present):
             answer = "active"
         elif all(per_model[n]["checks"]["bytes"]["miss"] == "prediction_below" for n in moe_present):
@@ -1187,7 +1410,10 @@ def h1_words(lines, models):
             for hyp in ("resident", "bytes"):
                 c = per_model[n]["checks"][hyp]
                 misses.append({"model": n, "hypothesis": hyp, "consistent": c["consistent"], "miss": c["miss"]})
-    return {"models": per_model, "active_or_resident": {"answer": answer, "moe_models": moe_present, "misses": misses},
+    return {"models": per_model,
+            "active_or_resident": {"answer": answer, "moe_models": moe_present, "misses": misses,
+                                   "missing_models": moe_missing,
+                                   "flags": [WITHHELD_MISSING] if moe_missing else []},
             "dense_note": ("Dense held-out models test the line's linearity over the bytes range, not which "
                            "hypothesis is right.")}
 
@@ -1195,27 +1421,53 @@ def h1_words(lines, models):
 # ----------------------------------------------------------------------------
 # H2: power against bandwidth (R5).
 
-def h2_fits(points, alpha, *, rails_power=None):
-    """points: {model: {"P", "BW", "R_over_tau", "P_half_width"}}; alpha the Bonferroni level."""
+def resident_adds_nothing(lower, upper, value):
+    """R5: "resident adds nothing" when rho's interval contains 0 or rho <= 0."""
+    return bool(lower is None or lower <= 0.0 <= upper or value <= 0)
+
+
+def h2_fits(points, alpha, *, rails_power=None, offset_terms_apply=False):
+    """points: {model: {"P", "BW", "R_over_tau", "P_half_width", "T", "offset": {...}}}; alpha the
+    Bonferroni level.  offset_terms_apply: Addendum 9's labelled alternative beside every coefficient
+    (DC input and rest; rails has no C term)."""
     names = sorted(n for n in points if points[n].get("status", "ok") == "ok")
     out = {"models": names, "n": len(names), "alpha": alpha, "se_method": "HC3 primary, OLS beside",
-           "one_pass_models": sorted(n for n in names if points[n].get("one_pass_after_refusal"))}
+           "one_pass_models": sorted(n for n in names if points[n].get("one_pass_after_refusal")),
+           "interval_scope": INTERVAL_SCOPE}
+    if offset_terms_apply:
+        out.update({"offset_scope": OFFSET_SCOPE, "offset_disclosure": OFFSET_DISCLOSURE,
+                    "offset_delta_structural_bound_ms": list(OFFSET_DELTA_BOUND_MS)})
     # Addendum 7 D9 (b): a fit is printed as primary only when n - p >= 2.
     if len(names) < 4:
         out["status"] = "refused_n_minus_p_below_2"
         return out
+
+    def interval(fit, index, fit_names, unit):
+        """coef_interval plus, at DC input and rest, Addendum 9's alternative and both decisions."""
+        iv = coef_interval(fit, index, alpha)
+        iv["decision"] = zero_sign_decision(iv.get("lower"), iv.get("upper"))
+        if offset_terms_apply:
+            iv["offset"] = offset_alternative(fit, index, iv, [points[n]["offset"] for n in fit_names], unit)
+        return iv
     y = [points[n]["P"] for n in names]
     bw = [points[n]["BW"] for n in names]
     rt = [points[n]["R_over_tau"] for n in names]
     simple = ols([[b] for b in bw], y)
-    out["simple"] = {"P0_w": simple["coef"][0], "epsilon_j_per_GB": coef_interval(simple, 1, alpha),
+    out["simple"] = {"P0_w": simple["coef"][0], "P0": interval(simple, 0, names, "W"),
+                     "epsilon_j_per_GB": interval(simple, 1, names, "J/GB"),
                      "df": simple["df"], "s2": simple["s2"], "residuals": dict(zip(names, simple["residuals"]))}
     if len(names) >= 5:
         ext = ols([[b, r] for b, r in zip(bw, rt)], y)
-        rho = coef_interval(ext, 2, alpha)
-        out["resident_extended"] = {"P0_w": ext["coef"][0], "epsilon_j_per_GB": coef_interval(ext, 1, alpha),
+        rho = interval(ext, 2, names, "J/GB")
+        out["resident_extended"] = {"P0_w": ext["coef"][0], "P0": interval(ext, 0, names, "W"),
+                                    "epsilon_j_per_GB": interval(ext, 1, names, "J/GB"),
                                     "rho_j_per_GB": rho, "df": ext["df"], "s2": ext["s2"],
-                                    "resident_adds_nothing": bool(rho["lower"] is None or rho["lower"] <= 0.0 <= rho["upper"] or rho["value"] <= 0)}
+                                    "resident_adds_nothing": resident_adds_nothing(rho["lower"], rho["upper"], rho["value"])}
+        if offset_terms_apply:
+            # Addendum 9 item 3: "resident adds nothing" is also decided under the offset interval.
+            o = rho["offset"]
+            out["resident_extended"]["resident_adds_nothing_offset"] = (
+                None if o["coefficient_C"] is None else resident_adds_nothing(o["offset_lower"], o["offset_upper"], rho["value"]))
     tier = [n for n in names if n in TIER]
     if len(tier) >= 5:
         tfit = ols([[points[n]["BW"], points[n]["R_over_tau"]] for n in tier], [points[n]["P"] for n in tier])
@@ -1235,8 +1487,9 @@ def h2_fits(points, alpha, *, rails_power=None):
                                      "upper_w": dev + half_ols, "se_pred_w": pred["se_pred"]},
                              "measured_half_width_w": points[n]["P_half_width"],
                              "sign": "+" if dev > 0 else "-" if dev < 0 else "0"}
-        out["tier"] = {"models": tier, "P0_w": tfit["coef"][0], "epsilon_j_per_GB": coef_interval(tfit, 1, alpha),
-                       "rho_j_per_GB": coef_interval(tfit, 2, alpha), "df": tfit["df"], "s2": tfit["s2"],
+        out["tier"] = {"models": tier, "P0_w": tfit["coef"][0], "P0": interval(tfit, 0, tier, "W"),
+                       "epsilon_j_per_GB": interval(tfit, 1, tier, "J/GB"),
+                       "rho_j_per_GB": interval(tfit, 2, tier, "J/GB"), "df": tfit["df"], "s2": tfit["s2"],
                        "deviations": deviations}
     loo = {}
     for n in names:
@@ -1251,8 +1504,9 @@ def h2_fits(points, alpha, *, rails_power=None):
         pr = [rails_power[n] for n in names]
         if all(is_number(v) for v in pr):
             lam = ols([[b, p] for b, p in zip(bw, pr)], y)
-            out["rest_model"] = {"c_w": lam["coef"][0], "epsilon_rest_j_per_GB": coef_interval(lam, 1, alpha),
-                                 "lambda": coef_interval(lam, 2, alpha), "df": lam["df"], "s2": lam["s2"],
+            out["rest_model"] = {"c_w": lam["coef"][0], "c": interval(lam, 0, names, "W"),
+                                 "epsilon_rest_j_per_GB": interval(lam, 1, names, "J/GB"),
+                                 "lambda": interval(lam, 2, names, ""), "df": lam["df"], "s2": lam["s2"],
                                  "vif_BW_and_P_rails": vif(bw, pr), "word_drawn": None}
     out["status"] = "ok"
     return out
@@ -1296,21 +1550,30 @@ def sha256_of(value) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None):
-    """sidecars: {session_id: export sidecar dict}; listed: {session_id: manifest sessions entry}."""
+def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None, withheld=None):
+    """sidecars: {session_id: export sidecar dict}; listed: {session_id: manifest sessions entry};
+    withheld: {session_id: load_withheld record} for the sessions whose withheld store was read (after
+    the stage-1 commit) or found missing."""
     roster = {name: spec for name, spec in ROSTER.items() if name in manifest}
     if set(manifest) not in (set(ROSTER), set(ROSTER) - {"qwen3-8b-8bit"}):
         raise ValueError("manifest requires the registered roster, optionally without Qwen3-8B-8bit")
     held_out = tuple(name for name in HELD_OUT if name in roster)
     h1_family = len(HYPOTHESES) * len(held_out)  # R5: manifest membership, including missing rows.
     sessions = group_sessions(rows)
-    sidecars, listed = sidecars or {}, listed or {}
+    sidecars, listed, withheld = sidecars or {}, listed or {}, withheld or {}
     identities = {s: pass_identity(s, listed, sidecars.get(s)) for s in sessions}
-    model_sessions = passes_by_model(sessions, identities)
+    # B6 ruling Q1: a session whose withheld file is missing is still a collected pass of the models
+    # it withheld; their cells print `missing` with the flag and the sidecar's counts.
+    withheld_missing = {s: w["missing"] for s, w in withheld.items() if w.get("missing")}
+    model_sessions = passes_by_model(sessions, identities, withheld_missing)
     model_keys = {}
     for row in rows:
         if row["role"] == "science" and row.get("model_name"):
             model_keys.setdefault(canon(row["model_name"]), set()).add(row["config_key"])
+    for models in withheld_missing.values():
+        for model in models:
+            if manifest.get(model, {}).get("config_key"):
+                model_keys.setdefault(model, set()).add(manifest[model]["config_key"])
     stage_models = set(FIT_SET) if stage == "1" else set(model_keys) if stage == "2" else set()
     if stage in ("1", "2"):
         if key_dir is None:
@@ -1325,11 +1588,15 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
     for session_id, identity in sorted(identities.items()):
         for flag in identity["flags"]:
             flags.append({"flag": flag, "session_id": session_id})
-        # Lead ruling 2026-10-20 item 1: the sidecar may record counts and key digests of rows
-        # written to the withheld store instead of the export; they are printed, never a refusal.
-        withheld = (sidecars.get(session_id) or {}).get("withheld")
-        if withheld:
-            flags.append({"flag": "rows_withheld", "session_id": session_id, "withheld": withheld})
+        # Lead ruling 2026-10-20 item 1: the sidecar records counts and key digests of rows written
+        # to the withheld store instead of the export; they are printed, never a refusal.
+        record = withheld_record(sidecars.get(session_id))
+        if record:
+            flags.append({"flag": "rows_withheld", "session_id": session_id, "withheld": record,
+                          "store_read": session_id in withheld and not withheld[session_id].get("missing")})
+        for model, item in sorted(withheld_missing.get(session_id, {}).items()):
+            flags.append({"flag": WITHHELD_MISSING, "session_id": session_id, "model": model,
+                          "withheld_row_count": item["row_count"], "withheld_config_row_count": item["config_row_count"]})
     allowances, reference_dc = {}, {}
     for session_id, srows in sessions.items():
         record = {}
@@ -1352,6 +1619,16 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         if model not in ROSTER:
             notes.append(f"{model}: not in the R1 roster; computed but outside H1/H2")
         for pass_index, session_id in enumerate(session_ids, 1):
+            missing = withheld_missing.get(session_id, {}).get(model)
+            if missing is not None:
+                cells.setdefault(model, {})[f"pass{pass_index}"] = {
+                    "session_id": session_id, "status": "missing", "flags": [WITHHELD_MISSING],
+                    "withheld_row_count": missing["row_count"], "withheld_config_row_count": missing["config_row_count"],
+                    "boundaries": {b: {"status": "missing", "flags": [WITHHELD_MISSING],
+                                       "withheld_row_count": missing["row_count"],
+                                       "withheld_config_row_count": missing["config_row_count"],
+                                       "quantities": missing_pass_quantities(missing)} for b in BOUNDARIES}}
+                continue
             srows = [r for r in sessions[session_id] if r["role"] == "science" and canon(r["model_name"]) == model]
             unblinded = all(r["_unblinded"] for r in srows)
             archive = archive_by_session.get(session_id)
@@ -1403,11 +1680,29 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             if q and (not two_pass_only or q.get("passes_computed", 1) >= 2):
                 points[model] = {"status": "ok", "P": q["P_mean_w"], "BW": q["BW_GB_per_s"],
                                  "R_over_tau": q["R_over_tau_GB_per_s"], "P_half_width": q["P_half_width_w"],
-                                 "label": q.get("label", "pass_mean"),
-                                 "one_pass_after_refusal": bool(q.get("one_pass_after_refusal"))}
+                                 "T": q["T_dec_s"], "label": q.get("label", "pass_mean"),
+                                 "passes_computed": q.get("passes_computed", 1),
+                                 "one_pass_after_refusal": bool(q.get("one_pass_after_refusal")),
+                                 # Addendum 9: the point's coherent-offset bound (W) and sensitivity (W)
+                                 "offset": {"bound_w": q.get("meter_offset_bound_w"),
+                                            "sensitivity_w": q.get("meter_offset_sensitivity_w"), "T": q["T_dec_s"],
+                                            "bound_flag": q.get("meter_offset_bound_flag"),
+                                            "sensitivity_flag": q.get("meter_offset_sensitivity_flag")}}
                 qr = point(model, pass_key, "rails")
                 rails_power[model] = qr["P_mean_w"] if qr else None
         return points, rails_power
+
+    def model_pass_status(model, boundary):
+        """The model's pass label and carried flags (Addendum 7 D9 (a): `one_pass` wherever the point
+        appears, the per-pass description rows of the surviving pass included; B6 ruling Q1: the flag)."""
+        q = point(model, "passes_mean", boundary) or {}
+        return {"label": q.get("label", "pass_mean"), "flags": q.get("flags") or [], "passes_computed": q.get("passes_computed")}
+
+    def missing_models(pass_key):
+        """Models whose point is `missing` (every pass's withheld file missing; B6 ruling Q1)."""
+        return sorted(m for m in roster if m in cells and pass_key in cells[m]
+                      and (cells[m][pass_key].get("status") == "missing"
+                           or cells[m][pass_key]["boundaries"]["rails"].get("quantities", {}).get("gross", {}).get("status") == "missing"))
 
     h1, h2, multiplicity = {}, {}, {"H1": {"family_size": h1_family, "alpha_per_check": alpha_h1,
                                             "t_quantile_level": 1 - alpha_h1 / 2}, "H2": {}}
@@ -1431,13 +1726,19 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     if q:
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
-                                             "label": q.get("label", "pass_mean")}
-                words = h1_words(lines, all_points)
+                                             **model_pass_status(model, boundary)}
+                words = h1_words(lines, all_points, missing=missing_models(pass_key))
                 for model in held_out:
                     if model not in all_points and model in cells:
                         q = cells[model].get(pass_key, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
-                        words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
-                                                  "refused": q.get("status", "absent")}
+                        if q.get("status") == "missing":
+                            # B6 ruling Q1: a pass (or model) whose withheld file is missing prints
+                            # `missing` with the flag; it has no word.
+                            words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
+                                                      "status": "missing", "flags": list(q.get("flags") or [])}
+                        else:
+                            words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
+                                                      "refused": q.get("status", "absent")}
                     elif model not in cells and stage == "2":
                         # Lead ruling 2026-10-20 item 4: a held-out model whose rows are missing (a
                         # withheld file not supplied) prints as `missing` with a flag, never a refusal.
@@ -1447,6 +1748,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                             flags.append({"flag": "rows_missing", "model": model})
                 for model, pt in all_points.items():
                     words["models"][model]["label"] = pt.get("label", "pass_mean")
+                    words["models"][model]["flags"] = list(pt.get("flags") or [])
+                    words["models"][model]["passes_computed"] = pt.get("passes_computed")
                 predictions = {model: {hyp: h1_predict(lines, hyp, (manifest[model]["b_GB"] if hyp == "bytes" else manifest[model]["R_GB"]))
                                        for hyp in ("bytes", "resident")}
                                for model in held_out if model in manifest}
@@ -1458,16 +1761,23 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             alpha_h2 = ALPHA / k if k else ALPHA
             multiplicity["H2"].setdefault(boundary, {})[pass_key] = {"k_primary_intervals": k, "alpha_per_interval": alpha_h2,
                                                                      "t_quantile_level": 1 - alpha_h2 / 2}
-            h2[boundary][pass_key] = h2_fits(points, alpha_h2, rails_power=rails_power if boundary == "rest" else None)
-            # Addendum 7 D9 (c): where a one-pass point or a refused model enters, H2 is also printed
-            # over the models with two computed passes, as a labelled sensitivity line.
+            offset_apply = boundary != "rails"      # Addendum 9: rails has no C term
+            h2[boundary][pass_key] = h2_fits(points, alpha_h2, rails_power=rails_power if boundary == "rest" else None,
+                                             offset_terms_apply=offset_apply)
+            # Addendum 7 D9 (c): where a one-pass point (a pass refused, its withheld file missing, or
+            # the pass never collected) or a model without a point enters, H2 is also printed over the
+            # models with two computed passes, as a labelled sensitivity line.
             if pass_key == primary_pass_key:
-                degraded = [m for m in ROSTER if m in cells and (m not in points or points[m]["one_pass_after_refusal"])]
-                if degraded:
+                degraded = [m for m in roster if m in cells and (m not in points or points[m]["passes_computed"] < 2)]
+                two_pass = [m for m in points if points[m]["passes_computed"] >= 2]
+                # The line is over the models with two computed passes; a campaign in which no model
+                # has two (R6's one-pass minimum for every model) has no such line to print.
+                if degraded and two_pass:
                     two_points, two_rails = h2_points(pass_key, boundary, two_pass_only=True)
                     h2[boundary][pass_key]["two_pass_sensitivity"] = {
                         "label": "sensitivity: models with two computed passes only", "excluded_models": degraded,
-                        **h2_fits(two_points, alpha_h2, rails_power=two_rails if boundary == "rest" else None)}
+                        **h2_fits(two_points, alpha_h2, rails_power=two_rails if boundary == "rest" else None,
+                                  offset_terms_apply=offset_apply)}
             stage1["h2_tier1_inputs"].setdefault(boundary, {})[pass_key] = {m: points[m] for m in FIT_SET if m in points}
     stage1_hash = sha256_of(stage1)
     return {"schema": SCHEMA, "stage": stage, "notes": notes, "flags": flags, "roster": roster, "manifest": manifest,
@@ -1491,31 +1801,56 @@ def main(argv=None):
     parser.add_argument("--archive", action="append", default=[], type=Path, help="harvest archive root (repeatable)")
     parser.add_argument("--key-dir", type=Path, help="the bytes group's blinding directory (stages 1 and 2)")
     parser.add_argument("--stage", choices=("blinded", "1", "2"), default="blinded")
+    parser.add_argument("--stage1-commit", help="the recorded stage-1 commit; at --stage blinded it admits the "
+                        "withheld held-out rows (lead ruling 2026-10-20 item 3: the post-commit blinded agreement)")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     exports = list(args.export)
     if args.export_dir:
         exports += sorted(args.export_dir.rglob("*.runs.csv"))
+    # Each file is read once.  A withheld store may also be named with --export (the convention
+    # before the store was located through the sidecar); its rows then enter once, not twice.
+    named, unique = set(), []
+    for path in exports:
+        if path.resolve() not in named:
+            named.add(path.resolve())
+            unique.append(path)
+    exports = unique
+    # Lead ruling 2026-10-20 item 1: a held-out configuration's withheld rows enter only after the
+    # stage-1 commit (stage 2, or the blinded post-commit agreement run named by --stage1-commit).
+    read_withheld = args.stage == "2" or (args.stage == "blinded" and bool(args.stage1_commit))
     # Addendum 7 D7: a refusal is printed as "refused: <reason>" with exit 1, never a traceback.
     try:
         if not exports:
             raise ValueError("no export given")
-        rows, sidecars = [], {}
+        if args.stage1_commit is not None and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", args.stage1_commit):
+            raise ValueError("--stage1-commit must be a git commit hash")
+        manifest = read_manifest(args.manifest)
+        rows, sidecars, withheld = [], {}, {}
         for path in exports:
             batch = read_export(path)
             rows += batch
             sidecar = read_sidecar(path)
-            for session_id in {r["session_id"] for r in batch}:
-                sidecars.setdefault(session_id, sidecar)
-        manifest = read_manifest(args.manifest)
+            session_ids = {r["session_id"] for r in batch} or {str(sidecar.get("session_id") or path.name)}
+            for session_id in session_ids:
+                # A store named directly has no sidecar beside it; it never hides the export's.
+                if not sidecars.get(session_id):
+                    sidecars[session_id] = sidecar
+            if read_withheld and withheld_record(sidecar) is not None:
+                store = load_withheld(path, sidecar, manifest)
+                if (path.parent / withheld_record(sidecar)["path"]).resolve() not in named:
+                    rows += store["rows"]
+                for session_id in session_ids:
+                    withheld[session_id] = store
         archives = [load_archive(root) for root in args.archive]
         result = analyse(rows, manifest, archives, stage=args.stage, key_dir=args.key_dir,
-                         sidecars=sidecars, listed=listed_sessions(args.manifest))
+                         sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld)
     except Exception as exc:  # noqa: BLE001 - every failure is a refusal line
         print("refused: " + (str(exc) or type(exc).__name__))
         return 1
     result["inputs"] = {"exports": [str(p) for p in exports], "manifest": str(args.manifest),
-                        "archives": [str(p) for p in args.archive], "key_dir": str(args.key_dir) if args.key_dir else None}
+                        "archives": [str(p) for p in args.archive], "key_dir": str(args.key_dir) if args.key_dir else None,
+                        "stage1_commit": args.stage1_commit, "withheld_rows_read": read_withheld}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1, allow_nan=False) + "\n", encoding="utf-8")
     print(json.dumps({"out": str(args.out), "stage": args.stage, "models": sorted(result["cells"]),

@@ -16,6 +16,17 @@ refusals and exit codes exactly.  A difference under the bar is one count per ca
 classified (item 1); a difference above the bar fails the test and is printed with its campaign,
 stage, field and both values.
 
+Addendum 9 (NR1, the meter label-offset alternative) and B4 (the withheld store, B6 ruling Q1) add:
+C_j and the offset interval's endpoints at 1% of that alternative's own half-width, t SE_j + C_j
+(``bar_offset_interval``; the labelled OLS alternative at 1% of its own); the per-point bound at the
+energy bar (J) and the power bar (W); the sensitivities at the no-half-width bar; the zero/sign
+decisions under both intervals as labels with the usual slack; units, flag presence, scope and
+disclosure presence (and the 22 and 25 ms the disclosure states), `missing` statuses, pass labels
+and withheld row counts exactly.  Two campaigns join the five: the edge-locked meter of Addendum
+9.1 (every run flips a whole sample) and a withholding campaign on R6's six sub-packs with one
+withheld file missing, both of one model's missing and one optional pass never collected, run
+through the post-commit blinded stage as well.
+
 A fence test proves the twin shares no code with the analysis: it imports nothing from ``joulewise``
 (so none of the modules the analysis imports for arithmetic), and it reproduces block 5's t table
 (Addendum 7 D8) rather than importing it.
@@ -41,6 +52,7 @@ from joulewise import bytes_analysis as ba
 from joulewise.b6 import blinding, export_runs
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_twin as bt
+from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/bytes"
@@ -64,12 +76,35 @@ DEFECTS = [
     (1, "Qwen3-8B-4bit", 20, "cooldown"),             # quad unit 2: member.cooldown_cap_hit (NUMBER class)
 ]
 DEFECTS_MINIMUM = [(1, "Qwen3-32B-4bit", i, "strict_validation") for i in range(6)]
+# Addendum 9 item 1: the generator's NR1 knobs (samples 50 ms into the interval, science-run edges
+# at a uniform phase, a 10 ms minimum receive latency) are its defaults, so every campaign below is
+# the ruled fixture in which a constant label offset flips a whole sample with probability
+# delta / dt = 10 ms / 100 ms per run.  "resident" (seed 3100) is the world of the NR1 regression
+# tests.test_bytes_analysis.ProductionArchiveTests.test_nr1_offset_term_covers_constant_label_offset.
+NR1_KNOBS = {"sample_phase_ms": 50, "edge_phase": True, "min_receive_latency_ms": 10.0}
+# Addendum 9.1's pre-ruling edge-locked meter, as closely as the generator's knobs allow: science-run
+# edges on the sample grid (edge_phase False) and the sample 95 ms into its 100 ms interval, so the
+# sample before each decode edge sits 5 ms before it and the 10 ms label offset carries it across
+# (a baseline sample enters at the start, a decode sample leaves at the end): whole-sample flips on
+# every run with certainty, Addendum 9.1's "with certainty, which no free-running meter clock can do".
+# 95 ms is the largest phase that keeps 5 ms of margin on each side of the offset against the
+# fitted label offset's own error (about 0.01 ms, B2-NR1-RULING "fitted label offset 9.991 ms").
+EDGE_LOCKED_KNOBS = {"sample_phase_ms": 95, "edge_phase": False, "min_receive_latency_ms": 10.0}
+# B4 withholding campaign (R6's six sub-packs, one session per sub-pack and pass; B6 ruling Q1):
+# the withheld store of s2 pass 2 (30B-A3B's held-out rows; 8B is a fit model) is missing, both
+# stores of s6 (Qwen3.5-122B, an MoE model) are missing, and s4 pass 2 (32B, 8B-8bit) was never
+# collected (R6's optional pass).
+WITHHELD_KNOBS = {"subpack_sessions": True, "uncollected_sessions": ("bytes-s4-p2",)}
+MISSING_STORES = ("bytes-s2-p2", "bytes-s6-p1", "bytes-s6-p2")
+# name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
-    "bytes": ("bytes", 1100, []),
-    "resident": ("resident", 3100, []),
-    "time": ("time", 2100, []),
-    "defects": ("bytes", 1100, DEFECTS),
-    "minimum": ("bytes", 1100, DEFECTS_MINIMUM),
+    "bytes": ("bytes", 1100, [], NR1_KNOBS, ()),
+    "resident": ("resident", 3100, [], NR1_KNOBS, ()),
+    "time": ("time", 2100, [], NR1_KNOBS, ()),
+    "defects": ("bytes", 1100, DEFECTS, NR1_KNOBS, ()),
+    "minimum": ("bytes", 1100, DEFECTS_MINIMUM, NR1_KNOBS, ()),
+    "edge_locked": ("resident", 3100, [], EDGE_LOCKED_KNOBS, ()),
+    "withheld": ("bytes", 1100, [], {**NR1_KNOBS, **WITHHELD_KNOBS}, MISSING_STORES),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -153,6 +188,30 @@ def bar_no_half_width(a, t):
     relative, or 1e-6 absolute in the column's unit, whichever is larger.  1e-6 relative is about 4.5e9 x float noise (1e-6 / 2.2e-16), above 1e6 x
     float noise (2.2e-16) and below 1% of any printed uncertainty."""
     return max(1e-6 * max(abs(a), abs(t)), 1e-6)
+
+
+def bar_offset_interval(offset_lower, offset_upper):
+    """Addendum 9's labelled alternative beta_j +/- (t SE_j + C_j): C_j and the interval's endpoints
+    compare at 1% of that printed alternative's own half-width, t SE_j + C_j (Addendum 8.1, "1% of
+    the cell's half-width", applied to the alternative; the HC3 interval gives the registered one, the
+    labelled OLS interval its own).  The half-width is formed from the analysis's endpoints, as every
+    other bar is."""
+    return bar_coefficient((offset_upper - offset_lower) / 2)
+
+
+# The sensitivity dbeta_j/ddelta per ms (Addendum 9 item 4) and the per-point sensitivity in W have no
+# half-width: bar_no_half_width in the column's unit.  The per-point bound in J has the cell's (h + B)
+# (bar_energy); in W, the point's power half-width (bar_power).
+WITHHELD_MISSING = "bytes.withheld_missing"
+
+
+def states_delta_bound(text):
+    """The numbers the disclosure states (Addendum 9 item 4: 22 to 25 ms at 50 SPS, block-6 M13):
+    compared exactly; the wording is representation and is not compared."""
+    import re
+    numbers = {int(n) for n in re.findall(r"\b(\d+)\s*(?:to\s*\d+\s*)?ms\b", text or "")}
+    numbers |= {int(n) for n in re.findall(r"\b\d+\s*to\s*(\d+)\s*ms\b", text or "")}
+    return (22 in numbers, 25 in numbers, "M13" in (text or ""))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -256,6 +315,21 @@ def compare_cell_numbers(R, stage, g, row, est):
     ak, tk = a_kinds(row), t_kinds(est)
     for kind in ("anchor", "interp", "drift", "meter_edge"):
         R.number(stage, g, "B_kind:" + kind, ak[kind], tk[kind], bar_energy(hb))
+    if row["boundary"] != "rails":
+        # Addendum 9: the pass's coherent-offset bound (J, at the cell's energy bar) and signed
+        # sensitivity (W, no half-width); rails has neither (checked in compare_cells).
+        offset = est.get("meter_offset") or {}
+        R.number(stage, g, "meter_offset_bound_j", row.get("meter_offset_bound_j"), offset.get("bound_j"), bar_energy(hb))
+        R.number(stage, g, "meter_offset_sensitivity_w", row.get("meter_offset_sensitivity_w"), offset.get("sensitivity_w"), None)
+
+
+def compare_missing(R, stage, g, row, est):
+    """B6 ruling Q1: a `missing` pass or point: the flag, the sidecar's withheld row counts, exactly."""
+    R.exact(stage, g, "flag:" + WITHHELD_MISSING, WITHHELD_MISSING in (row.get("flags") or []),
+            WITHHELD_MISSING in (est.get("flags") or []))
+    for key in ("withheld_row_count", "withheld_config_row_count"):
+        if key in row or key in est:
+            R.exact(stage, g, key, row.get(key), est.get(key))
 
 
 def compare_cells(R, stage, a_rows, t):
@@ -271,6 +345,14 @@ def compare_cells(R, stage, a_rows, t):
             continue
         est = cell.get(variant) if cell.get("status", "ok") == "ok" else cell
         est = est if est is not None else {"status": cell.get("status", "absent")}
+        if row["status"] == "missing" or est.get("status") == "missing":
+            # B6 ruling Q1: the pass prints `missing` with the flag and the sidecar's counts.
+            R.exact(stage, g, "status", row["status"], est.get("status"))
+            compare_missing(R, stage, g, row, est)
+            continue
+        if b == "rails":
+            R.exact(stage, g, "no meter offset terms on rails (Addendum 9: rails has no C term)",
+                    row.get("meter_offset_bound_j") is None, est.get("meter_offset") is None)
         a_ok, t_ok = row["status"] == "computed", est.get("status") == "ok"
         R.exact(stage, g, "status", "computed" if a_ok else "unavailable", "computed" if t_ok else "unavailable",
                 None if a_ok and t_ok else f"analysis: {row.get('reason')}; twin: {est.get('status')}")
@@ -336,15 +418,36 @@ def compare_points(R, stage, a_points, t):
         q = (((t.get("cells") or {}).get(model) or {}).get("passes_mean") or {}).get("boundaries", {}) \
             .get(b, {}).get("quantities", {}).get(variant) or {"status": "absent"}
         a_ok, t_ok = p.get("status") == "computed", q.get("status") == "ok"
+        if p.get("status") == "missing" or q.get("status") == "missing":
+            # B6 ruling Q1: every pass's withheld file missing: the model prints `missing`, no point.
+            R.exact(stage, g, "status", p.get("status"), q.get("status"))
+            R.exact(stage, g, "pass_label", p.get("pass_status"), q.get("label"))
+            R.exact(stage, g, "n_passes", p.get("n_passes"), q.get("passes_computed"))
+            compare_missing(R, stage, g, p, q)
+            continue
         R.exact(stage, g, "status", "computed" if a_ok else "unavailable", "computed" if t_ok else "unavailable")
         if not (a_ok and t_ok):
             continue
-        # Addendum 7 D9: the pass label and the number of computed passes.
+        # Addendum 7 D9: the pass label and the number of computed passes; B6 ruling Q1: the flag of a
+        # missing withheld file is carried on the one_pass point.
         R.exact(stage, g, "pass_label", {"two_pass": "pass_mean", "one_pass": "one_pass"}.get(p.get("pass_status")),
                 q.get("label"))
         R.exact(stage, g, "n_passes", p.get("n_passes"), q.get("passes_computed"))
+        R.exact(stage, g, "flag:" + WITHHELD_MISSING, WITHHELD_MISSING in (p.get("flags") or []),
+                WITHHELD_MISSING in (q.get("flags") or []))
         hb = p["h_j"] + p["B_j"]
         T = p["duration_s"]
+        if b != "rails":
+            # Addendum 9 (cold disposition M1): the point's bound in J (pass-averaged, the energy bar),
+            # in W (over the point's mean decode time, the power bar), and the sensitivity in W.
+            R.number(stage, g, "meter_offset_bound_j", p.get("meter_offset_bound_j"), q.get("meter_offset_bound_j"), bar_energy(hb))
+            R.number(stage, g, "meter_offset_bound_w", p.get("meter_offset_bound_w"), q.get("meter_offset_bound_w"),
+                     bar_power(p["power_half_w"]))
+            R.number(stage, g, "meter_offset_sensitivity_w", p.get("meter_offset_sensitivity_w"),
+                     q.get("meter_offset_sensitivity_w"), None)
+        else:
+            R.exact(stage, g, "no meter offset terms on rails (Addendum 9)", p.get("meter_offset_bound_w") is None,
+                    q.get("meter_offset_bound_w") is None)
         R.number(stage, g, "mean_j", p["mean_j"], q["E_dec_j"], bar_energy(hb))
         R.number(stage, g, "duration_s", p["duration_s"], q["T_dec_s"], DURATION_BAR_S)
         for ak, tk in (("e", "e_j_per_step"), ("lower", "e_lower_j_per_step"), ("upper", "e_upper_j_per_step"),
@@ -374,10 +477,21 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         th = (t.get("h1") or {}).get(b, {}).get(pk) or {}
         tm = (th.get("models") or {}).get(model)
         if tm is None:
-            R.exact(stage, g, "word", row["word"] if row["role"] == "heldout" else None, "absent:" + str(th.get("status")))
+            R.exact(stage, g, "word", row.get("word") if row["role"] == "heldout" else None, "absent:" + str(th.get("status")))
+            continue
+        if row.get("status") == "missing" or tm.get("status") == "missing":
+            # B6 ruling Q1: a `missing` model has no H1 word; the flag is carried.
+            R.exact(stage, g, "status", row.get("status"), tm.get("status"))
+            R.exact(stage, g, "word", row.get("word"), tm.get("word"))
+            compare_missing(R, stage, g, row, tm)
             continue
         if row["role"] == "heldout":
             R.exact(stage, g, "word", row["word"], tm["word"])
+            # Addendum 7 D9 (a) and B6 ruling Q1: the one_pass label and the carried flag.
+            R.exact(stage, g, "pass_label", {"two_pass": "pass_mean", "one_pass": "one_pass"}.get(row.get("pass_status")),
+                    tm.get("label"))
+            R.exact(stage, g, "flag:" + WITHHELD_MISSING, WITHHELD_MISSING in (row.get("flags") or []),
+                    WITHHELD_MISSING in (tm.get("flags") or []))
         for c in row["checks"]:
             tc = tm["checks"][c["hypothesis"]]
             h = c["hypothesis"]
@@ -398,6 +512,11 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         b = BMAP[row["boundary"]]
         tm = ((t.get("h1") or {}).get(b, {}).get("passes_mean") or {}).get("active_or_resident") or {}
         R.exact(stage, f"moe/{b}/passes_mean", "answer", row["answer"], tm.get("answer"))
+        if row.get("status") == "missing" or tm.get("missing_models"):
+            # B6 ruling Q1: an MoE model without a point leaves the answer `missing`, naming the models.
+            R.exact(stage, f"moe/{b}/passes_mean", "missing_models",
+                    sorted(canon(m["model"]) for m in row.get("missing_models") or []), sorted(tm.get("missing_models") or []))
+            compare_missing(R, stage, f"moe/{b}/passes_mean", row, tm)
     # Frozen lines (pass mean, gross primary): central line and the set of eight corner lines.
     # A line coefficient has no half-width (its consequences are compared above at the cells' bars).
     for group in (a_frozen or {}).get("rival_lines", []):
@@ -419,10 +538,11 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
                 R.number(stage, g, f"corner[{i}].slope", x[1], y[1], None)
 
 
-def _interval(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
+def _interval(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0, offset=False):
     """One coefficient: estimate and HC3 interval at 1% of the HC3 half-width; the labelled OLS
     interval beside it at 1% of its own half-width.  floor: the float-noise floor of the bar (the
-    rest model only, from its printed VIF); 0 for a fit that prints no VIF."""
+    rest model only, from its printed VIF); 0 for a fit that prints no VIF.  offset: Addendum 9's
+    labelled alternative beside the coefficient (DC input and rest)."""
     half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
     bar = max(bar_coefficient(half), floor)
     R.number(stage, g, name + ":estimate", a_fit["coefficients"][idx], t_iv["value"], bar)
@@ -433,37 +553,134 @@ def _interval(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
     bar_ols = max(bar_coefficient(half_ols), floor)
     R.number(stage, g, name + ":lower[OLS label]", a_fit["ols_intervals"][idx][0], t_ols.get("lower"), bar_ols)
     R.number(stage, g, name + ":upper[OLS label]", a_fit["ols_intervals"][idx][1], t_ols.get("upper"), bar_ols)
+    if offset:
+        _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, floor=floor)
+    elif "coefficient_C" in a_fit or "offset" in t_iv:
+        R.exact(stage, g, name + ":no offset alternative on rails (Addendum 9)", "coefficient_C" in a_fit, "offset" in t_iv)
+
+
+def _decision_near(lower, upper, bar):
+    """A zero/sign decision rests on the endpoint nearest zero: slack when it is within the bar of 0."""
+    return lower is not None and upper is not None and min(abs(lower), abs(upper)) <= bar
+
+
+def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
+    """Addendum 9 items 3 and 4 beside one coefficient at DC input or rest.  C_j and the offset
+    interval's endpoints at 1% of the alternative's own half-width (bar_offset_interval); the labelled
+    OLS alternative at 1% of its own; dbeta/ddelta at the no-half-width bar; units exact; the
+    zero/sign decisions under both intervals as labels with the usual slack."""
+    o = t_iv.get("offset") or {}
+    a_flag, t_flag = a_fit.get("systematics_flag"), o.get("systematics_flag")
+    R.exact(stage, g, name + ":systematics_flag", a_flag is not None, t_flag is not None,
+            None if (a_flag is None) == (t_flag is None) else f"analysis: {a_flag}; twin: {t_flag}")
+    a_sflag, t_sflag = a_fit.get("sensitivity_flag"), o.get("sensitivity_flag")
+    R.exact(stage, g, name + ":sensitivity_flag", a_sflag is not None, t_sflag is not None,
+            None if (a_sflag is None) == (t_sflag is None) else f"analysis: {a_sflag}; twin: {t_sflag}")
+    R.exact(stage, g, name + ":sensitivity_units", (a_fit.get("sensitivity_units") or [None] * (idx + 1))[idx],
+            o.get("sensitivity_units"))
+    # The registered decision rests on the HC3 endpoint nearest zero, at the HC3 bar.
+    half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
+    bar = max(bar_coefficient(half), floor)
+    R.label_with_slack(stage, g, name + ":coefficient_decision", a_fit["coefficient_decisions"][idx], o.get("coefficient_decision"),
+                       _decision_near(a_fit["intervals"][idx][0], a_fit["intervals"][idx][1], bar))
+    if a_flag is None and t_flag is None:
+        lo, hi = a_fit["offset_intervals"][idx]
+        bar_off = max(bar_offset_interval(lo, hi), floor)
+        R.number(stage, g, name + ":coefficient_C", a_fit["coefficient_C"][idx], o.get("coefficient_C"), bar_off)
+        R.number(stage, g, name + ":offset_lower", lo, o.get("offset_lower"), bar_off)
+        R.number(stage, g, name + ":offset_upper", hi, o.get("offset_upper"), bar_off)
+        lo_ols, hi_ols = a_fit["offset_ols_intervals"][idx]
+        bar_ols = max(bar_offset_interval(lo_ols, hi_ols), floor)
+        R.number(stage, g, name + ":offset_ols_lower", lo_ols, o.get("offset_ols_lower"), bar_ols)
+        R.number(stage, g, name + ":offset_ols_upper", hi_ols, o.get("offset_ols_upper"), bar_ols)
+        R.label_with_slack(stage, g, name + ":offset_decision", a_fit["offset_decisions"][idx], o.get("offset_decision"),
+                           _decision_near(lo, hi, bar_off))
+    if a_sflag is None and t_sflag is None:
+        R.number(stage, g, name + ":d_beta_d_delta_per_ms", a_fit["d_beta_d_delta_per_ms"][idx], o.get("d_beta_d_delta_per_ms"), None)
+
+
+def compare_offset_rows(R, stage, g, row, th):
+    """The H2 row's scope labels and disclosure (Addendum 9 items 2 and 4): presence exactly, and
+    the numbers the disclosure states (22 and 25 ms, M13) exactly; wording is not compared.  The
+    primary-row decisions (`coefficient_decision`, `offset_decision`) per primary coefficient."""
+    offset = BMAP.get(row["boundary"]) != "rails"
+    fits = [f for f in (row.get("two_term"), row.get("resident_extended"), row.get("tier"), row.get("rest"))
+            if isinstance(f, dict) and f.get("status") == "computed"]
+    R.exact(stage, g, "interval_scope present", any("interval_scope" in f for f in fits) or not fits,
+            bool(th.get("interval_scope")) or not fits)
+    R.exact(stage, g, "offset_scope present", any("offset_scope" in f for f in fits) if fits else offset,
+            bool(th.get("offset_scope")))
+    R.exact(stage, g, "offset_disclosure present", "offset_disclosure" in row, "offset_disclosure" in th)
+    if "offset_disclosure" in row and "offset_disclosure" in th:
+        R.exact(stage, g, "offset_disclosure states 22 ms, 25 ms, M13", states_delta_bound(row["offset_disclosure"]),
+                states_delta_bound(th["offset_disclosure"]))
+    if offset and th.get("status") == "ok":
+        R.exact(stage, g, "resident_adds_nothing_offset present", "resident_adds_nothing_offset" in row,
+                "resident_adds_nothing_offset" in (th.get("resident_extended") or {}))
+    # The primary rows carry the decision pair per coefficient (deviations have none).
+    twin_terms = {}
+    if th.get("status") == "ok":
+        twin_terms = {"epsilon": th["simple"]["epsilon_j_per_GB"]}
+        if th.get("resident_extended"):
+            twin_terms.update({"extended_epsilon": th["resident_extended"]["epsilon_j_per_GB"], "rho": th["resident_extended"]["rho_j_per_GB"]})
+        if th.get("tier"):
+            twin_terms.update({"tier_epsilon": th["tier"]["epsilon_j_per_GB"], "tier_rho": th["tier"]["rho_j_per_GB"]})
+        if th.get("rest_model"):
+            twin_terms.update({"rest_epsilon": th["rest_model"]["epsilon_rest_j_per_GB"], "lambda": th["rest_model"]["lambda"]})
+    for item in row.get("primary_intervals") or []:
+        term = item["term"]
+        if term not in twin_terms or "coefficient_decision" not in item:
+            continue
+        t_iv = twin_terms[term]
+        o = t_iv.get("offset") or {}
+        half = (item["upper"] - item["lower"]) / 2
+        R.label_with_slack(stage, g + "/primary", term + ":coefficient_decision", item["coefficient_decision"],
+                           o.get("coefficient_decision") if offset else t_iv.get("decision"),
+                           _decision_near(item["lower"], item["upper"], bar_coefficient(half)))
+        if offset and item.get("offset_intervals") and o.get("coefficient_C") is not None:
+            lo, hi = item["offset_intervals"]
+            R.label_with_slack(stage, g + "/primary", term + ":offset_decision", item["offset_decision"], o.get("offset_decision"),
+                               _decision_near(lo, hi, bar_offset_interval(lo, hi)))
+            R.number(stage, g + "/primary", term + ":coefficient_C", item["coefficient_C"], o.get("coefficient_C"), bar_offset_interval(lo, hi))
 
 
 def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
     """One H2 fit group (primary, or the two-pass sensitivity line).  rest_inputs: {model: (P_rest,
     BW, P_rails)} of the analysis's points, for the rest model's coefficient scales."""
     R.exact(stage, g, "n", row["n"], th.get("n"))
+    compare_offset_rows(R, stage, g, row, th)
     if row["two_term"]["status"] != "computed" or th.get("status") != "ok":
         R.exact(stage, g, "status", row["two_term"]["status"], th.get("status"))
         return
+    offset = b != "rails"      # Addendum 9: the alternative at DC input and rest; rails has no C term
     R.exact(stage, g, "simple:df", row["two_term"]["df"], th["simple"]["df"])
-    _interval(R, stage, g, "simple:P0", row["two_term"], 0, {"value": th["simple"]["P0_w"], "lower": None, "upper": None}
-              if False else _p0(th["simple"], "P0_w", row["two_term"], 0))
-    _interval(R, stage, g, "simple:epsilon", row["two_term"], 1, th["simple"]["epsilon_j_per_GB"])
+    _interval(R, stage, g, "simple:P0", row["two_term"], 0, _p0(th["simple"], "P0", row["two_term"], 0), offset=offset)
+    _interval(R, stage, g, "simple:epsilon", row["two_term"], 1, th["simple"]["epsilon_j_per_GB"], offset=offset)
     ext_a, ext_t = row["resident_extended"], th.get("resident_extended")
     R.exact(stage, g, "extended:status", ext_a["status"], "computed" if ext_t else "refused")
     if ext_a["status"] == "computed" and ext_t:
         R.exact(stage, g, "extended:df", ext_a["df"], ext_t["df"])
-        _interval(R, stage, g, "extended:P0", ext_a, 0, _p0(ext_t, "P0_w", ext_a, 0))
-        _interval(R, stage, g, "extended:epsilon", ext_a, 1, ext_t["epsilon_j_per_GB"])
-        _interval(R, stage, g, "extended:rho", ext_a, 2, ext_t["rho_j_per_GB"])
+        _interval(R, stage, g, "extended:P0", ext_a, 0, _p0(ext_t, "P0", ext_a, 0), offset=offset)
+        _interval(R, stage, g, "extended:epsilon", ext_a, 1, ext_t["epsilon_j_per_GB"], offset=offset)
+        _interval(R, stage, g, "extended:rho", ext_a, 2, ext_t["rho_j_per_GB"], offset=offset)
         lo, hi = ext_a["intervals"][2]
         slack = bar_coefficient((hi - lo) / 2)
         near = min(abs(lo), abs(hi), abs(ext_a["coefficients"][2])) <= slack
         R.label_with_slack(stage, g, "resident_adds_nothing", row["resident_adds_nothing"], ext_t["resident_adds_nothing"], near)
+        if offset and ext_a.get("systematics_flag") is None and "resident_adds_nothing_offset" in row:
+            # Addendum 9 item 3: "resident adds nothing" under the offset interval, with slack when
+            # the offset endpoint nearest zero is within its bar of zero.
+            lo, hi = ext_a["offset_intervals"][2]
+            near = min(abs(lo), abs(hi), abs(ext_a["coefficients"][2])) <= bar_offset_interval(lo, hi)
+            R.label_with_slack(stage, g, "resident_adds_nothing_offset", row["resident_adds_nothing_offset"],
+                               ext_t.get("resident_adds_nothing_offset"), near)
     tier_a, tier_t = row["tier"], th.get("tier")
     R.exact(stage, g, "tier:status", tier_a["status"], "computed" if tier_t else "refused")
     if tier_a["status"] == "computed" and tier_t:
         R.exact(stage, g, "tier:df", tier_a["df"], tier_t["df"])
-        _interval(R, stage, g, "tier:P0", tier_a, 0, _p0(tier_t, "P0_w", tier_a, 0))
-        _interval(R, stage, g, "tier:epsilon", tier_a, 1, tier_t["epsilon_j_per_GB"])
-        _interval(R, stage, g, "tier:rho", tier_a, 2, tier_t["rho_j_per_GB"])
+        _interval(R, stage, g, "tier:P0", tier_a, 0, _p0(tier_t, "P0", tier_a, 0), offset=offset)
+        _interval(R, stage, g, "tier:epsilon", tier_a, 1, tier_t["epsilon_j_per_GB"], offset=offset)
+        _interval(R, stage, g, "tier:rho", tier_a, 2, tier_t["rho_j_per_GB"], offset=offset)
         for dev in row["tier_deviations"]:
             m = canon(dev["model"])
             td = tier_t["deviations"].get(m)
@@ -490,9 +707,9 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
             vif_a, vif_t = rm.get("vif"), tr.get("vif_BW_and_P_rails")
             fitted = [rest_inputs[canon(p["model"])] for p in rm["point_labels"]]
             floors = [bar_float_noise_coefficient(vif_a, scale) for scale in coefficient_scales(fitted)]
-            _interval(R, stage, g, "rest:c", rm, 0, _p0(tr, "c_w", rm, 0), floor=floors[0])
-            _interval(R, stage, g, "rest:epsilon_rest", rm, 1, tr["epsilon_rest_j_per_GB"], floor=floors[1])
-            _interval(R, stage, g, "rest:lambda", rm, 2, tr["lambda"], floor=floors[2])
+            _interval(R, stage, g, "rest:c", rm, 0, _p0(tr, "c", rm, 0), floor=floors[0], offset=True)
+            _interval(R, stage, g, "rest:epsilon_rest", rm, 1, tr["epsilon_rest_j_per_GB"], floor=floors[1], offset=True)
+            _interval(R, stage, g, "rest:lambda", rm, 2, tr["lambda"], floor=floors[2], offset=True)
             vif_bar = bar_two_significant_figures(vif_a, vif_t) if vif_a is not None and vif_t is not None else None
             R.number(stage, g, "rest:vif", vif_a, vif_t, vif_bar)
     for item in row["loo_description"]:
@@ -504,10 +721,10 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
 
 
 def _p0(t_fit, key, a_fit, idx):
-    """The twin prints P0 and c as bare values (Addendum 3 item 6: printed, not counted); compare
-    the estimate at 1% of the analysis's HC3 half-width and nothing else."""
-    return {"value": t_fit[key], "lower": a_fit["intervals"][idx][0], "upper": a_fit["intervals"][idx][1],
-            "ols": {"lower": a_fit["ols_intervals"][idx][0], "upper": a_fit["ols_intervals"][idx][1]}}
+    """P0 and c are printed and not counted (Addendum 3 item 6); the twin now prints their intervals
+    too (Addendum 9: every coefficient, intercepts included, carries the alternative), so they compare
+    like every other coefficient."""
+    return t_fit[key]
 
 
 def compare_h2(R, stage, a_h2, t, a_points):
@@ -582,8 +799,21 @@ def compare_campaign(root):
     R = Recorder()
     exits = {tag: int((o / (tag + ".exit")).read_text().strip()) for tag in
              ("a-blinded", "a-fit", "a-held", "t-blinded", "t-1", "t-2", "a-held-fitkeys", "t-2-fitkeys",
-              "a-fit-nokeys", "t-1-nokeys") if (o / (tag + ".exit")).exists()}
+              "a-fit-nokeys", "t-1-nokeys", "a-blinded-post", "t-blinded-post") if (o / (tag + ".exit")).exists()}
     R.exact("refusal", "exit", "blinded", exits.get("a-blinded"), exits.get("t-blinded"))
+    if "a-blinded-post" in exits or "t-blinded-post" in exits:
+        # Lead ruling 2026-10-20 items 3 and 4: the post-commit blinded run on the withheld rows never
+        # refuses for a missing file.
+        R.exact("refusal", "exit", "blinded after the stage-1 commit (withheld rows; never refuses)",
+                exits.get("a-blinded-post"), exits.get("t-blinded-post"))
+        tb = load(o / "t-blinded-post.json")
+        if tb is not None and (o / "a-blinded-post").is_dir():
+            rows = load(o / "a-blinded-post/blinded_pass_estimates.json")
+            compare_cells(R, "blinded-post", rows, tb)
+            ap = load(o / "a-blinded-post/model_estimates.json")
+            compare_points(R, "blinded-post", ap, tb)
+            compare_h1(R, "blinded-post", load(o / "a-blinded-post/h1.json"), load(o / "a-blinded-post/moe.json"), tb, None)
+            compare_h2(R, "blinded-post", load(o / "a-blinded-post/h2.json"), tb, ap)
     R.exact("refusal", "exit", "fit/stage1 before any release (must refuse)", exits.get("a-fit-nokeys"), exits.get("t-1-nokeys"))
     R.exact("refusal", "exit", "fit/stage1", exits.get("a-fit"), exits.get("t-1"))
     R.exact("refusal", "exit", "heldout/stage2 with fit-only keys (must refuse)", exits.get("a-held-fitkeys"), exits.get("t-2-fitkeys"))
@@ -696,7 +926,7 @@ def plant(archive, acceptance, models, pass_id, defects, log):
 
 
 def build(root, name):
-    world, seed, defects = CAMPAIGNS[name]
+    world, seed, defects, knobs, missing_stores = CAMPAIGNS[name]
     root.mkdir(parents=True)
     log = []
     original = export_runs.export
@@ -711,11 +941,21 @@ def build(root, name):
     export_runs.export = export_with_defects
     try:
         manifest = archive_campaign(root, world=world, seed=seed, non_claim=False, release="none",
-                                    pass_duration_scales=PASS_SCALES, clock_latency_ms=CLOCK_LATENCY_MS)
+                                    pass_duration_scales=PASS_SCALES, clock_latency_ms=CLOCK_LATENCY_MS, **knobs)
     finally:
         export_runs.export = original
+    # B6 ruling Q1: a withheld file goes missing after the export wrote it (a file-custody fault);
+    # the sidecar's count-only locator stays.
+    removed = []
+    for session_id in missing_stores:
+        sidecar = next(root.glob(f"export/*/{session_id}.session.json"))
+        info = ba.read_json(sidecar)["blinding"]["withheld"]
+        store = sidecar.parent / info["path"]
+        store.unlink()
+        removed.append({"session_id": session_id, "store": str(store), "row_count": info["row_count"]})
     _write(root / "manifest.json", manifest)
-    _write(root / "build.json", {"name": name, "world": world, "seed": seed, "defects": log,
+    _write(root / "build.json", {"name": name, "world": world, "seed": seed, "defects": log, "knobs": knobs,
+                                 "missing_stores": removed,
                                  "pass_duration_scales": PASS_SCALES, "clock_latency_ms": CLOCK_LATENCY_MS})
     return manifest
 
@@ -753,6 +993,19 @@ def run_both(root, manifest):
     run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
     run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
     predictions = o / "a-fit/predictions.json"
+    if any(ba.read_json(p).get("blinding", {}).get("withheld") for p in (root / "export").rglob("*.session.json")):
+        # Lead ruling 2026-10-20 item 3: after the stage-1 commit and before any held-out key is
+        # released, both implementations run on the blinded held-out rows (rails only).  The commit
+        # is the desk's git commit of the stage-1 output; its hash admits the withheld store.
+        init_git_fixture(o / "a-fit", "-q")
+        subprocess.run(["git", "add", "."], cwd=o / "a-fit", check=True, capture_output=True)
+        subprocess.run(["git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
+                        "commit", "-qm", "Freeze synthetic stage-1 predictions"], cwd=o / "a-fit", check=True, capture_output=True)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=o / "a-fit", check=True, capture_output=True,
+                                text=True).stdout.strip()
+        (o / "stage1-commit").write_text(commit + "\n")
+        run("a-blinded-post", analysis + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "a-blinded-post")])
+        run("t-blinded-post", twin + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "t-blinded-post.json")])
     # Stage 2 with only the fit keys released must refuse on both sides (Addendum 3 item 4, D7).
     run("a-held-fitkeys", analysis + ["--stage", "heldout", "--key-dir", str(released), "--predictions", str(predictions),
                                       "--out", str(o / "a-held-fitkeys")])
@@ -788,6 +1041,33 @@ def describe(row):
             + (f" |a-t|={row['abs']:.3e} bar={row['bar']:.3e}" if "abs" in row else ""))
 
 
+def whole_sample_flips(name):
+    """Addendum 9 item 1: the science runs whose mapped DC-input decode energy differs from the
+    generator's truth (DC = 2 x rails) by more than the integer-microwatt payload rounding can
+    explain (at most 0.5 uW x T): a whole 100 ms sample taken or lost at a decode edge.  Read with
+    the twin's own meter reader and export reader after every key is released."""
+    root = WORK["root"] / name
+    manifest = load(root / "manifest.json")
+    released = root / "released-keys/bytes/blinding"
+    flips = runs = 0
+    largest = 0.0
+    for session in manifest["sessions"]:
+        archive = bt.load_archive(session["archive"])
+        rows = bt.read_export(next(root.glob(f"export/*/{session['session_id']}.runs.csv")))
+        rows = bt.unblind(rows, released, {r["config_key"] for r in rows if r["role"] == "science"})
+        for row in rows:
+            if row["role"] != "science":
+                continue
+            dc = bt.dc_join(archive, row["run_id"])
+            error = abs(dc["decode_energy_j"] - 2 * row["phase_decode_j"])
+            runs += 1
+            largest = max(largest, error)
+            flips += error > 0.5e-6 * row["dur_decode_s"]
+    return {"runs": runs, "flips": flips, "largest_error_j": largest,
+            "label_offset_s": manifest["synthetic_parameters"]["min_receive_latency_ms"] / 1000,
+            "sample_interval_s": kp.STEP_MS[1] / 1000}
+
+
 class AgreementTests(unittest.TestCase):
     """Every campaign, every stage: zero differences above the bar; the under-bar count is printed."""
 
@@ -810,7 +1090,46 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(exits["heldout/stage2 with fit-only keys (must refuse)"], (1, 1))
         ks = {r["group"]: (r["a"], r["t"]) for r in R.rows if r["key"] == "k" and r["stage"] == "heldout"}
         self.assertEqual(ks, expected_h2)
+        self.check_offset_terms_exercised(name, R)
         return R
+
+    def check_offset_terms_exercised(self, name, R):
+        """Addendum 8.4: the Addendum 9 fields must move above their bars in every campaign, so a
+        twin that omitted them (or printed zero) would fail: every C_j, every point's bound and
+        every pass's bound and sensitivity, and every dbeta/ddelta, is larger than its own bar."""
+        rows = [r for r in R.rows if r["stage"] == "heldout"]
+        for key in ("coefficient_C", "offset_lower", "offset_upper", "meter_offset_bound_j", "meter_offset_bound_w",
+                    "meter_offset_sensitivity_w"):
+            hits = [r for r in rows if r["key"].split(":")[-1] == key and "abs" in r]
+            self.assertTrue(hits, f"{name}: no {key} compared")
+            self.assertTrue(all(abs(r["a"]) > r["bar"] for r in hits), f"{name}: a {key} within its own bar of zero")
+        # dbeta/ddelta has the no-half-width bar with its 1e-6 absolute floor in the column's unit; rho's
+        # sensitivity (J/GB per ms) is of order 1e-7 in these worlds, so the field is exercised by the
+        # intercept and epsilon terms (W per ms and J/GB per ms, of order 1e-3 and 1e-5): most rows above.
+        hits = [r for r in rows if r["key"].endswith(":d_beta_d_delta_per_ms") and "abs" in r]
+        self.assertTrue(hits, f"{name}: no d_beta_d_delta_per_ms compared")
+        self.assertGreater(sum(abs(r["a"]) > r["bar"] for r in hits), len(hits) / 2, name)
+        # Rails has no C term (Addendum 9 item 3): both sides print none, and the comparer says so.
+        rails = [r for r in rows if "rails" in r["key"] and r["key"].startswith("no ") or "no offset alternative on rails" in r["key"]]
+        self.assertTrue(rails and all(r["status"] == "equal" and r["a"] is True for r in rails))
+        self.assertTrue(all(r["status"] == "equal" for r in rows if r["key"].endswith("sensitivity_units")))
+        self.assertTrue([r for r in rows if r["key"] == "offset_disclosure states 22 ms, 25 ms, M13"
+                         and r["a"] == r["t"] == (True, True, True)])
+        self.assertFalse([r for r in rows if r["key"].endswith(("systematics_flag", "sensitivity_flag")) and r["a"] is True])
+
+    def check_flips(self, name, certain):
+        """Addendum 9 item 1: the label offset flips a whole sample with probability delta / dt per
+        run (within three binomial standard errors, the ruling's bar), or, on the edge-locked meter,
+        on every run with certainty.  Printed for the record."""
+        flips = whole_sample_flips(name)
+        print(f"\nflips {name}: {flips['flips']} of {flips['runs']} runs, largest error {flips['largest_error_j']:.3f} J")
+        if certain:
+            self.assertEqual(flips["flips"], flips["runs"])
+        else:
+            p = flips["label_offset_s"] / flips["sample_interval_s"]
+            n = flips["runs"]
+            self.assertLessEqual(abs(flips["flips"] / n - p), 3 * math.sqrt(p * (1 - p) / n))
+        return flips
 
     def test_bytes_world(self):
         # 7 held-out models x 3 boundaries x (2 passes + their mean) = 63 primary-and-description words.
@@ -818,8 +1137,74 @@ class AgreementTests(unittest.TestCase):
                                  "h2/rest/passes_mean": (11, 11)})
 
     def test_resident_world(self):
-        self.check("resident", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
-                                    "h2/rest/passes_mean": (11, 11)})
+        # The NR1 regression's world (Addendum 9 item 1): about delta / dt = 10% of the runs take or
+        # lose a whole sample; at this seed every registered decision survives the alternative
+        # (every C_j is below the HC3 half-width of a coefficient whose interval excludes zero).
+        R = self.check("resident", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
+                                        "h2/rest/passes_mean": (11, 11)})
+        self.check_flips("resident", certain=False)
+        self.assertTrue([r for r in R.rows if r["key"].endswith(":offset_decision") and r["stage"] == "heldout"])
+
+    def test_edge_locked_meter_flips_every_run_and_moves_decisions(self):
+        # Addendum 9.1's pre-ruling edge-locked meter: the offset carries a sample across both decode
+        # edges of every run, and the coherent bias moves the resident-extended and rest-model P0 /
+        # epsilon decisions at DC input and rest from a sign to "contains zero" under the alternative.
+        R = self.check("edge_locked", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
+                                           "h2/rest/passes_mean": (11, 11)})
+        self.check_flips("edge_locked", certain=True)
+        moved = [r for r in R.rows if r["key"].endswith(":offset_decision") and r["stage"] == "heldout"
+                 and r["a"] != next(x["a"] for x in R.rows if x["stage"] == r["stage"] and x["group"] == r["group"]
+                                    and x["key"] == r["key"].replace(":offset_decision", ":coefficient_decision"))]
+        self.assertTrue(moved, "no offset decision differs from its registered decision")
+        self.assertTrue(all(r["status"] == "equal" for r in moved))
+        print("\nedge_locked decisions moved: " + ", ".join(sorted(f"{r['group'].split('/')[1]} {r['key']}" for r in moved)))
+
+    def test_withheld_campaign_missing_files_and_uncollected_pass(self):
+        # B6 ruling Q1 through the CLI chain on R6's six sub-packs: s2 pass 2's withheld file missing
+        # (30B-A3B: one_pass with the flag), both s6 files missing (Qwen3.5-122B: missing, no point, no
+        # H1 word, the MoE answer missing), s4 pass 2 never collected (32B, 8B-8bit: one_pass without
+        # the flag); nothing refuses, the post-commit blinded run included.  H2 is fitted on nine
+        # models (k = 8, 8, 10 from what is printed as primary) and the two-pass sensitivity line on
+        # the six models with two computed passes, whose tier fit refuses (n - p = 1).
+        # Words: per boundary 3 x 3 (two-pass held-out models) + 3 x 2 (one-pass: mean and the
+        # surviving pass) + 1 (the missing model's mean row, no word) = 16.
+        R = self.check("withheld", 48, {"h2/rails/passes_mean": (8, 8), "h2/dc_input/passes_mean": (8, 8),
+                                        "h2/rest/passes_mean": (10, 10)})
+        exits = {r["key"]: (r["a"], r["t"]) for r in R.rows if r["group"] == "exit"}
+        self.assertEqual(exits["blinded after the stage-1 commit (withheld rows; never refuses)"], (0, 0))
+        rows = [r for r in R.rows if r["stage"] in ("heldout", "blinded-post")]
+        labels = {r["group"]: r["a"] for r in rows if r["key"] == "pass_label" and r["group"].startswith("point/")
+                  and r["group"].endswith("/rails/gross") and r["stage"] == "heldout"}
+        self.assertEqual(labels["point/qwen3-30b-a3b-4bit/mean/rails/gross"], "one_pass")
+        self.assertEqual(labels["point/qwen3-32b-4bit/mean/rails/gross"], "one_pass")
+        self.assertEqual(labels["point/qwen3-8b-8bit/mean/rails/gross"], "one_pass")
+        self.assertEqual(labels["point/qwen3.5-122b-a10b-4bit/mean/rails/gross"], "no_pass")
+        self.assertEqual(labels["point/qwen3-14b-4bit/mean/rails/gross"], "pass_mean")
+        flags = {r["group"]: r["a"] for r in rows if r["key"] == "flag:" + WITHHELD_MISSING and r["stage"] == "heldout"
+                 and r["group"].startswith("point/") and r["group"].endswith("/rails/gross")}
+        self.assertTrue(flags["point/qwen3-30b-a3b-4bit/mean/rails/gross"])
+        self.assertTrue(flags["point/qwen3.5-122b-a10b-4bit/mean/rails/gross"])
+        self.assertFalse(flags["point/qwen3-32b-4bit/mean/rails/gross"])
+        self.assertFalse(flags["point/qwen3-8b-8bit/mean/rails/gross"])
+        statuses = {r["group"]: r["a"] for r in rows if r["key"] == "status" and r["stage"] == "heldout"}
+        self.assertEqual(statuses["cell/qwen3-30b-a3b-4bit/pass2/rails/gross"], "missing")
+        self.assertEqual(statuses["cell/qwen3.5-122b-a10b-4bit/pass1/dc_input/gross"], "missing")
+        self.assertEqual(statuses["point/qwen3.5-122b-a10b-4bit/mean/rest/gross"], "missing")
+        self.assertEqual(statuses["h1/rails/passes_mean/qwen3.5-122b-a10b-4bit"], "missing")
+        counts = {(r["group"], r["key"]): (r["a"], r["t"]) for r in rows if r["key"].startswith("withheld_")}
+        self.assertEqual(counts[("cell/qwen3-30b-a3b-4bit/pass2/rails/gross", "withheld_row_count")], (50, 50))
+        self.assertEqual(counts[("cell/qwen3-30b-a3b-4bit/pass2/rails/gross", "withheld_config_row_count")], (50, 50))
+        self.assertEqual({r["a"] for r in rows if r["key"] == "answer"}, {"missing"})
+        self.assertEqual({(tuple(r["a"]), tuple(r["t"])) for r in rows if r["key"] == "missing_models"},
+                         {(("qwen3.5-122b-a10b-4bit",), ("qwen3.5-122b-a10b-4bit",))})
+        sensitivity = {(r["stage"], r["group"]): (r["a"], r["t"]) for r in rows if "two_pass_sensitivity" in r["group"] and r["key"] == "n"}
+        self.assertEqual(set(sensitivity.values()), {(6, 6)})
+        self.assertEqual({(r["a"], r["t"]) for r in rows if "two_pass_sensitivity" in r["group"] and r["key"] == "tier:status"},
+                         {("refused", "refused")})
+        # Every rule above holds on both sides: no comparison of these fields is above the bar (check),
+        # and the twin's values are the ones asserted on the analysis's side.
+        self.assertTrue(all(r["status"] == "equal" for r in rows if r["key"] in ("status", "pass_label", "answer", "n")
+                            or r["key"].startswith(("flag:", "withheld_"))))
 
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
