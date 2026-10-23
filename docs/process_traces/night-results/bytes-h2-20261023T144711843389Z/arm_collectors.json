@@ -1,0 +1,66 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261022T0216Z-bytes-h-rem/.venv/bin/python",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261022T0216Z-bytes-h-rem/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/custody",
+        "--repo",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement",
+        "--pack",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement/configs/campaigns/bytes-mac-check",
+        "--plan-id",
+        "bytes-h2-20261023T144711843389Z",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "61aaad4f92fb44d1397b6739027eab6fbb834a60",
+        "--chain",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "bytes-h2-20261023T144711843389Z-calibration",
+        "--catalog",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-bytes/h2-20261023T144711Z/measurement/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 55.390541334,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 751693060786875,
+        "monotonic_raw_ns": 751693060786583,
+        "wall_ns": 1792767356077003000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 751637670245541,
+        "monotonic_raw_ns": 751637670245375,
+        "wall_ns": 1792767300686462000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "2be3a5cb82d71af4b3f097d213e885af4647010ab713f30c012d16cc746628e1",
+        "size": 418
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
