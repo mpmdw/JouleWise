@@ -36,6 +36,8 @@ The block-6 file is **REGISTERED 2026-10-17** despite “DRAFT” in its filenam
 | Independent arithmetic | `lane/2026-10-14-independent-recompute`, `scripts/independent_recompute_b5.py` | Pin the reviewed version; run comparison in restricted custody. B6 needs its registered counting/pairing/rules and S-13 comparison, not an unmodified B5 `claim_usable` veto. |
 | BYTES shared ancestry | B1 `lane/2026-10-20-bytes-integration` at `d924e7acf`; B2 `lane/2026-10-20-bytes-analysis-a8`; draft **#515** on `ci/2026-10-21-b2-nr1` (`de75fbabb`) | Item 60 holds landing: B2 would bring B1 and #499/#502 ancestry onto main. Lead must choose separate-ledger or combined landing, while respecting #502's block-5-release hold. A green B2 ledger does not clear the inherited B6 line. |
 
+Completed collection prerequisites to retain in the ancestry/evidence map: **#500**, `fix/2026-10-16-watchdog-b6-bindings`, is merged to main (`ad31062e9`), gates `docs/process_traces/2026-10-17-magistrate-1a1261a5/pr500-gates.md`; **#501** fixed busy-only admission, idle-skip stage interpretation and smoke handling, merged into the round-2 line (`5b58cfa06`), gates `docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-gates.md`. These are completed prerequisites, not new pending fixes. Registered acceptance/registration gate records are `docs/process_traces/2026-10-17-magistrate-1a1261a5/b6-accept-ruling-{fable,opus}.md` and `docs/process_traces/2026-10-17-magistrate-52d50d1f/reg-ruling-{fable,opus}.md`; preserve them with S-1 evidence.
+
 #515's recorded integration size was 123 commits in item 60; live PR metadata now reports 137. This is branch movement, not permission to assume the old reviewed tree is current. BYTES B4 → B3 twin → B5 kit → item G is the subsequent BYTES merge path, **not** a block-6 science-release prerequisite. H PRs #516/#518 and the paused physical run do not hold block-6 analysis.
 
 Relevant process records:
@@ -75,6 +77,10 @@ Required records/inputs:
 - External analysis custody root, complete immutable input census; final pinset and v2 mint input manifest; extraction reports, aggregate floor/replay sidecar; finalized GAMMA manifest; dominance close-out; claim verdict; each reported-cell issuance; disclosures and validated fill input.
 - Seal-record **analysis addendum**: analysis commit/file digests; L9 rule and “(d)” dispositions; every remaining PLAN §13 FILL. The sealed plan is not casually rewritten.
 
+The index must authenticate each governing historical harvest program, rather than re-harvest everything with newest code: ALPHA a1 (`v5-b5-alpha-a1-20261009T2312Z`) uses `224a264c5` on `lane/2026-10-09-harvest-corpus-cap`; BETA a6 (`v5-b5-beta-a6-20261011T2011Z`) and GAMMA a1 (`v5-b5-gamma-a1-20261012T0420Z`) use `b039c0257` on `lane/2026-10-11-harvest-trigger-scope`. The intervening history uses `0699abbb0` on `lane/2026-10-10-harvest-screen-sources` where Seal Addenda 3/4 govern. No PR number is recorded for these pins in the inspected authority; do not invent one. Source records: `docs/process_traces/2026-10-block5/seal2-beta-a6-window.md`, `seal2-gamma-a1-window.md`, and seal-record Addenda 2–4. Preserve failed BETA attempts; prospective errata cannot rehabilitate earlier attempts for deciding evidence.
+
+Before any number, L9 must check `excluded_reference_in_screen` (RUN_STATE item 33; `l9-rulings/RULING.md` J4). If it fires, only that window is re-harvested at a newly admitted pin after a cold gate; if it becomes not claim-usable, that pack has no analysed attempt and is **not re-armed**. Every consumer uses the window's own bracket timing bound and refuses a conflicting member bound (`DECISIONS.md` B1); a contrast's floor retains its producer window's drift allowance. None of these can be bypassed to make the joined run green.
+
 All post-seal FILLs to disposition: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-CONSUMER`, `L9-NEG8`, `REPORTED-ENERGY-ISSUER`, `FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST`, `MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`, `DISCLOSURE-SITES`. PLAN lines 776–783 place their fills in the seal-record addendum.
 
 PLAN §3.1 order is **1 strict validation → 2 restricted re-reduction → 3 kept units → 4 ALPHA/BETA extraction → 5 aggregate mint/replay → 8 GAMMA finalization → 6 dominance close-out → 9 claim gate → 10 per-cell issuer → 11 disclosures/fill**. The driver additionally records setup/adapter steps 0, 3b, 9b. Step 7 was removed. Step 6 is deliberately after 8, since it consumes the finalized manifest.
@@ -106,7 +112,7 @@ After the recorded event, run release mode on the same inputs, pin, index and cu
 
 Other S-1…S-18 slots are filled/registered, not new science questions. In particular S-5's dated filled pin text supersedes its earlier “still open”; S-13 is already fixed. Do not reset settled bars.
 
-Use loop acceptance/session history, not the archived B5-style `claim_usable` alone, to census attempts. Closed counting sets are A r1/r3/r4; B r1/r2/r3; G r1/r2/r3. **Also index noncounting A r2 and any other collected attempt revealed by the structural census**: §12.3 requires every B6 session, while item 59's “all nine” names only the counting set. Preserve reasons/history. §11.4 determines which noncounting sessions can enter the labelled flagged-inclusive line, retaining run exclusions and the registered experiment/computability requirements.
+Use loop acceptance/session history, not the archived B5-style `claim_usable` alone, to census attempts. Closed counting sets are A r1/r3/r4; B r1/r2/r3; G r1/r2/r3. **Also index noncounting A r2 and any other collected attempt revealed by the structural census**: §12.3 requires every B6 session, while item 59's “all nine” names only the counting set. Preserve reasons/history. §11.4 determines which noncounting sessions can enter the labelled flagged-inclusive line, retaining run exclusions: the session must be the registered experiment (no W1/W2/W3/S1 structural failure), each required stratum must retain at least five units (the registration's minimum for computability), and b_op plus drift must be defined (§11.4).
 
 Pair by registered round/counting, never value: G r1→A r1/B r1; G r2→A r3/B r2; G r3→A r3/B r3. No B5-floor fallback is needed for these recorded sets. Run B5 PLAN steps per counting session, **no pooling across sessions**. §10 then summarizes B5 plus the three counting B6 sessions (four values per quantity) by mean/sample SD. §11.2 permits “replicated” only if every counting GAMMA outcome and dbar sign matches B5; B5 `not_estimable` permits no such word.
 
@@ -114,7 +120,7 @@ Pair by registered round/counting, never value: G r1→A r1/B r1; G r2→A r3/B 
 
 Before the real blind run: S-9/S-11/S-14/S-15 filled; accepted/pinned driver/index/comparator; full synthetic stage chain and review/cold records; immutable archives/raw inputs/loop acceptance and harvest census; external restricted custody; all referenced capture locators readable. S-16 additionally closes before release.
 
-Automation may open restricted inputs; no seat may. Block-6 §12 restricts energies, powers, phase durations, floors, ratios/means/dbar/signs/outcomes, calibration numbers, science-derived pass/fail, and the three derived exclusion-code files. Human-readable records contain only structure: statuses, permitted verdict/counting, redacted counts, kept counts, digests, drift verdict, hazards, non-phase timing. Restrict logs/stderr too; “no numbers in stdout” alone is insufficient.
+Automation may open restricted inputs; no seat may. Block-6 §12 restricts energies, powers, phase durations, floors, ratios/means/dbar/signs/outcomes, calibration numbers, science-derived pass/fail, and `derived/flags.jsonl`, `derived/exclusions.json`, `derived/window_flags.json` (the three restricted code-bearing files). Human-readable records contain only structure: statuses, permitted verdict/counting, redacted counts, kept counts, digests, drift verdict, hazards, non-phase timing. Restrict logs/stderr too; “no numbers in stdout” alone is insufficient.
 
 Complete **every collected session** with no tooling refusal. Retain content-addressed input/output census, readable blind-run record and restricted outputs; do not manufacture a B6 record filename/schema from the B5 name. Build and pin those contracts first.
 
@@ -209,7 +215,7 @@ There is **no verified runnable B6 §13 blind/release/recompute command** on the
 - Does the final integrated L9 dry/probes/J6/chain run complete, and what leaf condition explains the prior warm 9b refusal? Pending execution evidence, not a science ruling.
 - Are all S-11 smoke records and every Mac ledger locator locally available? Cloud metadata cannot prove this.
 - What exact B6 driver/index/release-record contract and analysis tag will S-14 pin? Missing implementation/evidence, not permission to improvise commands.
-- No numerical NEEDS_RULING identified by this scout. A proposed change to selection/arithmetic must use the registered cold process and print original/alternative where required.
+- No numerical NEEDS_RULING identified by this scout. B6 §12.4 permits no change to registered arithmetic after data exist; a permitted blind §8 rule correction needs a dated §17 entry checked by an executing refuter, applies to every session, and retains the original-rule result beside the correction. A proposed change to selection/arithmetic must use the registered cold process and print original/alternative where required.
 
 ## Work performed and exact command/tool outcomes
 
@@ -229,4 +235,12 @@ GitHub API error 404: {"message":"Not Found","documentation_url":"https://docs.g
 
 Thus the conditional seat-setup script is absent on this base snapshot. Runtime skill/network readiness was inspected without printing credentials. No test tail exists: **tests not run (report-only; no modules touched)**. Source/report integrity was checked using in-memory content validation and GitHub readback; final publication outcome is recorded below.
 
-Publication method: connected GitHub tools, creating only the requested report branch from the stated main SHA and committing only this report. Local shell/Git execution remained unavailable; no branch other than the report branch is written. The final readback and scope comparison will be recorded in the close-out append.
+Publication method: connected GitHub tools, creating only the requested report branch from the stated main SHA and committing only this report. Local shell/Git execution remained unavailable; no branch other than the report branch is written. The readback and scope comparison are recorded in the close-out below.
+
+### Close-out verification
+
+- First report commit/push through `github.create_file`: `ade1eb489316cee1ca68029727229127858086c6`. Exact tool result: `{"commit_sha":"ade1eb489316cee1ca68029727229127858086c6"}`.
+- GitHub readback matched the complete submitted text exactly; report blob `44d9d0b8f954e8b44fc7adf3c27d0dcd556246e2`.
+- GitHub compare against base `7c23ea4b71622f7a898617a66da48868e20562a3`: `status=ahead`, `ahead_by=1`, `behind_by=0`; exactly one added path, `.codex-report/BLIND-DRY-RUN-SCOUT.md`, no other file. Commit parent equals the requested main snapshot.
+- Final documentary pass added the completed #500/#501 gate references, historical B5 harvest pins, excluded-reference cold re-harvest contingency and exact restricted filenames. In-memory final checks: terminal newline, no trailing whitespace/NUL, balanced code fences; PASS.
+- This close-out is committed directly to the same report branch through `github.update_file` (a normal new commit, no force update). Final content and one-path scope are read back before handoff. No local checkout/setup/test/diff success is claimed; the cloud execution environment never became usable during this scout.
