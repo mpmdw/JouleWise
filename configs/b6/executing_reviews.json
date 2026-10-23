@@ -716,5 +716,19 @@
    "paper": "/Users/edr/night-archive/seats-786c/fix573c/cold-delta-573-opus.md (JouleWise-data claude/cold-delta-573-opus-u8szk8)"
   }
  ]
+},
+{
+ "commit": "fa974480552acd9901b674fa2736b7c02e4aab95",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py"
+ ],
+ "change": "PR #573 cold Opus delta corrections: block-6 harvest_checkout digests six more program files (F5); the twin reader, F8 coverage, open_bytes, joint-bound test and restore reserve are outside verdict paths.",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "db9e8ab38..fa9744805 (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573c/report.md (JouleWise-data claude/cold-delta-573c-fable)"
+  }
+ ]
 }
 ]
