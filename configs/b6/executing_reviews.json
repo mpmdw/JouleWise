@@ -660,5 +660,24 @@
    "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (delta cold passes: JouleWise-data claude/b6-r2-delta-fable @ a8213b4 and claude/b6-r2-delta-opus-rmmapr @ 11a63d5, cold/REPORT.md with cold/probes)"
   }
  ]
+},
+{
+ "commit": "9d23e5b46ca7ed9fbf26e6bbc330803b8d733b42",
+ "number_bearing_paths": [
+  "joulewise/reduce.py"
+ ],
+ "change": "PR #573 F4: route five reducer reads through the authentication seam without changing integration arithmetic. Cold-pass corrections per /Users/edr/night-archive/forward-20261021/coldpass-audit/FIX-573.md (FIX-573, Sol 6.1 xhigh); lead verification 2026-10-22 (Opus 5.5, interactive 8a9fb7fe): the reducer max->min mutant fails the new regression and the re-issued D-138 byte pin; tests.test_reduce, test_desk_compress, test_desk_compressed_readers, test_restore_run_to_scratch, tests.b6.test_audit_record_fixes, test_authentication_io OK; tests.hazards 288/289 (the one failure is the load-sensitive background-QoS CPU-share test, unchanged by this PR, passing when the Mac is less loaded).",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-fable.report.md (JouleWise-data claude/cold-audit-pr573-fable)"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-opus.report.md (JouleWise-data claude/cold-audit-pr573-opus-0in1nh)"
+  }
+ ]
 }
 ]

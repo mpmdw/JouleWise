@@ -74,6 +74,78 @@ class ConstantsTests(unittest.TestCase):
         self.assertAlmostEqual(q["e_half_width_j_per_step"], 24.0 / 512)
 
 
+class BatteryWorkedExamples(unittest.TestCase):
+    @staticmethod
+    def stream():
+        # 1 V makes signed powers exactly -current_mA/1000 W. Decode [4,8)
+        # has 2,4,2,4 W; own idle [0,2) charges at -1 W. All values/results
+        # below are exact binary fractions, so equality (no bar) is intended.
+        powers = {0: -1, 1: -1, 4: 2, 5: 4, 6: 2, 7: 4, 8: 3, 9: 5, 10: 7}
+        return {"poll_ns": [t * 10**9 for t in range(15)],
+                "smc": [{"B0AC": -1000 * powers.get(t, 0), "B0AV": 1000} for t in range(15)]}
+
+    def test_signed_bases_and_two_forward_edges_have_closed_form_values(self):
+        got = bt.battery_phase(self.stream(), [4 * 10**9, 8 * 10**9], [0, 2 * 10**9])
+        # Decode 4*3=12 J; subtract own charging idle -> 12-(-1)*4=16 J.
+        # tau=1+1+1=3 s; T/n=1 s. Forward sums are 2+4+2=8 and 3+5+7=15 J.
+        for key, value in {"battery_gross_j": 12, "battery_secondary_j": 16,
+                           "battery_idle_power_w": -1, "battery_v_start_j": 8,
+                           "battery_v_end_j": 15, "battery_phase_edge_j": 23,
+                           "battery_tau_s": 3, "battery_poll_interval_max_s": 1,
+                           "battery_n": 4, "battery_n_idle": 2}.items():
+            self.assertEqual(got[key], value, key)
+        self.assertIs(got["decode_battery_assist"], True)
+        self.assertIs(got["battery_end_window_complete"], True)
+
+    def test_partial_voltage_poll_is_not_integrated_but_its_current_marks_assist(self):
+        stream = self.stream()
+        for values in stream["smc"]:
+            values["B0AC"] = 0
+        stream["smc"][7] = {"B0AC": -2000, "B0AV": None}
+        got = bt.battery_phase(stream, [4 * 10**9, 8 * 10**9], [0, 2 * 10**9])
+        self.assertEqual((got["battery_gross_j"], got["battery_n"]), (0, 3))
+        self.assertIs(got["decode_battery_assist"], True)
+        for t in (4, 5, 6):
+            stream["smc"][t]["B0AV"] = None
+        stream.pop("_battery_data")
+        self.assertIsNone(bt.battery_phase(stream, [4 * 10**9, 8 * 10**9], [0, 2 * 10**9]))
+        self.assertIs(bt.battery_marker(stream, [4 * 10**9, 8 * 10**9]), True)
+
+    def test_delay_uses_polls_outside_the_phase_and_marker_is_half_open(self):
+        stream = self.stream()
+        # Remove receive times 12 and 13: the largest interval is 3 s outside
+        # decode. BAT-2's average+hold adds exactly 2 s, giving tau=5 s.
+        for key in ("poll_ns", "smc"):
+            stream[key] = [v for i, v in enumerate(stream[key]) if i not in (12, 13)]
+        self.assertEqual(bt.battery_data(stream)[3], 5)
+        stream = self.stream()
+        for values in stream["smc"]:
+            values["B0AC"] = 0
+        stream["smc"][6]["B0AC"] = stream["smc"][11]["B0AC"] = -1000
+        self.assertIs(bt.battery_marker(stream, [4 * 10**9, 8 * 10**9]), False)
+        stream["smc"][7]["B0AC"] = -1000
+        self.assertIs(bt.battery_marker(stream, [4 * 10**9, 8 * 10**9]), True)
+
+    def test_empty_meter_batches_retain_ordered_current_polls_without_a_clock_fit(self):
+        records = [{"k": "h", "rate_idx": synth.RATE_IDX, "start_raw_ns": 10 * 10**9,
+                    "start_mono_ns": 9 * 10**9}]
+        for second in (13, 11, 12):
+            records.append({"k": "b", "rx": second * 10**9, "n": 0, "p": "",
+                            "smc": {"B0AC": -1000 if second == 13 else 0,
+                                    "B0AV": None if second == 13 else 1000}})
+        records.append({"k": "t", "end_raw_ns": 20 * 10**9, "end_mono_ns": 19 * 10**9})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stream.jsonl"
+            path.write_text("".join(json.dumps(row) + "\n" for row in records))
+            stream = bt.parse_meter_stream(path)
+        self.assertIs(stream["aligned"], False)
+        self.assertEqual(stream["raw_offset_ns"], 10**9)
+        self.assertEqual(stream["poll_ns"], [11 * 10**9, 12 * 10**9, 13 * 10**9])
+        # Raw decode [10,12), delay 3 s -> marker [13,15). The incomplete
+        # voltage at 13 s still marks assist; no meter fit is needed.
+        self.assertIs(bt.battery_marker(stream, [10 * 10**9, 12 * 10**9]), True)
+
+
 class StudentTTests(unittest.TestCase):
     def test_exact_quantiles_of_the_analysis_plan(self):
         for df, expected in ((9, 2.262157162798205), (8, 2.306004135204166), (7, 2.364624251592785),
@@ -477,7 +549,10 @@ class SyntheticWorldTests(unittest.TestCase):
         cell = self.result["cells"]["qwen3-4b-4bit"]["pass1"]["boundaries"]["rails"]
         self.assertEqual((cell["gross"]["n_r"], cell["gross"]["n_b"]), (8, 8))
         self.assertEqual(cell["gross"]["df"], 7)
-        self.assertEqual(cell["without_assisted"]["n_r"], 7)
+        # BAT-2: this world plants only a harvest flag, while every SMC
+        # current remains zero. The flag alone selects no diagnostic unit.
+        self.assertNotIn("without_assisted", cell)
+        self.assertEqual(cell["harvest_assisted_member_counts"], {"repeat": 1, "quad": 0})
         codes = {r["codes"]: r["restorable"] for r in cell["removed_members"]}
         self.assertEqual(codes, {"thermal.os_level_nonzero": True, "member.status_not_succeeded": False,
                                  "battery.member_span": True, "member.cooldown_cap_hit": True})
@@ -493,6 +568,8 @@ class SyntheticWorldTests(unittest.TestCase):
                                        "exclusion_codes": "member.cooldown_cap_hit"}))
         self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
                                         "exclusion_codes": "member.bytes_missing"}))
+        self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
+                                        "exclusion_codes": "member.anchor_not_bounded"}))
         self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
                                         "exclusion_codes": "roster.not_in_plan"}))
         self.assertIn("p1-s1-m-qwen3-4b-4bit-b02", cell["flagged_inclusive"]["kept_quad_ids"])

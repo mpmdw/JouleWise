@@ -239,7 +239,14 @@ class SmokeTests(DeskCase):
     def test_prepare_authenticates_production_tree_and_controller_pre_slot(self):
         from joulewise import arm_readiness, controller
         prepared = self.production_prepared()
-        self.assertTrue((prepared.measurement / '.venv/bin/python3.13').exists())
+        site, = (prepared.measurement / '.venv/lib').glob('python*/site-packages')
+        self.assertTrue((prepared.measurement / '.venv/bin' / site.parent.name).is_file())
+        # Operational startup bound: the same 5 s scheduling floor used by
+        # the partial-reader probe, with no sampler or workload involved.
+        interpreter = subprocess.run([str(prepared.measurement / '.venv/bin/python'),
+            '-c', 'import sys; print(sys.prefix)'], capture_output=True, text=True, timeout=5)
+        self.assertEqual(interpreter.returncode, 0, interpreter.stderr)
+        self.assertEqual(Path(interpreter.stdout.strip()), prepared.measurement / '.venv')
         pack = prepared.measurement / 'configs/campaigns' / PACKS['alpha']
         reduced, raw = arm_readiness._plan_tree(pack)
         self.assertEqual(sum(r['expected_count'] for r in reduced['stage_graph']

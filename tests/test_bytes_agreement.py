@@ -54,7 +54,8 @@ archive_campaign = _campaign.archive_campaign
 PASS_SCALES = (1, 2)
 CLOCK_LATENCY_MS = (-8, 3)
 # name: (world, seed, planted defects).  Seeds are each world's first in campaign_design.json.
-# bytes/resident/time are the three truths; defects plants the review's five defects (p08);
+# bytes/resident/time are the three truths; defects plants p08's five defects
+# plus FIX-573's unresolved-anchor validity failure;
 # minimum removes six of one model's pass-1 repeats so that one pass refuses (Addendum 7 D9).
 DEFECTS = [
     (1, "Qwen3-14B-4bit", 15, "lost_member"),        # quad unit 1: bundle and stored reduction gone
@@ -62,6 +63,7 @@ DEFECTS = [
     (1, "Qwen3-30B-A3B-4bit", 0, "battery_assist"),   # repeat: meter halved over decode, flag battery.assist
     (2, "Qwen3-8B-4bit", 2, "thermal"),               # repeat: thermal.os_level_nonzero
     (1, "Qwen3-8B-4bit", 20, "cooldown"),             # quad unit 2: member.cooldown_cap_hit (NUMBER class)
+    (1, "Qwen3-8B-4bit", 4, "anchor_not_bounded"),   # repeat: invalid energy never restored
 ]
 DEFECTS_MINIMUM = [(1, "Qwen3-32B-4bit", i, "strict_validation") for i in range(6)]
 CAMPAIGNS = {
@@ -679,6 +681,8 @@ def plant(archive, acceptance, models, pass_id, defects, log):
             codes = ["thermal.os_level_nonzero"]
         elif kind == "strict_validation":
             codes = ["member.strict_validation_failed"]
+        elif kind == "anchor_not_bounded":
+            codes = ["member.anchor_not_bounded"]
         elif kind == "cooldown":
             codes = ["member.cooldown_cap_hit"]
         elif kind == "battery_assist":
@@ -828,13 +832,20 @@ class AgreementTests(unittest.TestCase):
     def test_defects_campaign(self):
         R = self.check("defects", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                        "h2/rest/passes_mean": (11, 11)})
-        # The five planted defects reach both sides: D5's cooldown restore and D10's without-assisted line.
+        # D5 restores cooldown, but FIX-573's invalid-anchor repeat stays out
+        # on both primary and flagged-inclusive lines of both implementations.
         kept = {r["group"]: r for r in R.rows if r["key"] == "n_b" and r["stage"] == "heldout"}
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/gross"]["a"], 9)
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive"]["a"], 10)
         self.assertEqual(kept["cell/qwen3-14b-4bit/pass1/rails/flagged_inclusive"]["a"], 9)
+        repeats = {r['group']: r for r in R.rows if r['key'] == 'n_r' and r['stage'] == 'heldout'}
+        for variant in ('gross', 'flagged_inclusive'):
+            row = repeats['cell/qwen3-8b-4bit/pass1/rails/' + variant]
+            self.assertEqual((row['a'], row['t']), (9, 9))
         without = [r for r in R.rows if "/without_assisted" in r["group"] and r["key"] == "status"]
-        self.assertTrue(without and all(r["a"] == r["t"] == "computed" for r in without))
+        self.assertTrue(without)
+        self.assertTrue(all(r["a"] == r["t"] == ("unavailable" if r["stage"] == "blinded" else "computed")
+                            for r in without))
 
     def test_minimum_campaign_one_pass_refused(self):
         # Addendum 7 D9: 32B's pass 1 refuses; its point is pass 2, labelled one_pass; H2 is fitted on

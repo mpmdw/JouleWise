@@ -127,15 +127,20 @@ class BlindingTests(unittest.TestCase):
                "dur_decode_s": 2, "emitted_tokens": 7, "failed_energy_j": "", "absent_energy_j": None}
         scale = 1.117
         applied = blinding.apply(row, scale)
-        # No printed half-width: COMMON 1e-6 relative / absolute J2 or W2
-        # near zero, above 1e6 x double noise (2.2e-16 -> 2.2e-10 relative).
+        # Variance has no printed J^2 or W^2 half-width. COMMON uses
+        # 1e-6 relative, floor 1e-6 J^2 for energy variance (noise x 1e6
+        # at .25 J^2 is 5.5e-11 J^2), and floor 1e-6 W^2 for idle
+        # variance (noise x 1e6 at .125 W^2 is 2.75e-11 W^2).
         self.assertTrue(math.isclose(applied["variance_j2"], row["variance_j2"] * scale * scale,
                                      rel_tol=1e-6, abs_tol=1e-6))
         self.assertTrue(math.isclose(applied["idle_variance_of_mean_w2"], row["idle_variance_of_mean_w2"] * scale * scale,
                                      rel_tol=1e-6, abs_tol=1e-6))
         recovered = blinding.unblind(applied, scale)
-        # Roundtrip has no printed half-width: 1e-6 relative / absolute in the
-        # field's unit near zero, above 1e6 x 2.2e-16 = 2.2e-10 relative noise.
+        # Energy's 1.234e-6 J bar is above noise x 1e6 (2.7e-10 J) and
+        # below 1% of the printed 0.013 J half-width (1.3e-4 J). For the
+        # fields without half-widths, COMMON gives 1e-6 relative with floors
+        # 1e-6 W, 1e-6 J^2 and 1e-6 W^2 respectively; each exceeds noise x
+        # 1e6 at these .125-.4 unit fixture scales (at most 8.8e-11 units).
         self.assertTrue(all(math.isclose(recovered[k], v, rel_tol=1e-6, abs_tol=1e-6)
                             for k, v in row.items() if isinstance(v, float)),
                         "synthetic offset roundtrip failed")

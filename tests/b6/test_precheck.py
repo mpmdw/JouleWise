@@ -245,9 +245,9 @@ class PrecheckTests(DeskCase):
         for pack, count in (('alpha', 125), ('beta', 125), ('gamma', 107)):
             evidence = p.synthetic_session(ROOT / 'configs/campaigns' / PACKS[pack], ROOT, rows, {})
             self.assertEqual(sum(len(s.members) for s in evidence.stages), count)
-            # Synthetic stored-bound re-derivation, no printed half-width:
-            # 1e-6 relative / absolute ms near zero, above 1e6 x 2.2e-16 = 2.2e-10 noise.
-            self.assertTrue(math.isclose(evidence.captures[0].bound_ms, 15, rel_tol=1e-6, abs_tol=1e-6))
+            # The last 24 valid lexemes have median .015 s; Fraction x 1000
+            # gives exactly 15 ms. CaptureEvidence copies that same stored value.
+            self.assertEqual(evidence.captures[0].bound_ms, 15)
             self.assertTrue(all(c.synthetic for c in evidence.captures))
         empty = p.synthetic_session(ROOT / 'configs/campaigns' / PACKS['alpha'], ROOT, [], {})
         self.assertIsNone(empty.captures[0].bound_ms)

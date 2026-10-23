@@ -10,7 +10,6 @@ controller invokes it before ``finalize()``.
 
 from __future__ import annotations
 
-import ast
 import hashlib
 import importlib.util
 import json
@@ -2092,8 +2091,8 @@ class D078R01RegressionTests(unittest.TestCase):
     FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
     RAW_SHA256 = "cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81"
 
-    def test_d138_issued_pin_and_reduction_arithmetic_remain_fixed(self) -> None:
-        """Preserve issuance identity and every original numerical expression."""
+    def test_d138_reduce_source_bytes_remain_at_reissued_pin(self) -> None:
+        """D-138 re-issue (2026-10-22, PR #573): preserve every source byte."""
 
         issued_pin = (
             "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
@@ -2111,24 +2110,33 @@ class D078R01RegressionTests(unittest.TestCase):
             ["joulewise/reduce.py"],
             issued_pin,
         )
-        # F4 changes storage I/O, so the working source is no longer the issued
-        # blob. The historical acceptance pin above stays immutable. This hash
-        # is derived from reduce.py at 9bdcf6c95, in lexical AST order, covering
-        # every operator, comparison and numerical literal. Existing golden
-        # regressions below continue to pin the computed outputs themselves.
-        expressions = []
+        # D-138 re-issue (2026-10-22, PR #573), authorized by FIX-573:
+        # 9d23e5b46 routed five reads through the authentication seam. The
+        # D078R01 golden regressions below preserve the numerical outputs;
+        # the integration arithmetic is unchanged. Keep the historical issued
+        # acceptance bytes above intact. Any further reduce.py edit must
+        # re-issue this BYTE pin; a subset of AST nodes misses call/key edits.
+        self.assertEqual(
+            hashlib.sha256((REPO_ROOT / "joulewise/reduce.py").read_bytes()).hexdigest(),
+            "2d4d0750e3a4299ce2d306cde77e3a082542f0661033872872efc33f69f6df9c",
+        )
 
-        def visit(node):
-            if (isinstance(node, (ast.BinOp, ast.Compare))
-                    or isinstance(node, ast.UnaryOp) and not isinstance(node.op, ast.Not)
-                    or isinstance(node, ast.Constant) and type(node.value) in (float, int)):
-                expressions.append(ast.dump(node, include_attributes=False))
-            for child in ast.iter_child_nodes(node):
-                visit(child)
-
-        visit(ast.parse((REPO_ROOT / "joulewise" / "reduce.py").read_bytes()))
-        self.assertEqual(hashlib.sha256(json.dumps(expressions, separators=(",", ":")).encode()).hexdigest(),
-                         "7ac9fe69ab08ad1c1f057c37d39c8be8244c18bf9174a8fe3a3a82cd4778665c")
+    def test_half_gap_bound_takes_maximum_of_unequal_perturbations(self) -> None:
+        # The cold-pass max->min mutant is at _interpolation_edge_bound_j
+        # (reduce.py:540), called the anchor-shift bound in the FIX-573 brief.
+        # P(t)=4t W, integral=2t^2 J, edges 1.25/1.75 s, gaps 1 s.
+        # +/- half a gap gives energies 5, 0, 0, 7 J around the 3 J base:
+        # absolute changes 2, 3, 3, 4 J. All operands/results are exact binary
+        # fractions, so exact equality is the property; no tolerance applies.
+        curve = [reduce_module.TracePoint(t=float(t), power_w=float(4*t))
+                 for t in range(4)]
+        window = reduce_module.Window(1.25, 1.75)
+        self.assertEqual(reduce_module._integrate(curve, 1.25, 1.75), 3.0)
+        self.assertEqual(tuple(reduce_module._integrate(curve, start, end)
+                               for start, end in ((.75, 1.75), (1.75, 1.75),
+                                                  (1.25, 1.25), (1.25, 2.25))),
+                         (5.0, 0.0, 0.0, 7.0))
+        self.assertEqual(reduce_module._interpolation_edge_bound_j(curve, window), 4.0)
 
     @staticmethod
     def _claim_gates() -> dict:

@@ -52,12 +52,19 @@ def _decompressed_hash(path: Path) -> str:
 def open_bytes(path: Path):
     """Stream a logical plain file, falling back to its .zst sibling.
 
-    Consume the stream to EOF so the decompressor's exit status is checked.
+    Reading to EOF checks the decompressor's exit status. A partial reader
+    cancels decompression on exit; it does not verify the unread remainder.
     The process is also reaped when a consumer fails before reaching EOF.
     """
     path = Path(path)
-    if path.exists():
-        with path.open("rb") as stream:
+    try:
+        plain = path.open("rb")
+    except FileNotFoundError:
+        pass
+    else:
+        # Attempt the owning read before falling back, preserving audit-hook
+        # policy checks even for an absent logical file in a protected root.
+        with plain as stream:
             yield stream
         return
     compressed = Path(str(path) + ".zst")
@@ -71,6 +78,15 @@ def open_bytes(path: Path):
     with process:
         try:
             yield process.stdout
+            # A producer can be blocked on a full pipe after a partial read.
+            # Inspect buffered output before waiting, then cancel that producer.
+            # At EOF, retain the exit-status check (including corrupt frames).
+            if process.stdout.peek(1):
+                process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+                return
             if process.wait() != 0:
                 raise OSError(errno.EIO, "decompression_failed", str(compressed))
         finally:

@@ -17,6 +17,7 @@ from joulewise.b6 import blinding
 from joulewise.b6.acceptance import evidence_from_archive
 from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, ordered_roster, read_json,
                                 unresolved_clock_anchor)
+from joulewise.desk_compress import read_bytes
 
 PHASES = ("tokenize", "generation_setup", "prefill", "decode")
 BOUND_TERMS = ("E_clock_anchor_shift_bound", "E_drift_bound",
@@ -63,7 +64,7 @@ def _events(bundle: Path | None) -> list[dict]:
     if bundle is None:
         return []
     try:
-        lines = (bundle / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        lines = read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines()
     except FileNotFoundError:
         return []
     return [json.loads(line) for line in lines if line.strip()]

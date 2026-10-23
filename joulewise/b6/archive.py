@@ -6,10 +6,12 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from joulewise.desk_compress import read_bytes
+
 
 def read_json(path: Path, default: Any = None) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(read_bytes(path).decode("utf-8"))
     except (OSError, ValueError):
         return default
 

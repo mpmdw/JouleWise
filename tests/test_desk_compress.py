@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -42,6 +43,36 @@ class DeskCompressFixture(unittest.TestCase):
 
 @unittest.skipUnless(Path(ZSTD).is_file(), "zstd CLI required")
 class DeskCompressTests(DeskCompressFixture):
+    def test_partial_compressed_read_exits_within_plain_path_budget(self):
+        payload = random.Random(573).randbytes(4 * 1024 * 1024)
+        path = self.put(self.runs / "partial-read", payload)
+        probe = ("import sys\nfrom pathlib import Path\n"
+                 "from joulewise.desk_compress import open_bytes\n"
+                 "with open_bytes(Path(sys.argv[1])) as stream:\n"
+                 "    assert stream.read(10).hex() == sys.argv[2]\n")
+        argv = [sys.executable, "-B", "-c", probe, str(path), payload[:10].hex()]
+        started = time.monotonic()
+        # Five seconds bounds even the plain-path child on a busy test runner.
+        plain = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+        plain_seconds = time.monotonic() - started
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertEqual(self.compress()[0], 0)
+        self.assertFalse(path.exists())
+        # Operational hang detector: give decompression 100x the measured plain
+        # subprocess time, with a 5 s startup/scheduling floor. No energy bar.
+        result = subprocess.run(argv, capture_output=True, text=True,
+                                timeout=max(5, 100 * plain_seconds))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_full_read_still_rejects_a_damaged_compressed_frame(self):
+        path = self.put(self.runs / "damaged", random.Random(573).randbytes(1048576))
+        self.assertEqual(self.compress()[0], 0)
+        compressed = Path(str(path) + ".zst")
+        frame = compressed.read_bytes()
+        compressed.write_bytes(frame[:len(frame) // 2])
+        with self.assertRaisesRegex(OSError, "decompression_failed"):
+            desk.read_bytes(path)
+
     def test_git_hazards_and_campaign_logs_stay_plain_in_every_root(self):
         protected = []
         raw = []

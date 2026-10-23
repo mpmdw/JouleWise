@@ -13,7 +13,7 @@ import unittest
 from joulewise import desk_compress as desk
 from joulewise import authentication_io as auth, campaign_provenance as provenance
 from joulewise import whole_window
-from joulewise.b6 import survivor_screen
+from joulewise.b6 import archive, export_runs, survivor_screen
 from joulewise.b5 import harvest as h
 from joulewise.bundle_read import BundleReader
 from joulewise.cli import validate_bundle
@@ -70,6 +70,22 @@ class CompressedReaderTests(unittest.TestCase):
         rc, summary = desk.compress(archive=self.archive, custody=self.custody, min_bytes=0)
         self.assertEqual(rc, 0)
         self.assertGreater(summary["files"], 0)
+
+    def test_archive_json_and_export_events_read_the_compressed_sibling(self):
+        bundle = self.archive / 'sources/claim-runs/synthetic'
+        bundle.mkdir(parents=True)
+        record = {'fixture': True, 'label': 'synthetic'}
+        events = [{'event_type': 'phase_start', 'phase': 'decode', 'timestamp_s': 1}]
+        path = bundle / 'record.json'
+        path.write_text(json.dumps(record))
+        (bundle / 'events.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in events))
+        self.assertEqual(archive.read_json(path), record)
+        self.assertEqual(export_runs._events(bundle), events)
+        self.compress_archive()
+        self.assertFalse(path.exists())
+        self.assertFalse((bundle / 'events.jsonl').exists())
+        self.assertEqual(archive.read_json(path), record)
+        self.assertEqual(export_runs._events(bundle), events)
 
     def test_campaign_manifest_catalog_and_log_authentication_are_identical(self):
         runs = self.archive / "sources/claim-runs"

@@ -4011,6 +4011,12 @@ def _gross_fields(summary: Any) -> dict[str, float] | None:
     ):
         return None
     gross_value, point, lower, upper = (float(value) for value in fields)
+    # Internal agreement of two J-valued representations: 1e-9 relative is
+    # 4.5e6 times double noise (2.2e-16). At the 1e4 J reference scale it is
+    # 1e-5 J, below 1% of the smallest printed half-width (0.013 J -> 1.3e-4 J).
+    # The 1e-12 J absolute floor only dominates below 0.001 J, where it still
+    # exceeds 1e6 times float noise. This is a consistency check, not a gate on
+    # measured energy or on its uncertainty interval.
     if (
         not math.isclose(point, gross_value, rel_tol=1e-9, abs_tol=1e-12)
         or lower <= 0.0

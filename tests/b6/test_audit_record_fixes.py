@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from joulewise import desk_compress as desk
 from joulewise.b5 import harvest as h
 from joulewise.b6 import acceptance, archive, code_check, export_runs, precheck
 from tests.b6 import support
@@ -54,6 +55,8 @@ class AuditRecordTests(unittest.TestCase):
         self.assertEqual(checkout['head'], subprocess.check_output([
             'git', '-C', str(support.ROOT), 'rev-parse', 'HEAD'], text=True).strip())
         self.assertIsInstance(checkout['status_clean'], bool)
+        for name in h.B6_HARVEST_PROGRAM_FILES:
+            self.assertEqual(checkout['files'][name], hashlib.sha256((support.ROOT / name).read_bytes()).hexdigest())
         self.assertEqual(window.exclusions()['harvest_checkout'], checkout)
         exported = json.loads(result.stdout)['export']
         self.assertTrue(Path(exported['csv']).is_file())
@@ -73,10 +76,75 @@ class AuditRecordTests(unittest.TestCase):
                                 for review in row['executing_reviews']))
         registered = json.loads((support.ROOT / 'configs/b6/registration/acceptance.json').read_bytes())
         self.assertEqual(len(registered['number_bearing_paths']), 16)
-        result = code_check.check(support.ROOT, '3bb305d7a', 'f31aca19f',
+        # F8's verdict/calibration list is broader than registration's 16
+        # acquisition paths. Enumerate its historical coverage independently
+        # of code_check; G7's production path expansion remains a separate gate.
+        verdict_calibration_paths = (
+            'joulewise/b6/acceptance.py', 'joulewise/b6/calibration.py',
+            'joulewise/b6/capture_screen.py', 'joulewise/b5/harvest.py',
+            'joulewise/whole_window.py', 'joulewise/calibration_ledger.py',
+            'joulewise/flags/', 'joulewise/tolerances.py',
+            'joulewise/hazards/clock.py', 'joulewise/uncertainty_evidence.py',
+        )
+        reviewed = {row['commit'] for row in rows}
+        commits = subprocess.check_output([
+            'git', '-C', str(support.ROOT), 'log', '--format=%H',
+            registered['registered_commit'] + '..f31aca19f', '--',
+            *verdict_calibration_paths], text=True).splitlines()
+        self.assertTrue(commits, 'empty F8 history cannot prove review coverage')
+        self.assertEqual(sorted(set(commits) - reviewed), [])
+        # Also cover every registered-path commit on this PR, including later
+        # fix commits, and execute the actual check at the current lane head.
+        head = subprocess.check_output(['git', '-C', str(support.ROOT),
+                                        'rev-parse', 'HEAD'], text=True).strip()
+        commits = subprocess.check_output([
+            'git', '-C', str(support.ROOT), 'log', '--format=%H',
+            'fda9b380d..' + head, '--', *registered['number_bearing_paths']], text=True).splitlines()
+        self.assertEqual(sorted(set(commits) - reviewed), [])
+        result = code_check.check(support.ROOT, registered['registered_commit'], head,
                                   registered['number_bearing_paths'], rows, '')
         self.assertEqual(result['unreviewed'], [])
         self.assertNotIn('code.identity_unmeasured', result['flags'])
+
+    @unittest.skipUnless(Path(desk.zstd_path()).is_file(), 'zstd CLI required')
+    def test_truncated_compressed_hazard_journal_finishes_with_flags(self):
+        window = windows.Window(self.root / 'damaged-journal')
+        path = window.custody / 'hazards/monitor/battery.jsonl'
+        compressed = Path(str(path) + '.zst')
+        # Reproduce the historically compressed hazard layout, despite today's
+        # compressor exemption, then truncate a real zstd frame at its midpoint.
+        subprocess.run([desk.zstd_path(), '-q', str(path), '-o', str(compressed)], check=True)
+        frame = compressed.read_bytes()
+        compressed.write_bytes(frame[:len(frame) // 2])
+        path.unlink()
+        record = window.harvest(prepare_desk=False, run_g3=False)
+        self.assertEqual(record['verdict'], h.COLLECTED)
+        self.assertEqual(window.window_flags()['collector_errors'], [])
+        self.assertIn('records.monitor_journal_absent', window.codes())
+        self.assertIn('battery.unmeasured', window.codes())
+
+    @unittest.skipUnless(Path(desk.zstd_path()).is_file(), 'zstd CLI required')
+    def test_historical_compressed_arm_and_flags_are_present_to_harvest(self):
+        window = windows.Window(self.root / 'compressed-arm')
+        flags = window.custody / 'flags'
+        flags.mkdir(parents=True, exist_ok=True)
+        flag = windows.l4_flag_line('records.collector_failed', stage='arm', collector='synthetic')
+        (flags / 'arm.jsonl').write_text(json.dumps(flag) + '\n')
+        before = window.harvest(prepare_desk=False, run_g3=False)
+        self.assertEqual(before['verdict'], h.COLLECTED)
+        plain_codes = window.codes()
+        inputs = h.resolve_inputs(window.plan_path)
+        paths = [inputs.arm_record_path, *inputs.flags_dir.glob('*.jsonl')]
+        self.assertTrue(inputs.arm_record_path.is_file())
+        for path in paths:
+            subprocess.run([desk.zstd_path(), '-q', str(path), '-o', str(path) + '.zst'], check=True)
+            path.unlink()
+        window.archive = self.root / 'compressed-arm-reharvest'
+        after = window.harvest(prepare_desk=False, run_g3=False)
+        self.assertEqual(after['verdict'], h.COLLECTED)
+        self.assertEqual(window.window_flags()['collector_errors'], [])
+        self.assertEqual(window.codes(), plain_codes)
+        self.assertNotIn('records.arm_record_absent', window.codes())
 
     def test_gamma_midpoint_loss_harvest_writers_and_acceptance_use_block_six_rule(self):
         pack_id = support.PACKS['gamma']

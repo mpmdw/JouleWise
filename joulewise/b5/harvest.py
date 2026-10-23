@@ -54,7 +54,7 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 from __future__ import annotations
 
 from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
-from joulewise.desk_compress import read_bytes
+from joulewise.desk_compress import is_file as logical_is_file, read_bytes
 
 import concurrent.futures
 import dataclasses
@@ -3667,9 +3667,12 @@ HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
 # window's harvest, by these files' SHA-256s and the commit of the checkout
 # the harvest runs from (a desk checkout, never the measurement checkout).
 HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
+B6_HARVEST_PROGRAM_FILES = ("scripts/harvest_b6_session.py", "joulewise/b6/archive.py",
+                            "joulewise/b6/courier.py", "joulewise/b6/analysis_lane.py",
+                            "joulewise/flags/exclusions.py")
 
 
-def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
+def harvest_checkout(runner: Callable[..., Any] = subprocess.run, *, block_six: bool = False) -> dict[str, Any]:
     """The checkout this harvest program runs from (seal gate K-7): a record, never a flag.
 
     The harvest decides which members and windows are claim-usable, and it
@@ -3680,7 +3683,7 @@ def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, A
     nothing there (no tracked edit and no untracked file), ``status_lines``
     how many paths it printed, and ``files`` the SHA-256 of each harvest
     program file as it is on disk.  With a clean checkout the commit fixes
-    every byte of the program; with a dirty one the three digests still say
+    every byte of the program; with a dirty one the file digests still say
     whether the pinned files are the pinned bytes.  A value git or the disk
     cannot give is None and named in ``errors``; nothing here stops or
     excludes anything.
@@ -3691,6 +3694,9 @@ def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, A
     for name, arguments in (("head", ["rev-parse", "HEAD"]),
                             ("status", ["status", "--porcelain=v1", "--untracked-files=all"])):
         try:
+            # Operational cap, not a measurement bar: allow a minute for a
+            # cold checkout's untracked-file walk, then record an unavailable
+            # identity rather than letting two local Git probes stall harvest.
             result = runner(["git", "-C", str(root), *arguments], capture_output=True, text=True,
                             encoding="utf-8", errors="replace", check=False, timeout=60)
         except (OSError, subprocess.SubprocessError) as exc:
@@ -3707,7 +3713,7 @@ def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, A
         else:
             lines = [line for line in result.stdout.splitlines() if line.strip()]
             record["status_clean"], record["status_lines"] = not lines, len(lines)
-    for relative in HARVEST_PROGRAM_FILES:
+    for relative in HARVEST_PROGRAM_FILES + (B6_HARVEST_PROGRAM_FILES if block_six else ()):
         try:
             record["files"][relative] = sha256_file(root / relative)
         except OSError as exc:
@@ -3737,7 +3743,7 @@ class Seams:
     desk_gone_wait_s: float = DESK_GONE_WAIT_S
     killpg: Callable[[int, int], None] = os.killpg
     observe_identity: Callable[[int], Any] = _observe_identity
-    harvest_checkout: Callable[[], Mapping[str, Any]] = harvest_checkout
+    harvest_checkout: Callable[..., Mapping[str, Any]] = harvest_checkout
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -3774,7 +3780,7 @@ class _Harvest:
             from joulewise.b6.analysis_lane import HarvestLane
             self.exclusion_options["pack_scoped"] = HarvestLane().capabilities().pack_scoped_flags
         try:
-            self.harvest_checkout = dict(seams.harvest_checkout())
+            self.harvest_checkout = dict(seams.harvest_checkout(block_six=self.block_six))
         except Exception as exc:
             self.harvest_checkout = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": None, "head": None,
                                      "status_clean": None, "status_lines": None, "files": {},
@@ -6076,14 +6082,24 @@ class _Harvest:
                           observed={"module": module})
                 self.hazards.setdefault(module, {})["continuous"] = {"phase": "continuous", "journal": None}
                 continue
-            readings, malformed = read_monitor_journal(path, module)
+            try:
+                readings, malformed = read_monitor_journal(path, module)
+                digest = sha256_bytes(read_bytes(path))
+            except OSError as exc:
+                # Unreadable storage, including decompression_failed, supplies
+                # no observations. Use the same absence/unmeasured flags as a
+                # missing plain journal; it is not a harvest-program fault.
+                self.emit("records.monitor_journal_absent", level="window", collector="monitor",
+                          observed={"module": module, "error": str(exc)})
+                self.hazards.setdefault(module, {})["continuous"] = {"phase": "continuous", "journal": None}
+                continue
             journals[module] = readings
             if malformed:
                 self.emit("records.monitor_line_malformed", level="window", collector="monitor",
                           observed={"module": module, "lines": malformed})
             self.hazards.setdefault(module, {})["continuous"] = {
                 "phase": "continuous", "journal": {
-                    "path": f"{module}.jsonl", "sha256": sha256_bytes(read_bytes(path)), "readings": len(readings),
+                    "path": f"{module}.jsonl", "sha256": digest, "readings": len(readings),
                     "failed_probes": sum(reading.status == "error" for reading in readings), "malformed": malformed}}
         self._journals = journals
         roster = {member["run_id"]: member for member in self.roster["members"]}
@@ -6624,8 +6640,8 @@ class _Harvest:
     def arm_and_desk_records(self) -> None:
         path = self.inputs.arm_record_path
         arm_value: Any = None
-        if path.is_file():
-            arm_value = read_json(path)
+        if logical_is_file(path):
+            arm_value = json.loads(read_bytes(path))
             for module, phases in _arm_modules(arm_value).items():
                 self.hazards.setdefault(module, {})["arm"] = phases
                 for phase in phases:
@@ -6634,7 +6650,7 @@ class _Harvest:
                             self.emit(flag["code"], level="window", collector="arm",
                                       observed={"phase": phase["phase"], **flag},
                                       spec=_spec("DIAGNOSTIC", "PHYSICS"))
-        elif (self.inputs.night_dir / "chain.started").is_file():
+        elif logical_is_file(self.inputs.night_dir / "chain.started"):
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
         # L2's driver.jsonl.  A line that is not a valid flag may have been an
@@ -6645,11 +6661,13 @@ class _Harvest:
         # flags: it is read by _collector_run_records, and so is a run record
         # found in any other file of the directory.
         directory = self.inputs.flags_dir
-        for flag_file in sorted(directory.glob("*.jsonl")) if directory.is_dir() else []:
+        flag_files = set(directory.glob("*.jsonl")) if directory.is_dir() else set()
+        flag_files.update(path.with_suffix("") for path in directory.glob("*.jsonl.zst"))
+        for flag_file in sorted(flag_files):
             if flag_file.name == COLLECTOR_RUNS_NAME:
                 self._collector_run_records(flag_file)
                 continue
-            for number, line in enumerate(flag_file.read_bytes().split(b"\n"), start=1):
+            for number, line in enumerate(read_bytes(flag_file).split(b"\n"), start=1):
                 if not line.strip():
                     continue
                 value: Any = None
@@ -6858,7 +6876,7 @@ class _Harvest:
                                         elapsed_s=row.get("elapsed_s"), source=source)
 
     def _collector_run_records(self, path: Path) -> None:
-        for number, line in enumerate(path.read_bytes().split(b"\n"), start=1):
+        for number, line in enumerate(read_bytes(path).split(b"\n"), start=1):
             if not line.strip():
                 continue
             try:

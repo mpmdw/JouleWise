@@ -204,7 +204,10 @@ def write_wrapper(measurement, claim_measurement_root, smoke_dir, keep, *, run=s
     runner = Path(smoke_dir) / "run_campaign_reduced.py"
     runner.write_text(REDUCED_RUNNER)
     # Preserve the clone's own venv interpreter so sys.prefix and .pth apply.
-    real_python = venv / "bin/python3.13"
+    # The selected interpreter created this unique site-packages directory.
+    # Its versioned executable stays inside the venv when bin/python becomes
+    # the wrapper; an explicit Python 3.14 must not point at absent 3.13.
+    real_python = venv / "bin" / sites[0].parent.name
     wrapper = venv / "bin/python"
     wrapper.unlink()
     wrapper.write_text(wrapper_text(real_python, runner, keep, Path(smoke_dir) / "reduction.jsonl"))

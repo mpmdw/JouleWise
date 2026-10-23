@@ -10,6 +10,8 @@ and of block 5's analysis plan (``analysis_plan_block5.md`` section 4).  Standar
 only; nothing is imported from ``joulewise`` (R8 item 4: the twin shares no code with
 ``joulewise/bytes_analysis.py``; ``tests/test_bytes_agreement.py`` fences it).  The choices
 the ruling left open are recorded in JouleWise-data ``bytes/twin/CHOICES.md``.
+Battery energy, forward edges and the delayed decode diagnostic follow BAT-2
+in ``docs/contracts/bytes_tables.md``; harvest assist flags disclose only.
 
 Pass identity (lead ruling of 2026-10-20, item 2): a model's passes are ordered by the
 registered pass identity, never by a clock.  The identity of a session is read from the
@@ -61,6 +63,7 @@ REST_KINDS = ("E_clock_anchor_shift_bound_j", "E_meter_edge_bound_j", "E_whole_w
 VALIDITY_CODES = frozenset({
     "member.status_not_succeeded", "member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
     "member.strict_validation_failed", "member.token_count_mismatch", "member.reduction_mismatch",
+    "member.anchor_not_bounded",
     "member.anchor_recompute_mismatch", "member.config_not_in_inventory", "member.timeout",
     "member.span_unknown", "member.idle_admission_telemetry_missing",
 })
@@ -598,6 +601,17 @@ def parse_meter_stream(path):
     if header is None or header.get("status", "streaming") != "streaming":
         return None
     polls = sorted(batches, key=lambda b: b["rx"])
+    offset = None
+    try:
+        start = header["start_raw_ns"] - header["start_mono_ns"]
+        end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
+        offset = start if abs(end - start) <= 1_000_000 else None
+    except (KeyError, TypeError):
+        pass
+    # BAT-2 uses every receive interval, including empty/incomplete polls;
+    # its current marker does not require a voltage or a meter clock fit.
+    timing = {"header": header, "trailer": trailer, "raw_offset_ns": offset,
+              "poll_ns": [p["rx"] for p in polls], "smc": [p.get("smc") or {} for p in polls]}
     with_samples = [b for b in polls if b.get("n")]
     step = STEP_MS[header["rate_idx"]]
     dev_ms, watts, batch_of = [], [], []
@@ -629,7 +643,7 @@ def parse_meter_stream(path):
     points = [(dev, with_samples[j]["rx"], (with_samples[j]["rx"] - with_samples[j]["tx"]) / 1e6,
                with_samples[j]["n"]) for j, dev in newest.items()]
     if len(points) < 2:
-        return {"header": header, "trailer": trailer, "aligned": False, "reason": "fewer than two batches"}
+        return {**timing, "aligned": False, "reason": "fewer than two batches"}
     good = [p for p in points if p[3] < RESPONSE_CAP and p[2] < FIT_MAX_RTT_MS]
     used = good if len(good) >= FIT_MIN_POINTS else points
     x0, y0 = used[0][0], used[0][1]
@@ -652,15 +666,7 @@ def parse_meter_stream(path):
     above = [(y - (a1 + b1 * x)) / 1e6 for x, y in zip(xs, ys)]
     a_ns = y0 + a1 - b1 * x0
     host_ns = [int(round(a_ns + b1 * d)) for d in dev_ms]
-    offset = None
-    try:
-        start = header["start_raw_ns"] - header["start_mono_ns"]
-        end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
-        offset = start if abs(end - start) <= 1_000_000 else None
-    except (KeyError, TypeError):
-        offset = None
-    return {"header": header, "trailer": trailer, "aligned": True, "host_ns": host_ns, "watts": watts,
-            "raw_offset_ns": offset, "step_ms": step,
+    return {**timing, "aligned": True, "host_ns": host_ns, "watts": watts, "step_ms": step,
             "fit": {"a_ns": a_ns, "b_ns_per_ms": b1, "points": len(points), "points_used": len(used),
                     "clock_rate_ppm": (b1 / 1e6 - 1) * 1e6,
                     "excess_latency_ms_p50": percentile(above, 50),
@@ -686,6 +692,49 @@ def integrate(times_ns, watts, t0, t1):
     if hi == lo:
         return None, 0
     return math.fsum(watts[lo:hi]) / (hi - lo) * (t1 - t0) / 1e9, hi - lo
+
+
+def battery_data(stream):
+    """Independent BAT-2 signed powers and stream-wide publication delay."""
+    if "_battery_data" not in stream:
+        polls = stream["poll_ns"]
+        pairs = [(stamp, -v["B0AC"] * v["B0AV"] / 1e6)
+                 for stamp, v in zip(polls, stream["smc"])
+                 if v.get("B0AC") is not None and v.get("B0AV") is not None]
+        interval = max((b - a for a, b in zip(polls, polls[1:])), default=0) / 1e9
+        # BAT-2 §3: one 1 s average, one 1 s hold, then the largest poll gap.
+        stream["_battery_data"] = ([t for t, _ in pairs], [p for _, p in pairs], interval, 2 * 1.0 + interval)
+    return stream["_battery_data"]
+
+
+def battery_marker(stream, window):
+    """None means unevaluated; current alone marks the delayed decode window."""
+    _, _, _, tau = battery_data(stream)
+    lo = bisect.bisect_left(stream["poll_ns"], window[0] + tau * 1e9)
+    hi = bisect.bisect_left(stream["poll_ns"], window[1] + tau * 1e9)
+    if lo == hi:
+        return None
+    return any(v.get("B0AC") is not None and v["B0AC"] < 0 for v in stream["smc"][lo:hi])
+
+
+def battery_phase(stream, window, idle):
+    """BAT-2 §3: signed mean powers on both bases and two forward-edge terms."""
+    times, powers, interval, tau = battery_data(stream)
+    energy, n = integrate(times, powers, *window)
+    baseline, n_idle = integrate(times, powers, *idle)
+    if energy is None or baseline is None:
+        return None
+    duration = (window[1] - window[0]) / 1e9
+    idle_power = baseline / ((idle[1] - idle[0]) / 1e9)
+    edges = [duration / n * math.fsum(abs(p) for p in powers[
+        bisect.bisect_left(times, edge):bisect.bisect_left(times, edge + tau * 1e9)]) for edge in window]
+    return {"battery_gross_j": energy, "battery_secondary_j": energy - idle_power * duration,
+            "battery_idle_power_w": idle_power, "battery_phase_edge_j": math.fsum(edges),
+            "battery_v_start_j": edges[0], "battery_v_end_j": edges[1], "battery_tau_s": tau,
+            "battery_poll_interval_max_s": interval, "battery_n": n, "battery_n_idle": n_idle,
+            "battery_end_window_complete": bool(stream["poll_ns"] and
+                stream["poll_ns"][-1] >= window[1] + tau * 1e9),
+            "decode_battery_assist": battery_marker(stream, window)}
 
 
 # ----------------------------------------------------------------------------
@@ -763,56 +812,68 @@ def load_archive(root):
 
 
 def dc_join(archive, run_id):
-    """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
+    """DC input plus BAT-2 battery energy, with independent clock/edge arithmetic."""
     bundle = _bundle(archive["root"], run_id)
     if bundle is None:
         return {"status": "bundle_missing"}
     spans = member_spans(bundle)
     if spans is None:
         return {"status": "spans_unreadable"}
+    marker = None
+    reason = "no_aligned_stream_covers_span"
     for stream in archive["streams"]:
-        if not stream.get("aligned") or stream.get("raw_offset_ns") is None:
+        offset = stream.get("raw_offset_ns")
+        if offset is None:
             continue
-        offset = stream["raw_offset_ns"]
-        window = [spans["decode_ns"][0] + offset, spans["decode_ns"][1] + offset]
-        host = stream["host_ns"]
-        if not (host[0] <= window[0] and window[1] <= host[-1]):
+        window = [edge + offset for edge in spans["decode_ns"]]
+        observed = battery_marker(stream, window)
+        if observed is not None:
+            marker = bool(marker or observed)
+        if not stream.get("aligned") or spans["idle_ns"] is None:
             continue
-        energy, n = integrate(host, stream["watts"], window[0], window[1])
-        if energy is None:
+        base = [edge + offset for edge in spans["idle_ns"]]
+        host, watts = stream["host_ns"], stream["watts"]
+        if not all(host[0] <= a < b <= host[-1] for a, b in (window, base)):
+            continue
+        energy, n = integrate(host, watts, *window)
+        idle_energy, n_idle = integrate(host, watts, *base)
+        if energy is None or idle_energy is None:
+            continue
+        battery = battery_phase(stream, window, base)
+        if battery is None:
+            reason = "battery reading missing"
             continue
         duration = (window[1] - window[0]) / 1e9
-        mean_power = energy / duration
-        # Addendum 1 item 2 / Addendum 3 item 3: u = (P_start + P_end)(r_max + dt_meter), with P_start
-        # and P_end the meter power at the phase's two edges (the first and last sample inside the
-        # span), r_max the clock fit's largest excess latency and dt_meter one sample period.
-        watts = stream["watts"]
+        meter_idle = idle_energy / ((base[1] - base[0]) / 1e9)
         p_start, p_end = edge_powers(host, watts, window)
-        r_max_s = stream["fit"]["excess_latency_ms_absmax"] / 1e3   # Addendum 7 item 12: absolute
+        r_max_s = stream["fit"]["excess_latency_ms_absmax"] / 1e3
         dt_meter_s = stream["step_ms"] / 1e3
-        result = {"status": "ok", "stream": stream["name"], "decode_energy_j": energy, "samples": n,
-                  "decode_span_s": duration, "mean_power_w": mean_power,
-                  "edge_bound_j": (p_start + p_end) * (r_max_s + dt_meter_s),
+        # Addendum 7 D4's meter u plus BAT-2 §3's two forward battery edges.
+        meter_u = (p_start + p_end) * (r_max_s + dt_meter_s)
+        combined = energy + battery["battery_gross_j"]
+        result = {"status": "ok", "stream": stream["name"], "decode_energy_j": combined, "samples": n,
+                  "decode_span_s": duration, "mean_power_w": combined / duration,
+                  "edge_bound_j": meter_u + battery["battery_phase_edge_j"],
+                  "meter_gross_j": energy, "meter_secondary_j": energy - meter_idle * duration,
+                  "meter_phase_edge_j": meter_u, "meter_idle_power_w": meter_idle,
                   "edge_terms": {"P_start_w": p_start, "P_end_w": p_end, "r_max_s": r_max_s, "dt_meter_s": dt_meter_s},
                   "clock_fit": {key: stream["fit"][key] for key in
                                 ("excess_latency_ms_p95", "excess_latency_ms_max", "excess_latency_ms_min",
                                  "excess_latency_ms_absmax", "clock_rate_ppm")},
-                  "idle_power_w": None}
-        request = [spans["request_ns"][0] + offset, spans["request_ns"][1] + offset]
-        if host[0] <= request[0] and request[1] <= host[-1]:
-            request_energy, n_request = integrate(host, watts, request[0], request[1])
-            if request_energy is not None:
-                result.update({"request_energy_j": request_energy, "request_span_s": (request[1] - request[0]) / 1e9,
-                               "request_samples": n_request})
-        if spans["idle_ns"]:
-            base = [spans["idle_ns"][0] + offset, spans["idle_ns"][1] + offset]
-            if base[1] > base[0]:
-                idle_energy, n_idle = integrate(host, stream["watts"], base[0], base[1])
-                if idle_energy is not None:
-                    result["idle_power_w"] = idle_energy / ((base[1] - base[0]) / 1e9)
-                    result["idle_samples"] = n_idle
+                  "idle_power_w": meter_idle + battery["battery_idle_power_w"], "idle_samples": n_idle,
+                  **battery, "decode_assist_evaluated": True,
+                  "decode_battery_assist": bool(battery["decode_battery_assist"])}
+        request = [edge + offset for edge in spans["request_ns"]]
+        if host[0] <= request[0] < request[1] <= host[-1]:
+            request_energy, n_request = integrate(host, watts, *request)
+            bt, bp, _, _ = battery_data(stream)
+            request_battery, _ = integrate(bt, bp, *request)
+            if request_energy is not None and request_battery is not None:
+                result.update(request_energy_j=request_energy + request_battery,
+                              request_span_s=(request[1] - request[0]) / 1e9, request_samples=n_request)
         return result
-    return {"status": "no_aligned_stream_covers_span"}
+    return {"status": reason, "decode_assist_evaluated": marker is not None,
+            "decode_battery_assist": marker}
 
 
 # ----------------------------------------------------------------------------
@@ -843,7 +904,7 @@ def restorable(row) -> bool:
 def _kept(row, *, restore_load_correlated=False, drop_assist=False):
     if row["status"] != "succeeded":
         return False
-    if drop_assist and "battery.assist" in (row.get("flag_codes") or "").split(";"):
+    if drop_assist and row.get("_decode_battery_assist") is True:
         return False
     if not row["excluded"]:
         return True
@@ -962,7 +1023,8 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
     scale = None
     cell = {"boundary": boundary, "kinds": list(kinds),
             "drift_allowance": gross_record, "drift_allowance_idle_family": idle_record}
-    primary_rows = [row for row in rows]
+    primary_rows = [{**row, "_decode_battery_assist": dc_by_run.get(row["run_id"], {}).get("decode_battery_assist")}
+                    for row in rows]
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale))
     cell["gross"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
     removed = [{"run_id": r["run_id"], "status": r["status"], "codes": r.get("exclusion_codes"),
@@ -982,9 +1044,20 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
     cell["idle_subtracted"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale), restore=True)
     cell["flagged_inclusive"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
-    assist = [r["run_id"] for r in rows if "battery.assist" in (r.get("flag_codes") or "").split(";")]
+    # BAT-2 supersedes the old harvest-flag diagnostic: the delayed decode
+    # current selects whole units. A harvest flag is disclosed only.
+    repeats, quads = _assemble(primary_rows, lambda r: build(r, scale))
+    kept_ids = {m["id"] for m in repeats} | {m["id"] for q in quads for m in q["members"]}
+    kept = [r for r in primary_rows if r["run_id"] in kept_ids]
+    assist = [r["run_id"] for r in kept if r["_decode_battery_assist"] is True]
     cell["assist_members"] = assist
-    if assist:
+    cell["harvest_assisted_member_counts"] = {stratum: sum(_units_of(r)[0] == stratum and
+        "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept) for stratum in ("repeat", "quad")}
+    if any(r["_decode_battery_assist"] is None for r in kept):
+        cell["without_assisted"] = {"status": "not_evaluated", "description_only": True,
+            "reason": "not evaluated at the blinded stage" if any(not r.get("_unblinded") for r in kept)
+                      else "decode marker not evaluated: no mapped meter stream has polls in the marker window"}
+    elif assist:
         repeats, quads = _assemble(primary_rows, lambda r: build(r, scale), drop_assist=True)
         cell["without_assisted"] = phase_estimate(repeats, quads, kinds, alpha=alpha)
     return cell

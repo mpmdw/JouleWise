@@ -170,6 +170,7 @@
    "legacy_key": "named only as a legacy refusal key (PROTECTS/SUPERSEDES or a runbook reference); the retired ARM/T0 path runs it, block 5 does not"
   },
   "not_scanned": {
+   "joulewise/b6/analysis_lane.py": "data",
    "joulewise/b6/desk_identity.py": "desk",
    "joulewise/b6/plan_inputs.py": "desk",
    "joulewise/desk_compress.py": "desk",
@@ -1259,7 +1260,7 @@
   {"file": "joulewise/bundle_read.py", "function": "BundleReader.source_curve", "kind": "raise", "detail": "BundleReadError", "count": 1, "guard": "e943a989620a5cca", "category": "BASELINE"},
   {"file": "joulewise/bundle_read.py", "function": "BundleReader.source_curve", "kind": "raise", "detail": "BundleReadError|source identity has", "count": 1, "guard": "34c78c8187162d31", "category": "BASELINE"},
   {"file": "joulewise/bundle_read.py", "function": "BundleReader.suite_item_records", "kind": "raise", "detail": "BundleReadError", "count": 1, "guard": "fb8393d821cb5ac9", "category": "BASELINE"},
-  {"file": "joulewise/bundle_read.py", "function": "BundleReader.suite_manifest", "kind": "raise", "detail": "BundleReadError|suite_manifest json does", "count": 1, "guard": "a9c10ab33eef86dc", "category": "BASELINE"},
+  {"file": "joulewise/bundle_read.py", "function": "BundleReader.suite_manifest", "kind": "raise", "detail": "BundleReadError|suite_manifest json does", "count": 1, "guard": "7a5f9411a2514013", "category": "NUMBER_INTEGRITY", "protects": "Protects suite identity used to attribute computed energies: malformed suite manifests retain the existing validation error when read from either plain or compressed bytes.", "note": "FIX-573: desk-aware presence changes the guard fingerprint; not a frozen BASELINE guard."},
   {"file": "joulewise/bundle_read.py", "function": "BundleReader.summed_curve", "kind": "raise", "detail": "BundleReadError", "count": 1, "guard": "9b16449be3a06dca", "category": "BASELINE"},
   {"file": "joulewise/bundle_read.py", "function": "BundleReader.trace_rows", "kind": "raise", "detail": "BundleReadError|power_trace csv cannot", "count": 1, "guard": "ad83515c589f800b", "category": "BASELINE"},
   {"file": "joulewise/bundle_read.py", "function": "_prompt_realization_problems", "kind": "raise", "detail": "AssertionError", "count": 2, "guard": "01ba4719c80b6fe9", "category": "BASELINE"},
@@ -1501,7 +1502,7 @@
   {"file": "joulewise/cli.py", "function": "_parse_prompt_tokens", "kind": "raise", "detail": "KVSizeError|prompt-tokens must be", "count": 1, "guard": "077211b497febf00", "category": "BASELINE"},
   {"file": "joulewise/cli.py", "function": "_parse_prompt_tokens", "kind": "raise", "detail": "KVSizeError|prompt-tokens must include", "count": 1, "guard": "af139137507ef54c", "category": "BASELINE"},
   {"file": "joulewise/cli.py", "function": "_parse_prompt_tokens", "kind": "raise", "detail": "KVSizeError|prompt-tokens values must", "count": 1, "guard": "fe30910d3fb63ace", "category": "BASELINE"},
-  {"file": "joulewise/cli.py", "function": "_strict_uncertainty_evidence_problems", "kind": "raise", "detail": "ValueError|metadata idle_baseline is", "count": 1, "guard": "a610f3739058a3f1", "category": "BASELINE"},
+  {"file": "joulewise/cli.py", "function": "_strict_uncertainty_evidence_problems", "kind": "raise", "detail": "ValueError|metadata idle_baseline is", "count": 1, "guard": "f0d7896f5fcfc24e", "category": "NUMBER_INTEGRITY", "protects": "Protects idle baseline power and derived idle-subtracted energy: missing idle metadata becomes the existing strict-validation problem after authenticated raw reads.", "note": "FIX-573: desk-aware raw presence changes the guard fingerprint; not a frozen BASELINE guard."},
   {"file": "joulewise/cli.py", "function": "main", "kind": "return_code", "detail": "2", "count": 1, "guard": "036f1d34e5bc419e", "category": "BASELINE"},
   {"file": "joulewise/clock.py", "function": "FakeClock.sleep", "kind": "raise", "detail": "ValueError|cannot sleep a", "count": 1, "guard": "da04f86559935242", "category": "BASELINE"},
   {"file": "joulewise/clock.py", "function": "FakeClock.sleep", "kind": "raise", "detail": "ValueError|sleep duration must", "count": 1, "guard": "f5b5b4fbe0291684", "category": "BASELINE"},

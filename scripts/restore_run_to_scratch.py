@@ -26,8 +26,10 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from joulewise import desk_compress
 
-# The project's standing free-disk floor applies even to a one-run restore.
-MIN_RESERVE_GIB = 40
+# jw-disk-guard LOW_GIB is 25 GiB on this Mac: the 2026-10-12 iCloud
+# eviction began near 29 GiB free. Preserve that 25 GiB AFTER restoration;
+# restored_run adds the entire uncompressed run size before copying a byte.
+MIN_RESERVE_GIB = 25
 
 
 def _records(path):
@@ -141,7 +143,7 @@ def main(argv=None):
     parser.add_argument("--scratch-dir", required=True, type=Path)
     parser.add_argument("--compression-records", type=Path)
     parser.add_argument("--reserve-gib", type=float, default=MIN_RESERVE_GIB,
-                        help="free space remaining after restore (at least 40 GiB)")
+                        help="free space remaining after restore (at least 25 GiB)")
     parser.add_argument("command", nargs=argparse.REMAINDER,
                         help="reader command; each {run} is replaced by the restored bundle path")
     args = parser.parse_args(argv)

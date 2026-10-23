@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from joulewise.analysis_engine.distributions import student_t_quantile
+from joulewise.desk_compress import read_bytes
 
 BOUNDARIES = ("rails", "DC input", "rest")
 HYPOTHESES = ("bytes", "resident", "time")
@@ -50,7 +51,7 @@ def digest(value):
 
 
 def read_json(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return json.loads(read_bytes(Path(path)).decode("utf-8"))
 
 
 def line(xs, ys):
@@ -676,7 +677,8 @@ def _session_streams(root, spans):
 # Other catalog exclusions, including NUMBER cooldown/idle/envelope flags,
 # can be restored if the record itself passes the checks below.
 INVALID_RECORD_CODES = frozenset({"member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
-    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch"})
+    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch",
+    "member.anchor_not_bounded"})
 REFERENCE_ROLES = ("corpus", "start", "midpoint", "end")
 
 
@@ -882,6 +884,8 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         try:
             if run_id not in by_id:
                 raise AnalysisError("planned run absent from export")
+            if by_id[run_id]["status"] != "succeeded":
+                raise AnalysisError("export status not succeeded")
             if row["invalid_energy_record"]:
                 raise AnalysisError("harvest status, bundle or validity failure")
             bundle = bundle_of(root, {}, run_id)
@@ -893,7 +897,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
             metadata = read_json(bundle / "metadata.json")
             if metadata.get("workload_observed", {}).get("output_token_count") != 512:
                 raise AnalysisError("runtime-observed output count must be 512")
-            events = [json.loads(t) for t in (bundle / "events.jsonl").read_text().splitlines() if t.strip()]
+            events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
             stored = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
             summary, operative = operative_summary(bundle, acceptance,
                 synthetic=manifest.get("synthetic") is True, stored=stored, physics_cache=physics_cache)
@@ -922,7 +926,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
             try:
                 bundle = bundle_of(root, {}, ref["run_id"])
                 metadata = read_json(bundle / "metadata.json")
-                events = [json.loads(t) for t in (bundle / "events.jsonl").read_text().splitlines() if t.strip()]
+                events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
                 spans[ref["run_id"]] = (_event_span(events, "measured_run", metadata),
                                          _event_span(events, "idle_baseline", metadata))
             except (OSError, ValueError, KeyError, TypeError):
