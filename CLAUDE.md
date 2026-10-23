@@ -1,21 +1,32 @@
 # Claude Code Notes
 
 This repository has a project-local Codex MCP server plus an audited script
-bridge. On Ed's configured desktop, the script bridge is also the native
-pet-visible background route.
+bridge. The script bridge was also the native pet-visible background route
+while the Codex desktop app was installed; it is not installed on the
+measurement Mac (checked 2026-10-21), so the bridge runs the CLI transport.
 
-## MCP Path (pinned legacy CLI): Codex MCP
+## MCP Path: Codex app-server adapter
 
-The tracked `.mcp.json` starts `npx -y @openai/codex@0.153.3 mcp-server`
-(gpt-5.6-sol); Sol 6.0 work goes through the exec route below. Claude Code exposes the
-server's two entry points as the `codex` tool (start a session) and
-`codex-reply` (continue the returned thread).
+The tracked `.mcp.json` starts `node scripts/codex-mcp-server.mjs`, our
+Node-builtins adapter over the installed `codex app-server` (CLI 0.163.0 at
+implementation). It resolves `codex` from PATH or `CODEX_BIN`. This replaces
+the old 0.153.3 MCP pin: current CLIs removed `codex mcp-server`, and that
+old CLI cannot use the 6.x models. Both routes now use `gpt-6.1-sol`.
+Claude Code exposes `codex` (start a session) and `codex-reply` (continue its
+thread, including after an adapter restart).
 
 Select effort only as specified by `.claude/skills/codex/SKILL.md` §Effort
 selection.
 
-The Claude-facing MCP server disables the reverse Claude server for its child
-Codex sessions; top-level Codex sessions still load the reverse server.
+The adapter refuses every caller `config` key at or under `mcp_servers`
+(any server, dotted or nested). It forces `mcp_servers.claude.enabled=false`
+and `mcp_servers.claude.command="/usr/bin/false"` on every start/resume, including
+outside a trusted checkout. It refuses other models, efforts outside high/xhigh, unsafe sandboxes,
+and policies that remove approvals. It declines approval/input requests and
+reports them. Its native app-server child lives for the adapter's lifetime;
+child failure terminates the adapter so the census cannot miss an idle Node
+wrapper. `.codex-bridge/mcp-calls.jsonl` records hashes, readback metadata,
+and the thread id before the turn starts; it contains no prompt text.
 
 On the first launch from a clone, run Claude Code and approve the project
 server when prompted; Claude intentionally requires per-project approval for
@@ -24,6 +35,10 @@ tracked `.mcp.json` servers. Then verify the bridge:
 ```bash
 scripts/check-codex-mcp.mjs
 ```
+
+The check spends no model turn by default; `--live` opts into a real smoke.
+`CODEX_MCP_FRAME_LOG=<path>` explicitly records full protocol frames for a
+live replay fixture; it is off by default and absent from `.mcp.json`.
 
 The ONE home for bridge wire policy is `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`). The launch sequence lives in
@@ -56,20 +71,18 @@ peer advice.
 
 Use `scripts/codex-bridge` when a substantial delegated run needs D-050's
 prompt/response/log hashes and invocation manifest, or when a CLI-native review
-is preferable. This is the preferred route for background calls that must be
-visible in the native Codex pet. When the ignored local
-`.codex-bridge/app-host-thread-id` is present, `new` and `review` send the real
-turn to that app-owned task and return its final answer through the ordinary
+is preferable. While the Codex desktop app is installed it is also the route
+for background calls that must be visible in the native Codex pet: when the
+ignored local `.codex-bridge/app-host-thread-id` is present, `new` and `review`
+send the real turn to that app-owned task and return its final answer through the ordinary
 audit trail. External observer JSONL is diagnostic only; it does not drive the
 pet. Set `CODEX_APP_BRIDGE=off` only to require standalone `codex exec`.
 
 The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here). It supplies the audited report and D-064 evidence
-path described by the contract. Current model: gpt-6-sol (exec route, CLI
-0.156.1+). The MCP server in `.mcp.json` is pinned to CLI 0.153.3 with
-gpt-5.6-sol because `codex mcp-server` is absent from CLI 0.154.0, 0.155.0 and
-0.156.1 (checked 2026-09-23) and the 0.153.3 client cannot use the 6.0 models.
-The exec route is therefore the primary route for Sol 6.0 work.
+path described by the contract. Current model: gpt-6.1-sol on both MCP and
+exec routes (CLI 0.163.0, checked 2026-10-21). The audited route remains the
+choice for long or evidence-heavy work under contract §4.
 `scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol.
 

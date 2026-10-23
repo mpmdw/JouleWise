@@ -48,6 +48,9 @@ class ModelSpec:
     clock_domain: str = "client:monotonic"
     clock_mappings: tuple[ClockMapping, ...] = ()
     controls_verified: bool = False
+    # A native adapter may implement forced assistant-prefix continuation even
+    # when its backend label alone does not establish that capability.
+    supports_budget_continuation: bool = False
 
 
 @dataclass(frozen=True)
@@ -244,7 +247,8 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
             flags.append("budget_median_missing")
         else:
             cap = cap_tokens(median_tokens, condition.fraction)
-    if condition.mode == "budget" and model.backend not in ("vllm", "llamacpp", "mock"):
+    if (condition.mode == "budget" and model.backend not in ("vllm", "llamacpp", "mock")
+            and not model.supports_budget_continuation):
         flags.append("budget_forcing_continuation_unsupported")
     skip_generation = (condition.mode == "budget" and (cap is None or
                        "budget_forcing_continuation_unsupported" in flags)) or condition.mode == "deletion"
@@ -536,7 +540,8 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
         "models": [{"model": m.model, "size_b": m.size_b, "backend": m.backend,
                     "endpoint": m.endpoint_identity, "codec": m.codec.identity,
                     "attention": m.attention_design, "domain": m.clock_domain,
-                    "mappings": m.clock_mappings, "verified": m.controls_verified} for m in models],
+                    "mappings": m.clock_mappings, "verified": m.controls_verified,
+                    "supports_budget_continuation": m.supports_budget_continuation} for m in models],
         "conditions": configs, "seeds": seeds, "settings": settings,
         "monitor": {"model": monitor.model, "endpoint": monitor.endpoint.identity,
                     "max_tokens": monitor.max_tokens, "seed": monitor.seed,

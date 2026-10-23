@@ -112,7 +112,10 @@ class HTTPWorld(AbstractContextManager):
                 except BaseException as exc:
                     world.errors.append(exc)
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        try:
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        except PermissionError as exc:
+            raise unittest.SkipTest(f"loopback socket binding unavailable: {exc}") from exc
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.url = "http://127.0.0.1:" + str(self.server.server_address[1]) + "/v1"
 

@@ -4,7 +4,7 @@ Status: binding for reader-facing L2/L3 claims adopted on 2026-07-08
 (C-014). This contract rides `docs/contracts/claims_ladder.md` (D-037):
 from adoption, any reader-facing L2 or L3 claim must cite a filled
 analysis-plan row before the claim is drafted. Amendment 2026-07-09
-pending ratification (C-023 S3): reader-facing L2/L3 claims also need
+(C-023 S3), accepted under D-053 on 2026-07-09: reader-facing L2/L3 claims also need
 analysis-registry fields for claim role, selection scope, multiplicity, and
 contrast-level inference wording.
 
@@ -36,7 +36,7 @@ remain L0/L1 capability or instrument-result language under D-037.
 
 ## Analysis Registry
 
-Amendment 2026-07-09 pending ratification (C-023 S3): the analysis registry
+Amendment 2026-07-09 (C-023 S3), accepted under D-053 on 2026-07-09: the analysis registry
 is the frozen claim-facing view of this table plus campaign-specific
 manifest IDs, family IDs, claim roles, selection scopes, and multiplicity
 rules.

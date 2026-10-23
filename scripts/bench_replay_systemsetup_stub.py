@@ -2,17 +2,15 @@
 """Stand in for `sudo -n systemsetup -setusingnetworktime <state>` on the bench.
 
 Never toggles anything.  It exists so the ruled daytime bench replay (cold
-gate #3 ruling 10 Q7) can run the REAL ``establish_network_time_off`` and the
-REAL ``restore_network_time`` -- receipt writing, exact-stdout comparison,
-refusal-before-settle, the restore in the executor's ``finally`` -- without
-sudo and without touching the machine's clock discipline.  Brief D2: no new
-branch is added to those two functions; the bench driver rebinds the module's
-documented ``SUDO``/``SYSTEMSETUP`` executable constants to this file, which
-is a seam the module already declares ("A test substitutes its own
-executables by rebinding these names -- PATH cannot fake an absolute path").
+gate #3 ruling 10 Q7) can run the real ``set_network_time_off`` through
+``campaign.establish_network_time_off`` to write and admit the receipt,
+without sudo or changes to the machine's clock discipline.  The bench driver
+rebinds ``network_time_off.OFF_ARGV`` to
+``(stub, '-n', stub, '-setusingnetworktime', 'off')``, where ``stub`` is the
+path to this file.  There is no restore step.
 
-The interlock.  This stub prints the OFF line the chain's imported comparator
-demands ONLY when ``EVIDENCE_POWER_RECORDER_REPLAY`` is set in its own
+The interlock.  This stub prints an OFF line admitted by the receipt's stdout
+check ONLY when ``EVIDENCE_POWER_RECORDER_REPLAY`` is set in its own
 environment.  Without it -- that is, if this file were ever reached from an
 armed night, or from a desk shell that had not deliberately entered the bench
 -- it prints NOTHING and exits 2, which makes ``establish_network_time_off``
@@ -39,9 +37,7 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 from scripts.sample_quiet_predicate_evidence import REPLAY_ENV
 
-# The chain does not compare the ON stdout to anything (no ON comparator is
-# ruled; the restore's verdict is the set form's exit code), but a receipt
-# that says nothing is worse than one that says what happened.
+# Keep an ON response for the accepted ``on`` argument; the bench uses ``off``.
 ON_STDOUT = "setUsingNetworkTime: On\n"
 SUBCOMMAND = "-setusingnetworktime"
 

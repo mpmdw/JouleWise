@@ -56,6 +56,25 @@ def cap_tokens(median_tokens: float, fraction: float) -> int:
     return max(0, math.floor(median_tokens * fraction))
 
 
+def shakedown_median_length(lengths: Sequence[int], censored: Sequence[bool]) -> tuple[float, tuple[str, ...]]:
+    """Return L, statistics.median of hinted thinking-on shakedown lengths only.
+
+    The caller excludes generation failures. Output-cap-censored runs stay at
+    their recorded length. Those lengths and the runner's substituted max_tokens
+    are both at least every uncensored length, so substitution preserves the
+    median when its order statistics are uncensored (2c < n). At 2c >= n the
+    median itself is censored and carries L_censored. Empty input has no L.
+    """
+    from statistics import median
+
+    if not lengths or len(lengths) != len(censored):
+        raise ValueError("L needs nonempty lengths and matching censoring indicators")
+    if (any(isinstance(n, bool) or not isinstance(n, int) or n < 0 for n in lengths)
+            or any(not isinstance(c, bool) for c in censored)):
+        raise ValueError("L needs nonnegative integer lengths and boolean censoring indicators")
+    return float(median(lengths)), (("L_censored",) if 2 * sum(censored) >= len(lengths) else ())
+
+
 @dataclass(frozen=True)
 class Deletion:
     text: str

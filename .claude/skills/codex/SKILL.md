@@ -1,6 +1,6 @@
 ---
 name: codex
-description: Run OpenAI Codex (gpt-6-sol on the exec route; gpt-5.6-sol on the pinned MCP server) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
+description: Run OpenAI Codex (gpt-6.1-sol over the project app-server MCP adapter or audited CLI) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
 ---
 
 # Sol bridge for Claude Code
@@ -17,8 +17,6 @@ Choose before launch and always pass the choice explicitly:
 - `xhigh` — hard individual tasks: design-bearing decisions, cross-contract or
   multi-component work, non-local root-cause analysis, adversarial/integration
   review, or ambiguity where the cost of a wrong judgment is material.
-- `ultra` — only when the Sol session itself must spawn subagents. Never use it
-  as a quality upgrade for a single-agent task.
 
 When uncertain between `high` and `xhigh`, start `high`; escalate a fresh or
 continued session only when the task actually exhibits an xhigh trigger.
@@ -33,7 +31,7 @@ materially degraded round under a capped tier is supporting datum for
 escalation, never a prerequisite for requesting it. The lead may not raise or
 lower a ruled tier on its own authority.
 
-## Transport selection
+## Primary MCP path
 
 All wire rules live in `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`) — the ONE home. This section is the operating
@@ -51,11 +49,8 @@ Apply contract §4's t3 applicability and preferred-presentation-plane rule.
    `CODEX_REASONING_EFFORT` to the selected tier and call
    `scripts/codex-bridge new` or `scripts/codex-bridge review`. For MCP, call
    project tool `codex` with the
-   Git-root `cwd`, model `gpt-5.6-sol` (the MCP server runs the pinned
-   0.153.3 CLI, the last release that ships `mcp-server`; that CLI cannot use
-   the 6.0 models, so Sol 6.0 = `gpt-6-sol` runs only on the exec route via
-   `codex-run-v3` or `scripts/codex-bridge` on the current CLI), config
-   `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
+   Git-root `cwd`, model `gpt-6.1-sol`, config
+   `{"model_reasoning_effort":"<selected-effort>"}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
    and hop headers in developer instructions or the bridge prompt.
    Service tier (Ed 2026-08-09, supersedes the T1 fast-default): DEFAULT tier
@@ -90,11 +85,34 @@ These enforcement boundaries remain explicit:
 Reverse-consult operation is documented by contract §8 and
 `.agents/skills/claude-consult/SKILL.md`.
 
-The project `.mcp.json` pins `npx -y @openai/codex@0.153.3 mcp-server` with
-`gpt-5.6-sol` and `high` only as a safe fallback (`codex mcp-server` was
-absent from CLI 0.154 onward, observed 2026-09-23)
-and disables the reverse Claude server for every Claude-originated session;
-explicit per-task selection remains mandatory.
+The project `.mcp.json` runs `node scripts/codex-mcp-server.mjs`, backed by
+one installed `codex app-server` child (`CODEX_BIN` overrides PATH). Defaults
+are `gpt-6.1-sol`, `high`, `read-only`, and `on-request`; explicit per-task
+effort selection remains mandatory. The adapter accepts nested or dotted
+config overrides, refuses every caller key at or under `mcp_servers` for
+any server name (dotted or nested), and forces both
+`mcp_servers.claude.enabled=false` and
+`mcp_servers.claude.command="/usr/bin/false"` on start/resume, including outside
+a Codex-trusted checkout. Omit all MCP server keys from caller config. It
+declines every approval/input request with a visible result notice.
+`codex-reply` accepts `prompt` and `threadId` (`conversationId` is the legacy
+alias). In-process continuations retain confirmed settings; after a restart,
+resume applies high/read-only/on-request again. Start a new thread to choose
+xhigh or workspace-write after a restart.
+
+Results include the server-reported model, effort, thread id, and turn status.
+Missing/unsafe selection readback and model rerouting are tool errors.
+`.codex-bridge/mcp-calls.jsonl` records `pending` with the id before
+`turn/start`, followed by a terminal row with hashes and declined requests;
+use the callId to associate those rows. These are adapter diagnostics, not
+the audited wrapper's invocation manifest or thread registry.
+
+Long turns emit progress only when the caller supplies a progress token.
+Claude Code's `MCP_TOOL_TIMEOUT` still bounds the call; progress cannot extend
+a hard timeout. Set a sufficient caller budget or use the audited path.
+`node scripts/check-codex-mcp.mjs` checks connections and policy without a
+model turn; `--live` explicitly spends a smoke turn. Full frame recording is
+opt-in through `CODEX_MCP_FRAME_LOG`, never enabled in project configuration.
 
 ## Audited path
 
@@ -108,8 +126,10 @@ foreground route.
 ## Session observability + recovery (WO-027)
 
 The native Codex pet does not consume the external observer JSONL. It follows
-running local conversations owned by the Codex desktop app. On Ed's configured
-machine, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task;
+running local conversations owned by the Codex desktop app. When the app is
+installed, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task
+(the app is not installed on the measurement Mac, checked 2026-10-21, so the
+file is moved aside there and the CLI transport runs);
 `scripts/codex-bridge` uses `scripts/codex-app-bridge.mjs` to start the real Sol
 turn there. The script serializes calls on that host task, captures the final
 answer from its rollout, and interrupts the app turn if the wrapper is

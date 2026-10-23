@@ -116,6 +116,12 @@ def drive(task, endpoint, condition, *, runner_shaped=False):
 
 @unittest.skipUnless(shutil.which("git"), "runtime pin verification requires git")
 class ShadeHTTPTests(unittest.TestCase):
+    def setUp(self):
+        # Check before subTest catches SkipTest: the final cross-world
+        # assertions require every socket-backed world to have executed.
+        probe = HTTPWorld([])
+        probe.server.server_close()
+
     def test_invalid_http_monitor_is_flagged_and_excluded_from_arithmetic(self):
         with fixture_source() as source:
             plan = actions("benign")

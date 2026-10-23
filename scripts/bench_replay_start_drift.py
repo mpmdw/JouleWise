@@ -35,12 +35,14 @@ correct bench run looks like.
 
 WHAT IS REAL AND WHAT IS NOT.  Real: ``execute`` itself (the schedule, the
 abort rule, the teardown, the attestation), the collector, its rounds, its
-hard probes, its censuses, ``establish_network_time_off`` and
-``restore_network_time`` including receipt writing and the imported
-exact-stdout comparison, and the ``log show`` attestation against the live
-unified log.  Not real: the recorder (a frame feeder replaying an archived
-plist) and the ``systemsetup`` executable (a variable-gated stub that toggles
-nothing).  No sudo runs at any point.
+hard probes, its censuses, ``establish_network_time_off`` calling
+``set_network_time_off`` to write and admit the receipt, and the ``log show``
+attestation against the live unified log.  Not real: the recorder (a frame
+feeder replaying an archived plist) and the network-time command.  The bench
+rebinds ``network_time_off.OFF_ARGV`` to
+``(stub, '-n', stub, '-setusingnetworktime', 'off')``, where ``stub`` is the
+path to a variable-gated executable that toggles nothing.  There is no
+restore step.  No sudo runs at any point.
 
 USAGE
 
@@ -750,7 +752,7 @@ def markdown(report):
                      f"{r['frames_written']} | `{r['source_plist_sha256']}` | `{r['written_stream_sha256']}` |")
     lines += ["",
               "The bench NEVER turns network time off: the `systemsetup` stub toggles nothing, "
-              "it only prints the exact stdout the chain's comparator demands. `timed` "
+              "it only prints an OFF line admitted by the receipt's stdout check. `timed` "
               "therefore goes on applying clock corrections for the whole run, and a slot "
               "whose capture window contains one comes back `slew_attested`. On a night that "
               "is an exclusion; here it is the EXPECTED state of a machine whose clock is "
@@ -810,19 +812,15 @@ def execute_bench(args):
     stub = str(REPO_ROOT / STUB)
     started = time.time()
     previous = {key: os.environ.get(key) for key in environment}
-    os.environ.update(environment)
-    sudo, systemsetup = campaign.SUDO, campaign.SYSTEMSETUP
-    # Brief D2: the module's own documented rebinding seam.  BOTH constants
-    # move, because ``network_time_argv`` prefixes ``sudo -n`` and the hard
-    # limit on this lane is that no sudo runs at all; with both bound to the
-    # stub, the receipt's own argv contains neither `/usr/bin/sudo` nor
-    # `/usr/sbin/systemsetup`, which makes the control record self-identifying
-    # as a bench record.
-    campaign.SUDO, campaign.SYSTEMSETUP = stub, stub
+    off_argv = campaign.network_time_off.OFF_ARGV
     try:
+        os.environ.update(environment)
+        # Redirect the current setter's command, including sudo, to the
+        # replay-gated stub. The receipt records this bench-only argv too.
+        campaign.network_time_off.OFF_ARGV = (stub, "-n", stub, "-setusingnetworktime", "off")
         returncode = campaign.execute(plan, protocol, night_dir)
     finally:
-        campaign.SUDO, campaign.SYSTEMSETUP = sudo, systemsetup
+        campaign.network_time_off.OFF_ARGV = off_argv
         for key, value in previous.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -861,8 +859,7 @@ def execute_bench(args):
         "returncode": returncode, "outcome": outcome.get("outcome"),
         "outcome_error": outcome.get("error"),
         "outcome_recorder_kind": outcome.get("recorder_kind"),
-        "network_time_restored": outcome.get("network_time_restored"),
-        "network_time_control_argv": ((control.get("off") or {}).get("argv")),
+        "network_time_control_argv": control.get("argv"),
         "summary_status": summary.get("status"),
         "summary_evidence_status": summary.get("evidence_status"),
         "summary_retained": summary.get("retained"), "summary_s_upper": summary.get("s_upper"),
