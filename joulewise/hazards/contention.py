@@ -12,7 +12,9 @@ process outside the tree exceeds 0.05 CPU-s/s (5 % of one core).  READY after
 180 s of consecutive clean intervals (``HAZARD_ARM_CLEAN_S``; gate prune 2,
 A1); if none appears within 2700 s, REFUSE (the window is NULL).  ``kernel_task`` is included at the dwell, where the Mac
 should be idle.  An interval whose snapshot failed is UNMEASURED and breaks
-the clean run.
+the clean run. An interval unmeasured solely because an outside CPU counter
+regressed without previous over-limit evidence is skipped: it neither breaks
+nor extends the clean run, and the number skipped is disclosed.
 
 In the window (flag only) the monitor journals an interval every 10 s;
 :func:`span_findings` gives ``contention.request_overlap`` when an outside
@@ -365,8 +367,9 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     that was above ``limit`` in the previous interval (:func:`over_limit`); one
     of them that exited or regressed its counter inside this interval makes
     it dirty at that rate. A regressed outside counter without that previous
-    evidence is bounded by host CPU not attributed to measured counters;
-    an unread host or a bound above limit plus counter resolution is unmeasured.
+    evidence is unmeasured. Host CPU not attributed to measured counters and
+    its resolution are disclosed on the unaccounted entry, never used to
+    certify that process clean.
     ``aggregate_limit`` (None: not judged) makes the interval dirty when the
     host's busy CPU outside the tree exceeds it; with a limit, an unread host
     term leaves the interval unmeasured.
@@ -464,12 +467,12 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     resolution = (None if ticks is None else
                   2 * 3 * ticks["cpus"] / ticks["ticks_per_s"] / ticks["elapsed_s"]
                   + ps_counter_reads * PS_TIME_QUANTUM_S / elapsed_s)
-    regression_unmeasured = bool(regressed_outside) and (
-        unattributed is None or unattributed > limit + resolution)
-    if regressed_outside and not regression_unmeasured:
-        for entry in regressed_outside:
-            # CPU use is nonnegative; quantization can make the residual negative.
-            entry["bounded_by_unattributed_cpu_s_per_s"] = max(0.0, unattributed)
+    for entry in unaccounted:
+        if entry["reason"] == "counter regressed":
+            # Disclosure only: host/ps quantization cannot bound a dying
+            # process tightly enough to certify it below the per-process limit.
+            entry["unattributed_cpu_s_per_s"] = unattributed
+            entry["unattributed_resolution_cpu_s_per_s"] = resolution
     aggregate_over = (aggregate_limit is not None and outside_aggregate is not None
                       and outside_aggregate > aggregate_limit)
     over = [item for item in outside if item["cpu_s_per_s"] > limit]
@@ -495,9 +498,8 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         unaccounted=unaccounted,
         raw=[ref.to_json() for ref in (before.raw, after.raw) if ref is not None],
     )
-    if regression_unmeasured:
-        result.update(error="outside process CPU counter regressed without a previous over-limit rate "
-                            "and host unattributed CPU does not bound it within the limit plus resolution",
+    if regressed_outside:
+        result.update(error=REGRESSED_COUNTER_ERROR,
                       clean=None)
     if aggregate_limit is not None and host_busy is None:
         result.update(error=f"host CPU unread, so the registered aggregate limit cannot be "
@@ -544,37 +546,49 @@ def _mid(snapshot: Snapshot, field: str) -> int:
 # The dwell
 
 
+REGRESSED_COUNTER_ERROR = "outside process CPU counter regressed without a previous over-limit rate"
+
+
 class Dwell:
-    """Consecutive clean 30 s intervals until ``clean_s`` (READY) or ``cap_s`` (REFUSE)."""
+    """Clean intervals until ``clean_s`` (READY) or ``cap_s`` (REFUSE).
+
+    Unproven regressed outside counters alone neither add clean time nor
+    reset it. Every other failed or dirty interval resets the run.
+    """
 
     def __init__(self, thresholds: Mapping[str, Any], *, started_ns: int) -> None:
         self.limits = require_thresholds(MODULE, thresholds, ARM_THRESHOLD_KEYS)
         self.started_ns = started_ns
         self.intervals: list[dict[str, Any]] = []
-        self.clean_since_ns: int | None = None
+        self.clean_run_ns = 0
+        self.regressed_counter_intervals = 0
         self.ready_at_ns: int | None = None
 
     def add(self, result: Mapping[str, Any]) -> None:
         summary = _summary(result)
         self.intervals.append(summary)
         a, b = result["interval"]["monotonic_ns"]
+        if (result.get("error") == REGRESSED_COUNTER_ERROR and result.get("clean") is None
+                and not result.get("outside_over_limit") and not result.get("aggregate_over_limit")
+                and any(entry.get("reason") == "counter regressed"
+                        for entry in result.get("unaccounted", ()))):
+            # This is missing evidence, not measured contention. Its time
+            # cannot count toward READY, including at the end of the run.
+            self.regressed_counter_intervals += 1
+            return
         if result.get("clean"):
-            if self.clean_since_ns is None:
-                self.clean_since_ns = a
-            if self.ready_at_ns is None and b - self.clean_since_ns >= self.limits["clean_s"] * 1e9:
+            self.clean_run_ns += b - a
+            if self.ready_at_ns is None and self.clean_run_ns >= self.limits["clean_s"] * 1e9:
                 self.ready_at_ns = b
         else:
-            self.clean_since_ns = None
+            self.clean_run_ns = 0
 
     @property
     def ready(self) -> bool:
         return self.ready_at_ns is not None
 
     def clean_run_s(self, now_ns: int | None = None) -> float:
-        if self.clean_since_ns is None or not self.intervals:
-            return 0.0
-        end = self.intervals[-1]["interval"]["monotonic_ns"][1]
-        return (end - self.clean_since_ns) / 1e9
+        return self.clean_run_ns / 1e9
 
     def expired(self, now_ns: int) -> bool:
         return not self.ready and now_ns - self.started_ns >= self.limits["cap_s"] * 1e9
@@ -584,9 +598,14 @@ class Dwell:
                   "ready_at_monotonic_ns": self.ready_at_ns,
                   "clean_run_s": self.clean_run_s(), "elapsed_s":
                   (finished.monotonic_ns - self.started_ns) / 1e9,
+                  "regressed_counter_intervals": self.regressed_counter_intervals,
                   "started_monotonic_ns": self.started_ns}
         error = None
-        if self.intervals and all(item["error"] for item in self.intervals):
+        if (self.intervals and all(item["error"] for item in self.intervals)
+                and not any(item.get("outside_over_limit") or item.get("aggregate_over_limit")
+                            for item in self.intervals)):
+            # An unread counter cannot hide another process's measured
+            # hazard behind the all-errors UNMEASURED shortcut.
             error = "every dwell interval failed to measure"
         elif not self.intervals:
             error = "no dwell interval was measured"
@@ -666,7 +685,8 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
     observed = {"intervals": len(intervals), "clean_run_s": values["clean_run_s"],
                 "elapsed_s": values["elapsed_s"],
                 "unclean_intervals": sum(1 for item in intervals if item["clean"] is False),
-                "unmeasured_intervals": sum(1 for item in intervals if item["error"])}
+                "unmeasured_intervals": sum(1 for item in intervals if item["error"]),
+                "regressed_counter_intervals": values["regressed_counter_intervals"]}
     if values["ready"]:
         return Verdict(MODULE, PASS, (), limits, observed)
     last_dirty = next((item for item in reversed(intervals) if not item["clean"]), None)

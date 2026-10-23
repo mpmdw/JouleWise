@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+from pathlib import Path
 
 from joulewise import prewindow, quiet_admission
 from joulewise.hazards import base, contention
@@ -578,47 +579,90 @@ class RootPinDwellTests(unittest.TestCase):
                              {'impostor', 'impostor_child'})
 
 
-class RegressedCounterBoundTests(unittest.TestCase):
-    def interval(self, *, hidden=0.0, host=True):
+class RegressedCounterTests(unittest.TestCase):
+    def interval(self, *, hidden=0.0, host=True, seconds=None, outside_count=0,
+                 contender=False, aggregate_limit=None):
         clocks, table, ctx = machine()
         table.hidden_cpu_per_s = hidden
+        if contender:
+            table.processes[340].cpu_per_s = 2 * contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']
+        for index in range(outside_count):
+            table.add(Process(10000 + index, 1, 'idle_helper', cpu_per_s=0.0,
+                              start_epoch=clocks.wall_s - 3600))
         process = table.processes[330]
         process.cpu = 12.5
         reader = table.host_cpu if host else None
         before = contention.take_snapshot(ctx, host_reader=reader)
-        clocks.sleep(contention.DEFAULT_THRESHOLDS['interval_s'])
+        clocks.sleep(seconds if seconds is not None else contention.DEFAULT_THRESHOLDS['interval_s'])
         table.ps(contention.PS_ARGV)  # retain host work before TIME resets
         process.cpu = process.cpu_per_s = 0.0
         after = contention.take_snapshot(ctx, host_reader=reader)
         return contention.interval(before, after, tree_roots=[DRIVER], include_kernel_task=True,
-                                   limit=contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s'])
+                                   limit=contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s'],
+                                   aggregate_limit=aggregate_limit)
 
-    def test_quiet_regressed_counter_is_bounded_and_clean(self):
+    def test_quiet_regressed_counter_is_unmeasured_with_residual_disclosure(self):
         result = self.interval()
-        self.assertIs(result['clean'], True)
-        self.assertIsNone(result['error'])
+        self.assertIsNone(result['clean'])
+        self.assertEqual(result['error'],
+                         'outside process CPU counter regressed without a previous over-limit rate')
         entry = next(row for row in result['unaccounted'] if row['reason'] == 'counter regressed')
-        self.assertLessEqual(entry['bounded_by_unattributed_cpu_s_per_s'],
-                             contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']
-                             + result['unattributed_resolution_cpu_s_per_s'])
-        self.assertEqual(contention.span_findings([result], result['interval']), [])
+        self.assertEqual(entry['unattributed_cpu_s_per_s'], result['unattributed_cpu_s_per_s'])
+        self.assertEqual(entry['unattributed_resolution_cpu_s_per_s'],
+                         result['unattributed_resolution_cpu_s_per_s'])
+        self.assertNotIn('bounded_by_unattributed_cpu_s_per_s', entry)
+        self.assertEqual([f['code'] for f in contention.span_findings([result], result['interval'])],
+                         ['contention.unmeasured'])
 
-    def test_unattributed_above_limit_and_resolution_is_unmeasured(self):
+    def test_high_unattributed_cpu_is_unmeasured_in_both_member_joins(self):
+        from joulewise.b5 import harvest
+        from joulewise.hazards import monitor
+
         # One unlisted core is 20 times the registered 0.05 CPU-s/s limit.
-        result = self.interval(hidden=1.0)
+        # The journal's ~730-process, 10 s shape makes the summed ps/host
+        # resolution exceed that residual, exposing the old passing bound.
+        result = self.interval(hidden=1.0, seconds=10, outside_count=730)
         self.assertIsNone(result['clean'])
         self.assertEqual([f['code'] for f in contention.span_findings([result], result['interval'])],
                          ['contention.unmeasured'])
         self.assertEqual(result['outside_over_limit'], [])
+        a, b = result['interval']['monotonic_ns']
+        def stamp(ns):
+            return dict(wall_ns=ns, monotonic_ns=ns, monotonic_raw_ns=ns)
+        line = dict(schema='joulewise.hazard_journal.v1', module='contention',
+                    session='regression', seq=1, kind='interval', started=stamp(a),
+                    finished=stamp(b), values=result, error=result['error'], raw=[])
+        request = {'monotonic_ns': [a, b]}
+        self.assertEqual([f['code'] for f in monitor.member_findings(
+            {'contention': [line]}, span=request) if f['code'].startswith('contention.')],
+            ['contention.unmeasured'])
+        reading = harvest.parse_monitor_line('contention', line)
+        self.assertEqual([code for code, *_ in harvest.contention_member_flags(
+            [a, b], [reading], {'contention_cpu_s_per_s': contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']})],
+            ['contention.unmeasured'])
+        catalog = harvest.Catalog.load(Path(__file__).resolve().parents[1]
+                                       / 'fixtures/b5_harvest/flag_catalog.json')
+        self.assertEqual(catalog.effect('contention.unmeasured'), 'EXCLUDE_MEMBER')
 
-    def test_unread_host_cannot_bound_a_regressed_counter(self):
+    def test_unread_host_regression_discloses_missing_residual(self):
         result = self.interval(host=False)
         self.assertIsNone(result['clean'])
         self.assertIsNotNone(result['error'])
         self.assertEqual(result['outside_over_limit'], [])
+        entry = next(row for row in result['unaccounted'] if row['reason'] == 'counter regressed')
+        self.assertIsNone(entry['unattributed_cpu_s_per_s'])
+        self.assertIsNone(entry['unattributed_resolution_cpu_s_per_s'])
 
     def test_quiet_zombie_every_150_s_through_the_dwell_passes(self):
+        self.zombie_dwell()
+
+    def test_zombie_dwell_with_a_measured_contender_refuses(self):
+        self.zombie_dwell(contender=True)
+
+    def zombie_dwell(self, *, contender=False):
         clocks, table, ctx = machine()
+        if contender:
+            table.processes[340].cpu_per_s = 2 * contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']
         start = clocks.wall_s
         state = {'cycle': 0, 'pid': 9700}
         def tick():
@@ -635,11 +679,80 @@ class RegressedCounterBoundTests(unittest.TestCase):
                 table.add(Process(state['pid'], 1, 'mdworker_shared', cpu_per_s=0.001,
                                   cpu0=0.5, start_epoch=clocks.wall_s - 3600))
         tick()
+        # The cold pass did not read host ticks. Missing host evidence must
+        # not turn this special unmeasured interval into an arm refusal.
         measurement = contention.run_dwell(ctx, contention.DEFAULT_THRESHOLDS, tree_roots=[DRIVER],
-                                           on_tick=tick, host_reader=table.host_cpu)
-        self.assertEqual(contention.judge(measurement, contention.DEFAULT_THRESHOLDS).status, base.PASS)
-        self.assertTrue(any(row['reason'] == 'counter regressed'
-                            for result in measurement.values['intervals'] for row in result['unaccounted']))
+                                           on_tick=tick, host_reader=None)
+        verdict = contention.judge(measurement, contention.DEFAULT_THRESHOLDS)
+        self.assertEqual(verdict.status, base.REFUSE if contender else base.PASS)
+        intervals = measurement.values['intervals']
+        regressed = [r for r in intervals if r['error']]
+        self.assertTrue(regressed)
+        self.assertTrue(all(r['clean'] is None for r in regressed))
+        skipped = measurement.values['regressed_counter_intervals']
+        self.assertEqual(verdict.observed['regressed_counter_intervals'], skipped)
+        self.assertEqual(skipped, 0 if contender else len(regressed))
+        if not contender:
+            measured_ns = sum(b - a for r in intervals if r['clean'] is True
+                              for a, b in [r['interval']['monotonic_ns']])
+            self.assertEqual(measurement.values['clean_run_s'], measured_ns / 1e9)
+            self.assertGreaterEqual(measurement.values['clean_run_s'],
+                                    contention.DEFAULT_THRESHOLDS['clean_s'])
+
+    def test_regression_neither_extends_nor_breaks_the_clean_run(self):
+        dwell = contention.Dwell(contention.DEFAULT_THRESHOLDS, started_ns=0)
+        width = contention.DEFAULT_THRESHOLDS['interval_s'] * 10**9
+        count = contention.DEFAULT_THRESHOLDS['clean_s'] // contention.DEFAULT_THRESHOLDS['interval_s']
+        def add(index, result):
+            dwell.add({**result, 'interval': {'monotonic_ns': [index * width, (index + 1) * width]}})
+        for index in range(count - 1):
+            add(index, {'clean': True, 'error': None})
+        before = dwell.clean_run_s()
+        add(count - 1, self.interval(hidden=1.0))
+        self.assertEqual(dwell.clean_run_s(), before)
+        self.assertFalse(dwell.ready)
+        add(count, {'clean': True, 'error': None})
+        self.assertTrue(dwell.ready)
+        self.assertEqual(dwell.clean_run_s(), contention.DEFAULT_THRESHOLDS['clean_s'])
+
+    def test_other_unmeasured_or_measured_hazards_still_break_the_run(self):
+        regression = self.interval()
+        cases = [
+            {'clean': None, 'error': 'ps failed'},
+            {'clean': False, 'error': None},
+            {**regression, 'outside_over_limit': [
+                {'cpu_s_per_s': 2 * contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s']}]},
+            {**regression, 'aggregate_over_limit': True},
+            {**regression, 'error': 'host CPU unread, so the registered aggregate limit cannot be judged'},
+        ]
+        width = contention.DEFAULT_THRESHOLDS['interval_s'] * 10**9
+        for result in cases:
+            with self.subTest(result=result):
+                dwell = contention.Dwell(contention.DEFAULT_THRESHOLDS, started_ns=0)
+                dwell.add({'clean': True, 'error': None, 'interval': {'monotonic_ns': [0, width]}})
+                dwell.add({**result, 'interval': {'monotonic_ns': [width, 2 * width]}})
+                self.assertEqual(dwell.clean_run_s(), 0)
+                self.assertFalse(dwell.ready)
+
+    def test_measured_hazard_survives_when_every_interval_has_a_regression(self):
+        cases = [self.interval(contender=True),
+                 self.interval(hidden=1.0, aggregate_limit=contention.DEFAULT_THRESHOLDS['cpu_limit_s_per_s'])]
+        width = contention.DEFAULT_THRESHOLDS['interval_s'] * 10**9
+        count = contention.DEFAULT_THRESHOLDS['cap_s'] // contention.DEFAULT_THRESHOLDS['interval_s']
+        for result in cases:
+            with self.subTest(aggregate=result['aggregate_over_limit']):
+                self.assertIsNone(result['clean'])
+                self.assertIsNotNone(result['error'])
+                dwell = contention.Dwell(contention.DEFAULT_THRESHOLDS, started_ns=0)
+                for index in range(count):
+                    dwell.add({**result, 'interval': {'monotonic_ns': [index * width, (index + 1) * width]}})
+                started = base.Stamp(wall_ns=0, monotonic_ns=0, monotonic_raw_ns=0)
+                finished = base.Stamp(wall_ns=count * width, monotonic_ns=count * width,
+                                      monotonic_raw_ns=count * width)
+                measurement = dwell.measurement(started=started, finished=finished)
+                self.assertEqual(contention.judge(measurement, contention.DEFAULT_THRESHOLDS).status,
+                                 base.REFUSE)
+                self.assertEqual(measurement.values['regressed_counter_intervals'], 0)
 
 
 if __name__ == "__main__":
