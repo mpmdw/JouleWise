@@ -243,7 +243,7 @@ class RealSmokeRegressions(unittest.TestCase):
         self.assertGreaterEqual(attribution.half_width_j, 1.)
 
     def test_powermetrics_floor_belongs_to_printed_totals_not_segments(self):
-        # Constant 4 W and 0.02 W resolution give 0.01 J/s modeled bounds,
+        # Constant 4 W and 0.02 W resolution give 0.02 J/s modeled bounds,
         # well below the D-078 printed minimum of 1 J, even after tiling.
         trace = PowerTrace('powermetrics', 'cpu', 'host',
                            tuple(k*SECOND//10 for k in range(41)), (4.,)*41,
@@ -272,11 +272,13 @@ class RealSmokeRegressions(unittest.TestCase):
             math.fsum(s.energy.half_width_j for s in attribution.segments)))
         per_turn = turn_energy_from_attribution(attribution)
         for turn in turns:
-            expected = max(1., math.fsum(s.energy.half_width_j for s in attribution.segments
-                                         if s.turn == turn.index))
-            self.assertEqual(per_turn[turn.index][1], expected)  # Identical max/fsum.
-        # At 4 W resolution, the half-quantum term is 2 J per one-second
-        # turn. This pins retaining a modeled bound above the printed minimum.
+            expected = math.fsum(s.energy.half_width_j for s in attribution.segments
+                                 if s.turn == turn.index)
+            self.assertEqual(per_turn[turn.index][1], expected)  # Identical fsum.
+            self.assertLess(per_turn[turn.index][1], 1.)
+        self.assertLess(math.fsum(bound for _, bound in per_turn.values()), 1.)
+        # At 4 W resolution, the sensitivity is 4 J per one-second turn.
+        # This pins retaining a modeled bound above the run's minimum.
         wider = attribute_episode(replace(ep, power_traces=(replace(trace, resolution=4.),)),
                                   source='powermetrics', channel='cpu')
         for turn, (_, bound) in turn_energy_from_attribution(wider).items():
@@ -418,8 +420,9 @@ class RealSmokeRegressions(unittest.TestCase):
         self.assertEqual(sampler.clock_mappings[0].method, 'unmeasured')
 
     def test_variable_apple_windows_cover_low_to_high_step_through_runner(self):
-        # Epoch floats reproduce real powermetrics' varying support widths,
-        # including conversion roundoff on nominally 100 ms windows.
+        # Production-shaped epoch floats and contiguous 99/101 ms supports.
+        # A shared edge uses the same float so overlap cannot make the bound
+        # infinite and thereby conceal a failed step-allocation test.
         epoch_offset = 1_700_000_000.0123
         class EpochClock(FakeClock):
             def now(self): return super().now() + epoch_offset
@@ -429,10 +432,11 @@ class RealSmokeRegressions(unittest.TestCase):
             def ns(self): return round(FakeClock.now(self)*SECOND)
         clock = EpochClock(1.85)
         samples = []
+        def edge(k): return k/10 + (.001 if k % 2 else 0.) + epoch_offset
         for k in range(41):
-            end = k/10 + epoch_offset
+            end = edge(k)
             samples.append(PowerSample(end, 2. if k <= 20 else 40., 'powermetrics',
-                rail='cpu_power', interval_start_s=end-.1, interval_end_s=end))
+                rail='cpu_power', interval_start_s=edge(k-1), interval_end_s=end))
         evidence = {'clock_anchor': {'status': 'bounded', 'method': 'synthetic_anchor_v2',
             'wall_minus_monotonic_lower_s': epoch_offset-1e-6,
             'wall_minus_monotonic_upper_s': epoch_offset+2e-6,
@@ -452,23 +456,33 @@ class RealSmokeRegressions(unittest.TestCase):
         notes = json.loads(trace.notes)
         self.assertIsNone(trace.averaging_window_ns)
         self.assertIsNone(trace.resolution)
-        for timestamp, support, half in zip(trace.t_ns, notes['sample_support_ns'],
-                                             notes['timing_half_width_ns']):
+        self.assertNotIn('timing_half_width_ns', notes)
+        for timestamp, support in zip(trace.t_ns, notes['sample_support_ns']):
             a, b = support
-            # These are integer identities, including downward midpoint rounding
-            # and the ceiling that encloses the odd-width half nanosecond.
-            self.assertEqual(timestamp, (a+b)//2)
-            self.assertEqual(half, (b-a+1)//2)
+            self.assertEqual(timestamp, b)  # Native window-end stamp is exact.
         attribution = attribute_episode(ep, source='powermetrics', channel='cpu_power')
         segment = next(s for s in attribution.segments if s.turn == 0)
         step = 2*SECOND
         # Exact integral of the designed step: each sample is the exact mean
-        # of its nominal [(k-1)/10, k/10] support, wholly on one side of the
+        # of its native [edge(k-1), edge(k)] support, wholly on one side of the
         # step. Epoch serialization perturbs recorded timing only, not truth.
         # Integer ns durations times integer W sum exactly before the final
         # seconds conversion (6.300 J).
         truth = (2*(step-segment.start_ns) + 40*(segment.end_ns-step))/SECOND
+        self.assertTrue(math.isfinite(segment.energy.half_width_j))
+        self.assertTrue(math.isfinite(attribution.total.half_width_j))
         self.assertLessEqual(abs(segment.energy.joules-truth), segment.energy.half_width_j)
+        # Removing window support reproduces the original end-stamped point
+        # reconstruction: the 1.9 J lag exceeds its 1.302 J clock bound.
+        old_trace = replace(trace, notes='{}')
+        old = attribute_episode(replace(ep, power_traces=(old_trace,)),
+                                source='powermetrics', channel='cpu_power')
+        self.assertGreater(abs(old.total.joules-truth), old.total.half_width_j)
+        expected = math.fsum(value*max(0, min(ep.end_ns, b+ep.clock_mappings[0].offset_ns)
+                                      - max(ep.start_ns, a+ep.clock_mappings[0].offset_ns))/SECOND
+                            for value, (a, b) in zip(trace.values, notes['sample_support_ns']))
+        self.assertLessEqual(abs(attribution.total.joules-expected), 1e-6*max(1., abs(expected)))
+        self.assertEqual(attribution.total.method.split(';')[0], 'window_average_W')
         turns = turn_energy_from_attribution(attribution)
         self.assertLessEqual(abs(turns[0][0]-truth), turns[0][1])
         budget = episode_energy(ep, channels=(('powermetrics', 'cpu_power'),))
@@ -483,25 +497,91 @@ class RealSmokeRegressions(unittest.TestCase):
                    for t, a in ((10, 7), (20, None), (30, 25))]
         traces, _ = power_records(samples, nominal_interval_ns=10)
         trace = traces[0]
-        self.assertEqual(trace.t_ns, (8, 20, 27))  # Integer floor midpoints; unknown keeps timestamp.
-        self.assertEqual(json.loads(trace.notes)['timing_half_width_ns'], [2, None, 3])
+        self.assertEqual(trace.t_ns, (10, 20, 30))
+        self.assertEqual(json.loads(trace.notes)['sample_support_ns'], [[7, 10], None, [25, 30]])
         estimate = trace_energy(trace, 8, 27)
         self.assertTrue(math.isinf(estimate.half_width_j))
-        self.assertIn('timing.sample_uncertainty_unknown', estimate.flags)
-        # Reported ends increase, but midpoints go 5 -> 0 ns; the actual written
-        # point sequence must reject the second row, preserving notes alignment.
+        self.assertIn('window.support_unknown', estimate.flags)
+        ep = Episode('missing', 't', 'benign', 'm', 'e', 0, TRACE_DOMAIN, 8, 27, (),
+                     power_traces=(trace,))
+        self.assertIn('energy_window_support_unknown', episode_energy(ep).flags)
+        # Increasing ends stay in the record even if support midpoints reverse.
+        # The overlapping windows remain visibly unsupported to both reducers.
         reversed_midpoints = [PowerSample(t/SECOND, 4., 'powermetrics', rail='cpu_power',
             interval_start_s=a/SECOND, interval_end_s=t/SECOND) for t, a in ((10, 0), (20, -20))]
         traces, flags = power_records(reversed_midpoints, nominal_interval_ns=10)
-        self.assertEqual(traces[0].t_ns, (5,))
-        self.assertEqual(json.loads(traces[0].notes)['timing_half_width_ns'], [5])
-        self.assertIn('nonincreasing_power_timestamp:cpu_power', flags)
+        self.assertEqual(traces[0].t_ns, (10, 20))
+        self.assertEqual(json.loads(traces[0].notes)['sample_support_ns'], [[0, 10], [-20, 20]])
+        self.assertIn('window.overlap', trace_energy(traces[0], 0, 20).flags)
+        self.assertNotIn('nonincreasing_power_timestamp:cpu_power', flags)
         # Uniform supports retain the window-end representation and no new timing list.
         traces, _ = power_records([samples[0], replace(samples[0], timestamp_s=20/SECOND,
             interval_start_s=17/SECOND, interval_end_s=20/SECOND)], nominal_interval_ns=10)
         self.assertEqual(traces[0].t_ns, (10, 20))
         self.assertEqual(traces[0].averaging_window_ns, 3)
         self.assertNotIn('timing_half_width_ns', json.loads(traces[0].notes))
+
+    def test_window_step_allocation_and_full_support_in_both_reducers(self):
+        # A 2 -> 40 W step halfway through the middle window. The native
+        # mean is 21 W, so assigning its last half gives 1.26 J, versus
+        # 2.4 J of physical work: the half-width must cover the 1.14 J gap.
+        for widths in ((100, 120, 80), (100, 100, 100)):
+            with self.subTest(widths_ms=widths):
+                ends, cursor = [], 0
+                for width in widths:
+                    cursor += width*SECOND//1000
+                    ends.append(cursor)
+                starts = (0, ends[0], ends[1])
+                samples = [PowerSample(b/SECOND, value, 'powermetrics', rail='cpu_power',
+                    interval_start_s=a/SECOND, interval_end_s=b/SECOND)
+                    for a, b, value in zip(starts, ends, (2., 21., 40.))]
+                traces, _ = power_records(samples, nominal_interval_ns=SECOND//10)
+                trace = replace(traces[0], resolution=0.)
+                step = (starts[1]+ends[1])//2
+                width_s = (ends[1]-step)/SECOND
+                ep = Episode('step', 't', 'benign', 'm', 'e', 0, TRACE_DOMAIN,
+                             step, ends[1], (), power_traces=(trace,))
+                attr = attribute_episode(ep, source='powermetrics', channel='cpu_power')
+                query = trace_energy(trace, step, ends[1])
+                budget = episode_energy(ep, power_max_w=40.)
+                for estimate, bound in ((query.joules, query.half_width_j),
+                                        (budget.joules, budget.uncertainty_j)):
+                    self.assertTrue(math.isfinite(bound))
+                    self.assertAlmostEqual(estimate, 21.*width_s, places=12)
+                    self.assertGreaterEqual(bound+1e-6, abs(estimate-40.*width_s))
+                self.assertEqual(attr.total.method, 'window_average_W')
+                self.assertNotIn('energy_piecewise_linear_between_samples', budget.flags)
+                # Whole-window overlap is the native mean integral regardless
+                # of the position of the step inside the window.
+                whole = replace(ep, start_ns=starts[1])
+                expected = 21.*(ends[1]-starts[1])/SECOND
+                self.assertAlmostEqual(episode_energy(whole, power_max_w=40.).joules, expected, places=12)
+                self.assertAlmostEqual(attribute_episode(whole, source='powermetrics',
+                    channel='cpu_power').total.joules, expected, places=12)
+
+    def test_run_floor_is_applied_once_after_rail_sum(self):
+        # Two disjoint constant 4 W rails, exact resolution and aligned bounds:
+        # no modeled uncertainty; the run has one 1 J attribution minimum.
+        trace = PowerTrace('powermetrics', 'cpu', 'host', (0, SECOND),
+                           (4., 4.), 'W', SECOND, resolution=0.)
+        ep = Episode('rails', 't', 'benign', 'm', 'e', 0, 'host', 0, SECOND, (),
+                     power_traces=(trace, replace(trace, channel='gpu')))
+        energy = episode_energy(ep, channels=(('powermetrics', 'cpu'), ('powermetrics', 'gpu')),
+                                power_max_w=4.)
+        self.assertEqual((energy.joules, energy.uncertainty_j), (8., 1.))
+
+    def test_single_native_window_and_malformed_support_do_not_become_points(self):
+        trace = PowerTrace('powermetrics', 'cpu', 'host', (SECOND,), (4.,), 'W', SECOND,
+                           resolution=0., notes=json.dumps({'sample_support_ns': [[0, SECOND]]}))
+        ep = Episode('single', 't', 'benign', 'm', 'e', 0, 'host', 0, SECOND, (),
+                     power_traces=(trace,))
+        self.assertEqual(trace_energy(trace, 0, SECOND).joules, 4.)
+        self.assertEqual(episode_energy(ep, power_max_w=4.).joules, 4.)
+        for support in (None, [], [None], [[0, SECOND-1]], [[SECOND, SECOND]], [True]):
+            with self.subTest(support=support):
+                bad = replace(trace, notes=json.dumps({'sample_support_ns': support}))
+                self.assertTrue(math.isinf(trace_energy(bad, 0, SECOND).half_width_j))
+                self.assertIsNone(episode_energy(replace(ep, power_traces=(bad,))).joules)
 
     def test_apple_native_template_preserves_tool_calls_and_thinking_control(self):
         clock = FakeClock()
