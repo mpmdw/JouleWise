@@ -80,8 +80,7 @@ class AuditFixTests(unittest.TestCase):
                         self.assertEqual(row["input_status"], "compressed")
                         self.assertEqual(row["compressed_input"], "raw/powermetrics.plist.zst")
                         self.assertEqual(row["restore_tool"], "scripts/restore_run_to_scratch.py")
-                        self.assertIn("fix/2026-10-22-audit-battery-term", row["restore_tool_availability"])
-                        self.assertIn("9d23e5b46", row["restore_tool_availability"])
+                        self.assertNotIn("restore_tool_availability", row)
                         self.assertEqual(compressed.read_bytes(), b"synthetic compressed input, do not open")
 
     def test_trace_stops_are_scoped_to_selected_runs_in_both_detail_modes(self):
@@ -120,6 +119,41 @@ class AuditFixTests(unittest.TestCase):
                             if detail:
                                 self.assertEqual(len(flags), 1)
                             self.assertTrue(all(not f["stops_comparison"] for f in flags))
+
+    def test_comparison_counts_are_invariant_to_detail_and_meter_disclosures(self):
+        archive = full_pack(self.root, "ALPHA", 5)
+        rid = "fixture-decode-r01"
+        remove_member(archive, rid)
+        raw = archive / "sources/claim-runs" / rid / "raw/powermetrics.plist"
+        original = raw.read_bytes()
+        meter = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
+        expected = {"compared_runs": 68, "not_compared_runs": 0, "not_compared_by_reason": {}}
+        for present in (True, False):
+            if present:
+                raw.write_bytes(original)
+            else:
+                raw.unlink()
+            for has_meter in (False, True):
+                if has_meter:
+                    stream_file(meter, lambda t: 10.)
+                else:
+                    meter.unlink(missing_ok=True)
+                for detail in (False, True):
+                    with self.subTest(plist=present, meter=has_meter, detail=detail):
+                        _, out, stdout = run_cli({"ALPHA": archive}, self.root / "counts.json",
+                                                 ("--member-detail",) if detail else ())
+                        report = out["comparison"]
+                        self.assertEqual(report["summary"], expected)
+                        fields = dict(field.split("=", 1) for field in stdout.split())
+                        self.assertEqual(json.loads(fields["comparison"]), expected)
+                        self.assertFalse(out["comparison_stopped"])
+                        self.assertFalse(json.loads(fields["comparison_stopped"]))
+                        loaded = detail or has_meter
+                        self.assertEqual(rid in report["members"]["ALPHA"], loaded)
+                        self.assertEqual(report["detail_only_runs"], {
+                            "count": int(loaded), "compared_runs": int(loaded and present),
+                            "not_compared_runs": int(loaded and not present),
+                            "not_compared_by_reason": {"trace_plist_missing": 1} if loaded and not present else {}})
 
     def test_selected_reference_and_corpus_trace_failures_stop_in_both_detail_modes(self):
         for kind, rid in (("claim-runs", "neg8-window-start-r1"), ("bound-runs", "neg8-refcorpus-r01")):
@@ -221,15 +255,21 @@ class AuditFixTests(unittest.TestCase):
         rid = "fixture-decode-r01"
         (archive / "sources/claim-runs" / rid / "raw/powermetrics.plist").unlink()
         primary = full_pack(self.root, "ALPHA", 5)
-        _, out, stdout = run_cli({"ALPHA": primary}, self.root / "extra.json", ("--extra-beta", str(archive)))
+        for pack in (archive, primary):
+            remove_member(pack, "fixture-decode-r02")
+        _, out, stdout = run_cli({"ALPHA": primary}, self.root / "extra.json",
+                                 ("--member-detail", "--extra-beta", str(archive)))
         report = out["comparison"]["extra_beta"]
         self.assertEqual(report["members"]["0"][rid]["status"], "not_compared")
         self.assertTrue(report["comparison_stopped"])
         self.assertFalse(out["comparison_stopped"])
         self.assertEqual(out["comparison"]["summary"], {
-            "compared_runs": 69, "not_compared_runs": 0, "not_compared_by_reason": {}})
+            "compared_runs": 68, "not_compared_runs": 0, "not_compared_by_reason": {}})
         self.assertEqual(report["summary"], {
-            "compared_runs": 68, "not_compared_runs": 1, "not_compared_by_reason": {"trace_plist_missing": 1}})
+            "compared_runs": 67, "not_compared_runs": 1, "not_compared_by_reason": {"trace_plist_missing": 1}})
+        self.assertEqual(out["comparison"]["detail_only_runs"], {
+            "count": 1, "compared_runs": 1, "not_compared_runs": 0, "not_compared_by_reason": {}})
+        self.assertEqual(report["detail_only_runs"]["count"], 0)
         fields = dict(field.split("=", 1) for field in stdout.split())
         self.assertEqual(json.loads(fields["comparison"]), out["comparison"]["summary"])
         self.assertFalse(json.loads(fields["comparison_stopped"]))
@@ -329,8 +369,7 @@ class AuditFixTests(unittest.TestCase):
                 if compressed:
                     self.assertEqual(flag["detail"]["compressed_inputs"], ["stream-001.jsonl.zst"])
                     self.assertEqual(flag["detail"]["restore_tool"], "scripts/restore_run_to_scratch.py")
-                    self.assertIn("fix/2026-10-22-audit-battery-term", flag["detail"]["restore_tool_availability"])
-                    self.assertIn("9d23e5b46", flag["detail"]["restore_tool_availability"])
+                    self.assertNotIn("restore_tool_availability", flag["detail"])
 
     def test_unusable_anchor_and_failed_status_are_never_counted_as_compared(self):
         archive, rid, _, _ = self.machine_archive()

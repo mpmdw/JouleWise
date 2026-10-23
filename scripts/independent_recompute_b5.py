@@ -7,6 +7,8 @@ computed here. See the build SPEC for the dependency and comparison contract.
 
 Agreement policy (FIX-571 lead ruling): copies of the same stored number,
 integer-ns clocks, and plist/CSV records from the same samples compare exactly.
+Plist/CSV timestamps resolve one ulp of the epoch double (about 238 ns at
+2^30 s: 2^(30-52) s), the CSV's own float-seconds resolution.
 Otherwise use a bar above 1e6 times double noise (2.2e-10 relative) and below
 1% of the smallest printed uncertainty, when available; without a printed
 uncertainty use 1e-6 relative (1e-6 column units near zero for J/W). Rho uses
@@ -68,7 +70,6 @@ BETA_INCLUSIVE_LABEL = ("including three BETA sessions removed by rules later re
                         "the pooled floor is an upper bound on the registered arithmetic, never smaller")
 RESTORE_TOOL_DETAIL = {
     "restore_tool": "scripts/restore_run_to_scratch.py",
-    "restore_tool_availability": "lands with fix/2026-10-22-audit-battery-term (9d23e5b46); pending that lane's merge",
 }
 
 
@@ -423,6 +424,8 @@ class Member:
         if placed and csv_data:
             # Same capture code, samples, placement arithmetic and rail sum:
             # copy identity is the property, with no epoch-scaled tolerance.
+            # Timestamp resolution is one epoch-double ulp, the CSV's own
+            # float-seconds resolution (2^(30-52) s, about 238 ns at 2^30 s).
             if placed != csv_data:
                 reader.flag("trace_csv_plist_mismatch", run_id, "plist is primary")
         if not placed:
@@ -557,8 +560,8 @@ class Window:
         if self.exclusions.get("claim_usable") is not True:
             r.flag("claim_usable_false", "window", "exclusions claim_usable is false or absent")
         self.members = {}
-        # Only kept units, surviving references and the selected corpus can
-        # stop the primary comparison. Detail/disclosure loads do not add ids.
+        # Only kept units, surviving references and the selected corpus count
+        # toward or can stop the primary comparison. Detail/disclosure loads do not add ids.
         self.compared_run_ids = set()
         self.verdict = r.json(self.claim_root / "whole-window-verdict.json", "whole-window-verdict.json")
         self.verdict_members = set(strings(self.verdict.get("bundle_ids")))
@@ -2301,14 +2304,21 @@ def flag_stops_comparison(flag, windows):
 def member_comparison_report(windows):
     comparisons = {key: {rid: m.comparison for rid, m in sorted(window.members.items())}
                    for key, window in windows.items()}
-    rows = [row for members in comparisons.values() for row in members.values()]
-    reasons = {}
-    for row in rows:
-        if row["status"] == "not_compared":
-            reasons[row["reason"]] = reasons.get(row["reason"], 0) + 1
-    return {"members": comparisons, "summary": {
-        "compared_runs": sum(row["status"] == "compared" for row in rows),
-        "not_compared_runs": sum(reasons.values()), "not_compared_by_reason": reasons}}
+
+    def summarize(rows):
+        reasons = {}
+        for row in rows:
+            if row["status"] == "not_compared":
+                reasons[row["reason"]] = reasons.get(row["reason"], 0) + 1
+        return {"compared_runs": sum(row["status"] == "compared" for row in rows),
+                "not_compared_runs": sum(reasons.values()), "not_compared_by_reason": reasons}
+
+    selected, detail_only = [], []
+    for key, window in windows.items():
+        for rid, row in comparisons[key].items():
+            (selected if rid in window.compared_run_ids else detail_only).append(row)
+    return {"members": comparisons, "summary": summarize(selected),
+            "detail_only_runs": {"count": len(detail_only), **summarize(detail_only)}}
 
 
 def add_beta_inclusive(output, registered, extras):
