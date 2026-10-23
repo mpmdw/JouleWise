@@ -332,3 +332,20 @@ class KVTests(unittest.TestCase):
         with mock.patch.object(b.platform, 'system', return_value='Linux'):
             with self.assertRaisesRegex(RuntimeError, 'requires Mac MLX'):
                 b.kv(Path('/synthetic/absent'))
+
+
+class FrozenManifestTests(unittest.TestCase):
+    def test_frozen_manifest_reproduces_and_validates_analysis_models(self):
+        from joulewise.bytes_analysis import validate_manifest
+        root = Path(__file__).resolve().parents[1]
+        records = root / 'configs/bytes/records'
+        result, _ = b.merge([json.loads(p.read_bytes()) for p in sorted(records.glob('*.headers.json'))],
+                            [json.loads(p.read_bytes()) for p in sorted(records.glob('*.kv.json'))],
+                            json.loads((root / 'docs/design/bytes_pilot/summary_rows.json').read_bytes()))
+        raw = (json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + '\n').encode()
+        self.assertEqual((root / 'configs/bytes/bytes_manifest.json').read_bytes(), raw)
+        validate_manifest({**result, 'sessions': []})
+        from joulewise.b5.harvest import build_roster, l4_exclusion_inputs
+        families = {c['cell_id'] for pack in (root / 'configs/campaigns').glob('bytes-s*-p1')
+                    for c in l4_exclusion_inputs(build_roster(pack, root), {}, plan_id=None, attempt=None)[0]['cells']}
+        self.assertEqual({cell for m in result['models'] for cell in m['cell_ids']}, families)

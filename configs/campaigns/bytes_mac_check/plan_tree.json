@@ -64,8 +64,8 @@
   },
   "draft_status": "non-claim",
   "external_inputs": [
-    "manifests",
-    "artifacts"
+    "artifacts",
+    "manifests"
   ],
   "generator": {
     "path": "scripts/bytes_mac_kit.py",

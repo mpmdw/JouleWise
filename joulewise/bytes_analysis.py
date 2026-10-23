@@ -403,6 +403,8 @@ def validate_manifest(manifest):
         raise AnalysisError("manifest requires six Qwen3 4-bit tier models")
     cells = []
     for model in models:
+        if not isinstance(model.get("config_key"), str) or not model["config_key"].strip():
+            raise AnalysisError("manifest model requires non-empty string config_key")
         if model["role"] not in ("fit", "heldout") or (model["moe"] and model["role"] == "fit"):
             raise AnalysisError("invalid model role")
         for key in ("W_bytes", "KV_bytes", "R_bytes"):
@@ -644,6 +646,7 @@ def _stage_export_rows(path, *, include_withheld=False):
     info = read_json(sidecar).get("blinding", {}).get("withheld")
     if info is None:
         return rows, False
+    info = {**info, "withheld_path_checked": str((path.parent / info["path"]).resolve())}
     if not path.is_file():
         return rows, info
     try:
@@ -656,7 +659,9 @@ def _stage_export_rows(path, *, include_withheld=False):
 def _withheld_counts(info, model):
     key_digest = hashlib.sha256(model.get("config_key", "").encode("utf-8")).hexdigest()
     count = info["config_key_sha256"].get(key_digest, 0) if info else 0
-    return {"withheld_row_count": info["row_count"], "withheld_config_row_count": count} if count else {}
+    return {"withheld_row_count": info["row_count"], "withheld_config_row_count": count,
+            **({"withheld_path_checked": info["withheld_path_checked"]}
+               if "withheld_path_checked" in info else {})} if count else {}
 
 
 def _missing_withheld_records(info, manifest, session):
@@ -1149,7 +1154,7 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                 missing = next((r for r in module if "bytes.withheld_missing" in r["flags"]), None)
                 rows.append({**base, "status": "missing" if missing else "unavailable",
                              "reason": "withheld rows missing" if missing else str(exc),
-                             **({k: missing[k] for k in ("withheld_row_count", "withheld_config_row_count")} if missing else {}),
+                             **({k: missing[k] for k in ("withheld_row_count", "withheld_config_row_count", "withheld_path_checked") if k in missing} if missing else {}),
                              "unavailable_runs": [r["run_id"] for r in module if r["meter"] is None],
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue

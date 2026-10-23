@@ -48,7 +48,7 @@ def _missing_labels(points):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--export", type=Path, help="Block-6 export directory; manifest must locate matching archives")
+    source.add_argument("--export", type=Path, nargs="+", help="Block-6 export directories read in place; manifest must locate matching archives")
     source.add_argument("--records", type=Path, nargs="+", help="harvest archive or withheld/member-assessments.json")
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--stage", required=True, choices=("blinded", "fit", "heldout", "all"))

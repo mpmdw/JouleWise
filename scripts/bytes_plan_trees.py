@@ -8,6 +8,7 @@ pass two, reversing the sub-pack order for the second pass.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
 import importlib.util
@@ -150,8 +151,38 @@ def tree_files(value, repo_root):
     collection_path = directory / "collection_plan.json"
     tree["plan"] = {"path": "collection_plan.json", "plan_id": collection["plan_id"],
                     "actual_sha256": configs.sha(collection_raw), "declared_sha256": configs.sha(collection_raw)}
-    tree["external_inputs"] = [ref for ref in tree["external_inputs"]
-                               if "d117_floor_qwen3-8b_v5" not in json.dumps(ref)]
+    external = tree["external_inputs"]
+    if not isinstance(external, Mapping):
+        raise ValueError("template external_inputs must be a mapping")
+    tree["external_inputs"] = {key: [ref for ref in refs
+        if "d117_floor_qwen3-8b_v5" not in json.dumps(ref)] for key, refs in external.items()}
+    cells = []
+    covered = []
+    for module in working["modules"]:
+        module_id = module["module_id"]
+        science = [row for row in tree["science"] if row["module_id"] == module_id]
+        common = {"condition_family_id": module_id + "-decode", "metric": "phase_energy_j.decode",
+                  "window_class": "phase", "target_precheck_path": ["phase", "decode"], "expected_n": 10}
+        repeats = [row for row in science if row["role"] == "absolute_repeat"]
+        quads = {}
+        for row in science:
+            if row["role"] == "comparative_abba_member":
+                quads.setdefault(row["block_id"], {})[row["position"]] = row["run_id"]
+        if len(repeats) != 10 or len(quads) != 10 or any(set(q) != {"A1", "B1", "B2", "A2"} for q in quads.values()):
+            raise ValueError("BYTES requires ten repeats and ten complete quads per module")
+        cells.extend([{**common, "cell_id": module_id + "-decode-absolute", "kind": "absolute",
+                       "members": [{"bundle_id": row["run_id"]} for row in repeats]},
+                      {**common, "cell_id": module_id + "-decode-comparative", "kind": "comparative",
+                       "blocks": [{"block_id": block, "members": members} for block, members in quads.items()]}])
+        covered.extend(row["run_id"] for row in repeats)
+        covered.extend(run_id for members in quads.values() for run_id in members.values())
+    if len(covered) != len(set(covered)) or set(covered) != {row["run_id"] for row in tree["science"]}:
+        raise ValueError("extraction cells must cover every science run exactly once")
+    extraction = configs.raw_json({"schema_version": "joulewise.detection_floor_extraction_spec.v1",
+                                  "draft_status": "draft", "cells": cells})
+    files["extraction_spec.json"] = extraction
+    tree["downstream_contract"] = {"extraction_spec": {
+        "path": (directory / "extraction_spec.json").as_posix(), "sha256": configs.sha(extraction)}}
     for stage in tree["stage_graph"]:
         for command in stage["launch"]["commands"]:
             for arg in command["argv_template"]["arguments"]:

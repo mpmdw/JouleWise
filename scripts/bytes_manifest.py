@@ -272,6 +272,34 @@ def registered_config_key(model_name):
     return keys.pop()
 
 
+# Registration bytes_pack_v1 §§2 and 9; IDs agree with the generated harvest families.
+ANALYSIS_MODELS = {
+    "Qwen3-1.7B-4bit": ("qwen3-1p7b", "fit", None, True),
+    "Qwen3-4B-4bit": ("qwen3-4b", "fit", None, True),
+    "Qwen3-8B-4bit": ("qwen3-8b", "fit", None, True),
+    "Qwen3-14B-4bit": ("qwen3-14b", "heldout", None, True),
+    "Qwen3-32B-4bit": ("qwen3-32b", "heldout", None, True),
+    "Qwen3-8B-8bit": ("qwen3-8b-8bit", "heldout", None, False),
+    "Llama-3.3-70B-Instruct-4bit": ("llama-70b", "heldout", None, False),
+    "Qwen3-30B-A3B-4bit": ("qwen3-30b-a3b", "heldout", (8, 128), True),
+    "Qwen3-Next-80B-A3B-Instruct-4bit": ("qwen3-next-80b", "heldout", (10, 512), False),
+    "Qwen3.5-122B-A10B-4bit": ("qwen35-122b", "heldout", (8, 256), False),
+}
+
+
+def analysis_fields(header):
+    name = header.get("model_name", Path(header["model_dir"]).name)
+    module, role, experts, tier = ANALYSIS_MODELS[name]
+    # k and E are integer identities from the header census, not fitted quantities.
+    observed = (header.get("experts_per_tok"), header.get("num_experts"))
+    if experts is not None and observed != experts:
+        raise ValueError("header k/E disagree with registered model")
+    if experts is None and header.get("categories", {}).get("routed_experts", 0):
+        raise ValueError("registered dense model has routed expert storage")
+    return {"model": name, "role": role, "moe": experts is not None, "tier": tier,
+            "cell_ids": ["bytes-" + module + "-decode"]}
+
+
 def merge(header_records, kv_records, pilot_rows):
     by_dir = {r["model_dir"]: r for r in kv_records}
     if len(by_dir) != len(kv_records):
@@ -290,7 +318,7 @@ def merge(header_records, kv_records, pilot_rows):
             if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
                 raise ValueError("nonfinite or negative byte count")
         b = h["W_bytes"] + k["KV_bytes"]
-        row = {**h, "config_key": registered_config_key(
+        row = {**h, **analysis_fields(h), "config_key": registered_config_key(
                    h.get("model_name", Path(h["model_dir"]).name)), "kv": k, "KV_bytes": k["KV_bytes"], "b_bytes": b,
                "W_GB": h["W_bytes"] / 1e9, "KV_GB": k["KV_bytes"] / 1e9,
                "b_GB": b / 1e9, "R_GB": h["R_bytes"] / 1e9}
