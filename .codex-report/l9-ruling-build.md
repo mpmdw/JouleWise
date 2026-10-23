@@ -269,7 +269,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.008 | Codex Cloud @ `d09ed9205` | `9d490b2979e1955cd8bfebf4cc49c273f23dc29c42c5db1db590b86856063cac` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.881 | Codex Cloud @ `d09ed9205` | `e21f05d8b688c5123909fa8a5bba8e63bb821e5ec31b8f9c62d8df78b85e469f` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 49.053 | Codex Cloud @ `d09ed9205` | `a6bb75d12bfae215717711af2d03bf9c2619000648a59c4e4dedb12f40a4ff83` |
-| tests.b5_analysis.test_mint_kept_units | 87 | 1 | 32 | 0 | 1 | 119.237 | Codex Cloud @ `d09ed9205` | `0174e5e52d202a426ef8e25299bd3322b4c6ea822e4578012eb07d51d3e36de5` |
+| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 1 | 1 | 1 | 511.229 | Codex Cloud @ `e92edc756` | `2546a686727e0ac6c3c1e6043e504890b0de3c9456d92391afd2e2a686a4d892` |
 | tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.269 | Codex Cloud @ `d09ed9205` | `6008cd258ebe38e27680be3589f5c475001fc2638d438a5d21c3da1236ba1cf0` |
 | tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 2.909 | Codex Cloud @ `d09ed9205` | `e65edae586b0eac81ffecbeecf7f6741ca41d6a81d7eff4083dc4835195aa554` |
 | tests.test_authentication_io | 22 | 0 | 0 | — | — | 2 | Mac, director | prefix `df310df7d1f6cb9d` |
@@ -342,6 +342,9 @@ Completed cloud logs and test failures:
   - error_names: tests.b5_analysis.test_mint_kept_units.S10RelativeReportPathTests.test_block5_relative_report_resolves_at_manifest_directory
   - error_names: tests.b5_analysis.test_mint_kept_units.S10RelativeReportPathTests.test_emitter_two_directories_have_byte_identical_block5_manifests
   - error_names: tests.b5_analysis.test_mint_kept_units.SensitivityFixtureIsolationTests.test_guard_setup_after_s4_preserves_the_cached_source
+- `tests.b5_analysis.test_mint_kept_units` at `e92edc756c0906f82c5dec4e94441207ca53fa63`: 87 tests, 0 failures, 1 errors, 1 skips, exit 1, 511.229 s. Log `/workspace/l9-1/mint-5/logs/tests_b5_analysis_test_mint_kept_units.log`, SHA-256 `2546a686727e0ac6c3c1e6043e504890b0de3c9456d92391afd2e2a686a4d892`.
+  - error_names: tests.b5_analysis.test_mint_kept_units.SensitivityFixtureIsolationTests.test_guard_setup_after_s4_preserves_the_cached_source
+  - skip_names: ['tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_s10_sealed_floor_packs_bootstrap_their_producer_contracts', 'chain extraction reports not built (ChainTests C4 with JW_B5_S10_CHAIN_CACHE)']
 
 Additional logs (not completed acceptance modules):
 
