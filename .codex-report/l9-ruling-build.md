@@ -323,3 +323,6 @@ Passive leaf trace `/workspace/l9-1/captured-opener-1/leaf.jsonl`, SHA-256 `9984
 
 Real captured opener using the completed dry-run module original TMPDIR: admitted; validator codes []; process exit 0; wall 3507.028 s; execution head `54e8b176abe8b6a79ff91480130072832334ac99`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/original-tmp-opener-1/control.log`, SHA-256 `c34342a76c113e3fe83aa17731a4147c180182b29bfe810cdfa1b0f50af47f2d`.
 Passive leaf trace `/workspace/l9-1/original-tmp-opener-1/leaf.jsonl`, SHA-256 `8ec64405a6f907630ea84912e3c1a7a3383ea311d19bc4a0fa3e61a5a8a1121a`.
+
+Actual step9b preparation and opener on copied prior real artifacts: step9b=ok, admitted type=VerifiedClaimEvidence, exact regenerated input=True; validator codes []; process exit 0; wall 3360.640 s; execution head `6a307905fe4a7203d9919bcc34ef916107a7c73a`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/prelude-9b-1/control.log`, SHA-256 `3c63f7f603849a04c82677906d6872ab8e10e6ff8969ccf21faea123696040b3`.
+Passive leaf trace `/workspace/l9-1/prelude-9b-1/leaf.jsonl`, SHA-256 `765001188e8ad0df4bb495de636a96ce218a0511ee61ba3d61a39882cac741d9`.
