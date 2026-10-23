@@ -256,7 +256,7 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 Earlier L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Current lane integration merge `ee98a1a8f56f718ceff0092363a48aa32fc7bd68` contains concurrent lane `507bd16e2` and main `7c23ea4b7`. This main update changes analysis_engine/distributions.py, and the concurrent lane changes S10 Git initialization. All ten cloud modules are being rerun; rows show their actual execution anchors and do not assert new-head acceptance for an old-head result. The two prior-head real-driver diagnostics remain isolated in /workspace/JouleWise at detached 3f9d512fe; current lane work uses /workspace/JouleWise-L9-1. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
-5/10 cloud modules have completed on the current integrated source; old-head rows remain historical evidence until their reruns finish. Git labels are process-start source anchors; report-only commits may advance the lane between module boundaries, while runtime and harness files remain unchanged.
+6/10 cloud modules have completed on the current integrated source; old-head rows remain historical evidence until their reruns finish. Git labels are process-start source anchors; report-only commits may advance the lane between module boundaries, while runtime and harness files remain unchanged.
 
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
@@ -269,7 +269,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.008 | Codex Cloud @ `d09ed9205` | `9d490b2979e1955cd8bfebf4cc49c273f23dc29c42c5db1db590b86856063cac` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.881 | Codex Cloud @ `d09ed9205` | `e21f05d8b688c5123909fa8a5bba8e63bb821e5ec31b8f9c62d8df78b85e469f` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 49.053 | Codex Cloud @ `d09ed9205` | `a6bb75d12bfae215717711af2d03bf9c2619000648a59c4e4dedb12f40a4ff83` |
-| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud @ `38ff2a7fe` | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
+| tests.b5_analysis.test_mint_kept_units | 87 | 1 | 32 | 0 | 1 | 119.237 | Codex Cloud @ `d09ed9205` | `0174e5e52d202a426ef8e25299bd3322b4c6ea822e4578012eb07d51d3e36de5` |
 | tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.269 | Codex Cloud @ `d09ed9205` | `6008cd258ebe38e27680be3589f5c475001fc2638d438a5d21c3da1236ba1cf0` |
 | tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 2.909 | Codex Cloud @ `d09ed9205` | `e65edae586b0eac81ffecbeecf7f6741ca41d6a81d7eff4083dc4835195aa554` |
 | tests.test_authentication_io | 22 | 0 | 0 | — | — | 2 | Mac, director | prefix `df310df7d1f6cb9d` |
@@ -308,6 +308,40 @@ Completed cloud logs and test failures:
 - `tests.b5_analysis.test_sensitivity_guard` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 12 tests, 0 failures, 0 errors, 0 skips, exit 0, 49.053 s. Log `/workspace/l9-1/checks-4/logs/tests_b5_analysis_test_sensitivity_guard.log`, SHA-256 `a6bb75d12bfae215717711af2d03bf9c2619000648a59c4e4dedb12f40a4ff83`.
 - `tests.b5_analysis.test_s10_chain_defects` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 34 tests, 0 failures, 0 errors, 0 skips, exit 0, 6.269 s. Log `/workspace/l9-1/checks-4/logs/tests_b5_analysis_test_s10_chain_defects.log`, SHA-256 `6008cd258ebe38e27680be3589f5c475001fc2638d438a5d21c3da1236ba1cf0`.
 - `tests.test_r4_acceptance_oracle` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 10 tests, 0 failures, 0 errors, 0 skips, exit 0, 2.909 s. Log `/workspace/l9-1/checks-4/logs/tests_test_r4_acceptance_oracle.log`, SHA-256 `e65edae586b0eac81ffecbeecf7f6741ca41d6a81d7eff4083dc4835195aa554`.
+- `tests.b5_analysis.test_mint_kept_units` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 87 tests, 1 failures, 32 errors, 0 skips, exit 1, 119.237 s. Log `/workspace/l9-1/checks-4/logs/tests_b5_analysis_test_mint_kept_units.log`, SHA-256 `0174e5e52d202a426ef8e25299bd3322b4c6ea822e4578012eb07d51d3e36de5`.
+  - failure_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control
+  - error_names: tests.b5_analysis.test_mint_kept_units.GovernedTests.test_s10_governed_window_serves_every_kept_member_through_a_real_session
+  - error_names: tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_ca_emitter_changed_archive_inputs (relative='sources/inputs/acceptance.json')
+  - error_names: tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_ca_emitter_changed_archive_inputs (relative='derived/bracket-binding.json')
+  - error_names: tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_f1_indexed_emitter_routes_producer_identity
+  - error_names: tests.b5_analysis.test_mint_kept_units.IndexedEmitterContinuationTests.test_s10_sealed_floor_packs_bootstrap_their_producer_contracts
+  - error_names: tests.b5_analysis.test_mint_kept_units.LegacyContinuationTests.test_v2_c3_legacy_manifest_hazard_root_through_public_mint
+  - error_names: tests.b5_analysis.test_mint_kept_units.LegacyContinuationTests.test_v2_r13_third_legacy_cell_is_refused
+  - error_names: tests.b5_analysis.test_mint_kept_units.ManifestTests.test_c10_archive_terminal_pin_containment_is_null
+  - error_names: tests.b5_analysis.test_mint_kept_units.ManifestTests.test_r14_floor_sibling_and_repository_directory
+  - error_names: tests.b5_analysis.test_mint_kept_units.ManifestTests.test_r16_each_producer_own_terminal_pin
+  - error_names: tests.b5_analysis.test_mint_kept_units.MembershipTests.test_r13_non_target
+  - error_names: tests.b5_analysis.test_mint_kept_units.MembershipTests.test_r5_n4_validator_both_minima
+  - error_names: tests.b5_analysis.test_mint_kept_units.MembershipTests.test_r9_unindexed_hazard_before_opening_bundles
+  - error_names: tests.b5_analysis.test_mint_kept_units.OutputCleanupFixTests.test_f5_preserves_existing_directories_and_reraises_same_exception
+  - error_names: tests.b5_analysis.test_mint_kept_units.OutputCleanupFixTests.test_f5_type_error_removes_outputs_and_created_directories_then_retry_succeeds
+  - error_names: tests.b5_analysis.test_mint_kept_units.ProducerIdentityContinuationTests.test_f1_all_existing_plan_declarations_must_agree
+  - error_names: tests.b5_analysis.test_mint_kept_units.PublicContinuationTests.test_v3_build_pinset_then_public_indexed_mint
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='strict_json')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='header')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='cell_shape')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='cell_inventory')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='member_shape')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='unit_shape')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='unit_duplicate')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='cell_target_strata')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='unit_cardinality')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='unit_inventory')
+  - error_names: tests.b5_analysis.test_mint_kept_units.RosterRefusalBranchReplayTests.test_each_roster_refusal_site_and_repaired_control (branch='dropped_binding')
+  - error_names: tests.b5_analysis.test_mint_kept_units.S10RelativeReportPathTests.test_block5_manifest_refuses_absolute_escape_and_symlink_report
+  - error_names: tests.b5_analysis.test_mint_kept_units.S10RelativeReportPathTests.test_block5_relative_report_resolves_at_manifest_directory
+  - error_names: tests.b5_analysis.test_mint_kept_units.S10RelativeReportPathTests.test_emitter_two_directories_have_byte_identical_block5_manifests
+  - error_names: tests.b5_analysis.test_mint_kept_units.SensitivityFixtureIsolationTests.test_guard_setup_after_s4_preserves_the_cached_source
 
 Additional logs (not completed acceptance modules):
 
