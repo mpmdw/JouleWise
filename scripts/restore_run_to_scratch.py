@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from joulewise import desk_compress
 
 # macOS began evicting ledger-referenced capture files to iCloud near 29 GiB
-# free in the 2026-10-12 fault. The reserve must stay above that onset;
+# free in the 2026-10-12 fault (RUN_STATE.md item 34). Stay above that onset;
 # 40 GiB restores the earlier margin (11 GiB above the observed onset).
 # restored_run adds the entire uncompressed run size before copying a byte.
 MIN_RESERVE_GIB = 40

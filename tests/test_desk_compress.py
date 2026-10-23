@@ -71,6 +71,69 @@ class DeskCompressTests(DeskCompressFixture):
                     self.assertTrue(stream.closed)
                 self.assertEqual(observed, "a" * 5)
 
+    def damaged_frame(self, name):
+        path = self.put(self.runs / name, random.Random(573).randbytes(1048576))
+        self.assertEqual(self.compress()[0], 0)
+        compressed = Path(str(path) + ".zst")
+        frame = compressed.read_bytes()
+        compressed.write_bytes(frame[:len(frame) // 2])
+        return path, compressed, frame
+
+    def test_open_bytes_read_to_eof_then_close_checks_damaged_frame_status(self):
+        path, compressed, frame = self.damaged_frame("eof-then-close")
+
+        def consume(size=-1):
+            with desk.open_bytes(path) as stream:
+                self.assertTrue(stream.read(size))
+                stream.close()
+
+        for size in (-1, None, len(frame) * 2):
+            with self.subTest(size=size), self.assertRaisesRegex(OSError, "decompression_failed"):
+                consume(size)
+        compressed.write_bytes(frame)
+        consume()  # A closed full reader of a healthy frame remains valid.
+
+    def test_open_bytes_textiowrapper_eof_then_dropped_checks_damaged_frame_status(self):
+        path, compressed, frame = self.damaged_frame("wrapper-eof-then-dropped")
+
+        def consume():
+            with desk.open_bytes(path) as stream:
+                wrapper = io.TextIOWrapper(stream, encoding="latin-1")
+                self.assertTrue(wrapper.read())
+                with warnings.catch_warnings(action="ignore", category=ResourceWarning):
+                    del wrapper
+                self.assertTrue(stream.closed)
+
+        with self.assertRaisesRegex(OSError, "decompression_failed"):
+            consume()
+        compressed.write_bytes(frame)
+        consume()
+
+    def test_open_bytes_empty_read_before_close_preserves_eof_status_check(self):
+        path, _, _ = self.damaged_frame("empty-read-then-close")
+        for method in ("read", "read1", "readinto", "readinto1", "readline", "iteration"):
+            with self.subTest(method=method), self.assertRaisesRegex(OSError, "decompression_failed"):
+                with desk.open_bytes(path) as stream:
+                    if method == "iteration":
+                        for _ in stream:
+                            pass
+                    elif method.startswith("readinto"):
+                        buffer = bytearray(io.DEFAULT_BUFFER_SIZE)
+                        while getattr(stream, method)(buffer):
+                            pass
+                    else:
+                        while getattr(stream, method)(io.DEFAULT_BUFFER_SIZE):
+                            pass
+                    stream.close()
+
+    def test_open_bytes_zero_length_read_then_close_is_partial(self):
+        path, _, _ = self.damaged_frame("zero-read-then-close")
+        for method in ("read", "read1", "readinto", "readinto1", "readline"):
+            with self.subTest(method=method), desk.open_bytes(path) as stream:
+                argument = bytearray() if method.startswith("readinto") else 0
+                self.assertFalse(getattr(stream, method)(argument))
+                stream.close()
+
     def test_partial_compressed_read_exits_within_plain_path_budget(self):
         payload = random.Random(573).randbytes(4 * 1024 * 1024)
         path = self.put(self.runs / "partial-read", payload)

@@ -801,6 +801,69 @@ def describe(row):
             + (f" |a-t|={row['abs']:.3e} bar={row['bar']:.3e}" if "abs" in row else ""))
 
 
+@unittest.skipUnless(shutil.which("zstd"), "compressed refusal probes require zstd on PATH")
+class CompressedRefusalTests(unittest.TestCase):
+    """Fable variants 01-03: analysis marks the run unusable; twin refuses D7."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory(prefix="bytes-compressed-refusal-")
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.root = Path(cls.temporary.name) / "compressed"
+        cls.manifest = build(cls.root, "compressed")
+        cls.session = next(s for s in cls.manifest["sessions"] if s["pass_id"] == 1)
+        cls.archive = Path(cls.session["archive"])
+        cls.run_id = "qwen3-8b-4bit-0"
+        cls.bundle = cls.archive / "sources/claim-runs" / cls.run_id
+
+    def replay(self, name, payload, variant):
+        path = self.bundle / (name + ".zst")
+        original = path.read_bytes()
+        try:
+            path.write_bytes(payload(original))
+            keys = self.root / "private-keys/bytes/blinding"
+            records = ba.archive_records(self.archive, self.manifest, self.session,
+                                         stage="fit", key_dir=keys)
+            row = next(r for r in records if r["run_id"] == self.run_id)
+            self.assertEqual(row["status"], "unusable")
+            self.assertTrue(row["invalid_energy_record"])
+            output = self.root / (variant + ".json")
+            argv = [sys.executable, "-B", str(ROOT / "scripts/bytes_twin.py"),
+                    "--export-dir", str(self.root / "export"),
+                    "--manifest", str(self.root / "manifest.json"),
+                    "--key-dir", str(keys), "--stage", "1", "--out", str(output)]
+            for session in self.manifest["sessions"]:
+                argv += ["--archive", session["archive"]]
+            result = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
+            print(f"\ncompressed probe {variant}: analysis={row['status']} "
+                  f"twin_exit={result.returncode} refusal={result.stdout.startswith('refused: ')}",
+                  flush=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertTrue(result.stdout.startswith("refused: "), result.stdout)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertFalse(output.exists())
+        finally:
+            path.write_bytes(original)
+
+    def test_01_truncated_events_frame_analysis_unusable_twin_refuses(self):
+        self.replay("events.jsonl", lambda frame: frame[:len(frame) // 2], "01-truncated-frame")
+
+    def test_02_flipped_metadata_bytes_analysis_unusable_twin_refuses(self):
+        def flip(frame):
+            damaged = bytearray(frame)
+            # Reproduce Fable's 16 mid-frame byte flips (not a numeric bar).
+            middle = len(frame) // 2
+            for index in range(middle, middle + 16):
+                damaged[index] ^= 0xff
+            return bytes(damaged)
+        self.replay("metadata.json", flip, "02-flipped-bytes")
+
+    def test_03_non_json_metadata_payload_analysis_unusable_twin_refuses(self):
+        frame = subprocess.run(["zstd", "-qc"], input=b"not JSON", capture_output=True,
+                               check=True).stdout
+        self.replay("metadata.json", lambda _: frame, "03-non-json-payload")
+
+
 class AgreementTests(unittest.TestCase):
     """Every campaign, every stage: zero differences above the bar; the under-bar count is printed."""
 

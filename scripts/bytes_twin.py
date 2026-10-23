@@ -36,6 +36,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import statistics
 import struct
 import subprocess
@@ -745,28 +746,32 @@ def _read_text(path):
     """Read a logical UTF-8 file, including a desk-compressed sibling.
 
     Keep this reader independent of joulewise: the twin's no-shared-code
-    fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH.
-    A missing or unreadable sibling follows the caller's missing-file path.
+    fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH
+    or the desk's literal Homebrew fallback, independently of the analysis.
+    Only an absent sibling follows the caller's missing-file path. An
+    existing unreadable file propagates to main's Addendum 7 D7 refusal.
     """
     path = Path(path)
     try:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError:
         compressed = Path(str(path) + ".zst")
-        if not compressed.is_file():
+        if not compressed.exists():
             raise
     try:
-        result = subprocess.run(["zstd", "-dc", str(compressed)],
+        result = subprocess.run([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(compressed)],
                                 capture_output=True, check=True)
         return result.stdout.decode("utf-8")
+    except OSError:
+        raise RuntimeError("zstd unavailable: " + str(compressed)) from None
     except (subprocess.CalledProcessError, UnicodeDecodeError):
-        raise OSError("compressed_file_unreadable") from None
+        raise RuntimeError("compressed file unreadable: " + str(compressed)) from None
 
 
 def read_json(path, default=None):
     try:
         return json.loads(_read_text(path))
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return default
 
 
@@ -792,7 +797,7 @@ def member_spans(bundle):
     spans = {}
     try:
         lines = _read_text(bundle / "events.jsonl").splitlines()
-    except OSError:
+    except FileNotFoundError:
         return None
     for line in lines:
         if not line.strip():
