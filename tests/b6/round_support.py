@@ -645,8 +645,15 @@ def bytes_rehearsal(root):
         write(path, value)
     sizing_path = measurement / 'configs/b6/registration/sizing_b5.json'
     sizing = read(sizing_path)
+    # BY-MERGE: BY-C5's R2-3 hold refuses a BYTES pack whose sizing row has no
+    # registered P, so the rehearsal carries fixture-only disk terms (the same
+    # inputs as tests.b6.test_plan_inputs; not a BYTES C5 measurement).
+    b, wait, fixed = 1000001, 7200, 19
+    disk_terms = dict(B_bytes=b, extra_wait_raw_bytes=wait, fixed_retained_bytes=fixed,
+                      required_free_bytes=2 * (b + wait) + fixed, peak_copies=2,
+                      session_wait_budget_s=plan.SESSION_WAIT_BUDGET_S)
     for pack in config['pack_ids']:
-        sizing['packs'][pack] = {**sizing['packs']['ALPHA'], 'pack_id': pack}
+        sizing['packs'][pack] = {**sizing['packs']['ALPHA'], 'pack_id': pack, 'disk_derivation': dict(disk_terms)}
     write(sizing_path, sizing)
     ledger_path = measurement / plan.DEFAULT_LEDGER_RELATIVE
     ledger_path.parent.mkdir(parents=True, exist_ok=True)

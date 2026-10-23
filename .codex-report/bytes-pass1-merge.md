@@ -30,6 +30,23 @@ that work exists only as the scratch merge
 | tests/fixtures/bytes/campaign.py, `archive_campaign` signature | pass1 (`drop_8b_8bit`) vs battery-term (`battery_assist`, `battery_publication`) | Both keyword sets; bodies auto-merged | Same as above (fixture feeds both). Identical to the BY-TWIN-BAT scratch resolution 624adf821. |
 | tests/hazards/test_monitor.py, `SupervisorTests` header | main (setUpClass live-hardware opt-in, PR #563) vs BY-LOOP-fix1 (run()/track_supervisor reaper) | Both kept | Disjoint behaviour; no text needed. |
 
+One conflict did not show up in the text merge. CI run 39883766703 shard 7
+found it after the merges, and it reproduced on the Mac:
+
+| File | Branches | Resolution | Governing text |
+|---|---|---|---|
+| tests/b6/round_support.py `bytes_rehearsal` | BY-LOOP (rehearsal must reach SMOKE_RUN on bytes-s1-p1) vs BY-C5-fix1 (R2-3: a BYTES pack whose sizing row has no valid registered P holds as `LaneMissing("driver:disk.budget_missing")`) | The rehearsal's fixture-only sizing rows also carry fixture-only `disk_derivation` terms. They use the same inputs as tests.b6.test_plan_inputs (B 1000001, wait 7200, fixed 19, P = 2(B+wait)+fixed, peak_copies 2, session_wait_budget_s from joulewise.b5.plan) and are labelled as not a BYTES C5 measurement. Production code is unchanged, and the R2-3 hold stays (tests.b6.test_lane_adapters still pins it). | R2-3 (BY-C5-fix1 director ruling, LEDGER line 111) governs production. BY-LOOP's acceptance (NEXT, PRECHECK, SMOKE_RUN, then the fake launchctl argv) governs what the rehearsal must show. A rehearsal without P can only show the hold, so to meet both texts the fixture must register P. This is a decision I made; the lead may overrule it. The alternative is to make the rehearsal assert the hold. |
+
+Before the fix, `test_bytes_guard_shaped_rehearsal` ended in HOLD_LOOP
+with `lane_missing:driver:disk.budget_missing`. After it, the test passes.
+The whole tests.b6.test_loop_round_desk module passes (6 tests), along with
+lane_adapters 22, precheck 24, b6_plan_render 5, session_wrapper 6 and
+hazards.test_monitor 35 (1 skip, live-hardware opt-in).
+
+What this means for real runs: the BYTES loop will hold at prepare until
+the BYTES sizing rows carry a registered P (BY-SLOTS/BY-PIN).
+tests.b6.test_plan_inputs reports "registered BYTES sizing rows checked: 0".
+
 NEEDS_RULING: none.
 
 ## Generated files
@@ -77,6 +94,14 @@ bar" is therefore NOT met until BY-TWIN-BAT lands on twin-parity and is
 merged here.
 
 Logs: /Users/edr/night-archive/forward-20261021/BY-MERGE/logs/.
+
+## CI
+
+- c7e3973e0 (merge head plus this report), run 39883766703: 18 of 20 jobs green.
+  Shard 5 has one failure, `test_bytes_agreement` defects (the BY-TWIN-BAT gap above).
+  Shard 7 has one failure, `test_bytes_guard_shaped_rehearsal` (the cross-lane
+  conflict above, fixed in the next commit). gate-ledger 39883766618 skipped (draft).
+- The next head's run is recorded in the PR #535 comment and the ledger.
 
 ## Open
 
