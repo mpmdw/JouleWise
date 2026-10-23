@@ -53,6 +53,8 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 """
 from __future__ import annotations
 
+from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
+
 import concurrent.futures
 import dataclasses
 import hashlib
@@ -258,6 +260,25 @@ def _spec(family, klass, blinding=STRUCTURE, legacy=None):
 # wherever L4 names the same fact, with L4's family and klass; the rest are
 # listed in ``L5_ONLY_CODES`` for the draft and sealed catalogs (L4, L6).
 CODES: dict[str, CodeSpec] = {
+    # Block-6 collection flags: table entries only.
+    "agent.pause_marker_stale": _spec("RECORDS", "REPRESENTATION"),
+    "sleep.in_run": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
+    "sleep.between_runs": _spec("DIAGNOSTIC", "PHYSICS"),
+    "sleep.reading_unmeasured": _spec("DIAGNOSTIC", "PHYSICS"),
+    "idle.waited": _spec("DIAGNOSTIC", "PHYSICS"),
+    "idle.wait_cap_skip": _spec("MEMBER_VALIDITY", "PHYSICS"),
+    "idle.wait_budget_skip": _spec("MEMBER_VALIDITY", "PHYSICS"),
+    "idle.wait_budget_exhausted": _spec("DIAGNOSTIC", "PHYSICS"),
+    "idle.wait_budget_unreadable": _spec("DIAGNOSTIC", "PHYSICS"),
+    "idle.wait_ledger_unwritable": _spec("RECORDS", "REPRESENTATION"),
+    "idle.busy_fraction_exceeded": _spec("DIAGNOSTIC", "PHYSICS"),
+    "agent.presence": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
+    "agent.presence_overlap": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
+    "agent.capture_overlap": _spec("DIAGNOSTIC", "PHYSICS"),
+    "sleep.in_chain": _spec("DIAGNOSTIC", "PHYSICS"),
+    "sleep.assertion_lost": _spec("DIAGNOSTIC", "PHYSICS"),
+    "sleep.assertion_unverified": _spec("DIAGNOSTIC", "PHYSICS"),
+
     # Pack, code and model identity: the arm-path NUMBER checks, replayed.
     "pack.identity_mismatch": _spec("PACK_IDENTITY", "NUMBER", legacy="joulewise/arm_readiness.py:3077"),
     "pack.identity_unmeasured": _spec("PACK_IDENTITY", "NUMBER"),
@@ -499,6 +520,17 @@ CODES: dict[str, CodeSpec] = {
 }
 # The codes above that only protected-core writers emit (the harvest folds them).
 CORE_WRITER_CODES = frozenset({
+    "agent.pause_marker_stale",
+    "sleep.in_run",
+    "sleep.between_runs",
+    "sleep.reading_unmeasured",
+    "idle.waited",
+    "idle.wait_cap_skip",
+    "idle.wait_budget_skip",
+    "idle.wait_budget_exhausted",
+    "idle.wait_budget_unreadable",
+    "idle.wait_ledger_unwritable",
+    "idle.busy_fraction_exceeded",
     "calibration.capture_battery_pair_unverified", "records.pin_ledger", "calibration.power_policy_unverified",
     "instrument.binary_identity_unmeasured", "env.member_quiet_state_violated", "env.member_guard_flagged",
     "member.idle_admission_telemetry_missing", "teardown.survivors", "cooldown.result_unknown",
@@ -865,7 +897,7 @@ def _close(fresh: Any, recorded: Any) -> bool:
     if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
            for value in numbers):
         return False
-    return math.isclose(float(fresh), float(recorded), rel_tol=1e-9, abs_tol=1e-9)
+    return math.isclose(float(fresh), float(recorded), rel_tol=0, abs_tol=NEG8_ENERGY_ABS_TOL_J)
 
 
 # Fields of one NEG-8 claim-family record that depend on the bound (or, for
@@ -6506,6 +6538,12 @@ class _Harvest:
             arm_value = read_json(path)
             for module, phases in _arm_modules(arm_value).items():
                 self.hazards.setdefault(module, {})["arm"] = phases
+                for phase in phases:
+                    for flag in phase.get("flags") or []:
+                        if flag.get("code") in {"clock.rate_above_budget", "instrument.single_interval_above_screen"}:
+                            self.emit(flag["code"], level="window", collector="arm",
+                                      observed={"phase": phase["phase"], **flag},
+                                      spec=_spec("DIAGNOSTIC", "PHYSICS"))
         elif (self.inputs.night_dir / "chain.started").is_file():
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
@@ -7486,6 +7524,8 @@ def _arm_modules(value: Any) -> dict[str, list[dict[str, Any]]]:
                 continue
             verdict = entry.get("verdict") if isinstance(entry.get("verdict"), Mapping) else {}
             phases.append({"phase": entry.get("phase"), "verdict": verdict.get("status"),
+                           **({"flags": verdict["observed"]["flags"]}
+                              if (verdict.get("observed") or {}).get("flags") else {}),
                            "reasons": verdict.get("reasons"), "thresholds": verdict.get("thresholds"),
                            "measurement": entry.get("measurement")})
         out[str(module)] = phases
