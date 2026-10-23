@@ -147,6 +147,13 @@
       "klass": "REPRESENTATION",
       "note": "B6 Q2: under a module changed after the stage-1 commitment, the committed content does not rebuild; the committed content is evaluated as committed and the differing fields are listed."
     },
+    "bytes.decode_battery_assist": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "BAT-2 sections 3-4: a negative battery current received in [decode_start + tau, decode_end + tau) marks decode assistance; only the labelled description omits its whole unit; the harvest's battery.assist is counted only."
+    },
     "bytes.module_changed_after_commitment": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
