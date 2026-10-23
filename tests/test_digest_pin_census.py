@@ -239,6 +239,38 @@ class CensusTests(unittest.TestCase):
             self.assertEqual(census.load_registry(root), registry)
 
 
+class Block5EraScopeTests(unittest.TestCase):
+    REGISTRATION = "configs/campaigns/v5_claim_25g83/registration_block5.md"
+
+    def test_mixed_era_table_has_distinct_literal_locations_and_narrow_scopes(self) -> None:
+        digest = sha("one digest appearing in both eras")
+        text = (
+            f"| sizing, pins, plan trees | at H_claim, after the erratum: `{digest}`. "
+            f"At the first seal's H_claim: `{digest}` | recomputed: hashes |\n"
+            f"| unrelated current input | `{digest}` |\n"
+        )
+        literals = census.literals_in(self.REGISTRATION, text.encode())
+        self.assertEqual([item.pointer for item in literals], ["#L1:0", "#L1:1", "#L2"])
+        rules = census.ERA_RECORDS[self.REGISTRATION]
+        self.assertIs(census.era_spec(self.REGISTRATION, literals[0], text), rules[0])
+        self.assertIs(census.era_spec(self.REGISTRATION, literals[1], text), rules[1])
+        self.assertIsNone(census.era_spec(self.REGISTRATION, literals[2], text))
+
+    def test_era_index_resolves_a_named_directory_and_basename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            digests = build_tree(root)
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t",
+                            "-c", "commit.gpgsign=false", "commit", "-qm", "era"],
+                           check=True, capture_output=True)
+            commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            index = census.era_index(root, commit, "`configs/campaigns/packx` has `plan_tree.json`")
+            self.assertIn(census.Target("configs/campaigns/packx/plan_tree.json", "file", commit),
+                          index[digests["plan"]])
+            self.assertNotIn(digests["prompt"], index)
+            self.assertEqual(census.era_index(root, commit, "`plan_tree.json` alone is ambiguous"), {})
+
+
 class CommittedRegistryTests(unittest.TestCase):
     """Shape checks on configs/pins/registry.json; freshness is not required."""
 
@@ -275,6 +307,27 @@ class CommittedRegistryTests(unittest.TestCase):
         for path in ("tests/test_reduce.py", "tests/test_acc_25g83_rev5.py"):
             core = [row for row in rows[path] if row[2] and row[2].endswith("joulewise/reduce.py")]
             self.assertTrue(core and all(row[1] == "estimator_code" for row in core), path)
+
+    def test_every_scoped_block5_literal_resolves_at_its_own_declared_commit(self) -> None:
+        rows = rows_by_path(self.registry)
+        for path in (Block5EraScopeTests.REGISTRATION,
+                     "configs/campaigns/v5_claim_25g83/sealed_inventory.json"):
+            raw = (ROOT / path).read_bytes()
+            text = raw.decode()
+            recorded = {pointer: (family, key) for pointer, family, key in rows[path]}
+            scoped = [literal for literal in census.literals_in(path, raw)
+                      if census.in_era_scope(path, literal, text)]
+            self.assertTrue(scoped, path)
+            for literal in scoped:
+                with self.subTest(path=path, pointer=literal.pointer):
+                    family, key = recorded[literal.pointer]
+                    self.assertIsNotNone(key)
+                    target = census.parse_target_key(key)
+                    self.assertEqual(target.commit, census.era_commit(ROOT, path, text, literal))
+                    # Source files outside the measurement core retain their
+                    # existing Kind-B classification; their era still resolves.
+                    self.assertIn(family, census.FAMILIES)
+                    self.assertEqual(census.target_digest(ROOT, target), literal.value)
 
     def test_l2_ruled_registrations_table_is_a_named_followup(self) -> None:
         self.assertIn({"path": "joulewise/night_gate.py", "symbol": "RULED_REGISTRATIONS", "lane": "L2",
