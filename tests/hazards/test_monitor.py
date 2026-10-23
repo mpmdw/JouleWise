@@ -2,12 +2,14 @@
 disk.low, restart with a recorded gap, and its CPU cost on a desk run."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import signal
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -609,6 +611,36 @@ class SupervisorTests(unittest.TestCase):
         if sys.platform == "darwin":  # only macOS reads the SMC, battery gauge and notify bus
             require_live_hw()
 
+    def run(self, result=None):
+        # unittest deliberately propagates KeyboardInterrupt without invoking
+        # tearDown/addCleanup. These children have their own process groups.
+        self._supervisors = []
+        main_thread = threading.current_thread() is threading.main_thread()
+        previous = signal.getsignal(signal.SIGTERM) if main_thread else None
+
+        def terminate(signum, frame):
+            raise KeyboardInterrupt("SupervisorTests received SIGTERM")
+
+        if main_thread:
+            signal.signal(signal.SIGTERM, terminate)
+        try:
+            return super().run(result)
+        finally:
+            try:
+                # ExitStack attempts every reaper even if one raises.
+                with contextlib.ExitStack() as cleanup:
+                    for supervisor in self._supervisors:
+                        cleanup.callback(_kill_quietly, supervisor)
+            finally:
+                if main_thread:
+                    signal.signal(signal.SIGTERM, previous)
+
+    def track_supervisor(self, supervisor):
+        # Register before start so an interruption during startup is covered.
+        self._supervisors.append(supervisor)
+        self.addCleanup(_kill_quietly, supervisor)
+        return supervisor
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
         self.addCleanup(self.tmp.cleanup)
@@ -620,8 +652,7 @@ class SupervisorTests(unittest.TestCase):
                                       cadence=cadence)
         prefix = monitor.TASKPOLICY_PREFIX if sys.platform == "darwin" else ()
         supervisor = monitor.Supervisor(self.custody, config, prefix=prefix)
-        self.addCleanup(_kill_quietly, supervisor)
-        return supervisor
+        return self.track_supervisor(supervisor)
 
     def wait_for(self, predicate, timeout_s: float = 20.0):
         deadline = time.monotonic() + timeout_s
@@ -693,8 +724,7 @@ class SupervisorTests(unittest.TestCase):
                                           disk_targets=[{"path": str(root), "copies": 1}],
                                           cadence={"self_s": 10.0})
             prefix = () if name == "plain" else monitor.TASKPOLICY_PREFIX
-            supervisors[name] = monitor.Supervisor(root, config, prefix=prefix)
-            self.addCleanup(_kill_quietly, supervisors[name])
+            supervisors[name] = self.track_supervisor(monitor.Supervisor(root, config, prefix=prefix))
             supervisors[name].start()
 
         def costs(root):
@@ -722,6 +752,55 @@ class SupervisorTests(unittest.TestCase):
             self.assertTrue(all(line["error"] is None for line in monitor.readings(journals["thermal"])))
         self.assertLessEqual(shares["plain"], 0.005)
         self.assertLessEqual(shares["background"], 0.010)
+
+
+class SupervisorCleanupTests(unittest.TestCase):
+    def test_keyboard_interrupt_propagates_after_child_is_reaped(self):
+        self.check_interrupted_child(signal.SIGINT)
+
+    def test_sigterm_propagates_after_child_is_reaped_and_restores_handler(self):
+        self.check_interrupted_child(signal.SIGTERM)
+
+    def check_interrupted_child(self, interrupt):
+        started = []
+
+        class InterruptedCase(SupervisorTests):
+            def test_interrupt(self):
+                supervisor = self.supervisor()
+                # Exercise the real launcher, without taskpolicy or waiting for
+                # live hardware probes. Reaping requires no process inventory.
+                supervisor.prefix = ()
+                started.append(supervisor)
+                supervisor.start()
+                if interrupt == signal.SIGINT:
+                    raise KeyboardInterrupt("synthetic runner interruption")
+                os.kill(os.getpid(), interrupt)
+
+        case = InterruptedCase("test_interrupt")
+        original = signal.getsignal(signal.SIGTERM)
+
+        def fallback(signum, frame):
+            # A regression of the inner handler must fail this test, rather
+            # than terminate the whole runner before its fallback reaper.
+            raise KeyboardInterrupt("regression fallback")
+
+        signal.signal(signal.SIGTERM, fallback)
+        try:
+            with self.assertRaises(KeyboardInterrupt):
+                case.run(unittest.TestResult())
+            self.assertEqual(len(started), 1)
+            pid = started[0].process.pid
+            with self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+            self.assertIs(signal.getsignal(signal.SIGTERM), fallback)
+        finally:
+            try:
+                # Also reap the deliberately failing, pre-fix counterfactual.
+                for supervisor in started:
+                    _kill_quietly(supervisor)
+                case.doCleanups()
+            finally:
+                signal.signal(signal.SIGTERM, original)
 
 
 class SlowProbeIsolationTests(unittest.TestCase):

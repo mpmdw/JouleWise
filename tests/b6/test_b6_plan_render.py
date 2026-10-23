@@ -1,0 +1,338 @@
+"""Production plan preparation and launch, with desk identity and installer fakes."""
+import base64
+import contextlib
+import io
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+from types import SimpleNamespace
+from unittest import mock
+
+from joulewise import calibration_ledger as ledger, night_agent_install, night_gate
+from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+from joulewise.b5 import driver, plan
+from joulewise.b6 import archive, compose, plan_inputs, precheck, queue
+from joulewise.b6.driver_lane import DriverLane, read
+from joulewise.b6.pack_registration import Registration
+from tests.b6.support import DeskCase, ROOT, document, write_json
+from tests import battery_float_fixture
+from joulewise.hazards import base, disk
+
+
+class ProductionPlanRenderTests(DeskCase):
+    def setUp(self):
+        super().setUp()
+        self.measurement = self.root / "measurement"
+        self.git("clone", "--quiet", "--no-hardlinks", str(ROOT), str(self.measurement))
+        # The portable issued-ledger fixture supplies a matching committed pin;
+        # no host measurement/custody tree is read by this regression test.
+        seed = ROOT / "tests/fixtures/d117_v2_production/issued"
+        target = self.measurement / plan.DEFAULT_LEDGER_RELATIVE
+        target.parent.mkdir(exist_ok=True)
+        shutil.copyfile(seed / "calibration_observation_ledger.jsonl", target)
+        shutil.copyfile(seed / "calibration_ledger_head.json", self.measurement / plan.HEAD_PIN_RELATIVE)
+        self.git("-C", str(self.measurement), "add", plan.HEAD_PIN_RELATIVE)
+        self.git("-C", str(self.measurement), "-c", "user.name=B6 Desk", "-c", "user.email=desk@invalid",
+                 "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "Synthetic ledger fixture pin")
+        # Child plan readers must exercise the same uncommitted implementation
+        # as this process, rather than the clone's HEAD-only source.
+        for relative in ("joulewise/b5/chain.py", "joulewise/b5/plan.py", "joulewise/night_gate.py",
+                         "joulewise/b6/plan_inputs.py", "joulewise/b6/capture_screen.py",
+                         "scripts/check_b5_chain.py"):
+            shutil.copyfile(ROOT / relative, self.measurement / relative)
+
+    def git(self, *args, **kwargs):
+        return subprocess.run(["git", "-c", "maintenance.auto=false", "-c", "gc.auto=0", *args],
+                              check=True, capture_output=True, text=True, **kwargs)
+
+    def runner(self, argv, **kwargs):
+        argv = list(map(str, argv))
+        if "-c" in argv and "base64" in argv[argv.index("-c") + 1]:
+            epoch = dict(zip(ledger.IDENTITY_EPOCH_FIELDS,
+                             ("TEST", "Mac15,9", "ac_high_power", 100, "estimator-v1", "pulse-v3")))
+            t1 = {**{key: "value-" + key for key in V2_BINDING_FIELDS}, **epoch}
+            return SimpleNamespace(returncode=0, stdout=json.dumps({
+                name: base64.b64encode(json.dumps(value).encode()).decode()
+                for name, value in (("identity-epoch.json", epoch), ("t1-bindings.json", t1))}), stderr="")
+        if argv[0].endswith("install_night_agent.sh"):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if argv[0] == "git":
+            return subprocess.run(argv, **kwargs)
+        if argv[1:4] == ["-m", "venv", "--without-pip"]:
+            return subprocess.run(argv, **kwargs)
+        raise AssertionError("unexpected production-plan subprocess: " + repr(argv))
+
+    def render(self, pack, registered):
+        reg = self.measurement / "configs/b6/registration/acceptance.json"
+        if registered:
+            write_json(reg, document())
+        else:
+            reg.unlink(missing_ok=True)
+        loop = self.root / (pack + ("-registered" if registered else "-pending")) / "loop"
+        lane = DriverLane(self.measurement, loop, self.runner, block_root=loop.parent,
+                          launchctl_bin="/usr/bin/false")
+        value = read(self.measurement / f"configs/b6/packs/{pack}/registration.json")
+        value["status"] = "registered"
+        layout = compose.layout(queue.Selection((pack,), 1),
+                                {pack: Registration(value, commit_time=0)}, self.measurement)
+        prepared = lane.prepare_session(layout, compose.render(layout), smoke=False, keep={},
+                                        staging_root=loop / "staging" / layout.session_id)
+        lane.launch(prepared)
+        written = read(prepared.plan_path)
+        return prepared, written, Path(written["chain_path"]).read_text()
+
+    def screen(self, rendered, bound):
+        scratch = self.root / "screen"
+        scratch.mkdir(exist_ok=True)
+        write_json(scratch / "instrument_evidence.json", {"b_fiducial_s": bound})
+        source = rendered[rendered.index("B6_ALIGNMENT_REFERENCE_S="):rendered.index('cd "$REPO"')]
+        script = scratch / "screen.zsh"
+        script.write_text('CLAIM_RUNS_ROOT=fixture\nflag() { print -r -- "flag $1"; }\n'
+                          'stop_chain() { print -r -- "chain.stop $1 $2"; exit $2; }\n' + source +
+                          '\nscreen_b6_calibration "$1"\n')
+        return subprocess.run(["/bin/zsh", "-f", str(script), str(scratch)],
+                              capture_output=True, text=True, timeout=10)
+
+    def check_plan(self, prepared):
+        return subprocess.run([sys.executable, "-B", str(ROOT / "scripts/check_b5_chain.py"),
+                               "--plan", prepared.plan_path, "--no-live-identity"],
+                              capture_output=True, text=True, timeout=60)
+
+    def check_readers(self, prepared, written):
+        parsed = night_gate.NightPlan.from_mapping(read(prepared.plan_path))
+        self.assertEqual(driver.yield_plan(parsed)["planned"], written["hazard_window"]["member_count"])
+        self.assertEqual(len(driver.disk_targets(parsed.hazard_window, arm=True)), 5)
+        preflight = subprocess.run([sys.executable, "-B", str(self.measurement / "scripts/run_night.py"),
+                                    "preflight", "--plan", prepared.plan_path],
+                                   capture_output=True, text=True, timeout=30)
+        self.assertEqual(preflight.returncode, 0, preflight.stdout + preflight.stderr)
+        self.assertEqual(json.loads(preflight.stdout)["preflight"], "ok")
+
+        args = SimpleNamespace(plan=Path(prepared.plan_path), python=sys.executable,
+                               courier_bin="/usr/bin/true", render_only=self.root / "render-only")
+        real_run = subprocess.run
+
+        def desk_run(argv, **kwargs):
+            if "preflight" not in argv and Path(argv[0]).name != "git":
+                raise AssertionError("unexpected installer subprocess: " + repr(argv))
+            kwargs["env"] = {**os.environ, **kwargs.get("env", {}), "JW_B5_SYNTHETIC_ONLY": "1",
+                             "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": tempfile.gettempdir()}
+            return real_run(argv, **kwargs)
+
+        # Admission's wall-clock install span is independent of binding shape.
+        # The installer itself parses the written plan and runs its real child
+        # preflight, with a fixture battery reading and no launchd calls.
+        def install(courier_bin):
+            with mock.patch.object(night_agent_install, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner()), \
+                    mock.patch.object(night_agent_install.Prepared, "admit"), \
+                    mock.patch.object(night_agent_install.subprocess, "run", side_effect=desk_run), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                return night_agent_install.validate_install(
+                    SimpleNamespace(**{**vars(args), "courier_bin": courier_bin}), self.measurement)
+
+        installed = install("/usr/bin/true")
+        self.assertEqual(installed.plan.hazard_window["bindings"], written["hazard_window"]["bindings"])
+        # Stage-3 review F1/F4: a block-6 plan never renders an agent courier, by
+        # default or by name, and the courier's directory never leads the job's PATH.
+        system_path = "/usr/bin:/bin:/usr/sbin:/sbin"
+        self.assertEqual(installed.courier_path, system_path)
+        default = install(None)
+        self.assertEqual(Path(default.courier), self.measurement / "scripts/b6_courier.sh")
+        self.assertEqual(default.courier_path, system_path)
+        agents = self.root / "agent-couriers"
+        agents.mkdir(exist_ok=True)
+        named = agents / "claude"
+        named.write_text("#!/bin/sh\nexit 0\n")
+        named.chmod(0o755)
+        linked = agents / "courier-link"
+        if not linked.is_symlink():
+            linked.symlink_to(named)
+        for agent in (named, linked):
+            with self.subTest(courier=agent.name), self.assertRaises(night_agent_install.Refused) as refused:
+                install(str(agent))
+            self.assertEqual(refused.exception.code, 2)
+            self.assertIn("must be a program, not an agent", str(refused.exception))
+
+    def test_each_production_pack_uses_b6_screen_and_no_spares(self):
+        for pack, maximum, members in (("alpha", 124620, 125), ("beta", 127020, 125),
+                                       ("gamma", 113460, 107)):
+            for registered in (False, True):
+                with self.subTest(pack=pack, registered=registered):
+                    prepared, written, rendered = self.render(pack, registered)
+                    self.assertIn("screen_b6_calibration()", rendered)
+                    self.assertNotIn("screen_pre_calibration()", rendered)
+                    self.assertEqual(rendered.count("Spare-slot retry"), 0)
+                    bindings = archive.bindings(written)
+                    expected = {key: value if registered else None for key, value in (
+                        ("alignment_reference_s", "0.036462861644980"),
+                        ("bracket_screen_s", "0.014531"))}
+                    expected["operative_bound_stop_s"] = None if pack == 'beta' else '0.139'
+                    self.assertEqual(bindings["capture_screen"], expected)
+                    self.assertIs(bindings["spare_retries"], False)
+                    self.assertEqual((written["window_max_s"], prepared.max_s), (maximum, maximum))
+                    self.assertEqual(written["hazard_window"]["planned_bytes"], members * plan_inputs.BYTES_PER_MEMBER)
+                    for ms in (30.6, 36.5, 40.14, 48.01):
+                        ran = self.screen(rendered, ms / 1000)
+                        self.assertEqual(ran.returncode, 0, ran.stderr)
+                        self.assertEqual("flag calibration.alignment_above_reference" in ran.stdout,
+                                         registered and ms > 36.462861644980)
+                    missing = self.screen(rendered, None)
+                    self.assertEqual(missing.returncode, 1, missing.stderr)
+                    self.assertIn("flag calibration.bracket_incomplete", missing.stdout)
+                    if registered:
+                        # The 1.7B T10 is 139 ms; BETA has no sized line and
+                        # carries even this bound to the run phase checks.
+                        stopped = self.screen(rendered, .150)
+                        self.assertEqual(stopped.returncode, 0 if pack == 'beta' else 13, stopped.stderr)
+                        self.assertIn('flag calibration.stop_line_unsized' if pack == 'beta'
+                                      else "chain.stop operative_bound_above_stop 13", stopped.stdout)
+                    checked = self.check_plan(prepared)
+                    self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+                    self.check_readers(prepared, written)
+
+    def test_all_twelve_committed_fixed_budgets_through_native_planner_and_precheck(self):
+        # Ruling-derived H B maxima and committed fixed bytes; exact integer
+        # identity is the property. Timing/launch evidence below is synthetic.
+        bs = (21883930645, 22967763886, 24709054674, 27547300445, 22901363715, 16382541368)
+        expected_ps = (73814147037, 75981813519, 79464395095, 85140886637, 75849013177, 62811368483)
+        reg = self.measurement / "configs/b6/registration"
+        sizing = reg / "sizing_b5.json"
+        value = read(sizing)
+        for slot, (b, required) in enumerate(zip(bs, expected_ps), 1):
+            for partition in (1, 2):
+                pack_id = f"bytes-s{slot}-p{partition}"
+                terms = dict(B_bytes=b, extra_wait_raw_bytes=12999877322,
+                    fixed_retained_bytes=4046531103, peak_copies=2,
+                    session_wait_budget_s=plan.SESSION_WAIT_BUDGET_S, required_free_bytes=required)
+                self.assertEqual(required, 2 * (b + 12999877322) + 4046531103)
+                value["packs"][pack_id] = dict(pack_id=pack_id, programmed_span_s=3600,
+                    T_stream_max_s=100, disk_derivation=terms)
+                write_json(sizing, value)
+                path = self.measurement / "configs/campaigns" / pack_id / "plan_tree.json"
+                tree = read(path)
+                launch = read(self.measurement / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json")["arm_attachments"]["launch"]
+                for row in launch["bindings"]:
+                    if row["name"] in ("claim_runs_root", "bound_runs_root"):
+                        row["leaf"] = tree["roots"][row["name"].replace("runs_root", "root_leaf")]
+                tree["arm_attachments"]["launch"] = launch
+                write_json(path, tree)
+                prepared, written, _ = self.render(pack_id, False)
+                window = written["hazard_window"]
+                budget = read(Path(prepared.plan_path).parent.parent / "session.json")["disk_budget"]
+                limits = precheck.thresholds_for(self.measurement, pack_id, reg)["disk"]
+                self.assertEqual(limits["largest_session_bytes"], required)
+                self.assertEqual(limits["headroom_bytes"], 0)
+                targets = driver.disk_targets(window, arm=True)
+                def judge(free, targets, thresholds):
+                    measured = disk.measure(base.Context(), targets=targets,
+                        statvfs=lambda path: SimpleNamespace(f_bavail=free, f_frsize=1, f_blocks=2*required),
+                        stat=lambda path: SimpleNamespace(st_dev=1))
+                    return disk.judge(measured, thresholds)
+                for free, status in ((required-1, base.REFUSE), (required, base.PASS)):
+                    verdict = judge(free, targets, window["thresholds"]["disk"])
+                    self.assertEqual(verdict.observed["volumes"][0]["required_bytes"], required)
+                    self.assertEqual(verdict.status, status)
+                for smoke in (False, True):
+                    bar = required + (limits["smoke_bytes"] if smoke else 0)
+                    for free, status in ((bar-1, base.REFUSE), (bar, base.PASS)):
+                        verdict = judge(free, [{"path": str(self.root), "copies": 1}],
+                            {"planned_bytes": bar, "headroom_bytes": 0})
+                        self.assertEqual(verdict.observed["volumes"][0]["required_bytes"], bar)
+                        self.assertEqual(verdict.status, status)
+                print(pack_id, "P", required, "n", budget["member_count"],
+                    "q", budget["bytes_per_member"], "headroom", budget["headroom_bytes"],
+                    "smoke_retained", limits["smoke_bytes"], "planner=P; arm REFUSE/PASS; precheck REFUSE/PASS both smoke states")
+
+    def test_bytes_pack_p_through_real_planner_and_disk_hazard(self):
+        # Synthetic integer receipts: P is bit-identical, no float tolerance.
+        b, wait, fixed = 1000001, 7200, 19
+        required = 2 * (b + wait) + fixed
+        terms = dict(B_bytes=b, extra_wait_raw_bytes=wait, fixed_retained_bytes=fixed,
+                     peak_copies=2, session_wait_budget_s=7200, required_free_bytes=required)
+        sizing = self.measurement / "configs/b6/registration/sizing_b5.json"
+        value = read(sizing)
+        value["packs"]["BYTES"] = dict(pack_id="bytes-s1-p1", programmed_span_s=3600,
+                                        T_stream_max_s=100, disk_derivation=terms)
+        write_json(sizing, value)
+        # Draft pass trees intentionally omit arm authority. Supply only the
+        # synthetic launch declaration here; never alter the committed tree.
+        pack = self.measurement / "configs/campaigns/bytes-s1-p1/plan_tree.json"
+        tree = read(pack)
+        launch = read(self.measurement / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json")["arm_attachments"]["launch"]
+        for row in launch["bindings"]:
+            if row["name"] in ("claim_runs_root", "bound_runs_root"):
+                row["leaf"] = tree["roots"][row["name"].replace("runs_root", "root_leaf")]
+        tree["arm_attachments"]["launch"] = launch
+        write_json(pack, tree)
+        prepared, written, _ = self.render("bytes-s1-p1", False)
+        metadata = read(Path(prepared.plan_path).parent.parent / "session.json")
+        budget = metadata["disk_budget"]
+        window = written["hazard_window"]
+        self.assertEqual(budget["member_count"], window["member_count"])
+        self.assertEqual(budget["flags"], ["disk.budget_encoded_from_p"])
+        targets = driver.disk_targets(window, arm=True)
+        for free, expected in ((required - 1, base.REFUSE), (required, base.PASS)):
+            with self.subTest(free=free):
+                measured = disk.measure(base.Context(), targets=targets,
+                    statvfs=lambda path: SimpleNamespace(f_bavail=free, f_frsize=1, f_blocks=required * 2),
+                    stat=lambda path: SimpleNamespace(st_dev=1))
+                judged = disk.judge(measured, window["thresholds"]["disk"])
+                self.assertEqual(judged.observed["volumes"][0]["required_bytes"], required)
+                self.assertEqual(judged.status, expected)
+
+        # The real smoke reducer keeps q/headroom but reduces the member count.
+        # Metadata must name that native requirement and disclose full-pack P.
+        (self.measurement / ".venv/lib/python3.13/site-packages").mkdir(parents=True, exist_ok=True)
+        loop = self.root / "bytes-smoke" / "loop"
+        lane = DriverLane(self.measurement, loop, self.runner, block_root=loop.parent,
+                          launchctl_bin="/usr/bin/false")
+        value = read(self.measurement / "configs/b6/packs/bytes-s1-p1/registration.json")
+        value["status"] = "registered"
+        layout = compose.layout(queue.Selection(("bytes-s1-p1",), 1),
+            {"bytes-s1-p1": Registration(value, commit_time=0)}, self.measurement)
+        prepared = lane.prepare_session(layout, compose.render(layout), smoke=True,
+            keep=compose.smoke_keep(layout), staging_root=loop / "staging" / layout.session_id)
+        smoke_metadata = read(Path(prepared.plan_path).parent.parent / "session.json")
+        smoke_budget = smoke_metadata["disk_budget"]
+        self.assertEqual(smoke_budget["pack_required_free_bytes"], required)
+        self.assertEqual(smoke_budget["pack_member_count"], budget["member_count"])
+        m = plan_inputs.member_count(smoke_metadata["inputs"])
+        self.assertLess(m, smoke_budget["pack_member_count"])
+        self.assertEqual(smoke_budget["member_count"], m)
+        native_required = 3 * m * smoke_metadata["inputs"]["bytes_per_member"] + \
+            smoke_metadata["inputs"]["thresholds"]["disk"]["headroom_bytes"]
+        self.assertEqual(smoke_budget["required_free_bytes"], native_required)
+        self.assertNotEqual(native_required, required)
+        self.assertEqual(next(n for n in smoke_metadata["notes"] if n["kind"] == "disk.budget")
+                         ["required_free_bytes"], native_required)
+
+
+class ScreenInputsTests(DeskCase):
+    def test_replication_t10_is_139ms_only_for_the_sized_packs(self):
+        reg = self.root / 'registration'
+        reg.mkdir()
+        write_json(reg / 'acceptance.json', document())
+        for pack in ('alpha', 'gamma', 'd117_floor_qwen3-1p7b_v5',
+                     'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'):
+            self.assertEqual(plan_inputs.capture_screen(reg, pack)['operative_bound_stop_s'], '0.139')
+        for pack in ('beta', 'd117_floor_qwen3-8b_v5', 'unsized-pack'):
+            self.assertIsNone(plan_inputs.capture_screen(reg, pack)['operative_bound_stop_s'])
+
+    def test_acceptance_values_preserve_decimals_and_open_slots(self):
+        reg = self.root / "registration"
+        reg.mkdir()
+        keys = ("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s")
+        self.assertEqual(plan_inputs.capture_screen(reg), dict.fromkeys(keys))
+        value = document()
+        write_json(reg / "acceptance.json", value)
+        self.assertEqual(plan_inputs.capture_screen(reg), {key: value["calibration"][key] for key in keys})
+        del value["calibration"]["operative_bound_stop_s"]
+        write_json(reg / "acceptance.json", value)
+        self.assertIsNone(plan_inputs.capture_screen(reg)["operative_bound_stop_s"])
+        del value["calibration"]["alignment_reference_s"]
+        write_json(reg / "acceptance.json", value)
+        self.assertEqual(plan_inputs.capture_screen(reg), dict.fromkeys(keys))

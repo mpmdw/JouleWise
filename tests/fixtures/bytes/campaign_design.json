@@ -1,0 +1,317 @@
+{
+  "synthetic": true,
+  "notice": "Pilot-scale regressors; 8-bit row is invented. Not an R4 manifest or measurement.",
+  "models": [
+    {
+      "model": "Llama-3.3-70B-Instruct-4bit",
+      "role": "heldout",
+      "moe": false,
+      "tier": false,
+      "W_bytes": 39097356800.0,
+      "KV_bytes": 754974720.0,
+      "R_bytes": 39688355840.0,
+      "cell_ids": [
+        "Llama-3.3-70B-Instruct-4bit-decode"
+      ],
+      "synthetic_duration_s": 58.1
+    },
+    {
+      "model": "Qwen3-14B-4bit",
+      "role": "heldout",
+      "moe": false,
+      "tier": true,
+      "W_bytes": 7870210880.0,
+      "KV_bytes": 377487360.0,
+      "R_bytes": 8307783680.0,
+      "cell_ids": [
+        "Qwen3-14B-4bit-decode"
+      ],
+      "synthetic_duration_s": 12.7
+    },
+    {
+      "model": "Qwen3-30B-A3B-4bit",
+      "role": "heldout",
+      "moe": true,
+      "tier": true,
+      "W_bytes": 1711355008.0,
+      "KV_bytes": 226492415.99999997,
+      "R_bytes": 17174622207.999998,
+      "cell_ids": [
+        "Qwen3-30B-A3B-4bit-decode"
+      ],
+      "synthetic_duration_s": 5.6
+    },
+    {
+      "model": "Qwen3-32B-4bit",
+      "role": "heldout",
+      "moe": false,
+      "tier": true,
+      "W_bytes": 17992094528.0,
+      "KV_bytes": 603979776.0000001,
+      "R_bytes": 18429667328.0,
+      "cell_ids": [
+        "Qwen3-32B-4bit-decode"
+      ],
+      "synthetic_duration_s": 28.3
+    },
+    {
+      "model": "Qwen3-4B-4bit",
+      "role": "fit",
+      "moe": false,
+      "tier": true,
+      "W_bytes": 2262921632.0,
+      "KV_bytes": 339738624.0,
+      "R_bytes": 2262920192.0,
+      "cell_ids": [
+        "Qwen3-4B-4bit-decode"
+      ],
+      "synthetic_duration_s": 4.5
+    },
+    {
+      "model": "Qwen3-8B-4bit",
+      "role": "fit",
+      "moe": false,
+      "tier": true,
+      "W_bytes": 4257673471.9999995,
+      "KV_bytes": 339738624.0,
+      "R_bytes": 4607731712.0,
+      "cell_ids": [
+        "Qwen3-8B-4bit-decode"
+      ],
+      "synthetic_duration_s": 7.7
+    },
+    {
+      "model": "Qwen3-Next-80B-A3B-Instruct-4bit",
+      "role": "heldout",
+      "moe": true,
+      "tier": false,
+      "W_bytes": 2031833728.0,
+      "KV_bytes": 126163353.60000002,
+      "R_bytes": 44844060160.0,
+      "cell_ids": [
+        "Qwen3-Next-80B-A3B-Instruct-4bit-decode"
+      ],
+      "synthetic_duration_s": 8.0
+    },
+    {
+      "model": "Qwen3.5-122B-A10B-4bit",
+      "role": "heldout",
+      "moe": true,
+      "tier": false,
+      "W_bytes": 5070253248.0,
+      "KV_bytes": 194907340.79999998,
+      "R_bytes": 68690732544.0,
+      "cell_ids": [
+        "Qwen3.5-122B-A10B-4bit-decode"
+      ],
+      "synthetic_duration_s": 12.0
+    },
+    {
+      "model": "Qwen3-1.7B-4bit",
+      "role": "fit",
+      "moe": false,
+      "tier": true,
+      "W_bytes": 968002688.0,
+      "KV_bytes": 264241152.00000003,
+      "R_bytes": 968001536.0,
+      "cell_ids": [
+        "Qwen3-1.7B-4bit-decode"
+      ],
+      "synthetic_duration_s": 2.4
+    },
+    {
+      "model": "Qwen3-8B-8bit",
+      "role": "heldout",
+      "moe": false,
+      "tier": false,
+      "W_bytes": 8500000000.0,
+      "KV_bytes": 340000000.0,
+      "R_bytes": 9200000000.0,
+      "cell_ids": [
+        "Qwen3-8B-8bit-decode"
+      ],
+      "synthetic_duration_s": 14.1
+    }
+  ],
+  "seeds": {
+    "bytes": [
+      1100,
+      1101,
+      1102,
+      1103,
+      1104,
+      1105,
+      1106,
+      1107,
+      1108,
+      1109,
+      1110,
+      1111,
+      1112,
+      1113,
+      1114,
+      1115,
+      1116,
+      1117,
+      1118,
+      1119
+    ],
+    "time": [
+      2100,
+      2101,
+      2102,
+      2103,
+      2104,
+      2105,
+      2106,
+      2107,
+      2108,
+      2109,
+      2110,
+      2111,
+      2112,
+      2113,
+      2114,
+      2115,
+      2116,
+      2117,
+      2118,
+      2119
+    ],
+    "resident": [
+      3100,
+      3101,
+      3102,
+      3103,
+      3104,
+      3105,
+      3106,
+      3107,
+      3108,
+      3109,
+      3110,
+      3111,
+      3112,
+      3113,
+      3114,
+      3115,
+      3116,
+      3117,
+      3118,
+      3119
+    ]
+  },
+  "neg8_references": [
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-0",
+      "gross_j": 9.999,
+      "idle_power_w": 0.9999166666666667
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-1",
+      "gross_j": 9.9994,
+      "idle_power_w": 0.99995
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-2",
+      "gross_j": 9.9998,
+      "idle_power_w": 0.9999833333333333
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-3",
+      "gross_j": 10.0002,
+      "idle_power_w": 1.0000166666666668
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-4",
+      "gross_j": 10.0006,
+      "idle_power_w": 1.00005
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-5",
+      "gross_j": 10.001,
+      "idle_power_w": 1.0000833333333334
+    },
+    {
+      "role": "start",
+      "run_id": "neg8-start-0",
+      "gross_j": 10,
+      "idle_power_w": 1.0
+    },
+    {
+      "role": "start",
+      "run_id": "neg8-start-1",
+      "gross_j": 10,
+      "idle_power_w": 1.0
+    },
+    {
+      "role": "start",
+      "run_id": "neg8-start-2",
+      "gross_j": 10,
+      "idle_power_w": 1.0
+    },
+    {
+      "role": "midpoint",
+      "run_id": "neg8-midpoint-0",
+      "gross_j": 10.004,
+      "idle_power_w": 1.0003333333333333
+    },
+    {
+      "role": "end",
+      "run_id": "neg8-end-0",
+      "gross_j": 10.01,
+      "idle_power_w": 1.0008333333333332
+    },
+    {
+      "role": "end",
+      "run_id": "neg8-end-1",
+      "gross_j": 10.01,
+      "idle_power_w": 1.0008333333333332
+    },
+    {
+      "role": "end",
+      "run_id": "neg8-end-2",
+      "gross_j": 10.01,
+      "idle_power_w": 1.0008333333333332
+    }
+  ],
+  "reference_drift": {
+    "pivot_j": 10.0,
+    "rails_scale": 1.0,
+    "rest_scale": 100.0,
+    "derivation": "Synthetic D3 stress: 0.01 J rails endpoint drift versus 1 J DC-minus-rails drift (the approximate per-run attribution limit); checked against 0.10 B in every cell, not a measured spread."
+  },
+  "battery_assist": {
+    "models": ["Llama-3.3-70B-Instruct-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit", "Qwen3.5-122B-A10B-4bit"],
+    "current_ma": -1000,
+    "voltage_mv": 12774,
+    "publication_phase_ns": 370000000,
+    "charging": {
+      "current_ma": 100,
+      "duration_s": 1.0,
+      "derivation": "100 mA * 12774 mV / 1e6 * 1 s = 1.2774 J, above BAT-2's approximately 1 J attribution scale; below harvest's 200 mA charging exclusion, so the signed run stays in the primary cell and carries no battery.assist."
+    },
+    "episodes": ["inside_decode", "across_start", "across_end", "prefill_only"],
+    "derivation": "12.774 W for 0.8 to 1 s supplies at least 10.2192 J, above BAT-2's approximately 1 J attribution limit. The assisted fixture polls every 0.2 s, as production does. The no-assist fixture retains the original meter batches and random draws for exact output identity."
+  },
+  "main_campaign": {
+    "pass_duration_scales": [
+      1.0,
+      2.0
+    ],
+    "clock_latency_ms": [
+      -8.0,
+      3.0
+    ],
+    "derivation": "Retain Addendum 7.12: doubled second-pass duration; signed receive latency with the negative extreme larger in magnitude. NR1 knobs: 50 ms is farthest from the 100 ms sample edges; uniform science-edge phase models a free-running device clock on its own seed stream; 10 ms minimum receive latency is the recorded 10-17 ms USB arrival latency lower end. The fixture remains 10 Hz (50 SPS bench flips are five times smaller and five times more frequent).",
+    "sample_phase_ms": 50,
+    "edge_phase": true,
+    "min_receive_latency_ms": 10.0
+  }
+}

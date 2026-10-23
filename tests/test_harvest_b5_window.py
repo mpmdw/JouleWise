@@ -61,6 +61,17 @@ from joulewise.schemas import BenchmarkConfig
 from joulewise.uncertainty_evidence import resolve_clock_evidence_deriver, stamp_from_mapping
 
 ROOT = Path(__file__).resolve().parents[1]
+# Proposed block-6 collection vocabulary belongs to its future pack catalog,
+# never to the immutable block-5 seal. Shared block-5 entries still match exactly.
+B6_COLLECTION_CODES = frozenset({
+    "clock.rate_above_budget", "instrument.single_interval_above_screen",
+    "agent.presence", "agent.presence_overlap", "agent.capture_overlap", "agent.pause_marker_stale",
+    "sleep.in_run", "sleep.between_runs", "sleep.in_chain", "sleep.reading_unmeasured",
+    "sleep.assertion_lost", "sleep.assertion_unverified", "idle.waited", "idle.wait_cap_skip",
+    "idle.wait_budget_skip", "idle.wait_budget_exhausted", "idle.wait_budget_unreadable",
+    "idle.busy_fraction_exceeded",
+    "idle.wait_ledger_unwritable",
+})
 SEED = ROOT / "tests/fixtures/d117_v2_production/strict_seed_bundle"
 FIXTURES = ROOT / "tests/fixtures/b5_harvest"
 L1_JOURNALS = FIXTURES / "l1_monitor"
@@ -2303,7 +2314,10 @@ class EmittedCodeTests(unittest.TestCase):
         not_codes = {"g3.txt", "roster.json",  # file names
                      "chain.started", "monitor.capture_battery",  # a night record and a collector name
                      "yield.json"}  # a file name
-        self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
+        # The two block-6 arm diagnostics use explicit specs and the block-6 catalog, rather than extending block 5's
+        # immutable catalog vocabulary. Name only them, so any other new literal still needs a catalog entry.
+        b6_arm_diagnostics = {"clock.rate_above_budget", "instrument.single_interval_above_screen"}
+        self.assertEqual((literals | built) - not_codes - set(h.CODES) - b6_arm_diagnostics, set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
         from joulewise import window_lineage
@@ -2321,7 +2335,7 @@ class EmittedCodeTests(unittest.TestCase):
         # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
         self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES - h.AUDFIX2_CODES
-                         - h.NEG8_SURVIVOR_CODES,
+                         - h.NEG8_SURVIVOR_CODES - B6_COLLECTION_CODES,
                          set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
@@ -2334,10 +2348,11 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.catalog import DRAFT_CODES
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
-        emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
+        # Block-6 core codes are classified in configs/b6/flag_catalog_b6.json, not the sealed catalog.
+        emitted = (set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)) - {"calibration.acceptance_preflight_unverified"}
         # Audit-fix batches 1 and 2's codes and the NEG-8 survivors codes (ruling
         # 2026-10-07) reach the design catalog through REG before the seal.
-        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES - h.NEG8_SURVIVOR_CODES,
+        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES - h.NEG8_SURVIVOR_CODES - B6_COLLECTION_CODES,
                          set(h.NEVER_CLASSIFIED_CODES))
         self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
                           if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
@@ -4025,12 +4040,12 @@ class FixtureCatalogTests(WindowTestCase):
             self.skipTest("the block-5 catalog is not in this tree")
         catalog = json.loads(block5.read_bytes())
         fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
-        self.assertEqual(set(fixture["codes"]) - set(catalog["codes"]), set())
+        self.assertEqual(set(fixture["codes"]) - set(catalog["codes"]) - B6_COLLECTION_CODES, set())
         keys = ("family", "klass", "effect", "blinding")
         self.assertEqual({code: (tuple(entry.get(key) for key in keys),
                                  tuple(catalog["codes"][code].get(key) for key in keys))
                           for code, entry in fixture["codes"].items()
-                          if any(entry.get(key) != catalog["codes"][code].get(key) for key in keys)}, {})
+                          if code in catalog["codes"] and any(entry.get(key) != catalog["codes"][code].get(key) for key in keys)}, {})
         self.assertEqual(fixture["codes"]["g3.recompute_failed"]["effect"], "DISCLOSE")
         # The cell unit minimum, the one rule either file carries (seal gate SG-1: 5).
         self.assertEqual(fixture["rules"], catalog["rules"])

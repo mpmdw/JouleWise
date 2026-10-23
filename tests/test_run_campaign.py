@@ -10932,6 +10932,88 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertEqual(verdict["evaluation_basis"]["launch_lineage"], lineage)
 
+    def test_busy_only_member_passes_writer_status_and_producer_exit(self) -> None:
+        lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
+        base = self.root
+        # Derive the core from member bytes, then exercise both producers. AXI's
+        # synthetic child bundles isolate its writer from hardware collection.
+        state = run_campaign_module.load_analysis_manifest(ROOT / "tests/fixtures/axi_ap_spec")
+        real_subprocess_run = subprocess.run
+
+        def fixture_child(command, *, check, env):
+            clean_env = dict(env or {})
+            for name in (run_campaign_module.CAMPAIGN_POLICY_PATH_ENV,
+                         run_campaign_module.CAMPAIGN_POLICY_SHA256_ENV,
+                         run_campaign_module.CAMPAIGN_PREFLIGHT_JSON_ENV):
+                clean_env.pop(name, None)
+            clean_env["PYTHONDONTWRITEBYTECODE"] = "1"
+            return real_subprocess_run(command, check=check, env=clean_env)
+
+        for marker in (True, False):
+            with self.subTest(marker=marker):
+                self.root = base / ("block6" if marker else "block5")
+                self.root.mkdir()
+                binding, args = self._install_passing_whole_window_verdict_fixture(bound_lineage=lineage)
+                bundle = self.root / "p2-neg8-reference-start__r1"
+                records = _busy_idle_records()
+                (bundle / "rich_telemetry_idle.jsonl").write_text(
+                    "".join(json.dumps(record) + "\n" for record in records))
+                metadata = json.loads((bundle / "metadata.json").read_text())
+                final = metadata["environment_admission"]["attempts"][-1]
+                raw_cpu = run_campaign_module.evaluate_cpu_idle_admission(
+                    records, binding.idle_admission_extension.cpu_criteria, gpu_admitted=True)
+                self.assertEqual(raw_cpu["conditions"], ["cpu_busy_ratio_p95_exceeded"])
+                final["cpu_admission"] = raw_cpu
+                if marker:
+                    final["busy_fraction_admitted"] = True
+                (bundle / "metadata.json").write_text(json.dumps(metadata) + "\n")
+                calibration_bracket = {"schema_version": "joulewise.instrument_calibration_bracket.v1",
+                    "status": "passed", "b_fiducial_s": 0.02,
+                    "pre": {"bracket_runs_root": str(self.root)}, "post": {}}
+                with (
+                    patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+                    patch.object(run_campaign_module, "calibration_bracket_for_bundles",
+                                 return_value=(calibration_bracket, ())),
+                    patch("joulewise.whole_window.authenticate_launch_lineage",
+                          side_effect=lambda value, **_kwargs: {"launch_lineage": dict(value)}),
+                    patch("joulewise.whole_window._authenticated_bundle_launch_lineage_set", return_value=lineage),
+                    patch("joulewise.whole_window._calibration_launch_lineages", return_value=(lineage, lineage)),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    exit_code = run_campaign_module.run_whole_window_verdict(args)
+                row = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+                core = row["idle_admission_core"]
+                reasons = run_campaign_module._idle_admission_claim_barrier_reasons(core)
+                self.assertEqual(row["status"], "passed" if marker else "failed")
+                self.assertEqual(exit_code, 0 if marker else 1)
+                self.assertEqual("cpu_admission_core_failed" in reasons, not marker)
+                self.assertEqual(core["neg8_bracket"]["decision"], "passed")
+                self.assertEqual(core["adapter_wattage_continuity"]["decision"], "stable")
+                stored = next(member for member in core["members"] if member["bundle_id"] == bundle.name)
+                self.assertEqual(stored["cpu_admission"], raw_cpu)
+                self.assertFalse(raw_cpu["admitted"])
+                self.assertEqual(json.loads((bundle / "metadata.json").read_text()), metadata)
+                axi_runs = self.root / "axi"
+                with (
+                    patch.object(run_campaign_module, "campaign_environment_preflight", return_value={"admitted": True}),
+                    patch.object(run_campaign_module.subprocess, "run", side_effect=fixture_child),
+                    patch.object(run_campaign_module, "campaign_cooldown_before_member", return_value={"result": "recovered"}),
+                    patch.object(run_campaign_module, "_load_calibration_snapshot_for_evaluation", return_value=None),
+                    patch.object(run_campaign_module, "_idle_admission_core_evaluation", return_value=
+                        run_campaign_module._IdleAdmissionCoreEvaluation(core=core, member_failures=())),
+                    patch.object(run_campaign_module, "build_evaluation_basis", return_value={}),
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()),
+                ):
+                    axi_exit = run_campaign_module.run_axi_spec_campaign(
+                        run_campaign_module.argparse.Namespace(dry_run=False, cli_cmd=None,
+                            arm_quiet_mode=False, arm_countdown_s=0, environment_override=None),
+                        state, runs_dir=axi_runs, policy_binding=binding,
+                        log_path=axi_runs / "campaign_log.jsonl")
+                whole_row = next(row for row in read_all_jsonl(axi_runs / "campaign_log.jsonl")
+                                 if row.get("record_type") == "idle_admission_whole_window_verdict")
+                self.assertEqual(whole_row["status"], "passed" if marker else "failed")
+                self.assertEqual(axi_exit, 0 if marker else 1)
+
     def test_existing_verdict_output_refuses_after_one_log_append(self) -> None:
         lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
         _binding, args = self._install_passing_whole_window_verdict_fixture(
@@ -12226,6 +12308,75 @@ class G2aLowCountCampaignTests(unittest.TestCase):
                     "in_window_sample_count"], 3)
             rows = read_jsonl(runs / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
+
+
+class B6RunnerAdmissionTests(unittest.TestCase):
+    def test_final_attempt_accepts_consecutive_four_and_rejects_bad_ledgers(self):
+        entry = run_campaign_module.OrderEntry(index=1, config="member.json", block_id="quad")
+        self.assertEqual(entry.to_log()["block_id"], "quad")
+        self.assertNotIn("block_id", run_campaign_module.OrderEntry(index=1, config="member.json").to_log())
+        for numbers, decision, admitted, expected in (
+            ([1, 2, 3, 4], "admitted", True, 4),
+            ([1, 3], "admitted", True, None),
+            ([1, 2, 2], "admitted", True, None),
+            ([1, 2, 3, 4], "abort", True, None),
+        ):
+            with self.subTest(numbers=numbers, decision=decision):
+                evaluation = SimpleNamespace(metadata={"environment_admission": {
+                    "decision": decision, "attempts": [{"attempt": k, "admitted": admitted if i == len(numbers)-1 else False}
+                                                        for i, k in enumerate(numbers)]}})
+                self.assertEqual(run_campaign_module._final_idle_admission_attempt(evaluation), expected)
+
+
+from tests.test_run_campaign_hazard_flags import _Stage as _B6Stage
+
+
+class B6RunnerBoundaryTests(_B6Stage):
+    def test_waits_between_two_fake_members_and_legacy_never_waits(self):
+        import scripts.run_campaign as rc
+        from joulewise.b6 import agent_pause as ap
+        runs = self.hazard_root()
+        configs = self.configs("b6-first", "b6-second")
+        marker = self.custody / "collection/pause.json"
+        original = rc._hazard_run_authenticated_campaign_child
+        events = []
+        tick = [0]
+        def child(*args, **kw):
+            events.append(kw["run_id"])
+            result = original(*args, **kw)
+            if kw["run_id"] == "b6-first":
+                ap.write_marker(marker, {"driver_pid": 123})
+            return result
+        def sleep(seconds):
+            events.append("paused")
+            tick[0] += seconds
+            marker.unlink()
+        real_wait = ap.wait_while_paused
+        def wait(root):
+            return real_wait(root, sleep=sleep, now=lambda: tick[0], pid_alive=lambda _: True)
+        with patch.object(rc, "_hazard_run_authenticated_campaign_child", side_effect=child), \
+                patch.object(ap, "wait_while_paused", side_effect=wait):
+            result = self.run_stage(configs, runs)
+        self.assertEqual(self.invoked(runs), ["b6-first", "b6-second"], result.err)
+        self.assertEqual(events, ["b6-first", "paused", "b6-second"])
+        rows = [json.loads(line) for line in (self.custody / "collection/run_clock.jsonl").read_text().splitlines()]
+        self.assertEqual([r["event"] for r in rows], ["start", "end", "start", "end"])
+        plain = self.plain_root()
+        with patch.object(ap, "wait_while_paused") as waiting:
+            self.run_stage(configs, plain)
+        waiting.assert_not_called()
+
+    def test_member_cap_adds_effective_wait_keys(self):
+        import scripts.run_campaign as rc
+        runs = self.hazard_root()
+        policy = self.idle_policy()
+        payload = json.loads(policy.read_text())
+        payload["idle_admission"].update(wait_cap_s=1500, session_wait_budget_s=7200)
+        policy.write_text(json.dumps(payload))
+        with patch.object(rc, "_hazard_run_authenticated_campaign_child", wraps=rc._hazard_run_authenticated_campaign_child) as child:
+            result = self.run_stage(self.configs("b6-cap"), runs, policy=policy)
+        self.assertEqual(self.invoked(runs), ["b6-cap"], result.err)
+        self.assertEqual(child.call_args.kwargs["cap_s"], 3300)
 
 
 if __name__ == "__main__":

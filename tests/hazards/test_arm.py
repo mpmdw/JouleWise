@@ -161,6 +161,37 @@ class ArmTests(unittest.TestCase):
         dwell_s = record["hazards"]["contention"][0]["measurement"]["values"]["elapsed_s"]
         self.assertTrue(600 <= dwell_s <= 2700)
 
+    def test_block6_plan_flags_the_rate_that_block5_refuses(self):
+        from joulewise.b6 import plan_inputs
+        root = Path(__file__).resolve().parents[2]
+        thresholds = plan_inputs.thresholds(root, root / "configs/b6/registration")
+        self.rig.clocks.drift_word = ppm_word(4)
+        # Clock/plan integration only: supply synthetic cadence evidence at
+        # the child-runner seam, without a host process-group census.
+        import sys
+        from joulewise.hazards import instrument
+        report = {"schema": instrument.CHILD_SCHEMA, "returncode": 0, "frames": 300,
+                  "count_expected": 300, "elapsed_s": 1, "group_gone": True,
+                  "intervals_ns": [100_000_000] * 300}
+        self.rig.runner.handlers[sys.executable] = lambda argv: completed(argv, json.dumps(report).encode())
+        result = self.rig.run(thresholds=thresholds)
+        self.assertEqual(result.decision, arm.GO, result.reasons)
+        phases = result.document["hazards"]["clock"]
+        self.assertGreaterEqual(len(phases), 2)
+        for phase in phases:
+            verdict = phase["verdict"]
+            self.assertEqual(verdict["status"], base.PASS)
+            self.assertEqual([flag["code"] for flag in verdict["observed"]["flags"]],
+                             ["clock.rate_above_budget"])
+
+    def test_block6_plan_holds_above_its_registered_rate(self):
+        from joulewise.b6 import plan_inputs
+        root = Path(__file__).resolve().parents[2]
+        thresholds = plan_inputs.thresholds(root, root / "configs/b6/registration")
+        self.rig.clocks.drift_word = ppm_word(15)
+        result = self.rig.run(thresholds=thresholds)
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "instant"))
+
     def test_agent_present_refuses_at_the_census_before_any_action(self):
         self.rig.census = (0, b"812 /usr/local/bin/claude --resume\n")
         result = self.rig.run()
