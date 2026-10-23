@@ -218,6 +218,21 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
     digests: dict[str, str | None] = {}
     stale: list[StaleRow] = []
     warnings: list[str] = []
+    era_literals: dict[str, dict[str, census.Literal]] = {}
+    era_commits: dict[tuple[str, int], str] = {}
+    try:
+        census.validate_era_records(root)
+    except census.EraRecordError as error:
+        stale.append(StaleRow(census.REGISTRY_REL, "#era", "sealed_registration",
+                              f"file:{census.REGISTRY_REL}", f"invalid era record: {error}", None, "registry"))
+    inventory = files.json(census.B5_INVENTORY) if (root / census.B5_INVENTORY).exists() else None
+    if isinstance(inventory, dict) and isinstance(inventory.get("files"), dict):
+        changed = [path for path, digest in sorted(inventory["files"].items())
+                   if census.target_digest(root, census.Target(path, "file")) != digest]
+        if changed:
+            warnings.append("WARNING: current files differ from the sealed inventory; block-5 windows run "
+                            "from this tree will be flagged code.executed_differs_from_sealed:\n" +
+                            "\n".join(f"  {path}" for path in changed))
     for entry in registry["files"]:
         path = entry["path"]
         if files.text(path) is None:
@@ -239,7 +254,20 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
                 # An era record: the bytes at its declared commit are history and
                 # cannot change, so a mismatch means the record itself was edited.
                 try:
-                    declared = census.era_commit(root, path, files.text(path) or "")
+                    if path not in era_literals:
+                        era_literals[path] = {item.pointer: item for item in census.literals_in(
+                            path, (files.text(path) or "").encode("utf-8"))}
+                    literal = era_literals[path].get(pointer)
+                    if literal is None:
+                        raise census.EraRecordError(f"{path} {pointer}: recorded literal is missing")
+                    text = files.text(path) or ""
+                    spec = census.era_spec(path, literal, text)
+                    if spec is None:
+                        raise census.EraRecordError(f"{path} {pointer}: literal is outside declared era scope")
+                    claim = (path, id(spec))
+                    if claim not in era_commits:
+                        era_commits[claim] = census.era_commit(root, path, text, literal)
+                    declared = era_commits[claim]
                 except (KeyError, census.EraRecordError) as error:
                     declared = f"unreadable ({error})"
                 if declared != target.commit:
@@ -249,7 +277,7 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
                 elif digest is None:
                     stale.append(StaleRow(path, pointer, family, key,
                                           "era target is missing at its recorded commit", None, remedy))
-                elif not _carries(files, path, pointer, digest):
+                elif literal.value != digest:
                     stale.append(StaleRow(path, pointer, family, key,
                                           "no longer carries the target's digest at its recorded commit",
                                           digest, remedy))
