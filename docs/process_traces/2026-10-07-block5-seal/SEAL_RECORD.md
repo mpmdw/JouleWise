@@ -669,7 +669,12 @@ band centre (0.968), d = min(0.951364 − c/1.05, c/0.95 − 0.984889) ≈ 0.029
 not below d, the stream cannot tell a healthy meter from a faulted one: the reason is `slope_undetermined`,
 and the flag discloses unconfirmed agreement even when the fitted slope lies inside the band. The distance
 is taken at the band centre, not at the observed slope, because an idle-dominated stream's slope is biased
-by meter noise and cannot vouch for itself. (History of this bar: the seat first compared 2 SE with the
+by meter noise and cannot vouch for itself. What this buys, measured on synthetic streams (cold Opus delta re-check,
+2026-10-23, i.i.d. Gaussian bin noise, n = 3..40): with the healthy slope at the band centre a ±5 % fault reads
+clear in at most 2.5 % of streams per direction (observed 0.2–1.2 %); at the measured healthy extremes and at the
+2 s-lag slope 0.9534 the distance to the nearer edge is smaller (0.019–0.021), and a fault in that direction reads
+clear in up to about 4–6 % of streams. The flag is DISCLOSE either way. Using the worst-case distance (0.0134) would
+remove that gap at the cost of marking more short healthy streams undetermined; the lead kept the centre distance. (History of this bar: the seat first compared 2 SE with the
 band half-width, which marked 11 healthy short smokes; the lead then compared 2 SE with the raw 5 % shift;
 a cold Fable delta check showed that bar let a faulted 4-bin stream read clear and that 2 SE under-covers
 at few bins, so the final bar is the t half-width against the distance beyond the band.) Two bins
@@ -705,7 +710,7 @@ File to pin: `joulewise/external/km003c_parse.py`, SHA-256 `7d51ed8ebdfad76fdd58
 ### Verification and replay
 
 `PYTHONDONTWRITEBYTECODE=1 JW_B5_SYNTHETIC_ONLY=1 python3 -B -m unittest tests.external.test_km003c_parse tests.test_harvest_b5_p3harv tests.hazards.test_refusal_allowlist tests.external.test_km003c_monitor`
-passed 124 tests, one existing skip. These are all three test modules importing
+passed 127 tests at the pinned commit with three environmental skips (CommonCrypto is macOS-only; the real-meter smoke is barred by JW_B5_SYNTHETIC_ONLY; one design-branch test): test_km003c_parse 43, test_refusal_allowlist 23, test_harvest_b5_p3harv 48, test_km003c_monitor 13. These are all three test modules importing
 `km003c_parse`, plus the required hazard allowlist gate. The whole suite was not run,
 as the assignment explicitly forbids it. The baseline failed only the unlisted
 bin-duration guard; the updated gate passes. The rewritten gain-band test, replayed
