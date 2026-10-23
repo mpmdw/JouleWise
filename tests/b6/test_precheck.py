@@ -52,6 +52,43 @@ class PrecheckTests(DeskCase):
         return p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams,
                               acceptance=acceptance, out=out), ctx
 
+    def test_bytes_disk_bar_and_missing_record_through_run_precheck(self):
+        reg = self.measurement / p.REGISTRATION_RELATIVE
+        reg.mkdir(parents=True, exist_ok=True)
+        sizing = reg / 'sizing_b5.json'
+        value = json.loads((ROOT / p.REGISTRATION_RELATIVE / 'sizing_b5.json').read_text())
+        pack = 'bytes-s6-p1'
+        target = self.measurement / 'configs/campaigns' / pack
+        target.mkdir(parents=True)
+        # Use the production-shaped synthetic collection with the BYTES identity.
+        (target / 'plan_tree.json').write_bytes(
+            (self.measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json').read_bytes())
+        b, wait, fixed = 1000001, 7200, 19
+        required = 2 * (b + wait) + fixed
+        terms = dict(B_bytes=b, extra_wait_raw_bytes=wait, fixed_retained_bytes=fixed,
+            required_free_bytes=required, peak_copies=2, session_wait_budget_s=plan.SESSION_WAIT_BUDGET_S)
+        value['packs']['BYTES'] = dict(pack_id=pack, programmed_span_s=3600,
+                                      T_stream_max_s=100, disk_derivation=terms)
+        sizing.write_text(json.dumps(value))
+        for smoke in (False, True):
+            limits = p.thresholds_for(self.measurement, pack, reg)['disk']
+            bar = required + (limits['smoke_bytes'] if smoke else 0)
+            for free, expected in ((bar - 1, 'WAIT'), (bar, 'START')):
+                ctx, seams, _ = fake_environment(self.measurement)
+                seams.statvfs = lambda path: SimpleNamespace(f_bavail=free, f_frsize=1, f_blocks=bar * 2)
+                with mock.patch.object(fingerprint, 'smoke_required', return_value=(smoke, 'synthetic')):
+                    result = p.run_precheck(pack, self.measurement, self.state, ctx=ctx, seams=seams,
+                        disk_targets=[{'path': str(self.state), 'copies': 1}])
+                self.assertEqual(result['decision'], expected)
+                self.assertEqual('disk.low' in [r['code'] for r in result['would_refuse']], free < bar)
+        value['packs']['BYTES'].pop('disk_derivation')
+        sizing.write_text(json.dumps(value))
+        ctx, seams, _ = fake_environment(self.measurement, free_gib=0)
+        result = p.run_precheck(pack, self.measurement, self.state, ctx=ctx, seams=seams,
+                               disk_targets=[{'path': str(self.state), 'copies': 1}])
+        self.assertEqual(result['decision'], 'START')
+        self.assertIn('disk.budget_missing', [r['code'] for r in result['predicted_flags']])
+
     def test_01_clock_fit_exact_boundary_steps_boot_and_span(self):
         limits = p.PRECHECK_DEFAULTS['clock']
 

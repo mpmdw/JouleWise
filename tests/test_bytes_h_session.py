@@ -648,12 +648,22 @@ class SessionTests(unittest.TestCase):
             h.write(self.session/'receipts'/(name+'.json'), {'schema_version': 'joulewise.bytes_h_'+name+'.v1',
                 'non_claim': True, 'session_id': supplied['session_id'], 'values': values,
                 'derivation': 'Controlled synthetic arithmetic from tests.test_bytes_gates.synthetic_harvest; never live evidence.'})
+        # Production has a raw tree and an archive clone; seed both copies.
+        for row in native_rows:
+            source = self.session / 'archive/sources/claim-runs' / row['run_id']
+            key = 'bound' if 'bound-collection' in row['stage_id'] else 'claim'
+            raw = Path(state['runs_roots'][key]) / row['run_id']
+            shutil.copytree(source, raw)
         # Keep the session directory's own allocation stable for the snapshot
         # comparison; only membership-dependent backup content is added later.
         backup_dirs = [self.session / name for name in ('backup-claim', 'backup-bound')]
         for backup in backup_dirs:
             backup.mkdir()
         measured = h.measurements(state, exported.csv_path)
+        for rid, receipt in measured['runs'].items():
+            with self.subTest(run_id=rid):
+                # Equal allocated synthetic copies: integer byte identity.
+                self.assertEqual(receipt['retained_bytes'], 2 * receipt['raw_allocated_bytes'])
         self.assertEqual(measured['disk']['backup_retained_bytes'], sum(h.disk_bytes(p) for p in backup_dirs))
         for index, backup in enumerate(backup_dirs):
             source = self.session / 'archive/sources/claim-runs' / native_rows[index]['run_id']
@@ -698,6 +708,49 @@ class SessionTests(unittest.TestCase):
         invalid = h.measurements(state, exported.csv_path)
         self.assertIsNone(invalid['cpu_contention']['w_j_per_cpu_s'])
         self.assertIn('records.measurement_source_unreadable', [f['code'] for f in unavailable['flags']])
+
+    def check_desk_gates_status(self, *, writes_c5, stale_c5, exit_code=1):
+        state = self.prepared()
+        self.seed_collection(state)
+        c5_path = self.session / 'C5.json'
+        if stale_c5:
+            h.write(c5_path, {'stale': True})
+        calls = []
+
+        def child(argv, **kwargs):
+            if Path(argv[1]).name == 'bytes_gates.py':
+                # Only gates is stubbed: real preparation, harvest, export,
+                # measurements and the desk convergence loop run unchanged.
+                self.assertFalse(c5_path.exists())
+                calls.append(argv)
+                if writes_c5:
+                    h.write(c5_path, {'status': 'unavailable'})
+                return SimpleNamespace(returncode=exit_code, stdout='', stderr='synthetic gates result')
+            return subprocess.run([*argv, '--workers', '4'], **kwargs)
+
+        with redirect_stdout(io.StringIO()):
+            result = h.desk(self.session, run=child,
+                statvfs=lambda _: SimpleNamespace(f_bavail=90_000_000_000, f_frsize=1))
+        self.assertTrue(calls)
+        self.assertEqual(result, h.read(self.session / 'desk.json'))
+        self.assertEqual(result['gates_exit'], exit_code)
+        self.assertEqual(result['status'], 'unavailable' if writes_c5 else 'program_fault')
+        self.assertEqual(result['c5_written'], writes_c5)
+        self.assertEqual(result['c5_sha256'],
+            hashlib.sha256(c5_path.read_bytes()).hexdigest() if writes_c5 else None)
+        self.assertEqual(c5_path.exists(), writes_c5)
+
+    def test_desk_gates_exit_one_without_c5_is_program_fault(self):
+        self.check_desk_gates_status(writes_c5=False, stale_c5=False)
+
+    def test_desk_gates_exit_one_with_new_c5_is_unavailable(self):
+        self.check_desk_gates_status(writes_c5=True, stale_c5=False)
+
+    def test_desk_stale_c5_does_not_hide_program_fault(self):
+        self.check_desk_gates_status(writes_c5=False, stale_c5=True)
+
+    def test_desk_usage_exit_two_without_c5_is_program_fault(self):
+        self.check_desk_gates_status(writes_c5=False, stale_c5=True, exit_code=2)
 
     def test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates(self):
         state = self.prepared()

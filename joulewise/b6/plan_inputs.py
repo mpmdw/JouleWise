@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 
 from joulewise.b5 import plan
+from joulewise.b5.plan import SESSION_WAIT_BUDGET_S
 from joulewise.b6 import registration
 from joulewise.b6.capture_screen import operative_bound_stop_s
 
@@ -82,7 +83,7 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
         head = run(["git", "-C", str(measurement), "rev-parse", "HEAD"],
                    check=True, capture_output=True, text=True, timeout=30).stdout.strip()
     sized = registration.load_sizing(reg)
-    label = next((key for key, value in sized["packs"].items() if value["pack_id"] == pack_id), None)
+    label = sizing_label(sized, pack_id)
     if label is None:
         raise ValueError("pack has no registered sizing: " + pack_id)
     sizing_path = reg / "sizing_b5.json"
@@ -115,4 +116,65 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
               "registration": {"path": REGISTRATION, "sha256": sha256(registration_raw)}}
     for key, name in (("identity_epoch_json", "identity-epoch.json"), ("t1_bindings_json", "t1-bindings.json")):
         result[key] = {k: identities[name][k] for k in ("path", "sha256")}
+    if pack_id.startswith("bytes-s"):
+        encode_disk_budget(result, sized["packs"][label].get("disk_derivation"))
     return deepcopy(result)
+
+
+def sizing_label(sized, pack_id):
+    return next((key for key, value in sized["packs"].items() if value["pack_id"] == pack_id), None)
+
+
+def valid_disk_terms(terms):
+    """One validation contract for the PRECHECK and native arm encodings."""
+    keys = ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes")
+    return (isinstance(terms, dict)
+            and all(type(terms.get(k)) is int and terms[k] >= 0 for k in keys)
+            and terms.get("peak_copies") == 2
+            and terms.get("session_wait_budget_s") == SESSION_WAIT_BUDGET_S
+            and terms["required_free_bytes"] == 2 * (terms["B_bytes"] + terms["extra_wait_raw_bytes"])
+            + terms["fixed_retained_bytes"])
+
+
+def registered_disk_terms(registration_dir, pack_id):
+    """Missing registration is a record flag, with no fallback disk bar."""
+    try:
+        sized = registration.load_sizing(registration_dir)
+        label = sizing_label(sized, pack_id)
+        terms = sized["packs"][label].get("disk_derivation")
+        return deepcopy(terms) if valid_disk_terms(terms) else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def member_count(inputs):
+    tree, _ = plan.read_plan_tree(Path(inputs["pack_root"]))
+    collections = [s for s in plan.b5_chain.stage_plan(tree)
+                   if s.in_chain and s.kind == "campaign_collection"]
+    return sum(s.expected_count for s in collections) + sum(
+        max(s.spare_sets) for s in collections if s.spare_sets and inputs.get("spare_retries", True))
+
+
+def encode_disk_budget(inputs, terms):
+    """Encode the registered P in the native three-target budget, exactly.
+
+    No P is a disclosed open slot, never an inherited reserve threshold.
+    Count the same real stages (including optional spares) as the writer.
+    """
+    n = member_count(inputs)
+    if not valid_disk_terms(terms) or n <= 0:
+        inputs["disk_budget"] = {"flags": ["disk.budget_missing"],
+                                 "detail": "pack sizing row lacks valid disk_derivation",
+                                 "remedy": "register valid disk_derivation (P and its terms) in the pack sizing row",
+                                 "required_free_bytes": None, "member_count": n}
+        return
+    b, wait, fixed, required = (terms[k] for k in
+        ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes"))
+    q, remainder = divmod(2 * b, 3 * n)
+    headroom = remainder + 2 * wait + fixed
+    inputs["bytes_per_member"] = q
+    inputs["thresholds"]["disk"]["headroom_bytes"] = headroom
+    inputs["disk_budget"] = {"flags": ["disk.budget_encoded_from_p"], "derivation": deepcopy(terms),
+                             "member_count": n, "native_copies": 3, "bytes_per_member": q,
+                             "rounding_remainder_bytes": remainder, "headroom_bytes": headroom,
+                             "required_free_bytes": required}

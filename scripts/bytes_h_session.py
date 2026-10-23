@@ -639,6 +639,12 @@ def measurements(state, export_csv):
         bundle = bundle_of(archive, night_plan, rid)
         paths = [p for p in [*raw, bundle] if p and p.is_dir()]
         bundle_dirs.extend(paths)
+        raw_paths, raw_seen = [p for p in raw if p.is_dir()], set()
+        try:
+            raw_allocated = sum(disk_bytes(p, seen=raw_seen) for p in raw_paths) if raw_paths else None
+        except OSError:
+            raw_allocated = None
+            unavailable('raw bundle disk usage: ' + rid)
         try:
             retained = sum(disk_bytes(p, seen=seen) for p in paths)
         except OSError:
@@ -668,6 +674,7 @@ def measurements(state, export_csv):
             if fit is not None:
                 rate_observations.append({'run_id': rid, 'samples': len(selected), **fit})
         result['runs'][rid] = {'request_s': request, 'member_wall_s': wall, 'stream_s': stream,
+            'raw_allocated_bytes': raw_allocated,
             'retained_bytes': retained, 'thermal_level': level, 'outside_cpu_s': cpu, 'census_quanta': k}
         if wall is not None:
             per_stage[row['stage_id']].append((begin['wall_s'], end['wall_s']))
@@ -753,6 +760,7 @@ def measurements(state, export_csv):
         'rate_standard_error_ppm': 'single-fit noise model: independent uniform +/- WINDOW_SKEW_MAX_NS anchor error; SE = (WINDOW_SKEW_MAX_NS/sqrt(3))/sqrt(Sxx)*1e6, Sxx=sum((RAW_ns-mean_RAW_ns)^2). At 1 s monitor cadence Sxx~n*span_ns^2/12: about 0.27 ppm for a 150 s member with n~150 and the admitted 250000 ns skew limit. Actual admitted timestamps/count used; not empirical uncertainty or a multiplicity correction for worst-of-members selection; registered gate unchanged',
         'frequency_word_ppm': 'worst signed observed kernel raw_word / hazards.clock.FREQUENCY_SCALE',
         'retained_bytes': 'POSIX st_blocks*512 for raw and archive bundle trees, inode-deduplicated; disk usage at desk snapshot',
+        'raw_allocated_bytes': 'POSIX st_blocks*512 for this run raw bundle tree only (runs-parent/<stage dir>/<run_id>), inode-deduplicated with its own seen-set, independent of archive; null for members that never ran',
         'fixed_retained_bytes': 'remaining allocated session bytes, excluding per-run bundle subtrees and backup-claim/backup-bound',
         'backup_retained_bytes': 'POSIX st_blocks*512 for backup-claim and backup-bound trees, inode-deduplicated against raw/archive/fixed bytes at desk snapshot',
         'pre_arm_free_bytes': 'minimum observed native arm disk target free_bytes; null when no arm receipt exists; prepare snapshot is not substituted',
@@ -828,15 +836,23 @@ def desk(session_root, *, run=subprocess.run, statvfs=os.statvfs):
     # then name exactly the final MEASUREMENTS bytes.
     while True:
         write(session / 'MEASUREMENTS.json', measured)
+        # This derived output belongs to this invocation. A matching input hash
+        # cannot distinguish a stale result from a subprocess that wrote nothing.
+        c5_path = session / 'C5.json'
+        c5_path.unlink(missing_ok=True)
         gates = run(gate_argv, check=False, capture_output=True, text=True, timeout=HARVEST_TIMEOUT_S)
+        c5_written = c5_path.is_file()
         (session / 'staging/gates.stdout').write_text(gates.stdout or '')
         (session / 'staging/gates.stderr').write_text(gates.stderr or '')
         status = {'schema_version': 'joulewise.bytes_h_desk.v1', 'non_claim': True,
             'session_id': measured['session_id'], 'plan_id': state['session_id'],
             'harvest_argv': argv, 'harvest_exit': result.returncode,
             'gates_argv': gate_argv, 'gates_exit': gates.returncode,
+            'c5_written': c5_written,
+            'c5_sha256': locator(c5_path)['sha256'] if c5_written else None,
             'measurements': str(session / 'MEASUREMENTS.json'), 'export': native,
-            'status': 'unavailable' if gates.returncode == 1 else 'fail' if gates.returncode == 2
+            'status': 'program_fault' if not c5_written else
+                      'unavailable' if gates.returncode == 1 else 'fail' if gates.returncode == 2
                       else 'pass' if gates.returncode == 0 else 'program_fault',
             'flags': measured['flags'], 'registration_ready': False, 'disk': allocation}
         write(session / 'desk.json', status)

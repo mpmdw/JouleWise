@@ -88,6 +88,14 @@ class DriverLane:
         inputs = plan_inputs.build(self.measurement, reg, layout.campaign_id, layout.session_id, identities,
             custody_root=paths.custody, runs_parent=paths.runs_parent, claim_backup=paths.backup_claim,
             bound_backup=paths.backup_bound, run=self.run)
+        disk_budget = inputs.pop("disk_budget", None)
+        if disk_budget is not None:
+            notes = [*notes, {"kind": "disk.budget", **disk_budget}]
+            if disk_budget["required_free_bytes"] is None:
+                # Director's R2-3 registration-completeness exception: without
+                # registered P, neither the block-6 constants nor no bar is valid.
+                write(stage / "disk-budget.json", disk_budget)
+                return LaneMissing("driver:disk.budget_missing")
         fp = {}
         checks = sorted((self.root / "staging" / layout.session_id.split("-smoke-")[0] / "precheck").glob("*/*/precheck.json"))
         if checks:
@@ -100,6 +108,15 @@ class DriverLane:
                 registration_dir=reg, defer_plan=True, keep=keep)
             smoke_record = prepared_smoke.to_json()
             inputs = read(prepared_smoke.smoke_dir / "smoke-state.json")["plan_inputs"]
+            if disk_budget is not None:
+                disk_budget = {**disk_budget, "pack_required_free_bytes": disk_budget["required_free_bytes"],
+                               "pack_member_count": disk_budget["member_count"]}
+                m = plan_inputs.member_count(inputs)
+                disk_budget.update(member_count=m,
+                    required_free_bytes=3 * m * inputs["bytes_per_member"] +
+                                        inputs["thresholds"]["disk"]["headroom_bytes"])
+                notes = [note for note in notes if note.get("kind") != "disk.budget"]
+                notes.append({"kind": "disk.budget", **disk_budget})
             paths = replace(paths, measurement=prepared_smoke.measurement, custody=prepared_smoke.custody,
                 runs_parent=Path(inputs["runs_parent"]), backup_claim=Path(inputs["claim_backup_destination"]),
                 backup_bound=Path(inputs["bound_backup_destination"]), archive=prepared_smoke.smoke_dir / "archive",
@@ -108,6 +125,8 @@ class DriverLane:
         metadata = {"session_id": layout.session_id, "packs": list(layout.packs), "campaign_id": layout.campaign_id,
             "paths": paths.json(), "inputs": inputs, "notes": notes, "smoke": smoke_record,
             "prepared": asdict(prepared), "runs_roots": []}
+        if disk_budget is not None:
+            metadata["disk_budget"] = disk_budget
         write(metadata_path(prepared), metadata)
         write(stage / "plan-inputs.json", inputs)
         write(pointer, asdict(prepared))
