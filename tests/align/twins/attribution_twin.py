@@ -129,6 +129,7 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
+import math
 
 from joulewise.align.records import ClockMapping, Episode, PowerTrace
 
@@ -610,7 +611,8 @@ def attribute_episode(episode: Episode, *, source: str, channel: str,
     ``_tile_episode``; "their energies sum to the total within float
     accumulation error". Each segment and the total are ``trace_energy`` over
     their own interval of the selected trace (R13) with the episode's mapping
-    for that trace (R14).
+    for that trace (R14). For point W traces, the total bound is the larger
+    of its own query bound and the sum of the tile bounds.
     """
     flags: list[str] = []
     matches = [t for t in episode.power_traces if t.source == source and t.channel == channel]
@@ -632,6 +634,13 @@ def attribute_episode(episode: Episode, *, source: str, channel: str,
     segments = tuple(SegmentEnergy(turn=turn, kind=kind, start_ns=start, end_ns=end, energy=estimate(start, end))
                      for kind, turn, start, end in tiles)
     total = estimate(episode.start_ns, episode.end_ns)
+    if trace is not None and _method_of(trace) == METHOD_TRAPEZOID:
+        # The tiles partition the query: their additive bounds retain error
+        # at internal point-sample transitions, absent from a single query.
+        tile_bound = math.fsum(part.energy.half_width_j for part in segments)
+        total = EnergyEstimate(joules=total.joules,
+                               half_width_j=max(tile_bound, total.half_width_j),
+                               method=total.method, flags=total.flags)
     return EpisodeAttribution(episode_id=episode.episode_id, channel=channel, total=total,
                               segments=segments, flags=tuple(flags))
 

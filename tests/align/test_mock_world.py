@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import unittest
 from dataclasses import replace
 
@@ -29,6 +30,17 @@ def full_coverage(episode, ledger):
 
 
 class MockWorldTests(unittest.TestCase):
+    def test_mock_window_timestamps_have_exact_timing_metadata(self):
+        from joulewise.align.attribution import attribute_episode
+        episode, _, _, _, _ = inbox_episode()
+        for trace in episode.power_traces:
+            self.assertEqual(json.loads(trace.notes)["window_timing_half_width_ns"],
+                             [0]*len(trace.t_ns))
+            result = attribute_episode(episode, source=trace.source, channel=trace.channel)
+            self.assertNotIn("timing.sample_uncertainty_unreported", result.flags)
+            for energy in (result.total, *(s.energy for s in result.segments)):
+                self.assertNotIn("timing.sample_uncertainty_unreported", energy.flags)
+
     def test_tool_wait_excess_conserves_parameter_times_wait_duration(self):
         episode, _, task, _, _ = inbox_episode(seed=2)
         # Configured contrast, not a measured coefficient: 25 W above idle.

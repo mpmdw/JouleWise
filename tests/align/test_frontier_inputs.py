@@ -106,9 +106,9 @@ class FrontierInputRegressionTests(unittest.TestCase):
     def test_one_missing_episode_keeps_other_199_pairs(self):
         pairs = list(self.by_model["Qwen3-4B"])
         pairs[17] = (pairs[17][0], math.nan, math.nan)
-        result = F.joule_token_divergence(pairs, n_boot=199, seed=7)
+        result = F.joule_token_divergence(pairs, n_boot=199, seed=7, uncertainty_kind="standard_uncertainty")
         valid = pairs[:17] + pairs[18:]
-        reference = F.joule_token_divergence(valid, n_boot=199, seed=7)
+        reference = F.joule_token_divergence(valid, n_boot=199, seed=7, uncertainty_kind="standard_uncertainty")
         self.assertEqual(result["n_pairs"], 199)
         self.assertIn("excluded_pair:17", result["flags"])
         self.assertIn("pairs_used:199/200", result["flags"])
@@ -122,7 +122,7 @@ class FrontierInputRegressionTests(unittest.TestCase):
     def test_negative_net_energy_is_retained_and_flagged(self):
         pairs = list(self.by_model["Qwen3-4B"])
         pairs[5] = (pairs[5][0], -0.4, 1.0)
-        result = F.joule_token_divergence(pairs, n_boot=199, seed=7)
+        result = F.joule_token_divergence(pairs, n_boot=199, seed=7, uncertainty_kind="standard_uncertainty")
         self.assertEqual(result["n_pairs"], 200)
         self.assertIn("negative_joules_pair:5", result["flags"])
         self.assertFalse(any(f.startswith("excluded_pair:") for f in result["flags"]))
@@ -144,8 +144,8 @@ class FrontierInputRegressionTests(unittest.TestCase):
                              F.cheapest_reaching(ordinary, 0.75, cost=cost, n_boot=199))
         pairs = [(scalar(int(t)), j, h) for t, j, h in divergence_world(1)]
         reference = [(float(t), j, h) for t, j, h in pairs]
-        actual = F.joule_token_divergence(pairs, n_boot=99)
-        expected = F.joule_token_divergence(reference, n_boot=99)
+        actual = F.joule_token_divergence(pairs, n_boot=99, uncertainty_kind="standard_uncertainty")
+        expected = F.joule_token_divergence(reference, n_boot=99, uncertainty_kind="standard_uncertainty")
         self.assertEqual(actual, expected)  # Identical normalized input/RNG path.
 
     def test_integer_like_stdlib_inputs(self):
@@ -171,7 +171,7 @@ class FrontierInputRegressionTests(unittest.TestCase):
             self.assertIn("excluded_row:bad", probabilities.flags)
         pairs = divergence_world(1, n=200)
         for bad in ((-1, 1, 1), (1, 2, -1), (1, 2, math.inf)):
-            result = F.joule_token_divergence([bad] + pairs, n_boot=99)
+            result = F.joule_token_divergence([bad] + pairs, n_boot=99, uncertainty_kind="standard_uncertainty")
             self.assertEqual(result["n_pairs"], 200)
             self.assertIn("excluded_pair:0", result["flags"])
             self.assertTrue(math.isfinite(result["residual_sd"]))
@@ -182,7 +182,7 @@ class FrontierInputRegressionTests(unittest.TestCase):
             self.assertIsNone(result["identical"])
             self.assertIsNone(result["kill_condition_met"])
         for pairs in ([], [(1, 1, 1), (2, 2, 1)], [(1, k, 1) for k in range(10)]):
-            self.assertIsNone(F.joule_token_divergence(pairs, n_boot=99)["diverges"])
+            self.assertIsNone(F.joule_token_divergence(pairs, n_boot=99, uncertainty_kind="standard_uncertainty")["diverges"])
 
 
 if __name__ == "__main__":

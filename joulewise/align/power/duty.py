@@ -178,8 +178,16 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
       If instantaneous power is in [0,B], both y and outside power are in
       [0,B], hence |P_out-y| <= B and its term is (|d_i|/i)*o_edge*B.
       Without B this term is infinite, with boundary_baseline_missing.
-      boundary_uncorrected_joules and boundary_observed_range_bound_j retain
-      the old center and old inside/outside observed-range boundary term.
+      The boundary bound is max(the total deconvolution edge term above,
+      the total inside/outside observed-range term). The latter assumes
+      outside-adjacent power stays within the near-edge reading range, as
+      for a monotone decay or rise between inside and baseline levels;
+      boundary_monotone_transition_assumed records this assumption. Only
+      after a pilot measures the board's post-run tail may the narrow
+      deconvolution term replace this max. boundary_deconvolution_bound_j
+      and boundary_observed_range_bound_j print both inputs, and
+      boundary_bound_j prints the max. boundary_uncorrected_joules retains
+      the old center; the corrected center is unchanged by this widening.
       Noise in y and b_edge passes through z into run repeatability. Rounding
       propagates linearly too: q_z = ((w-o_missing)+o_known)*q/i.
     * Known timing: sum((|d_i|/i)*min(h_i,w_i)*R), since translating a
@@ -518,15 +526,18 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         flags.add("boundary_range_fallback_global")
     flags.add(f"boundary_start_range_w={boundary_ranges[0]!r}")
     flags.add(f"boundary_end_range_w={boundary_ranges[1]!r}")
-    old_boundary_bound = math.fsum(
+    observed_boundary_bound = math.fsum(
         weight * (1-Fraction(min(window.right, durations[window.run])-max(window.left, 0),
                             window.right-window.left)) * max(
                                 boundary_ranges[0] if window.left < 0 else 0.0,
                                 boundary_ranges[1] if window.right > durations[window.run] else 0.0)
         for weight, window in zip(interval_seconds, windows))
-    flags.add(f"boundary_observed_range_bound_j={old_boundary_bound!r}")
-    boundary_bound = math.fsum(weight*window.boundary_error_w
-                               for weight, window in zip(interval_seconds, windows))
+    flags.add(f"boundary_observed_range_bound_j={observed_boundary_bound!r}")
+    deconvolution_bound = math.fsum(weight*window.boundary_error_w
+                                  for weight, window in zip(interval_seconds, windows))
+    flags.add(f"boundary_deconvolution_bound_j={deconvolution_bound!r}")
+    flags.add("boundary_monotone_transition_assumed")
+    boundary_bound = max(deconvolution_bound, observed_boundary_bound)
     timing_bound = float(timing_area/_NS_PER_S)*reading_range
     unreplicated_bound = 0.0
     if any(len(members) < 2 for members in declared_groups.values()):

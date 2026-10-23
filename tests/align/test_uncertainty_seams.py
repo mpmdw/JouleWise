@@ -168,9 +168,9 @@ class UncertaintyChainTests(unittest.TestCase):
         for result in (owned,rows,er.design_row(rows[0]),model,threshold,
                        er.predict_episode(model,rows),score,upper,calibrated):
             self.assertIn("uncertainty.bound_read_as_sd",result.flags)
-        self.assertIn("uncertainty.normal_theory_conservative_upper_value",upper.flags)
+        self.assertIn("uncertainty.normal_theory_uncalibrated",upper.flags)
         self.assertIn("uncertainty.print_beside_calibrated_min_detectable_hidden_decode_tokens",upper.flags)
-        print("POWER chain H_min conservative upper",float(upper),"H_cal",float(calibrated),"flags",upper.flags)
+        print("POWER chain H_min normal-theory uncalibrated",float(upper),"H_cal",float(calibrated),"flags",upper.flags)
         # The adapter retains the exact printed bounds; no distribution factor.
         self.assertEqual(rows[0].energy_half_width_j,owned[ep.turns[0].index][1])
         standard=er.turn_rows_from_episode(ep,dict(owned),uncertainty_kind="standard_uncertainty")
@@ -188,7 +188,7 @@ class UncertaintyChainTests(unittest.TestCase):
             pairs.append((ep.totals()["decode_tokens"],a.joules,a.half_width_j))
         sd=statistics.stdev(errors)
         bound=frontier.joule_token_divergence(pairs,n_boot=256,seed=0,uncertainty_kind="additive_bound")
-        known=frontier.joule_token_divergence([(x,y,sd) for x,y,_ in pairs],n_boot=256,seed=0)
+        known=frontier.joule_token_divergence([(x,y,sd) for x,y,_ in pairs],n_boot=256,seed=0, uncertainty_kind="standard_uncertainty")
         self.assertIsNone(bound["diverges"])
         self.assertIn("divergence_undetermined_bound_as_sd",bound["flags"])
         self.assertIn("bound_read_as_sd",bound["flags"])

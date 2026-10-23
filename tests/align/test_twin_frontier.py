@@ -625,7 +625,7 @@ class FrontierTwinAgreement(unittest.TestCase):
 
         with mock.patch.object(lane, "_percentile", spy(captured["lane"], lane._percentile)), \
                 mock.patch.object(twin, "percentile", spy(captured["twin"], twin.percentile)):
-            a = lane.joule_token_divergence(lane_pairs, n_boot=n_boot, seed=seed)
+            a = lane.joule_token_divergence(lane_pairs, n_boot=n_boot, seed=seed, uncertainty_kind="standard_uncertainty")
             b = twin.joule_token_divergence(twin_pairs, n_boot=n_boot, seed=seed + 7919)
         return a, b, captured
 
@@ -1150,7 +1150,7 @@ def r4_capture(pairs, **kwargs):
         return original(values, fraction)
 
     with mock.patch.object(lane, "_percentile", spy):
-        result = lane.joule_token_divergence(pairs, **kwargs)
+        result = lane.joule_token_divergence(pairs, **kwargs, uncertainty_kind="standard_uncertainty")
     # Calls are (rho low, rho high, sd low, sd high) on the same two lists.
     return result, captured[0], captured[2]
 
@@ -1242,7 +1242,7 @@ class FrontierTwinAgreementRound4(unittest.TestCase):
         self.assertGreater(r4_binomial_cdf(at_most, b, p_any), R4_ALPHA / 2, (label, estimate, p))
 
     def check_divergence(self, pairs, label, n_boot=1999):
-        same_lane = lane.joule_token_divergence(pairs, n_boot=n_boot, seed=5)
+        same_lane = lane.joule_token_divergence(pairs, n_boot=n_boot, seed=5, uncertainty_kind="standard_uncertainty")
         same_twin = twin.joule_token_divergence(pairs, n_boot=n_boot, seed=5)
         for lk, tk in (("spearman_rho", "spearman_rho"), ("residual_sd", "residual_sd"),
                        ("median_half_width", "median_half_width")):
@@ -1333,7 +1333,7 @@ class FrontierTwinAgreementRound4(unittest.TestCase):
         model = raw[7][1]
         episode_pairs = list(pairs[model])
         episode_pairs[3] = (episode_pairs[3][0], math.nan, episode_pairs[3][2])
-        got = lane.joule_token_divergence(episode_pairs, n_boot=999, seed=5)
+        got = lane.joule_token_divergence(episode_pairs, n_boot=999, seed=5, uncertainty_kind="standard_uncertainty")
         ref = twin.joule_token_divergence(episode_pairs[:3] + episode_pairs[4:], n_boot=999, seed=5)
         self.assertIn("excluded_pair:3", got["flags"])
         self.assertEqual(got["n_pairs"], ref["n"])  # integer counts: exact
