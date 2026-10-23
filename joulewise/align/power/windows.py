@@ -17,8 +17,13 @@ def _support_edge_quantum_ns(end_ns: int) -> float:
     # the sampler's clock representation/arithmetic and _conversion_error_ns.
     # A snap moves at most quantum*P/1e9 J (1.98e-5 J at 40 W), not a new
     # sensor uncertainty. Derive this in the trace clock, before mapping it.
+    # Below 2**53 ns the ns product is spaced finer than 1 ns, so each of the
+    # two conversions' final round() can add 0.5 ns (the same term the
+    # sampler's _conversion_error_ns prices): +1 ns there, 0 at epoch scale.
     end_s = end_ns / 1_000_000_000
-    return math.ulp(end_s * 1_000_000_000) + math.ulp(end_s) * 1_000_000_000
+    product_spacing = math.ulp(end_s * 1_000_000_000)
+    return (product_spacing + math.ulp(end_s) * 1_000_000_000
+            + (1.0 if product_spacing < 1 else 0.0))
 
 
 def window_supports(
@@ -30,7 +35,7 @@ def window_supports(
     variable widths. Explicit unknown entries remain unknown. Malformed or
     non-end-stamped supports must never silently select point interpolation.
     Powermetrics edges within their float conversion quantum share one edge;
-    flags receives support_edge_snapped:<channel> and its integer snap count.
+    flags receives support_edge_snapped:<channel> once when any edge snapped.
     The recorded trace and its evidence are never rewritten.
     """
     if trace.unit != "W":
@@ -69,9 +74,12 @@ def window_supports(
                         and abs(start-edge) <= _support_edge_quantum_ns(edge)):
                     supports[i] = (edge, end)
                     snapped += 1
+            # One flag per channel, not one per count: the budget summary
+            # counts trials per flag string, so a count in the name would
+            # splinter its Flags column. The per-trace count is recoverable
+            # by re-reading the recorded supports, which are never rewritten.
             if snapped and flags is not None:
-                flags.extend((f"support_edge_snapped:{trace.channel}",
-                              f"support_edge_snap_count:{trace.channel}:{snapped}"))
+                flags.append(f"support_edge_snapped:{trace.channel}")
         return tuple(supports)
     width = trace.averaging_window_ns
     if width is not None and width > 0:

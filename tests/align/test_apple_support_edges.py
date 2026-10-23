@@ -16,7 +16,7 @@ from joulewise.align.apple.sampler import TRACE_DOMAIN, power_records, seconds_n
 from joulewise.align.attribution import attribute_episode
 from joulewise.align.budget.energy import episode_energy
 from joulewise.align.energy_residual import turn_energy_from_attribution
-from joulewise.align.power.windows import window_supports
+from joulewise.align.power.windows import _support_edge_quantum_ns, window_supports
 from joulewise.align.records import Episode, PowerTrace, Turn, from_json, to_json
 from joulewise.interfaces import PowerSample
 
@@ -56,17 +56,16 @@ class AppleSupportEdges(unittest.TestCase):
                 discrepancies = [a-b for (_, b), (a, _) in zip(raw, raw[1:])]
                 # Uniform and variable adapter windows exercise both signs.
                 self.assertIn(256 if len(widths) == 1 else -256, discrepancies)
-                count = sum(d != 0 for d in discrepancies)
+                self.assertGreater(sum(d != 0 for d in discrepancies), 0)
                 flags = []
                 supports = window_supports(trace, flags=flags)
                 self.assertTrue(all(b == c for (_, b), (c, _) in zip(supports, supports[1:])))
-                self.assertEqual(flags, ['support_edge_snapped:cpu_power',
-                                        f'support_edge_snap_count:cpu_power:{count}'])
+                self.assertEqual(flags, ['support_edge_snapped:cpu_power'])
                 for (old_start, _), (new_start, _) in zip(raw, supports):
                     # Two half-ulp ns products plus one epoch-second ulp:
                     # 494.42 ns here, hence < 1.98e-5 J moved per snap at 40 W.
                     quantum = math.ulp(epoch*SECOND) + math.ulp(epoch)*SECOND
-                    self.assertLessEqual(abs(new_start-old_start)*40./SECOND, quantum*40./SECOND)
+                    self.assertLessEqual(abs(new_start-old_start), quantum)
                 start, end = supports[0][0], supports[-1][1]
                 ep = Episode('adapter', 'synthetic', 'benign', 'm', 'e', 0, TRACE_DOMAIN,
                     start, end, (Turn(0, start, end, 0, 0, 1),), power_traces=(trace,))
@@ -98,7 +97,7 @@ class AppleSupportEdges(unittest.TestCase):
                     supports = window_supports(trace, flags=flags)
                     snapped = source == 'powermetrics' and 0 < abs(delta) <= 494
                     self.assertEqual(supports[1][0], edge if snapped else edge+delta)
-                    self.assertEqual(flags, ['support_edge_snapped:cpu', 'support_edge_snap_count:cpu:1']
+                    self.assertEqual(flags, ['support_edge_snapped:cpu']
                                      if snapped else [])
                     ep = Episode('edge', 'synthetic', 'benign', 'm', 'e', 0, 'host',
                         edge-SECOND, edge+SECOND, (), power_traces=(trace,))
@@ -114,6 +113,24 @@ class AppleSupportEdges(unittest.TestCase):
                         self.assertTrue(math.isfinite(energy.joules))
                     self.assertEqual('energy_window_gap' in energy.flags, delta > 0 and not snapped)
 
+    def test_sub_epoch_clock_prices_the_round_ties(self):
+        # Below 2**53 ns the ns product is finer than 1 ns, so the two final
+        # round() calls can disagree by 1 ns (cold Fable delta F1); the quantum
+        # adds that 1 ns, so +-1 ns snaps and +-2 ns does not.
+        edge = 1234 * SECOND
+        self.assertLess(_support_edge_quantum_ns(edge), 2)
+        self.assertGreaterEqual(_support_edge_quantum_ns(edge), 1)
+        for delta, snaps in ((1, True), (-1, True), (2, False), (-2, False)):
+            with self.subTest(delta=delta):
+                raw = [[edge-SECOND, edge], [edge+delta, edge+SECOND]]
+                trace = PowerTrace('powermetrics', 'cpu', TRACE_DOMAIN, (edge, edge+SECOND),
+                    (4., 4.), 'W', SECOND, resolution=0.,
+                    notes=json.dumps({'sample_support_ns': raw}))
+                flags = []
+                supports = window_supports(trace, flags=flags)
+                self.assertEqual(supports[1][0], edge if snaps else edge+delta)
+                self.assertEqual(flags, ['support_edge_snapped:cpu'] if snaps else [])
+
     def test_archived_episodes_keep_finite_totals_and_unfloored_segment_bounds(self):
         lines = (Path(__file__).parent/'fixtures/realsmoke_energy.jsonl').read_bytes().splitlines(keepends=True)
         self.assertEqual(len(lines), len(ARCHIVE))
@@ -128,7 +145,7 @@ class AppleSupportEdges(unittest.TestCase):
              'gpu_power': (284.2940729959329, .20523058879045106, .20477603702506825),
              'ane_power': (0., 0., 0.)},
         )
-        for line, (path, digest), targets, count in zip(lines, ARCHIVE, expected, (15, 57)):
+        for line, (path, digest), targets in zip(lines, ARCHIVE, expected):
             self.assertEqual(hashlib.sha256(line).hexdigest(), digest, path)
             ep = from_json(Episode, line)
             original = to_json(ep)
@@ -138,7 +155,6 @@ class AppleSupportEdges(unittest.TestCase):
                     budget = episode_energy(ep, channels=(('powermetrics', channel),))
                     for flags in (attr.flags, budget.flags):
                         self.assertIn(f'support_edge_snapped:{channel}', flags)
-                        self.assertIn(f'support_edge_snap_count:{channel}:{count}', flags)
                     self.assertTrue(math.isfinite(attr.total.joules))
                     self.assertTrue(math.isfinite(budget.joules))
                     self.assertEqual(attr.total.half_width_j, 1.)
