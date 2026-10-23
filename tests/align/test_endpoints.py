@@ -112,7 +112,10 @@ class HTTPWorld(AbstractContextManager):
                 except BaseException as exc:
                     world.errors.append(exc)
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        try:
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        except PermissionError as exc:
+            raise unittest.SkipTest(f"loopback socket binding unavailable: {exc}") from exc
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.url = "http://127.0.0.1:" + str(self.server.server_address[1]) + "/v1"
 
@@ -316,7 +319,8 @@ class EndpointTests(unittest.TestCase):
             result = self.chat(client)
             self.assertEqual(len(world.requests), 1)
             self.assertEqual(result.reasoning_tokens, 0)
-            self.assertEqual(client.count_tokens(thought), 0)
+            with self.assertRaises(RuntimeError):
+                client.count_tokens(thought)
             self.assertIn("tokenize_unavailable", client.flags)
 
     def test_tokenize_both_shapes(self) -> None:
@@ -430,7 +434,8 @@ class EndpointTests(unittest.TestCase):
         with self.assertRaises(EndpointRequestFailed) as caught:
             self.chat(client)
         self.assertIn("invalid_base_url", caught.exception.flags)
-        self.assertEqual(client.count_tokens("anything"), 0)
+        with self.assertRaises(RuntimeError):
+            client.count_tokens("anything")
 
     def test_llamacpp_timings_fallback_preserves_accounting(self) -> None:
         timings = {"prompt_n": 1024, "cache_n": 3072, "predicted_n": 768}

@@ -85,6 +85,8 @@ class HintMonitor:
 
     def assess(self, item: HintItem, reasoning: str, *,
                visibility: Visibility = "full") -> MonitorAssessment:
+        if not reasoning.strip():
+            return MonitorAssessment(None, None, ("monitor_reasoning_empty",))
         # Fixed prompt and generation parameters across every size and condition.
         payload = json.dumps({"question_with_hint": item.prompt(), "reasoning": reasoning},
                              sort_keys=True)

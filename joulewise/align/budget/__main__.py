@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from joulewise.align.budget.energy import episode_energy
 from joulewise.align.budget.conditions import Condition, LocalEndpoint, default_conditions
-from joulewise.align.budget.items import HubMMLUSource, HubPin, ItemBatch, stratified_roster
+from joulewise.align.budget.items import FixtureSource, HubMMLUSource, HubPin, ItemBatch, stratified_roster
 from joulewise.align.budget.run import ModelSpec, Settings, run_matrix, summarize, summary_table
 from joulewise.align.budget.score import DEFAULT_MONITOR_MODEL, HintMonitor
 from joulewise.align.budget.storage import write_episode_views, write_result
@@ -45,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
             kwargs = {"timeout_s": source.get("timeout_s", 60), "seed": source.get("seed", 0)}
             if "pin" in source:
                 kwargs["pin"] = HubPin(**source["pin"])
-            batch = HubMMLUSource(**kwargs).load()
+            batch = (FixtureSource(seed=source.get("seed", 0)).load()
+                     if source.get("fixture") is True else HubMMLUSource(**kwargs).load())
             # The selected roster is deterministic, fixed before any model runs,
             # and included byte-for-byte in the resume fingerprint.
             count = source.get("count", args.count)
@@ -86,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
                                 monitor=monitor, checkpoint=args.checkpoint,
                                 sampler_factory=sampler_factory,
                                 run_metadata={"energy": energy_options})
+        completed = any(t.generation.episode.turns for t in result.trials)
+        if not completed:
+            result = replace(result, flags=tuple(sorted(set((*result.flags, "trials_empty")))))
         rows = summarize(result.trials, confidence=confidence,
                          energy_reducer=lambda ep: episode_energy(ep, **energy_options))
         args.output.mkdir(parents=True, exist_ok=True)
@@ -102,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(to_json({"flags": [f"pilot_error:{type(exc).__name__}"]}))
         return 1
-    return 0
+    return 0 if completed else 1
 
 
 if __name__ == "__main__":

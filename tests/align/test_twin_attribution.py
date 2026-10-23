@@ -467,6 +467,9 @@ class ProductionWorldAgreement(unittest.TestCase):
                 # edges. The episode takes max(own, summed tile bounds).
                 expected = max(expected, math.fsum(lane_reading_half_width(
                     trace, mapping, s.start_ns, s.end_ns) for s in ref.segments))
+            if g is got.total and trace.source == "powermetrics" and math.isfinite(expected):
+                # D-078 clause 11 applies once to the printed episode total.
+                expected = max(1.0, expected)
             width_bar = 1e-6 * max(1.0, expected)  # No printed uncertainty: 1e-6 rule.
             self.assertLessEqual(abs(g.half_width_j - expected), width_bar, (t0, t1, g))
             if expected > 0:

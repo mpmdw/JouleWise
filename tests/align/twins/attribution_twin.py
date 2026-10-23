@@ -612,7 +612,8 @@ def attribute_episode(episode: Episode, *, source: str, channel: str,
     accumulation error". Each segment and the total are ``trace_energy`` over
     their own interval of the selected trace (R13) with the episode's mapping
     for that trace (R14). For point W traces, the total bound is the larger
-    of its own query bound and the sum of the tile bounds.
+    of its own query bound and the sum of the tile bounds. Finite powermetrics
+    episode totals then receive the D-078 clause 11 printed minimum of 1 J.
     """
     flags: list[str] = []
     matches = [t for t in episode.power_traces if t.source == source and t.channel == channel]
@@ -641,6 +642,12 @@ def attribute_episode(episode: Episode, *, source: str, channel: str,
         total = EnergyEstimate(joules=total.joules,
                                half_width_j=max(tile_bound, total.half_width_j),
                                method=total.method, flags=total.flags)
+    if trace is not None and trace.source == "powermetrics" and math.isfinite(total.half_width_j):
+        # D-078 clause 11 floors the printed episode total at ~1 J, not queries.
+        total = EnergyEstimate(joules=total.joules, half_width_j=max(1.0, total.half_width_j),
+                               method=total.method,
+                               flags=(*total.flags, "powermetrics.attribution_floor"))
+        _add(flags, "powermetrics.attribution_floor")
     return EpisodeAttribution(episode_id=episode.episode_id, channel=channel, total=total,
                               segments=segments, flags=tuple(flags))
 

@@ -29,7 +29,7 @@ from joulewise.align.budget.score import HintMonitor
 from joulewise.align.budget.storage import read_episode_views, read_result
 from joulewise.align.budget.synthetic import ScriptedModel, ScriptedMonitor, synthetic_items
 from joulewise.align.interfaces import ChatMessage
-from joulewise.align.records import Episode, to_json
+from joulewise.align.records import ClockMapping, Episode, PowerTrace, to_json
 from joulewise.clock import ClockStamp, FakeClock
 from joulewise.interfaces import AdapterResult, PowerSample, TelemetryStopResult
 from joulewise.schemas import BenchmarkConfig
@@ -170,9 +170,10 @@ class EndpointTests(unittest.TestCase):
             self.assertEqual(result.raw_usage["_finish_reason"], "length")
             self.assertIn("turn_token_budget_reached", result.raw_usage["_budget_flags"])
             self.assertFalse(any(f.startswith("turn_token_budget_reached:") for f in result.raw_usage["_budget_flags"]))
-            indexed = [f for f in result.raw_usage["flags"] if f.startswith("turn_token_budget_reached:")]
+            flags = result.raw_usage["joulewise"]["flags"]
+            indexed = [f for f in flags if f.startswith("turn_token_budget_reached:")]
             self.assertEqual(indexed, [f"turn_token_budget_reached:{result.raw_usage['native_generation']['turn']}"])
-            self.assertNotIn("turn_token_budget_reached", result.raw_usage["flags"])
+            self.assertNotIn("turn_token_budget_reached", flags)
             self.assertEqual(result.raw_usage["native_generation"], ep.endpoint.turn_provenance[-1])
             native_flags.extend(indexed)
         self.assertEqual(len(set(native_flags)), 2)  # Native calls retain distinct indices.
@@ -183,6 +184,43 @@ class EndpointTests(unittest.TestCase):
         ep = endpoint(runtime, clock)
         native = runtime._mlx_lm
         with self.assertRaisesRegex(RuntimeError, "endpoint_error"):
+            self.call(ep)
+        self.assertIs(runtime._mlx_lm, native)
+        self.assertIs(ep.endpoint.runtime, runtime)
+
+    def test_native_stop_at_exact_budget_is_not_a_cut(self):
+        clock = FakeClock()
+        ep = endpoint(native_runtime(clock, "done"), clock)
+        result = ep.chat((ChatMessage("user", "Question"),), max_tokens=4,
+                         temperature=0.0, seed=3)
+        self.assertEqual(result.raw_usage["_finish_reason"], "stop")
+        self.assertEqual(result.raw_usage["joulewise"]["finish_reason"], "stop")
+        self.assertNotIn("turn_token_budget_reached", result.raw_usage["_budget_flags"])
+        self.assertFalse(any(f.startswith("turn_token_budget_reached:")
+                             for f in result.raw_usage["joulewise"]["flags"]))
+
+    def test_cut_open_thought_keeps_native_visible_prefix_and_closed_spans(self):
+        raw = "Visible.<think>closed</think><think>unfinished<tool_call>{broken}"
+        clock = FakeClock()
+        ep = endpoint(native_runtime(clock, raw + "more"), clock)
+        result = ep.chat((ChatMessage("user", "Question"),), max_tokens=len(raw),
+                         temperature=0.0, seed=3)
+        self.assertEqual(result.content, "Visible.")
+        self.assertEqual(result.reasoning_text, "closed\nunfinished<tool_call>{broken}")
+        self.assertEqual(result.reasoning_tokens, len("closed") + len("unfinished<tool_call>{broken}"))
+        self.assertEqual(result.tool_calls, ())
+        self.assertIn("reasoning_censored_at_token_limit", result.raw_usage["_budget_flags"])
+
+    def test_stream_fault_restores_runtime_and_is_not_empty_success(self):
+        clock = FakeClock()
+        runtime = native_runtime(clock)
+        native = runtime._mlx_lm
+        def failing_stream(*args, **kwargs):
+            yield SimpleNamespace(token=ord("x"), text="x", finish_reason=None)
+            raise ValueError("synthetic stream failure")
+        native.stream_generate = failing_stream
+        ep = endpoint(runtime, clock)
+        with self.assertRaisesRegex(RuntimeError, "endpoint_error:.*synthetic stream failure"):
             self.call(ep)
         self.assertIs(runtime._mlx_lm, native)
         self.assertIs(ep.endpoint.runtime, runtime)
@@ -330,10 +368,65 @@ class MatrixTests(unittest.TestCase):
             wrong = apple_energy(shifted)
             self.assertIsNotNone(wrong.joules, (trial.trial_id, wrong.flags))
             self.assertGreater(abs(wrong.joules - expected), bar_j, trial.trial_id)
-            # End-stamped averages treated as points lag half an interval.
-            point = episode_energy(episode, channels=CHANNELS)
+            # The shared budget path now reads these same native supports.
+            shared = episode_energy(episode, channels=CHANNELS)
+            self.assertTrue(math.isclose(energy.joules, shared.joules, rel_tol=1e-6, abs_tol=1e-6))
+            # Removing ALL support evidence explicitly constructs the old
+            # end-stamped point counterfactual; it lags half an interval.
+            point_traces = []
+            for trace in episode.power_traces:
+                notes = json.loads(trace.notes)
+                notes.pop("sample_support_ns")
+                point_traces.append(replace(trace, averaging_window_ns=None, notes=json.dumps(notes)))
+            point = episode_energy(replace(episode, power_traces=tuple(point_traces)), channels=CHANNELS)
             self.assertIsNotNone(point.joules, (trial.trial_id, point.flags))
             self.assertGreater(abs(point.joules - expected), bar_j, trial.trial_id)
+
+    def test_shared_energy_agrees_with_dropped_poll_and_quantum_snaps(self):
+        epoch = 1_790_000_000_000_000_000
+        tick = 100_000_000
+        supports = [[epoch, epoch + tick],
+                    [epoch + tick + 256, epoch + 2*tick],
+                    [epoch + 3*tick, epoch + 4*tick],
+                    [epoch + 4*tick - 256, epoch + 5*tick]]
+        # The absent third poll leaves a 100 ms gap. The shared integral
+        # bridges it at 4 + 43.4 + 0.3 = 47.7 W: 4.77 J that D3's former
+        # overlap-only sum omitted. Each adjacent +/-256 ns edge snaps once.
+        for scale in (1.0, 0.01):
+            with self.subTest(scale=scale):
+                traces = tuple(PowerTrace(
+                    source, channel, "synthetic:epoch", tuple(b for _, b in supports),
+                    (watts*scale,)*len(supports), "W", tick, resolution=0.0,
+                    notes=json.dumps({"clock_anchor": {"status": "bounded"},
+                                      "sample_support_ns": supports,
+                                      "power_bound_w": watts*scale}))
+                    for (source, channel), watts in zip(CHANNELS, (4.0, 43.4, 0.3)))
+                start = 7_000_000_000
+                episode = Episode("missed-poll", "synthetic", "benign", "m", "e", 0,
+                    DOMAIN, start, start + 5*tick, (), power_traces=traces,
+                    clock_mappings=(ClockMapping("synthetic:epoch", DOMAIN, start-epoch, 0,
+                                                 "synthetic_exact"),))
+                original = to_json(episode)
+                shared = episode_energy(episode, channels=CHANNELS)
+                apple = apple_energy(episode)
+                expected = 47.7 * scale * 0.5
+                # Align agreement: 1e-6 relative, 1e-6 J absolute below 1 J.
+                for actual in (shared.joules, apple.joules):
+                    self.assertIsNotNone(actual)
+                    self.assertLessEqual(abs(actual-expected), 1e-6*max(1.0, abs(expected)))
+                self.assertLessEqual(abs(apple.joules-shared.joules),
+                                     1e-6*max(1.0, abs(shared.joules)))
+                self.assertIsNone(apple.uncertainty_j)
+                # D-078 remains one floor on the shared three-rail total.
+                expected_bound = max(1.0, 47.7*scale*0.1)
+                self.assertTrue(math.isclose(shared.uncertainty_j, expected_bound, rel_tol=1e-6))
+                for energy in (shared, apple):
+                    self.assertIn("energy_sample_gap", energy.flags)
+                    self.assertIn("energy_window_gap", energy.flags)
+                    self.assertIn("energy_window_average_over_support", energy.flags)
+                    snapped = [f for f in energy.flags if f.startswith("support_edge_snapped:")]
+                    self.assertEqual(snapped, sorted(f"support_edge_snapped:{c}" for _, c in CHANNELS))
+                self.assertEqual(to_json(episode), original)
 
     def test_step_interval_average_energy_with_partial_edge_bound(self):
         # Designed levels, not M3 measurements: summed IDLE=1.5 W, BUSY=34.3 W.
@@ -431,7 +524,9 @@ class MatrixTests(unittest.TestCase):
                               [supports[1], supports[0], *supports[2:]]):
                 notes = json.loads(first.notes)
                 notes["sample_support_ns"] = malformed
-                cases.append((with_notes(notes), "energy_sample_support_missing"))
+                flag = ("energy_window_support_unknown" if malformed and malformed[0] is None
+                        else "energy_window_support_invalid")
+                cases.append((with_notes(notes), flag))
             for value in (-1.0, math.inf, math.nan):
                 cases.append((replace(ep, power_traces=(
                     replace(first, values=(value, *first.values[1:])), *rest)), "energy_samples_invalid"))
@@ -543,7 +638,12 @@ class MatrixTests(unittest.TestCase):
             self.assertNotIn("load_wall_time_s", result.metadata["d3"]["prepare"])
             for t in result.trials:
                 self.assertFalse(any("generation_error" in f or "backend_kind_unrecognized" in f for f in t.flags), t.flags)
-                self.assertIsNotNone(apple_energy(t.episode).joules)
+                self.assertNotIn("budget_forcing_continuation_unsupported", t.flags)
+                if t.condition.mode == "budget":
+                    self.assertEqual(len(t.generation.calls), 2)
+                    self.assertEqual(len(t.paired.calls), 2)
+                self.assertIsNotNone(apple_energy(t.episode).joules,
+                                     (t.condition.name, apple_energy(t.episode).flags))
             # New preparation time/memory are not part of experiment identity.
             metadata["load_wall_time_s"] = 99.0
             metadata["memory_snapshots"] = ["different"]

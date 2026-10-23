@@ -1,8 +1,8 @@
 """Bridge the existing Apple telemetry adapter into alignment power records.
 
 The adapter owns capture, parsing and native-second clock anchoring. This
-module only changes representation. Native averaging supports remain in notes
-when their widths vary, since records.v1 has one averaging width per trace.
+module only changes representation. Every mean stays stamped at its window
+end; sample_support_ns retains the native support, including variable widths.
 """
 
 from __future__ import annotations
@@ -30,6 +30,9 @@ def _conversion_error_ns(seconds: float) -> float:
     # Multiplication rounds by <= half the spacing of the ns product:
     # 128 ns at an epoch near 1.8e18 ns. round() then costs <= 0.5 ns;
     # the latter vanishes for epoch products already spaced by integer ns.
+    # Together with the clock representation/arithmetic terms below this
+    # prices the shared-edge quantum derived in power.windows; that reader
+    # snaps only conversion-sized disagreements in native window supports.
     product_spacing = math.ulp(seconds * NS_PER_SECOND)
     return product_spacing / 2 + (0.5 if product_spacing < 1 else 0.0)
 
@@ -113,7 +116,7 @@ def stamp_mapping(
         bound_s = (
             bridge_resolution_s + (upper - lower) / 2
         )
-        method = "paired_clock_bracket_only"
+        method = "unmeasured" if evidence is not None else "paired_clock_bracket_only"
         if evidence is not None:
             flags.append("clock_anchor_unresolved")
     offset_s = -(lower + (upper - lower) / 2)
@@ -142,7 +145,8 @@ def stamp_mapping(
     return ClockMapping(
         trace_domain=TRACE_DOMAIN, episode_domain=episode_domain,
         offset_ns=seconds_ns(offset_s), uncertainty_ns=uncertainty_ns,
-        method=f"{method}; paired wall/monotonic envelope; half-ulp ns-product conversions",
+        method=("unmeasured" if method == "unmeasured" else
+                f"{method}; paired wall/monotonic envelope; half-ulp ns-product conversions"),
     ), tuple(flags)
 
 
@@ -163,9 +167,6 @@ def power_records(
         supports: list[list[int] | None] = []
         for sample in rows:
             timestamp = seconds_ns(sample.timestamp_s)
-            if times and timestamp <= times[-1]:
-                flags.append(f"nonincreasing_power_timestamp:{channel}")
-                continue
             if not math.isfinite(sample.power_w):
                 flags.append(f"nonfinite_power:{channel}")
                 continue
@@ -184,6 +185,17 @@ def power_records(
         )
         if variable:
             flags.append(f"variable_averaging_support:{channel}")
+        # Window means are not instantaneous readings. Keep the native end
+        # stamp and support paired, even when their widths differ.
+        written_times, written_values, written_supports = [], [], []
+        for timestamp, value, support in zip(times, values, supports):
+            if written_times and timestamp <= written_times[-1]:
+                flags.append(f"nonincreasing_power_timestamp:{channel}")
+                continue
+            written_times.append(timestamp)
+            written_values.append(value)
+            written_supports.append(support)
+        times, values, supports = written_times, written_values, written_supports
         source = "powermetrics" if any(row.source == "powermetrics" for row in rows) else "mock"
         # Parsing converts mW to W but does not establish sensor quantization.
         # Leave resolution unknown rather than inventing a physical quantum.
@@ -295,6 +307,10 @@ class ApplePowerSampler:
         noted = []
         for trace in traces:
             notes = json.loads(trace.notes)
-            notes["flags"] = list(dict.fromkeys([*notes.get("flags", ()), *self.flags]))
+            # Channel diagnostics belong only to their own rail. Global capture
+            # and hazard diagnostics still accompany every trace.
+            own_flags = [flag for flag in self.flags
+                         if flag not in trace_flags or flag.endswith(f":{trace.channel}")]
+            notes["flags"] = list(dict.fromkeys([*notes.get("flags", ()), *own_flags]))
             noted.append(replace(trace, notes=json.dumps(notes, sort_keys=True)))
         return tuple(noted)

@@ -99,7 +99,10 @@ class RegistryDefaultsTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(payload)
 
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        except PermissionError as exc:
+            self.skipTest(f"loopback socket binding unavailable: {exc}")
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

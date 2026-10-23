@@ -229,6 +229,7 @@ class LocalEndpoint:
             pending.append("prompt")
         cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
         usage["_budget_flags"] = flags
+        usage["joulewise"] = {"flags": flags, "finish_reason": raw["choices"][0].get("finish_reason")}
         if pending:
             usage["_budget_token_counts_pending"] = pending
         usage["_finish_reason"] = raw["choices"][0].get("finish_reason")
@@ -245,17 +246,32 @@ class LocalEndpoint:
         flags = list(usage.get("_budget_flags", ()))
         reasoning, completion, prompt = (result.reasoning_tokens, result.completion_tokens,
                                          result.prompt_tokens)
+        def count(text: str, field: str, fallback: int) -> int:
+            try:
+                return len(self.encode(text)) if text else 0
+            except Exception as exc:
+                # Generation already completed. A tokenizer is diagnostic I/O;
+                # preserve the result and mark the unknown count explicitly.
+                flags.extend((f"token_accounting_error:{field}:{type(exc).__name__}",
+                              f"{field}_tokens_unavailable"))
+                return fallback
+
         if "reasoning" in pending:
-            reasoning = len(self.encode(result.reasoning_text)) if result.reasoning_text else 0
-            if result.reasoning_text:
+            reasoning = count(result.reasoning_text, "reasoning", reasoning)
+            if result.reasoning_text and "reasoning_tokens_unavailable" not in flags:
                 flags.append("reasoning_tokens_from_tokenizer")
         if "completion" in pending:
-            completion = reasoning + len(self.encode(result.content))
-            flags.append("completion_tokens_from_tokenizer")
+            completion = reasoning + count(result.content, "completion", completion)
+            if "reasoning_tokens_unavailable" in flags:
+                flags.append("completion_tokens_unavailable")
+            if "completion_tokens_unavailable" not in flags:
+                flags.append("completion_tokens_from_tokenizer")
         if "prompt" in pending:
             # A concatenation is not the chat template; never claim an exact count.
-            prompt = len(self.encode("\n".join(m.content for m in messages)))
-            flags.append("prompt_tokens_template_estimate")
+            prompt = count("\n".join(m.content for m in messages), "prompt", prompt)
+            if "prompt_tokens_unavailable" not in flags:
+                flags.append("prompt_tokens_template_estimate")
         usage["_budget_flags"] = list(dict.fromkeys(flags))
+        usage["joulewise"] = {**usage.get("joulewise", {}), "flags": usage["_budget_flags"]}
         return replace(result, prompt_tokens=int(prompt), completion_tokens=int(completion),
                        reasoning_tokens=int(reasoning), raw_usage=usage)

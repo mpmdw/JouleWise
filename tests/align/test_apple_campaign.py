@@ -180,7 +180,8 @@ class AppleCampaignTests(unittest.TestCase):
             }
             policy_path = root / "synthetic-policy.json"
             policy_path.write_text(json.dumps(policy))
-            env = dict(os.environ, JW_B5_SYNTHETIC_ONLY="1", PYTHONDONTWRITEBYTECODE="1")
+            env = dict(os.environ, JW_B5_SYNTHETIC_ONLY="1", PYTHONDONTWRITEBYTECODE="1",
+                       JOULEWISE_CUSTODY_PARENT=str(root / "custody"))
             completed = subprocess.run([
                 sys.executable, "-B", str(ROOT / "scripts/run_campaign.py"),
                 str(root / "pack/members"), "--runs-dir", str(root / "runs"),

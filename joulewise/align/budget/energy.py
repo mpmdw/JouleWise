@@ -1,6 +1,7 @@
 """Gross episode integration with explicit edge, clock and sensor uncertainty.
 
-Power is estimated with piecewise-linear interpolation. The half-width also
+Point power is estimated with piecewise-linear interpolation; window means
+are constant over their recorded supports. The half-width also
 bounds arbitrary transitions within intervals whose sensor readings change,
 plus quantization and bracket edges. Identical sampled levels cannot reveal
 unseen excursions; no undocumented sensor-accuracy bound is claimed.
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from joulewise.align.records import Episode, PowerTrace
+from joulewise.align.power.windows import window_supports
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,39 @@ def _edge(trace: PowerTrace, t: int) -> tuple[float, float]:
 
 def _interpolate(trace: PowerTrace, t: int) -> float:
     return _edge(trace, t)[0]
+
+
+def _window_integral(supports, values, start, end, maximum):
+    """Overlap allocation and nonnegative-Pmax enclosure of cut windows.
+
+    A window of width w and mean p contains p*w joules. Its overlap of
+    length L contains between max(0, p*w-Pmax*(w-L)) and min(p*w, Pmax*L).
+    Full windows therefore have no within-window allocation error.
+    """
+    energies, bounds = [], []
+    previous = None
+    for (a, b), value in zip(supports, values):
+        if previous is not None:
+            t, power = previous
+            lo, hi = max(start, t), min(end, a)
+            if hi > lo:
+                left = power + (value-power)*(lo-t)/(a-t)
+                right = power + (value-power)*(hi-t)/(a-t)
+                area = (hi-lo)/1_000_000_000*(left+right)/2
+                energies.append(area)
+                bounds.append(max(area, maximum*(hi-lo)/1_000_000_000-area)
+                              if maximum is not None else math.inf)
+        lo, hi = max(start, a), min(end, b)
+        if hi > lo:
+            width, overlap = (b-a)/1_000_000_000, (hi-lo)/1_000_000_000
+            area = value*overlap
+            energies.append(area)
+            if lo != a or hi != b:
+                lower = max(0., value*width-maximum*(width-overlap)) if maximum is not None else 0.
+                upper = min(value*width, maximum*overlap) if maximum is not None else math.inf
+                bounds.append(max(area-lower, upper-area))
+        previous = b, value
+    return math.fsum(energies), math.fsum(bounds)
 
 
 def _median_interval_ns(intervals: list[int]) -> float:
@@ -130,7 +165,19 @@ def episode_energy(episode: Episode, *,
                 return Energy(None, flags=("energy_clock_mapping_unmeasured",))
             offset, uncertainty_ns = mappings[0].offset_ns, mappings[0].uncertainty_ns
         start, end = episode.start_ns - offset, episode.end_ns - offset
-        if (len(trace.t_ns) < 2 or trace.t_ns[0] > start + uncertainty_ns
+        try:
+            supports = window_supports(trace, flags=flags)
+        except ValueError:
+            return Energy(None, flags=("energy_window_support_invalid",))
+        if supports is not None:
+            if any(s is None for s in supports):
+                return Energy(None, flags=("energy_window_support_unknown",))
+            # Conversion-quantum disagreements have already been snapped and
+            # counted by window_supports; any remaining overlap is real.
+            if any(b > c for (_, b), (c, _) in zip(supports, supports[1:])):
+                return Energy(None, flags=("energy_window_overlap",))
+        coverage_start = supports[0][0] if supports else (trace.t_ns[0] if trace.t_ns else 0)
+        if (len(trace.t_ns) < (1 if supports else 2) or coverage_start > start + uncertainty_ns
                 or trace.t_ns[-1] < end - uncertainty_ns):
             return Energy(None, flags=("energy_trace_unbracketed",))
         # A synchronous first poll can lie inside the mapping's uncertainty
@@ -138,18 +185,19 @@ def episode_energy(episode: Episode, *,
         # overlap and bound the missing sliver, rather than discarding J.
         # This exception is limited to +/- the stated clock half-width:
         # a same-domain missing bracket still has no estimate.
-        partial = (trace.t_ns[0] > start - uncertainty_ns
+        partial = (coverage_start > start - uncertainty_ns
                    or trace.t_ns[-1] < end + uncertainty_ns)
         if partial:
             flags.append("energy_clock_bracket_partial")
-        measured_start = max(start, trace.t_ns[0])
+        measured_start = max(start, coverage_start)
         measured_end = min(end, trace.t_ns[-1])
         if measured_start > measured_end:
             return Energy(None, flags=("energy_trace_unbracketed",))
         if any(not math.isfinite(v) or v < 0 for v in trace.values):
             return Energy(None, flags=("energy_samples_invalid",))
-        first, delta_a = _edge(trace, measured_start)
-        last, delta_b = _edge(trace, measured_end)
+        if supports is None:
+            first, delta_a = _edge(trace, measured_start)
+            last, delta_b = _edge(trace, measured_end)
         duration_s = (end - start) / 1_000_000_000
         maximum = power_max_w
         if maximum is None:
@@ -184,6 +232,20 @@ def episode_energy(episode: Episode, *,
                     flags.append("energy_power_max_missing")
                 edge_bound += maximum * missing_ns / 1_000_000_000 if maximum is not None else math.inf
             bound = None if trace.resolution is None else trace.resolution + edge_bound
+        elif supports is not None:
+            joules, allocation_bound = _window_integral(
+                supports, trace.values, measured_start, measured_end, maximum)
+            missing_ns = max(0, coverage_start-start) + max(0, end-trace.t_ns[-1])
+            edge_ns = missing_ns + 2*uncertainty_ns
+            edge_bound = (maximum*edge_ns/1_000_000_000 if maximum is not None
+                          else (math.inf if edge_ns else 0.))
+            bound = (None if trace.resolution is None else
+                     trace.resolution*duration_s/2 + allocation_bound + edge_bound)
+            if maximum is None:
+                flags.append("energy_power_max_missing")
+            if any(b < c for (_, b), (c, _) in zip(supports, supports[1:])):
+                flags.append("energy_window_gap")
+            flags.append("energy_window_average_over_support")
         else:
             # Walk the interior once; only the two edges need binary search.
             interior = [(t, v) for t, v in zip(trace.t_ns, trace.values)
@@ -235,10 +297,6 @@ def episode_energy(episode: Episode, *,
         if trace.duty_fraction is not None and trace.duty_fraction < 1:
             flags.append("energy_duty_cycled_requires_repetitions")
             bound = None
-        if trace.source == "powermetrics":
-            flags.append("energy_powermetrics_attribution_floor")
-            # Documented M3 Max attribution half-width is about 1 J.
-            bound = None if bound is None else max(1.0, bound)
         intervals = [b - a for a, b in zip(trace.t_ns, trace.t_ns[1:])]
         # event.wait(T) followed by acquisition A has cycle T+A, not T.
         # A missed cycle is near 2*(T+A); 1.5 is their midpoint. The observed
@@ -247,15 +305,20 @@ def episode_energy(episode: Episode, *,
         # the n-1 normal intervals are a strict majority, so both median ranks
         # are normal. For n=2 the median mixes normal and doubled intervals;
         # use the minimum instead. A lone interval cannot identify a lost poll.
-        observed_cycle = (min(intervals) if len(intervals) < 3
-                          else _median_interval_ns(intervals))
+        observed_cycle = (min(intervals) if 0 < len(intervals) < 3
+                          else _median_interval_ns(intervals) if intervals else 0)
         cycle_ns = max(trace.nominal_interval_ns, observed_cycle)
         if any(interval > gap_factor * cycle_ns for interval in intervals):
             flags.append("energy_sample_gap")
-        flags.append("energy_piecewise_linear_between_samples")
+        if supports is None:
+            flags.append("energy_piecewise_linear_between_samples")
         values.append(joules)
         bounds.append(bound)
-    return Energy(math.fsum(values),
-                  math.fsum(b for b in bounds if b is not None)
-                  if all(b is not None for b in bounds) else None,
+    total_bound = math.fsum(bounds) if all(b is not None for b in bounds) else None
+    if any(trace.source == "powermetrics" for trace in traces):
+        # The ~1 J attribution minimum belongs to the run total, including
+        # a total over multiple disjoint rails; never sum one floor per rail.
+        flags.append("energy_powermetrics_attribution_floor")
+        total_bound = None if total_bound is None else max(1.0, total_bound)
+    return Energy(math.fsum(values), total_bound,
                   tuple(sorted(set(flags))))

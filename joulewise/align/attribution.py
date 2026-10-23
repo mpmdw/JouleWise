@@ -1,6 +1,7 @@
 """Energy attribution from power traces to episode phases and tool intervals.
 
-Point power is linear between samples; a window mean owns [t-window, t].
+Point power is linear between samples; a window mean is constant on its
+native support (sample_support_ns in notes, or [t-window, t] for fixed widths).
 Uncovered duty intervals bridge the neighbouring window means linearly.
 Their measured fraction is encoded as
 window_average_W;duty.uncovered_fraction=<repr(float)>; the corresponding
@@ -22,6 +23,7 @@ import json
 from typing import overload
 
 from joulewise.align.records import ClockMapping, Episode, PowerTrace
+from joulewise.align.power.windows import window_supports
 from joulewise.bundle_read import TracePoint
 from joulewise.reduce import _integrate
 
@@ -157,7 +159,19 @@ class _Trace:
             notes = notes if isinstance(notes, dict) else {}
         except (TypeError, ValueError):
             notes = {}
-        timing_key = "window_timing_half_width_ns" if window is not None and not self.counter else "timing_half_width_ns"
+        try:
+            supports = window_supports(trace, flags=self.flags)
+        except ValueError:
+            supports = (None,) * len(trace.t_ns)
+            self.flags.append("window.support_invalid")
+        self.windowed = supports is not None
+        self.windows = (tuple(None if support is None else
+                              (support[0] + offset, support[1] + offset)
+                              for support, value in zip(supports, trace.values)
+                              if math.isfinite(value)) if supports is not None else ())
+        if any(support is None for support in self.windows):
+            self.flags.append("window.support_unknown")
+        timing_key = "window_timing_half_width_ns" if self.windowed else "timing_half_width_ns"
         sample_timing = notes.get(timing_key)
         self.sample_timing = None
         if timing_key not in notes:
@@ -188,7 +202,7 @@ class _Trace:
                 self.counter_age_unknown = True
                 self.flags.append("timing.sensor_age_unknown")
         self.times: Sequence[int]
-        if not self.counter and window is None and all(map(math.isfinite, trace.values)):
+        if not self.counter and not self.windowed and all(map(math.isfinite, trace.values)):
             # Retain global nonfinite-sample semantics, but avoid allocating
             # O(n) pairs, translated epochs and spans for a short point query.
             self.times = trace.t_ns if offset == 0 else _OffsetTimes(trace.t_ns, offset)
@@ -232,12 +246,15 @@ class _Trace:
                         self.resets.append((a, b, "counter.reset_interval"))
                 watts = increment / ((b - a) / _NS_PER_S)
                 spans.append(_Span(a, b, watts, watts))
-        elif window is not None:
+        elif self.windowed:
             self.method = "window_average_W"
-            for i, (t, value) in enumerate(pairs):
-                start = t - window
-                if i:
-                    previous_t, previous_value = pairs[i - 1]
+            previous = None
+            for support, (_, value) in zip(self.windows, pairs):
+                if support is None:
+                    continue
+                start, t = support
+                if previous is not None:
+                    previous_t, previous_value = previous
                     if start > previous_t:
                         spans.append(_Span(previous_t, start, previous_value, value, True))
                     elif start < previous_t:
@@ -245,12 +262,14 @@ class _Trace:
                         # unsupported sensor shape rather than double counting.
                         self.flags.append("window.overlap")
                     start = max(start, previous_t)
-                spans.append(_Span(start, t, value, value))
-        if trace.duty_fraction is not None and trace.duty_fraction < 1 and window is None:
+                if start < t:
+                    spans.append(_Span(start, t, value, value))
+                previous = (t, value)
+        if trace.duty_fraction is not None and trace.duty_fraction < 1 and not self.windowed:
             self.flags.append("duty.window_missing")
         self.spans: Sequence[_Span]
         self.starts: Sequence[int]
-        if not self.counter and window is None:
+        if not self.counter and not self.windowed:
             self.spans = _PointSpans(self.times, self.values)
             # The final sample has no following span. Sequence slicing clips
             # that harmless extra knot when a query reaches/passes coverage.
@@ -290,7 +309,7 @@ class _Trace:
     def _interpolation(self, t: int, t0: int, t1: int, *, start: bool) -> float:
         if not self.spans:
             return 0.0
-        if self.window is not None and not self.counter:
+        if self.windowed:
             # Window interpolation compares raw timestamp brackets.
             starts = self.times
             count = len(self.times)-1
@@ -329,14 +348,16 @@ class _Trace:
         return math.fsum(terms)
 
     def _window_uncertainty(self, t0: int, t1: int) -> float:
-        if self.counter or self.window is None:
+        if not self.windowed:
             return 0.0
         terms = []
         k0 = max(1, bisect_left(self.times, t0))
         for k in range(k0, len(self.times)):
             if self.times[k - 1] >= t1:
                 break
-            a, b = self.times[k - 1], self.times[k] - self.window
+            if self.windows[k] is None:
+                continue
+            a, b = self.times[k - 1], self.windows[k][0]
             overlap = max(0, min(t1, b) - max(t0, a))
             if overlap:
                 # C2(a), assuming at most one step per duty gap: a step
@@ -348,8 +369,11 @@ class _Trace:
         for t in (t0, t1):
             k = bisect_left(self.times, t)
             if (k < len(self.times) and k not in cut_windows
-                    and self.times[k] - self.window < t < self.times[k]):
+                    and self.windows[k] is not None
+                    and self.windows[k][0] < t < self.windows[k][1]):
                 cut_windows.add(k)
+                window_start, window_end = self.windows[k]
+                width = window_end - window_start
                 neighbours = self.values[max(0, k - 1):k + 2]
                 # C2(b), assuming at most one step per window: allocating
                 # a trailing mean across a cut errs by dP*w*u*(1-u),
@@ -358,9 +382,9 @@ class _Trace:
                 # window overlap and count a shared end window only once.
                 # Adjacent means set the observed range; unseen bursts or
                 # larger unobserved steps remain unbounded.
-                overlap = min(t1, self.times[k]) - max(t0, self.times[k] - self.window)
+                overlap = min(t1, window_end) - max(t0, window_start)
                 terms.append((max(neighbours) - min(neighbours))
-                             * min(self.window / 4, overlap) / _NS_PER_S)
+                             * min(width / 4, overlap) / _NS_PER_S)
         return math.fsum(terms)
 
     def energy(self, t0: int, t1: int, idle_watts: float) -> EnergyEstimate:
@@ -400,6 +424,8 @@ class _Trace:
                         uncovered_ns += b - a
         missing_ns = (t1 - t0) - covered_ns
         bounds: list[float] = []
+        if "window.support_unknown" in flags or "window.support_invalid" in flags:
+            bounds.append(math.inf)
         if "window.overlap" in flags:
             # Earliest-ending windows still define the energy estimate, but
             # overlapping means do not identify the underlying waveform.
@@ -413,7 +439,10 @@ class _Trace:
                 flags.append("coverage.peak_missing")
         if self.mapping is not None:
             uncertainty = self.mapping.uncertainty_ns
-            if uncertainty < 0:
+            if self.mapping.method == "unmeasured":
+                flags.append("clock.unmeasured")
+                bounds.append(math.inf)
+            elif uncertainty < 0:
                 flags.append("clock.uncertainty_invalid")
             else:
                 bounds.append((self._adjacent_peak(t0) + self._adjacent_peak(t1))
@@ -455,7 +484,7 @@ class _Trace:
         if resolution is not None and math.isfinite(resolution) and resolution >= 0:
             bounds.append(2 * resolution if self.counter else resolution * duration)
         method = self.method
-        if self.window is not None:
+        if self.windowed:
             # C2 is a one-step sensitivity, not a bound on arbitrary work
             # hidden inside a window or unobserved duty gap.
             for t in (t0, t1):
@@ -469,7 +498,8 @@ class _Trace:
         energy = math.fsum(energies) - idle_watts * duration
         if energy < 0:
             flags.append("energy.negative")
-        return EnergyEstimate(energy, math.fsum(bounds), method, _flags(flags))
+        half_width = math.fsum(bounds)
+        return EnergyEstimate(energy, half_width, method, _flags(flags))
 
 
 # A single active immutable trace is retained for repeated public queries.
@@ -500,7 +530,8 @@ def trace_energy(
     and gives infinite timing sensitivity (timing.sensor_age_unknown).
     Endpoint hold-versus-line comparisons include both spans at sample knots
     and are clipped to the query itself.
-    Windowed sensors compare raw sample brackets and add the C2 duty-gap
+    Windowed sensors integrate their own supports, including variable widths,
+    compare raw sample brackets and add the C2 duty-gap
     and query-clipped within-window allocation sensitivities under a
     one-step assumption. Intervals shorter than nominal_interval_ns carry
     segment.shorter_than_period for every sensor shape, without a new width
@@ -609,6 +640,8 @@ def attribute_episode(
     tools taking precedence over model phases; no time is counted twice.
     Point W totals use the larger of the single-query bound and summed
     segment bounds; windowed W and counter totals keep their own query bound.
+    Finite powermetrics totals then carry the D-078 clause 11 minimum of 1 J;
+    individual queries and segments retain their modeled bounds.
     """
     flags = list(episode.flags)
     traces = [trace for trace in episode.power_traces
@@ -650,12 +683,17 @@ def attribute_episode(
     total = estimate(episode.start_ns, episode.end_ns)
     segments = tuple(SegmentEnergy(turn, kind, start, end, estimate(start, end))
                      for turn, kind, start, end in _segments(episode, flags))
-    if not reconstruction.counter and reconstruction.window is None:
+    if not reconstruction.counter and not reconstruction.windowed:
         # Point W reconstruction (including a flagged invalid window).
         # Interior phase edges can hide point-sample trapezoid error even
         # when the episode endpoints have no hold-versus-line sensitivity.
         total = EnergyEstimate(total.joules, max(total.half_width_j, math.fsum(
             segment.energy.half_width_j for segment in segments)), total.method, total.flags)
+    if trace.source == "powermetrics" and math.isfinite(total.half_width_j):
+        # D-078 clause 11: ~31 ms times ~33 W limits the printed episode
+        # total to about 1 J, not each query used to construct that total.
+        total = EnergyEstimate(total.joules, max(1.0, total.half_width_j), total.method,
+                               _flags([*total.flags, "powermetrics.attribution_floor"]))
     flags.extend(total.flags)
     for segment in segments:
         flags.extend(segment.energy.flags)
