@@ -13,6 +13,7 @@ from joulewise.b6.pack_registration import Registration, load, open_packs, valid
 from joulewise.flags.catalog import load_catalog
 from tests.git_fixture import init_git_fixture
 from joulewise.b6 import registration as acceptance_registration
+from joulewise.b6 import plan_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = load_catalog(ROOT / "configs/b6/flag_catalog_b6.json")
@@ -24,13 +25,49 @@ class AcceptanceDirectoryTests(unittest.TestCase):
         for name, loader in (("identity_pins.json", acceptance_registration.load_identity_pins),
                              ("sizing_b5.json", acceptance_registration.load_sizing)):
             with self.subTest(name=name):
-                self.assertEqual((target / name).read_bytes(),
-                                 (ROOT / 'configs/campaigns/v5_claim_25g83' / name).read_bytes())
+                original = ROOT / 'configs/campaigns/v5_claim_25g83' / name
+                if name == 'sizing_b5.json':
+                    # B6 adds pack-specific BYTES rows; the replication source
+                    # and every original field/row must still be unchanged.
+                    current, baseline = json.loads((target / name).read_text()), json.loads(original.read_text())
+                    for key, value in baseline.items():
+                        if key == 'packs':
+                            self.assertEqual({k: current[key][k] for k in value}, value)
+                        else:
+                            self.assertEqual(current[key], value)
+                else:
+                    self.assertEqual((target / name).read_bytes(), original.read_bytes())
                 self.assertIsInstance(loader(target), dict)
         self.assertEqual(acceptance_registration.load_precheck_thresholds(target), {})
         loaded = acceptance_registration.load(target)
         self.assertEqual(acceptance_registration.SCHEMA, loaded["schema"])
         self.assertEqual([], loaded["defaults_used"], "the registered file states every value")
+
+    def test_all_six_pass1_sizing_rows_reach_real_consumers(self):
+        target = ROOT / acceptance_registration.DEFAULT_DIR_RELATIVE
+        sized = acceptance_registration.load_sizing(target)
+        for n in range(1, 7):
+            pack = f'bytes-s{n}-p1'
+            with self.subTest(pack=pack):
+                self.assertIn(pack, sized['packs'], 'pass-1 sizing cannot be vacuously empty')
+                row = sized['packs'][pack]
+                self.assertEqual(row['pack_id'], pack)
+                self.assertTrue(plan_inputs.valid_disk_terms(row.get('disk_derivation')))
+                identities = {name: {'path': name, 'sha256': 'a' * 64}
+                              for name in ('identity-epoch.json', 't1-bindings.json')}
+                # build() consumes only the supplied identity locators; this
+                # verifies the sizing seam without pretending to attest Mac identity.
+                inputs = plan_inputs.build(ROOT, target, pack, 'sizing-desk-test', identities,
+                    custody_root='/synthetic/custody', runs_parent='/synthetic/runs',
+                    claim_backup='/synthetic/claim', bound_backup='/synthetic/bound', head='a' * 40)
+                self.assertEqual(inputs['programmed_span_s']['seconds'], row['programmed_span_s'])
+                self.assertEqual(inputs['T_stream_max_s']['seconds'], row['T_stream_max_s'])
+                plan_inputs.encode_disk_budget(inputs, row['disk_derivation'])
+                budget = inputs['disk_budget']
+                self.assertEqual(budget['member_count'], 125 if n <= 4 else 75)
+                self.assertGreater(budget['bytes_per_member'], 0)
+                self.assertEqual(3 * budget['member_count'] * budget['bytes_per_member']
+                                 + budget['headroom_bytes'], row['disk_derivation']['required_free_bytes'])
 
     def test_malformed_inputs_fail_the_loader_without_filling_measurements(self):
         with tempfile.TemporaryDirectory() as temp:
