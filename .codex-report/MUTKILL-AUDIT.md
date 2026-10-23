@@ -1,6 +1,6 @@
 # MUTKILL-AUDIT
 
-Date: 2026-10-23 UTC. Branch: report/2026-10-22-mutkill-audit. **INCOMPLETE: execution blocked by the cloud environment remaining in startup.**
+Date: 2026-10-23 UTC. Branch: report/2026-10-22-mutkill-audit. **INCOMPLETE: execution blocked by cloud environment startup failure.**
 
 All 93 added test methods across the four drafts were inventoried and statically reviewed by four independent reviewers, then reconciled by the lead. **Zero baseline passes, zero independently verified mutant kills, and zero empirical duplicate confirmations.** The PR authors' 135 claimed kills are claims, not this audit's evidence. No production or test file was changed.
 
@@ -32,7 +32,13 @@ A static DROP is not an empirical “kills nothing” result. No test was execut
 
 ## Commands run with exact tails
 
-The managed environment was selected but never became usable during this session. The initial wait_for_environment call remained pending through repeated waits. At 2026-10-23 05:20:01 UTC, environment_status reported:
+The managed environment was selected but never became usable during this session. The initial wait_for_environment call remained pending through repeated waits, then returned a definitive startup failure. The platform notification reported “failed to query executor configuration capabilities” for the selected environment. The final wait returned exactly:
+
+```text
+Environment `ccarenv_b64_Y2NhcmVudl9hYWEwZjliNGYyYTg4MTkxYTdkMTA3MjY2YWE2ZmI4ZQ` failed to start: exec-server connection attempt failed: environment unavailable: Environment provisioning failed during container_creation. Cause: snapshot_materialization_failed. Reason: gateway_unavailable.
+```
+
+A subsequent environment_status observation was `observed_phase=failed`, `connectivity=offline`, `failure.code=environment_startup_failed`, `failure.message="Environment startup failed. Check the configuration, retry, or contact support."`. These are recorded observations, not an additional root-cause diagnosis. At 2026-10-23 05:20:01 UTC, environment_status reported:
 
 ```json
 {
