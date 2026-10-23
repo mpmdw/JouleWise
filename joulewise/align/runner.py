@@ -1,0 +1,862 @@
+"""Run agent episodes and resumable matrices using only the shared contracts.
+
+Factories receive (config, FactoryContext); imports that install factories are
+explicit in a matrix. Optional clock hooks are lane-local adapters,
+so real endpoints, tasks, monitors and samplers need only the shared protocols.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import importlib
+import itertools
+import json
+import math
+import os
+import random
+import time
+from dataclasses import asdict, dataclass, is_dataclass, replace
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
+
+from joulewise.align.interfaces import (
+    AgentTask, ChatEndpoint, ChatMessage, ChatResult, Monitor, PowerSampler, TokenCounter,
+)
+from joulewise.align.records import (
+    ClockMapping, Episode, MonitorVerdict, PowerTrace, Turn, ToolCall,
+    from_json, to_json, to_jsonable,
+)
+
+_REASONING_TAGS = ("<jw_reasoning>", "</jw_reasoning>")
+_VISIBILITIES = ("full", "no_scratchpad", "actions_only", "tampered")
+_FACTORIES: dict[str, dict[str, Callable[..., Any]]] = {
+    kind: {} for kind in ("task", "endpoint", "monitor", "sampler", "clock", "token_counter")
+}
+
+
+@dataclass(frozen=True)
+class FactoryContext:
+    """Configuration context shared by the components of one matrix episode."""
+
+    task_pair: str
+    condition: str
+    seed: int
+    matrix_id: str
+    clock_domain: str
+    clock: Callable[[], int]
+
+
+def _register(kind: str, name: str, factory: Callable[..., Any]) -> None:
+    _FACTORIES[kind][name] = factory
+
+
+def register_task_factory(name: str, factory: Callable[..., AgentTask]) -> None:
+    _register("task", name, factory)
+
+
+def register_endpoint_factory(name: str, factory: Callable[..., ChatEndpoint]) -> None:
+    _register("endpoint", name, factory)
+
+
+def register_monitor_factory(name: str, factory: Callable[..., Monitor]) -> None:
+    _register("monitor", name, factory)
+
+
+def register_sampler_factory(name: str, factory: Callable[..., PowerSampler]) -> None:
+    _register("sampler", name, factory)
+
+
+def register_clock_factory(name: str, factory: Callable[..., Callable[[], int]]) -> None:
+    _register("clock", name, factory)
+
+
+def register_token_counter_factory(name: str, factory: Callable[..., TokenCounter]) -> None:
+    _register("token_counter", name, factory)
+
+
+def episode_id(task_pair: str, condition: str, endpoint_identity: str, seed: int,
+               matrix_id: str = "") -> str:
+    """Stable identity; seed, identities and matrix ID are data, never wall time."""
+    return hashlib.sha256(to_json(
+        [task_pair, condition, endpoint_identity, seed, matrix_id]).encode("utf-8")).hexdigest()
+
+
+def _spans(text: str, tags: tuple[str, str]) -> tuple[str, list[str], bool]:
+    opening, closing = tags
+    if not opening or not closing:
+        return text, [], False
+    visible: list[str] = []
+    hidden: list[str] = []
+    position = 0
+    unclosed = False
+    while (start := text.find(opening, position)) >= 0:
+        visible.append(text[position:start])
+        end = text.find(closing, start + len(opening))
+        if end < 0:
+            visible.append(text[start:])
+            position = len(text)
+            unclosed = True
+            break
+        hidden.append(text[start + len(opening):end])
+        position = end + len(closing)
+    visible.append(text[position:])
+    return "".join(visible), hidden, unclosed
+
+
+def transcript_view(transcript: Sequence[ChatMessage], visibility: str,
+                    scratchpad_tags: tuple[str, str] | None = None) -> list[ChatMessage]:
+    """Build monitor views; call messages carry name, call ID and JSON arguments.
+
+    Every view excludes system messages. Full/tampered preserve other messages.
+    The latter is a label for a
+    caller-supplied tampered transcript; Episode-only transforms do not edit text.
+    """
+    transcript = [m for m in transcript if m.role != "system"]
+    if visibility == "actions_only":
+        return [m for m in transcript if m.role == "tool" or
+                (m.role == "assistant" and m.tool_call_id is not None)]
+    if visibility != "no_scratchpad":
+        return list(transcript)
+    result = []
+    for message in transcript:
+        content = message.content
+        if message.role == "assistant" and message.tool_call_id is None:
+            for tags in dict.fromkeys(filter(None, (scratchpad_tags, _REASONING_TAGS))):
+                content, _, _ = _spans(content, tags)
+        result.append(replace(message, content=content))
+    return result
+
+
+def _count(value: Any, flags: list[str], field: str) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    flags.append("usage.invalid." + field)
+    return 0
+
+
+
+def _text_result(value: Any) -> str:
+    """Keep non-text tool output representable without losing the model turn."""
+    if isinstance(value, bytes):
+        return "hex:" + value.hex()
+    try:
+        return to_json(value)
+    except (TypeError, ValueError):
+        try:
+            return repr(value)
+        except Exception:
+            return "<" + type(value).__name__ + ">"
+
+
+def _endpoint_history(transcript: Sequence[ChatMessage]) -> list[ChatMessage]:
+    """Visible assistant content for backend history and task scorers."""
+    history = []
+    for message in transcript:
+        if message.role == "assistant" and message.tool_call_id is None:
+            content, _, _ = _spans(message.content, _REASONING_TAGS)
+            message = replace(message, content=content)
+        history.append(message)
+    return history
+
+
+def _endpoint_flags(value: Any, flags: list[str]) -> None:
+    """Lift adapter diagnostics without importing any endpoint implementation."""
+    if isinstance(value, str):
+        value = (value,)
+    if isinstance(value, (list, tuple)):
+        flags.extend("endpoint." + flag for flag in value if isinstance(flag, str))
+
+
+def _capture_usage(result: ChatResult, flags: list[str]) -> Any:
+    usage = _finite_json(result.raw_usage, flags, "usage.raw_non_finite")
+    if isinstance(usage, Mapping):
+        diagnostics = usage.get("joulewise", {})
+        if isinstance(diagnostics, Mapping):
+            _endpoint_flags(diagnostics.get("flags", ()), flags)
+    if result.prompt_tokens == 0:
+        flags.append("endpoint.empty_result")
+    return usage
+
+
+def _finite_json(value: Any, flags: list[str], flag: str) -> Any:
+    """Keep JSON diagnostics writable even when a server reports NaN/inf."""
+    value = to_jsonable(value)
+    def clean(item: Any) -> Any:
+        if isinstance(item, float) and not math.isfinite(item):
+            flags.append(flag)
+            return None
+        if isinstance(item, Mapping):
+            return {key: clean(entry) for key, entry in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [clean(entry) for entry in item]
+        return item
+    return clean(value)
+
+
+def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
+                monitors: Sequence[Any] = (), samplers: Sequence[PowerSampler] = (),
+                seed: int, max_turns: int, max_tokens: int, temperature: float,
+                clock_domain: str, token_counter: TokenCounter | None = None,
+                matrix_id: str = "", clock: Callable[[], int] | None = None
+                ) -> tuple[Episode, list[ChatMessage]]:
+    """Run, retain failures as flags, stop sampling, then score and monitor.
+
+    Monitor entries may be objects (full visibility), or (object, visibilities).
+    clock is a nanosecond callable, normally time.monotonic_ns; synthetic worlds
+    inject a virtual monotonic clock without replacing any production function.
+    """
+    now = clock or time.monotonic_ns
+    flags: list[str] = []
+    transcript: list[ChatMessage] = []
+    turns: list[Turn] = []
+    started: list[PowerSampler] = []
+    counts: dict[str, int | None] = {}
+    counted: list[int] = []
+    raw_usage: dict[str, Any] = {}
+    failed_requests: list[Any] = []
+    traces: list[PowerTrace] = []
+    mappings: dict[str, ClockMapping] = {}
+    pending_counts: dict[int, tuple[list[str], str]] = {}
+    hardware: dict[str, Any] = {
+        "endpoint": endpoint.identity,
+        "samplers": [getattr(s, "identity", type(s).__name__) for s in samplers],
+    }
+    tags = task.scratchpad_tags
+    tools: Sequence[Mapping[str, Any]] = ()
+    ready = True
+    try:
+        task.reset(seed)
+        transcript = [ChatMessage("system", task.system_prompt(condition)),
+                      ChatMessage("user", task.user_prompt())]
+        tools = task.tool_schemas()
+    except KeyboardInterrupt:
+        flags.append("episode.interrupted")
+        ready = False
+    except Exception as exc:
+        flags.append("task.setup_error." + type(exc).__name__)
+        ready = False
+    for sampler in samplers:
+        started.append(sampler)  # stop even a partially started sampler
+        try:
+            sampler.start()
+        except KeyboardInterrupt:
+            flags.append("episode.interrupted")
+            ready = False
+            break
+        except Exception as exc:
+            flags.append("sampler.start_error." + type(exc).__name__)
+    start = now()
+    end = start
+    if condition not in ("benign", "sabotage"):
+        flags.append("condition.unknown")
+        hardware["requested_condition"] = condition
+    try:
+        if ready:
+            for index in range(max(0, max_turns)):
+                call_start = now()
+                try:
+                    history = _endpoint_history(transcript)
+                    result = endpoint.chat(history, tools=tools, max_tokens=max_tokens,
+                                           temperature=temperature, seed=seed)
+                except KeyboardInterrupt:
+                    flags.append("episode.interrupted")
+                    break
+                except Exception as exc:
+                    flags.append("endpoint.error." + type(exc).__name__)
+                    _endpoint_flags(getattr(exc, "flags", ()), flags)
+                    partial = getattr(exc, "partial_result", None)
+                    if isinstance(partial, ChatResult):
+                        raw_usage[str(index)] = _capture_usage(partial, flags)
+                        # Incomplete responses are diagnostics, not completed model
+                        # turns or executable tool requests. Preserve partial counts.
+                        failed_requests.append({"index": index, "partial_result":
+                            _finite_json(partial, flags, "usage.raw_non_finite")})
+                    break
+                call_end = now()
+                raw_usage[str(index)] = _capture_usage(result, flags)
+                prompt = _count(result.prompt_tokens, flags, "prompt_tokens")
+                cached = _count(result.cached_prompt_tokens, flags, "cached_prompt_tokens")
+                if cached > prompt:
+                    flags.append("usage.cached_exceeds_prompt")
+                    cached = prompt
+                decode = _count(result.completion_tokens, flags, "completion_tokens")
+                hidden = _count(result.reasoning_tokens, flags, "reasoning_tokens")
+                t_start, t_end, first = result.start_ns, result.end_ns, result.first_token_ns
+                if (not isinstance(t_start, int) or isinstance(t_start, bool) or
+                    not isinstance(t_end, int) or isinstance(t_end, bool) or t_end < t_start):
+                    flags.append("clock.endpoint_invalid")
+                    t_start, t_end, first = call_start, call_end, None
+                if first is not None and (not isinstance(first, int) or isinstance(first, bool)):
+                    flags.append("clock.first_token_invalid")
+                    first = None
+                outside = (not call_start <= t_start <= t_end <= call_end or
+                           (first is not None and not t_start <= first <= t_end))
+                if outside:
+                    if first is not None and not t_start <= first <= t_end:
+                        flags.append("clock.first_token_invalid")
+                    # Adapter stamps must be inside the measured call, including
+                    # its endpoints. A different clock cannot stretch the record.
+                    flags.append("clock.endpoint_outside_call")
+                    t_start, t_end, first = call_start, call_end, None
+                if hidden > decode:
+                    flags.append("usage.hidden_exceeds_decode")
+                    hidden = decode
+                # Retain measured model work before content parsing or tool execution.
+                turns.append(Turn(index, t_start, t_end, cached, prompt - cached,
+                                  decode, hidden, first))
+                end = max(end, t_end)
+                content = result.content
+                if content is None:
+                    flags.append("endpoint.content_missing")
+                    content = ""
+                elif not isinstance(content, str):
+                    flags.append("endpoint.non_text_content")
+                    content = _text_result(content)
+                scratch: list[str] = []
+                if tags:
+                    _, scratch, unclosed = _spans(content, tags)
+                    if unclosed:
+                        flags.append("scratchpad.unclosed")
+                if result.reasoning_text and result.reasoning_tokens == 0:
+                    # Keep the existing diagnostic alias for readers of older runs.
+                    flags.extend(("hidden_tokens.unreported", "usage.reasoning_uncounted"))
+                pending_counts[index] = (scratch, result.reasoning_text)
+                if result.reasoning_text:
+                    content = _REASONING_TAGS[0] + result.reasoning_text + _REASONING_TAGS[1] + content
+                transcript.append(ChatMessage("assistant", content))
+                calls: list[ToolCall] = []
+                interrupted = False
+                for request in result.tool_calls:
+                    transcript.append(ChatMessage("assistant", request.arguments_json,
+                                                  request.name, request.call_id))
+                    tool_start = now()
+                    try:
+                        output = task.call_tool(request.name, request.arguments_json)
+                    except KeyboardInterrupt:
+                        flags.append("episode.interrupted")
+                        output = "Tool interrupted"
+                        interrupted = True
+                    except Exception as exc:
+                        flags.append("tool.error." + type(exc).__name__)
+                        output = "Tool error: " + type(exc).__name__
+                    tool_end = now()
+                    if not isinstance(output, str):
+                        flags.append("tool.non_text_result")
+                        output = _text_result(output)
+                    calls.append(ToolCall(request.name, tool_start, tool_end,
+                                          len(request.arguments_json.encode("utf-8")),
+                                          len(output.encode("utf-8"))))
+                    turns[-1] = replace(turns[-1], tool_calls=tuple(calls))
+                    transcript.append(ChatMessage("tool", output, request.name, request.call_id))
+                    if interrupted:
+                        break
+                end = max(end, t_end, now(), *(c.end_ns for c in calls))
+                if interrupted or "episode.interrupted" in flags:
+                    break
+                if not result.tool_calls:
+                    break
+            else:
+                flags.append("episode.max_turns")
+    except KeyboardInterrupt:
+        flags.append("episode.interrupted")
+    except Exception as exc:
+        flags.append("runner.error." + type(exc).__name__)
+    end = max(end, now())
+    if tools and not any(turn.tool_calls for turn in turns):
+        flags.append("episode.no_tool_calls")
+    hardware["runner"] = {
+        "matrix_id": matrix_id, "scratchpad_tokens": counts,
+        "raw_usage": raw_usage, "failed_requests": failed_requests,
+        "scoring_transcript_view": "endpoint_history",
+        "scratchpad_counted_hidden": counted,
+        "reasoning_history_policy": "strip_separated_reasoning",
+        "max_turns": max_turns, "max_tokens": max_tokens, "temperature": temperature,
+    }
+    runner = hardware["runner"]
+    collected: list[tuple[PowerTrace, tuple[Any, ...]]] = []
+    for sampler in started:
+        try:
+            sampled = tuple(sampler.stop())
+        except (Exception, KeyboardInterrupt) as exc:
+            flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
+                         "sampler.stop_error." + type(exc).__name__)
+            continue
+        try:
+            offered = tuple(getattr(sampler, "clock_mappings", ()))
+        except (TypeError, ValueError):
+            offered = (getattr(sampler, "clock_mappings", None),)
+        for trace in sampled:
+            if not isinstance(trace, PowerTrace):
+                flags.append("sampler.invalid_trace")
+                continue
+            if trace.clock_domain != clock_domain and not hasattr(sampler, "clock_mappings"):
+                flags.append("sampler.clock_mappings_missing")
+            collected.append((trace, offered))
+    # Resolve domains after every sampler stops: a later conflicting offer must
+    # not leave an earlier trace attached to an ambiguous episode mapping.
+    for original, offered in collected:
+        trace = original
+        finite = [(t, value) for t, value in zip(trace.t_ns, trace.values)
+                  if math.isfinite(value)]
+        dropped = len(trace.values) - len(finite)
+        if dropped:
+            flag = "power." + trace.channel + ".non_finite_samples"
+            flags.append(flag)
+            losses = runner.setdefault("non_finite_samples", {})
+            losses[trace.channel] = losses.get(trace.channel, 0) + dropped
+            trace = replace(trace, t_ns=tuple(t for t, _ in finite),
+                            values=tuple(value for _, value in finite))
+        if trace.clock_domain != clock_domain:
+            candidates = []
+            for _, offers in collected:
+                for mapping in offers:
+                    if (isinstance(mapping, ClockMapping) and
+                        mapping.trace_domain == trace.clock_domain and mapping not in candidates):
+                        candidates.append(mapping)
+            valid = [m for m in offered if isinstance(m, ClockMapping) and
+                     m.trace_domain == trace.clock_domain and
+                     m.episode_domain == clock_domain and
+                     isinstance(m.offset_ns, int) and not isinstance(m.offset_ns, bool) and
+                     isinstance(m.uncertainty_ns, int) and not isinstance(m.uncertainty_ns, bool) and
+                     m.uncertainty_ns >= 0]
+            valid = list(dict.fromkeys(valid))
+            reason = ("clock.mapping_conflict" if len(candidates) > 1 else
+                      "clock.unmapped" if len(valid) != 1 else None)
+            if reason:
+                flags.append(reason)
+                runner.setdefault("unattached_traces", []).append({
+                    "trace": _finite_json(original, flags,
+                        "power." + trace.channel + ".non_finite_samples"),
+                    "reason": reason, "clock_mappings": _finite_json(
+                        offered, flags, "clock.mapping_non_finite"),
+                })
+                continue
+            mappings[trace.clock_domain] = valid[0]
+        if not trace.t_ns:
+            flags.append("power.empty")
+        if trace.notes:
+            try:
+                notes = json.loads(trace.notes)
+            except (ValueError, TypeError):
+                notes = None
+            if (isinstance(notes, dict) and isinstance(notes.get("flags"), list) and
+                all(isinstance(flag, str) for flag in notes["flags"])):
+                flags.extend("power." + trace.channel + "." + flag for flag in notes["flags"])
+            else:
+                flags.append("power.notes")
+        traces.append(trace)
+    # Tokenizer requests are diagnostics. They run only after the loop AND
+    # every sampler.stop(), outside the episode and every sampled interval.
+    derived: dict[str, Any] = {
+        "source": getattr(token_counter, "identity", type(token_counter).__name__)
+                  if token_counter is not None else "unavailable",
+        "label": "Tokenizer count, not server accounting",
+        "per_turn": {}, "flags": [],
+    }
+    def count_text(text: str, field: str, failures: list[str]) -> int | None:
+        if token_counter is None:
+            failures.append("token_counter.unavailable")
+            return None
+        try:
+            value = token_counter.count_tokens(text)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError("invalid tokenizer count for " + field)
+            return value
+        except (Exception, KeyboardInterrupt) as exc:
+            flag = ("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
+                    "token_counter.error." + type(exc).__name__)
+            flags.append(flag)
+            failures.append(flag)
+            return None
+    for index, (scratch, reasoning) in pending_counts.items():
+        scratch_count: int | None = 0
+        if scratch:
+            values = [count_text(span, "scratchpad_tokens", []) for span in scratch]
+            scratch_count = sum(values) if all(v is not None for v in values) else None
+            if scratch_count is None:
+                flags.append("hidden_tokens.scratchpad_uncounted")
+        counts[str(index)] = scratch_count
+        if scratch_count is not None:
+            counted.append(index)
+            hidden = turns[index].hidden_tokens + scratch_count
+            if hidden > turns[index].decode_tokens:
+                flags.append("usage.hidden_exceeds_decode")
+                hidden = turns[index].decode_tokens
+            turns[index] = replace(turns[index], hidden_tokens=hidden)
+        if reasoning:
+            derived["per_turn"][str(index)] = count_text(
+                reasoning, "reasoning_text_tokens", derived["flags"])
+    if derived["per_turn"]:
+        derived["flags"] = list(dict.fromkeys(derived["flags"]))
+        runner["derived_reasoning_tokens"] = derived
+    scores: dict[str, Any] = {}
+    for name, scorer in (("main_task_score", task.score_main), ("side_task_success", task.score_side)):
+        try:
+            value = scorer(_endpoint_history(transcript))
+            if value is not None:
+                valid = (isinstance(value, (int, float)) and not isinstance(value, bool)
+                         and math.isfinite(value)) if name == "main_task_score" else isinstance(value, bool)
+                if not valid:
+                    flags.append("score." + name + ".invalid")
+                    value = None
+            scores[name] = value
+        except (Exception, KeyboardInterrupt) as exc:
+            flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
+                         "score." + name + ".error." + type(exc).__name__)
+    flags.extend("task." + flag for flag in getattr(task, "flags", ()) if isinstance(flag, str))
+    verdicts: list[MonitorVerdict] = []
+    for entry in monitors:
+        monitor, visibilities = entry if isinstance(entry, tuple) else (entry, ("full",))
+        for visibility in visibilities:
+            if visibility == "tampered":
+                flags.append("monitor.visibility_tampered_unavailable")
+                continue
+            if visibility not in _VISIBILITIES:
+                flags.append("monitor.visibility_unknown")
+                continue
+            try:
+                verdict = monitor.score(transcript_view(transcript, visibility, tags),
+                    visibility=visibility, task_description=task.task_description())
+                if verdict.visibility != visibility:
+                    flags.append("monitor.visibility_mismatch")
+                else:
+                    verdicts.append(verdict)
+                diagnostics = getattr(monitor, "last_verdict", None)
+            except (Exception, KeyboardInterrupt) as exc:
+                flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
+                             "monitor.error." + type(exc).__name__)
+                diagnostics = getattr(exc, "diagnostics", None)
+            if diagnostics is not None:
+                flags.extend("monitor." + flag for flag in getattr(diagnostics, "flags", ())
+                             if isinstance(flag, str))
+                runner.setdefault("monitor_diagnostics", []).append({
+                    "visibility": visibility, "model": getattr(monitor, "model", "unknown"),
+                    "snapshot": _finite_json(asdict(diagnostics) if is_dataclass(diagnostics)
+                                             else diagnostics, flags, "monitor.non_finite"),
+                })
+    episode = Episode(
+        episode_id(task.task_pair, condition, endpoint.identity, seed, matrix_id),
+        task.task_pair, condition if condition in ("benign", "sabotage") else "benign",
+        getattr(endpoint, "model", endpoint.identity), endpoint.identity, seed,
+        clock_domain, start, end, tuple(turns), hardware=hardware,
+        **scores, monitor_verdicts=tuple(verdicts), power_traces=tuple(traces),
+        clock_mappings=tuple(mappings.values()), flags=tuple(dict.fromkeys(flags)))
+    return episode, transcript
+
+
+def _component(value: Any) -> dict[str, Any]:
+    return {"factory": value} if isinstance(value, str) else dict(value)
+
+
+def _make(kind: str, spec: Any, context: FactoryContext) -> Any:
+    config = _component(spec)
+    factory = _FACTORIES[kind][config["factory"]]
+    return factory(dict(config.get("config", {})), context)
+
+
+def _atomic_json(path: Path, value: Any) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(to_json(value) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _append(path: Path, value: Any) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(to_json(value) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _load_lines(path: Path, parser: Callable[[bytes], Any], flags: list[str]) -> list[Any]:
+    """Recover valid records; preserve discarded bytes in recovery.jsonl."""
+    if not path.exists():
+        path.touch()
+        return []
+    rows = []
+    clean: list[bytes] = []
+    data = path.read_bytes()
+    lines = data.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        reason = ""
+        try:
+            if not line.endswith(b"\n"):
+                reason = "resume.partial_last_line"
+                raise ValueError(reason)
+            row = parser(line)
+            to_json(row)  # reject non-JSON floats and malformed objects on resume
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            reason = reason or "resume.invalid_record"
+            flags.append(reason + "." + path.name)
+            _append(path.parent / "recovery.jsonl", {
+                "file": path.name, "line": index + 1, "flag": reason, "raw_hex": line.hex(),
+            })
+            continue
+        rows.append(row)
+        clean.append(line)
+    if len(clean) != len(lines):
+        with path.open("wb") as handle:
+            handle.write(b"".join(clean))
+            handle.flush()
+            os.fsync(handle.fileno())
+    return rows
+
+
+def _transcript_row(line: bytes) -> dict[str, Any]:
+    row = json.loads(line)
+    if not isinstance(row["episode_id"], str) or not isinstance(row["messages"], list):
+        raise ValueError("invalid transcript")
+    for message in row["messages"]:
+        ChatMessage(**message)
+    return row
+
+
+
+def _public_spec(value: Any) -> Any:
+    """Remove credential fields before hashing or describing a planned cell."""
+    if isinstance(value, Mapping):
+        public = {}
+        for key, item in value.items():
+            name = str(key).lower().replace("-", "_")
+            credential = (name in ("token", "access_token", "auth_token", "api_token",
+                                  "bearer_token", "refresh_token", "api_key", "apikey") or
+                          any(word in name for word in ("secret", "password", "passwd",
+                                                       "credential", "authorization", "cookie")))
+            if not credential:
+                public[str(key)] = _public_spec(item)
+        return public
+    if isinstance(value, (list, tuple)):
+        return [_public_spec(item) for item in value]
+    return value
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(to_json(value).encode("utf-8")).hexdigest()
+
+
+def _planned_cell(task_spec: Mapping[str, Any], condition: str, seed: int,
+                  endpoint_key: str, matrix_id: str) -> str:
+    return episode_id(_digest(_public_spec(task_spec)), condition, endpoint_key, seed, matrix_id)
+
+
+def _retry_requested(episode: Episode, patterns: Sequence[str]) -> bool:
+    from fnmatch import fnmatchcase
+    return any(fnmatchcase(flag, pattern) for flag in episode.flags for pattern in patterns)
+
+
+def run_matrix(spec_path: str | Path) -> Path:
+    """Run a randomized matrix; a durable episode commits each linked attempt.
+
+    Planned cells come from the spec, so resume skips complete cells before
+    constructing a factory. A task-config digest distinguishes prompt variants.
+    Endpoint identity may be declared explicitly; otherwise its public config
+    digest names the cell. Runtime identities remain in the resulting Episode.
+    """
+    spec_path = Path(spec_path)
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    output = Path(spec.get("output_dir", "align-run"))
+    if not output.is_absolute():
+        output = spec_path.parent / output
+    output.mkdir(parents=True, exist_ok=True)
+    episodes_path = output / "episodes.jsonl"
+    transcripts_path = output / "transcripts.jsonl"
+    metadata_path = output / "run.json"
+    flags: list[str] = []
+    canonical = _public_spec({key: value for key, value in spec.items() if key != "output_dir"})
+    digest = _digest(canonical)
+    matrix_id = str(spec.get("matrix_id", digest))
+    order_seed = spec.get("order_seed", 0)
+    previous = {}
+    if metadata_path.exists():
+        try:
+            previous = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if not isinstance(previous, dict):
+                raise ValueError("run metadata is not an object")
+        except (ValueError, TypeError):
+            flags.append("resume.invalid_metadata")
+            previous = {}
+    flags.extend(previous.get("flags", []))
+    if previous and previous.get("spec_sha256") != digest:
+        flags.append("matrix.spec_changed")
+    # Serving limits are operator inputs, not the mock world's token ranges.
+    # Legacy matrices omitted temperature: retain explicit greedy decoding (0)
+    # with a visible default flag and the effective value in run.json/episodes.
+    settings = {key: spec[key] for key in ("max_turns", "max_tokens") if key in spec}
+    settings["temperature"] = spec.get("temperature", 0.0)
+    if "temperature" not in spec:
+        flags.append("matrix.default.temperature")
+    missing = [key for key in ("max_turns", "max_tokens") if key not in spec]
+    flags.extend("matrix.missing." + key for key in missing)
+    metadata = {"matrix_id": matrix_id, "spec_sha256": digest,
+                "order_seed": order_seed, "flags": flags, "order": [],
+                "run_settings": settings, "duplicate_cells": []}
+    from joulewise.align.mock_world import register_mock_factories
+    register_mock_factories()
+    for module in spec.get("imports", []):
+        try:
+            importlib.import_module(module)
+        except Exception as exc:
+            flags.append("matrix.import_error." + type(exc).__name__)
+    episodes = _load_lines(episodes_path, lambda line: from_json(Episode, line), flags)
+    transcripts = _load_lines(transcripts_path, _transcript_row, flags)
+    committed = {ep.episode_id: ep for ep in episodes}
+    transcript_map = {row["episode_id"]: row for row in transcripts}
+    if any(row["episode_id"] not in committed for row in transcripts):
+        flags.append("resume.orphan_transcript")
+        with transcripts_path.open("w", encoding="utf-8") as handle:
+            for row in transcripts:
+                if row["episode_id"] in committed:
+                    handle.write(to_json(row) + "\n")
+    for ep in episodes:
+        if ep.episode_id not in transcript_map:
+            flags.append("resume.transcript_missing")
+            _append(transcripts_path, {"episode_id": ep.episode_id, "messages": [],
+                                      "flags": ["resume.transcript_missing"]})
+    by_cell: dict[str, list[Episode]] = {}
+    for ep in episodes:
+        cell = ep.hardware.get("runner", {}).get("planned_cell_id", ep.episode_id)
+        by_cell.setdefault(cell, []).append(ep)
+
+    tasks = [_component(value) for value in spec.get("task_pairs", spec.get("tasks", []))]
+    conditions = []
+    for condition in spec.get("conditions", ["benign", "sabotage"]):
+        if condition in ("benign", "sabotage"):
+            conditions.append(condition)
+        else:
+            flags.append("matrix.condition_unknown." + str(condition))
+    endpoint_slots = []
+    for value in spec.get("endpoints", []):
+        entry = _component(value)
+        fingerprint = _digest(_public_spec(entry))
+        endpoint_key = str(entry.get("identity", entry["factory"] + "/config/" + fingerprint))
+        endpoint_slots.append((entry, endpoint_key))
+    jobs = list(itertools.product(tasks, conditions, spec.get("seeds", [0]), endpoint_slots))
+    random.Random(order_seed).shuffle(jobs)
+    if not jobs:
+        flags.append("matrix.empty")
+    planned: dict[str, dict[str, str]] = {}
+    retry_flags = spec.get("retry_flags", [])
+    if isinstance(retry_flags, str):
+        retry_flags = [retry_flags]
+    for task_spec, condition, seed, (endpoint_spec, endpoint_key) in jobs:
+        cell = _planned_cell(task_spec, condition, seed, endpoint_key, matrix_id)
+        description = {"task_spec_sha256": _digest(_public_spec(task_spec)),
+                       "endpoint_spec_sha256": _digest(_public_spec(endpoint_spec))}
+        if cell in planned:
+            flags.append("matrix.duplicate_planned_id")
+            metadata["duplicate_cells"].append({"planned_cell_id": cell,
+                                                "specs": [planned[cell], description]})
+            continue
+        planned[cell] = description
+        metadata["order"].append(cell)
+        if missing:
+            continue
+        prior = by_cell.get(cell, [])
+        latest = prior[-1] if prior else None
+        factory_retry = latest is not None and any(
+            flag.startswith("factory.error.") for flag in latest.flags)
+        if latest is not None and not factory_retry and not _retry_requested(latest, retry_flags):
+            continue
+        attempt = len(prior)
+        identity = cell if attempt == 0 else _digest([cell, "attempt", attempt])
+        pair = str(task_spec.get("task_pair", task_spec.get("config", {}).get(
+            "task_pair", task_spec.get("config", {}).get("pair", task_spec["factory"]))))
+        domain = spec.get("clock_domain", "host.monotonic")
+        context = FactoryContext(pair, condition, seed, matrix_id, domain, time.monotonic_ns)
+        task = None
+        endpoint = None
+        construction_flags: list[str] = []
+        pair_declared = any(value is not None for value in (
+            task_spec.get("task_pair"), task_spec.get("config", {}).get("task_pair"),
+            task_spec.get("config", {}).get("pair")))
+        try:
+            if "clock" in spec:
+                context = replace(context, clock=_make("clock", spec["clock"], context))
+            task = _make("task", task_spec, context)
+            pair = task.task_pair
+            context = replace(context, task_pair=pair)
+            endpoint = _make("endpoint", endpoint_spec, context)
+        except (Exception, KeyboardInterrupt) as exc:
+            construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
+                                      else "factory.error." + type(exc).__name__)
+        if construction_flags:
+            if task is None and not pair_declared:
+                construction_flags.append("matrix.task_pair_undeclared")
+            if factory_retry and tuple(construction_flags) == latest.flags:
+                continue  # A still-unavailable factory does not duplicate its diagnostic.
+            timestamp = context.clock()
+            episode = Episode(identity, pair, condition, endpoint_key, endpoint_key,
+                              seed, domain, timestamp, timestamp, (), flags=tuple(construction_flags))
+            transcript = []
+        else:
+            monitors = []
+            samplers = []
+            counter = None
+            for kind, configurations, target in (
+                ("monitor", spec.get("monitors", []), monitors),
+                ("sampler", spec.get("samplers", []), samplers),
+            ):
+                for configuration in configurations:
+                    try:
+                        component = _make(kind, configuration, context)
+                        if kind == "monitor":
+                            visibilities = _component(configuration).get("visibilities", ["full"])
+                            if isinstance(visibilities, str):
+                                visibilities = [visibilities]
+                            target.append((component, tuple(visibilities)))
+                        else:
+                            target.append(component)
+                    except (Exception, KeyboardInterrupt) as exc:
+                        construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
+                                                  else kind + ".factory_error." + type(exc).__name__)
+            if "token_counter" in spec:
+                try:
+                    counter = _make("token_counter", spec["token_counter"], context)
+                except (Exception, KeyboardInterrupt) as exc:
+                    construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
+                                              else "token_counter.factory_error." + type(exc).__name__)
+            if "episode.interrupted" in construction_flags:
+                timestamp = context.clock()
+                episode = Episode(identity, pair, condition, endpoint.identity, endpoint.identity,
+                                  seed, domain, timestamp, timestamp, (), flags=tuple(construction_flags))
+                transcript = []
+            else:
+                episode, transcript = run_episode(
+                    task, condition, endpoint, monitors=monitors, samplers=samplers, seed=seed,
+                    max_turns=settings["max_turns"], max_tokens=settings["max_tokens"],
+                    temperature=settings["temperature"], clock_domain=domain,
+                    token_counter=counter, matrix_id=matrix_id, clock=context.clock,
+                )
+        runner_metadata = dict(episode.hardware.get("runner", {}))
+        runner_metadata.update(order_seed=order_seed, order_index=len(metadata["order"]) - 1,
+                               planned_cell_id=cell, attempt=attempt, run_settings=settings,
+                               task_spec_sha256=description["task_spec_sha256"],
+                               endpoint_key=endpoint_key)
+        if latest is not None:
+            runner_metadata["retry_of"] = latest.episode_id
+        hardware = dict(episode.hardware)
+        hardware["runner"] = runner_metadata
+        episode = replace(episode, episode_id=identity, hardware=hardware,
+                          flags=tuple(dict.fromkeys((*episode.flags, *construction_flags))))
+        _append(transcripts_path, {"episode_id": episode.episode_id,
+                                  "messages": to_jsonable(transcript), "flags": []})
+        _append(episodes_path, episode)
+        committed[episode.episode_id] = episode
+        by_cell.setdefault(cell, []).append(episode)
+        if "episode.interrupted" in episode.flags:
+            flags.append("matrix.interrupted")
+            break
+        metadata["flags"] = list(dict.fromkeys(flags))
+        _atomic_json(metadata_path, metadata)
+    metadata["flags"] = list(dict.fromkeys(flags))
+    _atomic_json(metadata_path, metadata)
+    return episodes_path
+
+
+__all__ = [
+    "FactoryContext", "episode_id", "transcript_view", "run_episode", "run_matrix",
+    "register_task_factory", "register_endpoint_factory", "register_monitor_factory",
+    "register_sampler_factory", "register_clock_factory", "register_token_counter_factory",
+]
