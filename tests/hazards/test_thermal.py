@@ -5,6 +5,7 @@ import sys
 import unittest
 
 from joulewise.hazards import base, thermal
+from tests.live_hw import LiveHardwareTestCase
 from tests.hazards.fakes import FakeClocks, Runner, completed
 
 LIMITS = dict(thermal.DEFAULT_THRESHOLDS)
@@ -74,7 +75,7 @@ class ThermalSpanTests(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real notify bus (macOS)")
-class LiveReadOnlyTests(unittest.TestCase):
+class LiveReadOnlyTests(LiveHardwareTestCase):
     def test_live_level_reads(self):
         measurement = thermal.measure(base.Context())
         self.assertIsNone(measurement.error)
