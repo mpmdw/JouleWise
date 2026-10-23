@@ -12,6 +12,7 @@ import json
 import math
 import re
 import statistics
+import struct
 import sys
 from pathlib import Path
 
@@ -447,11 +448,17 @@ def _battery_delay_s(poll_interval):
     return 2 * T_SMC_S + poll_interval
 
 
-def _decode_battery_marker(stream, raw_span, tau):
+def _battery_delay_ns(stream):
+    # Keep window boundaries on the poll clock; seconds are display values.
+    return round(2 * T_SMC_S * 1e9) + max(
+        (b - a for a, b in zip(stream.poll_ns, stream.poll_ns[1:])), default=0)
+
+
+def _decode_battery_marker(stream, raw_span, tau_ns):
     # BAT-2 §4 defines the marker by current, independently of whether a
     # voltage was available to calculate energy at that poll.
-    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
-    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
+    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau_ns)
+    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau_ns)
     return any(values.get("B0AC") is not None and values["B0AC"] < 0
                for values in stream.smc[lo:hi])
 
@@ -491,13 +498,14 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     # BAT-2 §3: one averaged second, one held second, then the stream's own
     # largest poll interval, over ALL polls (including incomplete SMC reads).
     tau = _battery_delay_s(poll_interval)
+    tau_ns = _battery_delay_ns(stream)
     battery_edges = []
     for edge in spans[0]:
         lo = bisect.bisect_left(battery_times, edge)
-        hi = bisect.bisect_left(battery_times, edge + tau * 1e9)
+        hi = bisect.bisect_left(battery_times, edge + tau_ns)
         battery_edges.append(duration / battery_n * sum(abs(w) for w in battery_watts[lo:hi]))
     v = sum(battery_edges)
-    assisted = _decode_battery_marker(stream, spans[0], tau)
+    assisted = _decode_battery_marker(stream, spans[0], tau_ns)
     stats = stream.fit.stats
     residual = max(abs(number(stats[key], key)) for key in
                    ("excess_latency_ms_min", "excess_latency_ms_max")) / 1000
@@ -519,7 +527,7 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
             "battery_v_start_j": battery_edges[0], "battery_v_end_j": battery_edges[1],
             "battery_tau_s": tau, "battery_poll_interval_max_s": poll_interval,
             "battery_end_window_complete": bool(stream.poll_ns and
-                stream.poll_ns[-1] >= spans[0][1] + tau * 1e9),
+                stream.poll_ns[-1] >= spans[0][1] + tau_ns),
             "battery_n": battery_n, "battery_n_idle": battery_nb,
             "decode_battery_assist": assisted,
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
@@ -580,21 +588,23 @@ def _filtered_stream(path, spans):
     polls, batches, newest, positions = [], [], [], []
     previous_seq = previous_rx = None
     current = 0
-    payload_re = re.compile(r'"p"\s*:\s*"([0-9a-fA-F]*)"')
+    payload_re = re.compile(r'[0-9a-fA-F]*')
     with Path(path).open() as handle:
         while True:
             location = handle.tell()
             raw = handle.readline()
             if not raw:
                 break
-            match = payload_re.search(raw)
-            # Parse transport/timing without materializing the payload as JSON.
-            item = json.loads(raw[:match.start(1)] + raw[match.end(1):] if match else raw)
-            if item.get("k") == "h":
+            item = json.loads(raw)
+            kind = item.get("k")
+            # Keep transport/timing, not payloads. The top-level p is the
+            # sample payload; an SMC key named p is unrelated metadata.
+            item.pop("p", None)
+            if kind == "h":
                 header = item
-            elif item.get("k") == "t":
+            elif kind == "t":
                 trailer = item
-            elif item.get("k") == "b":
+            elif kind == "b":
                 polls.append((item, location))
     # Match km003c_parse.parse: transport line order is not receive order.
     polls.sort(key=lambda row: row[0]["rx"])
@@ -603,20 +613,23 @@ def _filtered_stream(path, spans):
     shell = kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
     offset = kp.raw_offset_ns(shell)
     if offset is not None:
-        tau = _battery_delay_s(_battery_stream_data(shell)[2])
+        tau_ns = _battery_delay_ns(shell)
         for a, b in spans:
             lo = bisect.bisect_left(poll_ns, a + offset)
-            hi = bisect.bisect_left(poll_ns, b + offset + tau * 1e9)
+            hi = bisect.bisect_left(poll_ns, b + offset + tau_ns)
             for i in range(lo, hi):
                 smc[i] = dict(polls[i][0].get("smc") or {})
     with Path(path).open() as handle:
         for item, location in polls:
             if item.get("n"):
                 handle.seek(location)
-                match = payload_re.search(handle.readline())
-                if match is None:
+                payload = json.loads(handle.readline()).get("p")
+                if not isinstance(payload, str) or not payload_re.fullmatch(payload) or not payload:
                     continue
-                payload = match.group(1)
+                # Native samples() refuses the whole stream for a partial
+                # word. Validate even unselected batches before clock fitting.
+                if len(payload) % (kp.SAMPLE.size * 2):
+                    raise ValueError("partial meter sample")
                 seq = int.from_bytes(bytes.fromhex(payload[-kp.SAMPLE.size * 2:][:4]), "little")
                 if previous_seq is None:
                     first = int.from_bytes(bytes.fromhex(payload[:4]), "little")
@@ -628,6 +641,10 @@ def _filtered_stream(path, spans):
                         delta += round((elapsed - delta) / kp.WRAP) * kp.WRAP
                     current += delta
                 previous_seq, previous_rx = seq, item["rx"]
+                # Native samples() updates its unwrap state even for replays,
+                # but clock_fit() sees only batches that advance the maximum.
+                if newest and current <= newest[-1]:
+                    continue
                 newest.append(current)
                 positions.append((seq, current, location))
                 batches.append(item)
@@ -658,8 +675,7 @@ def _filtered_stream(path, spans):
     with Path(path).open() as handle:
         for seq_last, dev_last, location in positions:
             handle.seek(location)
-            match = payload_re.search(handle.readline())
-            payload = match.group(1)
+            payload = json.loads(handle.readline())["p"]
             for pos in range(0, len(payload), kp.SAMPLE.size * 2):
                 word = payload[pos:pos + kp.SAMPLE.size * 2]
                 seq = int.from_bytes(bytes.fromhex(word[:4]), "little")
@@ -682,7 +698,7 @@ def _session_streams(root, spans):
     for path in sorted(directory.glob("stream-*.jsonl")):
         try:
             stream = _filtered_stream(path, spans)
-        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError, struct.error) as exc:
             stream = kp.Stream(None, None, [], [], None, None, [], [], [], [], str(exc))
         streams.append((path.name, stream))
     return streams
@@ -972,13 +988,13 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     if offset is None:
                         continue
                     raw_span = [edge + offset for edge in spans[row["run_id"]][0]]
-                    tau = _battery_delay_s(battery_readings[2])
-                    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
-                    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
+                    tau_ns = _battery_delay_ns(stream)
+                    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau_ns)
+                    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau_ns)
                     if lo == hi:
                         continue
-                    marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau * 1e9)
-                    if _decode_battery_marker(stream, raw_span, tau):
+                    marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau_ns)
+                    if _decode_battery_marker(stream, raw_span, tau_ns):
                         row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
                 row["decode_assist_evaluated"] = bool(marker_windows)
                 row["battery_end_window_complete"] = any(marker_windows)

@@ -715,9 +715,9 @@ def parse_meter_stream(path):
             trailer = item
         elif kind == "b":
             batches.append(item)
-            match = re.search(r'"p"\s*:\s*"([0-9a-fA-F]*)"', line)
-            if item.get("n") and match is not None:
-                payloads[id(item)] = match.group(1)
+            payload = item.get("p")
+            if item.get("n") and isinstance(payload, str) and re.fullmatch(r'[0-9a-fA-F]*', payload):
+                payloads[id(item)] = payload
     polls = sorted(batches, key=lambda b: b["rx"])
     with_samples = [b for b in polls if id(b) in payloads]
     # The primary scans sample endpoint timing before its header/fit early returns.
@@ -725,6 +725,10 @@ def parse_meter_stream(path):
     # the whole transport even if the header is closed.
     for batch in with_samples:
         payload = payloads[id(batch)]
+        # samples() in the instrument's reference reader refuses a partial
+        # word before yielding any samples from that batch.
+        if len(payload) % (SAMPLE.size * 2):
+            raise ValueError("partial meter sample")
         bytes.fromhex(payload[-SAMPLE.size * 2:][:4])
         bytes.fromhex(payload[:4])
     offset = None
@@ -952,7 +956,7 @@ def load_archive(root):
     for path in sorted(base.glob("stream-*.jsonl")):
         try:
             stream = parse_meter_stream(path)
-        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError, struct.error) as exc:
             # The primary discards an unreadable transport as a whole stream.
             stream = {"aligned": False, "poll_ns": [], "raw_offset_ns": None, "reason": str(exc)}
         stream["name"] = path.name

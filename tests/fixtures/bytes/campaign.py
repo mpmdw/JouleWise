@@ -31,10 +31,12 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     first science decode, while retaining its delayed marker polls.
     marker_stream_mode retains all polls but removes meter samples (polls_only)
     or closes the header (header_closed), independently of key export.
+    empty_payload_n and replayed_batch leave one sample-bearing poll without
+    any new samples, while preserving that poll's receive time and SMC data.
     """
     if battery_publication not in ("instant", "delayed"):
         raise ValueError("battery publication must be instant or delayed")
-    if marker_stream_mode not in (None, "polls_only", "header_closed"):
+    if marker_stream_mode not in (None, "polls_only", "header_closed", "empty_payload_n", "replayed_batch"):
         raise ValueError("unknown marker stream mode")
     if len(pass_duration_scales) != 2 or any(v <= 0 for v in pass_duration_scales):
         raise ValueError("two positive pass duration scales required")
@@ -316,6 +318,18 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         for session in manifest["sessions"]:
             stream = Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl"
             items = [json.loads(line) for line in stream.read_text().splitlines()]
+            polls = [item for item in items if item.get("k") == "b"]
+            if marker_stream_mode == "empty_payload_n":
+                polls[100]["p"] = ""  # Keep the nonzero n and the battery poll.
+            elif marker_stream_mode == "replayed_batch":
+                archive = Path(session["archive"])
+                first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
+                             if m["role"] == "science")
+                bundle = archive / "sources/claim-runs" / first["run_id"]
+                events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+                start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))
+                index = [i for i, item in enumerate(polls) if start <= item["rx"] < end][3]
+                polls[index]["p"] = polls[index - 5]["p"]
             for item in items:
                 if marker_stream_mode == "polls_only" and item.get("k") == "b":
                     item.update(n=0, p="")

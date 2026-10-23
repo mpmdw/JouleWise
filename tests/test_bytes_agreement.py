@@ -44,6 +44,7 @@ import json
 import math
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -122,6 +123,12 @@ CAMPAIGNS = {
     "header_closed": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                       "battery_publication": "delayed", "battery_reference_assist": True,
                       "marker_stream_mode": "header_closed"}, ()),
+    "empty_payload_n": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                        "battery_publication": "delayed", "battery_reference_assist": True,
+                        "marker_stream_mode": "empty_payload_n"}, ()),
+    "replayed_batch": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                       "battery_publication": "delayed", "battery_reference_assist": True,
+                       "marker_stream_mode": "replayed_batch"}, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -1623,6 +1630,15 @@ class AgreementTests(unittest.TestCase):
         self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in partial))
         self.assertTrue(any(r["battery_end_window_complete"] for r in partial))
 
+    def test_meter_batches_without_new_samples_campaigns(self):
+        for name in ("empty_payload_n", "replayed_batch"):
+            with self.subTest(campaign=name):
+                recorder = campaign(name)
+                self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
+                counts = recorder.counts()
+                print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+                      f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+
     def test_unaligned_marker_campaigns(self):
         for name in ("polls_only", "header_closed"):
             with self.subTest(campaign=name):
@@ -1970,13 +1986,13 @@ class MarkerPathAgreementTests(unittest.TestCase):
             if offset is None:
                 continue
             window = [t + offset for t in self.spans["decode_ns"]]
-            tau = ba._battery_delay_s(ba._battery_stream_data(stream)[2])
-            lo = bisect.bisect_left(stream.poll_ns, window[0] + tau * 1e9)
-            hi = bisect.bisect_left(stream.poll_ns, window[1] + tau * 1e9)
+            tau_ns = ba._battery_delay_ns(stream)
+            lo = bisect.bisect_left(stream.poll_ns, window[0] + tau_ns)
+            hi = bisect.bisect_left(stream.poll_ns, window[1] + tau_ns)
             if lo == hi:
                 continue
-            markers.append(ba._decode_battery_marker(stream, window, tau))
-            complete.append(stream.poll_ns[-1] >= window[1] + tau * 1e9)
+            markers.append(ba._decode_battery_marker(stream, window, tau_ns))
+            complete.append(stream.poll_ns[-1] >= window[1] + tau_ns)
         return False, any(markers) if markers else None, any(complete) if markers else None
 
     def assert_agreement(self):
@@ -1990,6 +2006,50 @@ class MarkerPathAgreementTests(unittest.TestCase):
         self.assertEqual((actual["status"] == "ok", actual.get("decode_assisted"),
                           actual.get("battery_end_window_complete")), expected)
         return primary, twin, actual
+
+    def test_batches_without_new_samples_match_native_fit_points(self):
+        for case in ("empty_payload_n", "replayed_batch"):
+            with self.subTest(path=case):
+                items = self.items()
+                items[7]["p"] = "" if case == "empty_payload_n" else items[2]["p"]
+                self.write(items)
+                native = kp.parse(self.path)
+                primary, twin, _ = self.assert_agreement()
+                stream = primary[0][1]
+                self.assertEqual(stream.fit.stats, native.fit.stats)
+                self.assertEqual(twin["streams"][0]["fit"]["points"], native.fit.stats["points"])
+                self.assertEqual(native.fit.stats["points"], 12)
+                self.assertEqual(stream.poll_ns, native.poll_ns)
+
+    def test_partial_sample_words_discard_the_stream(self):
+        for case, index in (("trunc_tail", -2), ("trunc_mid", 7)):
+            with self.subTest(path=case):
+                items = self.items()
+                items[index]["p"] += "ab"  # 21 bytes: a full sample and a partial word.
+                self.write(items)
+                with self.assertRaises(struct.error):
+                    kp.parse(self.path)
+                with self.assertRaisesRegex(ValueError, "partial meter sample"):
+                    ba._filtered_stream(self.path, list(self.spans.values()))
+                with self.assertRaisesRegex(ValueError, "partial meter sample"):
+                    bt.parse_meter_stream(self.path)
+                primary, twin, actual = self.assert_agreement()
+                self.assertEqual(primary[0][1].poll_ns, [])
+                self.assertEqual(twin["streams"][0]["poll_ns"], [])
+                self.assertIsNone(actual.get("decode_assisted"))
+
+    def test_smc_with_p_key_uses_the_native_top_level_payload(self):
+        items = self.items()
+        batch = items[7]
+        items[7] = {"k": "b", "tx": batch["tx"], "rx": batch["rx"], "n": batch["n"],
+                    "smc": {"p": "ab", **batch["smc"]}, "p": batch["p"]}
+        self.write(items)
+        native = kp.parse(self.path)
+        primary, twin, _ = self.assert_agreement()
+        self.assertEqual(primary[0][1].fit.stats, native.fit.stats)
+        self.assertEqual(twin["streams"][0]["host_ns"], native.host_ns)
+        native_power = dict(zip(native.host_ns, native.watts))
+        self.assertEqual(primary[0][1].watts, [native_power[t] for t in primary[0][1].host_ns])
 
     def test_parser_early_returns_preserve_mapped_polls(self):
         for case in ("streaming", "header_closed", "polls_only", "one_batch", "duplicate_sequences",

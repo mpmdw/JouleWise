@@ -243,6 +243,18 @@ class H2WorkedExamples(NumericTestCase):
 
 
 class MeterWorkedExamples(NumericTestCase):
+    def test_marker_window_uses_integer_nanoseconds_at_both_edges(self):
+        stream = self.stream()
+        gap = 100_000_001
+        stream.poll_ns = [i * gap for i in range(11)]
+        stream.smc = [{"B0AC": -1000, "B0AV": 12000} for _ in stream.poll_ns]
+        tau_ns = 2_000_000_000 + gap
+        edge = stream.poll_ns[-1] - tau_ns
+        self.assertEqual(ba._battery_delay_ns(stream), tau_ns)
+        for window, assisted in (([edge, edge + 1], True), ([edge - 1, edge], False)):
+            with self.subTest(window=window):
+                self.assertIs(ba._decode_battery_marker(stream, window, tau_ns), assisted)
+
     def stream(self, watts=None):
         # Exact host/device clock line, with two batches; parse calls clock_fit.
         samples = kp.Samples([i * 100 for i in range(101)], [1] * 101,
