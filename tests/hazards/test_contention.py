@@ -8,6 +8,7 @@ import unittest
 
 from joulewise import prewindow, quiet_admission
 from joulewise.hazards import base, contention
+from tests.live_hw import live_hw_only
 from tests.hazards.fakes import FakeClocks, FakeProcessTable, Process, Runner, completed
 
 # The dwell-mechanism tests below run at a 600 s clean run (the value the
@@ -358,6 +359,7 @@ class HostAggregateTests(unittest.TestCase):
             contention.host_ticks_delta([[0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0]])
 
     @unittest.skipUnless(sys.platform == "darwin", "reads the real host CPU ticks (macOS)")
+    @live_hw_only
     def test_live_host_ticks_read_without_privileges(self):
         first = contention.read_host_cpu()
         second = contention.read_host_cpu()
@@ -424,6 +426,7 @@ class PsFormatTests(unittest.TestCase):
             contention.parse("\n".join([header, row, row, *rest]).encode() + b"\n")
 
     @unittest.skipUnless(sys.platform == "darwin", "reads the real process table (macOS)")
+    @live_hw_only
     def test_parse_equals_parse_ps_on_live_ps_output(self):
         for _ in range(2):
             completed_ps = base.run_probe(contention.PS_ARGV)
@@ -450,6 +453,7 @@ class PsFormatTests(unittest.TestCase):
             self.assertEqual(contention.tree_identities(rows, roots), fixpoint(rows, roots))
 
     @unittest.skipUnless(sys.platform == "darwin", "reads the real process table (macOS)")
+    @live_hw_only
     def test_live_snapshot_parses_and_this_process_is_in_the_tree(self):
         ctx = base.Context()
         before = contention.take_snapshot(ctx)

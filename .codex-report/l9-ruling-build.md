@@ -254,22 +254,22 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 ## L9-1 joined-head acceptance (2026-10-22)
 
-L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Newer-main merge `01aac454c12bf31ba7c2628a3ecc4d12eae1d413` contains main `c21c52dfa`; the selected L9 package/test diff from 70fd61aa1 is empty. Rows retain their actual execution anchors; authentication and docs freshness are rerun after the incoming documentation changes. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
+Earlier L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Current lane integration merge `ee98a1a8f56f718ceff0092363a48aa32fc7bd68` contains concurrent lane `507bd16e2` and main `7c23ea4b7`. This main update changes analysis_engine/distributions.py, and the concurrent lane changes S10 Git initialization. All ten cloud modules are being rerun; rows show their actual execution anchors and do not assert new-head acceptance for an old-head result. The two prior-head real-driver diagnostics remain isolated in /workspace/JouleWise at detached 3f9d512fe; current lane work uses /workspace/JouleWise-L9-1. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
 | Module | Tests | Failures | Errors | Skips | Exit | Wall seconds | Where it ran | Log SHA-256 |
 |---|---|---|---|---|---|---|---|---|
-| tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
-| tests.b5_analysis.test_release_equality | — | — | — | — | — | — | cloud: pending | — |
-| tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
-| tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
-| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
-| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 1.155 | Codex Cloud | `e07c6fb1abd7a00f20ae1854231da7ea58b5d37e685b352d65b8ca8b3145ecb1` |
-| tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
-| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
-| tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
-| tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 3.323 | Codex Cloud | `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71` |
+| tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud @ `54da41a5e` | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
+| tests.b5_analysis.test_release_equality | 12 | 2 | 0 | 0 | 1 | 47231.364 | Codex Cloud @ `500f7ad3d` | `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559` |
+| tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud @ `54da41a5e` | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
+| tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud @ `54da41a5e` | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
+| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud @ `01aac454c` | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
+| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.801 | Codex Cloud @ `8987dffb3` | `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568` |
+| tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud @ `54da41a5e` | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
+| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud @ `38ff2a7fe` | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
+| tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud @ `cd4a61682` | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
+| tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 3.323 | Codex Cloud @ `54da41a5e` | `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71` |
 | tests.test_authentication_io | 22 | 0 | 0 | — | — | 2 | Mac, director | prefix `df310df7d1f6cb9d` |
 | tests.test_docs_freshness | 31 | 0 | 0 | — | — | 1 | Mac, director | prefix `f2ddd6c22fd8e05c` |
 | tests.test_run_d165_closeout_from_custody | 35 | 0 | 0 | — | — | 465 | Mac, director | `6b305b6edf079b92f6b6ff66f9ecb26feaec85cb6e8b8302804a95676cdba313` |
@@ -297,13 +297,35 @@ Completed cloud logs and test failures:
   - failure_names: tests.b5_analysis.test_joined_probes.JoinedProbeTests.test_load_correlated_restored_units_pass_real_tripwire_and_validator
 - `tests.test_authentication_io` at `01aac454c12bf31ba7c2628a3ecc4d12eae1d413`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 2.290 s. Log `/workspace/l9-1/checks-main-1/logs/tests_test_authentication_io.log`, SHA-256 `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b`.
 - `tests.test_docs_freshness` at `01aac454c12bf31ba7c2628a3ecc4d12eae1d413`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 1.155 s. Log `/workspace/l9-1/checks-main-1/logs/tests_test_docs_freshness.log`, SHA-256 `e07c6fb1abd7a00f20ae1854231da7ea58b5d37e685b352d65b8ca8b3145ecb1`.
+- `tests.b5_analysis.test_release_equality` at `500f7ad3d230a4b764283134426eea6d90354f74`: 12 tests, 2 failures, 0 errors, 0 skips, exit 1, 47231.364 s. Log `/workspace/l9-1/j6-1/logs/tests_b5_analysis_test_release_equality.log`, SHA-256 `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559`.
+  - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_release_after_dry_run_passes
+  - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_two_custody_roots_have_identical_output_digests
+- `tests.test_docs_freshness` at `8987dffb30943d10451c2d95bf956e70f1d38e06`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 0.801 s. Log `/workspace/l9-1/checks-main-2/logs/tests_test_docs_freshness.log`, SHA-256 `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568`.
 
 Additional logs (not completed acceptance modules):
 
 - interrupted nohup dry-run attempt, no completed module result: `/tmp/l9-1/dry-1/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `2e42a4d7fc20e0071a5a25465409762de8ac5f48fcc5d758ec137546b6d43c97`.
 - interrupted tmpfs dry-run attempt, no completed module result: `/tmp/l9-1/dry-2/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `33e0f4f0f768f4094bae6f2496da4ff2a2f6cf0b80cc14b53e4f34204e35ae4d`.
 - fixture-lifetime mechanism probe, not a step-9b replay: `/workspace/l9-1/lifetime-probe/probe.log`, SHA-256 `ee7f85e8dd62de5e97fa78587061a1f500867ca7857823d4aa7214c9d887d58f`.
+- independent complete synthetic-fixture snapshot before step 9b, 22,950 files copied and verified: `/workspace/l9-1/no-joined-observer-1/pre9b-snapshot/snapshot.log`, SHA-256 `d67a3e69417d550e924da6e9314da78987b9d9dc78b803cdf5179af7be6a655d`.
+- observer-free step-9 fixture checkpoint, 22,950 files with zero recorded changes: `/workspace/l9-1/no-joined-observer-1/step9-fixture-checkpoint.log`, SHA-256 `f0cabedd16817a2771d496d912e962502dc25d8e9ca0abacbdacb73b2a1e29a7`.
+- observer-free post-9b fixture checkpoint during step10 ALPHA, 22,950 files with zero recorded changes: `/workspace/l9-1/no-joined-observer-1/after9b-fixture-checkpoint.log`, SHA-256 `26f5b78ada5a3dec88971ae03b6c67ca06a625d00621cc3673361fabc62fb66d`.
+- observer-free claim census and ten bound inputs retained during the real opener: `/workspace/l9-1/no-joined-observer-1/entry-claim-input-retention.log`, SHA-256 `dda896da3e82859eb7bd023a21082fae1f881881af89e1ced26297e320e240d3`.
+- observer-free post-9b ten-binding/census re-verification during step10 ALPHA: `/workspace/l9-1/no-joined-observer-1/entry-claim-input/after9b-binding-verification.json`, SHA-256 `57698b3d28751849c9aa8b5dcfcb9fb14c396673c3c330519066d84168408a76`.
+- passive runtime-observer instrumentation smoke check, one real worker and owned temporary cleanup; not acceptance: `/workspace/l9-1/runtime-observer-smoke/runtime.jsonl`, SHA-256 `5badf05fc7f368da1f668f6090e3d63c62e28ffcb4e4e37228996be2efb6c9ab`.
 
 Exact merged-input diagnostic after the 49-test legacy prefix: admitted VerifiedClaimEvidence, no validator codes, exit 0, 3588.285 s including the prefix; all ten original bound-file hashes matched before and after. This does not replace the failed joined acceptance. Log `/workspace/l9-1/prefix-1/control.log`, SHA-256 `01f46960fd4d4807af7df0b8b7e87f91dfc13ea1bf975347b3a6c1854127bad6`; passive provenance log SHA-256 `808bde69efbf4fcaed346530b58235a30981786e309bbb0dea71004dc3d323ba`. The original runner exited at its completed-module boundary; retained synthetic trees were restored at their exact original locators and their ten bindings reverified.
 
 NEG-8 predicate diagnostic on the retained first J6 input: the actual `_archive_neg8_replay_reasons` returns no refusal reasons; `_derived_neg8_decision` returns a passed screen and no problem. All ten bound hashes matched before/after. Wall 468.071 s, exit 0. Log `/workspace/l9-1/neg8-1/control.log`, SHA-256 `76a982bee2468e7eb3fc47e43ed2218b51a657ea92eead4ec6ff1dee5390185d`; return trace SHA-256 `73a0019ad75dd16f17c118b3cd63ab5ef4e67be197198465a0bb274706f50629`. This isolated helper result does not replace the failed full-driver opener.
+
+Fresh fixture initialization then retained-input opener: admitted; validator codes []; process exit 0; wall 4871.240 s; execution head `152d8dc9f0098c232704aded50632f9560ab4f7d`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/fixture-opener-1/control.log`, SHA-256 `c9f7bcee7aa0a80cc56324df66fc0379a246e0867618146be1daf42991219187`.
+Passive leaf trace `/workspace/l9-1/fixture-opener-1/leaf.jsonl`, SHA-256 `b84df619e8000b08540f9c2d438364424496b774ee24b72b5c14d468744202e9`.
+
+Real StepRunner plus outer descriptor capture around retained-input opener: admitted; validator codes []; process exit 0; wall 4651.787 s; execution head `152d8dc9f0098c232704aded50632f9560ab4f7d`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/captured-opener-1/control.log`, SHA-256 `48763bc1e2e530fd276b25624dc0a6f2121a080e42c0c97911da5598fdb6d810`.
+Passive leaf trace `/workspace/l9-1/captured-opener-1/leaf.jsonl`, SHA-256 `99846e91b308f080e90748468cb342f37185c2fcdd1b81da80b6af3e4d81f57e`.
+
+Real captured opener using the completed dry-run module original TMPDIR: admitted; validator codes []; process exit 0; wall 3507.028 s; execution head `54e8b176abe8b6a79ff91480130072832334ac99`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/original-tmp-opener-1/control.log`, SHA-256 `c34342a76c113e3fe83aa17731a4147c180182b29bfe810cdfa1b0f50af47f2d`.
+Passive leaf trace `/workspace/l9-1/original-tmp-opener-1/leaf.jsonl`, SHA-256 `8ec64405a6f907630ea84912e3c1a7a3383ea311d19bc4a0fa3e61a5a8a1121a`.
+
+Actual step9b preparation and opener on copied prior real artifacts: step9b=ok, admitted type=VerifiedClaimEvidence, exact regenerated input=True; validator codes []; process exit 0; wall 3360.640 s; execution head `6a307905fe4a7203d9919bcc34ef916107a7c73a`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/prelude-9b-1/control.log`, SHA-256 `3c63f7f603849a04c82677906d6872ab8e10e6ff8969ccf21faea123696040b3`.
+Passive leaf trace `/workspace/l9-1/prelude-9b-1/leaf.jsonl`, SHA-256 `765001188e8ad0df4bb495de636a96ce218a0511ee61ba3d61a39882cac741d9`.
