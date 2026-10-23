@@ -1,0 +1,35 @@
+{
+  "archive_root": "/private/tmp/b5-s0-alpha-pin1-0i_3ybkb/archive",
+  "attempt": 1,
+  "claim_usable": false,
+  "exclude_window_reasons": [
+    "window.null"
+  ],
+  "faults": [],
+  "flags": 1,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "f68e53d4e84292c182772a20edf2e3649c7470a7113ff87ebdec6f91208c9bc2",
+      "joulewise/whole_window.py": "ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "7e6158d669cbb6fb35761aee18abf363f07c5d36",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin1",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_assessed": 0,
+  "outputs": {
+    "derived/exclusions.json": "6fb9bcb5e3d80a78102042df417a396c16b85d2d5adbfd8d0d655d5b3e0e173b",
+    "derived/flags.jsonl": "7efc2ce3b08aa1b404eef59e277cb464f53f3a2a6adda5865617f4e1684adea1",
+    "derived/window_flags.json": "1be32e9a69d490d39021f7201df46d188eecd55c83248a2f7a7f72814219f95f"
+  },
+  "pack_id": "s0_alpha_mock_v5",
+  "plan_id": "s0-alpha-plan",
+  "runs_root_overrides": [],
+  "schema": "joulewise.harvest_b5_window.v1",
+  "verdict": "NULL",
+  "yield": null
+}

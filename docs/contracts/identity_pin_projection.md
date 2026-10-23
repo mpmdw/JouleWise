@@ -643,7 +643,35 @@ derivation never edits its declaration or census.
   cells, compatible consumer families, runtime stack, and admissible stress
   envelope used by condition-family transport.
 
-### Analysis consumption
+### Hazard declaration consumption (L9 ruling, 2026-10-20)
+
+For an authenticated hazard lineage, an unprojected sealed pack with a null
+freeze receipt declares each family's consumer identities in its single identity
+unit. The gate authenticates the committed pack-tree digest, exactly one unit for
+the family, and every inventoried config's bytes and SHA-256. The frozen ARM
+route described below retains its U8 receipt requirements.
+
+A hazard declaration that cannot be re-authenticated yields
+`consumer_identity_set_unauthenticated:<family>` in `inputs.limitations`.
+This is justified by `_read_bundle`: both bundle config bytes and typed config
+must match the sealed plan's source config, otherwise `config_hash_mismatch`
+excludes the bundle before it supplies floor-request evidence. The five §I.1
+pinning variants (suite digest, output length, measurement-arm, df-condition,
+decode-prompt) each exercise that exclusion. A multi-identity arm with an
+unauthenticated declaration still refuses `consumer_identity_undeclared` and
+never falls through to transport.
+
+Only `hardware_target.notes`, `run_metadata.project`, and
+`run_metadata.operator` may differ as recording fields: notes describe hardware
+for people; project and operator label the record. None determines workload,
+phase, runtime, or telemetry. Their differences yield
+`consumer_identity_recording_difference:<family>`. Every tag and all other typed
+fields still bind. The existing omission of run_id from scientific identity
+continues to identify physical repeats. An undeclared scientific config still
+refuses `consumer_identity_undeclared`. Each limitation travels in the existing
+claim-verdict list and on to the validated fill input.
+
+### Analysis consumption (frozen ARM route)
 
 For successor packs, every accepted bundle carries an authenticated launch
 lineage that resolves one pack root. The analysis input gate follows that

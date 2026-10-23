@@ -239,7 +239,7 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
                 # An era record: the bytes at its declared commit are history and
                 # cannot change, so a mismatch means the record itself was edited.
                 try:
-                    declared = census.era_commit(root, path, files.text(path) or "")
+                    declared = census.era_commit(root, path, files.text(path) or "", pointer)
                 except (KeyError, census.EraRecordError) as error:
                     declared = f"unreadable ({error})"
                 if declared != target.commit:

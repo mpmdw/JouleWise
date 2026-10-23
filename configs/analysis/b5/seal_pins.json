@@ -1,0 +1,50 @@
+{
+  "schema": "joulewise.b5_seal_pins.v1",
+  "erratum_2_epoch_s": 1791649800,
+  "erratum_3_epoch_s": 1791738000,
+  "sealed": {
+    "registration_sha256": "c7b3fdf78dde0a403bbc0b63262d1f8b1a697695bdeb2fb737a90cedde1ddb3f",
+    "analysis_plan_sha256": "23ef67f56cc3cd2346e3ace87ec1d9390ef8b5727bd3bad169ea66d30a374859",
+    "inventory_sha256": "80852d98c13472e502411c2131d420b442fec2852350c3c520b2666a6826c4dc",
+    "catalog_sha256": "5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d",
+    "sizing_sha256": "a8e8d53036f08b5d6edc648ec77f01f75890ae904a817204600d6daac912cfad",
+    "identity_pins_sha256": "513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d",
+    "erratum_2_sha256": "b85105457cb6da00f26eb92de594311e0e3aa497de8365cb2dc2dc234307188a",
+    "erratum_3_sha256": "71deca18d8fbae283afe15dca4f5f36850c22f303077a859800e142577b3ac89"
+  },
+  "pins": {
+    "pin1": {
+      "head": "7e6158d669cbb6fb35761aee18abf363f07c5d36",
+      "files": {
+        "joulewise/b5/harvest.py": "f68e53d4e84292c182772a20edf2e3649c7470a7113ff87ebdec6f91208c9bc2",
+        "joulewise/whole_window.py": "ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5",
+        "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+      }
+    },
+    "pin2": {
+      "head": "224a264c5faaae90cdf56118df37e773a932700b",
+      "files": {
+        "joulewise/b5/harvest.py": "8aaaf96f4e3212e9c6544aa9908006d4a3cde794a61e3dff2106d677bd28dd2a",
+        "joulewise/whole_window.py": "ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5",
+        "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+      }
+    },
+    "pin3": {
+      "head": "0699abbb0881ce64b39c46ba07de568cc3848260",
+      "files": {
+        "joulewise/b5/harvest.py": "96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463",
+        "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+        "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+      }
+    },
+    "pin4": {
+      "head": "b039c0257d1b1d407ee9598222db3f78f6ad7beb",
+      "files": {
+        "joulewise/b5/harvest.py": "68d219478edb3d40a1d1a0a4cfd2fb7100421f09b5c8e681ec48c6acab0c73af",
+        "joulewise/calibration_bracketing.py": "5474902deb5c3b834bffe11da6698f40216ba978248a8457f09db0077eaaf3ff",
+        "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+        "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+      }
+    }
+  }
+}

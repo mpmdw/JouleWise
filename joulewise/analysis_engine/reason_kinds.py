@@ -63,6 +63,7 @@ DEAD_REASON_CODES = frozenset(
 # smoke predicate requires it once in each declared contrast evaluation.
 LOCK_REASON_CODES = frozenset({"mock_telemetry_claim_ineligible"})
 
+# unit_removed_by_exclusion_function is a structural exclusion label, hence CONTRACT.
 CONTRACT_REASON_CODES = frozenset(
     REASON_CODES - DATA_REASON_CODES - DEAD_REASON_CODES - LOCK_REASON_CODES
 )

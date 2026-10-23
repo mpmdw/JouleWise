@@ -913,6 +913,62 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             member_envelope_integral_sum_j=1.125,
         )
 
+    def test_zero_point_band_tracks_absolute_and_large_sum_noise(self):
+        agree = detection_floor.common_mode_zero_points_agree
+        for scale in (1.0, 1e4, 1e6, 2.5e6, 1e12):
+            # §Z: absolute 1e-6 J or 1e6*u*S float noise, whichever is larger.
+            bar = max(1e-6, 1e6 * 2**-53 * scale)
+            with self.subTest(scale=scale):
+                self.assertTrue(agree(0.0, 0.5 * bar, [scale]))
+                self.assertFalse(agree(0.0, 2.0 * bar, [scale]))
+                if scale <= 2.5e6:
+                    self.assertFalse(agree(0.0, 1e-3, [scale]))
+        self.assertFalse(agree(2e6, 2e6 + 1e-3, [2.5e6, 2e6 + 1e-3]))
+
+
+    def test_large_cancelling_joule_sums_share_the_zero_point_band(self):
+        from joulewise.dominance_closeout import replay_common_mode_dominance
+
+        # The two evaluation orders cancel ~1e5--1e6 J member energies.
+        energies = (
+            [100000.69170971455, 100000.45030370762,
+             100000.02083693854, 99999.7794309316],
+            [1000000.6152024022, 1000000.5967321057,
+             1000000.3014545352, 1000000.2829842386],
+        )
+        for members in energies:
+            delta = (members[1] + members[2]) / 2 - (members[0] + members[3]) / 2 + 1e-4
+            zero = math.fsum([-members[0] / 2, members[1] / 2,
+                              members[2] / 2, -members[3] / 2, 1e-4])
+            scale = math.fsum(abs(value) / 2 for value in members)
+            self.assertGreater(abs(zero - delta), 1e-12)
+            self.assertFalse(math.isclose(zero, delta, rel_tol=1e-9, abs_tol=1e-12))
+            kwargs = dict(
+                onset_sweeps_j=[[zero, zero + 0.1]] * 5,
+                offset_sweeps_j=[[zero, zero + 0.1]] * 5,
+                zero_point_contrasts_j=[zero] * 5,
+                bundle_residual_half_widths_j=[[0.0] * 4] * 5,
+                member_window_bounds_s=[[(0.0, 1.0)] * 4] * 5,
+                member_envelope_integral_sums_j=[scale] * 5,
+                calibration_bracket=self.bracket(),
+                shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+            )
+            for estimator in (two_shared_edge_common_mode_floor,
+                              floor_extraction._common_mode_floor_from_extracted_inputs):
+                with self.subTest(scale=scale, estimator=estimator.__name__):
+                    estimate = estimator([delta] * 5, **kwargs)
+                    self.assertIsNotNone(estimate.guarded_floor_j)
+            blocks = [dict(delta_j=delta, onset_sweep_j=kwargs['onset_sweeps_j'][0],
+                           offset_sweep_j=kwargs['offset_sweeps_j'][0],
+                           zero_point_contrast_j=zero,
+                           bundle_residual_half_widths_j=[0.0] * 4,
+                           member_window_bounds_s=[[0.0, 1.0]] * 4,
+                           member_envelope_integral_sum_j=scale)] * 5
+            replay_common_mode_dominance(
+                blocks, calibration_bracket=self.bracket(),
+                shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+            )
+
     def test_fcm_r4_01_mislabelled_zero_is_structurally_inexpressible(self):
         true_zero = 1.0
         adversarial_z = 1.0000000005
@@ -1554,7 +1610,8 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
             )[case_index % 5]
             tolerance_factor = (0.25, 0.5, 1.0)[case_index % 3]
             true_zero = value_sign * magnitude
-            tolerance = max(1e-12, 1e-9 * abs(true_zero))
+            # §Z: 1e-6 J absolute or 1e6*u*S; the later envelope bounds this S.
+            tolerance = max(1e-6, 1e6 * 2**-53 * max(1.0, abs(true_zero)))
             direction = -1.0 if (case_index // 2) % 2 else 1.0
             adversarial_z = true_zero + direction * tolerance * tolerance_factor
             delta = (
@@ -1565,8 +1622,8 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
             while not math.isclose(
                 adversarial_z,
                 delta,
-                rel_tol=1e-9,
-                abs_tol=1e-12,
+                rel_tol=0.0,
+                abs_tol=tolerance,
             ):
                 adversarial_z = math.nextafter(adversarial_z, delta)
             self.assertNotEqual(adversarial_z, true_zero)
@@ -2318,7 +2375,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
             )
         )
 
-    def test_floor_consumer_refuses_forged_self_authored_launch_lineage(self):
+    def test_floor_consumer_limits_unreconfirmable_launch_lineage(self):
         artifact = make_artifact()
         artifact["provenance"]["launch_lineage"] = launch_lineage()
         raw = (
@@ -2326,11 +2383,8 @@ class TestArtifactEmitValidate(unittest.TestCase):
         ).encode("utf-8")
 
         self.assertEqual(validate_floor_artifact(artifact), [])
-        with self.assertRaisesRegex(
-            AnalysisInputError,
-            "launch_consumption_missing",
-        ):
-            authenticate_floor_artifact_bytes(raw)
+        admitted = authenticate_floor_artifact_bytes(raw)
+        self.assertEqual(admitted.limitations, ("floor_launch_lineage_unauthenticated:aggregate",))
 
     def test_floor_consumer_reauthenticates_real_completed_launch_lineage(self):
         launch = arm_readiness_tests.LaunchConsumptionV2Tests()

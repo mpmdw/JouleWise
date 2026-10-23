@@ -1375,3 +1375,15 @@ class BinderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5WholeQuadLayoutTests(unittest.TestCase):
+    def test_layout_refuses_partly_kept_quad(self):
+        from tests.b5_analysis.test_mint_kept_units import case, registered, core
+        fixture = case()
+        component = next(iter(fixture.inputs.values())).cells["decode"].comparative
+        with registered(fixture.entries):
+            blocks, _deltas = estimator._comparative_layout(component, core)
+            self.assertEqual(len(blocks), 8)
+            with self.assertRaisesRegex(estimator._MintEstimatorError, "^floor_mint_kept_unit_mismatch"):
+                estimator._comparative_layout(replace(component, members=component.members[1:]), core)

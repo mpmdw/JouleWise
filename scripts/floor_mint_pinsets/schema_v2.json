@@ -32,17 +32,8 @@
       "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
     },
     "sixDecimal": {
-      "allOf": [
-        {
-          "type": "string",
-          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$"
-        },
-        {
-          "not": {
-            "const": "7.377086"
-          }
-        }
-      ]
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$"
     },
     "member": {
       "type": "object",
@@ -114,7 +105,7 @@
       }
     },
     "modelRuntimeConfig": {
-      "description": "Evidence-bound inventory: model_artifact_sha256 is read from authenticated stack identity and runtime_identity_sha256 is its authenticated stack-identity digest. With per-cell scientific_config_identity_sha256 pins, config_set_sha256 is SHA-256 of the canonical JSON array of sorted distinct per-cell scientific config hashes (including singleton sets). Legacy v2 producers without per-cell pins retain their single authenticated scientific-config identity digest.",
+      "description": "Evidence-bound inventory: model_artifact_sha256 is read from authenticated stack identity and runtime_identity_sha256 is its authenticated stack-identity digest. With per-cell scientific_config_identity_sha256 pins, config_set_sha256 is SHA-256 of the canonical JSON array of sorted distinct per-cell scientific config hashes (including singleton sets). Legacy v2 producers without per-cell pins retain their single authenticated scientific-config identity digest. With per-cell runtime_identity_sha256 pins, the producer runtime pin is the SHA-256 of the same canonical sorted distinct identity array; otherwise it remains the single authenticated stack-identity digest.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -410,7 +401,15 @@
         "scientific_config_identity_sha256": {
           "description": "Scientific identity of the registered workload for this cell; both authenticated absolute and comparative components must equal this pin. All cells of a producer carry this field together, or all omit it for legacy single-config v2 compatibility.",
           "$ref": "#/$defs/sha256"
+        },
+        "runtime_identity_sha256": {
+          "$ref": "#/$defs/sha256"
         }
+      },
+      "dependentRequired": {
+        "runtime_identity_sha256": [
+          "scientific_config_identity_sha256"
+        ]
       }
     },
     "deskPostcollection": {
@@ -492,13 +491,15 @@
         "allowance_rule": {
           "enum": [
             "max(observed_drift_s,0.010818)",
-            "max(observed_drift_s,0.009724)"
+            "max(observed_drift_s,0.009724)",
+            "max(observed_drift_s,0.014531)"
           ]
         },
         "bracket_screen_s": {
           "enum": [
             "0.010818",
-            "0.009724"
+            "0.009724",
+            "0.014531"
           ]
         },
         "applied_allowance_s": {
@@ -575,7 +576,8 @@
             "postcollection": {
               "$ref": "#/$defs/deskPostcollection"
             },
-            "scientific_config_identity_sha256": true
+            "scientific_config_identity_sha256": true,
+            "runtime_identity_sha256": true
           }
         }
       ]
@@ -621,7 +623,8 @@
             "postcollection": {
               "$ref": "#/$defs/finalPostcollection"
             },
-            "scientific_config_identity_sha256": true
+            "scientific_config_identity_sha256": true,
+            "runtime_identity_sha256": true
           }
         }
       ]
@@ -677,6 +680,22 @@
                 "items": {
                   "required": [
                     "scientific_config_identity_sha256"
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "contains": {
+                  "required": [
+                    "runtime_identity_sha256"
+                  ]
+                }
+              },
+              "then": {
+                "items": {
+                  "required": [
+                    "runtime_identity_sha256"
                   ]
                 }
               }
@@ -749,6 +768,22 @@
                 "items": {
                   "required": [
                     "scientific_config_identity_sha256"
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "contains": {
+                  "required": [
+                    "runtime_identity_sha256"
+                  ]
+                }
+              },
+              "then": {
+                "items": {
+                  "required": [
+                    "runtime_identity_sha256"
                   ]
                 }
               }

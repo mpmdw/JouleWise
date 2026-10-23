@@ -10086,19 +10086,28 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                             candidate_path, candidate_digest
                         )
 
-    def test_retired_literal_refuses_explicitly(self) -> None:
+    def test_retired_literal_is_valid_when_it_matches_the_floor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path, _digest, _inputs, _snapshot = freeze_synthetic_v2_pinset(root)
             candidate = load_json(path)
-            candidate["producer_plans"][0]["cells"][0]["postcollection"][
-                "operative_floor_six_decimal"
-            ] = generalized.RETIRED_OPERATIVE_FLOOR_LITERAL
+            for producer in candidate["producer_plans"]:
+                for cell in producer["cells"]:
+                    post = cell["postcollection"]
+                    for component in ("absolute", "comparative", "operative"):
+                        post[f"{component}_floor_full_precision"] = "7.3770861"
+                        post[f"{component}_floor_six_decimal"] = "7.377086"
+            _repair_v2_pinset_self_hashes(candidate)
             candidate_path, candidate_digest = write_pinset(root, candidate)
-            with self.assertRaisesRegex(
-                generalized.MintError, "reuses retired literal 7.377086"
-            ):
-                generalized.load_pinset(candidate_path, candidate_digest)
+            generalized.load_pinset(candidate_path, candidate_digest)
+            self.assertIsNotNone(detection_floor._project_floor_mint_pinset_v2(candidate))
+            generalized._verify_six_decimal_rendering(
+                "7.3770861", "7.377086", label="floor"
+            )
+            with self.assertRaisesRegex(generalized.MintError, "must equal the .6f"):
+                generalized._verify_six_decimal_rendering(
+                    "7.4", "7.377086", label="floor"
+                )
 
     def test_aggregate_and_component_hash_mismatches_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -10882,3 +10891,11 @@ class CoreCompatibilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5V2MinimumTests(unittest.TestCase):
+    def test_ten_repeat_five_quad_minimum_is_sealed_five(self):
+        from tests.b5_analysis.test_mint_kept_units import case, build
+        artifact, _components = build(case("t2"))
+        self.assertTrue(all(cell["eligibility"]["minimum_claim_n"] == 5 for cell in artifact["cells"]))
+        self.assertTrue(all(cell["floor_gate_j"] == 2.899596205228953 for cell in artifact["cells"]))

@@ -8,11 +8,15 @@ rendering. It does not estimate, alter scientific gates or infer floor lineage.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 from copy import deepcopy
 import hashlib
 import json
 from collections.abc import Mapping
 from typing import Any
+
+from joulewise.b5_analysis.kept_units import CellKeptUnits
 
 from joulewise.analysis_engine.artifact import validate_claim_verdicts
 
@@ -36,9 +40,47 @@ def _nonfinite(value):
     raise ResultsFillAdapterError(f"nonfinite JSON number: {value}")
 
 
+
+def _contrast_limitations(artifact, row):
+    families = {row["conditions"]["condition_a_id"], row["conditions"]["condition_b_id"]}
+    family_codes = {"consumer_identity_set_unauthenticated", "consumer_identity_recording_difference",
+                    "floor_cell_from_floor_pack"}
+    # Producer/aggregate carrier notes apply to this embedded floor artifact.
+    # Family notes accompany only contrasts that use the named family. Keep
+    # original order, spelling and all legacy limitations unchanged.
+    return [note for note in artifact["inputs"]["limitations"]
+            if note.partition(":")[0] not in family_codes
+            or note.split(":")[1] in families]
+
+
+def validate_results_fill_projection(value, artifact):
+    """Compare copy-only limitations and real source ids with issued verdicts."""
+    try:
+        rows = value["gamma"]["contrasts"]
+        issued = artifact["contrasts"]
+        if ([row["contrast_id"] for row in rows] != [row["contrast_id"] for row in issued]
+            or value["gamma"]["limitations"] != artifact["inputs"]["limitations"]):
+            raise ResultsFillAdapterError("results_fill_contrast_census_mismatch")
+        for row, source in zip(rows, issued, strict=True):
+            if row["limitations"] != _contrast_limitations(artifact, source):
+                raise ResultsFillAdapterError("results_fill_contrast_census_mismatch")
+            if (row.get("floor_source_cell_ids") != source["floor"]["floor_row_ids"]
+                or row.get("floor") != source["floor"]):
+                raise ResultsFillAdapterError("results_fill_floor_mismatch")
+    except ResultsFillAdapterError:
+        raise
+    except (KeyError, TypeError, ValueError, IndexError):
+        raise ResultsFillAdapterError("results_fill_contrast_census_mismatch") from None
+
 def adapt_claim_verdicts(
     claim_verdicts_raw: bytes, *, campaigns: Mapping[str, Any],
     characterization: Mapping[str, Any] | None = None,
+    finalized_manifest_raw: bytes | None = None,
+    floor_artifact_raw: bytes | None = None,
+    exclusions_sha256: str | None = None,
+    kept_quads: Mapping[str, CellKeptUnits] | None = None,
+    expected_contrast_ids=None,
+    floor_pinset_path=None,
 ) -> dict[str, Any]:
     """Return a detached v1 manifest with all five issued outcomes preserved.
 
@@ -51,7 +93,57 @@ def adapt_claim_verdicts(
             raise ResultsFillAdapterError("raw UTF-8 claim-verdict bytes required")
         artifact = json.loads(claim_verdicts_raw.decode("utf-8"),
                               object_pairs_hook=_object, parse_constant=_nonfinite)
-        errors = validate_claim_verdicts(artifact)
+        # A block-5 floor embedded in the verdicts authenticates against the
+        # pinset beside the floor (the engine validated it that way).
+        verdict_kwargs = {"floor_pinset_path": floor_pinset_path} if floor_pinset_path is not None else {}
+        extended = any(value is not None for value in (finalized_manifest_raw, floor_artifact_raw,
+                       exclusions_sha256, kept_quads, expected_contrast_ids))
+        manifest = None
+        if expected_contrast_ids is not None:
+            try:
+                observed = [row["contrast_id"] for row in artifact["contrasts"]]
+                expected = list(expected_contrast_ids)
+                if len(observed) != len(set(observed)) or len(expected) != len(set(expected)) or set(observed) != set(expected):
+                    raise ValueError()
+            except (KeyError, TypeError, ValueError):
+                raise ResultsFillAdapterError("results_fill_contrast_census_mismatch") from None
+        if finalized_manifest_raw is not None:
+            try:
+                manifest = json.loads(finalized_manifest_raw.decode("utf-8"),
+                                      object_pairs_hook=_object, parse_constant=_nonfinite)
+                if (validate_claim_verdicts(artifact, frozen_manifest=manifest, **verdict_kwargs)
+                    or hashlib.sha256(finalized_manifest_raw).hexdigest() != artifact["inputs"]["analysis_manifest"]["file_sha256"]):
+                    raise ValueError()
+            except (KeyError, TypeError, ValueError, AttributeError):
+                raise ResultsFillAdapterError("results_fill_manifest_mismatch") from None
+        if floor_artifact_raw is not None:
+            try:
+                floor = artifact["inputs"]["floor_artifact"]
+                if (floor_artifact_raw != base64.b64decode(floor["embedded_bytes_base64"], validate=True)
+                    or hashlib.sha256(floor_artifact_raw).hexdigest() != floor["file_sha256"]):
+                    raise ValueError()
+            except (KeyError, TypeError, ValueError, binascii.Error):
+                raise ResultsFillAdapterError("results_fill_floor_mismatch") from None
+        if exclusions_sha256 is not None:
+            try:
+                if manifest is None or exclusions_sha256 != manifest["evidence"]["analysed_attempt_exclusions"]["sha256"]:
+                    raise ValueError()
+            except (KeyError, TypeError, ValueError):
+                raise ResultsFillAdapterError("results_fill_exclusions_mismatch") from None
+        if kept_quads is not None:
+            try:
+                for row in artifact["contrasts"]:
+                    kept = kept_quads[row["contrast_id"]]
+                    yes = {u.unit_id for u in kept.kept["quad"]}
+                    no = {u.unit_id for u in kept.dropped if u.stratum == "quad"}
+                    blocks = row["bundle_blocks"]["blocks"]
+                    if ({b["block_id"] for b in blocks if b["included"] is True} != yes
+                        or {b["block_id"] for b in blocks if b["included"] is False} != no
+                        or row["estimator"]["n"] != len(kept.kept["quad"])):
+                        raise ValueError()
+            except (KeyError, TypeError, ValueError, AttributeError):
+                raise ResultsFillAdapterError("results_fill_kept_quads_mismatch") from None
+        errors = validate_claim_verdicts(artifact, **verdict_kwargs)
         if errors:
             raise ResultsFillAdapterError("invalid claim verdicts: " + "; ".join(errors))
         if not isinstance(campaigns, Mapping) or set(campaigns) != {"alpha", "beta"}:
@@ -71,6 +163,8 @@ def adapt_claim_verdicts(
             rows.append({
                 "contrast_id": row["contrast_id"], "metric": row["metric"],
                 "conditions": row["conditions"],
+                "limitations": _contrast_limitations(artifact, row),
+                "floor_source_cell_ids": row["floor"]["floor_row_ids"],
                 "estimate": estimator["estimate"],
                 "interval": estimator["metrology_aware_CI95"],
                 "decision_interval": row["deterministic_bounds"]["decision_interval"],
@@ -79,13 +173,28 @@ def adapt_claim_verdicts(
                 "n": estimator["n"], "floor": row["floor"],
                 "multiplicity": row["multiplicity"], "claim_evaluation": row["claim_evaluation"],
             })
+            if extended:
+                target = rows[-1]
+                target.update({key: row[key] for key in ("plan_id", "claim_role", "hypothesized_direction", "equivalence", "sampling", "loo")})
+                target.update({key: estimator[key] for key in ("df", "t_critical_95")})
+                included = {b["block_id"] for b in row["bundle_blocks"]["blocks"] if b["included"] is True}
+                target["kept_block_ids"] = [bid for bid in row["bundle_blocks"]["planned_block_ids"] if bid in included]
+                target["removed_block_ids"] = [bid for bid in row["bundle_blocks"]["planned_block_ids"] if bid not in included]
         output = deepcopy({
             "schema_version": INPUT_SCHEMA_VERSION, "campaigns": dict(campaigns),
             "gamma": {"claim_verdicts_id": artifact["claim_verdicts_id"],
                       "claim_verdicts_sha256": hashlib.sha256(claim_verdicts_raw).hexdigest(),
-                      "evidence_class": artifact["inputs"]["evidence_class"], "contrasts": rows},
+                      "evidence_class": artifact["inputs"]["evidence_class"],
+                      "limitations": artifact["inputs"]["limitations"], "contrasts": rows},
             "characterization": dict(characterization),
         })
+        if extended:
+            output["gamma"]["finalized_manifest"] = deepcopy(artifact["inputs"]["analysis_manifest"])
+            output["gamma"]["floor_artifact"] = {key: artifact["inputs"]["floor_artifact"][key]
+                                                for key in ("artifact_id", "file_sha256")}
+            output["gamma"]["exclusions_sha256"] = (exclusions_sha256 if exclusions_sha256 is not None else
+                manifest.get("evidence", {}).get("analysed_attempt_exclusions", {}).get("sha256") if manifest is not None else None)
+        validate_results_fill_projection(output, artifact)
         # A caller's orchestration fields must also be serializable JSON.
         json.dumps(output, allow_nan=False)
         return output
@@ -95,4 +204,9 @@ def adapt_claim_verdicts(
         raise ResultsFillAdapterError(f"invalid results-fill adapter input: {exc}") from exc
 
 
-__all__ = ["ResultsFillAdapterError", "adapt_claim_verdicts"]
+def render_results_fill_input(value) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                       allow_nan=False) + "\n").encode("utf-8")
+
+
+__all__ = ["ResultsFillAdapterError", "adapt_claim_verdicts", "render_results_fill_input", "validate_results_fill_projection"]

@@ -1,0 +1,357 @@
+{
+  "attempt": 3,
+  "bundles_ignored": [
+    {
+      "bundle_id": "bound/neg8-refcorpus-r01",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r01"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r02",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r02"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r03",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r03"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r04",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r04"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r05",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r05"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r06",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r06"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r07",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r07"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r08",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r08"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r09",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r09"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r10",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r10"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r11",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r11"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r12",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r12"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r13",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r13"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r14",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r14"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r15",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r15"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r16",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r16"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r17",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r17"
+    },
+    {
+      "bundle_id": "bound/neg8-refcorpus-r18",
+      "code": "roster.not_in_plan",
+      "run_id": "neg8-refcorpus-r18"
+    }
+  ],
+  "catalog_sha256": "5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d",
+  "cells": [
+    {
+      "cell_id": "df-b5t-family",
+      "dropped_units": [
+        {
+          "codes": [
+            "member.bytes_missing"
+          ],
+          "positions": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "run_ids": [
+            "s0-mock-b01-a1",
+            "s0-mock-b01-a2",
+            "s0-mock-b01-b1",
+            "s0-mock-b01-b2"
+          ],
+          "stratum": "quad",
+          "unit_id": "s0-mock-b01"
+        },
+        {
+          "codes": [
+            "member.bytes_missing"
+          ],
+          "positions": [
+            0
+          ],
+          "run_ids": [
+            "s0-mock-r01"
+          ],
+          "stratum": "repeat",
+          "unit_id": "s0-mock-r01"
+        },
+        {
+          "codes": [
+            "member.bytes_missing"
+          ],
+          "positions": [
+            1
+          ],
+          "run_ids": [
+            "s0-mock-r02"
+          ],
+          "stratum": "repeat",
+          "unit_id": "s0-mock-r02"
+        }
+      ],
+      "kept_units": {
+        "quad": [],
+        "repeat": []
+      },
+      "minimum": {
+        "quad": 5,
+        "repeat": 5
+      },
+      "n_kept": {
+        "quad": 0,
+        "repeat": 0
+      },
+      "n_quads": 0,
+      "n_repeats": 0,
+      "planned": {
+        "quad": 1,
+        "repeat": 2
+      },
+      "resolvable": false,
+      "target": true
+    }
+  ],
+  "claim_usable": false,
+  "duplicate_bundles": [],
+  "flag_counts": {
+    "by_code": {
+      "chain.stopped_before_collection": 1,
+      "collection.zero_yield": 1,
+      "diagnostic.s1_structural": 1,
+      "g3.not_applicable": 1,
+      "lineage.locator_unreadable": 2,
+      "member.bytes_missing": 13,
+      "neg8.corpus_member_dropped": 1,
+      "neg8.screen_failed": 1,
+      "roster.no_science_bundles": 1,
+      "roster.not_in_plan": 18,
+      "thermal.battery_temperature_unmeasured": 2,
+      "thermal.os_level_nonzero": 1,
+      "whole_window.not_passed": 1
+    },
+    "by_effect": {
+      "DISCLOSE": 10,
+      "EXCLUDE_MEMBER": 32,
+      "EXCLUDE_WINDOW": 2
+    },
+    "by_family": {
+      "DIAGNOSTIC": 4,
+      "MEMBER_VALIDITY": 13,
+      "NEG8": 3,
+      "PHYSICS_IN_SPAN": 1,
+      "RECORDS": 3,
+      "ROSTER": 20
+    },
+    "foreign_scope": 0,
+    "unmatched_member": 19
+  },
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463",
+      "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "0699abbb0881ce64b39c46ba07de568cc3848260",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin3",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_excluded": [
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 0,
+      "run_id": "s0-mock-r01"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 1,
+      "run_id": "s0-mock-r02"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 2,
+      "run_id": "s0-mock-b01-a1"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 3,
+      "run_id": "s0-mock-b01-b1"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 4,
+      "run_id": "s0-mock-b01-b2"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 5,
+      "run_id": "s0-mock-b01-a2"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 6,
+      "run_id": "b5t-neg8-end-1"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 7,
+      "run_id": "b5t-neg8-end-2"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 8,
+      "run_id": "b5t-neg8-end-3"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 9,
+      "run_id": "b5t-neg8-midpoint"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 10,
+      "run_id": "b5t-neg8-start-1"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 11,
+      "run_id": "b5t-neg8-start-2"
+    },
+    {
+      "codes": [
+        "member.bytes_missing"
+      ],
+      "families": [
+        "MEMBER_VALIDITY"
+      ],
+      "position": 12,
+      "run_id": "b5t-neg8-start-3"
+    }
+  ],
+  "plan_id": "s0-beta-plan",
+  "reasons": [
+    "cell.below_minimum",
+    "neg8.screen_failed",
+    "roster.no_science_bundles"
+  ],
+  "release_blocked": false,
+  "schema_version": "joulewise.exclusions.v1",
+  "span_unknown": [],
+  "unclassified": []
+}

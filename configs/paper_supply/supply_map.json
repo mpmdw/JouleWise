@@ -1,22 +1,48 @@
 {
-  "pending_roles": {
+  "pending_roles": {},
+  "roles": {
+    "production.claim_evidence.gamma.v5": {
+      "binding_census": {
+        "base": "runs_root",
+        "path": "supply-census/claim-evidence-gamma.json"
+      },
+      "family": "claim_evidence",
+      "issuance_gate_id": "claim-evidence.v1",
+      "mode": "production",
+      "subjects": [
+        "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b",
+        "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"
+      ],
+      "validator": "joulewise.paper_custody.claim_evidence.v1"
+    },
     "production.reported_energy_parents.qwen3-1p7b.v5": {
-      "authority": "git_blob",
-      "base": "repository",
+      "binding_census": {
+        "base": "runs_root",
+        "path": "supply-census/reported-energy-alpha.json"
+      },
       "family": "reported_energy_parents",
-      "input_role": "extraction_spec",
-      "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json",
-      "status": "pending_desk_day"
+      "issuance_gate_id": "reported-energy.v1",
+      "mode": "production",
+      "subjects": [
+        "d117-reported-mean-ph-decode-qwen3-1p7b",
+        "d117-reported-mean-ph-prefill-p2048-qwen3-1p7b"
+      ],
+      "validator": "joulewise.paper_custody.reported_energy_parents.v1"
     },
     "production.reported_energy_parents.qwen3-8b.v5": {
-      "authority": "git_blob",
-      "base": "repository",
+      "binding_census": {
+        "base": "runs_root",
+        "path": "supply-census/reported-energy-beta.json"
+      },
       "family": "reported_energy_parents",
-      "input_role": "extraction_spec",
-      "path": "configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json",
-      "status": "pending_desk_day"
+      "issuance_gate_id": "reported-energy.v1",
+      "mode": "production",
+      "subjects": [
+        "d117-reported-mean-ph-decode-qwen3-8b",
+        "d117-reported-mean-ph-prefill-p2048-qwen3-8b"
+      ],
+      "validator": "joulewise.paper_custody.reported_energy_parents.v1"
     }
   },
-  "roles": {},
   "schema_version": "joulewise.paper_supply_map.v2"
 }

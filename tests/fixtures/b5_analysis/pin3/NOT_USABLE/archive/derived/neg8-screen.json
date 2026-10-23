@@ -1,0 +1,38 @@
+{
+  "bound_derived_from": "collected_subset",
+  "bound_formula": "max(max(mean(largest_n_start)-mean(smallest_n_end),mean(largest_n_end)-mean(smallest_n_start)),t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))",
+  "bound_used": "corpus_physics_clean",
+  "clean_bound": {
+    "corpus_manifest": {
+      "path": "derived/neg8-clean-corpus.json",
+      "sha256": "9c03c34185ff5b75032e243b3509f4db4b9349ef639dc82266c5058bab725c14"
+    },
+    "path": "withheld/neg8-clean-bound.json",
+    "sha256": "e73029d66d68b562e631abc8b98545ba55230d9ff869b757289858744dc132c3"
+  },
+  "harvest_reference_losses": {},
+  "rescreen": {
+    "conditions": [],
+    "decision": "passed",
+    "evaluated": true,
+    "evaluated_at_source": "evaluation_scope.completed_at",
+    "freshness": {
+      "decision": "fresh",
+      "triggers": []
+    },
+    "problems": [],
+    "survivors": {
+      "endpoint_protocol": "replicated_endpoints_with_midpoint"
+    },
+    "verdict_authenticated": true
+  },
+  "schema": "joulewise.b5_neg8_screen.v1",
+  "stored": {
+    "conditions_beyond_bound_underived": [],
+    "decision": "failed"
+  },
+  "survivor_bracket": {
+    "path": "withheld/neg8-rescreen-bracket.json",
+    "sha256": "b2dbe572ab55f8a89da5aa80885312d37144ed481608e887f24836251592cc92"
+  }
+}

@@ -3077,3 +3077,21 @@ class ClaimArtifactTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FloorLineageLimitationValidationTests(unittest.TestCase):
+    def test_dropped_lineage_note_refuses_even_with_recomputed_verdict_id(self):
+        from tests.test_detection_floor import launch_lineage
+        artifact = minimal_artifact()
+        link = artifact["inputs"]["floor_artifact"]
+        floor = json.loads(base64.b64decode(link["embedded_bytes_base64"]))
+        floor["provenance"]["launch_lineage"] = launch_lineage()
+        raw = json.dumps(floor).encode()
+        link["embedded_bytes_base64"] = base64.b64encode(raw).decode()
+        link["file_sha256"] = hashlib.sha256(raw).hexdigest()
+        artifact["inputs"]["limitations"] = ["floor_launch_lineage_unauthenticated:aggregate"]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        self.assertEqual(validate_claim_verdicts(artifact), [])
+        artifact["inputs"]["limitations"] = []
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        self.assertTrue(any("lineage limitations" in error for error in validate_claim_verdicts(artifact)))

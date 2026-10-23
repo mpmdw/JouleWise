@@ -50,8 +50,10 @@ ZERO_POINT_KWARG = "zero_point_contrasts_j"
 GROSS_DIVERGENCE_REASON = "common_mode_zero_point_divergence_out_of_domain"
 PRECONDITION_REASON = "common_mode_precondition_failed"
 
-REL_TOL = 1e-9
-ABS_TOL = 1e-12
+def admission_bar(terms):
+    # §Z: 1e-6 J absolute or 1e6*u*S float noise; at production S<=2.5e6 J
+    # this is <=2.8e-4 J, below 1% of the ~1 J attribution limit.
+    return max(1e-6, 1e6 * 2**-53 * max(abs(value) for value in terms))
 PAD_COEFFICIENT = 64.0
 U = 2.0 ** -53                      # ulp(1.0) / 2
 OUTWARD_STEPS = 4
@@ -208,15 +210,18 @@ def sweeps_containing(zero, downward, upward):
 
 
 def just_beyond_tolerance(delta, sign):
-    """Smallest representable mismatch that `isclose` rejects."""
-    z = delta + sign * max(REL_TOL * abs(delta), ABS_TOL)
-    guard = 0
-    while math.isclose(z, delta, rel_tol=REL_TOL, abs_tol=ABS_TOL):
+    """Smallest representable mismatch beyond §Z's absolute band at S=1000 J."""
+    # The tested envelope is 1000 J and bounds delta/zero/onset/offset;
+    # §Z uses max(1e-6 J, 1e6*u*S), below 1% of the ~1 J attribution limit.
+    bar = max(1e-6, 1e6 * 2**-53 * 1000.0)
+    # Step the radius first: when delta==bar and sign==-1, stepping z==0
+    # would otherwise walk subnormal floats without changing the difference.
+    z = delta + sign * math.nextafter(bar, math.inf)
+    for _ in range(32):
+        if abs(z - delta) > bar:
+            return z
         z = math.nextafter(z, sign * math.inf)
-        guard += 1
-        if guard > 4096:
-            raise AssertionError("could not step beyond the admission band")
-    return z
+    raise AssertionError("could not step beyond the absolute admission band")
 
 
 # --------------------------------------------------------------------------
@@ -281,6 +286,17 @@ class R4RegisteredSemanticsOracle(unittest.TestCase):
                         caught.exception.reason, GROSS_DIVERGENCE_REASON
                     )
 
+    def test_millijoule_divergence_well_above_production_bar_refuses(self):
+        # 1e-3 J exceeds §Z's <=2.8e-4 J bar at production S<=2.5e6 J.
+        for scale in (1000.0, 2.5e6):
+            for sign in (-1.0, 1.0):
+                with self.subTest(scale=scale, sign=sign):
+                    zero = 0.2 + sign * 1e-3
+                    onset, offset = sweeps_containing(zero, 0.4, 0.1)
+                    with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                        emit_one(0.2, onset, offset, zero, scale, self.BOUND_S)
+                    self.assertEqual(caught.exception.reason, GROSS_DIVERGENCE_REASON)
+
     def test_gross_divergence_reason_is_in_the_cell_refusal_registry(self):
         """D-078: every estimator refusal must be a registered cell reason."""
         self.assertIn(GROSS_DIVERGENCE_REASON, CELL_REFUSAL_CODES)
@@ -289,19 +305,21 @@ class R4RegisteredSemanticsOracle(unittest.TestCase):
     def test_mismatch_grid_admits_and_satisfies_both_bars(self):
         """`delta` perturbed INDEPENDENTLY of the sweeps' zero point.
 
-        Mismatches span 0, +/-abs_tol, and +/-{0.25, 0.9, 1-ulp} x rel_tol x
-        |delta|, both signs. Every one is inside the admission band, so every
+        Mismatches span 0 and +/-{0.25, 0.9, 1-ulp, 1} times §Z's absolute
+        band at the envelope scale. Every sample is inside the band, so every
         one must be ADMITTED and satisfy BOTH exact bars.
         """
         fractions_of_rel = (0.25, 0.9, 1.0 - 2.0 ** -52)
         for delta in (0.2, -0.2, 1.0, -137.5, 1e-6, 5e4):
-            budget = REL_TOL * abs(delta)
-            offsets = [0.0, ABS_TOL, -ABS_TOL]
+            scale = max(abs(delta), 1.0)
+            envelope = 200.0 * scale
+            budget = admission_bar([envelope, delta])
+            offsets = [0.0, budget, -budget]
             offsets += [s * f * budget for f in fractions_of_rel for s in (1, -1)]
             for mismatch in offsets:
                 zero = delta + mismatch
-                if not math.isclose(zero, delta, rel_tol=REL_TOL, abs_tol=ABS_TOL):
-                    continue  # abs_tol step can exceed the band for tiny delta
+                if not math.isclose(zero, delta, rel_tol=0.0, abs_tol=budget):
+                    continue  # addition may round a boundary sample outside the band
                 scale = max(abs(delta), 1.0)
                 onset, offset = sweeps_containing(zero, 0.4 * scale, 0.11 * scale)
                 envelope = 200.0 * scale
@@ -320,8 +338,8 @@ class R4RegisteredSemanticsOracle(unittest.TestCase):
         emitted - BAR1 <= pad + |z - d| + the outward-step slack.
         """
         for delta in (0.2, -1.0, 137.5):
-            zero = delta + 0.5 * REL_TOL * abs(delta)
             scale = max(abs(delta), 1.0)
+            zero = delta + 0.5 * admission_bar([200.0 * scale, delta])
             onset, offset = sweeps_containing(zero, 0.4 * scale, 0.11 * scale)
             envelope = 200.0 * scale
             with self.subTest(delta=delta):
@@ -371,7 +389,8 @@ class R4RegisteredSemanticsOracle(unittest.TestCase):
         offset = [zero, zero]
         envelope = 1.0
         self.assertTrue(
-            math.isclose(zero, delta, rel_tol=REL_TOL, abs_tol=ABS_TOL),
+            math.isclose(zero, delta, rel_tol=0.0,
+                         abs_tol=admission_bar([delta, zero, envelope, *onset, *offset])),
             "the counterexample must sit INSIDE the admission band",
         )
         width = emit_one(delta, onset, offset, zero, envelope, self.BOUND_S)
@@ -429,12 +448,13 @@ class R4RegisteredSemanticsOracle(unittest.TestCase):
             )
             if delta == 0.0:
                 continue
-            band = max(REL_TOL * abs(delta), ABS_TOL)
+            envelope = magnitude * rng.uniform(1.0, 200.0)
+            band = admission_bar([delta, envelope])
             mismatch = rng.uniform(-1.0, 1.0) * band * rng.choice(
                 (0.0, 0.25, 0.5, 0.9, 1.0 - 2.0 ** -52)
             )
             zero = delta + mismatch
-            if not math.isclose(zero, delta, rel_tol=REL_TOL, abs_tol=ABS_TOL):
+            if not math.isclose(zero, delta, rel_tol=0.0, abs_tol=band):
                 continue
             span = abs(zero) * rng.uniform(1e-9, 0.5) + magnitude * 1e-12
             onset = sorted({zero} | {
@@ -445,7 +465,6 @@ class R4RegisteredSemanticsOracle(unittest.TestCase):
                 zero + span * rng.uniform(-1.0, 1.0)
                 for _ in range(rng.randrange(1, 5))
             })
-            envelope = magnitude * rng.uniform(1.0, 200.0)
             width = emit_one(delta, onset, offset, zero, envelope, self.BOUND_S)
             self._assert_both_bars(
                 width, delta, onset, offset, zero, envelope, quiet=True

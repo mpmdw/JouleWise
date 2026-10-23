@@ -447,11 +447,17 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   "('Constant', (('value', 'single_count_discipline'),))", 1),
  ('joulewise/analysis_engine/artifact.py', '_validate_cross_field_claim_semantics', 'typed-reader',
   "('Attribute', (('value', ('Name', (('id', 'discipline'), ('ctx', ('Load', ()))))), ('attr', 'copy_wire'), ('ctx', ('Load', ()))))", 1),
- ('joulewise/analysis_engine/artifact.py', 'finalize_claim_verdicts', 'delegate',
-  "('Call', (('func', ('Name', (('id', 'validate_claim_verdicts'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'artifact'), "
-  "('ctx', ('Load', ())))),)), ('keywords', (('keyword', (('arg', 'frozen_manifest'), ('value', ('Name', (('id', 'frozen_manifest'), "
-  "('ctx', ('Load', ()))))))),))))",
-  1),
+ ('joulewise/analysis_engine/artifact.py',
+ 'finalize_claim_verdicts',
+ 'delegate',
+ "('Call', (('func', ('Name', (('id', 'validate_claim_verdicts'), ('ctx', ('Load', ()))))), ('args', (('Name', "
+ "(('id', 'artifact'), ('ctx', ('Load', ())))),)), ('keywords', (('keyword', (('arg', 'frozen_manifest'), "
+ "('value', ('Name', (('id', 'frozen_manifest'), ('ctx', ('Load', ()))))))), ('keyword', (('value', ('IfExp', "
+ "(('test', ('Compare', (('left', ('Name', (('id', 'floor_pinset_path'), ('ctx', ('Load', ()))))), ('ops', "
+ "(('IsNot', ()),)), ('comparators', (('Constant', ()),))))), ('body', ('Dict', (('keys', (('Constant', "
+ "(('value', 'floor_pinset_path'),)),)), ('values', (('Name', (('id', 'floor_pinset_path'), ('ctx', ('Load', "
+ "())))),))))), ('orelse', ('Dict', ()))))),))))))",
+ 1),
  ('joulewise/analysis_engine/artifact.py', 'validate_claim_verdicts', 'api-reference',
   "('Name', (('id', '_ATTRIBUTION_FLOOR_KEYS'), ('ctx', ('Load', ()))))", 7),
  ('joulewise/analysis_engine/artifact.py', 'validate_claim_verdicts', 'api-reference',
@@ -479,11 +485,17 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   "'contrast'), ('ctx', ('Load', ())))), ('Name', (('id', 'where'), ('ctx', ('Load', ())))), ('Name', (('id', 'errors'), ('ctx', ('Load', "
   '()))))))))',
   1),
- ('joulewise/analysis_engine/artifact.py', 'write_claim_verdicts_atomic', 'delegate',
-  "('Call', (('func', ('Name', (('id', 'validate_claim_verdicts'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'value'), ('ctx', "
-  "('Load', ())))),)), ('keywords', (('keyword', (('arg', 'frozen_manifest'), ('value', ('Name', (('id', 'frozen_manifest'), ('ctx', "
-  "('Load', ()))))))),))))",
-  1),
+ ('joulewise/analysis_engine/artifact.py',
+ 'write_claim_verdicts_atomic',
+ 'delegate',
+ "('Call', (('func', ('Name', (('id', 'validate_claim_verdicts'), ('ctx', ('Load', ()))))), ('args', (('Name', "
+ "(('id', 'value'), ('ctx', ('Load', ())))),)), ('keywords', (('keyword', (('arg', 'frozen_manifest'), ('value', "
+ "('Name', (('id', 'frozen_manifest'), ('ctx', ('Load', ()))))))), ('keyword', (('value', ('IfExp', (('test', "
+ "('Compare', (('left', ('Name', (('id', 'floor_pinset_path'), ('ctx', ('Load', ()))))), ('ops', (('IsNot', "
+ "()),)), ('comparators', (('Constant', ()),))))), ('body', ('Dict', (('keys', (('Constant', (('value', "
+ "'floor_pinset_path'),)),)), ('values', (('Name', (('id', 'floor_pinset_path'), ('ctx', ('Load', ())))),))))), "
+ "('orelse', ('Dict', ()))))),))))))",
+ 1),
  ('joulewise/analysis_engine/claims.py', '<grep>', 'grep', '"single_count_discipline",', 1),
  ('joulewise/analysis_engine/claims.py', '<grep>', 'grep', '"single_count_discipline": discipline.copy_wire(),', 1),
  ('joulewise/analysis_engine/claims.py', '<grep>', 'grep', 'SingleCountDisciplineError,', 1),
@@ -530,10 +542,20 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   "('ctx', ('Load', ())))), ('Name', (('id', 'Any'), ('ctx', ('Load', ())))))), ('ctx', ('Load', ()))))), ('ctx', ('Load', ()))))), ('op', "
   "('BitOr', ())), ('right', ('Constant', ()))))), ('value', ('Constant', ())), ('simple', 1)))",
   1),
- ('joulewise/analysis_engine/inputs.py', 'authenticate_floor_artifact_bytes', 'delegate',
-  "('Call', (('func', ('Name', (('id', 'validate_floor_artifact'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'value'), ('ctx', "
-  "('Load', ())))),))))",
-  1),
+ ('joulewise/analysis_engine/inputs.py',
+ 'authenticate_floor_artifact_bytes',
+ 'delegate',
+ "('Call', (('func', ('Name', (('id', 'validate_floor_artifact'), ('ctx', ('Load', ()))))), ('args', (('Name', "
+ "(('id', 'value'), ('ctx', ('Load', ())))),))))",
+ 1),
+ ('joulewise/analysis_engine/inputs.py',
+ 'authenticate_floor_artifact_bytes',
+ 'delegate',
+ "('Call', (('func', ('Name', (('id', 'validate_floor_artifact'), ('ctx', ('Load', ()))))), ('args', (('Name', "
+ "(('id', 'value'), ('ctx', ('Load', ())))),)), ('keywords', (('keyword', (('arg', 'pinset_path'), ('value', "
+ "('Name', (('id', 'pinset_path'), ('ctx', ('Load', ()))))))), ('keyword', (('arg', 'expected_pinset_sha256'), "
+ "('value', ('Name', (('id', 'expected_pinset_sha256'), ('ctx', ('Load', ())))))))))))",
+ 1),
  ('joulewise/analysis_engine/inputs.py', 'read_floor_resolution_discipline', 'api-reference',
   "('Name', (('id', 'read_single_count_discipline'), ('ctx', ('Load', ()))))", 1),
  ('joulewise/analysis_engine/inputs.py', 'read_floor_resolution_discipline', 'delegate',
@@ -900,6 +922,10 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   "('ctx', ('Load', ())))),))))",
   1),
  ('scripts/mint_floor_artifact_generalized.py', '<grep>', 'grep', 'except detection_floor.SingleCountDisciplineError as exc:', 2),
+ ('scripts/mint_floor_artifact_generalized.py', 'V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT', 'text-token', "('Constant', (('value', 'No cell of this floor artifact carries the attribution-limited floor of D-078 clause 11; the single-count discipline does not apply to it.\\n'),))", 1),
+ ('scripts/mint_floor_artifact_generalized.py', '_write_v2_artifact_outputs', 'delegate', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'read_single_count_profile'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'artifact'), ('ctx', ('Load', ())))),)), ('keywords', (('keyword', (('arg', 'profile'), ('value', ('Constant', (('value', 'floor'),))))), ('keyword', (('arg', 'where'), ('value', ('Constant', (('value', 'artifact'),)))))))))", 1),
+ ('scripts/mint_floor_artifact_generalized.py', '<grep>', 'grep', '"clause 11; the single-count discipline does not apply to it.\\n"', 1),
+ ('scripts/mint_floor_artifact_generalized.py', '<grep>', 'grep', 'except detection_floor.SingleCountDisciplineError:', 1),
  ('scripts/mint_floor_artifact_generalized.py', '_mint_multi_cell_floor_artifact_active', 'delegate',
   "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'output_core'), ('ctx', ('Load', ()))))), ('attr', "
   "'write_outputs_exclusive'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'artifact'), ('ctx', ('Load', ())))), ('Name', (('id', "
