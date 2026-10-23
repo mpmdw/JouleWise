@@ -38,6 +38,7 @@ import math
 import re
 import statistics
 import struct
+import subprocess
 import sys
 from pathlib import Path
 
@@ -740,9 +741,31 @@ def battery_phase(stream, window, idle):
 # ----------------------------------------------------------------------------
 # Harvest archive: member spans in monotonic ns, meter join for the decode phase.
 
+def _read_text(path):
+    """Read a logical UTF-8 file, including a desk-compressed sibling.
+
+    Keep this reader independent of joulewise: the twin's no-shared-code
+    fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH.
+    A missing or unreadable sibling follows the caller's missing-file path.
+    """
+    path = Path(path)
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        compressed = Path(str(path) + ".zst")
+        if not compressed.is_file():
+            raise
+    try:
+        result = subprocess.run(["zstd", "-dc", str(compressed)],
+                                capture_output=True, check=True)
+        return result.stdout.decode("utf-8")
+    except (subprocess.CalledProcessError, UnicodeDecodeError):
+        raise OSError("compressed_file_unreadable") from None
+
+
 def read_json(path, default=None):
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
+        return json.loads(_read_text(path))
     except (OSError, ValueError):
         return default
 
@@ -768,7 +791,7 @@ def member_spans(bundle):
         return int(round((mono + (float(wall) - epoch)) * 1_000_000_000))   # Addendum 7 N1: nearest ns
     spans = {}
     try:
-        lines = (bundle / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        lines = _read_text(bundle / "events.jsonl").splitlines()
     except OSError:
         return None
     for line in lines:

@@ -68,6 +68,7 @@ DEFECTS = [
 DEFECTS_MINIMUM = [(1, "Qwen3-32B-4bit", i, "strict_validation") for i in range(6)]
 CAMPAIGNS = {
     "bytes": ("bytes", 1100, []),
+    "compressed": ("bytes", 1100, []),
     "resident": ("resident", 3100, []),
     "time": ("time", 2100, []),
     "defects": ("bytes", 1100, DEFECTS),
@@ -718,6 +719,14 @@ def build(root, name):
                                     pass_duration_scales=PASS_SCALES, clock_latency_ms=CLOCK_LATENCY_MS)
     finally:
         export_runs.export = original
+    if name == "compressed":
+        # Desk layout from the cold probe: both primary-byte files of every
+        # Qwen3-8B claim run, after export, with the plain originals removed.
+        for session in manifest["sessions"]:
+            for events in Path(session["archive"]).glob("sources/claim-runs/qwen3-8b-4bit-*/events.jsonl"):
+                for path in (events, events.with_name("metadata.json")):
+                    subprocess.run(["zstd", "-q", str(path), "-o", str(path) + ".zst"], check=True)
+                    path.unlink()
     _write(root / "manifest.json", manifest)
     _write(root / "build.json", {"name": name, "world": world, "seed": seed, "defects": log,
                                  "pass_duration_scales": PASS_SCALES, "clock_latency_ms": CLOCK_LATENCY_MS})
@@ -820,6 +829,13 @@ class AgreementTests(unittest.TestCase):
         # 7 held-out models x 3 boundaries x (2 passes + their mean) = 63 primary-and-description words.
         self.check("bytes", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                  "h2/rest/passes_mean": (11, 11)})
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed-bundle campaign requires zstd on PATH")
+    def test_compressed_bundle_campaign(self):
+        # Same words and fits as bytes: compression changes storage only.
+        # check uses the existing per-field derived agreement bars above.
+        self.check("compressed", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
+                                      "h2/rest/passes_mean": (11, 11)})
 
     def test_resident_world(self):
         self.check("resident", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),

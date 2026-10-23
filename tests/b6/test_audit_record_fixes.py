@@ -25,6 +25,19 @@ class AuditRecordTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 
+    def test_block_six_harvest_checkout_includes_acceptance_and_export(self):
+        # These execute in the block-6 entry process, beyond its archive and
+        # courier modules. Check named paths independently of the digest list.
+        required = (
+            'joulewise/b6/session.py', 'joulewise/b6/acceptance.py',
+            'joulewise/b6/export_runs.py', 'joulewise/b6/registration.py',
+            'joulewise/b6/survivor_screen.py', 'joulewise/flags/catalog.py',
+        )
+        checkout = h.harvest_checkout(block_six=True)
+        self.assertLessEqual(set(required), set(checkout['files']))
+        for name in required:
+            self.assertEqual(checkout['files'][name], hashlib.sha256((support.ROOT / name).read_bytes()).hexdigest())
+
     def test_cli_harvest_records_the_selected_registration_inputs(self):
         # Primary-byte synthetic bundles pass through the actual CLI, harvester,
         # acceptance and export; no harvest or registration reader is replaced.
@@ -93,13 +106,15 @@ class AuditRecordTests(unittest.TestCase):
             *verdict_calibration_paths], text=True).splitlines()
         self.assertTrue(commits, 'empty F8 history cannot prove review coverage')
         self.assertEqual(sorted(set(commits) - reviewed), [])
-        # Also cover every registered-path commit on this PR, including later
-        # fix commits, and execute the actual check at the current lane head.
+        # Also cover every registered acquisition path and F8 verdict/calibration
+        # path on this PR, including later fix commits. The independent F8 list
+        # must reach the lane head even for paths outside registration's sixteen.
         head = subprocess.check_output(['git', '-C', str(support.ROOT),
                                         'rev-parse', 'HEAD'], text=True).strip()
         commits = subprocess.check_output([
             'git', '-C', str(support.ROOT), 'log', '--format=%H',
-            'fda9b380d..' + head, '--', *registered['number_bearing_paths']], text=True).splitlines()
+            'fda9b380d..' + head, '--', *registered['number_bearing_paths'],
+            *verdict_calibration_paths], text=True).splitlines()
         self.assertEqual(sorted(set(commits) - reviewed), [])
         result = code_check.check(support.ROOT, registered['registered_commit'], head,
                                   registered['number_bearing_paths'], rows, '')

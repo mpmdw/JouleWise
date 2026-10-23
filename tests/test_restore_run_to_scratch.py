@@ -56,8 +56,8 @@ class RestoreRunTests(unittest.TestCase):
 
     @contextmanager
     def restored(self, source=None, scratch=None, **kwargs):
-        # Simulate free space exceeding the standing 25 GiB floor by exactly
-        # the fixture bytes; CI can exercise the floor without a 25 GiB disk.
+        # Simulate free space exceeding the standing 40 GiB floor by exactly
+        # the fixture bytes; CI can exercise the floor without a 40 GiB disk.
         size = sum(p.stat().st_size for p in self.run.rglob("*") if p.is_file())
         required = sum(row["size"] for row in desk.status(self.record_dir))
         with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(
@@ -195,13 +195,16 @@ class RestoreRunTests(unittest.TestCase):
         self.assertFalse(self.scratch.exists())
 
     def test_default_reserve_and_invalid_reserves(self):
-        # 24 GiB is exactly one GiB below the derived 25 GiB reserve.
-        with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(free=24 * 1024**3)):
+        # The 2026-10-12 eviction began near 29 GiB free; restore the earlier
+        # 40 GiB margin above it. Exact integer GiB, not a measured comparison.
+        self.assertEqual(restore.MIN_RESERVE_GIB, 40)
+        # 39 GiB is one GiB below that reserve, even before fixture bytes.
+        with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(free=39 * 1024**3)):
             with self.assertRaisesRegex(ValueError, "insufficient scratch space"):
                 with restore.restored_run(self.run, self.scratch):
                     self.fail("reader reached")
-        for reserve in (-1, 0, 24, float("nan"), float("inf")):
-            with self.subTest(reserve=reserve), self.assertRaisesRegex(ValueError, "finite and at least 25"):
+        for reserve in (-1, 0, 25, 29, 39, float("nan"), float("inf")):
+            with self.subTest(reserve=reserve), self.assertRaisesRegex(ValueError, "finite and at least 40"):
                 with restore.restored_run(self.run, self.scratch, reserve_gib=reserve):
                     self.fail("reader reached")
 
@@ -210,7 +213,7 @@ class RestoreRunTests(unittest.TestCase):
         # bytes are exactly the single synthetic run's restored footprint.
         required = sum(p.stat().st_size for p in self.run.rglob("*") if p.is_file())
         if shutil.disk_usage(self.root).free < restore.MIN_RESERVE_GIB * 1024**3 + required:
-            self.skipTest("real CLI restore requires the project's 25 GiB free-disk floor")
+            self.skipTest("real CLI restore requires the project's 40 GiB free-disk floor")
         if ZSTD:
             self.compress()
         before = self.snapshot(self.archive)
@@ -240,7 +243,7 @@ class RestoreRunTests(unittest.TestCase):
         shutil.copytree(seed, self.run)
         required = sum(p.stat().st_size for p in self.run.rglob("*") if p.is_file())
         if shutil.disk_usage(self.root).free < restore.MIN_RESERVE_GIB * 1024**3 + required:
-            self.skipTest("real CLI restore requires the project's 25 GiB free-disk floor")
+            self.skipTest("real CLI restore requires the project's 40 GiB free-disk floor")
         reader = ("import json, sys; from pathlib import Path; "
                   "from joulewise.cli import validate_bundle; from joulewise.reduce import reduce_bundle; "
                   "p=Path(sys.argv[1]); stored=json.loads((p/'summary_metrics.json').read_bytes()); "

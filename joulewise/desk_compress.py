@@ -80,8 +80,9 @@ def open_bytes(path: Path):
             yield process.stdout
             # A producer can be blocked on a full pipe after a partial read.
             # Inspect buffered output before waiting, then cancel that producer.
-            # At EOF, retain the exit-status check (including corrupt frames).
-            if process.stdout.peek(1):
+            # A consumer-closed stream is also partial (e.g. a dropped text
+            # wrapper). At EOF, retain the exit-status check for corrupt frames.
+            if process.stdout.closed or process.stdout.peek(1):
                 process.stdout.close()
                 if process.poll() is None:
                     process.kill()

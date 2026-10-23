@@ -3669,7 +3669,10 @@ HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
 HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
 B6_HARVEST_PROGRAM_FILES = ("scripts/harvest_b6_session.py", "joulewise/b6/archive.py",
                             "joulewise/b6/courier.py", "joulewise/b6/analysis_lane.py",
-                            "joulewise/flags/exclusions.py")
+                            "joulewise/flags/exclusions.py", "joulewise/b6/session.py",
+                            "joulewise/b6/acceptance.py", "joulewise/b6/export_runs.py",
+                            "joulewise/b6/registration.py", "joulewise/b6/survivor_screen.py",
+                            "joulewise/flags/catalog.py")
 
 
 def harvest_checkout(runner: Callable[..., Any] = subprocess.run, *, block_six: bool = False) -> dict[str, Any]:

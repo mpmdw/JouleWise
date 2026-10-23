@@ -14,6 +14,7 @@ import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import warnings
 
 from joulewise import desk_compress as desk
 from joulewise.b5.harvest import tree_inventory
@@ -43,6 +44,33 @@ class DeskCompressFixture(unittest.TestCase):
 
 @unittest.skipUnless(Path(ZSTD).is_file(), "zstd CLI required")
 class DeskCompressTests(DeskCompressFixture):
+    def test_open_bytes_consumer_closes(self):
+        path = self.put(self.runs / "consumer-closes")
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed):
+                if compressed:
+                    self.assertEqual(self.compress()[0], 0)
+                with desk.open_bytes(path) as stream:
+                    observed = stream.read(10)
+                    stream.close()
+                self.assertEqual(observed, b"a" * 10)
+
+    def test_open_bytes_textiowrapper_dropped(self):
+        path = self.put(self.runs / "wrapper-dropped")
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed):
+                if compressed:
+                    self.assertEqual(self.compress()[0], 0)
+                with desk.open_bytes(path) as stream:
+                    wrapper = io.TextIOWrapper(stream, encoding="latin-1")
+                    observed = wrapper.read(5)
+                    # Dropping an unclosed wrapper intentionally emits this
+                    # warning; its close of the underlying stream is the case.
+                    with warnings.catch_warnings(action="ignore", category=ResourceWarning):
+                        del wrapper
+                    self.assertTrue(stream.closed)
+                self.assertEqual(observed, "a" * 5)
+
     def test_partial_compressed_read_exits_within_plain_path_budget(self):
         payload = random.Random(573).randbytes(4 * 1024 * 1024)
         path = self.put(self.runs / "partial-read", payload)

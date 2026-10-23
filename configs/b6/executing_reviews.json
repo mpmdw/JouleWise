@@ -664,7 +664,9 @@
 {
  "commit": "9d23e5b46ca7ed9fbf26e6bbc330803b8d733b42",
  "number_bearing_paths": [
-  "joulewise/reduce.py"
+  "joulewise/reduce.py",
+  "joulewise/b5/harvest.py",
+  "joulewise/whole_window.py"
  ],
  "change": "PR #573 F4: route five reducer reads through the authentication seam without changing integration arithmetic. Cold-pass corrections per /Users/edr/night-archive/forward-20261021/coldpass-audit/FIX-573.md (FIX-573, Sol 6.1 xhigh); lead verification 2026-10-22 (Opus 5.5, interactive 8a9fb7fe): the reducer max->min mutant fails the new regression and the re-issued D-138 byte pin; tests.test_reduce, test_desk_compress, test_desk_compressed_readers, test_restore_run_to_scratch, tests.b6.test_audit_record_fixes, test_authentication_io OK; tests.hazards 288/289 (the one failure is the load-sensitive background-QoS CPU-share test, unchanged by this PR, passing when the Mac is less loaded).",
  "executing_reviews": [
@@ -677,6 +679,41 @@
    "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
    "covered": "fda9b380d..9ce9074a0 (PR #573)",
    "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-opus.report.md (JouleWise-data claude/cold-audit-pr573-opus-0in1nh)"
+  }
+ ]
+},
+{
+ "commit": "111705ee02299b4053c7cd5550e158781346b116",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/flags/catalog.py"
+ ],
+ "change": "PR #573 F8/F11/F15/F17: block-6 harvest records, claim usability, unresolved anchors and checkout identity.",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-fable.report.md (JouleWise-data claude/cold-audit-pr573-fable)"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-opus.report.md (JouleWise-data claude/cold-audit-pr573-opus-0in1nh)"
+  }
+ ]
+},
+{
+ "commit": "db9e8ab3878d6eb121de1b996362cb537514a8dd",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 cold-pass corrections: compressed harvest readers, unresolved anchors and block-6 checkout records.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "9ce9074a0..db9e8ab38 (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/fix573c/cold-delta-573-opus.md (JouleWise-data claude/cold-delta-573-opus-u8szk8)"
   }
  ]
 }

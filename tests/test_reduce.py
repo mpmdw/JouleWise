@@ -2138,6 +2138,22 @@ class D078R01RegressionTests(unittest.TestCase):
                          (5.0, 0.0, 0.0, 7.0))
         self.assertEqual(reduce_module._interpolation_edge_bound_j(curve, window), 4.0)
 
+    def test_joint_half_gap_bound_takes_maximum_of_unequal_perturbations(self) -> None:
+        # Closed form for STA-6: P(t)=4t W, integral=2t^2 J. With edges
+        # 1.25/2.75 s and 1 s bracketing gaps, the base energy is 12 J.
+        # Simultaneous +/-0.5 s shifts give 9, 20, 4, 15 J, hence changes
+        # 3, 8, 8, 3 J. The bound must be 8 J; max->min would give 3 J.
+        # Use the no-silly-numbers 1e-6 relative fallback: 8e-6 J is well
+        # above 1e6 * float epsilon * 20 J (~4.4e-9 J), far below the 5 J
+        # separation from the mutant. No source-byte pin enters this check.
+        curve = [reduce_module.TracePoint(t=float(t), power_w=float(4*t))
+                 for t in range(5)]
+        window = reduce_module.Window(1.25, 2.75)
+        expected_j = 8.0
+        self.assertAlmostEqual(
+            reduce_module._interpolation_joint_edge_bound_j(curve, window),
+            expected_j, delta=1e-6 * expected_j)
+
     @staticmethod
     def _claim_gates() -> dict:
         return {

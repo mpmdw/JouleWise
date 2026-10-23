@@ -8,8 +8,11 @@ Run from the repository root:
 import importlib.util
 import json
 import math
+import shutil
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from scripts import bytes_twin as bt
@@ -364,6 +367,58 @@ class H1Tests(unittest.TestCase):
         self.assertEqual(words["models"]["qwen3-30b-a3b-4bit"]["word"], "neither")
         self.assertEqual(words["active_or_resident"]["answer"], "mixed")
         self.assertTrue(words["active_or_resident"]["misses"])
+
+
+class DeskBundleReadTests(unittest.TestCase):
+    def test_missing_files_keep_existing_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            self.assertEqual(bt.read_json(bundle / "metadata.json", {"missing": True}), {"missing": True})
+            self.assertIsNone(bt.member_spans(bundle))
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
+    def test_compressed_json_and_events_and_plain_precedence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
+                "sampling_started": {"epoch_s": 2000, "monotonic_before_s": 1000}}}}}
+            events = [{"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000},
+                      {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001}]
+            for name, text in (("metadata.json", json.dumps(metadata)),
+                               ("events.jsonl", "".join(json.dumps(e) + "\n" for e in events))):
+                path = bundle / name
+                path.write_text(text, encoding="utf-8")
+                subprocess.run(["zstd", "-q", str(path), "-o", str(path) + ".zst"], check=True)
+                path.unlink()
+            self.assertEqual(bt.read_json(bundle / "metadata.json"), metadata)
+            # Exact integer ns: one second after the 1000 s monotonic anchor.
+            self.assertEqual(bt.member_spans(bundle), {
+                "decode_ns": [1_000_000_000_000, 1_001_000_000_000],
+                "request_ns": [1_000_000_000_000, 1_001_000_000_000], "idle_ns": None})
+            (bundle / "metadata.json").write_text('{"plain":true}', encoding="utf-8")
+            self.assertEqual(bt.read_json(bundle / "metadata.json"), {"plain": True})
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
+    def test_unreadable_compressed_files_keep_existing_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "metadata.json.zst").write_bytes(b"not a zstd frame")
+            self.assertEqual(bt.read_json(bundle / "metadata.json", {"missing": True}), {"missing": True})
+            self.assertIsNone(bt.member_spans(bundle))
+            (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {
+                "clock_anchor": {"clock_stamps": {"sampling_started": {
+                    "epoch_s": 2000, "monotonic_before_s": 1000}}}}}), encoding="utf-8")
+            (bundle / "events.jsonl.zst").write_bytes(b"not a zstd frame")
+            self.assertIsNone(bt.member_spans(bundle))
+            # A valid zstd frame with unreadable UTF-8 is still unavailable.
+            result = subprocess.run(["zstd", "-qc"], input=b"\xff", capture_output=True, check=True)
+            (bundle / "events.jsonl.zst").write_bytes(result.stdout)
+            self.assertIsNone(bt.member_spans(bundle))
+            # No PATH decompressor follows the same missing-file behavior.
+            with patch.object(bt.subprocess, "run", side_effect=FileNotFoundError("zstd")):
+                self.assertIsNone(bt.member_spans(bundle))
+                (bundle / "metadata.json").unlink()
+                self.assertEqual(bt.read_json(bundle / "metadata.json", {"missing": True}), {"missing": True})
 
 
 class MeterTests(unittest.TestCase):
