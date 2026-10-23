@@ -308,6 +308,7 @@ Additional logs (not completed acceptance modules):
 - interrupted tmpfs dry-run attempt, no completed module result: `/tmp/l9-1/dry-2/logs/tests_b5_analysis_test_dry_run.log`, SHA-256 `33e0f4f0f768f4094bae6f2496da4ff2a2f6cf0b80cc14b53e4f34204e35ae4d`.
 - fixture-lifetime mechanism probe, not a step-9b replay: `/workspace/l9-1/lifetime-probe/probe.log`, SHA-256 `ee7f85e8dd62de5e97fa78587061a1f500867ca7857823d4aa7214c9d887d58f`.
 - independent complete synthetic-fixture snapshot before step 9b, 22,950 files copied and verified: `/workspace/l9-1/no-joined-observer-1/pre9b-snapshot/snapshot.log`, SHA-256 `d67a3e69417d550e924da6e9314da78987b9d9dc78b803cdf5179af7be6a655d`.
+- observer-free step-9 fixture checkpoint, 22,950 files with zero recorded changes: `/workspace/l9-1/no-joined-observer-1/step9-fixture-checkpoint.log`, SHA-256 `f0cabedd16817a2771d496d912e962502dc25d8e9ca0abacbdacb73b2a1e29a7`.
 - passive runtime-observer instrumentation smoke check, one real worker and owned temporary cleanup; not acceptance: `/workspace/l9-1/runtime-observer-smoke/runtime.jsonl`, SHA-256 `5badf05fc7f368da1f668f6090e3d63c62e28ffcb4e4e37228996be2efb6c9ab`.
 
 Exact merged-input diagnostic after the 49-test legacy prefix: admitted VerifiedClaimEvidence, no validator codes, exit 0, 3588.285 s including the prefix; all ten original bound-file hashes matched before and after. This does not replace the failed joined acceptance. Log `/workspace/l9-1/prefix-1/control.log`, SHA-256 `01f46960fd4d4807af7df0b8b7e87f91dfc13ea1bf975347b3a6c1854127bad6`; passive provenance log SHA-256 `808bde69efbf4fcaed346530b58235a30981786e309bbb0dea71004dc3d323ba`. The original runner exited at its completed-module boundary; retained synthetic trees were restored at their exact original locators and their ten bindings reverified.
@@ -322,7 +323,3 @@ Passive leaf trace `/workspace/l9-1/captured-opener-1/leaf.jsonl`, SHA-256 `9984
 
 Real captured opener using the completed dry-run module original TMPDIR: admitted; validator codes []; process exit 0; wall 3507.028 s; execution head `54e8b176abe8b6a79ff91480130072832334ac99`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/original-tmp-opener-1/control.log`, SHA-256 `c34342a76c113e3fe83aa17731a4147c180182b29bfe810cdfa1b0f50af47f2d`.
 Passive leaf trace `/workspace/l9-1/original-tmp-opener-1/leaf.jsonl`, SHA-256 `8ec64405a6f907630ea84912e3c1a7a3383ea311d19bc4a0fa3e61a5a8a1121a`.
-
-### L9-1 full leaf diagnostic ownership update
-
-Private report d4f681c confirms the other seat's additional full leaf trace was interrupted during its environment outage: recovery at 2026-10-22 23:20:59 UTC found no process or completion record. Its completed failures and cold admissions remain unchanged. After reading that report, the prepared merged-head primary-driver trace began here at 23:39:41.352756 UTC on 6aa10e1cf, with normal joined observer and passive leaf/runtime diagnostics, all three synthetic flags and its own module-depth TMPDIR. No result is predicted; preparation/opener and observer-free controls also remain running.
