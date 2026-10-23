@@ -281,6 +281,7 @@ class Monitor:
         self.next_frequency_ns = first.monotonic_ns
         self.last_update_time: int | None = None
         self.previous_snapshot: contention.Snapshot | None = None
+        self.root_identities: dict[int, tuple[int, str]] = {}
         self.previous_over: dict[tuple[int, str], float] = {}
         self.disk_low_written = (self.directory / DISK_LOW_MARKER).exists()
         self.started = first
@@ -580,6 +581,7 @@ class Monitor:
             self._resolve_tree_roots()
         snapshot = contention.take_snapshot(self._raw_context("contention"), compress=True,
                                             host_reader=self.host_reader)
+        contention.pin_roots(snapshot, self.tree_roots, self.root_identities)
         previous, self.previous_snapshot = self.previous_snapshot, snapshot
         if previous is None:
             self._write("contention", "snapshot", started=snapshot.started,
@@ -590,7 +592,8 @@ class Monitor:
         result = contention.interval(previous, snapshot, tree_roots=self.tree_roots,
                                      include_kernel_task=False,
                                      limit=self.config["cpu_limit_s_per_s"],
-                                     previous_over=self.previous_over)
+                                     previous_over=self.previous_over,
+                                     root_identities=self.root_identities)
         self.previous_over = contention.over_limit(result)
         error = result.pop("error")
         self._write("contention", "interval", started=previous.started, finished=snapshot.finished,

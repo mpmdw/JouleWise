@@ -544,6 +544,24 @@ def publications(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [seen[key] for key in sorted(seen)]
 
 
+def state_observations(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Direct registry state at read time, independent of gauge UpdateTime.
+
+    A poll-triggered state transition can share an old gauge publication;
+    it remains in force until another registry read supersedes it.
+    """
+
+    states = []
+    for item in readings:
+        values = item.get("values") or {}
+        moment = (item.get("finished") or {}).get("monotonic_ns")
+        if (item.get("error") or "external_connected" not in values
+                or isinstance(moment, bool) or not isinstance(moment, int)):
+            continue
+        states.append({"monotonic_ns": moment, "values": values, "reading": item})
+    return sorted(states, key=lambda state: state["monotonic_ns"])
+
+
 def smc_samples(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Every SMC read in battery journal readings, in time order.
 
@@ -862,7 +880,8 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
       InstantAmperage/Amperage at a publication in force when B0AC does not
       cover the span; IsCharging not No or ExternalConnected not Yes at a
       publication in force (an unread state is not a pass); IsCharging Yes or
-      ExternalConnected No on any good registry read inside the span; a
+      ExternalConnected No on the latest good registry state at or before
+      the span's start, or on any good registry read inside the span; a
       charge-accumulator mean above 200 mA x Voltage.  No publication for
       more than ``max_unobserved_s`` overlapping the span is
       ``battery.unmeasured`` (EXCLUDE_MEMBER).
@@ -907,15 +926,16 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
                 "battery.member_span", span=span, observed=_observed(pub), expected=limits,
                 detail="; ".join(reasons), evidence=pub["reading"].get("raw") or (),
                 interval={"monotonic_ns": [pub["monotonic_ns"], pub["monotonic_ns"]]}))
-    for item in readings:
-        # Every good registry read inside the span, a new publication or not:
-        # a state change between publications (charging begins, the adapter is
-        # lost) is seen where it was read (the harvest copy's per-poll rule).
-        values = item.get("values") or {}
-        moment = (item.get("finished") or {}).get("monotonic_ns")
-        if (item.get("error") or "external_connected" not in values
-                or isinstance(moment, bool) or not isinstance(moment, int)
-                or not start <= moment <= stop):
+    states = state_observations(readings)
+    before = [state for state in states if state["monotonic_ns"] <= start]
+    # The latest state before the member still applies even if no state
+    # transition triggers another ioreg read inside this member.
+    active_states = ([before[-1]] if before else []) + [
+        state for state in states if start < state["monotonic_ns"] <= stop]
+    publication_reads = {id(pub["reading"]) for pub in in_force}
+    for state in active_states:
+        item, values, moment = state["reading"], state["values"], state["monotonic_ns"]
+        if id(item) in publication_reads:  # already judged above
             continue
         reasons = []
         if values.get("is_charging") is True:
