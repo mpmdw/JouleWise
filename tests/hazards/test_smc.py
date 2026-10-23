@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from joulewise.hazards import smc
+from tests.live_hw import LiveHardwareTestCase
 
 
 class FakeTransport:
@@ -194,7 +195,7 @@ class ReaderTests(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real SMC (macOS)")
-class LiveSmcTests(unittest.TestCase):
+class LiveSmcTests(LiveHardwareTestCase):
     def test_b0ac_is_readable_and_the_smc_power_block_updates_within_3_s(self):
         """B0AC reads as a signed integer on every read; the block it publishes
         with (B0AC, PDTR, PSTR, PPBR, refreshed together once a second) changes

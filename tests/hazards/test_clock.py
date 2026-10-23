@@ -10,6 +10,7 @@ from fractions import Fraction
 
 from joulewise import kernel_clock
 from joulewise.hazards import base, clock
+from tests.live_hw import LiveHardwareTestCase
 from tests.hazards.fakes import (
     BOOT_UUID, FakeClocks, FrequencyReader, Runner, completed, frequency_probe, ppm_word,
 )
@@ -486,7 +487,7 @@ class PreemptedReadReviewTests(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real kernel clock (macOS)")
-class LiveReadOnlyTests(unittest.TestCase):
+class LiveReadOnlyTests(LiveHardwareTestCase):
     def test_real_anchor_frequency_and_boot_read_without_privileges(self):
         measurement = clock.measure(base.Context())
         self.assertIsNone(measurement.error)

@@ -16,6 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from joulewise.hazards import base, battery, contention, monitor, smc, thermal
+from tests.live_hw import require_live_hw
 from tests.hazards.fakes import (
     FakeClocks, FakeProcessTable, FakeRegistry, FakeSmc, FrequencyReader, Runner, battery_bytes,
     completed, frequency_probe,
@@ -603,6 +604,12 @@ class SmcMonitorTests(unittest.TestCase):
 
 class SupervisorTests(unittest.TestCase):
     """The real monitor process: started, killed, restarted with the gap recorded, stopped."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if sys.platform == "darwin":  # only macOS reads the SMC, battery gauge and notify bus
+            require_live_hw()
 
     def run(self, result=None):
         # unittest deliberately propagates KeyboardInterrupt without invoking

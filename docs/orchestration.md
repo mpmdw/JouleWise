@@ -489,9 +489,10 @@ Pointer map only; mechanics stay in their owning files.
   the checkout; `--workers` bounds parallelism, and touched exclusive modules
   run alone. Measurements above three times the timing-map weight print a
   `STALE WEIGHT` finding. Failures include an exact single-module replay command.
-  CI runs quick first on Python 3.13 with four workers after interpreter
-  selection; ordinary and exclusive test jobs require its success. The lead
-  retains ownership of full-suite and live verification.
+  CI runs quick on Python 3.13 with four workers after interpreter selection,
+  at the same time as the ordinary and exclusive test jobs (none of them waits
+  for it); quick is a required check on main, so a red quick still blocks the
+  merge. The lead retains ownership of full-suite and live verification.
 - Skill-only mechanics on the operator's machine live under
   `~/.claude/skills`: `operation-loop` is the conductor,
   `codex-delegation` is the invocation/consumption contract,
