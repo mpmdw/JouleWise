@@ -444,6 +444,7 @@
     "heldout_pass_estimates.json/[]/boundary",
     "heldout_pass_estimates.json/[]/boundary_description",
     "heldout_pass_estimates.json/[]/bytes",
+    "heldout_pass_estimates.json/[]/decode_assisted_member_counts",
     "heldout_pass_estimates.json/[]/decode_assisted_member_counts/quad",
     "heldout_pass_estimates.json/[]/decode_assisted_member_counts/repeat",
     "heldout_pass_estimates.json/[]/df",
@@ -1026,6 +1027,8 @@
     "model_estimates.json/[]/passes/[]/without_assisted/meter_run_terms/[]/secondary_j",
     "model_estimates.json/[]/passes/[]/without_assisted/meter_run_terms/[]/stream",
     "model_estimates.json/[]/passes/[]/without_assisted/meter_unavailable",
+    "model_estimates.json/[]/passes/[]/without_assisted/meter_unavailable/[]/reason",
+    "model_estimates.json/[]/passes/[]/without_assisted/meter_unavailable/[]/run_id",
     "model_estimates.json/[]/passes/[]/without_assisted/n_b",
     "model_estimates.json/[]/passes/[]/without_assisted/n_r",
     "model_estimates.json/[]/passes/[]/without_assisted/neg8_inputs/boundaries/DC input/corpus_run_ids/[]",
@@ -1216,6 +1219,8 @@
     "model_estimates.json/[]/without_assisted/passes/[]/meter_run_terms/[]/secondary_j",
     "model_estimates.json/[]/without_assisted/passes/[]/meter_run_terms/[]/stream",
     "model_estimates.json/[]/without_assisted/passes/[]/meter_unavailable",
+    "model_estimates.json/[]/without_assisted/passes/[]/meter_unavailable/[]/reason",
+    "model_estimates.json/[]/without_assisted/passes/[]/meter_unavailable/[]/run_id",
     "model_estimates.json/[]/without_assisted/passes/[]/model",
     "model_estimates.json/[]/without_assisted/passes/[]/moe",
     "model_estimates.json/[]/without_assisted/passes/[]/n_b",
@@ -1710,6 +1715,7 @@
       "fields": [
         "blinded_pass_estimates.json/[]/decode_assisted_member_counts_reason",
         "blinded_pass_estimates.json/[]/with_assisted_label",
+        "heldout_pass_estimates.json/[]/decode_assisted_member_counts_reason",
         "heldout_pass_estimates.json/[]/with_assisted_label"
       ]
     },
@@ -1874,7 +1880,9 @@
         "heldout_pass_estimates.json/[]/meter_unavailable",
         "heldout_pass_estimates.json/[]/meter_unavailable/[]/reason",
         "heldout_pass_estimates.json/[]/meter_unavailable/[]/run_id",
-        "heldout_pass_estimates.json/[]/without_assisted/meter_unavailable"
+        "heldout_pass_estimates.json/[]/without_assisted/meter_unavailable",
+        "heldout_pass_estimates.json/[]/without_assisted/meter_unavailable/[]/reason",
+        "heldout_pass_estimates.json/[]/without_assisted/meter_unavailable/[]/run_id"
       ]
     },
     {
@@ -1919,6 +1927,7 @@
         "blinded_pass_estimates.json/[]/without_assisted/label",
         "blinded_pass_estimates.json/[]/without_assisted/reason",
         "heldout_pass_estimates.json/[]/without_assisted/label",
+        "heldout_pass_estimates.json/[]/without_assisted/reason",
         "model_estimates.json/[]/without_assisted/label",
         "model_estimates.json/[]/without_assisted/reason"
       ]
@@ -1933,7 +1942,8 @@
     "edge_locked",
     "withheld",
     "invalid_anchor",
-    "marker_incomplete"
+    "marker_incomplete",
+    "late_start"
   ],
   "mutation_sampling": "Fixed semantic row identities: gross-primary decision rows first for H1/H2/MoE; all campaigns inventoried. Meter projection preserves every emitted schema on both sides.",
   "row_exemptions": [

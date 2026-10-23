@@ -503,6 +503,42 @@ class BatteryTermsTests(QuantityTestCase):
         self.assertEqual(result["stream"], "good")
         self.assertQuantityEqual(result["battery_gross_j"], 6)
 
+    def test_marker_is_evaluated_without_decode_coverage_on_every_mapped_stream(self):
+        assisted = {**self.stream(), "aligned": True, "raw_offset_ns": 0,
+                    "host_ns": [6_000_000_000, 12_000_000_000]}
+        quiet = {**assisted, "battery_current_ma": [0] * 13}
+        spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000]}
+        for streams in ([assisted, quiet], [quiet, assisted]):
+            with self.subTest(assisted_first=streams[0] is assisted):
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(bt, "member_spans", return_value=spans):
+                    result = bt.dc_join({"root": Path("unused"), "streams": streams}, "member")
+                self.assertEqual(result["status"], "no_aligned_stream_covers_span")
+                self.assertIs(result.get("decode_assisted"), True)
+                self.assertIs(result.get("battery_end_window_complete"), True)
+
+    def test_marker_without_decode_coverage_distinguishes_quiet_polls_from_no_polls(self):
+        spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000]}
+        for count, expected in ((13, False), (6, None)):
+            stream = {**self.stream(), "aligned": True, "raw_offset_ns": 0,
+                      "host_ns": [6_000_000_000, 12_000_000_000],
+                      "poll_ns": self.stream()["poll_ns"][:count], "battery_current_ma": [0] * count}
+            with self.subTest(polls=count):
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(bt, "member_spans", return_value=spans):
+                    result = bt.dc_join({"root": Path("unused"), "streams": [stream]}, "member")
+                self.assertIs(result.get("decode_assisted"), expected)
+
+    def test_unknown_marker_in_one_pass_keeps_the_mean_description_unknown(self):
+        computed = {"status": "ok", "E_dec_j": 2.0, "T_dec_s": 1.0, "e_j_per_step": 2 / 512,
+                    "tau_s_per_step": 1 / 512, "e_half_width_j_per_step": .1 / 512,
+                    "e_printed_j_per_token": 2 / 512}
+        for diagnostics in ((computed, {"status": "not_evaluated"}),
+                            ({"status": "not_evaluated"}, computed)):
+            with self.subTest(unknown_first=diagnostics[0]["status"] == "not_evaluated"):
+                result = bt.mean_of_passes([{**computed, "without_assisted": d} for d in diagnostics])
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["passes_computed"], 2)
+                self.assertEqual(result["without_assisted"]["status"], "not_evaluated")
+
 
 class BlindingTests(QuantityTestCase):
     def test_config_filename_and_factor_product(self):

@@ -111,6 +111,9 @@ CAMPAIGNS = {
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
+    "late_start": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                   "battery_publication": "delayed", "battery_reference_assist": True,
+                   "late_start_stream": True}, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -148,10 +151,18 @@ def bar_rest_intercept_floor(vif, inputs):
     The centred two-regressor Gram condition number is approximately 4 VIF.
     The response RMS is the intercept's natural W scale. Registration §12 /
     Addendum 8.6 declares c unidentified and draws no word from it; where this
-    floor exceeds 1% of its interval, the floor governs this diagnostic only.
+    floor exceeds 1% of a printed interval, that interval's 1% ceiling governs
+    and the comparison record discloses the floor/ceiling crossing ratio.
     """
     response_rms = math.sqrt(math.fsum(p[0] ** 2 for p in inputs) / len(inputs))
     return 1e6 * sys.float_info.epsilon * 4 * vif * response_rms
+
+
+def coefficient_bar_note(ceiling, floor):
+    """Record an empty doctrine window beside the unchanged 1% ceiling."""
+    if floor > ceiling:
+        return f"float-noise lower edge / 1% ceiling = {floor / ceiling:.12g}; window empty, ceiling governs"
+    return None
 
 
 # Durations compare to 1 ms: Addendum 8.5 (the printed precision F13 asks B6 to fix; 1 ms is the
@@ -353,8 +364,52 @@ def row_key(row, *, point=False):
             row["boundary"], row["basis"], row["selection"])
 
 
-def compare_census(R, stage, rows, t, *, point=False):
+def compare_census(R, stage, rows, t, *, point=False, table=None):
     """Compare identities both ways, including unavailable rows and duplicate rows."""
+    if table is not None:
+        primary = [r for r in rows if (r["basis"], r["selection"]) == ("gross primary", "primary")]
+        expected = []
+        # Before withheld rows are admitted, the blinded primary has fit points
+        # only and emits no hypothesis tables (bytes_analyze's evaluation gate).
+        tables = t.get("h2" if table == "h2" else "h1", {}) if any(
+            model not in bt.FIT_SET for model in t.get("cells", {})) else {}
+        for boundary, passes in tables.items():
+            if stage.startswith("blinded") and boundary != "rails":
+                continue
+            if table == "moe":
+                if "passes_mean" in passes:
+                    expected.append((boundary,))
+            elif table == "h1":
+                for pk, block in passes.items():
+                    models = block.get("models", {})
+                    for model, cells in t.get("cells", {}).items():
+                        if model in bt.FIT_SET:
+                            continue
+                        quantity = cells.get(pk, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
+                        if block.get("status") == "refused_fit_set_incomplete":
+                            present = pk == "passes_mean" and quantity.get("status") != "ok"
+                        else:
+                            member = models.get(model)
+                            present = member is not None and (pk == "passes_mean" or
+                                ("refused" not in member and member.get("status") != "missing"))
+                        if present:
+                            expected.append((model, boundary, "mean" if pk == "passes_mean" else pk[4:]))
+            elif "passes_mean" in passes:
+                expected.append((boundary, "primary"))
+                quantities = [cells.get("passes_mean", {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
+                              for cells in t.get("cells", {}).values()]
+                if "two_pass_sensitivity" in passes["passes_mean"] or any(
+                    q.get("status") != "ok" or q.get("passes_computed", 1) < 2 for q in quantities):
+                    expected.append((boundary, "two_pass_sensitivity"))
+        if table == "h1":
+            actual = [(canon(r["model"]), BMAP.get(r["boundary"], r["boundary"]), str(r["pass_id"]))
+                      for r in primary if r["role"] == "heldout"]
+        elif table == "h2":
+            actual = [(BMAP.get(r["boundary"], r["boundary"]), r["analysis"]) for r in primary]
+        else:
+            actual = [(BMAP.get(r["boundary"], r["boundary"]),) for r in primary]
+        R.exact(stage, table + " census", "row keys", sorted(actual), sorted(expected))
+        return
     expected = []
     reverse_b = {v: k for k, v in BMAP.items()}
     for model, passes in (t.get("cells") or {}).items():
@@ -567,6 +622,8 @@ def compare_points(R, stage, a_points, t):
 
 
 def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
+    compare_census(R, stage, a_h1, t, table="h1")
+    compare_census(R, stage, a_moe, t, table="moe")
     for row in a_h1:
         if (row["basis"], row["selection"]) != ("gross primary", "primary"):
             continue
@@ -660,18 +717,20 @@ def _interval(R, stage, g, name, a_fit, idx, t_iv, *, offset=False, floor=0.0):
     interval beside it at 1% of its own half-width, without a VIF multiplier. offset: Addendum 9's
     labelled alternative beside the coefficient (DC input and rest)."""
     half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
-    bar = max(bar_coefficient(half), floor)
-    R.number(stage, g, name + ":estimate", a_fit["coefficients"][idx], t_iv["value"], bar)
-    R.number(stage, g, name + ":lower[HC3]", a_fit["intervals"][idx][0], t_iv["lower"], bar)
-    R.number(stage, g, name + ":upper[HC3]", a_fit["intervals"][idx][1], t_iv["upper"], bar)
+    bar = bar_coefficient(half)
+    note = coefficient_bar_note(bar, floor)
+    R.number(stage, g, name + ":estimate", a_fit["coefficients"][idx], t_iv["value"], bar, note)
+    R.number(stage, g, name + ":lower[HC3]", a_fit["intervals"][idx][0], t_iv["lower"], bar, note)
+    R.number(stage, g, name + ":upper[HC3]", a_fit["intervals"][idx][1], t_iv["upper"], bar, note)
     half_ols = (a_fit["ols_intervals"][idx][1] - a_fit["ols_intervals"][idx][0]) / 2
     t_ols = t_iv.get("ols") or {}
-    bar_ols = max(bar_coefficient(half_ols), floor)
-    R.number(stage, g, name + ":lower[OLS label]", a_fit["ols_intervals"][idx][0], t_ols.get("lower"), bar_ols)
-    R.number(stage, g, name + ":upper[OLS label]", a_fit["ols_intervals"][idx][1], t_ols.get("upper"), bar_ols)
+    bar_ols = bar_coefficient(half_ols)
+    note_ols = coefficient_bar_note(bar_ols, floor)
+    R.number(stage, g, name + ":lower[OLS label]", a_fit["ols_intervals"][idx][0], t_ols.get("lower"), bar_ols, note_ols)
+    R.number(stage, g, name + ":upper[OLS label]", a_fit["ols_intervals"][idx][1], t_ols.get("upper"), bar_ols, note_ols)
     # A standard error is its coefficient half-width divided by the same critical t.
-    R.number(stage, g, name + ":SE[HC3]", a_fit["standard_errors"][idx], t_iv["half_width"] / a_fit["critical"], bar / a_fit["critical"])
-    R.number(stage, g, name + ":SE[OLS]", a_fit["ols_standard_errors"][idx], t_ols["half_width"] / a_fit["critical"], bar_ols / a_fit["critical"])
+    R.number(stage, g, name + ":SE[HC3]", a_fit["standard_errors"][idx], t_iv["half_width"] / a_fit["critical"], bar / a_fit["critical"], note)
+    R.number(stage, g, name + ":SE[OLS]", a_fit["ols_standard_errors"][idx], t_ols["half_width"] / a_fit["critical"], bar_ols / a_fit["critical"], note_ols)
     if offset:
         _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, floor=floor)
     elif "coefficient_C" in a_fit or "offset" in t_iv:
@@ -695,14 +754,16 @@ def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
     R.exact(stage, g, name + ":coefficient_decision", a_fit["coefficient_decisions"][idx], o.get("coefficient_decision"))
     if a_flag is None and t_flag is None:
         lo, hi = a_fit["offset_intervals"][idx]
-        bar_off = max(bar_offset_interval(lo, hi), floor)
-        R.number(stage, g, name + ":coefficient_C", a_fit["coefficient_C"][idx], o.get("coefficient_C"), bar_off)
-        R.number(stage, g, name + ":offset_lower", lo, o.get("offset_lower"), bar_off)
-        R.number(stage, g, name + ":offset_upper", hi, o.get("offset_upper"), bar_off)
+        bar_off = bar_offset_interval(lo, hi)
+        note = coefficient_bar_note(bar_off, floor)
+        R.number(stage, g, name + ":coefficient_C", a_fit["coefficient_C"][idx], o.get("coefficient_C"), bar_off, note)
+        R.number(stage, g, name + ":offset_lower", lo, o.get("offset_lower"), bar_off, note)
+        R.number(stage, g, name + ":offset_upper", hi, o.get("offset_upper"), bar_off, note)
         lo_ols, hi_ols = a_fit["offset_ols_intervals"][idx]
-        bar_ols = max(bar_offset_interval(lo_ols, hi_ols), floor)
-        R.number(stage, g, name + ":offset_ols_lower", lo_ols, o.get("offset_ols_lower"), bar_ols)
-        R.number(stage, g, name + ":offset_ols_upper", hi_ols, o.get("offset_ols_upper"), bar_ols)
+        bar_ols = bar_offset_interval(lo_ols, hi_ols)
+        note_ols = coefficient_bar_note(bar_ols, floor)
+        R.number(stage, g, name + ":offset_ols_lower", lo_ols, o.get("offset_ols_lower"), bar_ols, note_ols)
+        R.number(stage, g, name + ":offset_ols_upper", hi_ols, o.get("offset_ols_upper"), bar_ols, note_ols)
         R.exact(stage, g, name + ":offset_decision", a_fit["offset_decisions"][idx], o.get("offset_decision"))
     if a_sflag is None and t_sflag is None:
         R.number(stage, g, name + ":d_beta_d_delta_per_ms", a_fit["d_beta_d_delta_per_ms"][idx], o.get("d_beta_d_delta_per_ms"), None)
@@ -851,6 +912,7 @@ def _p0(t_fit, key, a_fit, idx):
 
 
 def compare_h2(R, stage, a_h2, t, a_points):
+    compare_census(R, stage, a_h2, t, table="h2")
     for row in a_h2:
         if (row["basis"], row["selection"]) != ("gross primary", "primary"):
             continue
@@ -1263,9 +1325,14 @@ def build(root, name):
                     bundle = archive / "sources/claim-runs" / member["run_id"]
                     events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
                     ends.append(ba._event_span(events, "decode", load(bundle / "metadata.json"))[1])
-            # One second is inside BAT-2's >=2 s delayed marker window but
-            # after the entire science decode. End references lose DC only.
-            cutoff = max(ends) + 1_000_000_000
+            # Pass 1 ends inside the delayed end window, after science decode.
+            # Pass 2 ends before the last decode's delayed marker window starts,
+            # leaving no marker polls and making not_evaluated non-vacuous.
+            last_member = next(member for member in reversed(roster) if member["role"] == "science")
+            bundle = archive / "sources/claim-runs" / last_member["run_id"]
+            events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+            last_start = ba._event_span(events, "decode", load(bundle / "metadata.json"))[0]
+            cutoff = (max(ends) if session["pass_id"] == 1 else last_start) + 1_000_000_000
             stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
             batches = [json.loads(line) for line in stream.read_text().splitlines()]
             stream.write_text("".join(json.dumps(b) + "\n" for b in batches
@@ -1513,6 +1580,27 @@ class AgreementTests(unittest.TestCase):
                    for cell in block["boundaries"].values() for variant in VMAP.values()
                    for est in [cell.get(variant, {})]]
         self.assertFalse(any("blinded stage" in reason for reason in reasons))
+        unevaluated = [cell[variant]["without_assisted"]
+                       for model in twin["cells"].values() for pk, block in model.items() if pk != "passes_mean"
+                       for cell in block["boundaries"].values() for variant in VMAP.values()
+                       if cell.get(variant, {}).get("without_assisted", {}).get("status") == "not_evaluated"]
+        self.assertTrue(unevaluated, "campaign must exercise cells with no marker-window polls")
+        for line in unevaluated:
+            self.assertIn("no mapped meter stream has polls in the marker window", line["reason"])
+
+    def test_late_start_marker_window_campaign(self):
+        recorder = campaign("late_start")
+        self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
+        counts = recorder.counts()
+        print(f"\nagreement late_start: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        root = WORK["root"] / "late_start"
+        manifest = load(root / "manifest.json")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        partial = [r for r in records if r.get("meter") is None and r.get("decode_assist_evaluated")]
+        self.assertTrue(partial, "late-start stream must miss decode coverage but reach the marker window")
+        self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in partial))
+        self.assertTrue(any(r["battery_end_window_complete"] for r in partial))
 
     def test_unresolved_anchors_are_unusable_in_both_selections(self):
         R = self.check("invalid_anchor", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
@@ -1698,7 +1786,7 @@ class ComparerRegressionTests(unittest.TestCase):
         self.assertTrue(any(r["key"].endswith(":own half-width present") for r in recorder.above()))
         self.assertFalse(any(r.get("bar") == 0 and r["group"].endswith("/loo") for r in recorder.rows))
 
-    def test_rest_intercept_bar_clears_float_noise_lower_edge(self):
+    def test_rest_intercept_bar_uses_ceiling_and_clears_observed_noise(self):
         recorder = campaign("bytes")
         root = WORK["root"] / "bytes" / "out"
         h2 = next(r for r in load(root / "a-held/h2.json") if
@@ -1708,9 +1796,59 @@ class ComparerRegressionTests(unittest.TestCase):
         # Independent lower-edge calculation from the doctrine's 1e6 × noise,
         # the centred Gram condition number ~4 VIF and the RMS response scale.
         floor = 1e6 * sys.float_info.epsilon * 4 * h2["rest"]["vif"] * math.sqrt(sum(v*v for v in powers) / len(powers))
-        bars = [r["bar"] for r in recorder.rows if r["stage"] == "heldout" and r["key"] == "rest:c:estimate"]
-        self.assertTrue(bars)
-        self.assertTrue(all(bar >= floor for bar in bars))
+        fit = h2["rest"]
+        ceilings = {}
+        for field, keys in (("intervals", ("estimate", "lower[HC3]", "upper[HC3]")),
+                            ("ols_intervals", ("lower[OLS label]", "upper[OLS label]")),
+                            ("offset_intervals", ("coefficient_C", "offset_lower", "offset_upper")),
+                            ("offset_ols_intervals", ("offset_ols_lower", "offset_ols_upper"))):
+            lo, hi = fit[field][0]
+            ceilings.update({"rest:c:" + key: .01 * (hi - lo) / 2 for key in keys})
+        rows = [r for r in recorder.rows if r["stage"] == "heldout" and r["key"] in ceilings]
+        self.assertEqual({r["key"] for r in rows}, set(ceilings))
+        self.assertGreater(floor, min(ceilings.values()), "bytes campaign must have an empty doctrine window")
+        for row in rows:
+            with self.subTest(key=row["key"]):
+                self.assertEqual(row["bar"], ceilings[row["key"]])
+                self.assertLessEqual(row["abs"], row["bar"])
+                if floor > row["bar"]:
+                    self.assertIn(f"{floor / row['bar']:.12g}", row.get("note", ""))
+
+    def test_hypothesis_censuses_detect_missing_extra_and_relabelled_rows(self):
+        campaign("bytes")
+        root = WORK["root"] / "bytes" / "out"
+        h1, moe, h2 = [load(root / ("a-held/" + name + ".json")) for name in ("h1", "moe", "h2")]
+        twin = load(root / "t-2.json")
+        points = load(root / "a-held/model_estimates.json")
+        for table, rows in (("h1", h1), ("moe", moe), ("h2", h2)):
+            baseline = Recorder()
+            if table == "h2":
+                compare_h2(baseline, "heldout", rows, twin, points)
+            else:
+                compare_h1(baseline, "heldout", h1, moe, twin, None)
+            self.assertEqual(baseline.above(), [])
+            indices = [i for i, r in enumerate(rows) if
+                       (r["basis"], r["selection"]) == ("gross primary", "primary") and
+                       (table != "h1" or r["role"] == "heldout")]
+            self.assertTrue(indices)
+            for index in indices:
+                for kind in ("delete", "duplicate", "relabel"):
+                    with self.subTest(table=table, index=index, kind=kind):
+                        changed = copy.deepcopy(rows)
+                        if kind == "delete":
+                            changed.pop(index)
+                        elif kind == "duplicate":
+                            changed.append(dict(rows[index]))
+                        else:
+                            changed[index]["selection"] = "flagged-inclusive"
+                        result = Recorder()
+                        if table == "h2":
+                            compare_h2(result, "heldout", changed, twin, points)
+                        else:
+                            compare_h1(result, "heldout", changed if table == "h1" else h1,
+                                       changed if table == "moe" else moe, twin, None)
+                        self.assertTrue(any(r["group"] == table + " census" for r in result.above()),
+                                        "the comparer itself must detect changed row identities")
 
 
 class WordRuleTests(unittest.TestCase):

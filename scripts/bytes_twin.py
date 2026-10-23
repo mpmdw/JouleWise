@@ -959,11 +959,20 @@ def dc_join(archive, run_id):
     if spans is None:
         return {"status": "spans_unreadable"}
     failure = None
+    markers = []
     for stream in archive["streams"]:
         if not stream.get("aligned") or stream.get("raw_offset_ns") is None:
             continue
         offset = stream["raw_offset_ns"]
         window = [spans["decode_ns"][0] + offset, spans["decode_ns"][1] + offset]
+        base = [v + offset for v in spans["idle_ns"]] if spans["idle_ns"] else None
+        battery = battery_terms(stream, window, base)
+        polls = stream.get("poll_ns", [])
+        tau_ns = battery["battery_tau_s"] * 1e9
+        lo = bisect.bisect_left(polls, window[0] + tau_ns)
+        hi = bisect.bisect_left(polls, window[1] + tau_ns)
+        if lo < hi:
+            markers.append(battery)
         host = stream["host_ns"]
         if not (host[0] <= window[0] and window[1] <= host[-1]):
             continue
@@ -982,8 +991,6 @@ def dc_join(archive, run_id):
         # Addendum 9 item 3: the per-run coherent-offset bound max(P_start, P_end)(r_max + dt_meter) in
         # joules (the time factor is u's own); item 4: the signed sensitivity to delta in watts.
         p_before_start, p_before_end = before_edge_powers(host, watts, window)
-        base = [v + offset for v in spans["idle_ns"]] if spans["idle_ns"] else None
-        battery = battery_terms(stream, window, base)
         if battery["status"] != "ok":
             failure = battery
             continue
@@ -1032,7 +1039,15 @@ def dc_join(archive, run_id):
                       n=n, n_idle=result["idle_samples"], r_max_s=r_max_s, sample_interval_s=dt_meter_s,
                       edge_powers_w=[p_start, p_end], adjacent_before_edge_powers_w=[p_before_start, p_before_end])
         return result
-    return failure or {"status": "no_aligned_stream_covers_span"}
+    result = failure or {"status": "no_aligned_stream_covers_span"}
+    # The marker reads delayed polls even when no stream can supply decode
+    # energy. Missing decode/idle coverage does not make that marker unknown.
+    if markers:
+        result.update(decode_assisted=any(b["decode_assisted"] for b in markers),
+                      battery_end_window_complete=any(b["battery_end_window_complete"] for b in markers))
+    else:
+        result.pop("decode_assisted", None)
+    return result
 
 
 # ----------------------------------------------------------------------------
@@ -1488,7 +1503,11 @@ def mean_of_passes(per_pass):
     if all("meter_phase_edge_mean_j" in p for p in passes):
         out["meter_phase_edge_mean_j"] = statistics.fmean(p["meter_phase_edge_mean_j"] for p in passes)
     if any("without_assisted" in p for p in passes):
-        out["without_assisted"] = mean_of_passes([p.get("without_assisted", p) for p in passes])
+        diagnostics = [p.get("without_assisted", p) for p in passes]
+        if any(p.get("status") == "not_evaluated" for p in diagnostics):
+            out["without_assisted"] = {"status": "not_evaluated"}
+        else:
+            out["without_assisted"] = mean_of_passes(diagnostics)
         out["without_assisted"]["below_minimum"] = any(p.get("without_assisted", p).get("below_minimum", False) for p in passes)
     if all("battery_term_mean_j" in p for p in passes):
         out.update(boundary_description=DC_BOUNDARY_DESCRIPTION,

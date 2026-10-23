@@ -182,6 +182,7 @@ class OutputCoverageTests(unittest.TestCase):
     def test_every_output_field_is_compared_or_explicitly_exempt(self):
         mapping = coverage_map()
         self.assertEqual(set(self.observed) - set(mapping), set(), "new output fields need coverage decisions")
+        self.assertEqual(set(mapping) - set(self.observed), set(), "stale coverage decisions must be removed")
         for field in self.observed:
             entry = mapping[field]
             self.assertIn(entry["status"], ("compared", "exempt"), field)
@@ -200,6 +201,13 @@ class OutputCoverageTests(unittest.TestCase):
         path = next(p for p in documents if p.endswith("/h2.json") and documents[p])
         documents[path][0]["unregistered_output"] = 1
         self.assertTrue(set(samples(documents)) - set(self.observed))
+
+    def test_stale_coverage_entry_is_rejected(self):
+        mapping = coverage_map()
+        mapping["retired.json/never_emitted"] = {"status": "exempt", "reason": "planted stale entry"}
+        with mock.patch(__name__ + ".coverage_map", return_value=mapping):
+            with self.assertRaisesRegex(AssertionError, "stale coverage decisions"):
+                self.test_every_output_field_is_compared_or_explicitly_exempt()
 
 
 class SamplingTests(unittest.TestCase):

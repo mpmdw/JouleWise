@@ -18,7 +18,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                      pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
                      edge_phase=True, min_receive_latency_ms=10.0,
                      subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False,
-                     battery_assist=False, battery_publication="instant", battery_reference_assist=False):
+                     battery_assist=False, battery_publication="instant", battery_reference_assist=False,
+                     late_start_stream=False):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -26,6 +27,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     through reduce_bundle and the full CLI, not a summary oracle.
     subpack_sessions uses the R6 six sub-packs in both registered pass orders;
     an uncollected session is never generated or added to the manifest.
+    late_start_stream starts the first session's stream midway through its
+    first science decode, while retaining its delayed marker polls.
     """
     if battery_publication not in ("instant", "delayed"):
         raise ValueError("battery publication must be instant or delayed")
@@ -292,6 +295,19 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         for key in ["neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"])]:
             _write_json(private / blinding._config_filename(key), {"key": key, "factor": 1.0})
     release_keys(root, manifest, release)
+    if late_start_stream:
+        session = manifest["sessions"][0]
+        archive = Path(session["archive"])
+        first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
+                     if m["role"] == "science")
+        bundle = archive / "sources/claim-runs" / first["run_id"]
+        events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+        start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))
+        cutoff = (start + end) // 2
+        stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
+        batches = [json.loads(line) for line in stream.read_text().splitlines()]
+        stream.write_text("".join(json.dumps(b) + "\n" for b in batches
+                                   if b.get("k") != "b" or b["rx"] >= cutoff))
     return manifest
 
 
