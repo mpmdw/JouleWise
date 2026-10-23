@@ -220,6 +220,19 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
     warnings: list[str] = []
     era_literals: dict[str, dict[str, census.Literal]] = {}
     era_commits: dict[tuple[str, int], str] = {}
+    try:
+        census.validate_era_records(root)
+    except census.EraRecordError as error:
+        stale.append(StaleRow(census.REGISTRY_REL, "#era", "sealed_registration",
+                              f"file:{census.REGISTRY_REL}", f"invalid era record: {error}", None, "registry"))
+    inventory = files.json(census.B5_INVENTORY) if (root / census.B5_INVENTORY).exists() else None
+    if isinstance(inventory, dict) and isinstance(inventory.get("files"), dict):
+        changed = [path for path, digest in sorted(inventory["files"].items())
+                   if census.target_digest(root, census.Target(path, "file")) != digest]
+        if changed:
+            warnings.append("WARNING: current files differ from the sealed inventory; block-5 windows run "
+                            "from this tree will be flagged code.executed_differs_from_sealed:\n" +
+                            "\n".join(f"  {path}" for path in changed))
     for entry in registry["files"]:
         path = entry["path"]
         if files.text(path) is None:

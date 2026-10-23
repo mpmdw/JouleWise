@@ -55,7 +55,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, TypedDict
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_REL = "configs/pins/registry.json"
@@ -217,18 +217,32 @@ def parse_target_key(key: str) -> Target:
 #   scope_pointer / scope_line    which literals are era records: a regex on
 #                                 the JSON pointer, or on the literal's line
 #   scope_text                    regex spans containing the scoped literals
+#                                 (one regex per required alternative)
+#   expected_count                exact number of scoped SHA-256 literals
+class EraSpec(TypedDict, total=False):
+    commit_pointer: str
+    commit_line: str
+    scope_pointer: str
+    scope_line: str | tuple[str, ...]
+    scope_text: str | tuple[str, ...]
+    expected_count: int
+
+
 _B5_H_CLAIM = r"^1\. H_claim is fixed[^\n]+\*\*H_claim is `([0-9a-f]{7,40})`\*\*:"
 _B5_FIRST_H_CLAIM = r"^   the first seal's H_claim, `([0-9a-f]{7,40})`, and changes"
+B5_INVENTORY = "configs/campaigns/v5_claim_25g83/sealed_inventory.json"
+B5_REGISTRATION = "configs/campaigns/v5_claim_25g83/registration_block5.md"
 
 # Multiple rules let a document retain dated claims from several seals. A
 # scope_text regex selects only the matched spans, including individual parts
 # of a table row; it never assigns the whole document to its latest commit.
-ERA_RECORDS: dict[str, dict[str, str] | tuple[dict[str, str], ...]] = {
+ERA_RECORDS: dict[str, EraSpec | tuple[EraSpec, ...]] = {
     # Block 4's sizing source records the production code at sizing time; its
     # top-level "head" is the commit it sized from.
     "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json": {
         "commit_pointer": "/head",
         "scope_pointer": r"^/provenance/production/[0-9]+/source/sha256$",
+        "expected_count": 17,
     },
     # Revision 6's pins.validator_sha256 records the validator that produced
     # block 1's derivation captures, sealed at the commit its heading names.
@@ -236,34 +250,41 @@ ERA_RECORDS: dict[str, dict[str, str] | tuple[dict[str, str], ...]] = {
     "configs/calibration/preregistration_d079_epoch_25g83_rev1.md": {
         "commit_line": r"^# Revision 6 \(sealed [0-9]{4}-[0-9]{2}-[0-9]{2} at ([0-9a-f]{7,40})\)$",
         "scope_line": r'^\s*"validator_sha256": "[0-9a-f]{64}",?$',
+        "expected_count": 1,
     },
     "configs/campaigns/v5_claim_25g83/sealed_inventory.json": {
         "commit_pointer": "/head",
         "scope_pointer": r"^/files/.+$",
+        "expected_count": 682,
     },
     "configs/campaigns/v5_claim_25g83/registration_block5.md": (
         {
             "commit_line": _B5_H_CLAIM,
             "scope_text": (
-                r"  of the corpus files\. At H_claim [\s\S]+?recorded in the sizing output"
-                r"|^   The file's SHA-256 at H_claim is `[0-9a-f]{64}`"
-                r"|^  by its SHA-256\) pins theirs\. SHA-256 at H_claim: `[0-9a-f]{64}`"
-                r"|^\| sizing, pins, plan trees \| at H_claim, after the erratum[^\n]+?"
-                r"(?= At the first seal's H_claim:)"
+                r"  of the corpus files\. At H_claim [\s\S]+?recorded in the sizing output",
+                r"^   The file's SHA-256 at H_claim is `[0-9a-f]{64}`",
+                r"^  by its SHA-256\) pins theirs\. SHA-256 at H_claim: `[0-9a-f]{64}`",
+                r"^\| sizing, pins, plan trees \| at H_claim, after the erratum[^\n]+?"
+                r"(?= At the first seal's H_claim:)",
             ),
+            # 11 at ea0f51dec (lead, 2026-10-22): plan trees L763-765, L2549,
+            # L3194 and six H_claim digests in the L5875 table row.
+            "expected_count": 11,
         },
         {
             "commit_line": _B5_FIRST_H_CLAIM,
             "scope_text": (
-                r"Their plan-tree SHA-256s at the[\s\S]+?at `fe28e5a0c`, equal"
-                r"|^   first seal's H_claim and at the int5 head `fe28e5a0c` it was\n[^\n]+"
-                r"|^  `9395cecfb` it was `[0-9a-f]{64}`"
-                r"|(?<= At the first seal's H_claim:)[^\n]+(?= \| recomputed:)"
+                r"Their plan-tree SHA-256s at the[\s\S]+?at `fe28e5a0c`, equal",
+                r"^   first seal's H_claim and at the int5 head `fe28e5a0c` it was\n[^\n]+",
+                r"^  `9395cecfb` it was `[0-9a-f]{64}`",
+                r"(?<= At the first seal's H_claim:)[^\n]+(?= \| recomputed:)",
             ),
+            "expected_count": 7,
         },
         {
             "commit_line": r"^row was read in the candidate H_claim `([0-9a-f]{7,40})`",
             "scope_line": r"^\| sizing, pins, plan trees \| `sizing_b5\.json`,",
+            "expected_count": 1,
         },
     ),
 }
@@ -273,7 +294,12 @@ class EraRecordError(ValueError):
     """An era claim's scope or declared commit is missing, ambiguous or invalid."""
 
 
-def era_spec(path: str, literal: Literal, text: str) -> dict[str, str] | None:
+def _scope_patterns(spec: EraSpec, key: str) -> tuple[str, ...]:
+    patterns = spec[key]
+    return (patterns,) if isinstance(patterns, str) else patterns
+
+
+def era_spec(path: str, literal: Literal, text: str) -> EraSpec | None:
     """The one era claim covering this literal, or None outside declared scope."""
 
     specs = ERA_RECORDS.get(path, ())
@@ -299,9 +325,10 @@ def era_spec(path: str, literal: Literal, text: str) -> dict[str, str] | None:
         elif "scope_text" in spec:
             scoped = span is not None and any(
                 match.start() <= start + span[0] and start + span[1] <= match.end()
-                for match in re.finditer(spec["scope_text"], text, flags=re.MULTILINE))
+                for pattern in _scope_patterns(spec, "scope_text")
+                for match in re.finditer(pattern, text, flags=re.MULTILINE))
         else:
-            scoped = re.search(spec["scope_line"], line) is not None
+            scoped = any(re.search(pattern, line) for pattern in _scope_patterns(spec, "scope_line"))
         if scoped:
             found.append(spec)
     if len(found) > 1:
@@ -310,11 +337,15 @@ def era_spec(path: str, literal: Literal, text: str) -> dict[str, str] | None:
 
 
 def era_commit(root: Path, path: str, text: str, literal: Literal | None = None) -> str:
-    """The full commit an era record declares, verified to exist in history."""
+    """The full commit an era record declares, verified to be an ancestor of HEAD."""
 
     spec = ERA_RECORDS[path] if literal is None else era_spec(path, literal, text)
     if not isinstance(spec, dict):
         raise EraRecordError(f"{path}: literal does not identify one declared era claim")
+    return _era_commit(root, path, text, spec)
+
+
+def _era_commit(root: Path, path: str, text: str, spec: EraSpec) -> str:
     if "commit_pointer" in spec:
         try:
             declared = _pointer(json.loads(text), spec["commit_pointer"])
@@ -331,7 +362,46 @@ def era_commit(root: Path, path: str, text: str, literal: Literal | None = None)
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     if out.returncode != 0:
         raise EraRecordError(f"{path}: declared commit {declared} is not in this repository's history")
-    return out.stdout.strip()
+    commit = out.stdout.strip()
+    ancestor = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", commit, "HEAD"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if ancestor.returncode != 0:
+        raise EraRecordError(f"{path}: declared commit {commit} is not an ancestor of HEAD")
+    return commit
+
+
+def validate_era_records(root: Path) -> None:
+    """Validate declarations independently of the registry's resolved rows."""
+
+    commits: dict[str, list[str]] = {}
+    for path, specs in ERA_RECORDS.items():
+        if not (root / path).exists():
+            continue
+        try:
+            text = (root / path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise EraRecordError(f"{path}: unreadable era record") from error
+        specs = (specs,) if isinstance(specs, dict) else specs
+        literals = literals_in(path, text.encode("utf-8"))
+        counts = Counter(id(spec) for literal in literals if (spec := era_spec(path, literal, text)) is not None)
+        for number, spec in enumerate(specs):
+            for key in ("scope_text", "scope_line"):
+                if key not in spec:
+                    continue
+                for alternative, pattern in enumerate(_scope_patterns(spec, key)):
+                    if not re.search(pattern, text, flags=re.MULTILINE):
+                        raise EraRecordError(f"{path} rule {number}: {key} alternative {alternative} "
+                                             "matches zero spans")
+            if "expected_count" in spec and counts[id(spec)] != spec["expected_count"]:
+                raise EraRecordError(f"{path} rule {number}: scoped literal count {counts[id(spec)]}, "
+                                     f"expected {spec['expected_count']}")
+        commits[path] = [_era_commit(root, path, text, spec) for spec in specs]
+    if B5_INVENTORY in commits or B5_REGISTRATION in commits:
+        if B5_INVENTORY not in commits or B5_REGISTRATION not in commits:
+            raise EraRecordError("block-5 sealed inventory and registration must both be present")
+        if commits[B5_INVENTORY][0] != commits[B5_REGISTRATION][0]:
+            raise EraRecordError(f"{B5_INVENTORY}: /head must equal {B5_REGISTRATION} rule-0 H_claim "
+                                 f"({commits[B5_INVENTORY][0]} != {commits[B5_REGISTRATION][0]})")
 
 
 def in_era_scope(path: str, literal: "Literal", text: str) -> bool:
@@ -711,6 +781,7 @@ def regenerator(family: str, path: str, root: Path = REPO_ROOT) -> str | None:
 
 
 def census(root: Path = REPO_ROOT) -> dict[str, object]:
+    validate_era_records(root)
     files = tracked_files(root)
     index = build_index(root, files)
     rows: dict[str, list[list[object]]] = {}
