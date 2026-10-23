@@ -1,0 +1,88 @@
+{
+  "bytes-s1-p1": {
+    "bytes-qwen3-1p7b-absolute": 1,
+    "bytes-qwen3-4b-absolute": 1,
+    "bytes-s1-p1-reference-end": 1,
+    "bytes-s1-p1-reference-start": 1
+  },
+  "bytes-s1-p2": {
+    "bytes-qwen3-1p7b-absolute": 1,
+    "bytes-qwen3-4b-absolute": 1,
+    "bytes-s1-p2-reference-end": 1,
+    "bytes-s1-p2-reference-start": 1
+  },
+  "bytes-s2-p1": {
+    "bytes-qwen3-30b-a3b-absolute": 1,
+    "bytes-qwen3-8b-absolute": 1,
+    "bytes-s2-p1-reference-end": 1,
+    "bytes-s2-p1-reference-start": 1
+  },
+  "bytes-s2-p2": {
+    "bytes-qwen3-30b-a3b-absolute": 1,
+    "bytes-qwen3-8b-absolute": 1,
+    "bytes-s2-p2-reference-end": 1,
+    "bytes-s2-p2-reference-start": 1
+  },
+  "bytes-s3-p1": {
+    "bytes-qwen3-14b-absolute": 1,
+    "bytes-qwen3-next-80b-absolute": 1,
+    "bytes-s3-p1-reference-end": 1,
+    "bytes-s3-p1-reference-start": 1
+  },
+  "bytes-s3-p2": {
+    "bytes-qwen3-14b-absolute": 1,
+    "bytes-qwen3-next-80b-absolute": 1,
+    "bytes-s3-p2-reference-end": 1,
+    "bytes-s3-p2-reference-start": 1
+  },
+  "bytes-s4-p1": {
+    "bytes-qwen3-32b-absolute": 1,
+    "bytes-qwen3-8b-8bit-absolute": 1,
+    "bytes-s4-p1-reference-end": 1,
+    "bytes-s4-p1-reference-start": 1
+  },
+  "bytes-s4-p2": {
+    "bytes-qwen3-32b-absolute": 1,
+    "bytes-qwen3-8b-8bit-absolute": 1,
+    "bytes-s4-p2-reference-end": 1,
+    "bytes-s4-p2-reference-start": 1
+  },
+  "bytes-s5-p1": {
+    "bytes-llama-70b-absolute": 1,
+    "bytes-s5-p1-reference-end": 1,
+    "bytes-s5-p1-reference-start": 1
+  },
+  "bytes-s5-p2": {
+    "bytes-llama-70b-absolute": 1,
+    "bytes-s5-p2-reference-end": 1,
+    "bytes-s5-p2-reference-start": 1
+  },
+  "bytes-s6-p1": {
+    "bytes-qwen35-122b-absolute": 1,
+    "bytes-s6-p1-reference-end": 1,
+    "bytes-s6-p1-reference-start": 1
+  },
+  "bytes-s6-p2": {
+    "bytes-qwen35-122b-absolute": 1,
+    "bytes-s6-p2-reference-end": 1,
+    "bytes-s6-p2-reference-start": 1
+  },
+  "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": {
+    "gamma-reference-end": 1,
+    "gamma-reference-start": 1,
+    "gamma-science-01-decode-contrast-blocks-01-05": 2,
+    "gamma-science-03-prefill-p2048-contrast-blocks-01-05": 2
+  },
+  "d117_floor_qwen3-1p7b_v5": {
+    "alpha-reference-end": 1,
+    "alpha-reference-start": 1,
+    "alpha-science-absolute": 1,
+    "alpha-science-prefill-p2048-absolute": 1
+  },
+  "d117_floor_qwen3-8b_v5": {
+    "beta-reference-end": 1,
+    "beta-reference-start": 1,
+    "beta-science-absolute": 1,
+    "beta-science-prefill-p2048-absolute": 1
+  }
+}

@@ -14,6 +14,7 @@ from joulewise.authentication_io import (
     read_authentication_text,
 )
 from joulewise.environment import evaluate_environment_policy
+from joulewise.b6.idle_wait import busy_fraction_only
 from joulewise.schemas import CampaignPolicy, SchemaError
 
 
@@ -460,6 +461,22 @@ def _window_thermal_pressure_refusals(
     return ("environment_admission_missing",)
 
 
+def busy_fraction_admission_admitted(final: Any, cpu: Any = None) -> bool:
+    """Recognize Q3's explicit controller admission without altering raw CPU evidence."""
+    if not isinstance(final, Mapping):
+        return False
+    raw_cpu = final.get("cpu_admission")
+    cpu = raw_cpu if cpu is None else cpu
+    return (
+        final.get("admitted") is True
+        and final.get("busy_fraction_admitted") is True
+        and isinstance(raw_cpu, Mapping)
+        and busy_fraction_only(raw_cpu)
+        and isinstance(cpu, Mapping)
+        and busy_fraction_only(cpu)
+    )
+
+
 def environment_admission_refusals(
     admission: Any, *, require_attempt_timing: bool = False
 ) -> tuple[str, ...]:
@@ -555,6 +572,6 @@ def environment_admission_refusals(
         reasons.add("environment_admission_failed")
     if final.get("cpu_admission_enforced") is not True:
         reasons.add("cpu_admission_unenforced")
-    if cpu.get("admitted") is not True or refused:
+    if (cpu.get("admitted") is not True and not busy_fraction_admission_admitted(final)) or refused:
         reasons.add("environment_admission_failed")
     return tuple(sorted(reasons))
