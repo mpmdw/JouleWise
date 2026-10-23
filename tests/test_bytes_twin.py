@@ -465,11 +465,43 @@ class BatteryTermsTests(QuantityTestCase):
         self.assertQuantityEqual(r["battery_tau_s"], 7)  # 2 * 1 s SMC + stream-wide 5 s poll gap
 
     def test_unresolved_anchor_cannot_return_on_the_inclusive_line(self):
-        for code in ("member.anchor_not_bounded", "member.target_phase_precheck_failed"):
+        for code in ("member.anchor_not_bounded",):
             row = {"status": "succeeded", "phase_decode_j": 12.0, "dur_decode_s": 1.0,
                    "excluded": True, "exclusion_codes": code}
             self.assertFalse(bt.restorable(row))
             self.assertFalse(bt._kept(row, restore_load_correlated=True))
+
+    def test_precheck_exclusion_with_valid_energy_is_restored(self):
+        row = {"status": "succeeded", "phase_decode_j": 12.0, "dur_decode_s": 1.0,
+               "excluded": True, "exclusion_codes": "member.target_phase_precheck_failed"}
+        self.assertTrue(bt.restorable(row))
+        self.assertTrue(bt._kept(row, restore_load_correlated=True))
+
+    def test_incomplete_marker_window_is_evaluated_on_available_polls(self):
+        for current, expected in ((0, False), (-1000, True), (None, False)):
+            with self.subTest(current=current):
+                s = self.stream()
+                # End + tau = 11 s; the stream ends at 9 s, inside that window.
+                for key in ("poll_ns", "battery_watts", "battery_current_ma"):
+                    s[key] = s[key][:10]
+                s["battery_current_ma"][7:] = [current] * 3
+                r = bt.battery_terms(s, [4_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+                self.assertFalse(r["battery_end_window_complete"])
+                self.assertIs(r["decode_assisted"], expected)
+
+    def test_later_covering_stream_can_supply_missing_battery_readings(self):
+        good = {**self.stream(), "aligned": True, "raw_offset_ns": 0, "name": "good",
+                "host_ns": [i * 1_000_000_000 for i in range(13)], "watts": [10.0] * 13,
+                "step_ms": 1000, "fit": dict.fromkeys(("excess_latency_ms_absmax", "excess_latency_ms_p95",
+                    "excess_latency_ms_max", "excess_latency_ms_min", "clock_rate_ppm"), 0.0)}
+        bad = {**good, "name": "missing-voltage", "battery_watts": [None] * 13}
+        spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000],
+                 "request_ns": [2_000_000_000, 8_000_000_000]}
+        with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(bt, "member_spans", return_value=spans):
+            result = bt.dc_join({"root": Path("unused"), "streams": [bad, good]}, "member")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["stream"], "good")
+        self.assertQuantityEqual(result["battery_gross_j"], 6)
 
 
 class BlindingTests(QuantityTestCase):

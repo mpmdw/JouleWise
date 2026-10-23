@@ -323,7 +323,8 @@ class BatteryRulingWorkedExamples(NumericTestCase):
         self.assertEqual(result["battery_n"], 56)
         self.assertEqual(result["battery_v_end_j"], 0)
         self.assertFalse(result["decode_battery_assist"])
-        self.assertEqual(result["battery_tau_s"], 2 + .302440875)
+        # No own half-width: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+        self.assertAlmostEqual(result["battery_tau_s"], 2 + .302440875, delta=1e-6 * (2 + .302440875))
         self.assertAlmostEqual(result["gross_j"] - result["meter_gross_j"], .776577, delta=1e-5)
         for key, expected in (("gross_j", 885.276128), ("secondary_j", 857.327851),
                               ("phase_edge_j", 7.163877), ("offset_bound_j", 4.068644)):
@@ -2223,6 +2224,24 @@ class BatteryCampaignTests(NumericTestCase):
     def tearDownClass(cls):
         cls.directory.cleanup()
 
+    def test_valid_precheck_record_returns_only_on_inclusive_line(self):
+        path = self.archive / "derived/b6-acceptance.json"
+        acceptance = ba.read_json(path)
+        run_id = self.target["run_id"]
+        acceptance["excluding"].append({"scope": "member", "run_id": run_id,
+                                         "code": "member.target_phase_precheck_failed"})
+        original = ba.read_json
+        with patch.object(ba, "read_json", side_effect=lambda p: acceptance if Path(p) == path else original(p)):
+            rows = ba.load_records(self.root / "export", self.manifest, stage="all")
+        target = next(r for r in rows if r["run_id"] == run_id and r["session_id"] == self.session["session_id"])
+        self.assertEqual(target["status"], "succeeded")
+        self.assertTrue(target["excluded"])
+        self.assertFalse(target["invalid_energy_record"])
+        for inclusive in (False, True):
+            cells = ba.reduce_models(rows, self.manifest, inclusive=inclusive, boundaries=("rails",))
+            cell = next(r for r in cells if r["model"] == target["model"] and r["pass_id"] == target["pass_id"])
+            self.assertEqual(run_id in cell["kept_runs"], inclusive)
+
     def spans(self, run_id):
         from joulewise.b6.archive import bundle_of
         bundle = bundle_of(self.archive, {}, run_id)
@@ -2505,7 +2524,8 @@ class BatteryCampaignTests(NumericTestCase):
         finally:
             self.path.write_bytes(self.original)
         self.assertIn(rx, stream.poll_ns)  # Exact integer receive time is retained.
-        self.assertEqual(result["battery_tau_s"], 2 * 1.0 + .6)  # Identical input arithmetic.
+        # No own half-width: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+        self.assertAlmostEqual(result["battery_tau_s"], 2 * 1.0 + .6, delta=2.6e-6)
 
     def test_neg8_request_battery_correction_reaches_dc_and_rest_references(self):
         span = self.spans("neg8-start-0")["measured_run"]

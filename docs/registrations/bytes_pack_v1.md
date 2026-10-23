@@ -105,6 +105,8 @@ Manifest values: `⟦MAC: manifest SHA-256⟧`; per model W, KV (occupied and al
 
 **Flagged-inclusive line** (Addendum 1 item 3, Addendum 2, Addendum 3 item 8, Addendum 4 item 6, Addendum 7 D5). Beside every primary line a second line restores every unit excluded by a catalog code, whatever its class (thermal, contention, battery, clock, the NUMBER class and the rest), provided each of its runs has a valid energy record. It never restores a run without one: harvest status not succeeded, a missing or unreadable bundle, a strict-validity failure or a token-count mismatch. It is labelled and decides nothing.
 
+**Draft revision 2026-10-22 (F15).** `member.anchor_not_bounded` is an invalid energy record: a fallback or unresolved clock anchor cannot bound placement of the decode phase, so neither selection restores it.
+
 **Battery assist.** When the laptop draws more than its 140 W adapter delivers, the battery supplies the difference
 while the adapter stays connected. The meter on the adapter's cable does not see that energy, so DC input adds it
 back (§7, "Battery term"). Assist is disclosed, not excluded (R3; the battery-assist ruling of 2026-10-06), because

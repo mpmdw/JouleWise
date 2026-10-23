@@ -693,8 +693,8 @@ def _session_streams(root, spans):
 # can be restored if the record itself passes the checks below.
 INVALID_RECORD_CODES = frozenset({"member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
     "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch",
-    # Catalog codes for an unresolved clock anchor / unplaceable target phase (audit F15).
-    "member.anchor_not_bounded", "member.target_phase_precheck_failed"})
+    # F15: a fallback anchor cannot place a valid energy record on the phase clock.
+    "member.anchor_not_bounded"})
 REFERENCE_ROLES = ("corpus", "start", "midpoint", "end")
 
 
@@ -1292,6 +1292,7 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                 n_r = sum(r["stratum"] == "repeat" for r in without)
                 n_b = len({r["unit_id"] for r in without if r["stratum"] == "quad"})
                 below = min(n_r, n_b) < 5
+                # Two units are the smallest sample with an estimable sample variance.
                 diagnostic = _phase_cell(without, removed + [r["run_id"] for r in kept if r not in without],
                                          module, boundary, secondary, minimum_units=2,
                                          h1_family=h1_checks(manifest)) if n_r and n_b else {

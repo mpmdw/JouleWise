@@ -73,7 +73,7 @@ VALIDITY_CODES = frozenset({
     "member.anchor_recompute_mismatch", "member.config_not_in_inventory", "member.timeout",
     "member.span_unknown", "member.idle_admission_telemetry_missing",
     # The catalog's unresolved/fallback anchor has no valid phase placement (audit F15).
-    "member.anchor_not_bounded", "member.target_phase_precheck_failed",
+    "member.anchor_not_bounded",
 })
 VALIDITY_PREFIXES = ("roster.", "model.", "records.", "lineage.", "code.", "pack.", "cell.")
 # Addendum 7 D8: block 5's tabulated two-sided 95% t (aggregate.student_t_critical_95), reproduced
@@ -143,7 +143,8 @@ def _betacf(a: float, b: float, x: float) -> float:
         c = c if abs(c) > tiny else tiny
         delta = d * c
         h *= delta
-        # Relative update at double precision: far below the four-decimal printed t digit.
+        # Below binary64 epsilon at 1: effectively require an exactly converged
+        # update, far below the four-decimal printed t digit (not an agreement bar).
         if abs(delta - 1.0) < 1e-16:
             break
     return h
@@ -508,7 +509,9 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
     corpus = by_role.get("corpus", [])[:CORPUS_CAP]
     start, mid, end = by_role.get("start", []), by_role.get("midpoint", []), by_role.get("end", [])
     record = {"family": family, "corpus_n": len(corpus), "n_start": len(start), "n_midpoint": len(mid),
-              "n_end": len(end), "status": "ok"}
+              "n_end": len(end), "status": "ok",
+              "reference_values": [{"run_id": r["run_id"], "role": r["role"], "duration_s": request_duration(r),
+                                    "energy_j": energy(r)} for group in by_role.values() for r in group]}
     if len(corpus) < CORPUS_MINIMUM or len(start) < 2 or len(end) < 2:
         record["status"] = "undefined_references_insufficient"
         return record
@@ -855,7 +858,9 @@ def battery_terms(stream, window, idle):
     end_complete = bool(times and times[-1] >= window[1] + tau_ns)
     lo, hi = bisect.bisect_left(times, window[0] + tau_ns), bisect.bisect_left(times, window[1] + tau_ns)
     marker_values = [c for c in stream.get("battery_current_ma", [None] * len(times))[lo:hi] if is_number(c)]
-    marker = any(c < 0 for c in marker_values) if end_complete and marker_values else None
+    # The marker is any negative current in the available delayed window. Window
+    # completeness is disclosed separately; the registered marker has no null case.
+    marker = any(c < 0 for c in marker_values)
     result = {"battery_tau_s": tau_ns / 1e9, "battery_end_window_complete": end_complete,
               "decode_assisted": marker, "battery_decode_polls": len(decode), "battery_idle_polls": len(baseline)}
     if not decode or not baseline:
@@ -953,6 +958,7 @@ def dc_join(archive, run_id):
     spans = member_spans(bundle)
     if spans is None:
         return {"status": "spans_unreadable"}
+    failure = None
     for stream in archive["streams"]:
         if not stream.get("aligned") or stream.get("raw_offset_ns") is None:
             continue
@@ -979,7 +985,8 @@ def dc_join(archive, run_id):
         base = [v + offset for v in spans["idle_ns"]] if spans["idle_ns"] else None
         battery = battery_terms(stream, window, base)
         if battery["status"] != "ok":
-            return battery
+            failure = battery
+            continue
         v_start, v_end = battery["battery_v_start_j"], battery["battery_v_end_j"]
         result = {**battery, "status": "ok", "stream": stream["name"],
                   "meter_gross_j": energy, "decode_energy_j": energy + battery["battery_gross_j"], "samples": n,
@@ -1000,7 +1007,8 @@ def dc_join(archive, run_id):
             if request_energy is not None:
                 request_battery = battery_terms(stream, request, base)
                 if request_battery["status"] != "ok":
-                    return request_battery
+                    failure = request_battery
+                    continue
                 result.update({"request_energy_j": request_energy + request_battery["battery_gross_j"], "request_span_s": (request[1] - request[0]) / 1e9,
                                "request_samples": n_request})
         if spans["idle_ns"]:
@@ -1012,7 +1020,8 @@ def dc_join(archive, run_id):
                     result["idle_power_w"] = idle_energy / ((base[1] - base[0]) / 1e9) + battery["battery_idle_w"]
                     result["idle_samples"] = n_idle
         if result["idle_power_w"] is None:
-            return {**battery, "status": "idle meter samples missing"}
+            failure = {**battery, "status": "idle meter samples missing"}
+            continue
         # Public field names from the tables contract; the arithmetic above was derived separately.
         result.update(gross_j=result["decode_energy_j"], secondary_j=result["meter_secondary_j"] + result["battery_secondary_j"],
                       phase_edge_j=result["edge_bound_j"], decode_battery_assist=result["decode_assisted"],
@@ -1023,7 +1032,7 @@ def dc_join(archive, run_id):
                       n=n, n_idle=result["idle_samples"], r_max_s=r_max_s, sample_interval_s=dt_meter_s,
                       edge_powers_w=[p_start, p_end], adjacent_before_edge_powers_w=[p_before_start, p_before_end])
         return result
-    return {"status": "no_aligned_stream_covers_span"}
+    return failure or {"status": "no_aligned_stream_covers_span"}
 
 
 # ----------------------------------------------------------------------------
@@ -1051,12 +1060,10 @@ def restorable(row) -> bool:
     return bool(codes) and not any(c in VALIDITY_CODES or c.startswith(VALIDITY_PREFIXES) for c in codes)
 
 
-def _kept(row, *, restore_load_correlated=False, drop_assist=False):
+def _kept(row, *, restore_load_correlated=False):
     if row["status"] != "succeeded":
         return False
     if set((row.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES:
-        return False
-    if drop_assist and row.get("_decode_assisted"):
         return False
     if not row["excluded"]:
         return True
@@ -1108,7 +1115,7 @@ def _idle_subtracted(member):
     return out
 
 
-def _assemble(rows, build, *, restore=False, drop_assist=False):
+def _assemble(rows, build, *, restore=False):
     repeats, quads = [], {}
     quad_rows = {}
     for row in rows:
@@ -1116,12 +1123,12 @@ def _assemble(rows, build, *, restore=False, drop_assist=False):
         if stratum == "quad":
             quad_rows.setdefault(unit, []).append(row)
         elif stratum == "repeat":
-            if _kept(row, restore_load_correlated=restore, drop_assist=drop_assist):
+            if _kept(row, restore_load_correlated=restore):
                 member = build(row)
                 if member is not None:
                     repeats.append(member)
     for unit, members in quad_rows.items():
-        if len(members) != 4 or not all(_kept(r, restore_load_correlated=restore, drop_assist=drop_assist) for r in members):
+        if len(members) != 4 or not all(_kept(r, restore_load_correlated=restore) for r in members):
             continue
         built = [build(r) for r in sorted(members, key=lambda r: r["order_index"])]
         if all(b is not None for b in built):
@@ -1177,7 +1184,8 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
     kinds = RAILS_KINDS if boundary == "rails" else DC_KINDS if boundary == "dc_input" else REST_KINDS
     gross_allowance = allowances.get((boundary, "gross"), {})
     idle_allowance = allowances.get((boundary, "idle"), {})
-    # Below-minimum without-assisted diagnostics still print estimates down to two units/stratum.
+    # Two units/stratum are the smallest sample with an estimable sample variance;
+    # below-minimum without-assisted diagnostics still print down to that limit.
     minimum = 2 if diagnostic else UNIT_MINIMUM
     half_gross, gross_record = _scaled_allowance(rows, boundary, dc_by_run, gross_allowance, kinds, alpha,
                                                subtract_idle=False, minimum_units=minimum)
@@ -1205,12 +1213,23 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
 
     def estimate(repeats, quads, *, secondary=False):
         est = phase_estimate(repeats, quads, kinds, alpha=alpha, minimum_units=minimum)
+        est["drift_family"] = "idle_subtracted" if secondary else "gross"
         if est["status"] == "ok" and boundary != "rails":
             est["meter_offset"] = offset_terms(repeats, quads)    # Addendum 9: DC input and rest only
             est.update(battery_columns(repeats, quads, dc_by_run, secondary=secondary))
         kept = repeats + [m for q in quads for m in q["members"]]
+        if est["status"] == "ok":
+            anchors = [m["bounds"].get("E_clock_anchor_shift_bound_j", 0.0) for m in kept]
+            meters = [m["bounds"].get("E_meter_edge_bound_j", 0.0) for m in kept]
+            est.update(attribution_floor_j=max(a + u for a, u in zip(anchors, meters)),
+                       rails_attribution_floor_j=max(anchors) if boundary != "dc_input" else None,
+                       meter_attribution_floor_j=max(meters) if boundary != "rails" else None,
+                       meter_phase_edge_mean_j=est["kind_averages_j"].get("E_meter_edge_bound_j", 0.0))
         kept_ids = {m["id"] for m in kept}
         kept_rows = [r for r in rows if r["run_id"] in kept_ids]
+        flag_rows = kept_rows if est["status"] == "ok" else rows
+        est["flags"] = sorted({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
+                              {f for r in flag_rows for f in r.get("_meter_flags", [])})
         est["harvest_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
             "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept_rows) for s in ("repeat", "quad")}
         evaluated = all(r.get("_decode_assisted") is not None for r in kept_rows)
@@ -1259,13 +1278,15 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
             if est["status"] != "ok":
                 continue
             if est["decode_assisted_member_counts"] is None:
-                est["without_assisted"] = {"status": "not_evaluated", "reason": "not evaluated at the blinded stage"}
+                reasons = sorted({r.get("_decode_assist_reason", "decode marker unavailable") for r in rows
+                                  if r.get("_decode_assisted") is None})
+                est["without_assisted"] = {"status": "not_evaluated", "reason": "; ".join(reasons)}
             elif any(est["decode_assisted_member_counts"].values()):
                 kept_ids = set(est["members"]["repeats"]) | {m for q in est["members"]["quads"].values() for m in q}
                 units = {_units_of(r)[:2] for r in rows if r["run_id"] in kept_ids and r.get("_decode_assisted")}
                 without = [dict(r, excluded=False) for r in rows
                            if r["run_id"] in kept_ids and _units_of(r)[:2] not in units]
-                # The same estimator, including the retained cell's gross drift scale, is rerun.
+                # Rerun the same estimator, recomputing the without set's gross drift scale.
                 result = compute_cell(without, boundary, dc_by_run, allowances, alpha, diagnostic=True)
                 est["without_assisted"] = result["idle_subtracted" if variant in ("idle_subtracted", "idle_flagged_inclusive") else "gross"]
                 est["without_assisted"]["below_minimum"] = min(result["gross"]["n_r"], result["gross"]["n_b"]) < UNIT_MINIMUM
@@ -1407,7 +1428,8 @@ def quantities(cell_block, manifest_entry):
             q.update({"meter_offset_bound_j": offset["bound_j"], "meter_offset_sensitivity_w": offset["sensitivity_w"],
                       "meter_offset_bound_flag": offset["bound_flag"],
                       "meter_offset_sensitivity_flag": offset["sensitivity_flag"]})
-        for key in ("boundary_description", "battery_term_mean_j", "battery_term_max_j",
+        for key in ("below_minimum", "attribution_floor_j", "meter_attribution_floor_j", "meter_phase_edge_mean_j",
+                    "boundary_description", "battery_term_mean_j", "battery_term_max_j",
                     "battery_nonzero_run_count", "battery_phase_edge_max_j"):
             if key in est:
                 q[key] = est[key]
@@ -1449,7 +1471,7 @@ def mean_of_passes(per_pass):
     keys = ("E_dec_j", "T_dec_s", "e_j_per_step", "tau_s_per_step", "e_half_width_j_per_step",
             "e_printed_j_per_token")
     out = {"status": "ok", "n_passes": len(passes), "passes_collected": collected, "passes_computed": len(passes),
-           "label": "one_pass" if len(passes) == 1 else "pass_mean", "flags": flags,
+           "label": "one_pass" if len(passes) == 1 else "pass_mean", "flags": flags, "printed_label": PER_TOKEN_LABEL,
            # D9 (a): a point that rests on one pass because the other refused or its withheld file is
            # missing; a model collected once (R6's one-pass minimum) is labelled one_pass too.
            "one_pass_after_refusal": collected >= 2 and len(passes) == 1,
@@ -1459,8 +1481,15 @@ def mean_of_passes(per_pass):
     for key in ("h_j", "B_j"):
         if all(key in p for p in passes):
             out[key] = statistics.fmean(p[key] for p in passes)
+    for key in ("attribution_floor_j", "meter_attribution_floor_j"):
+        if all(key in p for p in passes):
+            values = [p[key] for p in passes if p[key] is not None]
+            out[key] = max(values) if values else None
+    if all("meter_phase_edge_mean_j" in p for p in passes):
+        out["meter_phase_edge_mean_j"] = statistics.fmean(p["meter_phase_edge_mean_j"] for p in passes)
     if any("without_assisted" in p for p in passes):
         out["without_assisted"] = mean_of_passes([p.get("without_assisted", p) for p in passes])
+        out["without_assisted"]["below_minimum"] = any(p.get("without_assisted", p).get("below_minimum", False) for p in passes)
     if all("battery_term_mean_j" in p for p in passes):
         out.update(boundary_description=DC_BOUNDARY_DESCRIPTION,
                    battery_term_mean_j=statistics.fmean(p["battery_term_mean_j"] for p in passes),
@@ -1813,6 +1842,13 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                 notes.append(f"{model} {session_id}: DC-input skipped, rows still blinded (raw meter cannot be blinded)")
             for r in srows:
                 r["_decode_assisted"] = dc_by_run.get(r["run_id"], {}).get("decode_assisted")
+                r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
+                    f"decode marker not evaluated: no mapped meter stream has polls in the marker window (run {r['run_id']})")
+                valid = r["status"] == "succeeded" and not (
+                    set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
+                r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
+                if valid and unblinded and dc_by_run.get(r["run_id"], {}).get("status") != "ok":
+                    r["_meter_flags"].append("bytes.meter_decode_unavailable")
             per_boundary = {}
             for boundary in BOUNDARIES:
                 if boundary != "rails" and not dc_by_run:

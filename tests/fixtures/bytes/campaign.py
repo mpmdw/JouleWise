@@ -18,7 +18,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                      pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
                      edge_phase=True, min_receive_latency_ms=10.0,
                      subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False,
-                     battery_assist=False, battery_publication="instant"):
+                     battery_assist=False, battery_publication="instant", battery_reference_assist=False):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -128,6 +128,13 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 power = energy / duration
                 start = tick / 10 + (phase_rng.random() * .1 if edge_phase and not ref else 0)
                 decode_start, end = start + 2, start + 2 + duration
+                if battery_reference_assist and ref:
+                    # Equal 1 s reference bursts retain the drift world. Each
+                    # burst at 12.774 W exceeds the ~1 J
+                    # attribution limit and exercises NEG-8's request battery term.
+                    span = [round(decode_start * 1e9), round((decode_start + 1) * 1e9)]
+                    battery_episodes.append({"run_id": run_id, "placement": "reference_decode",
+                                             "span_ns": span, "spans_ns": [span]})
                 if battery_assist and not ref and model["model"] in design["battery_assist"]["models"] and ordinal < (5 if battery_publication == "delayed" else 4):
                     placement = (design["battery_assist"]["episodes"] + ["both_edges"])[ordinal]
                     spans = {"inside_decode": [(decode_start + duration / 2 - .5, decode_start + duration / 2 + .5)],
