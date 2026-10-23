@@ -26,6 +26,7 @@ import time
 import unittest
 
 from joulewise import kernel_clock, network_time_off
+from tests.live_hw import live_hw_only
 
 
 # --------------------------------------------------------------------------
@@ -852,6 +853,7 @@ def test_script_help_and_import_stay_off_the_retired_path():
 
 
 @skipif(sys.platform != "darwin", reason="reads the macOS kernel clock")
+@live_hw_only
 def test_real_readers_are_read_only_probes():
     # ntp_adjtime(modes=0) and clock_gettime only; nothing changes machine state.
     frequency = g10.real_read_frequency()
