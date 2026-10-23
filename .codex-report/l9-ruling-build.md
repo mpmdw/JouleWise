@@ -254,22 +254,22 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 ## L9-1 joined-head acceptance (2026-10-22)
 
-L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Latest newer-main merge `8987dffb30943d10451c2d95bf956e70f1d38e06` contains main `abd9f1597`; the selected L9 package/test diff from 70fd61aa1 is empty. Rows retain their actual execution anchors; authentication passed after the preceding 01aac454c merge; docs freshness was rerun after the latest documentation changes at 8987dffb3. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
+Earlier L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Current lane integration merge `ee98a1a8f56f718ceff0092363a48aa32fc7bd68` contains concurrent lane `507bd16e2` and main `7c23ea4b7`. This main update changes analysis_engine/distributions.py, and the concurrent lane changes S10 Git initialization. All ten cloud modules are being rerun; rows show their actual execution anchors and do not assert new-head acceptance for an old-head result. The two prior-head real-driver diagnostics remain isolated in /workspace/JouleWise at detached 3f9d512fe; current lane work uses /workspace/JouleWise-L9-1. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
 | Module | Tests | Failures | Errors | Skips | Exit | Wall seconds | Where it ran | Log SHA-256 |
 |---|---|---|---|---|---|---|---|---|
-| tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
-| tests.b5_analysis.test_release_equality | 12 | 2 | 0 | 0 | 1 | 47231.364 | Codex Cloud | `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559` |
-| tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
-| tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
-| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
-| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.801 | Codex Cloud | `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568` |
-| tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
-| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
-| tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
-| tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 3.323 | Codex Cloud | `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71` |
+| tests.b5_analysis.test_dry_run | 62 | 2 | 1 | 0 | 1 | 22170.927 | Codex Cloud @ `54da41a5e` | `ac76967af063f22a992b7c3a4797c33494def5f0be2d218e5e26a7ab4ec48bc2` |
+| tests.b5_analysis.test_release_equality | 12 | 2 | 0 | 0 | 1 | 47231.364 | Codex Cloud @ `500f7ad3d` | `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559` |
+| tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud @ `54da41a5e` | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
+| tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud @ `54da41a5e` | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
+| tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud @ `01aac454c` | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
+| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.801 | Codex Cloud @ `8987dffb3` | `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568` |
+| tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud @ `54da41a5e` | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
+| tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud @ `38ff2a7fe` | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
+| tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud @ `cd4a61682` | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
+| tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 3.323 | Codex Cloud @ `54da41a5e` | `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71` |
 | tests.test_authentication_io | 22 | 0 | 0 | — | — | 2 | Mac, director | prefix `df310df7d1f6cb9d` |
 | tests.test_docs_freshness | 31 | 0 | 0 | — | — | 1 | Mac, director | prefix `f2ddd6c22fd8e05c` |
 | tests.test_run_d165_closeout_from_custody | 35 | 0 | 0 | — | — | 465 | Mac, director | `6b305b6edf079b92f6b6ff66f9ecb26feaec85cb6e8b8302804a95676cdba313` |
