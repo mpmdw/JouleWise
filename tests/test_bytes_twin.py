@@ -413,6 +413,45 @@ class MeterTests(QuantityTestCase):
 
 
 class BatteryTermsTests(QuantityTestCase):
+    def test_not_evaluated_reason_names_only_kept_rows_including_atomic_quads(self):
+        rows = []
+        for stratum, units, size in (("repeat", 10, 1), ("quad", 10, 4)):
+            for unit in range(units):
+                for member in range(size):
+                    run = f"{stratum}-{unit}-{member}"
+                    rows.append({"run_id": run, "order_index": member, "status": "succeeded", "excluded": False,
+                        "exclusion_codes": "", "flag_codes": "", "phase_decode_j": 12.0,
+                        "dur_decode_s": 1.0, "idle_power_w": 1.0,
+                        "bound_E_clock_anchor_shift_bound_j": .1,
+                        "bound_E_interpolation_joint_edge_bound_j": 0.0,
+                        "cell_ids": "cell", "strata": stratum, "unit_ids": str(unit),
+                        "_decode_assisted": False})
+        missing = next(r for r in rows if r["run_id"] == "repeat-0-0")
+        missing.update(_decode_assisted=None, _decode_assist_reason="no polls (run repeat-0-0)")
+        bad = next(r for r in rows if r["run_id"] == "quad-0-0")
+        bad.update(status="failed", excluded=True, exclusion_codes="member.status_not_succeeded")
+        sibling = next(r for r in rows if r["run_id"] == "quad-0-1")
+        sibling.update(_decode_assisted=None, _decode_assist_reason="spans unreadable (run quad-0-1)")
+        allowances = {("rails", v): {"status": "ok", "family": v, "allowance_j": .2,
+                                    "E_ref_j": 12.0, "T_ref_s": 1.0} for v in ("gross", "idle")}
+        with patch.object(bt, "_scaled_allowance", return_value=(.1, {"status": "ok", "scale": 1.0})):
+            cell = bt.compute_cell(rows, "rails", {}, allowances, .05)
+        for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive"):
+            self.assertEqual(cell[variant]["status"], "ok")
+            self.assertEqual(cell[variant]["without_assisted"]["reason"], "no polls (run repeat-0-0)")
+            self.assertEqual(cell[variant]["decode_assisted_member_counts_reason"], "no polls (run repeat-0-0)")
+
+    def test_missing_bundle_and_spans_have_their_own_marker_reasons(self):
+        for status in ("bundle_missing", "spans_unreadable"):
+            with self.subTest(status=status), patch.object(bt, "_bundle", return_value=(
+                    None if status == "bundle_missing" else Path("unused"))), patch.object(
+                    bt, "member_spans", return_value=None):
+                result = bt.dc_join({"root": Path("unused"), "streams": []}, "member")
+                self.assertEqual(result["status"], status)
+                reason = result["decode_assist_evaluated_reason"]
+                self.assertNotIn("no mapped meter stream has polls", reason)
+                self.assertIn("(run member)", reason)
+
     def test_blinded_stage_does_not_open_raw_meter_streams(self):
         with patch.object(bt, "load_archive", side_effect=AssertionError("blinded raw meter read")):
             result = run_twin(WORLD["one"], "blinded")
@@ -437,6 +476,23 @@ class BatteryTermsTests(QuantityTestCase):
         self.assertQuantityEqual(r["battery_v_end_j"], 12)  # delayed discharge in [8, 11) s
         self.assertQuantityEqual(r["battery_tau_s"], 3)
         self.assertTrue(r["decode_assisted"])  # negative current at 9 s lies in [7, 11)
+
+    def test_marker_poll_count_uses_integer_nanoseconds_at_both_edges(self):
+        gap = 100_000_001
+        times = [i * gap for i in range(11)]
+        tau = 2_000_000_000 + gap
+        stream = {"aligned": False, "raw_offset_ns": 0, "poll_ns": times,
+                  "battery_watts": [12.0] * len(times), "battery_current_ma": [-1000] * len(times)}
+        edge = times[-1] - tau
+        for window, count in (([edge, edge + 1], 1), ([edge - 1, edge], 0)):
+            with self.subTest(window=window):
+                result = bt.battery_terms(stream, window, [0, 1])
+                self.assertEqual(result["battery_marker_polls"], count)
+                spans = {"decode_ns": window, "idle_ns": [0, 1]}
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(
+                        bt, "member_spans", return_value=spans):
+                    joined = bt.dc_join({"root": Path("unused"), "streams": [stream]}, "member")
+                self.assertIs(joined.get("decode_assisted"), True if count else None)
 
     def test_missing_voltage_does_not_erase_the_current_marker(self):
         s = self.stream()
@@ -538,6 +594,18 @@ class BatteryTermsTests(QuantityTestCase):
                 self.assertEqual(result["status"], "ok")
                 self.assertEqual(result["passes_computed"], 2)
                 self.assertEqual(result["without_assisted"]["status"], "not_evaluated")
+
+    def test_pass_mean_marker_reason_keeps_the_actual_pass_identity(self):
+        computed = {"status": "ok", "E_dec_j": 2.0, "T_dec_s": 1.0, "e_j_per_step": 2 / 512,
+                    "tau_s_per_step": 1 / 512, "e_half_width_j_per_step": .1 / 512, "e_printed_j_per_token": 2 / 512}
+        reason = "no mapped meter stream has polls in the marker window (run member)"
+        unknown = {**computed, "without_assisted": {"status": "not_evaluated", "reason": reason}}
+        result = bt.mean_of_passes([computed, unknown], pass_ids=[1, 2])
+        self.assertEqual(result["without_assisted"]["reason"], "pass 2: " + reason)
+        result = bt.mean_of_passes([{"status": "missing"}, unknown], pass_ids=[1, 2])
+        self.assertEqual(result["without_assisted"]["reason"], "pass 2: " + reason)
+        blinded = {**computed, "without_assisted": {"status": "not_evaluated", "reason": "not evaluated at the blinded stage"}}
+        self.assertEqual(bt.mean_of_passes([blinded])["without_assisted"]["reason"], "not evaluated at the blinded stage")
 
 
 class BlindingTests(QuantityTestCase):

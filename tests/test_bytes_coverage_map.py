@@ -141,7 +141,9 @@ def mutation_is_compared(root, documents, sample):
     for key in actual[:-1]:
         parent[key] = copy.copy(parent[key])
         parent = parent[key]
-    parent[actual[-1]] = corrupt(leaf)
+    # Reason comparisons use the named run set, so plant a changed run identity.
+    parent[actual[-1]] = (leaf + " (run __coverage_fault__)" if isinstance(leaf, str)
+                         and str(actual[-1]).endswith("reason") else corrupt(leaf))
     original = agreement.load
     def load(path):
         if str(path) in cache:

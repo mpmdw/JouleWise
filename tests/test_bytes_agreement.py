@@ -37,10 +37,12 @@ Run from the repository root (about three minutes):
 from __future__ import annotations
 
 import ast
+import bisect
 import copy
 import importlib.util
 import json
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -114,6 +116,12 @@ CAMPAIGNS = {
     "late_start": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                    "battery_publication": "delayed", "battery_reference_assist": True,
                    "late_start_stream": True}, ()),
+    "polls_only": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                   "battery_publication": "delayed", "battery_reference_assist": True,
+                   "marker_stream_mode": "polls_only"}, ()),
+    "header_closed": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                      "battery_publication": "delayed", "battery_reference_assist": True,
+                      "marker_stream_mode": "header_closed"}, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -213,6 +221,11 @@ def states_delta_bound(text):
     numbers = {int(n) for n in re.findall(r"\b(\d+)\s*(?:to\s*\d+\s*)?ms\b", text or "")}
     numbers |= {int(n) for n in re.findall(r"\b\d+\s*to\s*(\d+)\s*ms\b", text or "")}
     return (22 in numbers, 25 in numbers, "M13" in (text or ""))
+
+
+def reason_run_ids(text):
+    """Reason wording is descriptive; the set of affected kept runs is exact."""
+    return sorted(set(re.findall(r"\(run ([^)]+)\)", text or "")))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -465,6 +478,9 @@ def compare_cells(R, stage, a_rows, t):
         compare_cell_numbers(R, stage, g, row, est)
         for key in ("decode_assisted_member_counts", "harvest_assisted_member_counts"):
             R.exact(stage, g, key, row.get(key), est.get(key))
+        R.exact(stage, g, "decode_assisted_member_counts_reason:run_ids",
+                reason_run_ids(row.get("decode_assisted_member_counts_reason")),
+                reason_run_ids(est.get("decode_assisted_member_counts_reason")))
         R.exact(stage, g, "kept_runs", sorted(row.get("kept_runs", [])), t_kept(est))
         if "assisted_unit_counts" in row:
             assists = set(cell.get("assist_members", []))
@@ -494,6 +510,8 @@ def compare_cells(R, stage, a_rows, t):
                     R.exact(stage, gw, "below_minimum", wa.get("below_minimum"), wt.get("below_minimum"))
                     if wa.get("status") == "not_evaluated" or wt.get("status") == "not_evaluated":
                         R.exact(stage, gw, "evaluation status", wa.get("status"), wt.get("status"))
+                        R.exact(stage, gw, "reason:run_ids", reason_run_ids(wa.get("reason")),
+                                reason_run_ids(wt.get("reason")))
                         for key in ("mean_j", "h_j", "B_j", "lower_j", "upper_j", "n_r", "n_b"):
                             R.exact(stage, gw, key + ":not evaluated is null", wa.get(key), None)
                 if a_ok and t_ok:
@@ -609,6 +627,9 @@ def compare_points(R, stage, a_points, t):
         R.number(stage, g, "pass_difference_j", p.get("pass_difference_j"), q.get("pass_difference_E_dec_j"), bar_energy(hb))
         if "without_assisted" in p:
             wa, wt = p["without_assisted"], q.get("without_assisted", {})
+            if wa.get("status") == "not_evaluated" or wt.get("status") == "not_evaluated":
+                R.exact(stage, g + "/without_assisted", "evaluation status", wa.get("status"), wt.get("status"))
+                R.exact(stage, g + "/without_assisted", "reason", wa.get("reason"), wt.get("reason"))
             R.exact(stage, g + "/without_assisted", "below_minimum", wa.get("below_minimum", False), wt.get("below_minimum", False))
             R.exact(stage, g + "/without_assisted", "evaluated", wa.get("mean_j") is not None, wt.get("status") == "ok")
             if wa.get("mean_j") is not None and wt.get("status") == "ok":
@@ -1602,6 +1623,21 @@ class AgreementTests(unittest.TestCase):
         self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in partial))
         self.assertTrue(any(r["battery_end_window_complete"] for r in partial))
 
+    def test_unaligned_marker_campaigns(self):
+        for name in ("polls_only", "header_closed"):
+            with self.subTest(campaign=name):
+                recorder = campaign(name)
+                self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
+                counts = recorder.counts()
+                print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+                      f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+                root = WORK["root"] / name
+                records = ba.load_records(root / "export", load(root / "manifest.json"), stage="all",
+                                          key_dir=root / "released-keys/bytes/blinding")
+                self.assertEqual(len(records), 1000)
+                self.assertTrue(all(r["meter"] is None and r.get("decode_assist_evaluated") for r in records))
+                self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in records))
+
     def test_unresolved_anchors_are_unusable_in_both_selections(self):
         R = self.check("invalid_anchor", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                               "h2/rest/passes_mean": (11, 11)})
@@ -1730,6 +1766,33 @@ class AgreementTests(unittest.TestCase):
 
 
 class ComparerRegressionTests(unittest.TestCase):
+    def test_not_evaluated_reason_run_sets_are_compared_in_both_directions(self):
+        campaign("marker_incomplete")
+        root = WORK["root"] / "marker_incomplete"
+        primary_path = root / "out/a-held/heldout_pass_estimates.json"
+        twin_path = root / "out/t-2.json"
+        primary, twin = load(primary_path), load(twin_path)
+        row = next(r for r in primary if r.get("decode_assisted_member_counts_reason"))
+        block = twin["cells"][canon(row["model"])][f"pass{row['pass_id']}"]["boundaries"][BMAP[row["boundary"]]]
+        est = block[VMAP[(row["basis"], row["selection"])]]
+        for field in ("decode_assisted_member_counts_reason", "without_assisted"):
+            for side in ("primary", "twin"):
+                with self.subTest(field=field, side=side):
+                    target = row if side == "primary" else est
+                    parent, key = (target[field], "reason") if field == "without_assisted" else (target, field)
+                    original_value = parent[key]
+                    parent[key] += "; no polls (run planted-run-id)"
+                    original_load = load
+                    try:
+                        with mock.patch(__name__ + ".load", side_effect=lambda p: (
+                                primary if Path(p) == primary_path else twin if Path(p) == twin_path else original_load(p))):
+                            above = compare_campaign(root).above()
+                        expected_key = "reason:run_ids" if field == "without_assisted" else field + ":run_ids"
+                        self.assertTrue(any(r["key"] == expected_key for r in above))
+                    finally:
+                        parent[key] = original_value
+        self.assertEqual(reason_run_ids("cause (run b); cause (run a); again (run b)"), ["a", "b"])
+
     def test_row_census_detects_deletions_additions_and_unknown_labels(self):
         rows = [{"model": "Qwen3-1.7B-4bit", "pass_id": 1, "boundary": "rails", "basis": basis,
                  "selection": selection, "status": "unavailable"} for basis, selection in VMAP]
@@ -1867,6 +1930,240 @@ class WordRuleTests(unittest.TestCase):
         _offset_alternative(recorder, "fixture", "edge", "epsilon", fit, 0, twin)
         self.assertEqual(numeric["status"], "under_bar")
         self.assertEqual([row["key"] for row in recorder.above()], ["epsilon:coefficient_decision"])
+
+
+class MarkerPathAgreementTests(unittest.TestCase):
+    """Small real stream files exercise every parser/join marker gate without a campaign."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="marker-paths-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.directory = self.root / "sources/night-custody/hazards/meter"
+        self.directory.mkdir(parents=True)
+        self.path = self.directory / "stream-001.jsonl"
+        self.spans = {"decode_ns": [4_000_000_000, 8_000_000_000],
+                      "idle_ns": [0, 2_000_000_000], "request_ns": [2_000_000_000, 8_000_000_000]}
+
+    def items(self):
+        return [{"k": "h", "status": "streaming", "rate_idx": 0,
+                 "start_raw_ns": 0, "start_mono_ns": 0}] + [
+            {"k": "b", "rx": i * 1_000_000_000, "tx": i * 1_000_000_000 - 1_000_000,
+             "n": 1, "p": kp.SAMPLE.pack(i * 1000, 0, 12_000_000, 1_000_000, 0, 0, 0, 0).hex(),
+             "smc": {"B0AC": -1000 if i == 9 else 0, "B0AV": 12000}} for i in range(13)
+        ] + [{"k": "t", "end_raw_ns": 12_000_000_000, "end_mono_ns": 12_000_000_000}]
+
+    def write(self, items):
+        self.path.write_text("".join(json.dumps(item) + "\n" for item in items))
+
+    def primary_decision(self, streams):
+        """Use the primary's energy join first, then its registered marker fallback."""
+        for _, stream in streams:
+            try:
+                result = ba.meter_decode(stream, self.spans["decode_ns"], self.spans["idle_ns"])
+                return True, result["decode_battery_assist"], result["battery_end_window_complete"]
+            except ba.AnalysisError:
+                pass
+        markers, complete = [], []
+        for _, stream in streams:
+            offset = kp.raw_offset_ns(stream)
+            if offset is None:
+                continue
+            window = [t + offset for t in self.spans["decode_ns"]]
+            tau = ba._battery_delay_s(ba._battery_stream_data(stream)[2])
+            lo = bisect.bisect_left(stream.poll_ns, window[0] + tau * 1e9)
+            hi = bisect.bisect_left(stream.poll_ns, window[1] + tau * 1e9)
+            if lo == hi:
+                continue
+            markers.append(ba._decode_battery_marker(stream, window, tau))
+            complete.append(stream.poll_ns[-1] >= window[1] + tau * 1e9)
+        return False, any(markers) if markers else None, any(complete) if markers else None
+
+    def assert_agreement(self):
+        selected = [self.spans["decode_ns"], self.spans["idle_ns"]]
+        primary = ba._session_streams(self.root, selected)
+        twin = bt.load_archive(self.root)
+        with mock.patch.object(bt, "_bundle", return_value=self.root), mock.patch.object(
+                bt, "member_spans", return_value=self.spans):
+            actual = bt.dc_join(twin, "member")
+        expected = self.primary_decision(primary)
+        self.assertEqual((actual["status"] == "ok", actual.get("decode_assisted"),
+                          actual.get("battery_end_window_complete")), expected)
+        return primary, twin, actual
+
+    def test_parser_early_returns_preserve_mapped_polls(self):
+        for case in ("streaming", "header_closed", "polls_only", "one_batch", "duplicate_sequences",
+                     "missing_payload", "nonhex_payload", "no_header", "no_trailer", "no_polls", "implicit_streaming",
+                     "offset_at_limit", "offset_drift"):
+            with self.subTest(path=case):
+                items = self.items()
+                if case == "header_closed":
+                    items[0].update(status="closed", rate_idx=99)  # rate is irrelevant without a fit
+                if case == "implicit_streaming":
+                    items[0].pop("status")
+                if case in ("polls_only", "one_batch"):
+                    for i, item in enumerate(items[1:-1]):
+                        if case == "polls_only" or i != 0:
+                            item.update(n=0, p="")
+                if case == "duplicate_sequences":
+                    for item in items[1:-1]:
+                        item["p"] = items[1]["p"]
+                if case == "missing_payload":
+                    for item in items[1:-1]:
+                        item.pop("p")
+                if case == "nonhex_payload":
+                    for item in items[1:-1]:
+                        item["p"] = "not-hex"
+                if case == "no_header":
+                    items = items[1:]
+                if case == "no_trailer":
+                    items = items[:-1]
+                if case == "no_polls":
+                    items = [items[0], items[-1]]
+                if case in ("offset_at_limit", "offset_drift"):
+                    items[-1]["end_raw_ns"] += 1_000_000 + (case == "offset_drift")
+                self.write(items)
+                primary, twin, _ = self.assert_agreement()
+                stream = twin["streams"][0]
+                self.assertEqual(stream["poll_ns"], primary[0][1].poll_ns)
+                self.assertEqual(stream["raw_offset_ns"], kp.raw_offset_ns(primary[0][1]))
+                self.assertEqual(stream["battery_tau_ns"], 3_000_000_000 if stream["poll_ns"] else 2_000_000_000)
+                if case in ("header_closed", "polls_only", "one_batch", "duplicate_sequences", "missing_payload", "nonhex_payload"):
+                    self.assertFalse(stream["aligned"])
+                    self.assertEqual(stream["battery_current_ma"][9], -1000)
+                    self.assertEqual(stream["battery_voltage_mv"][9], 12000)
+
+    def test_transport_failures_discard_the_stream_like_the_primary(self):
+        for case in ("invalid_json", "blank_line", "bad_payload", "closed_bad_payload", "missing_rx", "missing_rate"):
+            with self.subTest(path=case):
+                items = self.items()
+                if case in ("bad_payload", "closed_bad_payload"):
+                    items[1]["p"] = "f"
+                if case == "closed_bad_payload":
+                    items[0]["status"] = "closed"
+                if case == "missing_rx":
+                    items[1].pop("rx")
+                if case == "missing_rate":
+                    items[0].pop("rate_idx")
+                self.write(items)
+                if case in ("invalid_json", "blank_line"):
+                    with self.path.open("a") as handle:
+                        handle.write("{broken\n" if case == "invalid_json" else "\n")
+                primary, twin, actual = self.assert_agreement()
+                self.assertIsNone(actual.get("decode_assisted"))
+                self.assertEqual(primary[0][1].poll_ns, [])
+                self.assertEqual(twin["streams"][0]["poll_ns"], [])
+
+    def test_missing_canonical_stream_directory_does_not_read_a_fallback(self):
+        self.write(self.items())
+        fallback = self.root / "hazards/meter"
+        fallback.parent.mkdir(parents=True)
+        self.directory.rename(fallback)
+        self.assert_agreement()
+        self.assertEqual(bt.load_archive(self.root)["streams"], [])
+
+    def test_unreadable_stream_has_no_marker_on_either_side(self):
+        self.write(self.items())
+        with mock.patch.object(Path, "open", side_effect=OSError("unreadable stream")):
+            self.assert_agreement()
+
+    def test_non_object_transport_has_the_primarys_parse_failure(self):
+        self.write(self.items())
+        with self.path.open("a") as handle:
+            handle.write("[]\n")
+        with self.assertRaises(AttributeError):
+            ba._session_streams(self.root, list(self.spans.values()))
+        with self.assertRaises(AttributeError):
+            bt.load_archive(self.root)
+
+    def test_clock_fit_failure_and_envelope_fallback_preserve_marker(self):
+        self.write(self.items())
+        with mock.patch.object(kp, "clock_fit", side_effect=ValueError("fit failed")), mock.patch.object(
+                bt, "_linear_fit", side_effect=ValueError("fit failed")):
+            _, _, result = self.assert_agreement()
+            self.assertIs(result["decode_assisted"], True)
+        def fail_second(original):
+            calls = 0
+            def fit(*args):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise ValueError("envelope fit failed")
+                return original(*args)
+            return fit
+        with mock.patch.object(kp, "_linear_fit", side_effect=fail_second(kp._linear_fit)), mock.patch.object(
+                bt, "_linear_fit", side_effect=fail_second(bt._linear_fit)):
+            _, _, result = self.assert_agreement()
+            self.assertEqual(result["status"], "ok")
+            self.assertIs(result["decode_assisted"], True)
+
+    def test_energy_join_skip_paths_keep_the_marker(self):
+        for case in ("late_start", "end_in_decode", "idle_outside", "decode_samples_missing", "idle_samples_missing",
+                     "decode_voltage_missing", "idle_voltage_missing", "all_voltage_missing",
+                     "quiet_marker", "no_marker_polls"):
+            with self.subTest(path=case):
+                items = self.items()
+                if case == "late_start":
+                    items = [b for b in items if b["k"] != "b" or b["rx"] >= 6_000_000_000]
+                if case == "end_in_decode":
+                    items = [b for b in items if b["k"] != "b" or b["rx"] <= 7_000_000_000]
+                if case == "no_marker_polls":
+                    items = [b for b in items if b["k"] != "b" or b["rx"] <= 6_000_000_000]
+                if case == "idle_outside":
+                    self.spans["idle_ns"] = [-2_000_000_000, -1_000_000_000]
+                else:
+                    self.spans["idle_ns"] = [0, 2_000_000_000]
+                if case == "idle_samples_missing":
+                    self.spans["idle_ns"] = [1_000_000_000, 2_000_000_000]
+                for b in items[1:-1]:
+                    if case == "decode_samples_missing" and 4_000_000_000 <= b["rx"] < 8_000_000_000:
+                        b.update(n=0, p="")
+                    if case == "idle_samples_missing" and b["rx"] == 1_000_000_000:
+                        b.update(n=0, p="")
+                    if (case == "all_voltage_missing" or
+                        case == "decode_voltage_missing" and 4_000_000_000 <= b["rx"] < 8_000_000_000 or
+                        case == "idle_voltage_missing" and b["rx"] < 2_000_000_000):
+                        b["smc"].pop("B0AV")
+                    if case == "quiet_marker":
+                        b["smc"]["B0AC"] = 0
+                self.write(items)
+                self.assert_agreement()
+
+    def test_successful_join_uses_its_stream_before_marker_only_fallbacks(self):
+        self.write(self.items())
+        assisted = self.path.read_text()
+        quiet = self.items()
+        for b in quiet[1:-1]:
+            b["smc"]["B0AC"] = 0
+        self.write(quiet)
+        second = self.directory / "stream-002.jsonl"
+        second.write_text(assisted)
+        _, _, result = self.assert_agreement()
+        self.assertEqual(result["status"], "ok")
+        self.assertFalse(result["decode_assisted"])
+        # A prior unaligned assisted stream also yields to the successful join.
+        assisted_items = self.items()
+        assisted_items[0]["status"] = "closed"
+        self.write(assisted_items)
+        second.write_text("".join(json.dumps(b) + "\n" for b in quiet))
+        _, _, result = self.assert_agreement()
+        self.assertEqual(result["stream"], "stream-002.jsonl")
+        self.assertFalse(result["decode_assisted"])
+
+    def test_marker_only_streams_are_combined_in_both_orders(self):
+        quiet = self.items()
+        quiet[0]["status"] = "closed"
+        for b in quiet[1:-1]:
+            b["smc"]["B0AC"] = 0
+        assisted = self.items()
+        for b in assisted[1:-1]:
+            b.update(n=0, p="")
+        for first, second in ((quiet, assisted), (assisted, quiet)):
+            with self.subTest(assisted_first=first is assisted):
+                self.write(first)
+                (self.directory / "stream-002.jsonl").write_text("".join(json.dumps(b) + "\n" for b in second))
+                _, _, result = self.assert_agreement()
+                self.assertIs(result["decode_assisted"], True)
 
 
 class FenceTests(unittest.TestCase):

@@ -1389,9 +1389,13 @@ def combine_passes(rows):
                 "output_label": OUTPUT_LABEL,
                 "passes": [{"pass_id": r["pass_id"], **d} for r, d in zip(group, diagnostics)]}
             if any(d.get("status") == "not_evaluated" for d in diagnostics):
+                reasons = [(r["pass_id"], d.get("reason", "not evaluated at the blinded stage"))
+                           for r, d in zip(group, diagnostics) if d.get("status") == "not_evaluated"]
+                reason = ("not evaluated at the blinded stage" if all(
+                    text == "not evaluated at the blinded stage" for _, text in reasons) else
+                    "; ".join(f"pass {pass_id}: {text}" for pass_id, text in reasons))
                 point["without_assisted"].update(status="not_evaluated",
-                    reason="not evaluated at the blinded stage",
-                    label="without assisted members; not evaluated at the blinded stage")
+                    reason=reason, label="without assisted members; " + reason)
         points.append(point)
     return points
 

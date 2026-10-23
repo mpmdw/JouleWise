@@ -19,7 +19,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                      edge_phase=True, min_receive_latency_ms=10.0,
                      subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False,
                      battery_assist=False, battery_publication="instant", battery_reference_assist=False,
-                     late_start_stream=False):
+                     late_start_stream=False, marker_stream_mode=None):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -29,9 +29,13 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     an uncollected session is never generated or added to the manifest.
     late_start_stream starts the first session's stream midway through its
     first science decode, while retaining its delayed marker polls.
+    marker_stream_mode retains all polls but removes meter samples (polls_only)
+    or closes the header (header_closed), independently of key export.
     """
     if battery_publication not in ("instant", "delayed"):
         raise ValueError("battery publication must be instant or delayed")
+    if marker_stream_mode not in (None, "polls_only", "header_closed"):
+        raise ValueError("unknown marker stream mode")
     if len(pass_duration_scales) != 2 or any(v <= 0 for v in pass_duration_scales):
         raise ValueError("two positive pass duration scales required")
     if clock_latency_ms is not None and not clock_latency_ms[0] < 0 < clock_latency_ms[1]:
@@ -308,6 +312,16 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         batches = [json.loads(line) for line in stream.read_text().splitlines()]
         stream.write_text("".join(json.dumps(b) + "\n" for b in batches
                                    if b.get("k") != "b" or b["rx"] >= cutoff))
+    if marker_stream_mode:
+        for session in manifest["sessions"]:
+            stream = Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl"
+            items = [json.loads(line) for line in stream.read_text().splitlines()]
+            for item in items:
+                if marker_stream_mode == "polls_only" and item.get("k") == "b":
+                    item.update(n=0, p="")
+                elif marker_stream_mode == "header_closed" and item.get("k") == "h":
+                    item["status"] = "closed"
+            stream.write_text("".join(json.dumps(item) + "\n" for item in items))
     return manifest
 
 

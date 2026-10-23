@@ -38,6 +38,34 @@ class NumericTestCase(unittest.TestCase):
         return super().assertAlmostEqual(first, second, msg=msg, delta=delta)
 
 
+class MarkerPassReasonTests(unittest.TestCase):
+    def row(self, pass_id, reason):
+        diagnostic = {"status": "not_evaluated", "reason": reason, "mean_j": None,
+                      "h_j": None, "B_j": None, "below_minimum": False}
+        return {"model": "model", "boundary": "rails", "basis": "gross primary", "selection": "primary",
+                "bytes": 1.0, "resident": 1.0, "role": "heldout", "moe": False, "tier": True,
+                "pass_id": pass_id, "status": "computed", "mean_j": 12.0, "h_j": .1, "B_j": .2,
+                "duration_s": 1.0, "meter_phase_edge_mean_j": 0.0, "attribution_floor_j": .1,
+                "meter_attribution_floor_j": None, "without_assisted": diagnostic}
+
+    def test_heldout_mean_carries_each_unevaluated_pass_reason(self):
+        for ids in ((1,), (2,), (1, 2)):
+            with self.subTest(passes=ids):
+                rows = [self.row(i, f"no mapped meter stream has polls in the marker window (run member-{i})") for i in ids]
+                point = ba.combine_passes(list(reversed(rows)))[0]
+                reason = "; ".join(f"pass {r['pass_id']}: {r['without_assisted']['reason']}" for r in rows)
+                self.assertEqual(point["without_assisted"]["reason"], reason)
+                self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
+                self.assertIsNone(point["without_assisted"]["mean_j"])
+                self.assertEqual(point["mean_j"], 12.0)
+
+    def test_blinded_mean_keeps_the_registered_text(self):
+        rows = [self.row(i, "not evaluated at the blinded stage") for i in (1, 2)]
+        diagnostic = ba.combine_passes(rows)[0]["without_assisted"]
+        self.assertEqual(diagnostic["reason"], "not evaluated at the blinded stage")
+        self.assertEqual(diagnostic["label"], "without assisted members; not evaluated at the blinded stage")
+
+
 def assert_d3_exercised(test, records, manifest):
     """Run the competing D3 method: substitute rails allowance AND scale."""
     changed = []

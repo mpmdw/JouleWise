@@ -703,17 +703,11 @@ def percentile(values, q):
 def parse_meter_stream(path):
     header = trailer = None
     batches = []
+    payloads = {}
     text = Path(path).read_text(encoding="utf-8")
-    lines = text.split("\n")
+    lines = text.splitlines()
     for number, line in enumerate(lines, 1):
-        if not line.strip():
-            continue
-        try:
-            item = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(item, dict):
-            continue
+        item = json.loads(line)
         kind = item.get("k")
         if kind == "h":
             header = item
@@ -721,23 +715,49 @@ def parse_meter_stream(path):
             trailer = item
         elif kind == "b":
             batches.append(item)
-    if header is None or header.get("status", "streaming") != "streaming":
-        return None
+            match = re.search(r'"p"\s*:\s*"([0-9a-fA-F]*)"', line)
+            if item.get("n") and match is not None:
+                payloads[id(item)] = match.group(1)
     polls = sorted(batches, key=lambda b: b["rx"])
+    with_samples = [b for b in polls if id(b) in payloads]
+    # The primary scans sample endpoint timing before its header/fit early returns.
+    # Missing/non-hex payload fields supply no timing batch; malformed hex fails
+    # the whole transport even if the header is closed.
+    for batch in with_samples:
+        payload = payloads[id(batch)]
+        bytes.fromhex(payload[-SAMPLE.size * 2:][:4])
+        bytes.fromhex(payload[:4])
+    offset = None
+    try:
+        start = header["start_raw_ns"] - header["start_mono_ns"]
+        end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
+        # The raw/monotonic map is independent of the meter clock fit.
+        offset = start if abs(end - start) <= 1_000_000 else None
+    except (KeyError, TypeError):
+        pass
     # BAT-2 / registration 7: signed SMC power at every poll, including empty meter polls.
     # A partial current/voltage pair contributes no battery sample.
     poll_ns = [b["rx"] for b in polls]
     battery = []
     for batch in polls:
-        smc = batch.get("smc") or {}
+        smc = (batch.get("smc") or {}) if offset is not None else {}
         current, voltage = smc.get("B0AC"), smc.get("B0AV")
         battery.append(-current * voltage / 1e6 if is_number(current) and is_number(voltage) else None)
-    with_samples = [b for b in polls if b.get("n")]
+    common = {"header": header, "trailer": trailer, "aligned": False,
+              "poll_ns": poll_ns, "battery_watts": battery,
+              "battery_current_ma": [(b.get("smc") or {}).get("B0AC") if offset is not None else None for b in polls],
+              "battery_voltage_mv": [(b.get("smc") or {}).get("B0AV") if offset is not None else None for b in polls],
+              "battery_tau_ns": 2_000_000_000 + max((b - a for a, b in zip(poll_ns, poll_ns[1:])), default=0),
+              "raw_offset_ns": offset}
+    if header is None or header.get("status", "streaming") != "streaming":
+        return common
+    if not with_samples:
+        return common
     step = STEP_MS[header["rate_idx"]]
     dev_ms, watts, batch_of = [], [], []
     previous_seq, current, running_max, previous_rx = None, 0, None, None
     for j, batch in enumerate(with_samples):
-        raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
+        raw = bytes.fromhex(payloads[id(batch)])
         for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
             if previous_seq is None:
                 current = 0
@@ -763,13 +783,16 @@ def parse_meter_stream(path):
     points = [(dev, with_samples[j]["rx"], (with_samples[j]["rx"] - with_samples[j]["tx"]) / 1e6,
                with_samples[j]["n"]) for j, dev in newest.items()]
     if len(points) < 2:
-        return {"header": header, "trailer": trailer, "aligned": False, "reason": "fewer than two batches"}
+        return {**common, "reason": "fewer than two batches"}
     good = [p for p in points if p[3] < RESPONSE_CAP and p[2] < FIT_MAX_RTT_MS]
     used = good if len(good) >= FIT_MIN_POINTS else points
     x0, y0 = used[0][0], used[0][1]
     xs = [p[0] - x0 for p in used]
     ys = [p[1] - y0 for p in used]
-    a0, b0 = _linear_fit(xs, ys)
+    try:
+        a0, b0 = _linear_fit(xs, ys)
+    except ValueError as exc:
+        return {**common, "reason": str(exc)}
     residual = [y - (a0 + b0 * x) for x, y in zip(xs, ys)]
     span = xs[-1] - xs[0]
     bins = max(4, int(span / FIT_BIN_MS))
@@ -786,21 +809,7 @@ def parse_meter_stream(path):
     above = [(y - (a1 + b1 * x)) / 1e6 for x, y in zip(xs, ys)]
     a_ns = y0 + a1 - b1 * x0
     host_ns = [int(round(a_ns + b1 * d)) for d in dev_ms]
-    offset = None
-    try:
-        start = header["start_raw_ns"] - header["start_mono_ns"]
-        end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
-        # Parser contract: raw-minus-monotonic mapping must stay within 1 ms across the
-        # stream (km003c_parse semantics); this is a clock-validity rule, not agreement slack.
-        offset = start if abs(end - start) <= 1_000_000 else None
-    except (KeyError, TypeError):
-        offset = None
-    return {"header": header, "trailer": trailer, "aligned": True, "host_ns": host_ns, "watts": watts,
-            "poll_ns": poll_ns, "battery_watts": battery,
-            "battery_current_ma": [(b.get("smc") or {}).get("B0AC") for b in polls],
-            # BAT-2: two 1 s SMC publication intervals plus the stream-wide maximum poll gap.
-            "battery_tau_ns": 2_000_000_000 + max((b - a for a, b in zip(poll_ns, poll_ns[1:])), default=0),
-            "raw_offset_ns": offset, "step_ms": step,
+    return {**common, "aligned": True, "host_ns": host_ns, "watts": watts, "step_ms": step,
             "fit": {"a_ns": a_ns, "b_ns_per_ms": b1, "points": len(points), "points_used": len(used),
                     "clock_rate_ppm": (b1 / 1e6 - 1) * 1e6,
                     "excess_latency_ms_p50": percentile(above, 50),
@@ -862,7 +871,8 @@ def battery_terms(stream, window, idle):
     # completeness is disclosed separately; the registered marker has no null case.
     marker = any(c < 0 for c in marker_values)
     result = {"battery_tau_s": tau_ns / 1e9, "battery_end_window_complete": end_complete,
-              "decode_assisted": marker, "battery_decode_polls": len(decode), "battery_idle_polls": len(baseline)}
+              "decode_assisted": marker, "battery_marker_polls": hi - lo,
+              "battery_decode_polls": len(decode), "battery_idle_polls": len(baseline)}
     if not decode or not baseline:
         return {**result, "status": "battery reading missing"}
     weight = duration / len(decode)
@@ -938,14 +948,15 @@ def load_archive(root):
     root = Path(root)
     record = read_json(root / "derived/b6-acceptance.json", {}) or {}
     streams = []
-    for base in (root / "sources/night-custody/hazards/meter", root / "hazards/meter"):
-        if base.is_dir():
-            for path in sorted(base.glob("stream-*.jsonl")):
-                stream = parse_meter_stream(path)
-                if stream is not None:
-                    stream["name"] = path.name
-                    streams.append(stream)
-            break
+    base = root / "sources/night-custody/hazards/meter"
+    for path in sorted(base.glob("stream-*.jsonl")):
+        try:
+            stream = parse_meter_stream(path)
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+            # The primary discards an unreadable transport as a whole stream.
+            stream = {"aligned": False, "poll_ns": [], "raw_offset_ns": None, "reason": str(exc)}
+        stream["name"] = path.name
+        streams.append(stream)
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
             "streams": streams}
 
@@ -954,27 +965,27 @@ def dc_join(archive, run_id):
     """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
     bundle = _bundle(archive["root"], run_id)
     if bundle is None:
-        return {"status": "bundle_missing"}
+        return {"status": "bundle_missing", "decode_assist_evaluated_reason":
+                f"decode marker not evaluated: selected bundle missing (run {run_id})"}
     spans = member_spans(bundle)
     if spans is None:
-        return {"status": "spans_unreadable"}
+        return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
+                f"decode marker not evaluated: member spans unreadable (run {run_id})"}
     failure = None
     markers = []
     for stream in archive["streams"]:
-        if not stream.get("aligned") or stream.get("raw_offset_ns") is None:
+        if stream.get("raw_offset_ns") is None:
             continue
         offset = stream["raw_offset_ns"]
         window = [spans["decode_ns"][0] + offset, spans["decode_ns"][1] + offset]
         base = [v + offset for v in spans["idle_ns"]] if spans["idle_ns"] else None
         battery = battery_terms(stream, window, base)
-        polls = stream.get("poll_ns", [])
-        tau_ns = battery["battery_tau_s"] * 1e9
-        lo = bisect.bisect_left(polls, window[0] + tau_ns)
-        hi = bisect.bisect_left(polls, window[1] + tau_ns)
-        if lo < hi:
+        if battery["battery_marker_polls"]:
             markers.append(battery)
+        if not stream.get("aligned"):
+            continue
         host = stream["host_ns"]
-        if not (host[0] <= window[0] and window[1] <= host[-1]):
+        if not host or not base or any(a < host[0] or z > host[-1] or z <= a for a, z in (window, base)):
             continue
         energy, n = integrate(host, stream["watts"], window[0], window[1])
         if energy is None:
@@ -1047,6 +1058,9 @@ def dc_join(archive, run_id):
                       battery_end_window_complete=any(b["battery_end_window_complete"] for b in markers))
     else:
         result.pop("decode_assisted", None)
+        result["decode_assist_evaluated_reason"] = (
+            "decode marker not evaluated: no mapped meter stream has polls in the marker window"
+            f" (run {run_id})")
     return result
 
 
@@ -1293,9 +1307,12 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
             if est["status"] != "ok":
                 continue
             if est["decode_assisted_member_counts"] is None:
+                kept_ids = set(est["members"]["repeats"]) | {m for q in est["members"]["quads"].values() for m in q}
                 reasons = sorted({r.get("_decode_assist_reason", "decode marker unavailable") for r in rows
-                                  if r.get("_decode_assisted") is None})
-                est["without_assisted"] = {"status": "not_evaluated", "reason": "; ".join(reasons)}
+                                  if r["run_id"] in kept_ids and r.get("_decode_assisted") is None})
+                reason = "; ".join(reasons)
+                est["decode_assisted_member_counts_reason"] = reason
+                est["without_assisted"] = {"status": "not_evaluated", "reason": reason}
             elif any(est["decode_assisted_member_counts"].values()):
                 kept_ids = set(est["members"]["repeats"]) | {m for q in est["members"]["quads"].values() for m in q}
                 units = {_units_of(r)[:2] for r in rows if r["run_id"] in kept_ids and r.get("_decode_assisted")}
@@ -1422,6 +1439,8 @@ def quantities(cell_block, manifest_entry):
         est = cell_block.get(variant)
         if not est or est.get("status") != "ok":
             out[variant] = {"status": (est or {}).get("status", "absent")}
+            if est and "reason" in est:
+                out[variant]["reason"] = est["reason"]
             continue
         m, lo, hi = est["mean_j"], est["lower_j"], est["upper_j"]
         t = est["duration_s"]
@@ -1465,7 +1484,7 @@ def missing_pass_quantities(record):
     return {variant: dict(item) for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive", "without_assisted")}
 
 
-def mean_of_passes(per_pass):
+def mean_of_passes(per_pass, *, pass_ids=None):
     """Each pass's value, their mean and difference (R6); half-width the mean of the passes' (h + B).
 
     Addendum 7 item 12: P of the pass mean is mean E / mean T with half-width (mean h + mean B) / mean T.
@@ -1474,6 +1493,8 @@ def mean_of_passes(per_pass):
     flag is carried on the point.  Both passes missing: the model prints `missing` and has no point.
     """
     passes = [p for p in per_pass if p.get("status") == "ok"]
+    identities = list(range(1, len(per_pass) + 1)) if pass_ids is None else pass_ids
+    kept_ids = [identity for identity, p in zip(identities, per_pass) if p.get("status") == "ok"]
     collected = len(per_pass)
     flags = sorted({f for p in per_pass for f in (p.get("flags") or [])})
     statuses = [p.get("status") for p in per_pass]
@@ -1505,7 +1526,12 @@ def mean_of_passes(per_pass):
     if any("without_assisted" in p for p in passes):
         diagnostics = [p.get("without_assisted", p) for p in passes]
         if any(p.get("status") == "not_evaluated" for p in diagnostics):
-            out["without_assisted"] = {"status": "not_evaluated"}
+            reasons = [(identity, d.get("reason", "not evaluated at the blinded stage"))
+                       for identity, d in zip(kept_ids, diagnostics) if d.get("status") == "not_evaluated"]
+            reason = ("not evaluated at the blinded stage" if all(
+                text == "not evaluated at the blinded stage" for _, text in reasons) else
+                "; ".join(f"pass {identity}: {text}" for identity, text in reasons))
+            out["without_assisted"] = {"status": "not_evaluated", "reason": reason}
         else:
             out["without_assisted"] = mean_of_passes(diagnostics)
         out["without_assisted"]["below_minimum"] = any(p.get("without_assisted", p).get("below_minimum", False) for p in passes)
@@ -1862,7 +1888,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             for r in srows:
                 r["_decode_assisted"] = dc_by_run.get(r["run_id"], {}).get("decode_assisted")
                 r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
-                    f"decode marker not evaluated: no mapped meter stream has polls in the marker window (run {r['run_id']})")
+                    dc_by_run.get(r["run_id"], {}).get("decode_assist_evaluated_reason",
+                        f"decode marker not evaluated: archive unavailable (run {r['run_id']})"))
                 valid = r["status"] == "succeeded" and not (
                     set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
                 r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
@@ -1888,7 +1915,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         for boundary in BOUNDARIES:
             merged["boundaries"][boundary] = {"quantities": {
                 variant: mean_of_passes([block[k]["boundaries"][boundary].get("quantities", {}).get(variant, {})
-                                         for k in sorted(block) if k.startswith("pass")]) or {"status": "absent"}
+                                         for k in sorted(block) if k.startswith("pass")],
+                                       pass_ids=[int(k[4:]) for k in sorted(block) if k.startswith("pass")]) or {"status": "absent"}
                 for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive")}}
         block["passes_mean"] = merged
     pass_keys.append("passes_mean")
