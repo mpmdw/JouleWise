@@ -111,13 +111,15 @@ own `idle_baseline` spans, rails decode energy, its operative phase envelope,
 and zero joint interpolation bound for interval-support telemetry. Gross is
 primary; the secondary subtracts each member's own idle power times decode
 duration. Signed secondary energies are retained. Rest is paired DC input minus
-rails before aggregation. Battery assistance relies on the harvest's
-`battery.assist` flag; analysis does not infer it anew or add battery energy.
+rails before aggregation. BAT-2 adds the signed battery term from the meter
+stream's B0AC/B0AV polls on both bases, including the NEG-8 request references.
+The decode marker is `bytes.decode_battery_assist`; the harvest's
+`battery.assist` is counted only and selects nothing.
 For each selected cell with an assisted member, print `with_assisted_label`
 and the nested `without_assisted` diagnostic side by side. The latter removes
 whole repeat/quad units containing an assisted member and reruns the same
 estimator, including duration, drift scale, h and B. Counts of assist members
-and units are separate by stratum; `battery.assist_outside_request` does not
+and units are separate by stratum; neither harvest battery flag alone can
 qualify. The line also appears in the idle-subtracted and flagged-inclusive
 cells when their kept members contain assist. It decides nothing. Below five
 units, print its counts and "below the registered minimum of 5 units"; with
@@ -132,6 +134,10 @@ is scanned incrementally for clock metadata and endpoint sequence numbers;
 no out-of-selection power samples are unpacked or retained. Only authorized
 science decode/idle spans, released NEG-8 request/idle spans and one adjacent
 sample at each edge are decoded. Clock-fit metadata may cover the session;
+every poll's receive time is retained, in receive order, so the stream-wide
+largest poll interval and τ are unchanged; SMC values are retained only for
+polls received in [start, end + τ) of a selected span, and none when the
+raw/monotonic mapping is missing;
 held-out power is absent at fit stage. Tests compare this clock fit exactly
 with the full native parser. No raw/monotonic mapping or fit gives a labelled
 unavailable meter value, without changing rails. There is no hazard-journal
@@ -142,9 +148,39 @@ last in-phase sample at an aligned end. Per member,
 `u=(P_start+P_end)*(r_max+sample_interval)`, with maximum absolute recorded
 clock-fit excess latency (largest absolute recorded minimum or maximum,
 including negative extremes) and native sample interval. Phase ends map to
-integer nanoseconds by rounding to nearest, as in `_event_span`. The stratified mean u replaces
-rails timing in DC input; rest carries rails timing plus u. The largest u is
+integer nanoseconds by rounding to nearest, as in `_event_span`. The stratified mean u + v replaces
+rails timing in DC input; rest carries rails timing plus u + v. The largest u + v is
 printed as the meter attribution floor, never added again.
+
+BAT-2's battery power is `-B0AC[mA] * B0AV[mV] / 1e6` W, signed (charging
+is negative), from `Stream.battery_watts`; `integrate` takes its decode mean
+times decode length T. The idle-subtracted term subtracts the own idle mean
+battery power times T. If decode or idle has no complete current/voltage poll,
+the existing `bytes.meter_decode_unavailable` carries reason `battery reading missing`;
+only DC input/rest lose the run. Partial polls are ignored by the integral.
+There is no refusal. The delay is `tau = 2 * 1.0 + max_poll_interval_s`, over
+all polls. With n complete decode polls, each forward edge window `[edge, edge+tau)`
+has `v_edge = (T/n) * sum(abs(P_b))`; `v = v_start + v_end`, with no idle-edge
+addition. A negative current received in `[decode_start+tau, decode_end+tau)`
+marks `bytes.decode_battery_assist`, which is disclose-only.
+
+Per-run meter results retain `meter_gross_j`, `meter_secondary_j`,
+`battery_gross_j`, `battery_secondary_j`, their sums `gross_j`/`secondary_j`,
+`battery_v_start_j`, `battery_v_end_j`, `battery_tau_s`, complete poll counts,
+and separate meter u and battery v. Each DC/rest cell prints `meter_run_terms`
+for its kept runs, `battery_term_mean_j` (the registered stratified mean on
+that basis), `battery_term_max_j` (largest signed value),
+`battery_nonzero_run_count`, and `battery_phase_edge_max_j` (largest v).
+Combined points average the available pass means and retain the overall
+maximums and sum of run counts. `decode_assisted_member_counts` and
+`harvest_assisted_member_counts` disclose kept run counts by stratum.
+The without-assisted line uses the decode marker at every boundary.
+At the blinded stage, `decode_assisted_member_counts` and the without-assisted line's numbers are null with reason "not evaluated at the blinded stage"; harvest-assisted counts remain evaluated.
+At stages reading the meter, unevaluated decode counts and without-assisted numbers are null with the actual missing marker-window cause and run ids; harvest-assisted counts remain evaluated.
+`battery_end_window_complete` records whether a poll reaches decode end plus tau, in each meter result and (if every meter reduction fails) on the row, where True means at least one qualifying marker stream reaches that endpoint.
+No separate meter-only estimate line is printed: DC input minus the battery
+column gives it. Every DC/rest value carries `boundary_description`:
+"whole-machine DC input plus the battery term, measured at the USB-C input; the adapter's AC-to-DC loss is not included".
 
 NEG-8 inputs come from export rows with `config_key=neg8_reference`, roles
 `corpus`, `start`, `midpoint`, `end`, succeeded status and no exclusion. The
@@ -706,7 +742,8 @@ Registered H2 coefficients, covariance, k and intervals stay unchanged and print
 first, labelled **statistical; conditional on the mapped meter energies**.
 
 The meter record adds `offset_bound_j = max(edge_powers_w) *
-(r_max_s + sample_interval_s)` in joules, `adjacent_before_edge_powers_w`
+(r_max_s + sample_interval_s) + max(battery_v_start_j, battery_v_end_j)`
+in joules (BAT-2 §3), `adjacent_before_edge_powers_w`
 and their signed difference `offset_sensitivity_w`. The pass and model tables
 carry `meter_offset_bound_j` and `meter_offset_sensitivity_w`, using the existing
 repeat/quad weights and then the arithmetic mean over available passes as B

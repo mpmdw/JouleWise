@@ -68,6 +68,7 @@
     "battery.smc_unavailable": "DISCLOSE",
     "battery.unmeasured": "EXCLUDE_MEMBER",
     "bytes.commitment_not_rebuilt": "DISCLOSE",
+    "bytes.decode_battery_assist": "DISCLOSE",
     "bytes.module_changed_after_commitment": "DISCLOSE",
     "bytes.withheld_missing": "DISCLOSE",
     "calibration.acceptance_mismatch": "DISCLOSE",
