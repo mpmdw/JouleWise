@@ -109,10 +109,10 @@ class FeatureTests(_TimedCase):
     def test_stable_logged_feature_values_and_count_logs(self):
         values = baseline.features(self.episode())
         expected = {
-            "turns": 2, "prefill_tokens": 2000, "decode_tokens": 1300, "hidden_tokens": 0,
-            "tool_calls": 1, "duration_s": 50, "decode_per_turn_mean": 650,
+            "turns": 2, "prefill_tokens": 2000, "decode_tokens": 1400, "hidden_tokens": 0,
+            "tool_calls": 1, "duration_s": 50, "decode_per_turn_mean": 700,
             "decode_per_turn_max": 900, "tool_calls_per_turn": 0.5,
-            "decode_tokens_per_second": 1300 / 30, "fraction_turns_with_tool_calls": 0.5,
+            "decode_tokens_per_second": 1400 / 30, "fraction_turns_with_tool_calls": 0.5,
         }
         for key in ("turns", "prefill_tokens", "decode_tokens", "hidden_tokens", "tool_calls"):
             expected["log1p_" + key] = math.log1p(expected[key])
@@ -121,15 +121,18 @@ class FeatureTests(_TimedCase):
             self.close(values[key], target)
         self.assertIn("fixture", values.flags)
 
-    def test_logged_hidden_tokens_equal_stripped_log(self):
+    def test_hidden_annotation_is_not_a_logged_input(self):
         episode = self.episode()
+        unannotated = dataclasses.replace(episode, turns=tuple(
+            dataclasses.replace(t, hidden_tokens=0) for t in episode.turns))
+        # Identical integers through identical code require bit identity.
+        self.assertEqual(baseline.features(episode), baseline.features(unannotated))
         stripped = dataclasses.replace(episode, turns=tuple(
             dataclasses.replace(t, decode_tokens=t.decode_tokens - t.hidden_tokens,
                                 hidden_tokens=0) for t in episode.turns))
-        # Identical logged integers through identical code require bit identity.
-        self.assertEqual(baseline.features(episode), baseline.features(stripped))
-        # Logged turns contain (500 - 100) + 900 visible generated tokens.
-        self.assertEqual(baseline.features(episode)["decode_tokens"], 1300.0)
+        self.assertEqual(baseline.features(episode)["decode_tokens"], 1400.0)
+        # A log that omits hidden tokens contains (500 - 100) + 900.
+        self.assertEqual(baseline.features(stripped)["decode_tokens"], 1300.0)
 
     def test_all_work_view_and_no_outcome_leakage(self):
         episode = self.episode()

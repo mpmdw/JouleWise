@@ -11,12 +11,9 @@ log still never shows them), zero-duration turns, crashed-run class imbalance
 and 6-45-turn pairs; the features of those episodes are also checked against
 values accumulated while the episode is built (not via ``totals()``).
 
-Written by the blind executing reviewers of rounds 2 and 3. It replaces the
-round-1 file: after the F1 ruling the lane's logged view removes each logged turn's
-hidden tokens from every decode feature, while the twin (written before the
-ruling) keeps them. The twin is not edited; the ruling is replayed instead by
-feeding the twin the hidden-stripped episode (decode_tokens - hidden_tokens,
-hidden_tokens = 0), which is exactly what a log that omits hidden tokens shows.
+Written by the blind executing reviewers of rounds 2 and 3. Lane and twin
+both keep hidden tokens in logged decode, per the 2026-10-22 lead ruling;
+they receive the same episodes, including the hidden annotations.
 
 Bars are the orchestrator's, not chosen here:
 
@@ -37,8 +34,6 @@ Bars are the orchestrator's, not chosen here:
 Readings the two implementations differ on, replayed rather than called a
 defect:
 
-* F1 (ruled): lane logged decode excludes hidden tokens; twin gets the
-  stripped episode;
 * penalty: lane minimises NLL + l2/2 |beta|^2, twin NLL + l2 |beta|^2, so the
   lane at l2 = L equals the twin at l2 = L/2;
 * name: lane ``decode_tokens_per_second`` is twin
@@ -82,12 +77,6 @@ REL = 1e-6  # orchestrator bar where no uncertainty is printed
 def close_bar(expected: float) -> float:
     """1e-6 relative, or 1e-6 absolute in the output's unit below 1 (orchestrator bar)."""
     return REL * max(1.0, abs(expected))
-
-
-def strip_hidden(episode: Episode) -> Episode:
-    """What a log without hidden tokens shows: the F1 ruling, applied to the twin's input."""
-    return replace(episode, turns=tuple(replace(t, decode_tokens=t.decode_tokens - t.hidden_tokens,
-                                                hidden_tokens=0) for t in episode.turns))
 
 
 # ---------------------------------------------------------------- worlds
@@ -208,8 +197,7 @@ class FeatureAgreement(unittest.TestCase):
         for episode in episodes:
             for logged_only in (True, False):
                 a = lane.features(episode, logged_only=logged_only)
-                # F1 ruling replayed: the twin sees what the log shows.
-                b = twin.features(strip_hidden(episode) if logged_only else episode, logged_only=logged_only)
+                b = twin.features(episode, logged_only=logged_only)
                 self.assertEqual({NAME_MAP.get(k, k) for k in a}, set(b))
                 for key, value in a.items():
                     expected = b[NAME_MAP.get(key, key)]
@@ -217,16 +205,6 @@ class FeatureAgreement(unittest.TestCase):
                         self.assertLessEqual(abs(value - expected), close_bar(expected))
                     checked += 1
         self.assertGreater(checked, 30_000)
-
-    def test_twin_unstripped_differs_only_where_hidden_tokens_are(self):
-        # Confirms the replay is the only reading difference: on episodes without
-        # hidden tokens the twin as written agrees with the lane directly.
-        for episode in make_world(7, mode="null", seeds=8):
-            a = lane.features(episode)
-            b = twin.features(episode)
-            has_hidden = any(t.hidden_tokens for t in episode.logged_turns())
-            same = all(abs(a[k] - b[NAME_MAP.get(k, k)]) <= close_bar(b[NAME_MAP.get(k, k)]) for k in a)
-            self.assertEqual(same, not has_hidden)
 
 
 @unittest.skipUnless(lane is not None, LANE_MISSING)
@@ -314,21 +292,20 @@ class LogisticAgreement(unittest.TestCase):
         worst = 0.0
         for seed, mode in product(range(3), ("visible", "null", "slack")):
             episodes = make_world(300 + seed, mode=mode)
-            stripped = [strip_hidden(e) for e in episodes]
             pred_lane = lane.grouped_cv_scores(episodes, l2=2.0)
-            pred_twin = twin.grouped_cv_scores(stripped, l2=1.0)  # lane l2/2 |b|^2 == twin (l2/2) |b|^2
+            pred_twin = twin.grouped_cv_scores(episodes, l2=1.0)  # lane l2/2 |b|^2 == twin (l2/2) |b|^2
             self.assertEqual([k for k, _ in pred_lane], [k for k, _ in pred_twin])
             for (_, x), (_, y) in zip(pred_lane, pred_twin):
                 self.assertLessEqual(abs(x - y), close_bar(y))
                 worst = max(worst, abs(x - y))
             names = ["decode_tokens_per_second", "tool_calls", "duration_s"]
             sub_l = lane.grouped_cv_scores(episodes, l2=2.0, feature_names=names)
-            sub_t = twin.grouped_cv_scores(stripped, l2=1.0, feature_names=[NAME_MAP.get(k, k) for k in names])
+            sub_t = twin.grouped_cv_scores(episodes, l2=1.0, feature_names=[NAME_MAP.get(k, k) for k in names])
             for (_, x), (_, y) in zip(sub_l, sub_t):
                 self.assertLessEqual(abs(x - y), close_bar(y))
         huge = make_world(9, mode="visible", seeds=10, scale=10**6)
         for (_, x), (_, y) in zip(lane.grouped_cv_scores(huge, l2=2.0),
-                                  twin.grouped_cv_scores([strip_hidden(e) for e in huge], l2=1.0)):
+                                  twin.grouped_cv_scores(huge, l2=1.0)):
             self.assertLessEqual(abs(x - y), close_bar(y))
         print(f"TWIN2 grouped CV worst |lane - twin| probability: {worst:.2e}")
 
@@ -459,9 +436,8 @@ class PermutationAgreement(unittest.TestCase):
 
     def exact_p(self, episodes):
         """Every within-pair label arrangement, scored by the twin's CV and AUC."""
-        stripped = [strip_hidden(e) for e in episodes]
         labels = [int(e.condition == "sabotage") for e in episodes]
-        observed = twin_cv_auc(stripped, labels, 0.5, self.FEATS)
+        observed = twin_cv_auc(episodes, labels, 0.5, self.FEATS)
         pairs = sorted({e.task_pair for e in episodes})
         idx = [[i for i, e in enumerate(episodes) if e.task_pair == p] for p in pairs]
         arrangements = []
@@ -478,7 +454,7 @@ class PermutationAgreement(unittest.TestCase):
             for rows, combo in zip(idx, choice):
                 for i, v in zip(rows, combo):
                     lab[i] = v
-            a = twin_cv_auc(stripped, lab, 0.5, self.FEATS)
+            a = twin_cv_auc(episodes, lab, 0.5, self.FEATS)
             # The lane's statistic |AUC - 0.5|, ties extreme; with 8 positives and 8
             # negatives AUCs are multiples of 1/128 (ties count 1/2), exact in binary64,
             # so this comparison of exact rationals is exact.
@@ -506,14 +482,13 @@ class PermutationAgreement(unittest.TestCase):
         # Production-shaped world; independent shuffles (random.sample, other seed)
         # through the twin's CV. Both p values are MC estimates of the same exact p.
         episodes = make_world(700, pairs=5, seeds=12, mode="weak")
-        stripped = [strip_hidden(e) for e in episodes]
         labels = [int(e.condition == "sabotage") for e in episodes]
         feats = ["tool_calls", "tool_calls_per_turn", "turns"]
         B = 60  # compute budget for each implementation; MC SE enters the bar
         obs_l, p_lane, _ = lane.grouped_cv_permutation_test(episodes, l2=1.0, n_permutations=B, seed=3,
                                                             feature_names=feats)
         twin_feats = [NAME_MAP.get(f, f) for f in feats]
-        observed = twin_cv_auc(stripped, labels, 0.5, twin_feats)
+        observed = twin_cv_auc(episodes, labels, 0.5, twin_feats)
         self.assertLessEqual(abs(obs_l - observed), close_bar(observed))
         rng = random.Random(10**6 + 3)
         groups = sorted({e.task_pair for e in episodes})
@@ -525,7 +500,7 @@ class PermutationAgreement(unittest.TestCase):
                 vals = rng.sample([labels[i] for i in rows], len(rows))
                 for i, v in zip(rows, vals):
                     lab[i] = v
-            extreme += abs(twin_cv_auc(stripped, lab, 0.5, twin_feats) - 0.5) >= abs(observed - 0.5)
+            extreme += abs(twin_cv_auc(episodes, lab, 0.5, twin_feats) - 0.5) >= abs(observed - 0.5)
         p_twin = (1 + extreme) / (B + 1)
         p_mid = (p_lane + p_twin) / 2
         se = math.sqrt(2 * B * p_mid * (1 - p_mid)) / (B + 1)
@@ -598,7 +573,7 @@ def r3_episode(ep_id, pair, cond, rng, pp, *, extra_calls=0, extra_hidden=0, sla
         turns.append(Turn(len(turns), s, e, ctx, prefill, decode, hidden_tokens=think,
                           first_token_ns=s + dur // 3, tool_calls=tuple(calls)))
         ctx += prefill + decode
-        for v, ncalls, dec in (("logged", nlog, visible), ("all", nall, decode)):
+        for v, ncalls, dec in (("logged", nlog, decode), ("all", nall, decode)):
             a = acc[v]
             a["turns"] += 1
             a["prefill"] += prefill
@@ -682,7 +657,7 @@ class Round3WorldAgreement(unittest.TestCase):
             for episode, truth in zip(episodes, truths):
                 for view, logged_only in (("logged", True), ("all", False)):
                     a = lane.features(episode, logged_only=logged_only)
-                    b = twin.features(strip_hidden(episode) if logged_only else episode, logged_only=logged_only)
+                    b = twin.features(episode, logged_only=logged_only)
                     self.assertEqual(set(a), set(truth[view]))
                     for key, value in a.items():
                         exact = truth[view][key]
@@ -698,9 +673,8 @@ class Round3WorldAgreement(unittest.TestCase):
         worst = {"prob": 0.0, "auc": 0.0, "delong": 0.0, "diff": 0.0, "se": 0.0, "p": 0.0}
         for mode, seed in product(("visible", "calls_only", "hidden_only", "slack", "null"), (21, 22)):
             episodes, _ = r3_world(seed, mode=mode)
-            stripped = [strip_hidden(e) for e in episodes]
             pred_l = lane.grouped_cv_scores(episodes, l2=2.0)
-            pred_t = twin.grouped_cv_scores(stripped, l2=1.0)  # lane l2/2 |b|^2 at 2 == twin l2 |b|^2 at 1
+            pred_t = twin.grouped_cv_scores(episodes, l2=1.0)  # lane l2/2 |b|^2 at 2 == twin l2 |b|^2 at 1
             self.assertEqual([k for k, _ in pred_l], [k for k, _ in pred_t])
             for (_, x), (_, y) in zip(pred_l, pred_t):
                 self.assertLessEqual(abs(x - y), close_bar(y))  # probabilities: no printed uncertainty

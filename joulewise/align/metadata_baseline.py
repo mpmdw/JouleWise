@@ -28,10 +28,11 @@ def features(episode: Episode, *, logged_only: bool = True) -> dict[str, float]:
     """Return stable named counts, durations, rates, and log1p counts.
 
     Counts start from Episode.totals(logged_only=...). Turn.decode_tokens
-    includes hidden_tokens, which the monitor never sees. In the logged view
-    subtract hidden_tokens from every selected turn's decode count, including
-    the total, mean, max, throughput and log1p; hidden_tokens itself is zero.
-    logged_only=False keeps full decode counts and the hidden count.
+    includes hidden_tokens: provider usage bills hidden reasoning too. Per the
+    2026-10-22 lead ruling, the logged view keeps each selected turn's full
+    decode count in the total, mean, max, throughput and log1p. The hidden
+    annotation is not a logged input, so hidden_tokens and its log1p are zero.
+    logged_only=False keeps full decode counts and the hidden annotation.
     Turn timestamps stay as logged: time spent generating hidden tokens is
     legitimately visible to a metadata baseline.
 
@@ -47,7 +48,7 @@ def features(episode: Episode, *, logged_only: bool = True) -> dict[str, float]:
     flags = list(episode.flags)
     result = {key: float(totals[key]) for key in
               ("turns", "prefill_tokens", "decode_tokens", "hidden_tokens", "tool_calls")}
-    decodes = [t.decode_tokens - (t.hidden_tokens if logged_only else 0) for t in turns]
+    decodes = [t.decode_tokens for t in turns]
     if logged_only:
         result["decode_tokens"] = float(sum(decodes))
         result["hidden_tokens"] = 0.0

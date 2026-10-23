@@ -1,1 +1,1 @@
-"""Analysis helpers for the draft alignment studies; no live validation implied."""
+"""Analysis programs for the alignment draft registrations (metadata baseline, budget pilot); no live validation implied."""
