@@ -1,0 +1,44 @@
+{
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "attempt": 1,
+  "census": {
+    "clean": false,
+    "exit_code": 0
+  },
+  "diagnostics": [],
+  "ended": {
+    "monotonic_ns": 717257301692083,
+    "monotonic_raw_ns": 717257301691750,
+    "wall_s": 1792732920.317908
+  },
+  "flags_emitted": [],
+  "keep_awake": {
+    "pid": 38070,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "pack_id": "bytes-mac-check",
+  "plan_id": "bytes-h2-20261023T051435034192Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "pgrep exit 0; forbidden process output: 87378 claude\n87403 node scripts/codex-mcp-server.mjs\n87404 npm exec @modelcontextprotocol/server-pdf --stdio HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/MacGPG2/bin SHELL=/bin/zsh\n87410 node /opt/homebrew/bin/codex app-server\n87411 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex app-server",
+    "reason": "night_refused_agent_present"
+  },
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": null,
+    "runs_excluded": []
+  },
+  "stage_reached": "census",
+  "started": {
+    "monotonic_ns": 717257275988208,
+    "monotonic_raw_ns": 717257275987541,
+    "wall_s": 1792732920.2922041
+  },
+  "verdict": "REFUSED"
+}

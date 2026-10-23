@@ -1,0 +1,41 @@
+{
+  "aborted_reason": "night_refused_agent_present",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "7ac579ac9da794c16abe66f81e560a0f93ca873caddb3ad101e8bacccacc17af"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "24093e75b55d0f1f654abdf4f6abc27be416974abb33d72251969e3194231156"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "b876f785f9d491766ea58067fd4f639c3ce4c25fdb07aec860aaa4c9a95e37de"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "5da88fb827351099718a6995a80110ebffaef55fcba589d5b0ca610f7f24494f"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1792732920.318204,
+  "ended_monotonic_ns": 717257301988083,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "bytes-h2-20261023T051435034192Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1792732920.269387,
+  "started_monotonic_ns": 717257253170875,
+  "verdict": "REFUSED"
+}
