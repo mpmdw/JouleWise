@@ -626,3 +626,148 @@ Like the earlier harvest lanes, this lane is not merged into main; the branch is
 Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has
 closed, and after the analysis has been run end to end on the real bytes with every output kept closed (the blind
 dry run of the analysis plan's section 3.2). It will tie the digests of section 4 to the final harvest records.
+
+## Addendum 5: F7 meter cross-check by a resolved PDTR-on-meter slope (2026-10-22)
+
+Appended by the lead (Opus 5.5, interactive session 8a9fb7fe) under the §12 convention: addenda are appended to this seal record. Drafted by the Sol 6.1 seat FIX-565; the lead changed the `slope_undetermined` criterion after the real-stream replay and re-ran the replay.
+
+Authority: the seven binding lead rulings in
+`/Users/edr/night-archive/forward-20261021/coldpass-audit/FIX-565.md`, addressing
+F7 in `/Users/edr/night-archive/forward-20261021/audit/REPORT.md:255-272` and the
+Fable and Opus cold reports beside the assignment. This changes only the meter
+agreement diagnostic. Its effect stays DISCLOSE. It changes no energy estimator,
+printed outcome, exclusion rule, or rule deciding which data count. Historical
+block-5 captures and deciding harvests retain their original pins.
+
+### Definition and sealed text
+
+The superseded definition in
+`configs/campaigns/v5_claim_25g83/registration_block5.md:3560` is:
+
+> the median over 1 s bins of mean PDTR ÷ mean meter power is outside 0.95–1.02, or cannot be computed
+
+The sealed registration, `configs/campaigns/v5_claim_25g83/flag_catalog.json`, and
+`tests/fixtures/b5_harvest/flag_catalog.json` remain byte-for-byte unchanged.
+
+For this correction, `meter.pdtr_gain_out_of_band` fires when the ordinary-least-squares
+slope of mean PDTR on mean meter power, with a free intercept over paired 20 s bins,
+is outside the inclusive band **[0.951364, 0.984889]**, or gain is unconfirmed.
+Each paired bin has a PDTR reading and more than half its nominal meter samples;
+this is the capture-C2 majority rule, scaled by the device sample period. The strict
+majority gives a retained bin more observed than missing nominal samples and prevents
+a sparse final bin from receiving full-bin weight. The intercept absorbs the fixed
+sensor offset that invalidated the idle-dominated median ratio.
+
+The record now carries `r`, `sxx` (W²), `meter_power_range_W` (the minimum and maximum
+paired bin-mean meter powers), and `slope_se`. For n paired bins,
+`SE(slope) = sqrt(SSE / (n - 2) / sxx)`, with residuals from the fitted intercept
+and slope. Two SE is approximately 95% normal coverage. The cross-check exists to see a meter gain
+fault of 5 % (`PDTR_FAULT_FRACTION`, audit F7), which moves the slope by about 0.05 × slope.
+When `2 * slope_se` exceeds `0.05 * |slope|`, the stream cannot resolve that fault: the reason is
+`slope_undetermined`, and the flag discloses unconfirmed agreement even when the fitted slope lies
+inside the band. (The seat first used the band half-width, 0.0168, as the bar; on the real streams
+that marked 11 healthy short smokes whose slopes were all inside the band and which all still
+detected both ±5 % faults, so the lead tied the bar to the fault size instead.) Two bins
+leave zero residual degrees of freedom, so also give `slope_undetermined`. The fitted
+slope remains in the diagnostic record. Exact `sxx == 0` is only a division guard;
+near-constant power is judged by slope uncertainty. Other unavailable/nonfinite
+conditions remain unconfirmed DISCLOSE flags. A nonpositive caller-supplied bin
+duration remains an internal programming error, now registered as INTERNAL in the
+hazard refusal allowlist; stream data never select it.
+
+The descriptive median is now named `median_ratio_20s` to distinguish it from the
+old 1 s field. It includes only positive-meter-power bins, where the ratio is
+defined; the arbitrary 1 W floor and `PDTR_MIN_W` were removed. It decides no flag.
+
+### Derivation and pin
+
+Recomputed from the twelve whole-session meter hazard streams named by audit
+`capture/verify-capture-C2/blind_slope.py`, without rounding the slopes before
+aggregation: mean **0.9681264838730295**, sample SD **0.0033525440726185764** (n − 1),
+minimum **0.9629625068075808**, maximum **0.9740307606199866**.
+Mean ± 5 SD is [0.9513637635099366, 0.9848892042361224]; the implemented endpoints
+round to six decimal places, changing each by less than 1e-6 relative. The band is
+an engineering margin, not a confidence interval. The registration's 0.955 probe
+is 0.003636 above its lower edge; the cold Opus replay's lagged probe slope 0.95437
+also has margin. A ±5% meter gain error still moves the observed extremes outside:
+0.9740307606199866 / 1.05 = 0.9276483434476063 below the band, and
+0.9629625068075808 / 0.95 = 1.0136447440079799 above it. The cold Opus synthetic
+replay gave 0.9674 at a 1 s PDTR refresh lag and 0.9534 at 2 s, a shape-dependent
+shift of about −0.014 slope per extra second; added lag can still disclose.
+
+File to pin: `joulewise/external/km003c_parse.py`, SHA-256 `19d913c1330ecb83b9553f2cf667109cd35d881d22fdb1ab0b5af772a0151920`, in the commit that appends this addendum (branch `fix/2026-10-22-audit-f7-meter`, PR #565).
+
+### Verification and replay
+
+`PYTHONDONTWRITEBYTECODE=1 JW_B5_SYNTHETIC_ONLY=1 python3 -B -m unittest tests.external.test_km003c_parse tests.test_harvest_b5_p3harv tests.hazards.test_refusal_allowlist tests.external.test_km003c_monitor`
+passed 124 tests, one existing skip. These are all three test modules importing
+`km003c_parse`, plus the required hazard allowlist gate. The whole suite was not run,
+as the assignment explicitly forbids it. The baseline failed only the unlisted
+bin-duration guard; the updated gate passes. The rewritten gain-band test, replayed
+against the pre-F7 parser at c21c52dfa, gives exactly one expected failure at scale
+0.98, proving the revised idle-dominated fixture discriminates the correction.
+
+The replay reads only complete session/smoke meter hazard records. Compressed inputs
+are decompressed in memory; custody files are never written. Every stream source
+directory named by the audit meter census contains exactly one stream file. The
+census names **27 streams**, two more than F7's stated 25-stream target; all 27 were
+replayed. Under the final rule **0 of 27** real streams fire (largest 2 SE 0.0282, against
+about 0.048 for a 5 % shift), and both ±5% meter-gain counterfactuals fire on **27/27**
+streams, always DISCLOSE. The slope and r agree with an independent
+copy of the audit formula within COMMON's 1e-6 relative fallback bar.
+
+The script and per-stream outputs are kept off the repository at
+`/Users/edr/night-archive/forward-20261021/coldpass-audit/replay-565/` (`replay.py`, `calibration.jsonl`,
+`replay.jsonl` for the seat's run, `replay-lead.jsonl` for the final rule).
+The following table prints slope and r rounded to six decimal places for display;
+all replay assertions and aggregate calculations used full precision. Correlation
+is unchanged by a positive gain scaling, apart from float rounding. Both
+counterfactual verdict columns are DISCLOSE for every row.
+
+| Stream | Real slope | r | Real verdict | −5% slope | +5% slope |
+|---|---:|---:|---|---:|---:|
+| b5-alpha-a1 | 0.970861 | 0.996176 | clear | 1.021959 | 0.924630 |
+| b5-beta-a6 | 0.965836 | 0.994331 | clear | 1.016670 | 0.919844 |
+| b5-gamma-a1 | 0.968834 | 0.995771 | clear | 1.019825 | 0.922699 |
+| b6-r1-alpha | 0.970518 | 0.994984 | clear | 1.021598 | 0.924303 |
+| b6-r1-beta | 0.965673 | 0.994943 | clear | 1.016498 | 0.919689 |
+| b6-r1-gamma | 0.970666 | 0.994194 | clear | 1.021754 | 0.924444 |
+| b6-r2-beta | 0.962963 | 0.994182 | clear | 1.013645 | 0.917107 |
+| b6-r2-gamma | 0.974031 | 0.994935 | clear | 1.025296 | 0.927648 |
+| b6-r3-alpha | 0.970147 | 0.993449 | clear | 1.021208 | 0.923950 |
+| b6-r3-beta | 0.964824 | 0.994363 | clear | 1.015604 | 0.918880 |
+| b6-r3-gamma | 0.964244 | 0.994501 | clear | 1.014994 | 0.918328 |
+| b6-r4-alpha | 0.968921 | 0.994184 | clear | 1.019916 | 0.922782 |
+| rehearsal-1949Z | 0.969942 | 0.995314 | clear | 1.020991 | 0.923754 |
+| smoke-r1-alpha | 0.967188 | 0.993458 | clear | 1.018093 | 0.921132 |
+| smoke-r1-beta | 0.970668 | 0.997225 | clear | 1.021756 | 0.924446 |
+| smoke-r1-gamma | 0.967795 | 0.994354 | clear | 1.018732 | 0.921710 |
+| smoke-r2-alpha | 0.964875 | 0.993994 | clear | 1.015658 | 0.918929 |
+| smoke-r2-beta | 0.975080 | 0.996955 | clear | 1.026400 | 0.928648 |
+| smoke-r2-gamma | 0.970760 | 0.994594 | clear | 1.021853 | 0.924533 |
+| smoke-r3-alpha | 0.966029 | 0.995046 | clear | 1.016872 | 0.920027 |
+| smoke-r3-beta | 0.976939 | 0.996514 | clear | 1.028357 | 0.930418 |
+| smoke-r3-gamma | 0.962936 | 0.994835 | clear | 1.013617 | 0.917082 |
+| smoke-r4-alpha | 0.963394 | 0.995451 | clear | 1.014099 | 0.917518 |
+| MT-20261016T2114Z | 0.965430 | 0.997488 | clear | 1.016242 | 0.919457 |
+| MT-20261017T1735Z | 0.965767 | 0.995379 | clear | 1.016596 | 0.919778 |
+| MT-20261017T2215Z | 0.967264 | 0.996421 | clear | 1.018173 | 0.921204 |
+| open:bytes-h | 0.973831 | 0.998549 | clear | 1.025085 | 0.927458 |
+
+### Decisions I made
+
+- Used the sample SD (n − 1), as the audit's `statistics.stdev` source specifies.
+- Rounded the final band to six decimals after full-precision aggregation, within
+  the 1e-6 relative fallback agreement bar, and kept the unrounded derivation.
+- Retained an uncertain fitted slope for diagnosis and explicitly made the flag
+  honor `slope_undetermined`; treated n = 2 as unresolved because SE has no degrees
+  of freedom, without introducing any additional spread threshold.
+- Removed the descriptive ratio's 1 W floor, retaining only its positive-power
+  domain guard; it changes no decision.
+- Replayed all 27 streams named by the audit census and reported the count
+  difference explicitly rather than silently dropping two streams.
+
+### Open issues
+
+1. The block-6 review-ledger row belongs on the b6 lane, not main: it must record this parser digest
+   and the F7 definition there.

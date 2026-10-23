@@ -74,16 +74,22 @@ FIT_BIN_MS = 10_000
 FIT_MIN_POINTS = 20
 
 DROP_LIMIT = 0.005                  # meter.drops_excess above 0.5 %
-# Audit F7 (2026-10-22), capture-C2: the 12 pooled-session 20 s slopes
-# have mean 0.968 and SD 0.0034. Four SD is the smallest integer multiple
-# that also includes the registration probe's 0.955: 3 SD gives 0.9578,
-# whereas 4 SD gives 0.9544. This is a diagnostic engineering margin, not
-# a confidence interval. A +/-5% meter gain fault moves even the observed
-# extremes outside the band: 0.974/1.05 < 0.9544 and 0.963/0.95 > 0.9816.
-# An intercept absorbs the fixed sensor offset that dominates idle ratios.
-PDTR_GAIN_BAND = (0.9544, 0.9816)    # 0.968 +/- 4 * 0.0034; DISCLOSE only
+# Audit F7 (2026-10-22), capture/verify-capture-C2/blind_slope.py's 12
+# pooled-session sources, recomputed without rounding individual slopes:
+# mean 0.9681264838730295, sample SD 0.0033525440726185764 (n-1).
+# Mean +/- 5 SD = (0.9513637635099366, 0.9848892042361224), rounded below
+# to six decimals (less than 1e-6 relative change). This is an engineering
+# margin, not a confidence interval. The probe's 0.955 is 0.003636 above
+# the lower edge, and the cold Opus replay's lagged probe slope 0.95437
+# is also inside. A +/-5% meter gain fault still moves both observed
+# extremes outside: 0.97403076/1.05 = 0.927648 < 0.951364;
+# 0.96296251/0.95 = 1.013645 > 0.984889. Cold Opus's synthetic replay
+# measured 0.9674 at 1 s PDTR refresh lag and 0.9534 at 2 s: about -0.014
+# slope per extra second, session-shape dependent; lag can still disclose.
+# A free intercept absorbs the fixed sensor offset dominating idle ratios.
+PDTR_GAIN_BAND = (0.951364, 0.984889)  # recomputed mean +/- 5 SD; DISCLOSE only
+PDTR_FAULT_FRACTION = 0.05          # meter gain fault the cross-check must see (audit F7: +/-5 %)
 PDTR_BIN_NS = 20_000_000_000        # registration's 20 s PDTR-on-meter fit
-PDTR_MIN_W = 1.0                    # only for the legacy descriptive ratio
 VBUS_BAND_V = (26.6, 29.4)          # 28 V EPR contract +/- 5 %
 BATTERY_FLOOR_MA = 0                # meter.battery_activity when |B0AC| > this
 FIT_RESIDUAL_PERIODS = 2            # meter.clock_fit_residual above this many sample periods
@@ -461,14 +467,18 @@ def pdtr_gain(stream: Stream, bin_ns: int = PDTR_BIN_NS) -> dict[str, Any]:
     sensors. Each bin needs a PDTR read and more than half its nominal meter
     samples (over 500 at 50 SPS), matching audit capture-C2's fit. A short or
     constant-power stream cannot establish gain and remains unconfirmed.
-    ``median`` is retained as a descriptive bin-ratio diagnostic for existing
-    readers; only ``slope`` decides meter.pdtr_gain_out_of_band.
+    ``median_ratio_20s`` describes positive-meter-power bin ratios; gain is
+    decided by the slope only when its residual standard error resolves the
+    band. ``sxx`` is in W squared and ``meter_power_range_W`` holds the minimum
+    and maximum paired bin-mean meter powers. ``r`` is undefined for a
+    constant sensor; ``slope_se`` needs at least three paired bins.
     """
 
     if bin_ns <= 0:
         raise ValueError("PDTR bin duration must be positive")
     result = {"statistic": "ols_pdtr_on_meter", "bin_ns": bin_ns,
-              "bins": 0, "slope": None, "median": None}
+              "bins": 0, "slope": None, "median_ratio_20s": None,
+              "r": None, "sxx": None, "meter_power_range_W": None, "slope_se": None}
     if not stream.host_ns or stream.samples is None:
         return {**result, "reason": "no_aligned_samples"}
     start = stream.host_ns[0]
@@ -490,19 +500,49 @@ def pdtr_gain(stream: Stream, bin_ns: int = PDTR_BIN_NS) -> dict[str, Any]:
     result["bins"] = len(pairs)
     if any(not math.isfinite(v) for pair in pairs for v in pair):
         return {**result, "reason": "nonfinite_bin_power"}
-    gains = [y / x for x, y in pairs if x >= PDTR_MIN_W]
-    result["median"] = percentile(gains, 50) if gains else None
+    # A ratio requires positive input power; no arbitrary idle-power floor.
+    gains = [y / x for x, y in pairs if x > 0]
+    result["median_ratio_20s"] = percentile(gains, 50) if gains else None
+    if pairs:
+        result["meter_power_range_W"] = [min(x for x, _ in pairs), max(x for x, _ in pairs)]
     if len(pairs) < 2:
         return {**result, "reason": "fewer_than_two_paired_bins"}
     mean_x = math.fsum(x for x, _ in pairs) / len(pairs)
     mean_y = math.fsum(y for _, y in pairs) / len(pairs)
     sxx = math.fsum((x - mean_x) ** 2 for x, _ in pairs)
+    result["sxx"] = sxx
+    # Exact zero is the division guard: no variation at all in the bin means.
+    # Near-constant streams are judged by residual slope uncertainty below.
     if sxx == 0:
         return {**result, "reason": "no_meter_power_variation"}
-    slope = math.fsum((x - mean_x) * (y - mean_y) for x, y in pairs) / sxx
+    sxy = math.fsum((x - mean_x) * (y - mean_y) for x, y in pairs)
+    slope = sxy / sxx
     if not math.isfinite(slope):
         return {**result, "reason": "nonfinite_slope"}
-    return {**result, "slope": slope}
+    result["slope"] = slope
+    syy = math.fsum((y - mean_y) ** 2 for _, y in pairs)
+    if syy > 0:
+        result["r"] = max(-1.0, min(1.0, sxy / (math.sqrt(sxx) * math.sqrt(syy))))
+    if len(pairs) < 3:
+        # Two points fit exactly but leave no residual degrees of freedom.
+        return {**result, "reason": "slope_undetermined"}
+    residual_ss = math.fsum(((y - mean_y) - slope * (x - mean_x)) ** 2 for x, y in pairs)
+    slope_se = math.sqrt(residual_ss / (len(pairs) - 2) / sxx)
+    if not math.isfinite(slope_se):
+        return {**result, "reason": "slope_undetermined"}
+    result["slope_se"] = slope_se
+    # OLS with an intercept estimates residual variance as SSE/(n-2), hence
+    # SE(slope) = sqrt(SSE/(n-2)/sxx). Two SE is approximately 95% normal
+    # coverage. The check exists to see a meter gain fault of
+    # PDTR_FAULT_FRACTION (audit F7); a gain fault g moves the slope to
+    # slope/(1+g), about slope*g. If the 95% half-width exceeds that shift,
+    # this stream cannot resolve the fault; it remains DISCLOSE, never a
+    # refusal. On the 27 real streams of the F7 replay the largest 2 SE is
+    # 0.028 against about 0.048, so no healthy stream is marked; the cold
+    # passes' idle-only stream (2 SE above 1) is.
+    if 2 * slope_se > PDTR_FAULT_FRACTION * abs(slope):
+        return {**result, "reason": "slope_undetermined"}
+    return result
 
 
 def flags(stream: Stream, windows: Iterable[Sequence[int]] = ()) -> list[dict[str, Any]]:
@@ -540,7 +580,8 @@ def flags(stream: Stream, windows: Iterable[Sequence[int]] = ()) -> list[dict[st
                          f"fit residual {stream.fit.stats['excess_latency_ms_max']:.1f} ms above "
                          f"{limit_ms} ms (two sample periods)"))
     gain = pdtr_gain(stream)
-    if gain["slope"] is None or not PDTR_GAIN_BAND[0] <= gain["slope"] <= PDTR_GAIN_BAND[1]:
+    if (gain["slope"] is None or gain.get("reason") == "slope_undetermined"
+            or not PDTR_GAIN_BAND[0] <= gain["slope"] <= PDTR_GAIN_BAND[1]):
         out.append(_flag("meter.pdtr_gain_out_of_band", gain, list(PDTR_GAIN_BAND),
                          f"PDTR-on-meter slope {gain['slope']} outside {PDTR_GAIN_BAND} "
                          f"or unconfirmed ({gain.get('reason', 'computed')})"))

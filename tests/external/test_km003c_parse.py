@@ -8,6 +8,9 @@ a known answer.
 from __future__ import annotations
 
 import json
+import math
+import random
+import statistics
 import struct
 import tempfile
 import unittest
@@ -355,7 +358,9 @@ class FlagTests(unittest.TestCase):
     def test_pdtr_gain_band(self):
         for pdtr_scale, expected in ((0.98, False), (0.90, True), (1.05, True)):
             s = Synthetic()
-            for watts in (2.0, 20.0, 60.0):
+            # Idle dominates the median: the superseded 1 s ratio is 1.23
+            # at scale 0.98, above its 1.02 upper edge, so base code fires.
+            for watts in (2.0,) * 8 + (20.0,):
                 for _ in range(100):  # 20 s per level at 50 samples/s
                     s.poll(10, watts=watts, smc={"B0AC": 0, "B0AV": 12000,
                                                "PDTR": watts * pdtr_scale + 0.5})
@@ -402,7 +407,9 @@ class PDTRSlopeTests(unittest.TestCase):
     def test_offset_dominated_idle_ratio_no_longer_fires(self):
         stream = self.stream(levels=(2.0,) * 8 + (20.0,))
         gain = kp.pdtr_gain(stream)
-        self.assertGreater(gain["median"], 1.02)  # the superseded ratio fired
+        superseded_ratio_upper_edge = 1.02  # old 1 s median-ratio band: 0.95 to 1.02
+        self.assertGreater(gain["median_ratio_20s"], superseded_ratio_upper_edge)
+        self.assertNotIn("median", gain)
         # No printed interval belongs to this analytic fixture: use COMMON's
         # fallback 1e-6 relative agreement bar at the unit-scale slope.
         self.assertAlmostEqual(gain["slope"], 0.968, delta=0.968e-6)
@@ -412,7 +419,7 @@ class PDTRSlopeTests(unittest.TestCase):
         self.assertEqual(self.gain_flags(stream), [])
 
     def test_registered_probe_and_session_extremes_pass_and_five_percent_faults_fire(self):
-        for slope in (0.955, 0.963, 0.968, 0.974):
+        for slope in (0.955, 0.9629625068075808, 0.968, 0.9740307606199866):
             for offset in (0.5, 2.3):
                 for meter_gain in (0.95, 1.0, 1.05):
                     with self.subTest(slope=slope, offset=offset, meter_gain=meter_gain):
@@ -425,6 +432,99 @@ class PDTRSlopeTests(unittest.TestCase):
                             self.assertEqual(row["effect"], "DISCLOSE")
                             self.assertEqual(row["expected"], list(kp.PDTR_GAIN_BAND))
                             self.assertIn("slope", row["detail"])
+
+    def test_five_sd_band_recomputed_from_unrounded_session_slopes(self):
+        # Whole-session hazard streams named by audit capture-C2/blind_slope.py;
+        # no outcome data. Keep source precision until the final band rounding.
+        slopes = (0.9708613231344463, 0.9658361075887404, 0.9688335914862309,
+                  0.9705182654601937, 0.9656733151345229, 0.9706660497987868,
+                  0.9629625068075808, 0.9740307606199866, 0.9701473528752843,
+                  0.9648235696922711, 0.9642443558562367, 0.9689206080220732)
+        mean, sd = statistics.fmean(slopes), statistics.stdev(slopes)
+        for actual, expected in zip(kp.PDTR_GAIN_BAND, (mean - 5 * sd, mean + 5 * sd)):
+            # COMMON's 1e-6 relative fallback covers the six-decimal rounding.
+            self.assertAlmostEqual(actual, expected, delta=expected * 1e-6)
+        # Both the registered probe and its cold-pass 1 s lag replay have margin.
+        for slope in (0.955, 0.95437):
+            self.assertGreater(slope - kp.PDTR_GAIN_BAND[0], sd / 2)
+            self.assertEqual(self.gain_flags(self.stream(slope=slope, offset=2.3)), [])
+        self.assertLess(max(slopes) / 1.05, kp.PDTR_GAIN_BAND[0])
+        self.assertGreater(min(slopes) / 0.95, kp.PDTR_GAIN_BAND[1])
+
+    def test_band_edges_are_inclusive(self):
+        lower, upper = kp.PDTR_GAIN_BAND
+        for slope, fires in ((lower, False), (upper, False),
+                             (lower - lower * 1e-6, True), (upper + upper * 1e-6, True)):
+            # Symmetric exactly representable meter means keep the OLS slope
+            # equal to the supplied endpoint; 1e-6 relative separates outsiders
+            # from float noise without inventing an instrument tolerance.
+            stream = self.stream(levels=(0.0, 1.0, 2.0), slope=slope, offset=0.0)
+            with self.subTest(slope=slope):
+                self.assertEqual(bool(self.gain_flags(stream)), fires)
+
+    def test_fit_quality_matches_closed_form_residuals(self):
+        stream = self.stream(levels=(1.0, 2.0, 3.0, 4.0), slope=1.0, offset=0.0)
+        # Residuals (1,-1,-1,1) are orthogonal to intercept and x: SSE=4,
+        # sxx=5, n-2=2, SE=sqrt(4/2/5), r=sqrt(5/(5+4)).
+        for row, residual in zip(stream.smc, (1.0, -1.0, -1.0, 1.0)):
+            row["PDTR"] += residual
+        gain = kp.pdtr_gain(stream)
+        for key, expected in (("slope", 1.0), ("sxx", 5.0),
+                              ("slope_se", math.sqrt(0.4)), ("r", math.sqrt(5 / 9))):
+            self.assertAlmostEqual(gain[key], expected, delta=expected * 1e-6)
+        self.assertEqual(gain["meter_power_range_W"], [1.0, 4.0])
+        self.assertEqual(gain["reason"], "slope_undetermined")
+
+    def test_idle_only_600s_is_undetermined_and_disclosed(self):
+        # Independent 0.05 W sensor noise at 1 Hz for 600 s; 30 paired bins.
+        # This is the cold Fable idle-only challenge, not a noise-floor gate.
+        rng = random.Random(565)
+        meter = [2.0 + rng.gauss(0, 0.05) for _ in range(600)]
+        pdtr = [2.0 * 0.968 + 0.5 + rng.gauss(0, 0.05) for _ in range(600)]
+        stream = self.stream(levels=meter, counts=[1] * 600, step_ms=1000)
+        stream.host_ns = stream.poll_ns = [t * NS for t in range(600)]
+        stream.smc = [{"PDTR": w} for w in pdtr]
+        gain = kp.pdtr_gain(stream)
+        self.assertEqual(gain["bins"], 30)
+        self.assertGreater(gain["sxx"], 0)
+        self.assertIsNotNone(gain["slope"])
+        self.assertIsNotNone(gain["r"])
+        self.assertEqual(gain["reason"], "slope_undetermined")
+        self.assertGreater(2 * gain["slope_se"], kp.PDTR_FAULT_FRACTION * abs(gain["slope"]))
+        flag, = self.gain_flags(stream)
+        self.assertEqual(flag["effect"], "DISCLOSE")
+        self.assertEqual(flag["observed"]["reason"], "slope_undetermined")
+
+    def test_in_band_slope_with_large_se_is_unconfirmed(self):
+        stream = self.stream(levels=(1.0, 2.0, 3.0, 4.0))
+        for row, residual in zip(stream.smc, (1.0, -1.0, -1.0, 1.0)):
+            row["PDTR"] += residual
+        gain = kp.pdtr_gain(stream)
+        self.assertTrue(kp.PDTR_GAIN_BAND[0] <= gain["slope"] <= kp.PDTR_GAIN_BAND[1])
+        self.assertEqual(gain["reason"], "slope_undetermined")
+        self.assertEqual(self.gain_flags(stream)[0]["effect"], "DISCLOSE")
+
+    def test_short_healthy_stream_with_moderate_se_stays_clear(self):
+        # Shape of the F7 replay's short real streams: in-band slope, 2 SE about
+        # 0.028, below the 5 % fault shift (about 0.048): the fit can see the
+        # fault it exists for, so no disclosure. Residuals (e,-e,-e,e) give
+        # SE = 2e/sqrt(2*sxx) with sxx = 5 for levels 1..4 W: e = 0.0221 -> SE 0.014.
+        stream = self.stream(levels=(1.0, 2.0, 3.0, 4.0))
+        for row, residual in zip(stream.smc, (0.0221, -0.0221, -0.0221, 0.0221)):
+            row["PDTR"] += residual
+        gain = kp.pdtr_gain(stream)
+        self.assertTrue(kp.PDTR_GAIN_BAND[0] <= gain["slope"] <= kp.PDTR_GAIN_BAND[1])
+        self.assertLess(2 * gain["slope_se"], kp.PDTR_FAULT_FRACTION * gain["slope"])
+        self.assertIsNone(gain.get("reason"))
+        self.assertEqual(self.gain_flags(stream), [])
+
+    def test_two_bins_cannot_estimate_residual_variance(self):
+        stream = self.stream(levels=(2.0, 20.0))
+        gain = kp.pdtr_gain(stream)
+        self.assertIsNotNone(gain["slope"])
+        self.assertIsNone(gain["slope_se"])
+        self.assertEqual(gain["reason"], "slope_undetermined")
+        self.assertEqual(self.gain_flags(stream)[0]["effect"], "DISCLOSE")
 
     def test_fewer_than_two_bins_or_constant_power_is_unconfirmed(self):
         for levels, reason in (((), "no_aligned_samples"),
