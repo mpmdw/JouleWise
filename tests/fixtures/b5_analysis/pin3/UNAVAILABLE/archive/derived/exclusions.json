@@ -1,0 +1,22 @@
+{
+  "cells": [],
+  "claim_usable": false,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463",
+      "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "0699abbb0881ce64b39c46ba07de568cc3848260",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin3",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_excluded": [],
+  "reasons": [
+    "exclusions.function_unavailable"
+  ],
+  "status": "UNAVAILABLE"
+}

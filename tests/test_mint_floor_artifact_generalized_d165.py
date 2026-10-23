@@ -41,3 +41,11 @@ class MintD165OutputTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5ReplayMembershipTests(unittest.TestCase):
+    def test_replay_uses_eight_whole_kept_quads(self):
+        from tests.b5_analysis.test_mint_kept_units import CommonModeTests
+        _fixture, artifact, sidecar = CommonModeTests().built()
+        self.assertTrue(all(cell["comparative"]["guard_factor"] == 1.1338934190276817 for cell in artifact["cells"]))
+        self.assertTrue(all(len(cell["comparative"]["common_mode_replay"]["inputs"]["blocks"]) == 8 for cell in sidecar["cells"]))

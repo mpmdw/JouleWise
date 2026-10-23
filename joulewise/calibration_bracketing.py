@@ -2115,9 +2115,47 @@ def evaluate_calibration_bracket(
     bracket_plan_sha256: str | None = None,
     bracket_evidence_root_id: str | None = None,
     bracket_runs_root: Path | str | None = None,
+    trigger_scope: Literal["sealed", "window_evidence"] = "sealed",
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Select a causal bracket and apply the provenance-bound D-079 budget."""
+
+    if trigger_scope not in ("sealed", "window_evidence"):
+        raise ValueError("invalid calibration trigger_scope")
+
+    window_evidence = False
+    sealed_fallback = False
+    scope_epochs: Sequence[Mapping[str, Any]] | None = None
+    # A refusal before the count step has no evaluated doubling count.
+    scope_record: dict[str, Any] = {
+        "trigger_scope": "window_evidence",
+        "recorded_only_triggers": [],
+        "corpus_doubling": None,
+        "other_session_systematic_sequences": [],
+    }
+
+    def finish(reasons: tuple[str, ...]) -> tuple[dict[str, Any], tuple[str, ...]]:
+        # Sealed records retain their exact shape, including early refusals.
+        if trigger_scope == "window_evidence" and result["acceptance"] is not None:
+            # Complete descriptive counts AFTER the original refusal, without
+            # moving a failure check. No count is invented for missing inputs.
+            if scope_record["corpus_doubling"] is None and scope_epochs is not None:
+                excluded_ids = disposed_content_ids_for(
+                    artifact["prior_observation_set"].get("disposing_decision_ids")
+                )
+                if excluded_ids is not None:
+                    distinct = {row.content_id: row for row in ledger_snapshot.observations
+                                if row.content_id is not None}
+                    counts = [sum(row.disposition == "valid" and row.content_id not in excluded_ids
+                                  and dict(row.identity_epoch) == dict(epoch)
+                                  for row in distinct.values()) for epoch in scope_epochs]
+                    scope_record["corpus_doubling"] = {
+                        "count": max(counts, default=0), "threshold": 48,
+                    }
+            result["acceptance"].setdefault("prospective_rederivation", {}).update(scope_record)
+            if not sealed_fallback and reasons:
+                result["acceptance"]["freshness"]["status"] = "stale"
+        return result, reasons
 
     result: dict[str, Any] = {
         "schema_version": BRACKET_SCHEMA,
@@ -2140,13 +2178,13 @@ def evaluate_calibration_bracket(
         "status": "not_required" if not policy.require_bracket else "failed",
     }
     if not policy.require_bracket:
-        return result, ()
+        return finish(())
     if (
         not math.isfinite(window_start_s)
         or not math.isfinite(window_end_s)
         or window_start_s >= window_end_s
     ):
-        return result, ("instrument_calibration_bracket_missing",)
+        return finish(("instrument_calibration_bracket_missing",))
 
     using_default_bound = acceptance_bound is None
     artifact = (
@@ -2163,7 +2201,7 @@ def evaluate_calibration_bracket(
                 "reason": "acceptance_artifact_missing_or_invalid",
             },
         }
-        return result, ("calibration_acceptance_bound_stale",)
+        return finish(("calibration_acceptance_bound_stale",))
     artifact_role = artifact["artifact_role"]
     artifact_sha256 = _acceptance_artifact_sha256(artifact)
     if artifact_role == "schema_fixture_unissued" and not _allow_unissued_fixture:
@@ -2181,7 +2219,7 @@ def evaluate_calibration_bracket(
                 "reason": "acceptance_artifact_unissued_fixture",
             },
         }
-        return result, ("calibration_acceptance_bound_stale",)
+        return finish(("calibration_acceptance_bound_stale",))
     cutoff = artifact["ledger_cutoff"]
     result["acceptance"] = {
         "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
@@ -2202,9 +2240,9 @@ def evaluate_calibration_bracket(
         },
     }
     if ledger_snapshot is None:
-        return result, ("calibration_ledger_snapshot_required",)
+        return finish(("calibration_ledger_snapshot_required",))
     if ledger_snapshot.refusal_reasons:
-        return result, tuple(ledger_snapshot.refusal_reasons)
+        return finish(tuple(ledger_snapshot.refusal_reasons))
     if (
         ledger_snapshot.baseline_sequence != cutoff["sequence"]
         or ledger_snapshot.baseline_digest != cutoff["head_digest"]
@@ -2215,9 +2253,9 @@ def evaluate_calibration_bracket(
             or ledger_snapshot.head_digest == "0" * 64
         )
     ):
-        return result, ("calibration_ledger_baseline_missing",)
+        return finish(("calibration_ledger_baseline_missing",))
     if not _prior_set_matches_import_cutoff_prefix(artifact, ledger_snapshot):
-        return result, ("calibration_ledger_baseline_missing",)
+        return finish(("calibration_ledger_baseline_missing",))
     identity_epoch = artifact["identity_epoch"]
     prospective = artifact["prospective_rederivation"]
     result["policy"].update(
@@ -2246,6 +2284,7 @@ def evaluate_calibration_bracket(
         artifact, ledger_snapshot, refusal_details=continuation_refusals,
         continuation_details=continuations,
     )
+    scope_epochs = judged_epochs
     matched_epoch = next(
         (epoch for epoch in judged_epochs if dict(epoch) == observed_identity),
         identity_epoch,
@@ -2317,7 +2356,7 @@ def evaluate_calibration_bracket(
     if stale_fields:
         if continuation_refusals:
             result["acceptance"]["freshness"]["reason"] = "calibration_epoch_continuation_invalid"
-        return result, ("calibration_acceptance_bound_stale",)
+        return finish(("calibration_acceptance_bound_stale",))
     observations_by_attempt = ledger_snapshot.observation_by_attempt
     finalized_session_ids = {
         session.session_id
@@ -2356,7 +2395,7 @@ def evaluate_calibration_bracket(
     # This prevents a caller from narrowing the registered universe to a
     # favorable subset while still passing per-candidate membership checks.
     if supplied_valid != registered_valid or len(candidates) != len(supplied_valid):
-        return result, ("calibration_ledger_off_ledger_artifact",)
+        return finish(("calibration_ledger_off_ledger_artifact",))
     for candidate in candidates:
         observation = (
             observations_by_attempt.get(candidate.attempt_id)
@@ -2382,7 +2421,7 @@ def evaluate_calibration_bracket(
             != observation.bracket_evidence_root_id
             or candidate.bracket_runs_root != observation.bracket_runs_root
         ):
-            return result, ("calibration_ledger_off_ledger_artifact",)
+            return finish(("calibration_ledger_off_ledger_artifact",))
     # A complete session pair makes the binding mandatory only for a window
     # that pair can causally and freshly bracket.  ``candidates`` still spans
     # the full registered universe above, preserving the anti-withholding
@@ -2432,7 +2471,7 @@ def evaluate_calibration_bracket(
             )
             or bracket_runs_root is None
         ):
-            return result, ("calibration_bracket_binding_missing",)
+            return finish(("calibration_bracket_binding_missing",))
         expected_runs_root = str(Path(bracket_runs_root).absolute())
         bound_observations = validate_calibration_bracket_binding(
             bracket_binding,
@@ -2444,7 +2483,7 @@ def evaluate_calibration_bracket(
             runs_root=expected_runs_root,
         )
         if bound_observations is None:
-            return result, ("calibration_bracket_binding_invalid",)
+            return finish(("calibration_bracket_binding_invalid",))
         result["bracket_binding"] = {
             "schema_version": BRACKET_BINDING_SCHEMA,
             "binding_digest": bracket_binding["binding_digest"],
@@ -2472,14 +2511,16 @@ def evaluate_calibration_bracket(
                 bracket_evidence_root_id,
                 expected_runs_root,
             ):
-                return result, ("calibration_bracket_binding_invalid",)
+                return finish(("calibration_bracket_binding_invalid",))
+    sealed_fallback = bound_observations is None
+    window_evidence = trigger_scope == "window_evidence" and not sealed_fallback
     # v2 remains an authenticated validation/reduction artifact, but only the
     # 59-pulse v3 protocol carries the governed 95/95 claim calibration.
     matching_decimals: dict[int, Decimal] = {}
     for candidate in matching:
         candidate_decimal = _candidate_decimal(candidate)
         if candidate_decimal is None or candidate_decimal < 0:
-            return result, ("instrument_calibration_invalid",)
+            return finish(("instrument_calibration_invalid",))
         matching_decimals[id(candidate)] = candidate_decimal
     corpus_members = artifact["derivation_corpus"]["members"]
     # The corpus-doubling trigger is a function of THIS artifact's corpus, not
@@ -2533,14 +2574,14 @@ def evaluate_calibration_bracket(
         not in {"valid", "systematic-invalid", "ordinary-invalid"}
         for observation in new_observations
     ):
-        return result, ("calibration_observation_unclassifiable",)
+        return finish(("calibration_observation_unclassifiable",))
     # Rows set aside by a reviewed decision this artifact declares do not
     # count toward corpus doubling.
     disposed_ids = disposed_content_ids_for(
         artifact["prior_observation_set"].get("disposing_decision_ids")
     )
     if disposed_ids is None:
-        return result, ("calibration_acceptance_bound_stale",)
+        return finish(("calibration_acceptance_bound_stale",))
     valid_counts_by_epoch = [
         sum(
             observation.disposition == "valid"
@@ -2550,7 +2591,13 @@ def evaluate_calibration_bracket(
         )
         for epoch in judged_epochs
     ]
-    if any(count >= corpus_doubling_threshold for count in valid_counts_by_epoch):
+    scope_record["corpus_doubling"] = {
+        "count": max(valid_counts_by_epoch, default=0), "threshold": 48,
+    }
+    doubling_observed = any(count >= corpus_doubling_threshold for count in valid_counts_by_epoch)
+    if doubling_observed and window_evidence:
+        scope_record["recorded_only_triggers"].append(corpus_doubling_trigger)
+    if doubling_observed:
         observed_triggers.append(corpus_doubling_trigger)
     # Equivalence compares retained values against the envelope, so only
     # range expansion exempts the acknowledged rows. Systematic failures
@@ -2570,15 +2617,34 @@ def evaluate_calibration_bracket(
         and dict(observation.identity_epoch) in judged_epochs
         and (value := _decimal(observation.exact_bound_lexeme_s)) is not None
     ]
-    if any(value < min(corpus_values) or value > max(corpus_values) for value in new_valid_values):
+    range_observed = any(
+        value < min(corpus_values) or value > max(corpus_values) for value in new_valid_values
+    )
+    if range_observed and window_evidence:
+        scope_record["recorded_only_triggers"].append(
+            "new_valid_same_identity_capture_expands_observed_range"
+        )
+    if range_observed:
         observed_triggers.append(
             "new_valid_same_identity_capture_expands_observed_range"
         )
-    if any(
-        observation.disposition == "systematic-invalid"
+    systematic_observations = [
+        observation for observation in new_observations
+        if observation.disposition == "systematic-invalid"
         and dict(observation.identity_epoch) in judged_epochs
-        for observation in new_observations
-    ):
+    ]
+    other_session_systematics = [
+        observation for observation in systematic_observations
+        if window_evidence and observation.bracket_session_id != bound_session_id
+    ]
+    scope_record["other_session_systematic_sequences"] = sorted(
+        observation.sequence for observation in other_session_systematics
+    )
+    if other_session_systematics:
+        scope_record["recorded_only_triggers"].append(
+            "new_systematic_failure_challenges_preflight_screen"
+        )
+    if systematic_observations:
         observed_triggers.append(
             "new_systematic_failure_challenges_preflight_screen"
         )
@@ -2591,7 +2657,12 @@ def evaluate_calibration_bracket(
         for trigger in observed_triggers
         if trigger == "new_systematic_failure_challenges_preflight_screen"
     ]
-    if observation_stale_triggers:
+    # Classify the EVENT by the validated session, not the shared trigger name.
+    if observation_stale_triggers and (
+        not window_evidence
+        or any(observation.bracket_session_id == bound_session_id
+               for observation in systematic_observations)
+    ):
         result["acceptance"]["freshness"].update(
             {
                 "status": "stale",
@@ -2599,7 +2670,7 @@ def evaluate_calibration_bracket(
                 "stale_triggers": observation_stale_triggers,
             }
         )
-        return result, ("calibration_acceptance_bound_stale",)
+        return finish(("calibration_acceptance_bound_stale",))
     causal_pre = [
         candidate for candidate in matching if candidate.capture_wall_time_s <= window_start_s
     ]
@@ -2622,7 +2693,7 @@ def evaluate_calibration_bracket(
             if (causal_pre and not fresh_pre) or (causal_post and not fresh_post)
             else "instrument_calibration_bracket_missing"
         )
-        return result, (reason,)
+        return finish((reason,))
     if bound_observations is None:
         pre = max(fresh_pre, key=lambda candidate: candidate.capture_wall_time_s)
         post = min(fresh_post, key=lambda candidate: candidate.capture_wall_time_s)
@@ -2633,7 +2704,7 @@ def evaluate_calibration_bracket(
             pre.bracket_session_id is not None
             or post.bracket_session_id is not None
         ):
-            return result, ("calibration_bracket_binding_missing",)
+            return finish(("calibration_bracket_binding_missing",))
     else:
         candidate_by_receipt = {
             candidate.ledger_receipt_digest: candidate for candidate in matching
@@ -2641,7 +2712,7 @@ def evaluate_calibration_bracket(
         pre = candidate_by_receipt.get(bound_observations[0].receipt_digest)
         post = candidate_by_receipt.get(bound_observations[1].receipt_digest)
         if pre not in fresh_pre or post not in fresh_post:
-            return result, ("calibration_bracket_binding_invalid",)
+            return finish(("calibration_bracket_binding_invalid",))
     pre_decimal = matching_decimals[id(pre)]
     post_decimal = matching_decimals[id(post)]
     if (
@@ -2650,7 +2721,7 @@ def evaluate_calibration_bracket(
         or pre_decimal < 0
         or post_decimal < 0
     ):
-        return result, ("instrument_calibration_invalid",)
+        return finish(("instrument_calibration_invalid",))
     if isinstance(pre.b_fiducial_s, float) and isinstance(
         post.b_fiducial_s, float
     ):
@@ -2704,18 +2775,19 @@ def evaluate_calibration_bracket(
             "screen_s": str(screen),
             "maximum_budgetable_drift_s": str(maximum_drift),
         }
-        return result, ("instrument_calibration_mismatch",)
+        return finish(("instrument_calibration_mismatch",))
 
+    failing_trigger_names = {"protocol_or_estimator_byte_change"} if window_evidence else {
+        "protocol_or_estimator_byte_change",
+        corpus_doubling_trigger,
+        "new_valid_same_identity_capture_expands_observed_range",
+        "new_systematic_failure_challenges_preflight_screen",
+    }
     stale_triggers = [
         trigger
         for trigger in observed_triggers
         if trigger
-        in {
-            "protocol_or_estimator_byte_change",
-            corpus_doubling_trigger,
-            "new_valid_same_identity_capture_expands_observed_range",
-            "new_systematic_failure_challenges_preflight_screen",
-        }
+        in failing_trigger_names
     ]
     if stale_triggers:
         result["acceptance"]["freshness"].update(
@@ -2725,7 +2797,7 @@ def evaluate_calibration_bracket(
                 "stale_triggers": stale_triggers,
             }
         )
-        return result, ("calibration_acceptance_bound_stale",)
+        return finish(("calibration_acceptance_bound_stale",))
 
     excess = max(drift_decimal - screen, Decimal(0))
     drift_status = (
@@ -2744,7 +2816,7 @@ def evaluate_calibration_bracket(
         "maximum_budgetable_drift_s": str(maximum_drift),
     }
     if drift_decimal > maximum_drift:
-        return result, ("instrument_calibration_mismatch",)
+        return finish(("instrument_calibration_mismatch",))
 
     allowance = max(drift_decimal, screen)
     operative_bound = endpoint_max_decimal + allowance
@@ -2764,7 +2836,7 @@ def evaluate_calibration_bracket(
         "operative_b_fiducial_binary64_s": float(operative_bound),
     }
     result["status"] = "passed"
-    return result, ()
+    return finish(())
 
 
 def calibration_bracket_for_bundles(
@@ -2780,9 +2852,13 @@ def calibration_bracket_for_bundles(
     bracket_plan_sha256: str | None = None,
     bracket_evidence_root_id: str | None = None,
     diagnostics: list[dict[str, str]] | None = None,
+    trigger_scope: Literal["sealed", "window_evidence"] = "sealed",
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Use the runs root only for the evaluated window's T1/endpoints."""
+
+    if trigger_scope not in ("sealed", "window_evidence"):
+        raise ValueError("invalid calibration trigger_scope")
 
     if not bundle_paths:
         empty, _ = evaluate_calibration_bracket(
@@ -2792,6 +2868,7 @@ def calibration_bracket_for_bundles(
             bindings={},
             policy=policy,
             ledger_snapshot=ledger_snapshot,
+            trigger_scope=trigger_scope,
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_bracket_missing",)
@@ -2816,6 +2893,7 @@ def calibration_bracket_for_bundles(
             bindings={},
             policy=policy,
             ledger_snapshot=ledger_snapshot,
+            trigger_scope=trigger_scope,
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_bracket_missing",)
@@ -2831,6 +2909,7 @@ def calibration_bracket_for_bundles(
             bindings=expected,
             policy=policy,
             ledger_snapshot=ledger_snapshot,
+            trigger_scope=trigger_scope,
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_mismatch",)
@@ -2882,6 +2961,7 @@ def calibration_bracket_for_bundles(
                 bindings=expected,
                 policy=policy,
                 ledger_snapshot=ledger_snapshot,
+                trigger_scope=trigger_scope,
                 _allow_unissued_fixture=_allow_unissued_fixture,
             )
             return empty, ("calibration_ledger_custody_invalid",)
@@ -2898,6 +2978,7 @@ def calibration_bracket_for_bundles(
         bracket_plan_sha256=bracket_plan_sha256,
         bracket_evidence_root_id=bracket_evidence_root_id,
         bracket_runs_root=runs_root,
+        trigger_scope=trigger_scope,
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
     if superseded_observations:

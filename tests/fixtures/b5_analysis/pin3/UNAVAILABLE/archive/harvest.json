@@ -1,0 +1,101 @@
+{
+  "archive_root": "/private/tmp/b5-s0-beta-pin3-z2vg_n2i/archive",
+  "attempt": 5,
+  "claim_usable": false,
+  "exclude_window_reasons": [
+    "exclusions.function_unavailable"
+  ],
+  "faults": [],
+  "flags": 36,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463",
+      "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "0699abbb0881ce64b39c46ba07de568cc3848260",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin3",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_assessed": 13,
+  "outputs": {
+    "derived/bracket-binding.json": "d695d2957d6d858aaf5fd578fd3f246cc3e1477485c42b44fa70eae106a6e35d",
+    "derived/code-identity.json": "2d49ab294f305739780dfc0a76dd3b03cdc7f086af2c0fe0382603cf9e55fb79",
+    "derived/exclusions.json": "6f1d525d840d4d881b6cb312efbc96e88db2480676221dd50c93934f4a83884c",
+    "derived/flags.jsonl": "681c670799436252aa0f960ee5651d431fc0abda00857f0948b5199d1d620b02",
+    "derived/harvest-thresholds.json": "ecc1d9482ce85dfb82af80de02994634621207f626c9548e0069aa8a73fb8760",
+    "derived/historical-custody.json": "e143bddc7229197fad496dae7e54e18ce093528ee0247f0f61f7c4f332f18276",
+    "derived/neg8-allowance.json": "1bb87b5c2221c9cce5d42a4c3e8d617c114ea599711f4b0cbae38f5d784317cf",
+    "derived/neg8-bound.json": "64a5d347b1beaa2a41ebaabd16419dd3674ee54ed02c4771654125c5bddd509c",
+    "derived/neg8-corpus-physics.json": "8d799466c672d28370c471f9d681fee8d7d74fba2bfda093a05302fa54649108",
+    "derived/neg8-screen.json": "b52894618b0a77a488d28d20b2ae229cb325654480aec3c0be4268dab1cba9cc",
+    "derived/roster.json": "afcb174efb827693c2ce7e88a1186b8eaf8c6c63fc1041ebe3ad561ff41956db",
+    "derived/terminal-boundary.json": "d146892d8268d0d64ebd4983da4068f644e15c9c842c92469ee10d59fa0d41ea",
+    "derived/terminal-pin.json": "4b4eb52a15961871e23e24c83eea69f06e233a791c4db8ea8baf617a195bf49c",
+    "derived/window_flags.json": "2c1f9c52b684a70675302b80cd8bbe5efd78ec5953382fc40c88d8f35968ea2f",
+    "derived/yield.json": "d02585e036a514494d361d3ca88bc8ee0df7a4e926d216e5491eb8d178df7578"
+  },
+  "pack_id": "s0_beta_mock_v5",
+  "plan_id": "s0-beta-plan",
+  "runs_root_overrides": [],
+  "schema": "joulewise.harvest_b5_window.v1",
+  "verdict": "COLLECTED",
+  "yield": {
+    "j3_failed_stages": [],
+    "per_collection_stage": [],
+    "per_roster_stage": [
+      {
+        "planned": 2,
+        "present": 2,
+        "raw_valid": 2,
+        "stage_id": "01_abs",
+        "strict_deferred": 0,
+        "succeeded": 2
+      },
+      {
+        "planned": 4,
+        "present": 4,
+        "raw_valid": 4,
+        "stage_id": "02_abba",
+        "strict_deferred": 0,
+        "succeeded": 4
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "end_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      },
+      {
+        "planned": 1,
+        "present": 1,
+        "raw_valid": 1,
+        "stage_id": "midpoint_reference",
+        "strict_deferred": 0,
+        "succeeded": 1
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "start_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      }
+    ],
+    "planned": 13,
+    "present": 13,
+    "raw_valid": 13,
+    "schema": "joulewise.b5_harvest_yield.v1",
+    "stage_journal": null,
+    "strict_deferred": 0,
+    "succeeded": 13,
+    "unresolved_collection_stages": [],
+    "window_stage_yield": null
+  }
+}
