@@ -160,7 +160,7 @@ class _Trace:
         except (TypeError, ValueError):
             notes = {}
         try:
-            supports = window_supports(trace)
+            supports = window_supports(trace, flags=self.flags)
         except ValueError:
             supports = (None,) * len(trace.t_ns)
             self.flags.append("window.support_invalid")

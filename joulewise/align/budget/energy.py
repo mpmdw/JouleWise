@@ -166,12 +166,14 @@ def episode_energy(episode: Episode, *,
             offset, uncertainty_ns = mappings[0].offset_ns, mappings[0].uncertainty_ns
         start, end = episode.start_ns - offset, episode.end_ns - offset
         try:
-            supports = window_supports(trace)
+            supports = window_supports(trace, flags=flags)
         except ValueError:
             return Energy(None, flags=("energy_window_support_invalid",))
         if supports is not None:
             if any(s is None for s in supports):
                 return Energy(None, flags=("energy_window_support_unknown",))
+            # Conversion-quantum disagreements have already been snapped and
+            # counted by window_supports; any remaining overlap is real.
             if any(b > c for (_, b), (c, _) in zip(supports, supports[1:])):
                 return Energy(None, flags=("energy_window_overlap",))
         coverage_start = supports[0][0] if supports else (trace.t_ns[0] if trace.t_ns else 0)

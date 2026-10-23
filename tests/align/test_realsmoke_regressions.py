@@ -24,7 +24,7 @@ from joulewise.align.energy_residual import turn_energy_from_attribution
 from joulewise.align.budget.__main__ import main
 from joulewise.align.budget.conditions import Condition, LocalEndpoint
 from joulewise.align.budget.energy import episode_energy
-from joulewise.align.budget.run import ModelSpec, Settings, _generate, run_matrix, summarize
+from joulewise.align.budget.run import ModelSpec, Settings, _generate, run_matrix, summarize, summary_table
 from joulewise.align.budget.score import HintMonitor
 from joulewise.align.budget.synthetic import (
     ScriptedModel, ScriptedMonitor, ScriptedSampler, SyntheticClock, WordCodec, synthetic_items,
@@ -481,6 +481,8 @@ class RealSmokeRegressions(unittest.TestCase):
         expected = math.fsum(value*max(0, min(ep.end_ns, b+ep.clock_mappings[0].offset_ns)
                                       - max(ep.start_ns, a+ep.clock_mappings[0].offset_ns))/SECOND
                             for value, (a, b) in zip(trace.values, notes['sample_support_ns']))
+        # Different integration arithmetic: the project's 1e-6 relative
+        # agreement rule, or 1e-6 J absolute for energies below 1 J.
         self.assertLessEqual(abs(attribution.total.joules-expected), 1e-6*max(1., abs(expected)))
         self.assertEqual(attribution.total.method.split(';')[0], 'window_average_W')
         turns = turn_energy_from_attribution(attribution)
@@ -547,17 +549,22 @@ class RealSmokeRegressions(unittest.TestCase):
                 for estimate, bound in ((query.joules, query.half_width_j),
                                         (budget.joules, budget.uncertainty_j)):
                     self.assertTrue(math.isfinite(bound))
-                    self.assertAlmostEqual(estimate, 21.*width_s, places=12)
-                    self.assertGreaterEqual(bound+1e-6, abs(estimate-40.*width_s))
+                    # Both reducers multiply the same mean by overlap/SECOND.
+                    self.assertEqual(estimate, 21.*width_s)
+                    # Physical enclosure uses different arithmetic: use the
+                    # project's 1e-6 relative (1e-6 J below 1 J) agreement rule.
+                    error = abs(estimate-40.*width_s)
+                    self.assertGreaterEqual(bound+1e-6*max(1., error), error)
                 self.assertEqual(attr.total.method, 'window_average_W')
                 self.assertNotIn('energy_piecewise_linear_between_samples', budget.flags)
                 # Whole-window overlap is the native mean integral regardless
                 # of the position of the step inside the window.
                 whole = replace(ep, start_ns=starts[1])
-                expected = 21.*(ends[1]-starts[1])/SECOND
-                self.assertAlmostEqual(episode_energy(whole, power_max_w=40.).joules, expected, places=12)
-                self.assertAlmostEqual(attribute_episode(whole, source='powermetrics',
-                    channel='cpu_power').total.joules, expected, places=12)
+                # Identical mean * (integer-ns duration / SECOND) expression.
+                expected = 21.*((ends[1]-starts[1])/SECOND)
+                self.assertEqual(episode_energy(whole, power_max_w=40.).joules, expected)
+                self.assertEqual(attribute_episode(whole, source='powermetrics',
+                    channel='cpu_power').total.joules, expected)
 
     def test_run_floor_is_applied_once_after_rail_sum(self):
         # Two disjoint constant 4 W rails, exact resolution and aligned bounds:
@@ -569,6 +576,13 @@ class RealSmokeRegressions(unittest.TestCase):
         energy = episode_energy(ep, channels=(('powermetrics', 'cpu'), ('powermetrics', 'gpu')),
                                 power_max_w=4.)
         self.assertEqual((energy.joules, energy.uncertainty_j), (8., 1.))
+        # Each 1.5 W resolution contributes 1.5*1 s/2 = .75 J. Sum the two
+        # modeled bounds, then take max(1 J, 1.5 J), rather than 1 J per rail.
+        uncertain = replace(ep, power_traces=tuple(replace(t, resolution=1.5) for t in ep.power_traces))
+        energy = episode_energy(uncertain, channels=(('powermetrics', 'cpu'), ('powermetrics', 'gpu')),
+                                power_max_w=4.)
+        self.assertEqual((energy.joules, energy.uncertainty_j), (8., 1.5))
+        self.assertIn("D-078's 1 J attribution minimum applies once", summary_table(()))
 
     def test_single_native_window_and_malformed_support_do_not_become_points(self):
         trace = PowerTrace('powermetrics', 'cpu', 'host', (SECOND,), (4.,), 'W', SECOND,

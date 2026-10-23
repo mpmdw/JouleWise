@@ -818,4 +818,5 @@ def summary_table(rows: Sequence[Summary]) -> str:
                      f"{joules} | {r.missing_monitor_verdicts}/{r.missing_energies}; {r.excluded_trials} | {spans} | {counted} |")
     lines.append("")
     lines.append("J half-widths are maximum available per-trial quantization, edge enclosures (counter increments or Pmax times the two inward edge-to-poll distances), clock and averaging bounds, conditional on piecewise-linear interior power and a recorded maximum for power traces. They are not confidence intervals on the mean or sensor-accuracy bounds. An absent half-width means an unknown/unbounded term, including duty-cycle gaps; missing trials are counted. Seeds have separate Wilson rows; repeated items are never pooled as independent.")
+    lines.append("For powermetrics, D-078's 1 J attribution minimum applies once to each trial's summed total across the selected disjoint rails, after adding their modeled bounds; it is not added once per rail.")
     return "\n".join(lines) + "\n"

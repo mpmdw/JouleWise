@@ -30,6 +30,9 @@ def _conversion_error_ns(seconds: float) -> float:
     # Multiplication rounds by <= half the spacing of the ns product:
     # 128 ns at an epoch near 1.8e18 ns. round() then costs <= 0.5 ns;
     # the latter vanishes for epoch products already spaced by integer ns.
+    # Together with the clock representation/arithmetic terms below this
+    # prices the shared-edge quantum derived in power.windows; that reader
+    # snaps only conversion-sized disagreements in native window supports.
     product_spacing = math.ulp(seconds * NS_PER_SECOND)
     return product_spacing / 2 + (0.5 if product_spacing < 1 else 0.0)
 
