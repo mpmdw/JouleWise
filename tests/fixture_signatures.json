@@ -1,5 +1,10 @@
 [
   {
+    "id": "hazards-test-real-monitor",
+    "command_regex": "(?:^|\\s)\\S*/scripts/hazard_monitor\\.py\\s+--config\\s+\\S*/tmp[a-z0-9_]{8}/(?:[^\\s/]+/)*hazards/monitor/config\\.json(?:\\s|$)",
+    "source": "tests/hazards/test_monitor.py: SupervisorTests tempfile custody roots; real monitor launcher restricted to a tempfile-made path component"
+  },
+  {
     "id": "nv5-fake-vllm",
     "command_regex": "(?:^|\\s)(?:\\S*/)?vllm\\s+serve\\s+/fake/model\\s+.*?--served-model-name\\s+nv5-fake-model(?:\\s|$)",
     "source": "tests/test_node_worker_subprocess.py: _write_fake_vllm and _runtime_task; argv built by joulewise/adapters/node_worker.py:_vllm_serve_command"

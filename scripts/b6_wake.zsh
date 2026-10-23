@@ -18,6 +18,7 @@ from scripts.magistrate_watchdog import session_argv
 if collection_live(loop):
     raise SystemExit("block-six collection is active; defer the wake")
 prompt = brief.read_text() + "\nWake record: " + str(record.resolve()) + "\nLoop root: " + str(loop.resolve())
+os.environ["JW_B6_LOOP_ROOT"] = str(loop.resolve())
 argv = session_argv(Path("/Users/edr/.local/bin/claude"), prompt, "b6-" + record.stem)
 os.chdir("/Users/edr/code/JouleWise")
 os.execv(argv[0], argv)

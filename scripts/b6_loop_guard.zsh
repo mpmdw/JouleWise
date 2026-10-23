@@ -13,6 +13,15 @@ if [[ -f $active ]]; then
         exit 0
     fi
 fi
+# DONE is terminal. The loop publishes this marker after its final I/O;
+# an explicit control that changes state makes the guard fall through again.
+if [[ -f $loop_root/done.idle && -f $loop_root/state.json ]]; then
+    while IFS= read -r line; do
+        if [[ $line =~ '^  "state"[[:space:]]*:[[:space:]]*"DONE"[[:space:]]*,?[[:space:]]*$' ]]; then
+            exit 0
+        fi
+    done < $loop_root/state.json
+fi
 if [[ -n ${JW_B6_LOOP_TICK:-} ]]; then
     # An argv string split by zsh's lexical parser, never evaluated as shell code.
     typeset -a tick_argv

@@ -30,7 +30,7 @@ def live_run(argv, **kwargs):
 
 def main(argv=None, *, factory=Loop):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--loop-root", default=os.environ.get("JW_B6_LOOP_ROOT", DEFAULT_LOOP_ROOT))
+    parser.add_argument("--loop-root", default=os.environ.get("JW_B6_LOOP_ROOT"))
     parser.add_argument("--repo-root", default=str(ROOT))
     parser.add_argument("--config")
     subs = parser.add_subparsers(dest="command", required=True)
@@ -46,7 +46,20 @@ def main(argv=None, *, factory=Loop):
             sub.add_argument("session_id")
     args = parser.parse_args(argv)
     repo = Path(args.repo_root)
-    config = json.loads((Path(args.config) if args.config else repo / "configs/b6/loop.json").read_text())
+    config_path = Path(args.config) if args.config else repo / "configs/b6/loop.json"
+    if not args.config and args.loop_root:
+        requested_root = Path(args.loop_root).resolve()
+        matches = []
+        for candidate in sorted((repo / "configs/b6").glob("loop*.json")):
+            value = json.loads(candidate.read_text())
+            if value.get("loop_root") and Path(value["loop_root"]).resolve() == requested_root:
+                matches.append(candidate)
+        if len(matches) > 1:
+            raise ValueError(f"multiple loop configs for {requested_root}: {matches}")
+        if matches:
+            config_path = matches[0]
+    config = json.loads(config_path.read_text())
+    args.loop_root = args.loop_root or config.get("loop_root", DEFAULT_LOOP_ROOT)
     catalog = load_catalog(repo / config["flag_catalog"])
     mailer = Mailer(args.loop_root, catalog, clock=time.time, transport=GitHubTransport(config["github_repo"], live_run))
     loop = factory(args.repo_root, args.loop_root, config=config, run=live_run, mailer=mailer)

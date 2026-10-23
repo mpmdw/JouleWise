@@ -612,3 +612,106 @@ def synthesize(plan_path, state):
         return
     write(night / 'chain.exited', {'epoch_s': 1786216000, 'exit_code': 0})
     write(night / 'result.json', {'verdict': 'GO', 'aborted_reason': None, 'chain_exit_code': 0, 'artifacts': []})
+
+
+def bytes_rehearsal(root):
+    """Real CLI ticks, discovery and preparation; synthetic hardware and launch.
+
+    The sizing entries are fixture-only copies of ALPHA's registered allowances,
+    not BYTES C5 measurements. No installed job or collection is started.
+    """
+    import runpy
+    from joulewise.b6 import loop as loop_module
+    from joulewise.b6.lanes import PrecheckResult, Running
+    from tests.fixtures.b5_plan.fake_window import GENESIS_PIN
+    assert os.environ.get('JW_B5_SYNTHETIC_ONLY') == '1'
+    root = root.resolve()
+    measurement = root / 'measurement'
+    for directory in ('configs', 'joulewise', 'scripts'):
+        shutil.copytree(ROOT / directory, measurement / directory)
+    config = read(ROOT / 'configs/b6/loop_bytes.json')
+    config.update(loop_root=str(root / 'loop-bytes'), wake_argv=[])
+    write(measurement / 'configs/b6/loop_bytes.json', config)
+    replication = read(measurement / 'configs/b6/loop.json')
+    replication['loop_root'] = str(root / 'loop-replication')
+    write(measurement / 'configs/b6/loop.json', replication)
+    for pack in config['pack_ids']:
+        path = measurement / f'configs/b6/packs/{pack}/registration.json'
+        value = read(path)
+        value.update(status='registered')
+        value.pop('draft_notes', None)
+        for estimator in value['estimators']:
+            estimator['version'] = 'synthetic-rehearsal'
+        write(path, value)
+    sizing_path = measurement / 'configs/b6/registration/sizing_b5.json'
+    sizing = read(sizing_path)
+    for pack in config['pack_ids']:
+        sizing['packs'][pack] = {**sizing['packs']['ALPHA'], 'pack_id': pack}
+    write(sizing_path, sizing)
+    ledger_path = measurement / plan.DEFAULT_LEDGER_RELATIVE
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger_path.write_bytes(b'')
+    write(measurement / plan.HEAD_PIN_RELATIVE, GENESIS_PIN)
+    sites = measurement / '.venv/lib/python3.13/site-packages'
+    sites.mkdir(parents=True)
+    (measurement / '.gitignore').write_text('.venv/\nruns/\n')
+    init_git_fixture(measurement, '-q')
+    # Same fixture identity as Round: CI runners have no global git identity.
+    for args in (('config', 'user.name', 'B6 Desk'), ('config', 'user.email', 'desk@invalid'),
+                 ('config', 'commit.gpgsign', 'false'), ('add', '.'), ('commit', '-qm', 'synthetic BYTES rehearsal')):
+        subprocess.run(['git', '-C', str(measurement), *args], check=True, capture_output=True)
+    fake = root / 'bin/launchctl'
+    fake.parent.mkdir()
+    fake.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> ' + str(root / 'launchctl.argv') + '\nexit 0\n')
+    fake.chmod(0o755)
+    calls, transitions = [], ['NEXT']
+    real_loop = loop_module.Loop
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        if argv[0] == str(measurement / '.venv/bin/python'):
+            payload = {name: base64.b64encode(b'{}').decode() for name in
+                       ('identity-epoch.json', 't1-bindings.json')}
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(payload), stderr='')
+        if 'ls-remote' in argv:
+            return subprocess.CompletedProcess(argv, 0, stdout='', stderr='')
+        return subprocess.run(argv, **{"capture_output": True, "text": True, "timeout": 120,
+                                       "check": False, **kwargs})
+    def factory(repo, loop_root, **kwargs):
+        kwargs.update(run=runner, mailer=Mailer(loop_root, __import__(
+            'joulewise.flags.catalog', fromlist=['load_catalog']).load_catalog(measurement / config['flag_catalog']),
+            clock=time.time, transport=Transport()))
+        loop = real_loop(repo, loop_root, **kwargs)
+        loop.lanes.precheck.run = lambda *args: PrecheckResult(fingerprint={'synthetic': True})
+        loop.lanes.driver.launchctl_bin = str(fake)
+        # This stub proves preparation only. BY-SLOTS/BY-PIN must supply
+        # arm_attachments.launch = joulewise.stage_launch_bindings.v1;
+        # real DriverLane.launch with scratch HOME/fake launchctl must pass before any BYTES arm.
+        def launch(prepared):
+            runner([str(fake), 'rehearsal-only', prepared.session_id], check=True)
+            return Running('synthetic-no-job')
+        loop.lanes.driver.launch = launch
+        return loop
+    argv = [str(ROOT / 'scripts/b6_loop.py'), '--repo-root', str(measurement),
+            'tick', '--loop-root', str(root / 'loop-bytes')]
+    with mock.patch.dict(os.environ, {'PATH': str(fake.parent) + ':' + os.environ['PATH']}), \
+            mock.patch.object(sys, 'argv', argv), mock.patch.object(loop_module, 'Loop', factory):
+        os.environ.pop('JW_B6_LOOP_ROOT', None)
+        for _ in range(3):
+            try:
+                runpy.run_path(str(ROOT / 'scripts/b6_loop.py'), run_name='__main__')
+            except SystemExit as exc:
+                if exc.code != 0:
+                    raise
+            state = read(root / 'loop-bytes/state.json')
+            transitions.append(state['state'])
+            if state['state'] == 'HOLD_LOOP':
+                raise AssertionError(state.get('last_exception', state))
+    assert transitions == ['NEXT', 'PRECHECK', 'SMOKE_RUN', 'SMOKE_RUN'], transitions
+    assert state['session']['packs'] == ['bytes-s1-p1'], state
+    prepared = state['session']['smoke_prepared']
+    assert Path(prepared['plan_path']).parent.parent.joinpath('session.json').is_file()
+    result = {'root': str(root), 'transitions': transitions, 'packs': state['session']['packs'],
+              'smoke_prepared': prepared, 'fake_launchctl': (root / 'launchctl.argv').read_text(),
+              'discovered': len(state['packs'])}
+    write(root / 'rehearsal.json', result)
+    return result
