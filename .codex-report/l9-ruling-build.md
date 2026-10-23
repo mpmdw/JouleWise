@@ -256,7 +256,7 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 Earlier L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Current lane integration merge `ee98a1a8f56f718ceff0092363a48aa32fc7bd68` contains concurrent lane `507bd16e2` and main `7c23ea4b7`. This main update changes analysis_engine/distributions.py, and the concurrent lane changes S10 Git initialization. All ten cloud modules are being rerun; rows show their actual execution anchors and do not assert new-head acceptance for an old-head result. The two prior-head real-driver diagnostics remain isolated in /workspace/JouleWise at detached 3f9d512fe; current lane work uses /workspace/JouleWise-L9-1. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
-2/10 cloud modules have completed on the current integrated source; old-head rows remain historical evidence until their reruns finish. Git labels are process-start source anchors; report-only commits may advance the lane between module boundaries, while runtime and harness files remain unchanged.
+3/10 cloud modules have completed on the current integrated source; old-head rows remain historical evidence until their reruns finish. Git labels are process-start source anchors; report-only commits may advance the lane between module boundaries, while runtime and harness files remain unchanged.
 
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
@@ -268,7 +268,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud @ `54da41a5e` | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.008 | Codex Cloud @ `d09ed9205` | `9d490b2979e1955cd8bfebf4cc49c273f23dc29c42c5db1db590b86856063cac` |
 | tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.881 | Codex Cloud @ `d09ed9205` | `e21f05d8b688c5123909fa8a5bba8e63bb821e5ec31b8f9c62d8df78b85e469f` |
-| tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud @ `54da41a5e` | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
+| tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 49.053 | Codex Cloud @ `d09ed9205` | `a6bb75d12bfae215717711af2d03bf9c2619000648a59c4e4dedb12f40a4ff83` |
 | tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud @ `38ff2a7fe` | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
 | tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud @ `cd4a61682` | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
 | tests.test_r4_acceptance_oracle | 10 | 0 | 0 | 0 | 0 | 3.323 | Codex Cloud @ `54da41a5e` | `3a57d33627f8ca098907b04a85f4851c7e78bff0df7542fb10c07fcb371a6d71` |
@@ -305,6 +305,7 @@ Completed cloud logs and test failures:
 - `tests.test_docs_freshness` at `8987dffb30943d10451c2d95bf956e70f1d38e06`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 0.801 s. Log `/workspace/l9-1/checks-main-2/logs/tests_test_docs_freshness.log`, SHA-256 `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568`.
 - `tests.test_authentication_io` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 2.008 s. Log `/workspace/l9-1/checks-4/logs/tests_test_authentication_io.log`, SHA-256 `9d490b2979e1955cd8bfebf4cc49c273f23dc29c42c5db1db590b86856063cac`.
 - `tests.test_docs_freshness` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 0.881 s. Log `/workspace/l9-1/checks-4/logs/tests_test_docs_freshness.log`, SHA-256 `e21f05d8b688c5123909fa8a5bba8e63bb821e5ec31b8f9c62d8df78b85e469f`.
+- `tests.b5_analysis.test_sensitivity_guard` at `d09ed9205e4f8d81345ce3bc1161184932cbfa77`: 12 tests, 0 failures, 0 errors, 0 skips, exit 0, 49.053 s. Log `/workspace/l9-1/checks-4/logs/tests_b5_analysis_test_sensitivity_guard.log`, SHA-256 `a6bb75d12bfae215717711af2d03bf9c2619000648a59c4e4dedb12f40a4ff83`.
 
 Additional logs (not completed acceptance modules):
 
