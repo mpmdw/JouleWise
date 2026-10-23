@@ -26,7 +26,7 @@ def machine(**kwargs):
 
 
 def run_dwell(ctx, **limits):
-    return contention.run_dwell(ctx, {**LIMITS, **limits}, tree_roots=[DRIVER])
+    return contention.run_dwell(ctx, {**LIMITS, **limits}, tree_roots=[DRIVER], host_reader=None)
 
 
 class DwellTests(unittest.TestCase):
@@ -88,9 +88,9 @@ class DwellTests(unittest.TestCase):
         clocks, table, ctx = machine()
         table.add(Process(0, 0, "kernel_task", cpu_per_s=0.2))
         self.assertEqual(contention.judge(run_dwell(ctx, cap_s=700), LIMITS).status, base.REFUSE)
-        before = contention.take_snapshot(ctx)
+        before = contention.take_snapshot(ctx, host_reader=None)
         clocks.sleep(10)
-        after = contention.take_snapshot(ctx)
+        after = contention.take_snapshot(ctx, host_reader=None)
         window = contention.interval(before, after, tree_roots=[DRIVER], include_kernel_task=False,
                                      limit=0.05)
         self.assertTrue(window["clean"])
@@ -100,12 +100,12 @@ class DwellTests(unittest.TestCase):
         clocks = FakeClocks()
         runner = Runner({contention.PS_ARGV: lambda argv: completed(argv, b"", returncode=1)})
         measurement = contention.run_dwell(base.Context(run=runner, clocks=clocks), LIMITS,
-                                           tree_roots=[DRIVER])
+                                           tree_roots=[DRIVER], host_reader=None)
         self.assertEqual(contention.judge(measurement, LIMITS).status, base.UNMEASURED)
 
     def test_a_single_snapshot_is_not_a_dwell(self):
         _clocks, _table, ctx = machine()
-        snapshot = contention.take_snapshot(ctx)
+        snapshot = contention.take_snapshot(ctx, host_reader=None)
         self.assertIsNone(snapshot.error)
         with self.assertRaises(ValueError):
             contention.judge(base.Measurement("contention", "instant", {}, (), snapshot.started,
@@ -113,30 +113,31 @@ class DwellTests(unittest.TestCase):
 
     def test_pid_reuse_is_a_new_process(self):
         clocks, table, ctx = machine()
-        before = contention.take_snapshot(ctx)
+        before = contention.take_snapshot(ctx, host_reader=None)
         clocks.sleep(30)
         old = table.processes.pop(320)
         table.add(Process(320, 1, "mdworker_shared", cpu_per_s=0.0, start_epoch=clocks.wall_s - 5,
                           cpu0=0.01))
-        after = contention.take_snapshot(ctx)
+        after = contention.take_snapshot(ctx, host_reader=None)
         result = contention.interval(before, after, tree_roots=[DRIVER], include_kernel_task=True,
                                      limit=0.05)
         self.assertTrue(result["clean"])
         self.assertIn(old.command, [item["command"] for item in result["unaccounted"]])
 
 
-    def test_zombie_with_regressed_counter_is_unaccounted_not_unmeasured(self):
+    def test_zombie_without_previous_rate_is_unmeasured_for_the_request(self):
         clocks, table, ctx = machine()
         table.processes[330].cpu = 12.5
-        before = contention.take_snapshot(ctx)
+        before = contention.take_snapshot(ctx, host_reader=None)
         clocks.sleep(30)
         table.processes[330].cpu = 0.0  # ps lists an exiting process with TIME 0:00.00
         table.processes[330].cpu_per_s = 0.0
-        after = contention.take_snapshot(ctx)
+        after = contention.take_snapshot(ctx, host_reader=None)
         result = contention.interval(before, after, tree_roots=[DRIVER], include_kernel_task=True,
                                      limit=0.05)
-        self.assertIsNone(result["error"])
-        self.assertTrue(result["clean"])
+        found = contention.span_findings([result], result["interval"])
+        self.assertEqual([item["code"] for item in found], ["contention.unmeasured"])
+        self.assertIsNone(result["clean"])
         self.assertIn("counter regressed", [item["reason"] for item in result["unaccounted"]])
 
 
@@ -178,8 +179,84 @@ class DwellRuleTests(unittest.TestCase):
         self.assertGreater(entry["cpu_s_per_s"], 0.45)
 
 
+class ReusedTreeIdentityTests(unittest.TestCase):
+    def test_reused_tree_child_is_outside_and_flags_the_request(self):
+        self.check_reuse(4100, DRIVER)
+
+    def test_reused_root_and_its_new_child_are_outside(self):
+        self.check_reuse(DRIVER, 1, new_child=True)
+
+    def check_reuse(self, pid, ppid, *, new_child=False):
+        clocks, table, ctx = machine()
+        table.add(Process(pid, ppid, "measurement_helper", cpu_per_s=0.0))
+        before = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        # 10 s is the monitor's sampling interval. The replacement starts
+        # halfway through and uses 6 CPU-s: 0.6 CPU-s/s over the interval,
+        # twelve times the registered 0.05 CPU-s/s limit.
+        clocks.sleep(5)
+        table.ps(contention.PS_ARGV)  # integrate the old process before replacing it
+        table.add(Process(pid, 1, "outside_replacement", start_epoch=clocks.wall_s,
+                          cpu0=0.0, cpu_per_s=1.2))
+        if new_child:
+            table.add(Process(4200, pid, "outside_child", start_epoch=clocks.wall_s,
+                              cpu0=0.0, cpu_per_s=1.2))
+        clocks.sleep(5)
+        after = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        result = contention.interval(before, after, tree_roots=[DRIVER],
+                                     include_kernel_task=False,
+                                     limit=contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"])
+        # Request is the complete measured interval: no placement tolerance.
+        found = contention.span_findings([result], result["interval"])
+        self.assertEqual([item["code"] for item in found], ["contention.request_overlap"])
+        expected = {"outside_replacement", "outside_child"} if new_child else {"outside_replacement"}
+        self.assertEqual({item["command"] for item in result["outside_over_limit"]}, expected)
+        for item in result["outside_over_limit"]:
+            # ps TIME resolves 0.01 CPU-s; allow one quantum per snapshot.
+            self.assertAlmostEqual(item["cpu_s_per_s"], 0.6, delta=2 * 0.01 / result["elapsed_s"])
+
+
 class ExitedProcessTests(unittest.TestCase):
     """A process above the limit that exits inside the next interval (review finding)."""
+
+    def test_regressed_zombie_keeps_previous_over_limit_and_flags_request(self):
+        self.check_regressed_zombie()
+
+    def test_known_zombie_hazard_survives_another_unmeasured_counter(self):
+        self.check_regressed_zombie(unknown_counter=True)
+
+    def check_regressed_zombie(self, *, unknown_counter=False):
+        clocks, table, ctx = machine()
+        # 0.6 CPU-s/s is twelve times the registered 5% of one-core limit;
+        # a 10 s monitor interval measures 6 CPU-s before TIME resets.
+        process = table.add(Process(9600, 1, "outside_zombie", cpu_per_s=0.6))
+        first = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        clocks.sleep(10)
+        second = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        one = contention.interval(first, second, tree_roots=[DRIVER], include_kernel_task=False,
+                                  limit=contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"])
+        previous_over = contention.over_limit(one)
+        clocks.sleep(10)
+        process.cpu = process.cpu_per_s = 0.0
+        if unknown_counter:
+            table.processes[330].cpu = 0.0  # no previous over-limit evidence for backupd
+        third = contention.take_snapshot(ctx, host_reader=table.host_cpu)
+        two = contention.interval(second, third, tree_roots=[DRIVER], include_kernel_task=False,
+                                  limit=contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"],
+                                  previous_over=previous_over)
+        found = contention.span_findings([two], two["interval"])
+        expected = ["contention.request_overlap"]
+        if unknown_counter:
+            expected.append("contention.unmeasured")
+            self.assertIsNone(two["clean"])
+        else:
+            self.assertIs(two["clean"], False)
+        self.assertEqual([item["code"] for item in found], expected)
+        [entry] = two["exited_over_limit"]
+        self.assertIn(entry, two["outside_over_limit"])
+        # Counter quantization: 0.01 CPU-s at each snapshot, divided by
+        # the actual interval, bounds the error in the measured rate.
+        self.assertAlmostEqual(entry["cpu_s_per_s"], 0.6, delta=2 * 0.01 / one["elapsed_s"])
+        self.assertEqual(contention.over_limit(two), {})  # do not invent another interval's rate
 
     def snapshots(self, table, clocks, ctx):
         first = contention.take_snapshot(ctx, host_reader=table.host_cpu)

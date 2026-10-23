@@ -346,7 +346,9 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
 
     ``previous_over`` maps (pid, start) to the rate of each outside process
     that was above ``limit`` in the previous interval (:func:`over_limit`); one
-    of them that exited inside this interval makes it dirty at that rate.
+    of them that exited or regressed its counter inside this interval makes
+    it dirty at that rate. A regressed outside counter without that previous
+    evidence leaves the interval unmeasured.
     ``aggregate_limit`` (None: not judged) makes the interval dirty when the
     host's busy CPU outside the tree exceeds it; with a limit, an unread host
     term leaves the interval unmeasured.
@@ -363,12 +365,24 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     if not math.isfinite(elapsed_s) or elapsed_s <= 0:
         result.update(error="snapshots are not in time order", clean=None)
         return result
-    union = {**before.rows, **after.rows}
-    tree = tree_identities(union.values(), tree_roots)
+    roots = set(tree_roots)
+    # Pin each root to its first observed identity. A reused root PID must
+    # not exempt its replacement, or that replacement's descendants.
+    root_identities = {identity[0]: identity for snapshot in (after, before)
+                       for identity in snapshot.rows if identity[0] in roots}
+    tree: set[tuple[int, str]] = set()
+    for snapshot in (before, after):
+        snapshot_roots = [pid for pid, identity in root_identities.items()
+                          if identity in snapshot.rows]
+        pids = tree_identities(snapshot.rows.values(), snapshot_roots)
+        # Close ancestry within each snapshot; an old child's ppid edge
+        # cannot give a new process reusing its PID tree membership.
+        tree.update(identity for identity in snapshot.rows if identity[0] in pids)
     wall_start_s = before.started.wall_ns / 1e9
     outside: list[dict[str, Any]] = []
     unaccounted: list[dict[str, Any]] = []
     exited_over: list[dict[str, Any]] = []
+    regressed_outside = False
     tree_cpu = 0.0
     kernel_task_cpu = None
     for identity in sorted(set(before.rows) | set(after.rows)):
@@ -390,13 +404,22 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
             # with TIME 0:00.00 while it is a zombie.  Its delta is unmeasurable.
             unaccounted.append({"pid": row["pid"], "command": row["command"],
                                 "start": row["start_identity"], "reason": "counter regressed"})
+            if identity not in tree and not (row["pid"] == 0 and row["command"] == KERNEL_TASK
+                                             and not include_kernel_task):
+                if previous_over and identity in previous_over:
+                    exited_over.append({
+                        "pid": row["pid"], "command": row["command"], "start": row["start_identity"],
+                        "cpu_s_per_s": previous_over[identity],
+                        "basis": "counter regressed inside this interval; its rate over the previous interval"})
+                else:
+                    regressed_outside = True
             continue
         rate = delta / elapsed_s
         if row["command"] == KERNEL_TASK and row["pid"] == 0:
             kernel_task_cpu = rate
             if not include_kernel_task:
                 continue
-        if row["pid"] in tree:
+        if identity in tree:
             tree_cpu += rate
             continue
         outside.append({"pid": row["pid"], "command": row["command"],
@@ -423,7 +446,7 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         outside_total_cpu_s_per_s=outside_total,
         outside_process_count=len(outside),
         tree_cpu_s_per_s=tree_cpu,
-        tree_process_count=len(tree & {r["pid"] for r in union.values()}),
+        tree_process_count=len(tree),
         kernel_task_cpu_s_per_s=kernel_task_cpu,
         kernel_task_included=include_kernel_task,
         **host,
@@ -434,6 +457,9 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         unaccounted=unaccounted,
         raw=[ref.to_json() for ref in (before.raw, after.raw) if ref is not None],
     )
+    if regressed_outside:
+        result.update(error="outside process CPU counter regressed without a previous over-limit rate",
+                      clean=None)
     if aggregate_limit is not None and host_busy is None:
         result.update(error=f"host CPU unread, so the registered aggregate limit cannot be "
                             f"judged: {host['host_error']}", clean=None)
@@ -640,9 +666,10 @@ def span_findings(intervals: Sequence[Mapping[str, Any]], request: Mapping[str, 
         a, b = item["interval"]["monotonic_ns"]
         if b < start or a > stop:
             continue
-        if item.get("error"):
-            continue
-        covered.append((a, b))
+        # Missing evidence leaves coverage open, but cannot erase another
+        # outside process's directly measured over-limit evidence.
+        if not item.get("error"):
+            covered.append((a, b))
         over = [entry for entry in item.get("outside_over_limit") or ()
                 if entry["cpu_s_per_s"] > limit]
         if over:

@@ -246,8 +246,10 @@ class WindowEventTests(unittest.TestCase):
         self.assertEqual([event["code"] for event in clock.window_events(samples)], ["clock.step"])
         mid = samples[100]["finished"]["monotonic_ns"]
         span = {"monotonic_ns": [mid - 3 * 10**9, mid + 3 * 10**9]}
+        # The prior f still supports the existing step comparison, but
+        # the failed refresh must also disclose incomplete f coverage.
         self.assertEqual([f["code"] for f in clock.span_findings(samples, span)],
-                         ["clock.step_overlap"])
+                         ["clock.step_overlap", "clock.unmeasured"])
 
     def test_step_across_a_failed_anchor_read_is_compared_across_the_gap(self):
         samples = self.journal_with_failure(2_000_000, fail_anchor=True)
@@ -256,10 +258,11 @@ class WindowEventTests(unittest.TestCase):
         a, b = events[0]["interval"]["monotonic_ns"]
         self.assertEqual(a, samples[99]["started"]["monotonic_ns"])
         self.assertEqual(b, samples[101]["finished"]["monotonic_ns"])
-        # a 2 s gap is under the 3 s coverage bound: no clock.unmeasured
+        # The 2 s anchor gap is under the existing 3 s bound, but this
+        # sample also failed its f read: frequency coverage is unmeasured.
         span = {"monotonic_ns": [a - 10**9, b + 10**9]}
         self.assertEqual([f["code"] for f in clock.span_findings(samples, span)],
-                         ["clock.step_overlap"])
+                         ["clock.step_overlap", "clock.unmeasured"])
 
     def test_no_step_no_event_across_failed_samples(self):
         clocks = FakeClocks()
@@ -281,6 +284,47 @@ class WindowEventTests(unittest.TestCase):
         span = {"monotonic_ns": [samples[15]["finished"]["monotonic_ns"],
                                  samples[25]["finished"]["monotonic_ns"]]}
         self.assertIn("clock.unmeasured", [f["code"] for f in clock.span_findings(samples, span)])
+
+
+class FrequencyCoverageTests(unittest.TestCase):
+    def journal(self, *, failed, seconds=11):
+        from joulewise.hazards.monitor import DEFAULT_CADENCE
+
+        clocks = FakeClocks()
+        # Twice the registered step threshold: a real 2 ms wall step in
+        # the 1-5 ms band, with 1 Hz anchors and the production f cadence.
+        clocks.step_at(4.5, 2 * LIMITS["step_ns"])
+        reader = FrequencyReader(clocks)
+        ctx = base.Context(clocks=clocks)
+        samples = []
+        for second in range(seconds):
+            reader.fail = failed(second)
+            samples.append(clock.sample(ctx, frequency_reader=(
+                reader if second % DEFAULT_CADENCE["frequency_s"] == 0 else None)))
+            clocks.sleep(DEFAULT_CADENCE["clock_s"])
+        return samples
+
+    def member(self, samples, start, stop):
+        # Use observed integer timestamps, with a successful anchor on
+        # either side; only frequency evidence can leave this unmeasured.
+        span = {"monotonic_ns": [samples[start]["finished"]["monotonic_ns"],
+                                 samples[stop]["finished"]["monotonic_ns"]]}
+        return clock.span_findings(samples, span)
+
+    def test_failed_frequency_from_startup_is_unmeasured_not_a_step(self):
+        samples = self.journal(failed=lambda second: True)
+        self.assertEqual(clock.window_events(samples), [])
+        self.assertEqual([item["code"] for item in self.member(samples, 1, 9)],
+                         ["clock.unmeasured"])
+
+    def test_failed_refresh_before_member_makes_frequency_stale(self):
+        samples = self.journal(failed=lambda second: second > 0)
+        self.assertEqual([item["code"] for item in self.member(samples, 6, 9)],
+                         ["clock.unmeasured"])
+
+    def test_successful_refresh_restores_coverage(self):
+        samples = self.journal(failed=lambda second: 0 < second < 10, seconds=16)
+        self.assertEqual(self.member(samples, 11, 14), [])
 
 
 class PreemptedReadTests(unittest.TestCase):

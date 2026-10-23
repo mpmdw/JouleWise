@@ -107,7 +107,10 @@ def measure(ctx: Context, *, executable: str = POWERMETRICS,
                 error = f"cadence probe child returned no report (exit {completed.returncode})"
             else:
                 values.update(report)
-                values.update(cadence_statistics(report.get("intervals_ns") or []))
+                try:
+                    values.update(cadence_statistics(report.get("intervals_ns") or []))
+                except ValueError as exc:
+                    error = f"cadence intervals unmeasured: {exc}"
         if output.exists():
             data = output.read_bytes()
             raw.append(RawRef("powermetrics-idle.plist", sha256_hex(data), len(data),
@@ -124,6 +127,11 @@ def measure(ctx: Context, *, executable: str = POWERMETRICS,
 def cadence_statistics(intervals_ns: Sequence[int]) -> dict[str, Any]:
     """Median, p95 and maximum frame interval in ms, as ``_probe_cadence`` reports them."""
 
+    # elapsed_ns is a measured duration: zero or negative cannot represent
+    # a sampling interval. Validate every frame before deriving statistics.
+    for index, value in enumerate(intervals_ns):
+        if value <= 0:
+            raise ValueError(f"frame {index} elapsed_ns {value} is not strictly positive")
     values = sorted(value / 1_000_000 for value in intervals_ns)
     if not values:
         return {"median_ms": None, "p95_ms": None, "max_ms": None}
