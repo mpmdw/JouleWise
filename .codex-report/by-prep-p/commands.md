@@ -19,6 +19,7 @@ git -C "$DATA" archive 8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b bytes-h-desk-202
 ~~~
 
 If that commit is absent, fetch only the named data branch into the data checkout first. Read-only raw inputs are:
+
 - export/bytes-h-20261021T185555335572Z-calibration.runs.csv and matching .session.json;
 - MEASUREMENTS.json;
 - tables/indep_runs.json (per-run one-copy allocated bytes, **not** retained_bytes divided by two);
