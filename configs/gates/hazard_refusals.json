@@ -132,6 +132,7 @@
    "scripts/validate_powermetrics_fiducial.py"
   ],
   "not_scanned_reasons": {
+   "alignment_workload": "prospective align_episode branch only; absent from currently registered HAZARD packs; census required before D1 registration",
    "retired": "retired ARM/T0 path: block 5 does not run it (the HAZARD branch dispatches away)",
    "analysis": "desk analysis after the harvest; it decides no collection and no window exclusion",
    "data": "constants and data shapes only",
@@ -142,6 +143,7 @@
    "legacy_key": "named only as a legacy refusal key (PROTECTS/SUPERSEDES or a runbook reference); the retired ARM/T0 path runs it, block 5 does not"
   },
   "not_scanned": {
+   "joulewise/align/apple/workload.py": "alignment_workload",
    "joulewise/__init__.py": "data",
    "joulewise/adapters/local_transport.py": "mock",
    "joulewise/adapters/mock_runtime.py": "mock",
