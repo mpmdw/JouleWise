@@ -1957,7 +1957,7 @@
       ],
       "model_artifact_sha256": "d4f5fe85e4b0dccc49a48098978f39540cfb6f52baafb6f78656cdbacba2a753",
       "model_name": "Qwen3-8B-8bit",
-      "model_revision": null,
+      "model_revision": "48a0b75b1ae72503e21e1558d040bc227510ff06",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-8bit",
       "packs": [
         "bytes-s4-p1",
