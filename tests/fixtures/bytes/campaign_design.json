@@ -287,6 +287,19 @@
     "rest_scale": 100.0,
     "derivation": "Synthetic D3 stress: 0.01 J rails endpoint drift versus 1 J DC-minus-rails drift (the approximate per-run attribution limit); checked against 0.10 B in every cell, not a measured spread."
   },
+  "battery_assist": {
+    "models": ["Llama-3.3-70B-Instruct-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit", "Qwen3.5-122B-A10B-4bit"],
+    "current_ma": -1000,
+    "voltage_mv": 12774,
+    "publication_phase_ns": 370000000,
+    "charging": {
+      "current_ma": 100,
+      "duration_s": 1.0,
+      "derivation": "100 mA * 12774 mV / 1e6 * 1 s = 1.2774 J, above BAT-2's approximately 1 J attribution scale; below harvest's 200 mA charging exclusion, so the signed run stays in the primary cell and carries no battery.assist."
+    },
+    "episodes": ["inside_decode", "across_start", "across_end", "prefill_only"],
+    "derivation": "12.774 W for 0.8 to 1 s supplies at least 10.2192 J, above BAT-2's approximately 1 J attribution limit. The assisted fixture polls every 0.2 s, as production does. The no-assist fixture retains the original meter batches and random draws for exact output identity."
+  },
   "main_campaign": {
     "pass_duration_scales": [
       1.0,

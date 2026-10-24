@@ -11,6 +11,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import bytes_twin as bt
 
@@ -18,6 +19,23 @@ ROOT = Path(__file__).resolve().parents[1]
 _synth_spec = importlib.util.spec_from_file_location("twin_synth", ROOT / "tests/fixtures/bytes/twin_synth.py")
 synth = importlib.util.module_from_spec(_synth_spec)
 _synth_spec.loader.exec_module(synth)
+
+
+def quantity_bar(a, b):
+    """COMMON: an algebraic oracle without a printed half-width uses 1e-6 relative,
+    or 1e-6 absolute in its unit near zero. This exceeds 1e6 * 2.2e-16 = 2.2e-10
+    relative floating-point noise. Tests of recovery use their uncertainty instead.
+    """
+    return 1e-6 * max(1.0, abs(a), abs(b))
+
+
+class QuantityTestCase(unittest.TestCase):
+    """Closed-form algebra checks without printed cells use quantity_bar in the quantity's unit."""
+    def assertQuantityEqual(self, a, b):
+        self.assertAlmostEqual(a, b, delta=quantity_bar(a, b))
+
+    def assertQuantityDifferent(self, a, b):
+        self.assertGreater(abs(a - b), quantity_bar(a, b))
 
 WORLD = {}
 
@@ -54,7 +72,7 @@ def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) 
     return json.loads(out.read_text())
 
 
-class ConstantsTests(unittest.TestCase):
+class ConstantsTests(QuantityTestCase):
     def test_addendum5_512_decode_passes(self):
         self.assertEqual(bt.DECODE_STEPS, 512)
         self.assertEqual(bt.PRINTED_TOKENS, 512)
@@ -66,19 +84,19 @@ class ConstantsTests(unittest.TestCase):
                "upper95_j": 1038.0, "duration_s": 5.12, "n_r": 10, "n_b": 10, "h_j": 1.0, "B_j": 11.0,
                "variance": 0.1, "df": 9}
         q = bt.quantities({"gross": est}, {"b_GB": 2.0, "R_GB": 4.0})["gross"]
-        self.assertAlmostEqual(q["e_j_per_step"], 2.0)
-        self.assertAlmostEqual(q["tau_s_per_step"], 0.01)
-        self.assertAlmostEqual(q["BW_GB_per_s"], 200.0)
-        self.assertAlmostEqual(q["e_printed_j_per_token"], 2.0)
+        self.assertQuantityEqual(q["e_j_per_step"], 2.0)
+        self.assertQuantityEqual(q["tau_s_per_step"], 0.01)
+        self.assertQuantityEqual(q["BW_GB_per_s"], 200.0)
+        self.assertQuantityEqual(q["e_printed_j_per_token"], 2.0)
         self.assertEqual(q["printed_label"], bt.PER_TOKEN_LABEL)
-        self.assertAlmostEqual(q["e_half_width_j_per_step"], 24.0 / 512)
+        self.assertQuantityEqual(q["e_half_width_j_per_step"], 24.0 / 512)
 
 
-class StudentTTests(unittest.TestCase):
+class StudentTTests(QuantityTestCase):
     def test_exact_quantiles_of_the_analysis_plan(self):
         for df, expected in ((9, 2.262157162798205), (8, 2.306004135204166), (7, 2.364624251592785),
                              (6, 2.446911851), (5, 2.570581836), (4, 2.776445105)):
-            self.assertAlmostEqual(bt.t_quantile(0.975, df), expected, places=8)
+            self.assertQuantityEqual(bt.t_quantile(0.975, df), expected)
 
     def test_d8_block5_three_decimal_table_reproduced(self):
         for df, value in ((9, 2.262), (8, 2.306), (7, 2.365), (6, 2.447), (5, 2.571), (4, 2.776), (11, 2.201)):
@@ -98,7 +116,7 @@ class StudentTTests(unittest.TestCase):
 
     def test_bonferroni_level_is_wider_than_95(self):
         self.assertGreater(bt.t_two_sided(0.05 / 21, 9), bt.t_two_sided(0.05, 9))
-        self.assertAlmostEqual(bt.t_cdf(bt.t_two_sided(0.05 / 21, 9), 9), 1 - 0.05 / 42, places=12)
+        self.assertQuantityEqual(bt.t_cdf(bt.t_two_sided(0.05 / 21, 9), 9), 1 - 0.05 / 42)
 
 
 def members(values, bounds, prefix):
@@ -109,7 +127,7 @@ def quads(values, bounds, prefix):
     return [{"id": f"{prefix}{i}", "members": members([e] * 4, bounds, f"{prefix}{i}m")} for i, e in enumerate(values, 1)]
 
 
-class PhaseEstimateTests(unittest.TestCase):
+class PhaseEstimateTests(QuantityTestCase):
     R = [10.0, 10.2, 9.9, 10.1, 10.0, 10.3, 9.8, 10.1, 10.0, 9.6]
     B = [10.4, 10.1, 10.3, 10.2, 10.5, 10.0, 10.2, 10.3, 10.1, 9.9]
     KINDS = ("k1", "k2", "k3")
@@ -118,12 +136,16 @@ class PhaseEstimateTests(unittest.TestCase):
     def test_worked_example_all_units_kept(self):
         cell = bt.phase_estimate(members(self.R, self.BOUNDS, "r"), quads(self.B, self.BOUNDS, "q"), self.KINDS)
         self.assertEqual(cell["status"], "ok")
-        self.assertAlmostEqual(cell["mean_j"], 10.16, places=12)
-        self.assertAlmostEqual(cell["h95_j"], 0.10833, places=5)
-        self.assertAlmostEqual(cell["B_j"], 0.060, places=12)
-        self.assertAlmostEqual(cell["lower95_j"], 9.9917, places=4)
-        self.assertAlmostEqual(cell["upper95_j"], 10.3283, places=4)
-        self.assertAlmostEqual(cell["per_token_j"], 0.019844, places=6)
+        self.assertQuantityEqual(cell["mean_j"], 10.16)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["h95_j"], 0.10833, delta=0.5 * 10 ** -5)
+        self.assertQuantityEqual(cell["B_j"], 0.060)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["lower95_j"], 9.9917, delta=0.5 * 10 ** -4)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["upper95_j"], 10.3283, delta=0.5 * 10 ** -4)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["per_token_j"], 0.019844, delta=0.5 * 10 ** -6)
         self.assertEqual(cell["df"], 9)
 
     def test_worked_example_units_removed(self):
@@ -131,11 +153,16 @@ class PhaseEstimateTests(unittest.TestCase):
         qs = [q for q in quads(self.B, self.BOUNDS, "q") if q["id"] not in ("q5", "q9")]
         cell = bt.phase_estimate(reps, qs, self.KINDS)
         self.assertEqual((cell["n_r"], cell["n_b"], cell["df"]), (9, 8, 7))
-        self.assertAlmostEqual(cell["mean_j"], 10.13333, places=5)
-        self.assertAlmostEqual(cell["h95_j"], 0.11519, places=5)
-        self.assertAlmostEqual(cell["lower95_j"], 9.9581, places=4)
-        self.assertAlmostEqual(cell["upper95_j"], 10.3085, places=4)
-        self.assertAlmostEqual(cell["per_token_j"], 0.019792, places=6)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["mean_j"], 10.13333, delta=0.5 * 10 ** -5)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["h95_j"], 0.11519, delta=0.5 * 10 ** -5)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["lower95_j"], 9.9581, delta=0.5 * 10 ** -4)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["upper95_j"], 10.3085, delta=0.5 * 10 ** -4)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(cell["per_token_j"], 0.019792, delta=0.5 * 10 ** -6)
 
     def test_family_alpha_widens_only_h(self):
         full = bt.phase_estimate(members(self.R, self.BOUNDS, "r"), quads(self.B, self.BOUNDS, "q"), self.KINDS)
@@ -144,7 +171,7 @@ class PhaseEstimateTests(unittest.TestCase):
         self.assertEqual(full["mean_j"], wide["mean_j"])
         self.assertEqual(full["B_j"], wide["B_j"])
         self.assertGreater(wide["h_j"], full["h_j"])
-        self.assertAlmostEqual(wide["h_j"], bt.h_at(full, 0.05 / 21), places=12)
+        self.assertQuantityEqual(wide["h_j"], bt.h_at(full, 0.05 / 21))
 
     def test_below_minimum_and_missing_kind_refuse(self):
         reps = members(self.R[:4], self.BOUNDS, "r")
@@ -158,18 +185,19 @@ class PhaseEstimateTests(unittest.TestCase):
         qs = [q for q in quads(self.B, self.BOUNDS, "q") if q["id"] not in ("q5", "q9")]
         cell = bt.phase_estimate(reps, qs, self.KINDS)
         plain = (sum(self.R) - 10.3 + 4 * (sum(self.B) - 10.5 - 10.1)) / 41
-        self.assertNotAlmostEqual(cell["mean_j"], plain, places=4)
-        self.assertAlmostEqual(plain, 10.12927, places=5)
+        self.assertQuantityDifferent(cell["mean_j"], plain)
+        # Half of the worked value's last printed digit (registration §14).
+        self.assertAlmostEqual(plain, 10.12927, delta=0.5 * 10 ** -5)
 
 
-class Neg8Tests(unittest.TestCase):
+class Neg8Tests(QuantityTestCase):
     def test_count_adjusted_bound_by_hand(self):
         bound = bt.neg8_bound([1, 2, 3, 4, 5, 6], 2, 2)
-        self.assertAlmostEqual(bound["envelope_j"], 4.0)
+        self.assertQuantityEqual(bound["envelope_j"], 4.0)
         expected = 2.571 * 1.8708286933869707 * math.sqrt(1.0)   # Addendum 7 D8: the three-decimal table
-        self.assertAlmostEqual(bound["prediction_j"], expected, places=9)
-        self.assertNotAlmostEqual(bound["prediction_j"], bt.t_quantile(0.975, 5) * 1.8708286933869707, places=9)
-        self.assertAlmostEqual(bound["bound_j"], max(4.0, expected), places=9)
+        self.assertQuantityEqual(bound["prediction_j"], expected)
+        self.assertQuantityDifferent(bound["prediction_j"], bt.t_quantile(0.975, 5) * 1.8708286933869707)
+        self.assertQuantityEqual(bound["bound_j"], max(4.0, expected))
         self.assertIsNone(bt.neg8_bound([1.0], 1, 1))
 
     def test_allowance_from_session_rows(self):
@@ -182,22 +210,22 @@ class Neg8Tests(unittest.TestCase):
         record = bt.neg8_allowance(rows)
         self.assertEqual(record["status"], "ok")
         self.assertEqual(record["corpus_n"], 12)           # the desk cap
-        self.assertAlmostEqual(record["trajectory_excursion_j"], 0.8, places=9)
+        self.assertQuantityEqual(record["trajectory_excursion_j"], 0.8)
         self.assertEqual(record["allowance_j"], max(0.8, record["bound_terms"]["bound_j"]))
-        self.assertAlmostEqual(record["T_ref_s"], 2.0)
+        self.assertQuantityEqual(record["T_ref_s"], 2.0)
         lost = [r for r in rows if r["role"] != "midpoint"]
         self.assertTrue(bt.neg8_allowance(lost)["midpoint_lost"])
-        self.assertAlmostEqual(bt.neg8_allowance(lost)["trajectory_excursion_j"], 0.1, places=9)
+        self.assertQuantityEqual(bt.neg8_allowance(lost)["trajectory_excursion_j"], 0.1)
         self.assertEqual(bt.neg8_allowance(rows[:5])["status"], "undefined_references_insufficient")
 
 
-class RegressionTests(unittest.TestCase):
+class RegressionTests(QuantityTestCase):
     def test_exact_line(self):
         fit = bt.ols([[1], [2], [4]], [3.0, 5.0, 9.0])
-        self.assertAlmostEqual(fit["coef"][0], 1.0)
-        self.assertAlmostEqual(fit["coef"][1], 2.0)
-        self.assertAlmostEqual(fit["s2"], 0.0)
-        self.assertAlmostEqual(bt.ols_predict(fit, [10])["yhat"], 21.0)
+        self.assertQuantityEqual(fit["coef"][0], 1.0)
+        self.assertQuantityEqual(fit["coef"][1], 2.0)
+        self.assertQuantityEqual(fit["s2"], 0.0)
+        self.assertQuantityEqual(bt.ols_predict(fit, [10])["yhat"], 21.0)
 
     def test_simple_regression_against_textbook_formulas(self):
         xs, ys = [1, 2, 3, 4, 5], [2.1, 3.9, 6.2, 7.8, 10.1]
@@ -208,8 +236,8 @@ class RegressionTests(unittest.TestCase):
         rss = sum((y - (my - slope * mx) - slope * x) ** 2 for x, y in zip(xs, ys))
         se = math.sqrt(rss / 3 / sxx)
         interval = bt.coef_interval(fit, 1, 0.05)
-        self.assertAlmostEqual(interval["value"], slope, places=12)
-        self.assertAlmostEqual(interval["ols"]["half_width"], bt.t_quantile(0.975, 3) * se, places=12)
+        self.assertQuantityEqual(interval["value"], slope)
+        self.assertQuantityEqual(interval["ols"]["half_width"], bt.t_quantile(0.975, 3) * se)
 
     def test_d1_hc3_covariance_by_hand_and_ols_printed_beside(self):
         xs, ys = [1, 2, 3, 4, 5, 6], [1.0, 2.3, 2.9, 4.4, 4.9, 6.6]
@@ -227,26 +255,26 @@ class RegressionTests(unittest.TestCase):
         expected = [[sum(inv[a][c] * meat[c][d] * inv[d][b] for c in range(2) for d in range(2)) for b in range(2)] for a in range(2)]
         for a in range(2):
             for b in range(2):
-                self.assertAlmostEqual(fit["cov_hc3"][a][b], expected[a][b], places=12)
+                self.assertQuantityEqual(fit["cov_hc3"][a][b], expected[a][b])
         interval = bt.coef_interval(fit, 1, 0.05)
         self.assertEqual(interval["se_method"], "HC3")
-        self.assertAlmostEqual(interval["half_width"], bt.t_quantile(0.975, 4) * math.sqrt(expected[1][1]), places=12)
+        self.assertQuantityEqual(interval["half_width"], bt.t_quantile(0.975, 4) * math.sqrt(expected[1][1]))
         self.assertEqual(interval["ols"]["se_method"], "OLS")
-        self.assertAlmostEqual(interval["ols"]["half_width"], bt.t_quantile(0.975, 4) * math.sqrt(fit["cov"][1][1]), places=12)
+        self.assertQuantityEqual(interval["ols"]["half_width"], bt.t_quantile(0.975, 4) * math.sqrt(fit["cov"][1][1]))
         pred = bt.ols_predict(fit, [7])
         var = sum([1.0, 7.0][a] * expected[a][b] * [1.0, 7.0][b] for a in range(2) for b in range(2))
-        self.assertAlmostEqual(pred["se_pred_hc3"], math.sqrt(var + fit["s2"]), places=12)
-        self.assertAlmostEqual(pred["se_mean_hc3"], math.sqrt(var), places=12)
+        self.assertQuantityEqual(pred["se_pred_hc3"], math.sqrt(var + fit["s2"]))
+        self.assertQuantityEqual(pred["se_mean_hc3"], math.sqrt(var))
 
     def test_two_regressors(self):
         rows = [[1, 1], [2, 1], [3, 2], [4, 3], [5, 5], [6, 8]]
         ys = [2 + 3 * a + 0.5 * b for a, b in rows]
         fit = bt.ols(rows, ys)
         for value, expected in zip(fit["coef"], (2, 3, 0.5)):
-            self.assertAlmostEqual(value, expected, places=9)
+            self.assertQuantityEqual(value, expected)
 
 
-class H1Tests(unittest.TestCase):
+class H1Tests(QuantityTestCase):
     def points(self):
         return {"a": {"x": {"bytes": 1.0, "resident": 1.0, "time": 1.0}, "e": 1.0, "w": 0.1, "kind": "fit"},
                 "b": {"x": {"bytes": 2.0, "resident": 2.0, "time": 1.5}, "e": 2.0, "w": 0.1, "kind": "fit"},
@@ -256,13 +284,13 @@ class H1Tests(unittest.TestCase):
         lines = bt.h1_lines(self.points())
         self.assertEqual(len(lines["bytes"]["corners"]), 8)
         pred = bt.h1_predict(lines, "bytes", 10.0)
-        self.assertAlmostEqual(pred["central"], 10.0, places=9)
+        self.assertQuantityEqual(pred["central"], 10.0)
         self.assertLess(pred["lower"], 10.0)
         self.assertGreater(pred["upper"], 10.0)
         # The all-up and all-down corners shift the whole line by exactly w, so the interval is at
         # least 2w wide, and mixed corners tilt it further out at x far from the fit points.
-        self.assertGreaterEqual(pred["upper"], 10.1 - 1e-9)
-        self.assertLessEqual(pred["lower"], 9.9 + 1e-9)
+        self.assertGreaterEqual(pred["upper"], 10.1 - quantity_bar(10.1, pred["upper"]))
+        self.assertLessEqual(pred["lower"], 9.9 + quantity_bar(9.9, pred["lower"]))
         self.assertGreater(pred["upper"] - pred["lower"], 0.2)
         near = bt.h1_predict(lines, "bytes", 2.0)
         self.assertLess(near["upper"] - near["lower"], pred["upper"] - pred["lower"])
@@ -279,7 +307,7 @@ class H1Tests(unittest.TestCase):
         for name in bt.MOE:
             self.assertEqual(words["models"][name]["word"], "bytes")
             self.assertEqual(words["models"][name]["checks"]["resident"]["miss"], "prediction_above")
-            self.assertAlmostEqual(words["models"][name]["checks"]["bytes"]["ln_measured_over_predicted"], 0.0, places=9)
+            self.assertQuantityEqual(words["models"][name]["checks"]["bytes"]["ln_measured_over_predicted"], 0.0)
         self.assertEqual(words["active_or_resident"]["answer"], "active")
         self.assertEqual(words["models"]["qwen3-14b-4bit"]["word"], "unresolved")
         self.assertIsNone(words["models"]["a"]["word"])
@@ -294,7 +322,7 @@ class H1Tests(unittest.TestCase):
         self.assertTrue(words["active_or_resident"]["misses"])
 
 
-class MeterTests(unittest.TestCase):
+class MeterTests(QuantityTestCase):
     def test_integrate_mean_power_times_duration(self):
         times = [0, 1_000_000_000, 2_000_000_000, 3_000_000_000]
         energy, n = bt.integrate(times, [1.0, 2.0, 3.0, 4.0], 0, 2_000_000_000)
@@ -355,8 +383,14 @@ class MeterTests(unittest.TestCase):
         expected_power = (truth["DC_BASE_w"] + truth["DC_GAIN"] * rails / summary["decode_latency_s"]
                           + truth["REST_PER_RESIDENT_W_PER_GB"] * resident)
         self.assertGreater(expected_power, truth["DC_BASE_w"])
-        self.assertAlmostEqual(joined["mean_power_w"] / expected_power, 1.0, delta=0.03)
-        self.assertAlmostEqual(joined["idle_power_w"], truth["DC_IDLE_W"], delta=0.1)
+        # Independently placed edges: use u in J, plus three SEs of the fixture's
+        # 0.02 W iid sample noise and half a 28 V * 1 microamp payload digit.
+        noise_w = 3 * .02 / math.sqrt(joined["samples"]) + 0.5 * 28e-6
+        self.assertLessEqual(abs(joined["meter_gross_j"] - expected_power * joined["decode_span_s"]),
+                             joined["meter_phase_edge_j"] + noise_w * joined["decode_span_s"])
+        # Same synthetic sampler noise and payload quantization on the idle mean.
+        self.assertLessEqual(abs(joined["idle_power_w"] - truth["DC_IDLE_W"]),
+                             3 * .02 / math.sqrt(joined["idle_samples"]) + 0.5 * 28e-6)
         self.assertGreaterEqual(joined["edge_bound_j"], 0.0)
 
     def test_item3_edge_term_is_edge_powers_times_r_max_plus_dt(self):
@@ -366,10 +400,9 @@ class MeterTests(unittest.TestCase):
         run_id = next(m["run_id"] for m in roster["members"] if m["role"] == "science")
         joined = bt.dc_join(archive, run_id)
         terms = joined["edge_terms"]
-        self.assertAlmostEqual(joined["edge_bound_j"],
-                               (terms["P_start_w"] + terms["P_end_w"]) * (terms["r_max_s"] + terms["dt_meter_s"]), places=12)
-        self.assertAlmostEqual(terms["dt_meter_s"], synth.STEP_MS / 1e3)
-        self.assertAlmostEqual(terms["r_max_s"], joined["clock_fit"]["excess_latency_ms_absmax"] / 1e3)
+        self.assertQuantityEqual(joined["edge_bound_j"], (terms["P_start_w"] + terms["P_end_w"]) * (terms["r_max_s"] + terms["dt_meter_s"]))
+        self.assertQuantityEqual(terms["dt_meter_s"], synth.STEP_MS / 1e3)
+        self.assertQuantityEqual(terms["r_max_s"], joined["clock_fit"]["excess_latency_ms_absmax"] / 1e3)
         self.assertGreater(terms["r_max_s"], 0.001)
         self.assertIn("request_energy_j", joined)
         self.assertGreater(joined["request_energy_j"], joined["decode_energy_j"])
@@ -379,14 +412,230 @@ class MeterTests(unittest.TestCase):
         self.assertGreaterEqual(joined["edge_bound_j"], (terms["P_start_w"] + terms["P_end_w"]) * terms["dt_meter_s"])
 
 
-class BlindingTests(unittest.TestCase):
+class BatteryTermsTests(QuantityTestCase):
+    def test_not_evaluated_reason_names_only_kept_rows_including_atomic_quads(self):
+        rows = []
+        for stratum, units, size in (("repeat", 10, 1), ("quad", 10, 4)):
+            for unit in range(units):
+                for member in range(size):
+                    run = f"{stratum}-{unit}-{member}"
+                    rows.append({"run_id": run, "order_index": member, "status": "succeeded", "excluded": False,
+                        "exclusion_codes": "", "flag_codes": "", "phase_decode_j": 12.0,
+                        "dur_decode_s": 1.0, "idle_power_w": 1.0,
+                        "bound_E_clock_anchor_shift_bound_j": .1,
+                        "bound_E_interpolation_joint_edge_bound_j": 0.0,
+                        "cell_ids": "cell", "strata": stratum, "unit_ids": str(unit),
+                        "_decode_assisted": False})
+        missing = next(r for r in rows if r["run_id"] == "repeat-0-0")
+        missing.update(_decode_assisted=None, _decode_assist_reason="no polls (run repeat-0-0)")
+        bad = next(r for r in rows if r["run_id"] == "quad-0-0")
+        bad.update(status="failed", excluded=True, exclusion_codes="member.status_not_succeeded")
+        sibling = next(r for r in rows if r["run_id"] == "quad-0-1")
+        sibling.update(_decode_assisted=None, _decode_assist_reason="spans unreadable (run quad-0-1)")
+        allowances = {("rails", v): {"status": "ok", "family": v, "allowance_j": .2,
+                                    "E_ref_j": 12.0, "T_ref_s": 1.0} for v in ("gross", "idle")}
+        with patch.object(bt, "_scaled_allowance", return_value=(.1, {"status": "ok", "scale": 1.0})):
+            cell = bt.compute_cell(rows, "rails", {}, allowances, .05)
+        for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive"):
+            self.assertEqual(cell[variant]["status"], "ok")
+            self.assertEqual(cell[variant]["without_assisted"]["reason"], "no polls (run repeat-0-0)")
+            self.assertEqual(cell[variant]["decode_assisted_member_counts_reason"], "no polls (run repeat-0-0)")
+
+    def test_missing_bundle_and_spans_have_their_own_marker_reasons(self):
+        for status in ("bundle_missing", "spans_unreadable"):
+            with self.subTest(status=status), patch.object(bt, "_bundle", return_value=(
+                    None if status == "bundle_missing" else Path("unused"))), patch.object(
+                    bt, "member_spans", return_value=None):
+                result = bt.dc_join({"root": Path("unused"), "streams": []}, "member")
+                self.assertEqual(result["status"], status)
+                reason = result["decode_assist_evaluated_reason"]
+                self.assertNotIn("no mapped meter stream has polls", reason)
+                self.assertIn("(run member)", reason)
+
+    def test_blinded_stage_does_not_open_raw_meter_streams(self):
+        with patch.object(bt, "load_archive", side_effect=AssertionError("blinded raw meter read")):
+            result = run_twin(WORLD["one"], "blinded")
+        cell = next(iter(result["cells"].values()))["pass1"]["boundaries"]["rails"]
+        self.assertIsNone(cell["gross"]["decode_assisted_member_counts"])
+        self.assertEqual(cell["without_assisted"]["status"], "not_evaluated")
+
+    def stream(self):
+        # 1 s polls give tau = 2 * 1 s SMC publication + 1 s poll = 3 s.
+        # Signed 12 W discharge and -6 W charge are above the ~1 J attribution limit.
+        power = [0.0] * 13
+        power[3], power[5], power[6], power[9] = 24.0, 12.0, -6.0, 12.0
+        return {"poll_ns": [i * 1_000_000_000 for i in range(13)], "battery_watts": power,
+                "battery_current_ma": [-1000 if p > 0 else 500 if p < 0 else 0 for p in power]}
+
+    def test_signed_energy_and_forward_edges_and_delayed_marker(self):
+        r = bt.battery_terms(self.stream(), [4_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+        self.assertEqual(r["status"], "ok")
+        self.assertQuantityEqual(r["battery_gross_j"], 6)  # (4 s / 4 polls) * (12 - 6) W
+        self.assertQuantityEqual(r["battery_secondary_j"], 6)  # zero idle current
+        self.assertQuantityEqual(r["battery_v_start_j"], 18)  # |12| + |-6| W in [4, 7) s
+        self.assertQuantityEqual(r["battery_v_end_j"], 12)  # delayed discharge in [8, 11) s
+        self.assertQuantityEqual(r["battery_tau_s"], 3)
+        self.assertTrue(r["decode_assisted"])  # negative current at 9 s lies in [7, 11)
+
+    def test_marker_poll_count_uses_integer_nanoseconds_at_both_edges(self):
+        gap = 100_000_001
+        times = [i * gap for i in range(11)]
+        tau = 2_000_000_000 + gap
+        stream = {"aligned": False, "raw_offset_ns": 0, "poll_ns": times,
+                  "battery_watts": [12.0] * len(times), "battery_current_ma": [-1000] * len(times)}
+        edge = times[-1] - tau
+        for window, count in (([edge, edge + 1], 1), ([edge - 1, edge], 0)):
+            with self.subTest(window=window):
+                result = bt.battery_terms(stream, window, [0, 1])
+                self.assertEqual(result["battery_marker_polls"], count)
+                spans = {"decode_ns": window, "idle_ns": [0, 1]}
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(
+                        bt, "member_spans", return_value=spans):
+                    joined = bt.dc_join({"root": Path("unused"), "streams": [stream]}, "member")
+                self.assertIs(joined.get("decode_assisted"), True if count else None)
+
+    def test_missing_voltage_does_not_erase_the_current_marker(self):
+        s = self.stream()
+        s["battery_watts"][4:8] = [None] * 4
+        r = bt.battery_terms(s, [4_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+        self.assertEqual(r["status"], "battery reading missing")
+        self.assertTrue(r["decode_assisted"])
+
+    def test_idle_charging_is_subtracted_with_its_sign(self):
+        s = self.stream()
+        s["battery_watts"][:2] = [-6.0, -6.0]
+        r = bt.battery_terms(s, [4_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+        self.assertQuantityEqual(r["battery_secondary_j"], 30)  # 6 J - (-6 W * 4 s)
+
+    def test_request_span_keeps_battery_energy_outside_decode(self):
+        r = bt.battery_terms(self.stream(), [2_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+        # NEG-8 requests integrate the whole request: 24 J before decode plus its signed 6 J.
+        self.assertQuantityEqual(r["battery_gross_j"], 30)
+
+    def test_delay_uses_a_poll_gap_outside_decode(self):
+        s = self.stream()
+        s["poll_ns"].insert(0, -5_000_000_000)
+        s["battery_watts"].insert(0, None)
+        s["battery_current_ma"].insert(0, None)
+        r = bt.battery_terms(s, [4_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+        self.assertQuantityEqual(r["battery_tau_s"], 7)  # 2 * 1 s SMC + stream-wide 5 s poll gap
+
+    def test_unresolved_anchor_cannot_return_on_the_inclusive_line(self):
+        for code in ("member.anchor_not_bounded",):
+            row = {"status": "succeeded", "phase_decode_j": 12.0, "dur_decode_s": 1.0,
+                   "excluded": True, "exclusion_codes": code}
+            self.assertFalse(bt.restorable(row))
+            self.assertFalse(bt._kept(row, restore_load_correlated=True))
+
+    def test_precheck_exclusion_with_valid_energy_is_restored(self):
+        row = {"status": "succeeded", "phase_decode_j": 12.0, "dur_decode_s": 1.0,
+               "excluded": True, "exclusion_codes": "member.target_phase_precheck_failed"}
+        self.assertTrue(bt.restorable(row))
+        self.assertTrue(bt._kept(row, restore_load_correlated=True))
+
+    def test_incomplete_marker_window_is_evaluated_on_available_polls(self):
+        for current, expected in ((0, False), (-1000, True), (None, False)):
+            with self.subTest(current=current):
+                s = self.stream()
+                # End + tau = 11 s; the stream ends at 9 s, inside that window.
+                for key in ("poll_ns", "battery_watts", "battery_current_ma"):
+                    s[key] = s[key][:10]
+                s["battery_current_ma"][7:] = [current] * 3
+                r = bt.battery_terms(s, [4_000_000_000, 8_000_000_000], [0, 2_000_000_000])
+                self.assertFalse(r["battery_end_window_complete"])
+                self.assertIs(r["decode_assisted"], expected)
+
+    def test_printed_poll_interval_comes_from_integer_delay(self):
+        for gap in (208_000_000, 100_000_001):
+            with self.subTest(gap=gap):
+                polls = [i * gap for i in range(130)]
+                stream = {**self.stream(), "aligned": True, "raw_offset_ns": 0, "name": "meter",
+                          "host_ns": [i * 1_000_000_000 for i in range(13)], "watts": [10.0] * 13,
+                          "poll_ns": polls, "battery_watts": [0.0] * len(polls),
+                          "battery_current_ma": [0] * len(polls), "battery_tau_ns": 2_000_000_000 + gap,
+                          "step_ms": 1000, "fit": dict.fromkeys(("excess_latency_ms_absmax", "excess_latency_ms_p95",
+                              "excess_latency_ms_max", "excess_latency_ms_min", "clock_rate_ppm"), 0.0)}
+                spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000],
+                         "request_ns": [2_000_000_000, 8_000_000_000]}
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(
+                        bt, "member_spans", return_value=spans):
+                    result = bt.dc_join({"root": Path("unused"), "streams": [stream]}, "member")
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["battery_poll_interval_max_s"], gap / 1e9)
+                if gap == 208_000_000:
+                    self.assertEqual(json.dumps(result["battery_poll_interval_max_s"]), "0.208")
+
+    def test_later_covering_stream_can_supply_missing_battery_readings(self):
+        good = {**self.stream(), "aligned": True, "raw_offset_ns": 0, "name": "good",
+                "host_ns": [i * 1_000_000_000 for i in range(13)], "watts": [10.0] * 13,
+                "step_ms": 1000, "fit": dict.fromkeys(("excess_latency_ms_absmax", "excess_latency_ms_p95",
+                    "excess_latency_ms_max", "excess_latency_ms_min", "clock_rate_ppm"), 0.0)}
+        bad = {**good, "name": "missing-voltage", "battery_watts": [None] * 13}
+        spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000],
+                 "request_ns": [2_000_000_000, 8_000_000_000]}
+        with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(bt, "member_spans", return_value=spans):
+            result = bt.dc_join({"root": Path("unused"), "streams": [bad, good]}, "member")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["stream"], "good")
+        self.assertQuantityEqual(result["battery_gross_j"], 6)
+
+    def test_marker_is_evaluated_without_decode_coverage_on_every_mapped_stream(self):
+        assisted = {**self.stream(), "aligned": True, "raw_offset_ns": 0,
+                    "host_ns": [6_000_000_000, 12_000_000_000]}
+        quiet = {**assisted, "battery_current_ma": [0] * 13}
+        spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000]}
+        for streams in ([assisted, quiet], [quiet, assisted]):
+            with self.subTest(assisted_first=streams[0] is assisted):
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(bt, "member_spans", return_value=spans):
+                    result = bt.dc_join({"root": Path("unused"), "streams": streams}, "member")
+                self.assertEqual(result["status"], "no_aligned_stream_covers_span")
+                self.assertIs(result.get("decode_assisted"), True)
+                self.assertIs(result.get("battery_end_window_complete"), True)
+
+    def test_marker_without_decode_coverage_distinguishes_quiet_polls_from_no_polls(self):
+        spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000]}
+        for count, expected in ((13, False), (6, None)):
+            stream = {**self.stream(), "aligned": True, "raw_offset_ns": 0,
+                      "host_ns": [6_000_000_000, 12_000_000_000],
+                      "poll_ns": self.stream()["poll_ns"][:count], "battery_current_ma": [0] * count}
+            with self.subTest(polls=count):
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(bt, "member_spans", return_value=spans):
+                    result = bt.dc_join({"root": Path("unused"), "streams": [stream]}, "member")
+                self.assertIs(result.get("decode_assisted"), expected)
+
+    def test_unknown_marker_in_one_pass_keeps_the_mean_description_unknown(self):
+        computed = {"status": "ok", "E_dec_j": 2.0, "T_dec_s": 1.0, "e_j_per_step": 2 / 512,
+                    "tau_s_per_step": 1 / 512, "e_half_width_j_per_step": .1 / 512,
+                    "e_printed_j_per_token": 2 / 512}
+        for diagnostics in ((computed, {"status": "not_evaluated"}),
+                            ({"status": "not_evaluated"}, computed)):
+            with self.subTest(unknown_first=diagnostics[0]["status"] == "not_evaluated"):
+                result = bt.mean_of_passes([{**computed, "without_assisted": d} for d in diagnostics])
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["passes_computed"], 2)
+                self.assertEqual(result["without_assisted"]["status"], "not_evaluated")
+
+    def test_pass_mean_marker_reason_keeps_the_actual_pass_identity(self):
+        computed = {"status": "ok", "E_dec_j": 2.0, "T_dec_s": 1.0, "e_j_per_step": 2 / 512,
+                    "tau_s_per_step": 1 / 512, "e_half_width_j_per_step": .1 / 512, "e_printed_j_per_token": 2 / 512}
+        reason = "no mapped meter stream has polls in the marker window (run member)"
+        unknown = {**computed, "without_assisted": {"status": "not_evaluated", "reason": reason}}
+        result = bt.mean_of_passes([computed, unknown], pass_ids=[1, 2])
+        self.assertEqual(result["without_assisted"]["reason"], "pass 2: " + reason)
+        result = bt.mean_of_passes([{"status": "missing"}, unknown], pass_ids=[1, 2])
+        self.assertEqual(result["without_assisted"]["reason"], "pass 2: " + reason)
+        blinded = {**computed, "without_assisted": {"status": "not_evaluated", "reason": "not evaluated at the blinded stage"}}
+        self.assertEqual(bt.mean_of_passes([blinded])["without_assisted"]["reason"], "not evaluated at the blinded stage")
+
+
+class BlindingTests(QuantityTestCase):
     def test_config_filename_and_factor_product(self):
         import hashlib
         self.assertEqual(bt.config_filename("k"), "config-" + hashlib.sha256(b"k").hexdigest()[:16] + ".json")
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "pack.json").write_text('{"factor": 1.1}')
             Path(tmp, bt.config_filename("k")).write_text('{"factor": 0.99}')
-            self.assertAlmostEqual(bt.stored_factor(tmp, "k"), 1.1 * 0.99)
+            self.assertQuantityEqual(bt.stored_factor(tmp, "k"), 1.1 * 0.99)
             with self.assertRaises(ValueError):
                 bt.stored_factor(tmp, "other")
 
@@ -418,22 +667,22 @@ class BlindingTests(unittest.TestCase):
             self.assertFalse(Path(tmp, "o.json").exists())
 
 
-class ManifestTests(unittest.TestCase):
+class ManifestTests(QuantityTestCase):
     def test_dict_and_list_forms(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp, "m.json")
             path.write_text(json.dumps({"models": {"mlx-community/Qwen3-8B-4bit": {"W_bytes": 4e9, "KV_bytes": 3e8, "R_bytes": 4.6e9}}}))
             m = bt.read_manifest(path)
-            self.assertAlmostEqual(m["qwen3-8b-4bit"]["b_GB"], 4.3)
-            self.assertAlmostEqual(m["qwen3-8b-4bit"]["R_GB"], 4.6)
+            self.assertQuantityEqual(m["qwen3-8b-4bit"]["b_GB"], 4.3)
+            self.assertQuantityEqual(m["qwen3-8b-4bit"]["R_GB"], 4.6)
             path.write_text(json.dumps([{"model": "Qwen3-4B-4bit", "W_GB": 2.0, "KV_GB": 0.5, "R_GB": 2.1}]))
             m = bt.read_manifest(path)
-            self.assertAlmostEqual(m["qwen3-4b-4bit"]["b_GB"], 2.5)
+            self.assertQuantityEqual(m["qwen3-4b-4bit"]["b_GB"], 2.5)
         self.assertEqual(bt.canon("mlx-community/Qwen3_8B-4bit"), "qwen3-8b-4bit")
         self.assertEqual(bt.canon("Qwen3.5-122B-A10B-4bit (pinned jw_models copy, read only)"), "qwen3.5-122b-a10b-4bit")
 
 
-class SyntheticWorldTests(unittest.TestCase):
+class SyntheticWorldTests(QuantityTestCase):
     """One pass with defects: a thermal exclusion, a failed quad member and an assist flag on 4B and 30B-A3B."""
 
     @classmethod
@@ -456,19 +705,20 @@ class SyntheticWorldTests(unittest.TestCase):
         for model, block in self.result["cells"].items():
             q = block["pass1"]["boundaries"]["rails"]["quantities"]["gross"]
             expected = self.truth["S_BYTES_j_per_GB"] * self.truth_of(model)["b_GB"]
-            self.assertAlmostEqual(q["e_j_per_step"] / expected, 1.0, delta=0.005, msg=model)
+            # Truth recovery: the cell's registered (h+B)/512 interval, not an agreement tolerance.
+            self.assertLessEqual(abs(q["e_j_per_step"] - expected), q["e_half_width_j_per_step"], model)
             self.assertLess(q["e_lower_j_per_step"], expected)
             self.assertGreater(q["e_upper_j_per_step"], expected)
-            self.assertAlmostEqual(q["e_printed_j_per_token"] * bt.PRINTED_TOKENS, q["E_dec_j"], places=9)
+            self.assertQuantityEqual(q["e_printed_j_per_token"] * bt.PRINTED_TOKENS, q["E_dec_j"])
 
     def test_rest_is_dc_minus_rails_and_idle_lines_are_lower(self):
         for model, block in self.result["cells"].items():
             b = block["pass1"]["boundaries"]
             rails, dc, rest = (b[k]["quantities"]["gross"] for k in bt.BOUNDARIES)
-            self.assertAlmostEqual(rest["E_dec_j"], dc["E_dec_j"] - rails["E_dec_j"], places=6)
+            self.assertQuantityEqual(rest["E_dec_j"], dc["E_dec_j"] - rails["E_dec_j"])
             for k in bt.BOUNDARIES:
                 self.assertLess(b[k]["quantities"]["idle_subtracted"]["E_dec_j"], b[k]["quantities"]["gross"]["E_dec_j"])
-            self.assertAlmostEqual(b["rails"]["gross"]["B_j"], sum(b["rails"]["gross"]["kind_averages_j"].values()), places=9)
+            self.assertQuantityEqual(b["rails"]["gross"]["B_j"], sum(b["rails"]["gross"]["kind_averages_j"].values()))
             self.assertEqual(set(b["rails"]["gross"]["kind_averages_j"]), set(bt.RAILS_KINDS))
             self.assertEqual(set(b["dc_input"]["gross"]["kind_averages_j"]), set(bt.DC_KINDS))
             self.assertEqual(set(b["rest"]["gross"]["kind_averages_j"]), set(bt.REST_KINDS))
@@ -477,7 +727,9 @@ class SyntheticWorldTests(unittest.TestCase):
         cell = self.result["cells"]["qwen3-4b-4bit"]["pass1"]["boundaries"]["rails"]
         self.assertEqual((cell["gross"]["n_r"], cell["gross"]["n_b"]), (8, 8))
         self.assertEqual(cell["gross"]["df"], 7)
-        self.assertEqual(cell["without_assisted"]["n_r"], 7)
+        # A request-level harvest disclosure alone cannot select the BAT-2 decode diagnostic.
+        self.assertNotIn("without_assisted", cell)
+        self.assertEqual(cell["gross"]["decode_assisted_member_counts"], {"repeat": 0, "quad": 0})
         codes = {r["codes"]: r["restorable"] for r in cell["removed_members"]}
         self.assertEqual(codes, {"thermal.os_level_nonzero": True, "member.status_not_succeeded": False,
                                  "battery.member_span": True, "member.cooldown_cap_hit": True})
@@ -528,9 +780,9 @@ class SyntheticWorldTests(unittest.TestCase):
             q = self.result["cells"][model]["pass1"]["boundaries"]["rails"]["quantities"]["gross"]
             pred = bt.ols_predict(fit, [q["BW_GB_per_s"], q["R_over_tau_GB_per_s"]])
             expected = bt.t_two_sided(alpha, fit["df"]) * pred["se_pred_hc3"] + q["P_half_width_w"]
-            self.assertAlmostEqual(dev["half_width_w"], expected, places=9)
+            self.assertQuantityEqual(dev["half_width_w"], expected)
             self.assertGreater(dev["half_width_w"], q["P_half_width_w"])
-            self.assertAlmostEqual(dev["deviation_w"], q["P_mean_w"] - pred["yhat"], places=9)
+            self.assertQuantityEqual(dev["deviation_w"], q["P_mean_w"] - pred["yhat"])
 
     def test_item9_vif_printed_beside_lambda(self):
         rest = self.result["h2"]["rest"]["pass1"]["rest_model"]
@@ -550,9 +802,8 @@ class SyntheticWorldTests(unittest.TestCase):
                 self.assertEqual(record["status"], "ok", (model, boundary))
                 self.assertGreaterEqual(record["scale"], 1.0)
                 expected = max(1.0, record["E_first_pass_j"] / record["E_ref_j"], record["T_first_pass_s"] / record["T_ref_s"])
-                self.assertAlmostEqual(record["scale"], expected, places=9)
-                self.assertAlmostEqual(cell["gross"]["kind_averages_j"]["E_whole_window_drift_allowance_j"],
-                                       record["half_allowance_scaled_j"], places=9)
+                self.assertQuantityEqual(record["scale"], expected)
+                self.assertQuantityEqual(cell["gross"]["kind_averages_j"]["E_whole_window_drift_allowance_j"], record["half_allowance_scaled_j"])
 
     def test_d2_d3_d6_each_boundary_and_family_has_its_own_allowance(self):
         block = self.result["cells"]["qwen3-8b-4bit"]["pass1"]["boundaries"]
@@ -569,19 +820,17 @@ class SyntheticWorldTests(unittest.TestCase):
         rows = bt.read_export(WORLD["one"] / "exports/bytes-s2-p1/p1-s2.runs.csv")
         refs = [r for r in rows if r["role"] in ("start", "midpoint", "end")]
         joined = [bt.dc_join(archive, r["run_id"])["request_energy_j"] for r in refs]
-        self.assertAlmostEqual(session["dc_input/gross"]["E_ref_j"], sum(joined) / len(joined), places=6)
-        self.assertAlmostEqual(session["rest/gross"]["E_ref_j"] + session["rails/gross"]["E_ref_j"],
-                               session["dc_input/gross"]["E_ref_j"], places=6)
+        self.assertQuantityEqual(session["dc_input/gross"]["E_ref_j"], sum(joined) / len(joined))
+        self.assertQuantityEqual(session["rest/gross"]["E_ref_j"] + session["rails/gross"]["E_ref_j"], session["dc_input/gross"]["E_ref_j"])
         self.assertLess(session["rails/idle"]["E_ref_j"], session["rails/gross"]["E_ref_j"])
         # D6: the idle-subtracted line carries the idle family's own allowance, at the cell's one
         # gross scale (Addendum 3 item 2: E_ref is the mean gross energy of the references)
         for b in bt.BOUNDARIES:
             idle = block[b]["drift_allowance_idle_family"]
-            self.assertAlmostEqual(block[b]["idle_subtracted"]["kind_averages_j"]["E_whole_window_drift_allowance_j"],
-                                   idle["half_allowance_scaled_j"], places=9)
+            self.assertQuantityEqual(block[b]["idle_subtracted"]["kind_averages_j"]["E_whole_window_drift_allowance_j"], idle["half_allowance_scaled_j"])
             self.assertEqual(idle["scale"], block[b]["drift_allowance"]["scale"])
             self.assertNotEqual(idle["allowance_j"], block[b]["drift_allowance"]["allowance_j"])
-            self.assertAlmostEqual(idle["half_allowance_scaled_j"], idle["allowance_j"] / 2 * idle["scale"], places=12)
+            self.assertQuantityEqual(idle["half_allowance_scaled_j"], idle["allowance_j"] / 2 * idle["scale"])
         # D2/D3: u is added to B beside the allowance, never substituted
         for b in ("dc_input", "rest"):
             kinds = block[b]["gross"]["kind_averages_j"]
@@ -596,7 +845,8 @@ class SyntheticWorldTests(unittest.TestCase):
         self.assertEqual(h1["active_or_resident"]["answer"], "active")
         for model in bt.FIT_SET:
             self.assertIsNone(h1["models"][model]["word"])
-            self.assertAlmostEqual(h1["models"][model]["checks"]["bytes"]["ln_measured_over_predicted"], 0.0, delta=0.01)
+            # These noisy fit points test recovery through the registered prediction interval.
+            self.assertTrue(h1["models"][model]["checks"]["bytes"]["consistent"])
         for model in bt.HELD_OUT:
             self.assertIn(h1["models"][model]["word"], ("bytes", "unresolved"))
             self.assertTrue(h1["models"][model]["checks"]["bytes"]["consistent"])
@@ -608,7 +858,8 @@ class SyntheticWorldTests(unittest.TestCase):
         eps = h2["simple"]["epsilon_j_per_GB"]
         self.assertLess(eps["lower"], self.truth["S_BYTES_j_per_GB"])
         self.assertGreater(eps["upper"], self.truth["S_BYTES_j_per_GB"])
-        self.assertAlmostEqual(h2["simple"]["P0_w"], 0.0, delta=0.5)
+        # Truth recovery: zero must be in the intercept's registered HC3 interval.
+        self.assertLessEqual(abs(h2["simple"]["P0_w"]), h2["simple"]["P0"]["half_width"])
         self.assertTrue(h2["resident_extended"]["resident_adds_nothing"])
         self.assertEqual(sorted(h2["tier"]["models"]), sorted(bt.TIER))
         self.assertEqual(set(h2["tier"]["deviations"]), {m for m in bt.ROSTER if m not in bt.TIER})
@@ -626,23 +877,23 @@ class SyntheticWorldTests(unittest.TestCase):
         eps = h2["simple"]["epsilon_j_per_GB"]
         self.assertEqual(eps["se_method"], "HC3")
         self.assertEqual(eps["ols"]["se_method"], "OLS")
-        self.assertNotAlmostEqual(eps["half_width"], eps["ols"]["half_width"], places=12)
+        self.assertQuantityDifferent(eps["half_width"], eps["ols"]["half_width"])
         self.assertEqual(h2["se_method"], "HC3 primary, OLS beside")
         for dev in h2["tier"]["deviations"].values():
             self.assertEqual(dev["se_method"], "HC3")
             alpha = self.result["multiplicity"]["H2"]["rails"]["pass1"]["alpha_per_interval"]
             t = bt.t_two_sided(alpha, h2["tier"]["df"])
-            self.assertAlmostEqual(dev["half_width_w"], t * dev["se_pred_hc3_w"] + dev["measured_half_width_w"], places=9)
-            self.assertAlmostEqual(dev["ols"]["half_width_w"], t * dev["ols"]["se_pred_w"] + dev["measured_half_width_w"], places=9)
+            self.assertQuantityEqual(dev["half_width_w"], t * dev["se_pred_hc3_w"] + dev["measured_half_width_w"])
+            self.assertQuantityEqual(dev["ols"]["half_width_w"], t * dev["ols"]["se_pred_w"] + dev["measured_half_width_w"])
 
     def test_multiplicity_levels(self):
         m = self.result["multiplicity"]
         self.assertEqual(m["H1"]["family_size"], 21)
-        self.assertAlmostEqual(m["H1"]["alpha_per_check"], 0.05 / 21)
+        self.assertQuantityEqual(m["H1"]["alpha_per_check"], 0.05 / 21)
         self.assertEqual(m["H2"]["rails"]["pass1"]["k_primary_intervals"], 9)
         self.assertEqual(m["H2"]["rest"]["pass1"]["k_primary_intervals"], 11)
         cell = self.result["cells"]["qwen3-8b-4bit"]["pass1"]["boundaries"]["rails"]["gross"]
-        self.assertAlmostEqual(cell["alpha_family"], 0.05 / 21)
+        self.assertQuantityEqual(cell["alpha_family"], 0.05 / 21)
         self.assertGreater(cell["h_j"], cell["h95_j"])
 
     def test_neg8_record_per_session(self):
@@ -655,7 +906,7 @@ class SyntheticWorldTests(unittest.TestCase):
             self.assertEqual(neg8["bound_terms"]["prediction_j"] / (bt.student_t_critical_95(11)), neg8["bound_terms"]["prediction_j"] / 2.201)
 
 
-class TwoStageTests(unittest.TestCase):
+class TwoStageTests(QuantityTestCase):
     def test_stage_one_commits_what_stage_two_recomputes(self):
         one = run_twin(WORLD["two"], "1")
         two = run_twin(WORLD["two"], "2")
@@ -680,8 +931,8 @@ class TwoStageTests(unittest.TestCase):
             self.assertEqual(q1["label"], "one_pass")
             self.assertFalse(q1["one_pass_after_refusal"])    # collected once: labelled, not degraded
             q, p = (block[k]["boundaries"]["rails"]["quantities"]["gross"] for k in ("passes_mean", "pass1"))
-            self.assertAlmostEqual(q["E_dec_j"], p["E_dec_j"], places=12)
-            self.assertAlmostEqual(q["e_half_width_j_per_step"], p["e_half_width_j_per_step"], places=12)
+            self.assertQuantityEqual(q["E_dec_j"], p["E_dec_j"])
+            self.assertQuantityEqual(q["e_half_width_j_per_step"], p["e_half_width_j_per_step"])
             self.assertIsNone(q["pass_difference_E_dec_j"])
         self.assertEqual(one["h1"]["rails"]["passes_mean"]["active_or_resident"]["answer"],
                          one["h1"]["rails"]["pass1"]["active_or_resident"]["answer"])
@@ -694,16 +945,16 @@ class TwoStageTests(unittest.TestCase):
             cells = [block[k]["boundaries"]["rails"]["gross"] for k in ("pass1", "pass2")]
             q = block["passes_mean"]["boundaries"]["rails"]["quantities"]["gross"]
             expected = sum(c["h_j"] + c["B_j"] for c in cells) / 2
-            self.assertAlmostEqual(q["e_half_width_j_per_step"] * bt.DECODE_STEPS, expected, places=9)
-            self.assertAlmostEqual(q["E_dec_j"], sum(c["mean_j"] for c in cells) / 2, places=9)
+            self.assertQuantityEqual(q["e_half_width_j_per_step"] * bt.DECODE_STEPS, expected)
+            self.assertQuantityEqual(q["E_dec_j"], sum(c["mean_j"] for c in cells) / 2)
             # Addendum 7 item 12: P of the pass mean is mean E / mean T, half-width (mean h + mean B) / mean T
             mean_t = sum(c["duration_s"] for c in cells) / 2
-            self.assertAlmostEqual(q["P_mean_w"], q["E_dec_j"] / mean_t, places=9)
-            self.assertAlmostEqual(q["P_half_width_w"], expected / mean_t, places=9)
-            self.assertNotAlmostEqual(cells[0]["duration_s"], cells[1]["duration_s"], places=3)   # unequal passes
+            self.assertQuantityEqual(q["P_mean_w"], q["E_dec_j"] / mean_t)
+            self.assertQuantityEqual(q["P_half_width_w"], expected / mean_t)
+            self.assertQuantityDifferent(cells[0]["duration_s"], cells[1]["duration_s"])   # unequal passes
             self.assertEqual(q["label"], "pass_mean")
             for stored, c in zip(q["pass_half_widths_j"], cells):
-                self.assertAlmostEqual(stored, c["h_j"] + c["B_j"], places=9)
+                self.assertQuantityEqual(stored, c["h_j"] + c["B_j"])
         fit = two["stage1_commit"]["content"]["fit_cells"]["rails"]
         self.assertIn("passes_mean", fit)
 
@@ -722,8 +973,8 @@ class TwoStageTests(unittest.TestCase):
             q = block["passes_mean"]["boundaries"]["rails"]["quantities"]["gross"]
             p1 = block["pass1"]["boundaries"]["rails"]["quantities"]["gross"]["E_dec_j"]
             p2 = block["pass2"]["boundaries"]["rails"]["quantities"]["gross"]["E_dec_j"]
-            self.assertAlmostEqual(q["E_dec_j"], (p1 + p2) / 2, places=9)
-            self.assertAlmostEqual(q["pass_difference_E_dec_j"], p2 - p1, places=9)
+            self.assertQuantityEqual(q["E_dec_j"], (p1 + p2) / 2)
+            self.assertQuantityEqual(q["pass_difference_E_dec_j"], p2 - p1)
         for pass_key in ("pass1", "pass2", "passes_mean"):
             self.assertEqual(two["h1"]["rails"][pass_key]["active_or_resident"]["answer"], "active")
             eps = two["h2"]["rails"][pass_key]["simple"]["epsilon_j_per_GB"]
@@ -732,7 +983,7 @@ class TwoStageTests(unittest.TestCase):
         self.assertEqual(two["sessions"]["p2-s1"]["pass_of"]["qwen3-4b-4bit"], 2)
 
 
-class OnePassFallbackTests(unittest.TestCase):
+class OnePassFallbackTests(QuantityTestCase):
     """Addendum 7 D9 on a two-pass world where Qwen3-14B's pass 1 refuses (four kept repeats)."""
 
     @classmethod
@@ -750,8 +1001,8 @@ class OnePassFallbackTests(unittest.TestCase):
         single = self.result["cells"]["qwen3-8b-4bit"]["passes_mean"]["boundaries"]["rails"]["quantities"]["gross"]
         self.assertFalse(single["one_pass_after_refusal"])
         self.assertEqual(q["pass_statuses"], ["refused_below_minimum", "ok"])
-        self.assertAlmostEqual(q["E_dec_j"], p2["E_dec_j"], places=12)
-        self.assertAlmostEqual(q["e_half_width_j_per_step"], p2["e_half_width_j_per_step"], places=12)
+        self.assertQuantityEqual(q["E_dec_j"], p2["E_dec_j"])
+        self.assertQuantityEqual(q["e_half_width_j_per_step"], p2["e_half_width_j_per_step"])
         h1 = self.result["h1"]["rails"]["passes_mean"]
         self.assertEqual(h1["models"]["qwen3-14b-4bit"]["label"], "one_pass")
         self.assertIsNotNone(h1["models"]["qwen3-14b-4bit"]["word"])
@@ -789,7 +1040,7 @@ class OnePassFallbackTests(unittest.TestCase):
         self.assertEqual(bt.h2_primary_count(four, "rails"), 1)
 
 
-class ExportShapeTests(unittest.TestCase):
+class ExportShapeTests(QuantityTestCase):
     def test_synthetic_export_has_the_export_runs_columns(self):
         import csv
         path = next((WORLD["one"] / "exports/bytes-s1-p1").glob("*.runs.csv"))
@@ -819,11 +1070,11 @@ class ExportShapeTests(unittest.TestCase):
         factor = truth["factors"]["pack"] * truth["factors"]["config"][row["config_key"]]
         archive = WORLD["one"] / "archives/p1-s2/withheld/reductions" / (row["run_id"] + ".summary_metrics.rereduced.json")
         summary = json.loads(archive.read_text())
-        self.assertAlmostEqual(row["phase_decode_j"], summary["phase_energy_j"]["decode"] * factor, places=9)
-        self.assertAlmostEqual(bt.stored_factor(WORLD["one"] / "keys", row["config_key"]), factor, places=12)
+        self.assertQuantityEqual(row["phase_decode_j"], summary["phase_energy_j"]["decode"] * factor)
+        self.assertQuantityEqual(bt.stored_factor(WORLD["one"] / "keys", row["config_key"]), factor)
 
 
-class PassIdentityTests(unittest.TestCase):
+class PassIdentityTests(QuantityTestCase):
     """Lead ruling 2026-10-20 item 2: ordering by registered pass identity, never by a clock."""
 
     def test_identity_sources_in_order(self):
@@ -925,7 +1176,7 @@ class PassIdentityTests(unittest.TestCase):
         self.assertEqual(result["cells"]["qwen3-1.7b-4bit"]["passes_mean"]["n_passes"], 1)   # still computed
 
 
-class MeterOffsetArithmeticTests(unittest.TestCase):
+class MeterOffsetArithmeticTests(QuantityTestCase):
     """Addendum 9 (NR1) by hand: C_j with an exact A, the M1 normalisation, the sensitivity's sign,
     the L1/L2 flags."""
 
@@ -935,10 +1186,10 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
         fit = bt.ols([[0.0], [1.0], [2.0]], [1.0, 2.0, 4.0])
         for a, expected in zip(fit["A"], ([5 / 6, 2 / 6, -1 / 6], [-0.5, 0.0, 0.5])):
             for v, e in zip(a, expected):
-                self.assertAlmostEqual(v, e, places=14)
+                self.assertQuantityEqual(v, e)
         # beta = A y: intercept 5/6 + 4/6 - 4/6 = 5/6, slope (4 - 1) / 2 = 1.5.
-        self.assertAlmostEqual(fit["coef"][0], 5 / 6, places=14)
-        self.assertAlmostEqual(fit["coef"][1], 1.5, places=14)
+        self.assertQuantityEqual(fit["coef"][0], 5 / 6)
+        self.assertQuantityEqual(fit["coef"][1], 1.5)
         # C_j = sum_i |A_ji| bound_w_i with bounds (1.2, 0.6, 2.4) W: C_0 = (6 + 1.2 + 2.4) / 6 = 1.6,
         # C_1 = 0.6 + 0 + 1.2 = 1.8 (the absolute value: the slope's weights have both signs).
         # dbeta_j/ddelta = sum_i A_ji sens_i / T_i per second with sens (3, -6, 9) W over T (1, 2, 3) s,
@@ -947,11 +1198,11 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
                   {"bound_w": 2.4, "sensitivity_w": 9.0, "T": 3.0}]
         iv = {"value": 1.5, "half_width": 0.5, "lower": 1.0, "upper": 2.0, "ols": {"half_width": 0.25}}
         o = bt.offset_alternative(fit, 1, iv, points, "J/GB")
-        self.assertAlmostEqual(o["coefficient_C"], 1.8, places=14)
-        self.assertAlmostEqual(o["offset_lower"], 1.5 - 2.3, places=14)       # beta - (t SE + C)
-        self.assertAlmostEqual(o["offset_upper"], 1.5 + 2.3, places=14)
-        self.assertAlmostEqual(o["offset_ols_lower"], 1.5 - 2.05, places=14)
-        self.assertAlmostEqual(o["d_beta_d_delta_per_ms"], 0.0, places=14)
+        self.assertQuantityEqual(o["coefficient_C"], 1.8)
+        self.assertQuantityEqual(o["offset_lower"], 1.5 - 2.3)       # beta - (t SE + C)
+        self.assertQuantityEqual(o["offset_upper"], 1.5 + 2.3)
+        self.assertQuantityEqual(o["offset_ols_lower"], 1.5 - 2.05)
+        self.assertQuantityEqual(o["d_beta_d_delta_per_ms"], 0.0)
         self.assertEqual((o["coefficient_decision"], o["offset_decision"], o["offset_ols_decision"]),
                          ("positive", "contains zero", "contains zero"))
         self.assertEqual(o["sensitivity_units"], "J/GB per ms")
@@ -959,8 +1210,8 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
         self.assertIsNone(o["sensitivity_flag"])
         o0 = bt.offset_alternative(fit, 0, {"value": 5 / 6, "half_width": 0.1, "lower": 5 / 6 - 0.1, "upper": 5 / 6 + 0.1,
                                             "ols": {"half_width": 0.1}}, points, "W")
-        self.assertAlmostEqual(o0["coefficient_C"], 1.6, places=14)
-        self.assertAlmostEqual(o0["d_beta_d_delta_per_ms"], 1e-3, places=14)
+        self.assertQuantityEqual(o0["coefficient_C"], 1.6)
+        self.assertQuantityEqual(o0["d_beta_d_delta_per_ms"], 1e-3)
         self.assertEqual(o0["sensitivity_units"], "W per ms")
         self.assertEqual(bt.offset_alternative(fit, 1, iv, points, "")["sensitivity_units"], "per ms")
 
@@ -974,17 +1225,17 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
                     "meter_offset_bound_j": bound, "meter_offset_sensitivity_w": sens,
                     "meter_offset_bound_flag": None, "meter_offset_sensitivity_flag": None}
         q = bt.mean_of_passes([pas(20.0, 2.0, 4.0, -3.0), pas(20.0, 4.0, 2.0, -1.0)])
-        self.assertAlmostEqual(q["meter_offset_bound_j"], 3.0, places=14)
-        self.assertAlmostEqual(q["meter_offset_bound_w"], 1.0, places=14)
-        self.assertNotAlmostEqual(q["meter_offset_bound_w"], 1.25, places=6)
-        self.assertAlmostEqual(q["meter_offset_sensitivity_w"], -2.0, places=14)   # watts, pass mean
-        self.assertAlmostEqual(q["P_mean_w"], 20.0 / 3.0, places=14)               # the same ratio of means
+        self.assertQuantityEqual(q["meter_offset_bound_j"], 3.0)
+        self.assertQuantityEqual(q["meter_offset_bound_w"], 1.0)
+        self.assertQuantityDifferent(q["meter_offset_bound_w"], 1.25)
+        self.assertQuantityEqual(q["meter_offset_sensitivity_w"], -2.0)   # watts, pass mean
+        self.assertQuantityEqual(q["P_mean_w"], 20.0 / 3.0)               # the same ratio of means
         # A flagged pass flags the point and withholds the bound; the sensitivity survives on its own.
         flagged = {**pas(20.0, 2.0, None, -3.0), "meter_offset_bound_flag": "meter offset bound negative on run(s) r1"}
         q = bt.mean_of_passes([flagged, pas(20.0, 4.0, 2.0, -1.0)])
         self.assertIsNone(q["meter_offset_bound_w"])
         self.assertIn("r1", q["meter_offset_bound_flag"])
-        self.assertAlmostEqual(q["meter_offset_sensitivity_w"], -2.0, places=14)
+        self.assertQuantityEqual(q["meter_offset_sensitivity_w"], -2.0)
 
     def test_sensitivity_sign_and_per_run_bound_from_the_meter_samples(self):
         # Samples at 0, 100, ..., 400 ms: idle 0.2 W before 200 ms and after 400 ms, 5 W inside.  A
@@ -999,8 +1250,8 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
         # The per-run bound is max(P_start, P_end)(r_max + dt): 5 W x (8 ms + 100 ms) = 0.54 J, half of
         # u = (P_start + P_end)(r_max + dt) = 1.08 J when the two edge powers are equal.
         p_start, p_end = bt.edge_powers(times, watts, window)
-        self.assertAlmostEqual(max(p_start, p_end) * (0.008 + 0.1), 0.54, places=14)
-        self.assertAlmostEqual((p_start + p_end) * (0.008 + 0.1), 1.08, places=14)
+        self.assertQuantityEqual(max(p_start, p_end) * (0.008 + 0.1), 0.54)
+        self.assertQuantityEqual((p_start + p_end) * (0.008 + 0.1), 1.08)
         # The reverse window (load before the start, idle before the end) has the opposite sign.
         self.assertEqual(bt.before_edge_powers(times, watts, (250_000_000, 450_000_000)), (5.0, 0.2))
 
@@ -1010,19 +1261,19 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
         repeats = [member(i, 1.0, -1.0) for i in range(5)]
         quads = [{"id": f"q{k}", "members": [member(f"{k}{j}", 2.0, -3.0) for j in range(4)]} for k in range(5)]
         terms = bt.offset_terms(repeats, quads)
-        self.assertAlmostEqual(terms["bound_j"], 0.2 * 1.0 + 0.8 * 2.0, places=14)
-        self.assertAlmostEqual(terms["sensitivity_w"], 0.2 * -1.0 + 0.8 * -3.0, places=14)
+        self.assertQuantityEqual(terms["bound_j"], 0.2 * 1.0 + 0.8 * 2.0)
+        self.assertQuantityEqual(terms["sensitivity_w"], 0.2 * -1.0 + 0.8 * -3.0)
         self.assertEqual((terms["bound_flag"], terms["sensitivity_flag"], terms["n_runs"]), (None, None, 25))
         # L1/L2: one negative bound flags the bound and names the run; one non-finite sensitivity
         # flags the sensitivity; each leaves the other term computed and nothing refuses.
         bad = bt.offset_terms([member(0, -0.5, -1.0), *repeats[1:]], quads)
         self.assertIsNone(bad["bound_j"])
         self.assertIn("m0", bad["bound_flag"])
-        self.assertAlmostEqual(bad["sensitivity_w"], -2.6, places=14)
+        self.assertQuantityEqual(bad["sensitivity_w"], -2.6)
         bad = bt.offset_terms(repeats, [{"id": "q9", "members": [member("x", 2.0, float("nan"))] * 4}, *quads[1:]])
         self.assertIsNone(bad["sensitivity_w"])
         self.assertIn("mx", bad["sensitivity_flag"])
-        self.assertAlmostEqual(bad["bound_j"], 1.8, places=14)
+        self.assertQuantityEqual(bad["bound_j"], 1.8)
         bad = bt.offset_terms([member(0, None, -1.0), *repeats[1:]], quads)
         self.assertIn("m0", bad["bound_flag"])
         # Through the fit: a flagged point gives the systematics flag and keeps the registered interval.
@@ -1066,10 +1317,10 @@ class MeterOffsetArithmeticTests(unittest.TestCase):
         self.assertEqual(rest["epsilon_rest_j_per_GB"]["offset"]["sensitivity_units"], "J/GB per ms")
         # Per point: the bound in W is the pass-averaged joules over the mean decode time (M1).
         q = result["cells"]["qwen3-8b-4bit"]["passes_mean"]["boundaries"]["dc_input"]["quantities"]["gross"]
-        self.assertAlmostEqual(q["meter_offset_bound_w"], q["meter_offset_bound_j"] / q["T_dec_s"], places=14)
+        self.assertQuantityEqual(q["meter_offset_bound_w"], q["meter_offset_bound_j"] / q["T_dec_s"])
         p1 = result["cells"]["qwen3-8b-4bit"]["pass1"]["boundaries"]["dc_input"]["gross"]["meter_offset"]
         p2 = result["cells"]["qwen3-8b-4bit"]["pass2"]["boundaries"]["dc_input"]["gross"]["meter_offset"]
-        self.assertAlmostEqual(q["meter_offset_bound_j"], (p1["bound_j"] + p2["bound_j"]) / 2, places=12)
+        self.assertQuantityEqual(q["meter_offset_bound_j"], (p1["bound_j"] + p2["bound_j"]) / 2)
         self.assertNotIn("meter_offset", result["cells"]["qwen3-8b-4bit"]["pass1"]["boundaries"]["rails"]["gross"])
 
 
@@ -1105,7 +1356,7 @@ def withhold(world: Path, session_id: str, model: str, *, store_present: bool):
     return len(withheld)
 
 
-class WithheldStoreTests(unittest.TestCase):
+class WithheldStoreTests(QuantityTestCase):
     """Lead ruling 2026-10-20 items 1 to 4 and B6 ruling Q1 on the twin's own two-pass world, with
     Qwen3-30B-A3B's rows of each pass moved into a withheld store."""
 
@@ -1198,7 +1449,7 @@ class WithheldStoreTests(unittest.TestCase):
                              ("ok", "one_pass", [bt.WITHHELD_MISSING], 2, 1))
             self.assertTrue(q["one_pass_after_refusal"])
             p1 = block["pass1"]["boundaries"][boundary]["quantities"]["gross"]
-            self.assertAlmostEqual(q["E_dec_j"], p1["E_dec_j"], places=12)                  # D9 (a): the surviving pass
+            self.assertQuantityEqual(q["E_dec_j"], p1["E_dec_j"])                  # D9 (a): the surviving pass
             h1 = result["h1"][boundary]["passes_mean"]["models"]["qwen3-30b-a3b-4bit"]
             self.assertIsNotNone(h1["word"])
             self.assertEqual((h1["label"], h1["flags"]), ("one_pass", [bt.WITHHELD_MISSING]))
