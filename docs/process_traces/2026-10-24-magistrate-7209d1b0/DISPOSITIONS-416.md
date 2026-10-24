@@ -39,3 +39,18 @@ Seat A is `fix/2026-10-24-416-analysis` (worktree `jw-wt/fix416-analysis`). Seat
 - **O-S9: the 5 ms anchor cap removed 2 of 168 runs.** This is a registered block-5 rule, and the flagged-inclusive line prints them. Deferred to the pruning list.
 - **O-S12: DST repeated hour 2026-11-01 01:00-02:00 PDT.** Scheduling removes it: no pass-1 session spans that hour. Gate rule 5: one setting rather than enforcement code.
 - **F-S7, F-S8, remaining NITs.** Deferred to the registration gate charge as named items. F-S8's disk case is backstopped by the precheck's WAIT and the in-window `disk.low`.
+
+## Cold delta passes on 24718b166 (Fable 5.1 REFUSE, Opus 5.5 ADMIT-WITH-CORRECTIONS)
+
+Reports: `/private/tmp/cold416-{fable,opus}/REPORT.md` (copied to `~/night-archive/seats-7209/cold416/`). Both seats were stopped by the lead's 2 h background limit after writing their reports, Fable before its Executed section was final.
+
+| finding | lead check | disposition |
+|---|---|---|
+| Merged tree's agreement/analysis suites red: fixture cannot export under fail-closed registration (Fable 1, Opus 1) | Same failure in the lead's own shard run | Fixed 2ed536739 (explicit registration for ungrouped synthetic packs). Lead rerun: agreement 48 tests OK, 0 above the bar. The SubsetReleaseChain test wrapper is still red → FIX-416-C item 1 |
+| `_reference_request_fields` drops a reference silently on a read/storage failure (Fable 2, BLOCKER) | Re-executed (Fable's blinding_probe2 P on the merged code): a corrupt or unreadable trace exports `succeeded`, empty columns, no flag | FIX-416-C item 2: read/parse failure stops the export with its cause; unreadable request → `bytes.reference_request_unavailable` (DISCLOSE) and no usable record; both readers print dropped references; a missing column on an unflagged reference is an error. Refusal reported to Ed (Gmail 1a16fa8f5681d1f3) |
+| bytes-mac-check exports refused (Opus 2, Fable 8) | Opus re-export probe | FIX-416-C item 3 |
+| Blinding: whole-document comparison falsely refuses a changed member set; non-atomic sidecar; harvest hides the cause (Fable 3, Opus 6) | Probes in the reports | FIX-416-C item 4 |
+| Arm judge passes mid-dwell steps up to 2 ms (old 1 ms); missing f skips the rate gate; G10 control cannot discharge (Opus 3, 4, 5; Fable (a)) | Both seats measured 1.8-2.0 ms on real dwells. No number reads the dwell (Fable (a)). | FIX-416-C item 5: add the precheck's registered consecutive-step test; judge the anchors when f is absent; fix G10 |
+| C4 compare omits sampler, output policy, telemetry, OS, hardware; qwen3-8b-8bit tokenizer revision null; issuer roots not recorded (Opus 7, 8; Fable 5) | Opus probes | FIX-416-C item 6 |
+| §9 stale 377/400 sentence; §7 edge counts and span ratio (Fable 4, 6; Opus 9, 10) | Lead's text edit left the old sentence | Lead text fix with FIX-416-C's sentences |
+| Harvest uses the global catalog, so a below-minimum BYTES session carries `records.claim_usable_counting_disagreement` (Fable 7) | Code read by Fable; disclosure only, acceptance governs | Deferred: HARVEST-PACK-EFFECTS (before stage-1 analysis); §6 gets one sentence |
