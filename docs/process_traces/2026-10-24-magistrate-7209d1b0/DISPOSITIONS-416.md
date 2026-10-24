@@ -54,3 +54,24 @@ Reports: `/private/tmp/cold416-{fable,opus}/REPORT.md` (copied to `~/night-archi
 | C4 compare omits sampler, output policy, telemetry, OS, hardware; qwen3-8b-8bit tokenizer revision null; issuer roots not recorded (Opus 7, 8; Fable 5) | Opus probes | FIX-416-C item 6 |
 | §9 stale 377/400 sentence; §7 edge counts and span ratio (Fable 4, 6; Opus 9, 10) | Lead's text edit left the old sentence | Lead text fix with FIX-416-C's sentences |
 | Harvest uses the global catalog, so a below-minimum BYTES session carries `records.claim_usable_counting_disagreement` (Fable 7) | Code read by Fable; disclosure only, acceptance governs | Deferred: HARVEST-PACK-EFFECTS (before stage-1 analysis); §6 gets one sentence |
+
+## Round-2 cold delta passes on 2ed536739..fcc0ac921 (Fable 5.1 and Opus 5.5 both ADMIT-WITH-CORRECTIONS)
+
+Reports in `~/night-archive/seats-7209/cold416b/`. Round 1's blockers are closed. Opus's BLOCKER 1 is the same defect class as Fable's round-1 refusal: a storage fault in a reference bundle still drops the reference from NEG-8. The new cases are a missing, truncated or unreadable raw plist, a missing calibration directory, and a missing bundle directory, now flagged `bytes.reference_request_unavailable`. Real BY-H2 effect of one such drop: rails E_ref 37.12101 → 37.08911 J.
+
+**Lead ruling, structural (FIX-416-D), instead of a consult.** The rule says that the same class failing twice goes to a consult. That rule exists to stop a search that is not converging, and here the cause is identified: the code listed the failure classes that stop, and each pass found more. So the rule is inverted. For a reference the harvest recorded as collected, the export returns:
+- the three columns; or
+- the disclosed flag, only for the two registered absences (no request markers in a complete, SHA256SUMS-verified `events.jsonl`; no idle baseline in a verified, well-typed summary); or
+- a `StorageStop` with its cause, for everything else (any exception, an unresolved anchor, uncovered curve support, a missing bundle, garbled JSON, a digest mismatch).
+
+It is replayed over every real archive before adoption. The precedent is #574 round e: a recurring class with an identified cause was ruled directly.
+
+| finding | disposition |
+|---|---|
+| Opus 1 (BLOCKER), Fable 1, 2, 4; Opus 2, 6 | FIX-416-D items 1-2 (default-stop, SHA256SUMS verification, every cause printed) |
+| Opus 3: a skew-rejected anchor sample voids the dwell and hides a measured rate hazard | FIX-416-D item 3 |
+| Opus 7: blinding key first draw can leave 0 bytes | FIX-416-D item 4 |
+| Fable 5: whole-dict sampler comparison can exclude a good session after an adapter change | FIX-416-D item 5 (registered keys only) |
+| Fable 3: the qwen3-8b-8bit tokenizer revision cannot be compared at harvest (runs do not record it) | Text: the revision is a pin-side record; for this model the tokenizer is bound by its pinned file hashes and the artifact digest |
+| Opus 4, 5; Fable 6: step figure about 1.010 ms; span ratios (BY-H2 window 6.5-6.8, corpus 6.3-6.8; H window 6.6-6.9) | Lead text |
+| Opus 8: the G10 control no longer exercises the clock module | Deferred (G10 is dormant in block 6/BYTES; diagnostic; pruning list) |
