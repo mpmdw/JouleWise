@@ -18,7 +18,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                      pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
                      edge_phase=True, min_receive_latency_ms=10.0,
                      subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False,
-                     battery_assist=False, battery_publication="instant"):
+                     battery_assist=False, battery_publication="instant", battery_reference_assist=False,
+                     late_start_stream=False, marker_stream_mode=None):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -26,9 +27,21 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     through reduce_bundle and the full CLI, not a summary oracle.
     subpack_sessions uses the R6 six sub-packs in both registered pass orders;
     an uncollected session is never generated or added to the manifest.
+    late_start_stream starts the first session's stream midway through its
+    first science decode, while retaining its delayed marker polls.
+    marker_stream_mode retains all polls but removes meter samples (polls_only)
+    or closes the header (header_closed), independently of key export.
+    empty_payload_n and replayed_batch leave one sample-bearing poll without
+    any new samples, while preserving that poll's receive time and SMC data.
+    replayed_tail appends an older batch after new words in a science poll;
+    first_batch_tail_replayed appends the first word after the first batch's
+    new words. Both preserve the native last-kept-sample timing point.
     """
     if battery_publication not in ("instant", "delayed"):
         raise ValueError("battery publication must be instant or delayed")
+    if marker_stream_mode not in (None, "polls_only", "header_closed", "empty_payload_n", "replayed_batch",
+                                  "replayed_tail", "first_batch_tail_replayed"):
+        raise ValueError("unknown marker stream mode")
     if len(pass_duration_scales) != 2 or any(v <= 0 for v in pass_duration_scales):
         raise ValueError("two positive pass duration scales required")
     if clock_latency_ms is not None and not clock_latency_ms[0] < 0 < clock_latency_ms[1]:
@@ -128,6 +141,13 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 power = energy / duration
                 start = tick / 10 + (phase_rng.random() * .1 if edge_phase and not ref else 0)
                 decode_start, end = start + 2, start + 2 + duration
+                if battery_reference_assist and ref:
+                    # Equal 1 s reference bursts retain the drift world. Each
+                    # burst at 12.774 W exceeds the ~1 J
+                    # attribution limit and exercises NEG-8's request battery term.
+                    span = [round(decode_start * 1e9), round((decode_start + 1) * 1e9)]
+                    battery_episodes.append({"run_id": run_id, "placement": "reference_decode",
+                                             "span_ns": span, "spans_ns": [span]})
                 if battery_assist and not ref and model["model"] in design["battery_assist"]["models"] and ordinal < (5 if battery_publication == "delayed" else 4):
                     placement = (design["battery_assist"]["episodes"] + ["both_edges"])[ordinal]
                     spans = {"inside_decode": [(decode_start + duration / 2 - .5, decode_start + duration / 2 + .5)],
@@ -285,6 +305,48 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         for key in ["neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"])]:
             _write_json(private / blinding._config_filename(key), {"key": key, "factor": 1.0})
     release_keys(root, manifest, release)
+    if late_start_stream:
+        session = manifest["sessions"][0]
+        archive = Path(session["archive"])
+        first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
+                     if m["role"] == "science")
+        bundle = archive / "sources/claim-runs" / first["run_id"]
+        events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+        start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))
+        cutoff = (start + end) // 2
+        stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
+        batches = [json.loads(line) for line in stream.read_text().splitlines()]
+        stream.write_text("".join(json.dumps(b) + "\n" for b in batches
+                                   if b.get("k") != "b" or b["rx"] >= cutoff))
+    if marker_stream_mode:
+        for session in manifest["sessions"]:
+            stream = Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl"
+            items = [json.loads(line) for line in stream.read_text().splitlines()]
+            polls = [item for item in items if item.get("k") == "b"]
+            if marker_stream_mode == "empty_payload_n":
+                polls[100]["p"] = ""  # Keep the nonzero n and the battery poll.
+            elif marker_stream_mode == "first_batch_tail_replayed":
+                polls[0]["p"] += polls[0]["p"][:kp.SAMPLE.size * 2]
+                polls[0]["n"] += 1
+            elif marker_stream_mode in ("replayed_batch", "replayed_tail"):
+                archive = Path(session["archive"])
+                first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
+                             if m["role"] == "science")
+                bundle = archive / "sources/claim-runs" / first["run_id"]
+                events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+                start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))
+                index = [i for i, item in enumerate(polls) if start <= item["rx"] < end][3]
+                if marker_stream_mode == "replayed_batch":
+                    polls[index]["p"] = polls[index - 5]["p"]
+                else:
+                    polls[index]["p"] += polls[index - 5]["p"]
+                    polls[index]["n"] += polls[index - 5]["n"]
+            for item in items:
+                if marker_stream_mode == "polls_only" and item.get("k") == "b":
+                    item.update(n=0, p="")
+                elif marker_stream_mode == "header_closed" and item.get("k") == "h":
+                    item["status"] = "closed"
+            stream.write_text("".join(json.dumps(item) + "\n" for item in items))
     return manifest
 
 

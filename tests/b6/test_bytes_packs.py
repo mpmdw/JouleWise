@@ -65,7 +65,8 @@ class BytesConfigTests(unittest.TestCase):
         self.assertEqual([r['model_id'] for r in roster['models'] if r['role'] == 'fit'],
                          ['qwen3-1p7b', 'qwen3-4b', 'qwen3-8b'])
         self.assertEqual(roster['workload']['decode_forward_passes'], 512)
-        self.assertIsNone(next(r for r in roster['models'] if r['model_id'] == 'qwen3-8b-8bit')['model']['revision'])
+        self.assertEqual(next(r for r in roster['models'] if r['model_id'] == 'qwen3-8b-8bit')['model']['revision'],
+                         '48a0b75b1ae72503e21e1558d040bc227510ff06')
 
     def test_generators_reproduce_committed_bytes_and_write_only_allowed_paths(self):
         first = configs.generate(check=True)
@@ -109,17 +110,20 @@ class BytesPackTests(unittest.TestCase):
                     self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
                     self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
 
-    def test_estimators_name_the_analysis_stage_functions_with_version_slot_while_draft(self):
+    def test_estimators_name_the_analysis_stage_functions_with_pass_specific_versions_while_draft(self):
         from joulewise import bytes_analysis
+        agreeing_sha = '94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b'
         for n in range(1, 7):
             for pass_number in (1, 2):
                 with self.subTest(subpack=n, pass_number=pass_number):
                     reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
-                    self.assertEqual(reg.data['estimators'], plans.ESTIMATORS)
+                    expected = deepcopy(plans.ESTIMATORS)
+                    for entry in expected:
+                        entry['version'] = agreeing_sha if pass_number == 1 else None
+                    self.assertEqual(reg.data['estimators'], expected)
                     for entry in reg.data['estimators']:
                         self.assertTrue(callable(getattr(bytes_analysis, entry['function'])))
-                        # Registration section 13: the agreeing pin's SHA-256 replaces null.
-                        self.assertIsNone(entry['version'])
+                        self.assertEqual(entry['version'], agreeing_sha if pass_number == 1 else None)
                     self.assertEqual(reg.status, 'draft')
                     self.assertTrue(any('docs/registrations/bytes_pack_v1.md' in note for note in reg.data['draft_notes']))
 
@@ -219,7 +223,13 @@ class BytesPackTests(unittest.TestCase):
         self.assertIsInstance(queue.next_session(state, regs, now), queue.Close)
 
     def test_fixed_driver_campaign_paths_and_smoke_keep_reach_sizing(self):
-        from joulewise.b6 import plan_inputs
+        from joulewise.b6 import plan_inputs, registration
+        sizing_path = ROOT / 'configs/b6/registration/sizing_b5.json'
+        sized = registration.load_sizing(sizing_path.parent)
+        identities = {name: {'path': '/synthetic/' + name, 'sha256': 'a' * 64}
+                      for name in ('identity-epoch.json', 't1-bindings.json')}
+        self.assertEqual({p for p in sized['packs'] if p.startswith('bytes-')},
+                         {f'bytes-s{n}-p1' for n in range(1, 7)})
         for n in range(1, 7):
             for pass_number in (1, 2):
                 p = f'bytes-s{n}-p{pass_number}'
@@ -233,12 +243,27 @@ class BytesPackTests(unittest.TestCase):
                                 **{m['module_id'] + '-absolute': 1 for m in reg.modules},
                                 f'{p}-reference-end': 1}
                     self.assertEqual(compose.smoke_keep(layout), expected)
-                    # C5 sizing is intentionally pending; campaign identity and
-                    # smoke lookup must already work without a driver change.
-                    with self.assertRaisesRegex(ValueError, f'pack has no registered sizing: {p}'):
-                        plan_inputs.build(ROOT, ROOT / 'configs/b6/registration', p, layout.session_id, {},
-                                          custody_root='/x', runs_parent='/x', claim_backup='/x',
-                                          bound_backup='/x', head='deadbeef')
+                    if pass_number == 2:
+                        # C5 supplies six pass-1 rows; no pass-2 sizing is inferred.
+                        with self.assertRaisesRegex(ValueError, f'pack has no registered sizing: {p}'):
+                            plan_inputs.build(ROOT, sizing_path.parent, p, layout.session_id, identities,
+                                              custody_root='/x', runs_parent='/x', claim_backup='/x',
+                                              bound_backup='/x', head='a' * 40)
+                        continue
+                    inputs = plan_inputs.build(ROOT, sizing_path.parent, p, layout.session_id, identities,
+                                               custody_root='/x', runs_parent='/x', claim_backup='/x',
+                                               bound_backup='/x', head='a' * 40)
+                    row = sized['packs'][p]
+                    for key in ('programmed_span_s', 'T_stream_max_s'):
+                        self.assertEqual(inputs[key], {'seconds': row[key],
+                            'source': {'path': sizing_path.relative_to(ROOT).as_posix(),
+                                       'sha256': hashlib.sha256(sizing_path.read_bytes()).hexdigest()},
+                            'source_pointer': f'/packs/{p}/{key}'})
+                    self.assertEqual(inputs['pack_root'], str(campaign))
+                    self.assertEqual(inputs['disk_budget']['member_count'], 125 if n <= 4 else 75)
+                    self.assertEqual(inputs['disk_budget']['required_free_bytes'],
+                                     row['disk_derivation']['required_free_bytes'])
+                    self.assertEqual(inputs['disk_budget']['derivation'], row['disk_derivation'])
 
 
 class BytesHarvestAcceptanceTests(unittest.TestCase):

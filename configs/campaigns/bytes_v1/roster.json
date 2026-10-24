@@ -104,13 +104,13 @@
       "model": {
         "family": "qwen3",
         "name": "Qwen3-8B-8bit",
-        "revision": null,
+        "revision": "48a0b75b1ae72503e21e1558d040bc227510ff06",
         "source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-8bit",
         "weight_format": "mlx"
       },
       "model_id": "qwen3-8b-8bit",
       "pilot": null,
-      "revision_status": "pending_download_R8_5",
+      "revision_status": "pinned_source",
       "role": "held_out"
     },
     {

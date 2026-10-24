@@ -22,6 +22,9 @@ import zlib
 
 from scripts import b6_machine_test as mt
 from joulewise import agent_identity, calibration_ledger
+# Import before Case.setUp patches subprocess.Popen: a first import inside that patch
+# would build t0_rehearsal.ObservedProcess as a subclass of the mock.
+from joulewise import t0_rehearsal as _t0_rehearsal  # noqa: F401
 from joulewise.b5 import chain, plan
 from joulewise.b6 import registration, smoke
 from joulewise.hazards.base import Context

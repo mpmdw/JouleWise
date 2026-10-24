@@ -10,9 +10,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import warnings
 
 from joulewise import desk_compress as desk
 from joulewise.b5.harvest import tree_inventory
@@ -42,6 +44,149 @@ class DeskCompressFixture(unittest.TestCase):
 
 @unittest.skipUnless(Path(ZSTD).is_file(), "zstd CLI required")
 class DeskCompressTests(DeskCompressFixture):
+    def test_open_bytes_consumer_closes(self):
+        path = self.put(self.runs / "consumer-closes")
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed):
+                if compressed:
+                    self.assertEqual(self.compress()[0], 0)
+                with desk.open_bytes(path) as stream:
+                    observed = stream.read(10)
+                    stream.close()
+                self.assertEqual(observed, b"a" * 10)
+
+    def test_open_bytes_textiowrapper_dropped(self):
+        path = self.put(self.runs / "wrapper-dropped")
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed):
+                if compressed:
+                    self.assertEqual(self.compress()[0], 0)
+                with desk.open_bytes(path) as stream:
+                    wrapper = io.TextIOWrapper(stream, encoding="latin-1")
+                    observed = wrapper.read(5)
+                    # Dropping an unclosed wrapper intentionally emits this
+                    # warning; its close of the underlying stream is the case.
+                    with warnings.catch_warnings(action="ignore", category=ResourceWarning):
+                        del wrapper
+                    self.assertTrue(stream.closed)
+                self.assertEqual(observed, "a" * 5)
+
+    def damaged_frame(self, name):
+        path = self.put(self.runs / name, random.Random(573).randbytes(1048576))
+        self.assertEqual(self.compress()[0], 0)
+        compressed = Path(str(path) + ".zst")
+        frame = compressed.read_bytes()
+        compressed.write_bytes(frame[:len(frame) // 2])
+        return path, compressed, frame
+
+    def test_open_bytes_read_to_eof_then_close_checks_damaged_frame_status(self):
+        path, compressed, frame = self.damaged_frame("eof-then-close")
+
+        def consume(size=-1):
+            with desk.open_bytes(path) as stream:
+                self.assertTrue(stream.read(size))
+                stream.close()
+
+        for size in (-1, None, len(frame) * 2):
+            with self.subTest(size=size), self.assertRaisesRegex(OSError, "decompression_failed"):
+                consume(size)
+        compressed.write_bytes(frame)
+        consume()  # A closed full reader of a healthy frame remains valid.
+
+    def test_open_bytes_textiowrapper_eof_then_dropped_checks_damaged_frame_status(self):
+        path, compressed, frame = self.damaged_frame("wrapper-eof-then-dropped")
+
+        def consume():
+            with desk.open_bytes(path) as stream:
+                wrapper = io.TextIOWrapper(stream, encoding="latin-1")
+                self.assertTrue(wrapper.read())
+                with warnings.catch_warnings(action="ignore", category=ResourceWarning):
+                    del wrapper
+                self.assertTrue(stream.closed)
+
+        with self.assertRaisesRegex(OSError, "decompression_failed"):
+            consume()
+        compressed.write_bytes(frame)
+        consume()
+
+    def test_open_bytes_empty_read_before_close_preserves_eof_status_check(self):
+        path, _, _ = self.damaged_frame("empty-read-then-close")
+        for method in ("read", "read1", "readinto", "readinto1", "readline", "iteration"):
+            with self.subTest(method=method), self.assertRaisesRegex(OSError, "decompression_failed"):
+                with desk.open_bytes(path) as stream:
+                    if method == "iteration":
+                        for _ in stream:
+                            pass
+                    elif method.startswith("readinto"):
+                        buffer = bytearray(io.DEFAULT_BUFFER_SIZE)
+                        while getattr(stream, method)(buffer):
+                            pass
+                    else:
+                        while getattr(stream, method)(io.DEFAULT_BUFFER_SIZE):
+                            pass
+                    stream.close()
+
+    def test_open_bytes_zero_length_read_then_close_is_partial(self):
+        path, _, _ = self.damaged_frame("zero-read-then-close")
+        for method in ("read", "read1", "readinto", "readinto1", "readline"):
+            with self.subTest(method=method), desk.open_bytes(path) as stream:
+                argument = bytearray() if method.startswith("readinto") else 0
+                self.assertFalse(getattr(stream, method)(argument))
+                stream.close()
+
+    def test_partial_compressed_read_exits_within_plain_path_budget(self):
+        payload = random.Random(573).randbytes(4 * 1024 * 1024)
+        path = self.put(self.runs / "partial-read", payload)
+        probe = ("import sys\nfrom pathlib import Path\n"
+                 "from joulewise.desk_compress import open_bytes\n"
+                 "with open_bytes(Path(sys.argv[1])) as stream:\n"
+                 "    assert stream.read(10).hex() == sys.argv[2]\n")
+        argv = [sys.executable, "-B", "-c", probe, str(path), payload[:10].hex()]
+        started = time.monotonic()
+        # Five seconds bounds even the plain-path child on a busy test runner.
+        plain = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+        plain_seconds = time.monotonic() - started
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertEqual(self.compress()[0], 0)
+        self.assertFalse(path.exists())
+        # Operational hang detector: give decompression 100x the measured plain
+        # subprocess time, with a 5 s startup/scheduling floor. No energy bar.
+        result = subprocess.run(argv, capture_output=True, text=True,
+                                timeout=max(5, 100 * plain_seconds))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_full_read_still_rejects_a_damaged_compressed_frame(self):
+        path = self.put(self.runs / "damaged", random.Random(573).randbytes(1048576))
+        self.assertEqual(self.compress()[0], 0)
+        compressed = Path(str(path) + ".zst")
+        frame = compressed.read_bytes()
+        compressed.write_bytes(frame[:len(frame) // 2])
+        with self.assertRaisesRegex(OSError, "decompression_failed"):
+            desk.read_bytes(path)
+
+    def test_git_hazards_and_campaign_logs_stay_plain_in_every_root(self):
+        protected = []
+        raw = []
+        for root in (self.runs, self.custody, self.archive / "sources"):
+            for relative in ("clone/.git/objects/pack/pack-fixture.pack", "worktree/.git",
+                             "nested/hazards/monitor/battery.jsonl",
+                             "hazards/meter/stream-001.jsonl", "nested/campaign_log.jsonl"):
+                protected.append(self.put(root / relative))
+            raw.append(self.put(root / "run/raw/powermetrics.plist"))
+        before = {path: path.read_bytes() for path in protected + raw}
+        rc, summary = self.compress()
+        self.assertEqual((rc, summary["files"]), (0, len(raw)))
+        self.assertGreaterEqual(summary["skipped_protected"], len(protected))
+        for path in protected:
+            self.assertEqual(path.read_bytes(), before[path])
+            self.assertFalse(Path(str(path) + ".zst").exists())
+        for path in raw:
+            self.assertFalse(path.exists())
+            self.assertEqual(desk.read_bytes(path), before[path])
+        # Protected files are counted in the summary, omitted from the journal:
+        # only successful transformations need a restorable custody record.
+        self.assertEqual({row["path"] for row in desk.status(self.records)}, {str(path) for path in raw})
+
     def test_round_trip_modes_times_reader_and_harvest_inventory(self):
         files = [self.put(self.runs / "random", random.Random(5).randbytes(1048576)),
                  self.put(self.runs / "repeat"), self.put(self.runs / "empty", b""),

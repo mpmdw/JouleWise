@@ -54,6 +54,7 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 from __future__ import annotations
 
 from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
+from joulewise.desk_compress import is_file as logical_is_file, read_bytes
 
 import concurrent.futures
 import dataclasses
@@ -762,7 +763,7 @@ from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_
 
 
 def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
-                    succeeded: Sequence[Any]) -> tuple[dict[str, str], str]:
+                    succeeded: Sequence[Any], *, compression_records: Path | None = None) -> tuple[dict[str, str], str]:
     """What the core's HAZARD NEG-8 mint drops from the corpus members that succeeded.
 
     Returns ``({bundle_id: reason}, rule)``, mirroring the chain's
@@ -792,7 +793,8 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
             staged = Path(scratch) / "succeeded-members.json"
             staged.write_bytes((json.dumps({**committed, "members": list(succeeded)}, indent=2, sort_keys=True)
                                 + "\n").encode("utf-8"))
-            rows = function(Path(runs_root), staged)
+            rows = function(Path(runs_root), staged, **({"compression_records": compression_records}
+                            if compression_records is not None else {}))
         reasons = {row["bundle_id"]: row["reason"] for row in rows}
     except Exception as exc:  # unknown evidence never authorizes an omission
         return {}, f"raised: {type(exc).__name__}"
@@ -801,7 +803,8 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
     return reasons, "joulewise.whole_window.neg8_corpus_mint_drops"
 
 
-def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> list[str]:
+def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path, *,
+                               compression_records: Path | None = None) -> list[str]:
     """Each corpus member a NEG-8 bound names, re-checked against its bundle in the bound root.
 
     The bound's arithmetic and its manifest identity are validated by the
@@ -817,6 +820,7 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
     the core's tolerance.  Problems name the member, never a number.
     """
     from joulewise import whole_window as ww
+    from joulewise.desk_restore import readable_run
     corpus = bound.get("reference_corpus") if isinstance(bound, Mapping) else None
     members = corpus.get("members") if isinstance(corpus, Mapping) else None
     if not isinstance(members, list) or not members:
@@ -834,47 +838,47 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
         if len(paths) != 1 or paths[0].is_symlink():
             problems.append(f"bound_member_not_one_bundle:{bundle_id}")
             continue
-        path = paths[0]
-        try:
-            digest = ww._bundle_evidence_sha256(path)
-        except (OSError, ValueError):
-            digest = None
-        if digest is None or digest != member.get("bundle_evidence_sha256"):
-            problems.append(f"bound_member_bytes_differ:{bundle_id}")
-            continue
-        try:
-            summary = ww._read_json_object(path / "summary_metrics.json")
-            metadata = ww._read_json_object(path / "metadata.json")
-            config = ww._read_json_object(path / "config.json")
+        with readable_run(paths[0], compression_records=compression_records) as path:
             try:
-                authenticated = ww.authenticate_bundle_launch_lineage(path, config=config, metadata=metadata,
-                                                                      require_completion=False)
-            except ww.LaunchLineageError:
-                problems.append(f"bound_member_lineage_unauthenticated:{bundle_id}")
+                digest = ww._bundle_evidence_sha256(path)
+            except (OSError, ValueError):
+                digest = None
+            if digest is None or digest != member.get("bundle_evidence_sha256"):
+                problems.append(f"bound_member_bytes_differ:{bundle_id}")
                 continue
-            if authenticated is not None:
-                extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
-                lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
-                member_lineages[str(bundle_id)] = lineage
-            calibration = _neg8_member_calibration_identity(ww, metadata)
-            if calibration is None or calibration != bound_calibration:
-                problems.append(f"bound_member_calibration_differs:{bundle_id}")
+            try:
+                summary = ww._read_json_object(path / "summary_metrics.json")
+                metadata = ww._read_json_object(path / "metadata.json")
+                config = ww._read_json_object(path / "config.json")
+                try:
+                    authenticated = ww.authenticate_bundle_launch_lineage(path, config=config, metadata=metadata,
+                                                                          require_completion=False)
+                except ww.LaunchLineageError:
+                    problems.append(f"bound_member_lineage_unauthenticated:{bundle_id}")
+                    continue
+                if authenticated is not None:
+                    extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+                    lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+                    member_lineages[str(bundle_id)] = lineage
+                calibration = _neg8_member_calibration_identity(ww, metadata)
+                if calibration is None or calibration != bound_calibration:
+                    problems.append(f"bound_member_calibration_differs:{bundle_id}")
+                    continue
+                identity, canonical = ww._scientific_config_identity(path)
+                strict = (not ww._custody_strict_invalid(path, summary, metadata)
+                          and ww._current_strict_summary(summary, path))
+                gross, idle, problem = ww._reference_energy_evidence(path)
+            except Exception:  # a member that cannot be re-derived does not support the bound
+                problems.append(f"bound_member_not_rederived:{bundle_id}")
                 continue
-            identity, canonical = ww._scientific_config_identity(path)
-            strict = (not ww._custody_strict_invalid(path, summary, metadata)
-                      and ww._current_strict_summary(summary, path))
-            gross, idle, problem = ww._reference_energy_evidence(path)
-        except Exception:  # a member that cannot be re-derived does not support the bound
-            problems.append(f"bound_member_not_rederived:{bundle_id}")
-            continue
-        if not strict:
-            problems.append(f"bound_member_not_strict:{bundle_id}")
-        elif identity is None or not canonical or identity != corpus.get("scientific_config_sha256"):
-            problems.append(f"bound_member_condition_differs:{bundle_id}")
-        elif problem is not None or not isinstance(gross, Mapping) or not _close(
-                gross.get("point_j"), member.get("point_gross_j")) \
-                or not _close(idle, member.get("point_idle_subtracted_j")):
-            problems.append(f"bound_member_energy_differs:{bundle_id}")
+            if not strict:
+                problems.append(f"bound_member_not_strict:{bundle_id}")
+            elif identity is None or not canonical or identity != corpus.get("scientific_config_sha256"):
+                problems.append(f"bound_member_condition_differs:{bundle_id}")
+            elif problem is not None or not isinstance(gross, Mapping) or not _close(
+                    gross.get("point_j"), member.get("point_gross_j")) \
+                    or not _close(idle, member.get("point_idle_subtracted_j")):
+                problems.append(f"bound_member_energy_differs:{bundle_id}")
     # Stamped members carry one lineage, and it is the bound's when the bound names one (the mint's rule).
     distinct = {json.dumps(value, sort_keys=True, default=str) for value in member_lineages.values()}
     if len(distinct) > 1 or (member_lineages and bound_lineage is not None
@@ -2202,14 +2206,23 @@ def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
 
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
+    from joulewise.desk_restore import readable_run
+
+    bundle = Path(task["bundle_path"])
+    with readable_run(bundle, compression_records=task.get("compression_records")) as readable:
+        return _assess_plain_member(task, readable)
+
+
+def _assess_plain_member(task: Mapping[str, Any], bundle: Path) -> dict[str, Any]:
+    """Assess plain primary bytes, retaining the original archive locator."""
     from joulewise import battery_float
     from joulewise.cli import validate_bundle
     from joulewise.identity_pins import derive_model_runtime_config_from_metadata
     from joulewise.reduce import reduce_bundle
     from joulewise.schemas import is_admissible_succeeded_summary
 
-    run_id, bundle = task["run_id"], Path(task["bundle_path"])
-    result: dict[str, Any] = {"run_id": run_id, "bundle_path": str(bundle), "present": bundle.is_dir(),
+    run_id = task["run_id"]
+    result: dict[str, Any] = {"run_id": run_id, "bundle_path": str(Path(task["bundle_path"])), "present": bundle.is_dir(),
                               "errors": {}}
     if not result["present"]:
         return result
@@ -2254,10 +2267,24 @@ def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
         payload = reduce_bundle(bundle, reducer_version=provenance.get("reducer_version"),
                                 _instrument_calibration_physics_cache=cache).to_dict()
         raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+        # Compare the original re-derivation; the archive-only status projection
+        # must not introduce a reduction-mismatch exclusion or alter admissibility.
+        original_raw = raw
+        admissible = bool(is_admissible_succeeded_summary(payload))
+        if task.get("block_six"):
+            from joulewise.b6.archive import summary_with_clock_status
+            payload = summary_with_clock_status(payload, metadata)
+            raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
         target = Path(task["withheld_dir"]) / "reductions" / f"{run_id}.summary_metrics.rereduced.json"
         digest = write_once(target, raw)
-        return {"sha256": digest, "path": str(target), "identical_to_stored": raw == summary_raw,
-                "admissible": bool(is_admissible_succeeded_summary(payload))}
+        assessment = {"sha256": digest, "path": str(target),
+                      "identical_to_stored": original_raw == summary_raw, "admissible": admissible}
+        if raw != original_raw:
+            # Name the projection explicitly: the archived bytes now contain
+            # null energies, while the comparison above concerns the re-derivation.
+            assessment.update(archived_identical_to_stored=raw == summary_raw,
+                              energy_status=payload["energy_status"])
+        return assessment
 
     result["rereduced"] = guarded("rereduce", rereduce)
     result["spans"] = guarded("spans", lambda: member_spans(metadata, events)) or {"member": None, "request": None}
@@ -2370,6 +2397,7 @@ class Reading:
     values: Mapping[str, Any]
     status: str = "ok"
     interval: tuple[int, int] | None = None  # contention: the ps interval in monotonic_ns
+    error: str | None = None  # retain probe parts: anchor skew alone is not an f failure
 
 
 def _num(value: Any) -> float | None:
@@ -2426,13 +2454,13 @@ def parse_monitor_line(module: str, value: Any) -> Reading | None:
             raise MonitorLineError("contention interval lacks interval.monotonic_ns")
     status = "event" if disk_event else ("error" if value.get("error") is not None else "ok")
     return Reading(module, finished["monotonic_ns"], finished["monotonic_raw_ns"], finished["wall_ns"],
-                   started["monotonic_ns"], started["wall_ns"], values, status, interval)
+                   started["monotonic_ns"], started["wall_ns"], values, status, interval, value.get("error"))
 
 
 def read_monitor_journal(path: Path, module: str) -> tuple[list[Reading], int]:
     """Every observation of one journal in ``finished`` order, and the malformed-line count."""
     readings, malformed = [], 0
-    for line in path.read_bytes().splitlines():
+    for line in read_bytes(path).splitlines():
         if not line.strip():
             continue
         try:
@@ -2664,7 +2692,7 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
 
     * an SMC B0AC read in force above +limit (charging);
     * IsCharging Yes or ExternalConnected No at a publication in force or at
-      any good poll inside the span;
+      the latest good registry state at or before the start or any good poll inside the span;
     * without SMC coverage only, the registry InstantAmperage/Amperage above
       +limit at a publication in force;
     * ``battery.accumulator_excursion``: the charge accumulator's mean above
@@ -2720,13 +2748,19 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
         if reasons:
             violations.append({"publication_monotonic_ns": item.monotonic_ns, "update_time_s": item.update_time_s,
                                "instant_ma": item.instant_ma, "amperage_ma": item.amperage_ma, "reasons": reasons})
-    for reading in readings:  # every good poll inside the span, published or not
-        if reading.status == "ok" and span[0] <= reading.monotonic_ns <= span[1]:
-            values = reading.values
-            reasons = _float_reasons(None, None, _bool(values.get("is_charging")),
-                                     _bool(values.get("external_connected")), limit)
-            if reasons:
-                violations.append({"poll_monotonic_ns": reading.monotonic_ns, "reasons": reasons})
+    states = sorted((reading for reading in readings if reading.status == "ok"
+                     and "external_connected" in reading.values), key=lambda reading: reading.monotonic_ns)
+    before = [reading for reading in states if reading.monotonic_ns <= span[0]]
+    active_states = ([before[-1]] if before else []) + [
+        reading for reading in states if span[0] < reading.monotonic_ns <= span[1]]
+    publication_reads = {id(item.values) for item in in_force_pubs}
+    for reading in active_states:
+        if id(reading.values) in publication_reads:  # already judged at its publication
+            continue
+        reasons = _float_reasons(None, None, _bool(reading.values.get("is_charging")),
+                                 _bool(reading.values.get("external_connected")), limit)
+        if reasons:
+            violations.append({"poll_monotonic_ns": reading.monotonic_ns, "reasons": reasons})
     smc_times = [entry["monotonic_ns"] for entry in good]
     for index in in_force(smc_times, span[0], span[1]):
         entry = good[index]
@@ -3069,7 +3103,7 @@ def contention_member_flags(request: Sequence[int], readings: Sequence[Reading],
                             ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """``contention.request_overlap`` and ``contention.unmeasured`` for one request."""
     limit = float(thresholds["contention_cpu_s_per_s"])
-    intervals = [reading for reading in readings if reading.status == "ok" and reading.interval]
+    intervals = [reading for reading in readings if reading.interval]
     offenders = []
     for reading in intervals:
         if not _overlaps(reading.interval, request):
@@ -3085,7 +3119,7 @@ def contention_member_flags(request: Sequence[int], readings: Sequence[Reading],
     # A hole is named by the interval edges around it (None where the journal
     # has no interval on that side), never by the request's own edges.  A
     # failed ps interval covers nothing.
-    every = sorted(reading.interval for reading in intervals)
+    every = sorted(reading.interval for reading in intervals if reading.status == "ok")
     ended = [end for _start, end in every if end <= request[0]]
     previous_end: int | None = max(ended) if ended else None
     cursor: int = request[0]
@@ -3120,7 +3154,8 @@ def _clock_point(reading: Reading, max_skew_ns: int) -> tuple[int, int] | None:
     3.9-8.3 ms in the 10-06 rehearsal, R3-1) carries up to half its skew of
     anchor error and is never compared; nor is one whose skew is unrecorded.
     """
-    anchor = reading.values.get("anchor") if reading.status == "ok" else None
+    # A failed f read does not erase a separately measured, usable anchor.
+    anchor = reading.values.get("anchor")
     if not isinstance(anchor, Mapping):
         return None
     skew = anchor.get("read_skew_ns")
@@ -3139,14 +3174,44 @@ def _clock_skew_unmeasured(reading: Reading, max_skew_ns: int) -> bool:
     return bool(reading.values.get("rejected_anchors"))
 
 
+def _clock_frequency_gap(readings: Sequence[Reading], span: Sequence[int]) -> list[int | None] | None:
+    """L1 frequency coverage, using journal edges only in structure outputs.
+
+    Anchor-only skew errors preserve the last f. A failed refresh invalidates
+    it until success. An open gap ends at None, never the member's own edge.
+    """
+    missing_since = None
+    have_frequency = False
+    for reading in readings:
+        failed = any(not part.startswith("clock.unmeasured: anchor read skew")
+                     for part in str(reading.error or "").split("; ") if part)
+        if reading.values.get("frequency") is not None:
+            if missing_since is not None and missing_since <= span[1] and reading.monotonic_ns >= span[0]:
+                return [missing_since, reading.monotonic_ns]
+            missing_since = None
+            have_frequency = True
+        elif failed or not have_frequency:
+            if missing_since is None:
+                missing_since = reading.started_monotonic_ns
+            have_frequency = False
+    if missing_since is not None and missing_since <= span[1]:
+        return [missing_since, None]
+    return None
+
+
 def clock_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
                        ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """``clock.unmeasured`` when the 1 Hz anchor journal has a hole overlapping the span, or a
-    sample inside the span read no anchor within the read-skew bound (L1's ``clock.span_findings``)."""
+    sample inside the span read no anchor within the read-skew bound, or frequency
+    evidence is missing/stale (L1's ``clock.span_findings``)."""
     max_skew_ns = _clock_skew_max_ns(thresholds)
     times = [reading.monotonic_ns for reading in readings if _clock_point(reading, max_skew_ns) is not None]
     holes = _uncovered(times, span, int(float(thresholds["clock_unmeasured_gap_s"]) * 1e9))
     out = [("clock.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0]))] if holes else []
+    frequency_gap = _clock_frequency_gap(readings, span)
+    if frequency_gap is not None:
+        out.append(("clock.unmeasured", {"rule": "frequency_coverage", "gap_monotonic_ns": frequency_gap},
+                    _hole_interval(frequency_gap)))
     skewed = [reading for reading in readings
               if span[0] <= reading.monotonic_ns <= span[1] and _clock_skew_unmeasured(reading, max_skew_ns)]
     if skewed:
@@ -3637,13 +3702,77 @@ def l4_exclusion_inputs(roster: Mapping[str, Any], spans: Mapping[str, Mapping[s
 
 
 def _l4_exclusions(flags: list[dict[str, Any]], roster: Mapping[str, Any], spans: Mapping[str, Any],
-                   catalog: Catalog) -> Any:
+                   catalog: Catalog, *, pack_scoped: bool = True) -> Any:
     """L4's ``joulewise.flags.exclusions.compute`` over the catalog read by L4's own loader."""
     if catalog.path is None or catalog.sha256 is None:
         raise HarvestFault("flag_catalog_absent")
     exclusions = importlib.import_module("joulewise.flags.exclusions")
     load_catalog = importlib.import_module("joulewise.flags.catalog").load_catalog
-    return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)))
+    return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)), pack_scoped=pack_scoped)
+
+
+HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
+# The harvest program's own files.  Registration section 11 item 4: an
+# addendum to the seal record pins the harvest program before the first
+# window's harvest, by these files' SHA-256s and the commit of the checkout
+# the harvest runs from (a desk checkout, never the measurement checkout).
+HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
+B6_HARVEST_PROGRAM_FILES = ("scripts/harvest_b6_session.py", "joulewise/b6/archive.py",
+                            "joulewise/b6/courier.py", "joulewise/b6/analysis_lane.py",
+                            "joulewise/flags/exclusions.py", "joulewise/b6/session.py",
+                            "joulewise/b6/acceptance.py", "joulewise/b6/export_runs.py",
+                            "joulewise/b6/registration.py", "joulewise/b6/survivor_screen.py",
+                            "joulewise/flags/catalog.py")
+
+
+def harvest_checkout(runner: Callable[..., Any] = subprocess.run, *, block_six: bool = False) -> dict[str, Any]:
+    """The checkout this harvest program runs from (seal gate K-7): a record, never a flag.
+
+    The harvest decides which members and windows are claim-usable, and it
+    runs from a checkout other than the one that collected the window.  So
+    which program decided must be on record: ``head`` is that checkout's
+    commit (``git rev-parse HEAD`` in the directory that holds this file's
+    package), ``status_clean`` whether ``git status --porcelain`` printed
+    nothing there (no tracked edit and no untracked file), ``status_lines``
+    how many paths it printed, and ``files`` the SHA-256 of each harvest
+    program file as it is on disk.  With a clean checkout the commit fixes
+    every byte of the program; with a dirty one the file digests still say
+    whether the pinned files are the pinned bytes.  A value git or the disk
+    cannot give is None and named in ``errors``; nothing here stops or
+    excludes anything.
+    """
+    root = Path(__file__).resolve().parents[2]
+    record: dict[str, Any] = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": str(root), "head": None,
+                              "status_clean": None, "status_lines": None, "files": {}, "errors": []}
+    for name, arguments in (("head", ["rev-parse", "HEAD"]),
+                            ("status", ["status", "--porcelain=v1", "--untracked-files=all"])):
+        try:
+            # Operational cap, not a measurement bar: allow a minute for a
+            # cold checkout's untracked-file walk, then record an unavailable
+            # identity rather than letting two local Git probes stall harvest.
+            result = runner(["git", "-C", str(root), *arguments], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", check=False, timeout=60)
+        except (OSError, subprocess.SubprocessError) as exc:
+            record["errors"].append(f"{name}:{type(exc).__name__}")
+            continue
+        if result.returncode != 0:
+            record["errors"].append(f"{name}:git_exit_{result.returncode}")
+        elif name == "head":
+            head = result.stdout.strip()
+            if re.fullmatch(r"[0-9a-f]{40}([0-9a-f]{24})?", head):
+                record["head"] = head
+            else:
+                record["errors"].append("head:not_a_commit_name")
+        else:
+            lines = [line for line in result.stdout.splitlines() if line.strip()]
+            record["status_clean"], record["status_lines"] = not lines, len(lines)
+    for relative in HARVEST_PROGRAM_FILES + (B6_HARVEST_PROGRAM_FILES if block_six else ()):
+        try:
+            record["files"][relative] = sha256_file(root / relative)
+        except OSError as exc:
+            record["files"][relative] = None
+            record["errors"].append(f"file:{relative}:{type(exc).__name__}")
+    return record
 
 
 @dataclasses.dataclass
@@ -3667,6 +3796,7 @@ class Seams:
     desk_gone_wait_s: float = DESK_GONE_WAIT_S
     killpg: Callable[[int, int], None] = os.killpg
     observe_identity: Callable[[int], Any] = _observe_identity
+    harvest_checkout: Callable[..., Mapping[str, Any]] = harvest_checkout
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -3694,6 +3824,20 @@ class _Harvest:
         self.inputs, self.archive, self.seams = inputs, archive_root, seams
         self.prepare_desk, self.run_g3 = prepare_desk, run_g3
         self.derived, self.withheld = archive_root / "derived", archive_root / "withheld"
+        from joulewise.b6.courier import block_six_plan
+        self.block_six = block_six_plan(inputs.plan)
+        # The plan declares the lane; the lane declares its exclusion capability.
+        # Block 5 retains L4's existing default and seam calling convention.
+        self.exclusion_options = {}
+        if self.block_six:
+            from joulewise.b6.analysis_lane import HarvestLane
+            self.exclusion_options["pack_scoped"] = HarvestLane().capabilities().pack_scoped_flags
+        try:
+            self.harvest_checkout = dict(seams.harvest_checkout(block_six=self.block_six))
+        except Exception as exc:
+            self.harvest_checkout = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": None, "head": None,
+                                     "status_clean": None, "status_lines": None, "files": {},
+                                     "errors": [f"record:{type(exc).__name__}"]}
         self.catalog = Catalog.load(inputs.catalog_path)
         self.flags = FlagLedger(plan_id=inputs.plan_id, attempt=inputs.attempt, catalog=self.catalog,
                                 boot_session_uuid=seams.boot_session_uuid(), now=seams.now,
@@ -3910,7 +4054,8 @@ class _Harvest:
             # A discarded early result already wrote its re-reduction under withheld/.
             withheld = self.withheld / "reassessed" if member["run_id"] in (getattr(self, "_early", None) or {}) \
                 else self.withheld
-            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld)})
+            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld), "block_six": self.block_six,
+                              "compression_records": str(Path(str(self.archive) + ".desk") / "compression.jsonl")})
         if discarded:
             self.emit("records.source_changed_during_harvest", level="window", collector="members",
                       observed={"early_assessments_discarded": sorted(discarded)[:16],
@@ -4381,7 +4526,8 @@ class _Harvest:
                 # numbers to the bundles in this bound root (core-prune N2, F2).
                 check["members_rederived"] = False
                 try:
-                    member_problems = neg8_bound_member_problems(value, bound_root)
+                    member_problems = neg8_bound_member_problems(value, bound_root,
+                        compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl")
                 except Exception as exc:
                     member_problems = [f"bound_member_check_failed:{type(exc).__name__}"]
                 if member_problems:
@@ -4524,7 +4670,8 @@ class _Harvest:
         reasons: dict[str, str] = {}
         if dropped_succeeded:
             reasons, check["mint_rule"] = neg8_mint_drops(
-                root, committed, [member for member in listed if _corpus_member_status(root, member) == "succeeded"])
+                root, committed, [member for member in listed if _corpus_member_status(root, member) == "succeeded"],
+                compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl")
         omitted = [(member.get("bundle_id"), reasons[member.get("bundle_id")]) for member in dropped_succeeded
                    if reasons.get(member.get("bundle_id")) in NEG8_ACCEPTED_DROP_REASONS]
         selected = [member.get("bundle_id") for member in dropped_succeeded
@@ -4571,7 +4718,10 @@ class _Harvest:
         authentic = False
         try:
             authentic = bool(len(matches) == 1 and matches[0] == raw
-                             and validate_whole_window_verdict_row(row, runs, set(row.get("bundle_ids", []))).authentic)
+                             and validate_whole_window_verdict_row(
+                                 row, runs, set(row.get("bundle_ids", [])),
+                                 compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl",
+                             ).authentic)
         except Exception:
             authentic = False
         if not authentic:
@@ -5325,7 +5475,8 @@ class _Harvest:
             found = [root / member["run_id"] for root in self._runs_roots() if (root / member["run_id"]).is_dir()]
             if len(found) == 1 and _same_path(found[0].parent, runs):
                 tasks.append({"run_id": member["run_id"], "bundle_path": str(found[0]),
-                              "withheld_dir": str(self.withheld)})
+                              "withheld_dir": str(self.withheld), "block_six": self.block_six,
+                              "compression_records": str(Path(str(self.archive) + ".desk") / "compression.jsonl")})
         results = assess_members(tasks, workers=self.seams.workers)
         self._early = {result["run_id"]: result for result in results}
 
@@ -5986,19 +6137,29 @@ class _Harvest:
         journals: dict[str, list[Reading]] = {}
         for module in MONITOR_MODULES:
             path = directory / f"{module}.jsonl"
-            if not path.is_file():
+            if not path.is_file() and not Path(str(path) + ".zst").is_file():
                 self.emit("records.monitor_journal_absent", level="window", collector="monitor",
                           observed={"module": module})
                 self.hazards.setdefault(module, {})["continuous"] = {"phase": "continuous", "journal": None}
                 continue
-            readings, malformed = read_monitor_journal(path, module)
+            try:
+                readings, malformed = read_monitor_journal(path, module)
+                digest = sha256_bytes(read_bytes(path))
+            except OSError as exc:
+                # Unreadable storage, including decompression_failed, supplies
+                # no observations. Use the same absence/unmeasured flags as a
+                # missing plain journal; it is not a harvest-program fault.
+                self.emit("records.monitor_journal_absent", level="window", collector="monitor",
+                          observed={"module": module, "error": str(exc)})
+                self.hazards.setdefault(module, {})["continuous"] = {"phase": "continuous", "journal": None}
+                continue
             journals[module] = readings
             if malformed:
                 self.emit("records.monitor_line_malformed", level="window", collector="monitor",
                           observed={"module": module, "lines": malformed})
             self.hazards.setdefault(module, {})["continuous"] = {
                 "phase": "continuous", "journal": {
-                    "path": f"{module}.jsonl", "sha256": sha256_file(path), "readings": len(readings),
+                    "path": f"{module}.jsonl", "sha256": digest, "readings": len(readings),
                     "failed_probes": sum(reading.status == "error" for reading in readings), "malformed": malformed}}
         self._journals = journals
         roster = {member["run_id"]: member for member in self.roster["members"]}
@@ -6212,7 +6373,12 @@ class _Harvest:
         """
         from joulewise.external import km003c_parse as kp
         directory = self.inputs.custody_root / METER_DIRECTORY
-        paths = sorted(directory.glob("stream-*.jsonl")) if directory.is_dir() else []
+        # Use logical plain names for discovery and output, including old
+        # archives compressed before hazards/ became protected. A plain
+        # sibling takes precedence in read_bytes, with no duplicate stream.
+        paths = sorted({path.with_suffix("") if path.suffix == ".zst" else path
+                        for pattern in ("stream-*.jsonl", "stream-*.jsonl.zst")
+                        for path in directory.glob(pattern)}) if directory.is_dir() else []
         if not paths:
             self.emit("meter.absent", level="window", collector="meter",
                       observed={"status": None, "reason": "no meter stream file", "streams": 0})
@@ -6534,8 +6700,8 @@ class _Harvest:
     def arm_and_desk_records(self) -> None:
         path = self.inputs.arm_record_path
         arm_value: Any = None
-        if path.is_file():
-            arm_value = read_json(path)
+        if logical_is_file(path):
+            arm_value = json.loads(read_bytes(path))
             for module, phases in _arm_modules(arm_value).items():
                 self.hazards.setdefault(module, {})["arm"] = phases
                 for phase in phases:
@@ -6544,7 +6710,7 @@ class _Harvest:
                             self.emit(flag["code"], level="window", collector="arm",
                                       observed={"phase": phase["phase"], **flag},
                                       spec=_spec("DIAGNOSTIC", "PHYSICS"))
-        elif (self.inputs.night_dir / "chain.started").is_file():
+        elif logical_is_file(self.inputs.night_dir / "chain.started"):
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
         # L2's driver.jsonl.  A line that is not a valid flag may have been an
@@ -6555,11 +6721,13 @@ class _Harvest:
         # flags: it is read by _collector_run_records, and so is a run record
         # found in any other file of the directory.
         directory = self.inputs.flags_dir
-        for flag_file in sorted(directory.glob("*.jsonl")) if directory.is_dir() else []:
+        flag_files = set(directory.glob("*.jsonl")) if directory.is_dir() else set()
+        flag_files.update(path.with_suffix("") for path in directory.glob("*.jsonl.zst"))
+        for flag_file in sorted(flag_files):
             if flag_file.name == COLLECTOR_RUNS_NAME:
                 self._collector_run_records(flag_file)
                 continue
-            for number, line in enumerate(flag_file.read_bytes().split(b"\n"), start=1):
+            for number, line in enumerate(read_bytes(flag_file).split(b"\n"), start=1):
                 if not line.strip():
                     continue
                 value: Any = None
@@ -6768,7 +6936,7 @@ class _Harvest:
                                         elapsed_s=row.get("elapsed_s"), source=source)
 
     def _collector_run_records(self, path: Path) -> None:
-        for number, line in enumerate(path.read_bytes().split(b"\n"), start=1):
+        for number, line in enumerate(read_bytes(path).split(b"\n"), start=1):
             if not line.strip():
                 continue
             try:
@@ -7442,7 +7610,7 @@ class _Harvest:
                 if self.exclusion_roster is None:
                     raise HarvestFault("exclusion_inputs_unavailable")
                 exclusions = self.seams.exclusions_compute(flags, self.exclusion_roster, self.exclusion_spans,
-                                                           self.catalog)
+                                                           self.catalog, **self.exclusion_options)
             except Exception as exc:
                 # Absent or failing L4 function: numbers and flags still stand;
                 # the window is simply not claim-usable until it is computed.
@@ -7452,6 +7620,7 @@ class _Harvest:
                 flags = ordered()
         self.outputs["derived/flags.jsonl"] = write_jsonl_once(self.derived / "flags.jsonl", flags)
         exclusions = dict(exclusions) if isinstance(exclusions, Mapping) else {"value": exclusions}
+        exclusions["harvest_checkout"] = dict(self.harvest_checkout)
         self.outputs["derived/exclusions.json"] = write_json_once(self.derived / "exclusions.json", exclusions)
         write_json_once(self.withheld / "collector-errors.json",
                         {"schema": "joulewise.b5_collector_errors.v1", "errors": self.error_details})
@@ -7491,7 +7660,10 @@ class _Harvest:
                   "yield": getattr(self, "yield_block", None),
                   "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
                   "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
+                  "harvest_checkout": dict(self.harvest_checkout),
                   "outputs": dict(sorted(self.outputs.items()))}
+        if self.block_six:
+            record["registration_files"] = getattr(self, "registration_files", {})
         write_json_once(self.archive / "harvest.json", record)
         return record
 
@@ -7646,8 +7818,9 @@ def _common_root(paths: Sequence[Path]) -> Path:
     return Path(os.path.commonpath([os.path.abspath(path) for path in paths]))
 
 
-def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
-            prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False) -> dict[str, Any]:
+def _harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
+            prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False,
+            registration_paths: Sequence[Path | str] = ()) -> dict[str, Any]:
     """Harvest one window.  Raises NotReady before the chain group is gone."""
     seams = seams or Seams()
     archive = Path(archive_root).absolute()
@@ -7659,6 +7832,13 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
             raise HarvestFault("archive_overlaps_source")
     archive.mkdir(parents=True)
     run = _Harvest(inputs, archive, seams, prepare_desk=prepare_desk, run_g3=run_g3)
+    if run.block_six:
+        from joulewise.b6.archive import registration_digests
+        # Explicit paths from the block-six caller, plus the shared harvester's
+        # own registered inputs. No discovery or inference from a pack name.
+        run.registration_files = registration_digests([
+            *registration_paths, *(path for path in (inputs.registration_path,
+                inputs.catalog_path, inputs.identity_pins_path) if path is not None)])
     if not state["terminal_record"]:
         run.emit("records.terminal_record_absent", level="window", collector="readiness", observed={"result_json": None})
     if not state["chain_started"]:
@@ -7710,3 +7890,12 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("diagnostics", run.diagnostics, fault=False)
     run.step("sources_unchanged", run.sources_unchanged)
     return run.finish(COLLECTED if collected else NO_COLLECTION)
+
+
+def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
+            prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False,
+            registration_paths: Sequence[Path | str] = ()) -> dict[str, Any]:
+    """Stop on storage refusals before a harvest verdict can be written."""
+    return _harvest(inputs, archive_root, seams=seams, prepare_desk=prepare_desk,
+                    run_g3=run_g3, allow_missing_terminal=allow_missing_terminal,
+                    registration_paths=registration_paths)

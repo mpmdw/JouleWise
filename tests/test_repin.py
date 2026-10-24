@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from scripts import digest_pin_census as census
 from scripts import repin
-from tests.test_digest_pin_census import REDUCE_SOURCE, build_tree, rows_by_path, sha
+from tests.test_digest_pin_census import FIXTURE_TMP, REDUCE_SOURCE, build_tree, rows_by_path, sha
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,7 +23,7 @@ class MiniatureTree:
     """build_tree plus its committed registry, in a temporary directory."""
 
     def __init__(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
+        self._temporary = tempfile.TemporaryDirectory(dir=FIXTURE_TMP)
         self.root = Path(self._temporary.name)
         self.digests = build_tree(self.root)
         with redirect_stdout(io.StringIO()):
@@ -207,7 +207,8 @@ class CommandFamilyTests(unittest.TestCase):
 
 
 ERA_PATH = "configs/campaigns/packy/sizing_source.json"
-ERA_SPEC = {"commit_pointer": "/head", "scope_pointer": r"^/provenance/production/[0-9]+/source/sha256$"}
+ERA_SPEC = {"commit_pointer": "/head", "scope_pointer": r"^/provenance/production/[0-9]+/source/sha256$",
+            "expected_count": 1}
 
 
 def _git(root: Path, *argv: str) -> str:
@@ -281,12 +282,214 @@ class EraRecordTests(unittest.TestCase):
         with self.assertRaises(census.EraRecordError):
             census.census(self.tree.root)
 
+    def test_existing_orphan_commit_is_rejected_even_after_registry_regeneration(self) -> None:
+        tree = _git(self.tree.root, "rev-parse", f"{self.era}^{{tree}}")
+        orphan = _git(self.tree.root, "commit-tree", tree, "-m", "forged orphan era")
+        self.tree.edit(ERA_PATH, self.era, orphan)
+        self.assertEqual(self.tree.check()[0], 1)
+        self.assertIn("not an ancestor of HEAD", self.tree.check()[1])
+        before = self.tree.path(census.REGISTRY_REL).read_bytes()
+        with self.assertRaisesRegex(census.EraRecordError, "not an ancestor of HEAD"):
+            census.main(["--write", "--root", str(self.tree.root)])
+        self.assertEqual(self.tree.path(census.REGISTRY_REL).read_bytes(), before)
+
+    def test_scope_count_is_checked_even_if_registry_has_no_era_rows(self) -> None:
+        record = json.loads(self.tree.path(ERA_PATH).read_text())
+        record["provenance"]["production"] = []
+        self.tree.path(ERA_PATH).write_text(json.dumps(record))
+        registry = census.load_registry(self.tree.root)
+        registry["files"] = [entry for entry in registry["files"] if entry["path"] != ERA_PATH]
+        stale, _ = repin.registry_stale(self.tree.root, registry)
+        self.assertTrue(any("scoped literal count 0, expected 1" in row.reason for row in stale))
+        with self.assertRaisesRegex(census.EraRecordError, "scoped literal count 0, expected 1"):
+            census.census(self.tree.root)
+
+    def test_each_scope_line_alternative_must_match(self) -> None:
+        with patch.dict(ERA_SPEC, {"scope_line": (r'^  "head":', r'^missing required line$')}):
+            with self.assertRaisesRegex(census.EraRecordError, "scope_line alternative 1 matches zero spans"):
+                census.census(self.tree.root)
+
+
+class Block5EraRecordTests(unittest.TestCase):
+    """The real block-5 rules, exercised against small, independently committed eras."""
+
+    INVENTORY = "configs/campaigns/v5_claim_25g83/sealed_inventory.json"
+    REGISTRATION = "configs/campaigns/v5_claim_25g83/registration_block5.md"
+
+    def setUp(self) -> None:
+        # Retain the real matchers used by this miniature document; its claims
+        # intentionally contain one literal each rather than the full seal.
+        rules = tuple(dict(spec) for spec in census.ERA_RECORDS[self.REGISTRATION])
+        for spec in rules[:2]:
+            spec["scope_text"] = (spec["scope_text"][-1],)
+        for spec in rules:
+            spec["expected_count"] = 1
+        inventory = dict(census.ERA_RECORDS[self.INVENTORY], expected_count=1)
+        patcher = patch.dict(census.ERA_RECORDS, {self.REGISTRATION: rules, self.INVENTORY: inventory})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.tree = MiniatureTree()
+        self.addCleanup(self.tree.close)
+        self.tree.path("joulewise/bundle.py").write_text("VALUE = 'first seal'\n")
+        _git(self.tree.root, "add", ".")
+        _git(self.tree.root, "commit", "-qm", "first seal inputs")
+        self.first = _git(self.tree.root, "rev-parse", "HEAD")
+        self.registry_digest = sha(self.tree.path(census.REGISTRY_REL).read_bytes())
+        self.tree.path("joulewise/bundle.py").write_text("VALUE = 'second seal'\n")
+        self.bundle_digest = sha(self.tree.path("joulewise/bundle.py").read_bytes())
+        _git(self.tree.root, "add", ".")
+        _git(self.tree.root, "commit", "-qm", "erratum inputs")
+        self.current = _git(self.tree.root, "rev-parse", "HEAD")
+        self.tree.path(self.INVENTORY).parent.mkdir(parents=True)
+        self.tree.path(self.INVENTORY).write_text(json.dumps({
+            "head": self.current, "files": {"joulewise/bundle.py": self.bundle_digest},
+            "outside_files": self.tree.digests["prompt"],
+        }))
+        self.tree.path(self.REGISTRATION).write_text(
+            f"1. H_claim is fixed. **H_claim is `{self.current}`**: the merge\n"
+            f"   the first seal's H_claim, `{self.first}`, and changes no code\n"
+            f"row was read in the candidate H_claim `{self.first}` (a clone)\n"
+            f"| sizing, pins, plan trees | `sizing_b5.json`, `configs/pins/registry.json` "
+            f"`{self.registry_digest}`, unchanged | filled |\n"
+            f"| sizing, pins, plan trees | at H_claim, after the erratum: "
+            f"`configs/pins/registry.json` `{self.registry_digest}`. At the first seal's H_claim: "
+            f"`configs/pins/registry.json` `{self.registry_digest}`, unchanged | recomputed: hashes |\n"
+        )
+        _git(self.tree.root, "add", ".")
+        self.refresh()
+
+    def refresh(self) -> None:
+        with redirect_stdout(io.StringIO()):
+            census.main(["--write", "--root", str(self.tree.root)])
+
+    def test_post_seal_edits_pass_both_eras_and_registry_self_record(self) -> None:
+        self.tree.path("joulewise/bundle.py").write_text("VALUE = 'post seal audit fix'\n")
+        code, output = self.tree.check()
+        self.assertEqual(code, 0)
+        self.assertIn("WARNING:", output)
+        self.assertIn("code.executed_differs_from_sealed", output)
+        self.assertIn("\n  joulewise/bundle.py\n", output)
+        self.assertTrue(output.endswith("PASS 1 pin families current\n"))
+        rows = rows_by_path(census.load_registry(self.tree.root))
+        self.assertIn(("/files/joulewise~1bundle.py", "estimator_code",
+                       f"file@{self.current}:joulewise/bundle.py"), rows[self.INVENTORY])
+        self.assertEqual([target for _, _, target in rows[self.REGISTRATION]], [
+            f"file@{self.first}:{census.REGISTRY_REL}",
+            f"file@{self.current}:{census.REGISTRY_REL}",
+            f"file@{self.first}:{census.REGISTRY_REL}",
+        ])
+
+    def test_tampered_inventory_digest_still_fails(self) -> None:
+        self.tree.edit(self.INVENTORY, self.bundle_digest, sha("tampered inventory literal"))
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("no longer carries the target's digest at its recorded commit", out)
+
+    def test_inventory_head_must_equal_registration_h_claim_even_after_refresh(self) -> None:
+        self.tree.edit(self.INVENTORY, self.current, self.first)
+        code, output = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("/head must equal", output)
+        with self.assertRaisesRegex(census.EraRecordError, "/head must equal"):
+            self.refresh()
+
+    def test_forged_orphan_inventory_is_rejected_before_write(self) -> None:
+        forged = "VALUE = 'forged orphan seal'\n"
+        self.tree.path("joulewise/bundle.py").write_text(forged)
+        _git(self.tree.root, "add", "joulewise/bundle.py")
+        tree = _git(self.tree.root, "write-tree")
+        orphan = _git(self.tree.root, "commit-tree", tree, "-m", "forged orphan seal")
+        self.tree.edit(self.INVENTORY, self.current, orphan)
+        self.tree.edit(self.INVENTORY, self.bundle_digest, sha(forged))
+        code, output = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("not an ancestor of HEAD", output)
+        before = self.tree.path(census.REGISTRY_REL).read_bytes()
+        with self.assertRaisesRegex(census.EraRecordError, "not an ancestor of HEAD"):
+            self.refresh()
+        self.assertEqual(self.tree.path(census.REGISTRY_REL).read_bytes(), before)
+
+    def test_wording_edit_cannot_be_laundered_by_write(self) -> None:
+        self.tree.edit(self.REGISTRATION, "At the first seal's H_claim:",
+                       "At the first seal's H_claim (a64000884):")
+        code, output = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("matches zero spans", output)
+        before = self.tree.path(census.REGISTRY_REL).read_bytes()
+        with self.assertRaisesRegex(census.EraRecordError, "matches zero spans"):
+            self.refresh()
+        self.assertEqual(self.tree.path(census.REGISTRY_REL).read_bytes(), before)
+
+    def test_missing_text_alternative_fails_even_when_scoped_count_is_unchanged(self) -> None:
+        spec = census.ERA_RECORDS[self.REGISTRATION][0]
+        with patch.dict(spec, {"scope_text": (*spec["scope_text"], r"missing required wording")}):
+            self.assertEqual(self.tree.check()[0], 1)
+            with self.assertRaisesRegex(census.EraRecordError, "scope_text alternative 1 matches zero spans"):
+                self.refresh()
+
+    def test_unchanged_inventory_has_no_warning_and_missing_file_is_listed(self) -> None:
+        self.assertEqual(self.tree.check(), (0, "PASS 1 pin families current\n"))
+        self.tree.path("joulewise/bundle.py").unlink()
+        code, output = self.tree.check()
+        self.assertEqual(code, 0)
+        self.assertIn("WARNING:", output)
+        self.assertIn("\n  joulewise/bundle.py\n", output)
+
+    def test_duplicate_digest_elsewhere_cannot_hide_a_tampered_table_literal(self) -> None:
+        text = self.tree.path(self.REGISTRATION).read_text()
+        # Keep the revision-8 row and first-seal copy intact; alter only H_claim's copy.
+        self.tree.path(self.REGISTRATION).write_text(text.replace(
+            f"`{self.registry_digest}`. At the first seal's H_claim:",
+            f"`{sha('tampered table literal')}`. At the first seal's H_claim:"))
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("#L5:0", out)
+        self.assertIn("no longer carries the target's digest at its recorded commit", out)
+
+    def test_historical_target_bytes_are_actually_rechecked(self) -> None:
+        read_at = census._read_at
+
+        def corrupt(root, path, commit):
+            raw = read_at(root, path, commit)
+            return raw + b"# tampered historical byte\n" if (
+                path == "joulewise/bundle.py" and commit == self.current) else raw
+
+        with patch.object(census, "_read_at", side_effect=corrupt):
+            code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn(f"file@{self.current}:joulewise/bundle.py", out)
+
+    def test_moving_one_of_the_two_declared_commits_fails(self) -> None:
+        self.tree.edit(self.REGISTRATION, f"first seal's H_claim, `{self.first}`",
+                       f"first seal's H_claim, `{self.current}`")
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn(f"declares era commit {self.current}, not the recorded one", out)
+
+    def test_unscoped_live_pins_still_fail(self) -> None:
+        self.tree.edit("joulewise/reduce.py", "sum(samples)", "sum(samples) * 2")
+        code, out = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("configs/calibration/acceptance.json /estimator_code_sha256", out)
+        self.assertNotIn(self.INVENTORY, out)
+
+    def test_inventory_scope_does_not_include_other_fields(self) -> None:
+        rows = rows_by_path(census.load_registry(self.tree.root))[self.INVENTORY]
+        self.assertIn(("/outside_files", "pack_config_bytes",
+                       "file:configs/campaigns/packx/prompt_pin.json"), rows)
+
 
 class RealTreeTests(unittest.TestCase):
     def test_committed_registry_kind_p_rows_are_current(self) -> None:
         stale, warnings = repin.registry_stale(ROOT)
         self.assertEqual([(row.path, row.pointer, row.reason) for row in stale], [])
-        self.assertEqual(warnings, [])
+        inventory = json.loads((ROOT / census.B5_INVENTORY).read_text())["files"]
+        changed = sorted(path for path, digest in inventory.items()
+                         if not (ROOT / path).is_file() or sha((ROOT / path).read_bytes()) != digest)
+        self.assertEqual(len(warnings), int(bool(changed)))
+        if changed:
+            self.assertTrue(warnings[0].startswith("WARNING:"))
+            self.assertEqual(warnings[0].splitlines()[1:], [f"  {path}" for path in changed])
 
     def test_real_generator_families_pass(self) -> None:
         out = io.StringIO()

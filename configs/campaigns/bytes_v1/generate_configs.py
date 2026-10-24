@@ -70,6 +70,9 @@ def model_config(spec):
             revision = snapshot.name
     if model_id == "qwen35-122b":
         revision = json.loads((ROOT / "configs/examples/mac_mlx_qwen35_122b.json").read_bytes())["model"]["revision"]
+    if model_id == "qwen3-8b-8bit":
+        # Download receipt: configs/bytes/records/RUN.md, addendum 16:17 PDT.
+        revision = "48a0b75b1ae72503e21e1558d040bc227510ff06"
     return {"name": name, "family": family, "source": source,
             "revision": revision, "weight_format": "mlx"}
 

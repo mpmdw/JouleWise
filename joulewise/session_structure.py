@@ -264,6 +264,12 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
     acceptance_path = archive / "derived/b6-acceptance.json"
     acceptance = _json(acceptance_path, harvest_damage)
     if acceptance_path.exists():
+        # F11: acceptance governs block six. A disagreement is a disclosure,
+        # never another counting reason or a collection/desk refusal.
+        if (isinstance(harvest.get("claim_usable"), bool)
+                and isinstance(acceptance.get("counting"), bool)
+                and harvest["claim_usable"] != acceptance["counting"]):
+            public_flags["records.claim_usable_counting_disagreement"] += 1
         counting_reasons = []
         if verdict != "STRUCTURE_OK":
             counting_reasons.append("structure:" + verdict)

@@ -27,7 +27,715 @@
     "selection": "issued_d116_artifact_only",
     "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
   },
-  "arm_attachments": {},
+  "arm_attachments": {
+    "identity_pin_projection": {
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r01.json",
+              "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r02.json",
+              "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r03.json",
+              "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r04.json",
+              "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r05.json",
+              "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r06.json",
+              "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r07.json",
+              "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r08.json",
+              "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r09.json",
+              "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r10.json",
+              "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r11.json",
+              "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r12.json",
+              "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r13.json",
+              "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r14.json",
+              "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r15.json",
+              "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r16.json",
+              "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r17.json",
+              "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa"
+            },
+            {
+              "path": "members/bytes-s2-p1-bound-collection/neg8-refcorpus-r18.json",
+              "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-end/neg8-window-end-r1.json",
+              "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-end/neg8-window-end-r2.json",
+              "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-end/neg8-window-end-r3.json",
+              "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-midpoint/neg8-window-midpoint.json",
+              "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-start/neg8-window-start-r1.json",
+              "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-start/neg8-window-start-r2.json",
+              "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
+            },
+            {
+              "path": "members/bytes-s2-p1-reference-start/neg8-window-start-r3.json",
+              "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "neg8_reference",
+              "family": "neg8_reference",
+              "measurement_arm": "df_rq_mid"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_rq_mid",
+              "output_tokens": 256,
+              "prompt_text": null,
+              "prompt_tokens": 1024,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "neg8_reference",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s2-p1"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r01.json",
+              "sha256": "80634af1c1bb9207c5984f237a70332a5ea5f98d43a6d12352dbc4f2b8ad5409"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r02.json",
+              "sha256": "460842c12b58461f80ca38acd2801fab00592fb104c991eafa61b3b01762425a"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r03.json",
+              "sha256": "72cc1048bb044480a1bad419966a43814b6247a8b0f6c2ff27d5d8ecd323ecef"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r04.json",
+              "sha256": "c8b02674e47ea223fbee7369f15376eb969958c481a75b160e3bd4b100e2713f"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r05.json",
+              "sha256": "c2027b98cf832a72c92fd09df8b3b02508f51a8afefd550d593226a1221b8935"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r06.json",
+              "sha256": "a58cc204b704f5cb01b3cbafcfcf22e8440a9258de6c189a41ec5c274d439bf1"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r07.json",
+              "sha256": "d8c9a7bc19e72154e34310c8b0841e7e5e301b9dc10a618afa3827fae94c24ac"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r08.json",
+              "sha256": "6afa3a97059c1dcf1c5b71a0b048333e44bc44aad0984a4b66e5906782d0d511"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r09.json",
+              "sha256": "49f5be5a5ebf58d55db9c06fdd31f85074da59c17807eb3d97891739c66bfc14"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r10.json",
+              "sha256": "fe5b86436de199ce7648463ed7ae7307ee3e80e693b6b4d7a2faa3308b8cba51"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-a1.json",
+              "sha256": "38f272b40e6e1fe7eb0c0d8cf8f4435d675741eb9b01c56d8558b5f3ea4ee46a"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-a2.json",
+              "sha256": "78d2b9dfbad27afa705949c429a30f9c48f1bca34695ad1321dc00c711ec345a"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-b1.json",
+              "sha256": "612cea8f78ad17f3f669fe1fad214f29f231e2655d63ca6b2dec242a5cb92ed3"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-b2.json",
+              "sha256": "c104573d9b3cb1d6ad0accb312eb53f615cca2b5c667d8fd49be503b637f60de"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-a1.json",
+              "sha256": "a2d47ef8d39e36423f58ff375d12ac1de71d303e75f15077f93cc3d6f66db62e"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-a2.json",
+              "sha256": "521ac50e975c61751334104dc05466ce3b0349d20d61f302606c809204ad99e9"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-b1.json",
+              "sha256": "e6d7fc806c8e2e66167283ff34ba5db620a9d83bc7f4b834b86d8690b091a133"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-b2.json",
+              "sha256": "3c3c91952c1662ec27b0ab6fbe479a01e73897a28ed3cede89bc1d81ba2508b2"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-a1.json",
+              "sha256": "2fee4d4b1dc265fc8b47fdcb5150010939861aae060eadf890a740032f33a41b"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-a2.json",
+              "sha256": "04d5ecaf927b3318f8b73873c67a2d26cf69c60674d0cd203fdf950c27e8041a"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-b1.json",
+              "sha256": "31571dc95c2aec437732201ef88bd3ba3d6fa0312df48561be802b82360a00df"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-b2.json",
+              "sha256": "400e30072fea7cb1bbf4f95f5493fbb947ebb2a31a151b2f399d759519b49a8f"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-a1.json",
+              "sha256": "4bf137d998da0edd564a07addb83dc47af05b2226ee724dd036c1e8f77679c12"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-a2.json",
+              "sha256": "017168211cf5e4baa986cdb76225138990c873f94b88b14b4afca37de5019d19"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-b1.json",
+              "sha256": "a99ada0944f82234f83956671ed88164c8ab05ebfab693d6e511f8498995eeba"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-b2.json",
+              "sha256": "a753860d4a5fc1db858dd97ad1ff270f9fa083fef8521b85f529ce2b31d58d96"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-a1.json",
+              "sha256": "ae6c3d3af9660d667a5d805343bcf33d5e8a124e7ee9735941cc5688af848198"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-a2.json",
+              "sha256": "abf6458cfa9be25e05e3f4a96b9efe27a7e6fc98b906068b485f26a3c3e23a61"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-b1.json",
+              "sha256": "fee4e608d63eef33b9b3c47730d99d2827e40de0b186e75be41918ac3044fa80"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-b2.json",
+              "sha256": "f5b604b7ae02b8fe2d7105911f774ba97a138ddd45cf2f64d294073618c6fc02"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-a1.json",
+              "sha256": "1bd20b245f1054ea1f565de9deeb2787cfaf7a4fe9d523aca8f47ea6b91ed31b"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-a2.json",
+              "sha256": "a2bd6717da6a96cd3962a1205733a50ab0594fd571a898d6cea772fa38f8a363"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-b1.json",
+              "sha256": "8c8a5c30115d0b8c6cbdb3e1d367b43c34453911d3b1b00562d13478fb1cf50e"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-b2.json",
+              "sha256": "9f671bb8c1c71d16d895ba2c06bb8c9cc421f0582779d91b173ccd9dfa8b8e3b"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-a1.json",
+              "sha256": "f50ba0fda6f878550e0940dc9224dcdc452b8225f2b0678845a1b18700f9e2e5"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-a2.json",
+              "sha256": "014394d081555ae693de00012e28d1382e397904faa622bc48167c5d5f1f67ce"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-b1.json",
+              "sha256": "c4a842068aa63b5561db3593809e071534f19bc164057566f295b8dd4abb9038"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-b2.json",
+              "sha256": "6fc12902ea4cf5a8c1e60439b650e6bd8cbe76e8aaff59fab45695833b4af700"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-a1.json",
+              "sha256": "6becad8fd2b716844ad908fbd0557f7f3d8eb8f8493a8f2e55c64a6ecce26039"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-a2.json",
+              "sha256": "2ddb3a98d01455c348392321e0ce1d894d579ce84297de8b540442ad43b68d95"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-b1.json",
+              "sha256": "489d6505ebe78e924028e9fa70dfb128c64b41f92169f3e3562a6ccd00703f15"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-b2.json",
+              "sha256": "6133a909d19441514972182ce73381742033a6e5c61410d27c84c7ce2b5d26de"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-a1.json",
+              "sha256": "e3402d9576312912402353249e643ae57b74af96c7142caf9d4a5c71d494b038"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-a2.json",
+              "sha256": "672ccf890a9599cad2caeaa86d14f988dcc3a8b1880dc707bc5612dda5ba32f8"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-b1.json",
+              "sha256": "9a0ea6e5b5969ec7dc9de7930bd32c4d8ccc5aa90bb9256940e8df3464e65627"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-b2.json",
+              "sha256": "4d94357baa3a98dfe974c70799b19260187d2321589b07bfc9b31d08e11ff536"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-a1.json",
+              "sha256": "e45d9a6cd616983607c905aea3ff4a0566942eb46ef6289d7090f4d5f29d6233"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-a2.json",
+              "sha256": "86f470d426e6df9bbad8c9a9b0902ebcfe81cde5359562deb997f31d45eabab5"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-b1.json",
+              "sha256": "a783298e69d65392f05e489e93aaf9601af393514e59b812762555041c333bc8"
+            },
+            {
+              "path": "members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-b2.json",
+              "sha256": "aedda7924f9a7240ecdee9a79da2fd0b8ab8ff2c0b21843ece2f877563ee910a"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "qwen3-30b-a3b",
+              "family": "qwen3-30b-a3b",
+              "measurement_arm": "bytes_synthetic_2048_decode_512"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen3-30B-A3B-4bit",
+            "model_revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
+            "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+            "quantization": {
+              "bits": 4,
+              "group_size": 64,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "bytes_synthetic_2048_decode_512",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 2048,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "qwen3-30b-a3b",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s2-p1"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r01.json",
+              "sha256": "aada35d1f226bfeaa2897a7b47eca478c9dbef313c7ed9a7fd819ea78486a182"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r02.json",
+              "sha256": "bf3787cbdae1121272c206624d959f3b6a13dae45efe90673f856cc786ee279c"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r03.json",
+              "sha256": "756490860d5a42a4ca570141ff1d4cc55d40980f0a9f5a8d860006f6c52bfe87"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r04.json",
+              "sha256": "420ce8013c58f7ff1793a39760dfe9328a2867a25f43935581a047c281954a46"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r05.json",
+              "sha256": "c8f8b57fea3fd60c943d0be0524a29fd4ec7c6cff60f4144b498029ae6b8cab1"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r06.json",
+              "sha256": "49104509ab0d846bab4cdb71d59b6346df8ab79b578954233e5a42aab68102f6"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r07.json",
+              "sha256": "c5c6287879612631959e0e242aa0cf41d95e903e1dd9e767c823d34bfbde642f"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r08.json",
+              "sha256": "c3f1c6c7d2d33443c70528b8bd11dd0d99d5f66dee10f0db7dc898ceebab414d"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r09.json",
+              "sha256": "39c57fe047ce10995d4725401d13beaef5f0d1d9f52abd1cb4adadf0922ec145"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r10.json",
+              "sha256": "7532e1ba3cbdd428f16a9c4912b72779e25e03bca9dce257b1ac6b568203a066"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-a1.json",
+              "sha256": "609ff3778fb198963e263f2da986f48c15e47b82313f1ff0324b48ede653a4fa"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-a2.json",
+              "sha256": "d7612b800195f1153723a840950224b4fd35e8eb991a32777fda61903a069210"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-b1.json",
+              "sha256": "9457434ec9dbddcc1d44f0e2892bca70fec8f1975312ae5885f9eacb1f576b0e"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-b2.json",
+              "sha256": "c0d2a48eaec772a01d7dfd9a78344a25506e948888171e754e0061f1681cd391"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-a1.json",
+              "sha256": "58979fc973cbeade9af972473608bd302f9b6881fe6403e9a37943081f22f025"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-a2.json",
+              "sha256": "77c4031397cb36e45b588f6d7d7a718bfa7518c42378f4183f09d2587c8edfb3"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-b1.json",
+              "sha256": "5f68502f7c2b8618a7123d88dd08a289ca6470afdeec0a3957b288214e7b6a05"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-b2.json",
+              "sha256": "5d1a979f3e094aec937620f7b8b8a3f10b08fb68bcffb421d2bb960fa8194d1b"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-a1.json",
+              "sha256": "2857c66c585f87d2ad8d4e550cf743201f7fe6885f989841305d419e08691fb2"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-a2.json",
+              "sha256": "e88a1ba9a0463b6e60f6c85c1bc466309aabad092fea46bd8149cd8afc79e0c9"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-b1.json",
+              "sha256": "54a7812e30061f7e4944c0adf80a84f2e629ca9a962794f879f865382d0088fd"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-b2.json",
+              "sha256": "c4c3bcb3885416b2151577f237f1a4e54aca4bcde16f05e466b20b99492d0233"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-a1.json",
+              "sha256": "f3241f180061730a8a217fb0dd8f7f16867dc4880d2a8eac3c58e2c05c3bc7eb"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-a2.json",
+              "sha256": "bce034fb2f50aeefb641fe8d97a3a715b5e8244bca7d8aa7dff5ef51cc882542"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-b1.json",
+              "sha256": "38ae72c6fea31bec358d66d2b06e454d063dc949af1922d31a8ca3323611a1db"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-b2.json",
+              "sha256": "705e816eb05c9f0a6d9a2654a762ebc66b5c946d06b932a9dab0ba1f8824bd26"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-a1.json",
+              "sha256": "e7811ba1f40e6a5d9fc0343ae8b762fc18d4ad949e1e65cb34a8800462caf8ef"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-a2.json",
+              "sha256": "1674ef2b30e4d0eb1e9d999c2a7fede1e6afc0e92ba6a0d1bdca3f998939e62f"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-b1.json",
+              "sha256": "be1bdd07204d22c4caeb55e2e698925a63e4bea82cb4c9a809160fa947555f88"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-b2.json",
+              "sha256": "cfb2627b724520b193e4f4f8c9242f1f7f8a5854c5375dbe7ce5472613b64753"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-a1.json",
+              "sha256": "199207e5a427aab694069b7100163b24fa0697929b8e1662e1b0eb52530d32ed"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-a2.json",
+              "sha256": "1bdf6d18a8a50b487f8d7fbc24d0d0eace86dfcc524b3d45272ec5196099b7b1"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-b1.json",
+              "sha256": "b43dd577ce35d9b6bd7c8a9c7d0f41eec09a6c9fc168872ab8ac2d1207266376"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-b2.json",
+              "sha256": "70be5c495681905e7c4028ed0f304cddf4546491df160b88a853b52d59a06ff8"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-a1.json",
+              "sha256": "034ba25c895b8244cb6e937253bd8b2bab66838fa3ce06d01a0b5739e22470a3"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-a2.json",
+              "sha256": "cde97bcaaea573579faa36da8523338b83a2a1612fa54a4a9701cb9ccbc00545"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-b1.json",
+              "sha256": "07b0583277d371c33a3fa80311069e97d6f7f5f6f0f1d8a7879f4aefabbc7c42"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-b2.json",
+              "sha256": "45fedaa8efb42fdfbee08c1d31dece66fc359f01f5e306464f64d97e13160a40"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-a1.json",
+              "sha256": "c4a6beaf6fab21eef6e5c0f33fed201b94053054970fe6674cb1fa44689a6266"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-a2.json",
+              "sha256": "a733dbe443d6217015176254ae5c3c118f5f8ccb126e681e0c0856ccab1ccdf9"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-b1.json",
+              "sha256": "f4687fd9aa6eb361decafa7c1964885b761c2b61703df75b97b21fe1ec406091"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-b2.json",
+              "sha256": "63214abf56a3d767c8bc83b831c514592101e3174e37aa2b524ef5c5b8f2ab5e"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-a1.json",
+              "sha256": "6cf719010928f0697f6ee59f44d599ba6308059bf9bf61a5087e9c4dfb8bcdf9"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-a2.json",
+              "sha256": "c7b6f9bb739386d9184808431789591e5bc7fb6f9dfba2095e9f19d1588e216c"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-b1.json",
+              "sha256": "0f31afeeaee182ffee4b7ee8a2dcee58ffb52360f8c9ca76d79ab5ea052948cf"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-b2.json",
+              "sha256": "26286a448fd0e7589a2e95633b24c97d64c4d461b2855b1db40ed6bb599e7aa7"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-a1.json",
+              "sha256": "043c7715dd782e52e6e4d02860350d2caf09a8089581d537a575b8a0abe2b6aa"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-a2.json",
+              "sha256": "97e6219b198724e368d127c476a3e0cbeb2833f9b58fe060d432a80da2596e7b"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-b1.json",
+              "sha256": "34515ea512c8e0e47fdd709a1440acf32943e9041212d7fe6e3d0ed41e668ea2"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-b2.json",
+              "sha256": "184121ba55a6829f250685f0879f2dea99d5f2ac7e74eff69402875e826f1b09"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "qwen3-8b",
+              "family": "qwen3-8b",
+              "measurement_arm": "bytes_synthetic_2048_decode_512"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen3-8B-4bit",
+            "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+            "quantization": {
+              "bits": 4,
+              "group_size": 64,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "bytes_synthetic_2048_decode_512",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 2048,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "qwen3-8b",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s2-p1"
+          }
+        }
+      ],
+      "mode": "derive_never_operator_enter",
+      "projection_receipt": null,
+      "required_before_arm": true,
+      "state": "unprojected",
+      "supersedes": [],
+      "work_order": "D117-U11-IDPIN-PROJECTION"
+    },
+    "launch": {
+      "bindings": [
+        {
+          "name": "repo_root",
+          "type": "existing_absolute_directory"
+        },
+        {
+          "name": "ledger_path",
+          "type": "existing_absolute_file"
+        },
+        {
+          "leaf": "runs_bytes-s2-p1",
+          "name": "claim_runs_root",
+          "type": "fresh_absolute_directory"
+        },
+        {
+          "leaf": "runs_bytes-s2-p1_bound",
+          "name": "bound_runs_root",
+          "type": "fresh_absolute_directory"
+        },
+        {
+          "name": "operator_log_root",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "pre_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "post_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "claim_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bound_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bracket_session_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "pre_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "post_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "identity_epoch_json",
+          "type": "authenticated_absolute_file"
+        },
+        {
+          "name": "t1_bindings_json",
+          "type": "authenticated_absolute_file"
+        }
+      ],
+      "derived_path_rules": [
+        "pre_calibration_dir=claim_runs_root/instrument_validation/pre_attempt_id",
+        "post_calibration_dir=claim_runs_root/instrument_validation/post_attempt_id"
+      ],
+      "schema_version": "joulewise.stage_launch_bindings.v1"
+    }
+  },
   "attempt_policy": {
     "authority": "R6; Block-6 catalog unchanged",
     "minimum_kept_units_per_stratum": 5,
@@ -72,18 +780,18 @@
   },
   "draft_notes": [
     "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
-    "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
+    "C6/C7 use blinding_group=bytes. Group keys: <pack_records_root>/bytes/blinding; withheld rows: <pack_records_root>/bytes/withheld/<pack_id>/<session_id>.runs.csv; missing-store flag: bytes.withheld_missing. The stage1-commit interface is validated now; its actual prediction hash is supplied at held-out release (BYTES-P0 ruling 7). Runtime config: configs/b6/loop_bytes.json.",
     "Lead blinding ruling 2026-10-20 (registration section 11): held-out configuration rows stay out of the analysis export, blinded in a withheld store, until the stage-1 prediction hash is recorded; rows visible before that carry no clock stamps.",
     "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
     "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
-    "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
+    "C5 uses the six H/BY-H2 sizing rows in configs/b6/registration/sizing_b5.json, including measured T_stream_max_s and P = 2(B+WAIT)+fixed without an added reserve. C4 file and installed runtime evidence is in configs/b6/registration/identity_pins.json; full model stacks and frozen projection receipts remain unobserved.",
     "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
     "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
-    "Model sources include HF cache snapshot directories; C4 identity pins must hash through their symlinks. model.context_window is unused by the runtime; tokenizer and chat-template pins remain C4.",
-    "Qwen3-8B-8bit revision is pending; group_size=64 is assumed and unverified against the eventual checkpoint.",
+    "Model sources include HF cache snapshot directories; C4 file hashes follow their symlinks and bind tokenizer/config files and checkpoint quantization separately from observed installed packages. model.context_window is unused by the runtime. The desk build does not load a model or freeze an execution stack.",
+    "Qwen3-8B-8bit file evidence, source roster and configs pin revision 48a0b75b1ae72503e21e1558d040bc227510ff06 and verify bits=8, group_size=64. Generated config copies preserve those exact source bytes.",
     "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
-    "Fixed packs bypass the 265-minute science cap. Sub-pack s4 is planned at 254 minutes, leaving 11 minutes on planning numbers only.",
-    "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints."
+    "Fixed packs bypass the 265-minute science cap. The native window maximum comes from the C5 programmed span plus the existing stage, pause and session-wait allowances, not the former s4 pilot estimate.",
+    "Module minutes = C5 count * own member_allowance_s / 60, using the exact rational sizing operands and no additional margin. Shared references, calibration and custody stay in the full programmed span. Pass two reuses the same measured model costs in reverse order."
   ],
   "draft_status": "draft",
   "external_inputs": {
@@ -106,116 +814,117 @@
         "expected_count": 18,
         "external_input_id": "neg8_bound",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-reference-corpus-order-v2",
-          "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-          "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+          "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/order_manifest.json",
+          "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r01.json",
             "run_id": "neg8-refcorpus-r01",
             "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r02.json",
             "run_id": "neg8-refcorpus-r02",
             "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r03.json",
             "run_id": "neg8-refcorpus-r03",
             "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
           },
           {
             "ordinal": 4,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r04.json",
             "run_id": "neg8-refcorpus-r04",
             "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
           },
           {
             "ordinal": 5,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r05.json",
             "run_id": "neg8-refcorpus-r05",
             "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
           },
           {
             "ordinal": 6,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r06.json",
             "run_id": "neg8-refcorpus-r06",
             "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
           },
           {
             "ordinal": 7,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r07.json",
             "run_id": "neg8-refcorpus-r07",
             "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
           },
           {
             "ordinal": 8,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r08.json",
             "run_id": "neg8-refcorpus-r08",
             "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
           },
           {
             "ordinal": 9,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r09.json",
             "run_id": "neg8-refcorpus-r09",
             "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
           },
           {
             "ordinal": 10,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r10.json",
             "run_id": "neg8-refcorpus-r10",
             "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
           },
           {
             "ordinal": 11,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r11.json",
             "run_id": "neg8-refcorpus-r11",
             "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
           },
           {
             "ordinal": 12,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r12.json",
             "run_id": "neg8-refcorpus-r12",
             "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
           },
           {
             "ordinal": 13,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r13.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r13.json",
             "run_id": "neg8-refcorpus-r13",
             "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e"
           },
           {
             "ordinal": 14,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r14.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r14.json",
             "run_id": "neg8-refcorpus-r14",
             "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b"
           },
           {
             "ordinal": 15,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r15.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r15.json",
             "run_id": "neg8-refcorpus-r15",
             "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd"
           },
           {
             "ordinal": 16,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r16.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r16.json",
             "run_id": "neg8-refcorpus-r16",
             "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e"
           },
           {
             "ordinal": 17,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r17.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r17.json",
             "run_id": "neg8-refcorpus-r17",
             "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa"
           },
           {
             "ordinal": 18,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r18.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/neg8-refcorpus-r18.json",
             "run_id": "neg8-refcorpus-r18",
             "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06"
           }
@@ -225,26 +934,27 @@
         "expected_count": 3,
         "external_input_id": "start_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-start-triplet-v1",
-          "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-          "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+          "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-start/order_manifest.json",
+          "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-start/neg8-window-start-r1.json",
             "run_id": "neg8-window-start-r1",
             "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-start/neg8-window-start-r2.json",
             "run_id": "neg8-window-start-r2",
             "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-start/neg8-window-start-r3.json",
             "run_id": "neg8-window-start-r3",
             "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
           }
@@ -254,14 +964,15 @@
         "expected_count": 1,
         "external_input_id": "midpoint_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-midpoint-v1",
-          "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-          "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+          "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-midpoint/order_manifest.json",
+          "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-midpoint/neg8-window-midpoint.json",
             "run_id": "neg8-window-midpoint",
             "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
           }
@@ -271,26 +982,27 @@
         "expected_count": 3,
         "external_input_id": "end_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-end-triplet-v1",
-          "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-          "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+          "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-end/order_manifest.json",
+          "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-end/neg8-window-end-r1.json",
             "run_id": "neg8-window-end-r1",
             "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-end/neg8-window-end-r2.json",
             "run_id": "neg8-window-end-r2",
             "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
+            "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-end/neg8-window-end-r3.json",
             "run_id": "neg8-window-end-r3",
             "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
           }
@@ -300,15 +1012,15 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "697c189e98858e458d6eca8baf02d4b3d6e51ae881a3390d4c0d21f804716ff7"
+    "sha256": "92faf04889d4a21101bf13152224785fbec9d9b878ceb71342ef5814d3ba7db4"
   },
   "module_order": [
     "bytes-qwen3-8b",
     "bytes-qwen3-30b-a3b"
   ],
   "plan": {
-    "actual_sha256": "d48217cb5651f041a6a9aeb819158326a2faa1e5f798eaa4b557e7a480d59808",
-    "declared_sha256": "d48217cb5651f041a6a9aeb819158326a2faa1e5f798eaa4b557e7a480d59808",
+    "actual_sha256": "c0d1a1c8ee483dee90becabbb67ec5702058bbd2bb0b0b31ef4c195fd60bdf2d",
+    "declared_sha256": "c0d1a1c8ee483dee90becabbb67ec5702058bbd2bb0b0b31ef4c195fd60bdf2d",
     "path": "collection_plan.json",
     "plan_id": "bytes-s2-p1"
   },
@@ -323,7 +1035,7 @@
       "block_id": null,
       "block_index": 1,
       "config": "bytes-qwen3-8b-abs-r01.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r01.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r01.json",
       "config_sha256": "aada35d1f226bfeaa2897a7b47eca478c9dbef313c7ed9a7fd819ea78486a182",
       "index": 1,
       "model_tag": "qwen3-8b-mlx",
@@ -342,7 +1054,7 @@
       "block_id": null,
       "block_index": 2,
       "config": "bytes-qwen3-8b-abs-r02.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r02.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r02.json",
       "config_sha256": "bf3787cbdae1121272c206624d959f3b6a13dae45efe90673f856cc786ee279c",
       "index": 2,
       "model_tag": "qwen3-8b-mlx",
@@ -361,7 +1073,7 @@
       "block_id": null,
       "block_index": 3,
       "config": "bytes-qwen3-8b-abs-r03.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r03.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r03.json",
       "config_sha256": "756490860d5a42a4ca570141ff1d4cc55d40980f0a9f5a8d860006f6c52bfe87",
       "index": 3,
       "model_tag": "qwen3-8b-mlx",
@@ -380,7 +1092,7 @@
       "block_id": null,
       "block_index": 4,
       "config": "bytes-qwen3-8b-abs-r04.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r04.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r04.json",
       "config_sha256": "420ce8013c58f7ff1793a39760dfe9328a2867a25f43935581a047c281954a46",
       "index": 4,
       "model_tag": "qwen3-8b-mlx",
@@ -399,7 +1111,7 @@
       "block_id": null,
       "block_index": 5,
       "config": "bytes-qwen3-8b-abs-r05.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r05.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r05.json",
       "config_sha256": "c8f8b57fea3fd60c943d0be0524a29fd4ec7c6cff60f4144b498029ae6b8cab1",
       "index": 5,
       "model_tag": "qwen3-8b-mlx",
@@ -418,7 +1130,7 @@
       "block_id": null,
       "block_index": 6,
       "config": "bytes-qwen3-8b-abs-r06.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r06.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r06.json",
       "config_sha256": "49104509ab0d846bab4cdb71d59b6346df8ab79b578954233e5a42aab68102f6",
       "index": 6,
       "model_tag": "qwen3-8b-mlx",
@@ -437,7 +1149,7 @@
       "block_id": null,
       "block_index": 7,
       "config": "bytes-qwen3-8b-abs-r07.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r07.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r07.json",
       "config_sha256": "c5c6287879612631959e0e242aa0cf41d95e903e1dd9e767c823d34bfbde642f",
       "index": 7,
       "model_tag": "qwen3-8b-mlx",
@@ -456,7 +1168,7 @@
       "block_id": null,
       "block_index": 8,
       "config": "bytes-qwen3-8b-abs-r08.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r08.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r08.json",
       "config_sha256": "c3f1c6c7d2d33443c70528b8bd11dd0d99d5f66dee10f0db7dc898ceebab414d",
       "index": 8,
       "model_tag": "qwen3-8b-mlx",
@@ -475,7 +1187,7 @@
       "block_id": null,
       "block_index": 9,
       "config": "bytes-qwen3-8b-abs-r09.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r09.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r09.json",
       "config_sha256": "39c57fe047ce10995d4725401d13beaef5f0d1d9f52abd1cb4adadf0922ec145",
       "index": 9,
       "model_tag": "qwen3-8b-mlx",
@@ -494,7 +1206,7 @@
       "block_id": null,
       "block_index": 10,
       "config": "bytes-qwen3-8b-abs-r10.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/bytes-qwen3-8b-abs-r10.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/bytes-qwen3-8b-abs-r10.json",
       "config_sha256": "7532e1ba3cbdd428f16a9c4912b72779e25e03bca9dce257b1ac6b568203a066",
       "index": 10,
       "model_tag": "qwen3-8b-mlx",
@@ -513,7 +1225,7 @@
       "block_id": "bytes-qwen3-8b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-null-b01-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b01-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-a1.json",
       "config_sha256": "609ff3778fb198963e263f2da986f48c15e47b82313f1ff0324b48ede653a4fa",
       "index": 1,
       "model_tag": "qwen3-8b-mlx",
@@ -532,7 +1244,7 @@
       "block_id": "bytes-qwen3-8b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-null-b01-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b01-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-b1.json",
       "config_sha256": "9457434ec9dbddcc1d44f0e2892bca70fec8f1975312ae5885f9eacb1f576b0e",
       "index": 2,
       "model_tag": "qwen3-8b-mlx",
@@ -551,7 +1263,7 @@
       "block_id": "bytes-qwen3-8b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-null-b01-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b01-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-b2.json",
       "config_sha256": "c0d2a48eaec772a01d7dfd9a78344a25506e948888171e754e0061f1681cd391",
       "index": 3,
       "model_tag": "qwen3-8b-mlx",
@@ -570,7 +1282,7 @@
       "block_id": "bytes-qwen3-8b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-null-b01-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b01-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b01-a2.json",
       "config_sha256": "d7612b800195f1153723a840950224b4fd35e8eb991a32777fda61903a069210",
       "index": 4,
       "model_tag": "qwen3-8b-mlx",
@@ -589,7 +1301,7 @@
       "block_id": "bytes-qwen3-8b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-null-b02-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b02-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-a1.json",
       "config_sha256": "58979fc973cbeade9af972473608bd302f9b6881fe6403e9a37943081f22f025",
       "index": 5,
       "model_tag": "qwen3-8b-mlx",
@@ -608,7 +1320,7 @@
       "block_id": "bytes-qwen3-8b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-null-b02-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b02-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-b1.json",
       "config_sha256": "5f68502f7c2b8618a7123d88dd08a289ca6470afdeec0a3957b288214e7b6a05",
       "index": 6,
       "model_tag": "qwen3-8b-mlx",
@@ -627,7 +1339,7 @@
       "block_id": "bytes-qwen3-8b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-null-b02-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b02-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-b2.json",
       "config_sha256": "5d1a979f3e094aec937620f7b8b8a3f10b08fb68bcffb421d2bb960fa8194d1b",
       "index": 7,
       "model_tag": "qwen3-8b-mlx",
@@ -646,7 +1358,7 @@
       "block_id": "bytes-qwen3-8b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-null-b02-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b02-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b02-a2.json",
       "config_sha256": "77c4031397cb36e45b588f6d7d7a718bfa7518c42378f4183f09d2587c8edfb3",
       "index": 8,
       "model_tag": "qwen3-8b-mlx",
@@ -665,7 +1377,7 @@
       "block_id": "bytes-qwen3-8b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-null-b03-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b03-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-a1.json",
       "config_sha256": "2857c66c585f87d2ad8d4e550cf743201f7fe6885f989841305d419e08691fb2",
       "index": 9,
       "model_tag": "qwen3-8b-mlx",
@@ -684,7 +1396,7 @@
       "block_id": "bytes-qwen3-8b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-null-b03-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b03-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-b1.json",
       "config_sha256": "54a7812e30061f7e4944c0adf80a84f2e629ca9a962794f879f865382d0088fd",
       "index": 10,
       "model_tag": "qwen3-8b-mlx",
@@ -703,7 +1415,7 @@
       "block_id": "bytes-qwen3-8b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-null-b03-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b03-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-b2.json",
       "config_sha256": "c4c3bcb3885416b2151577f237f1a4e54aca4bcde16f05e466b20b99492d0233",
       "index": 11,
       "model_tag": "qwen3-8b-mlx",
@@ -722,7 +1434,7 @@
       "block_id": "bytes-qwen3-8b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-null-b03-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b03-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b03-a2.json",
       "config_sha256": "e88a1ba9a0463b6e60f6c85c1bc466309aabad092fea46bd8149cd8afc79e0c9",
       "index": 12,
       "model_tag": "qwen3-8b-mlx",
@@ -741,7 +1453,7 @@
       "block_id": "bytes-qwen3-8b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-null-b04-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b04-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-a1.json",
       "config_sha256": "f3241f180061730a8a217fb0dd8f7f16867dc4880d2a8eac3c58e2c05c3bc7eb",
       "index": 13,
       "model_tag": "qwen3-8b-mlx",
@@ -760,7 +1472,7 @@
       "block_id": "bytes-qwen3-8b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-null-b04-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b04-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-b1.json",
       "config_sha256": "38ae72c6fea31bec358d66d2b06e454d063dc949af1922d31a8ca3323611a1db",
       "index": 14,
       "model_tag": "qwen3-8b-mlx",
@@ -779,7 +1491,7 @@
       "block_id": "bytes-qwen3-8b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-null-b04-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b04-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-b2.json",
       "config_sha256": "705e816eb05c9f0a6d9a2654a762ebc66b5c946d06b932a9dab0ba1f8824bd26",
       "index": 15,
       "model_tag": "qwen3-8b-mlx",
@@ -798,7 +1510,7 @@
       "block_id": "bytes-qwen3-8b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-null-b04-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b04-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b04-a2.json",
       "config_sha256": "bce034fb2f50aeefb641fe8d97a3a715b5e8244bca7d8aa7dff5ef51cc882542",
       "index": 16,
       "model_tag": "qwen3-8b-mlx",
@@ -817,7 +1529,7 @@
       "block_id": "bytes-qwen3-8b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-null-b05-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b05-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-a1.json",
       "config_sha256": "e7811ba1f40e6a5d9fc0343ae8b762fc18d4ad949e1e65cb34a8800462caf8ef",
       "index": 17,
       "model_tag": "qwen3-8b-mlx",
@@ -836,7 +1548,7 @@
       "block_id": "bytes-qwen3-8b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-null-b05-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b05-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-b1.json",
       "config_sha256": "be1bdd07204d22c4caeb55e2e698925a63e4bea82cb4c9a809160fa947555f88",
       "index": 18,
       "model_tag": "qwen3-8b-mlx",
@@ -855,7 +1567,7 @@
       "block_id": "bytes-qwen3-8b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-null-b05-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b05-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-b2.json",
       "config_sha256": "cfb2627b724520b193e4f4f8c9242f1f7f8a5854c5375dbe7ce5472613b64753",
       "index": 19,
       "model_tag": "qwen3-8b-mlx",
@@ -874,7 +1586,7 @@
       "block_id": "bytes-qwen3-8b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-null-b05-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/bytes-qwen3-8b-null-b05-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/bytes-qwen3-8b-null-b05-a2.json",
       "config_sha256": "1674ef2b30e4d0eb1e9d999c2a7fede1e6afc0e92ba6a0d1bdca3f998939e62f",
       "index": 20,
       "model_tag": "qwen3-8b-mlx",
@@ -893,7 +1605,7 @@
       "block_id": "bytes-qwen3-8b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-null-b06-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b06-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-a1.json",
       "config_sha256": "199207e5a427aab694069b7100163b24fa0697929b8e1662e1b0eb52530d32ed",
       "index": 1,
       "model_tag": "qwen3-8b-mlx",
@@ -912,7 +1624,7 @@
       "block_id": "bytes-qwen3-8b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-null-b06-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b06-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-b1.json",
       "config_sha256": "b43dd577ce35d9b6bd7c8a9c7d0f41eec09a6c9fc168872ab8ac2d1207266376",
       "index": 2,
       "model_tag": "qwen3-8b-mlx",
@@ -931,7 +1643,7 @@
       "block_id": "bytes-qwen3-8b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-null-b06-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b06-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-b2.json",
       "config_sha256": "70be5c495681905e7c4028ed0f304cddf4546491df160b88a853b52d59a06ff8",
       "index": 3,
       "model_tag": "qwen3-8b-mlx",
@@ -950,7 +1662,7 @@
       "block_id": "bytes-qwen3-8b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-null-b06-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b06-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b06-a2.json",
       "config_sha256": "1bdf6d18a8a50b487f8d7fbc24d0d0eace86dfcc524b3d45272ec5196099b7b1",
       "index": 4,
       "model_tag": "qwen3-8b-mlx",
@@ -969,7 +1681,7 @@
       "block_id": "bytes-qwen3-8b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-null-b07-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b07-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-a1.json",
       "config_sha256": "034ba25c895b8244cb6e937253bd8b2bab66838fa3ce06d01a0b5739e22470a3",
       "index": 5,
       "model_tag": "qwen3-8b-mlx",
@@ -988,7 +1700,7 @@
       "block_id": "bytes-qwen3-8b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-null-b07-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b07-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-b1.json",
       "config_sha256": "07b0583277d371c33a3fa80311069e97d6f7f5f6f0f1d8a7879f4aefabbc7c42",
       "index": 6,
       "model_tag": "qwen3-8b-mlx",
@@ -1007,7 +1719,7 @@
       "block_id": "bytes-qwen3-8b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-null-b07-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b07-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-b2.json",
       "config_sha256": "45fedaa8efb42fdfbee08c1d31dece66fc359f01f5e306464f64d97e13160a40",
       "index": 7,
       "model_tag": "qwen3-8b-mlx",
@@ -1026,7 +1738,7 @@
       "block_id": "bytes-qwen3-8b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-null-b07-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b07-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b07-a2.json",
       "config_sha256": "cde97bcaaea573579faa36da8523338b83a2a1612fa54a4a9701cb9ccbc00545",
       "index": 8,
       "model_tag": "qwen3-8b-mlx",
@@ -1045,7 +1757,7 @@
       "block_id": "bytes-qwen3-8b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-null-b08-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b08-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-a1.json",
       "config_sha256": "c4a6beaf6fab21eef6e5c0f33fed201b94053054970fe6674cb1fa44689a6266",
       "index": 9,
       "model_tag": "qwen3-8b-mlx",
@@ -1064,7 +1776,7 @@
       "block_id": "bytes-qwen3-8b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-null-b08-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b08-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-b1.json",
       "config_sha256": "f4687fd9aa6eb361decafa7c1964885b761c2b61703df75b97b21fe1ec406091",
       "index": 10,
       "model_tag": "qwen3-8b-mlx",
@@ -1083,7 +1795,7 @@
       "block_id": "bytes-qwen3-8b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-null-b08-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b08-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-b2.json",
       "config_sha256": "63214abf56a3d767c8bc83b831c514592101e3174e37aa2b524ef5c5b8f2ab5e",
       "index": 11,
       "model_tag": "qwen3-8b-mlx",
@@ -1102,7 +1814,7 @@
       "block_id": "bytes-qwen3-8b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-null-b08-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b08-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b08-a2.json",
       "config_sha256": "a733dbe443d6217015176254ae5c3c118f5f8ccb126e681e0c0856ccab1ccdf9",
       "index": 12,
       "model_tag": "qwen3-8b-mlx",
@@ -1121,7 +1833,7 @@
       "block_id": "bytes-qwen3-8b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-null-b09-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b09-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-a1.json",
       "config_sha256": "6cf719010928f0697f6ee59f44d599ba6308059bf9bf61a5087e9c4dfb8bcdf9",
       "index": 13,
       "model_tag": "qwen3-8b-mlx",
@@ -1140,7 +1852,7 @@
       "block_id": "bytes-qwen3-8b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-null-b09-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b09-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-b1.json",
       "config_sha256": "0f31afeeaee182ffee4b7ee8a2dcee58ffb52360f8c9ca76d79ab5ea052948cf",
       "index": 14,
       "model_tag": "qwen3-8b-mlx",
@@ -1159,7 +1871,7 @@
       "block_id": "bytes-qwen3-8b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-null-b09-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b09-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-b2.json",
       "config_sha256": "26286a448fd0e7589a2e95633b24c97d64c4d461b2855b1db40ed6bb599e7aa7",
       "index": 15,
       "model_tag": "qwen3-8b-mlx",
@@ -1178,7 +1890,7 @@
       "block_id": "bytes-qwen3-8b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-null-b09-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b09-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b09-a2.json",
       "config_sha256": "c7b6f9bb739386d9184808431789591e5bc7fb6f9dfba2095e9f19d1588e216c",
       "index": 16,
       "model_tag": "qwen3-8b-mlx",
@@ -1197,7 +1909,7 @@
       "block_id": "bytes-qwen3-8b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-null-b10-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b10-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-a1.json",
       "config_sha256": "043c7715dd782e52e6e4d02860350d2caf09a8089581d537a575b8a0abe2b6aa",
       "index": 17,
       "model_tag": "qwen3-8b-mlx",
@@ -1216,7 +1928,7 @@
       "block_id": "bytes-qwen3-8b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-null-b10-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b10-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-b1.json",
       "config_sha256": "34515ea512c8e0e47fdd709a1440acf32943e9041212d7fe6e3d0ed41e668ea2",
       "index": 18,
       "model_tag": "qwen3-8b-mlx",
@@ -1235,7 +1947,7 @@
       "block_id": "bytes-qwen3-8b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-null-b10-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b10-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-b2.json",
       "config_sha256": "184121ba55a6829f250685f0879f2dea99d5f2ac7e74eff69402875e826f1b09",
       "index": 19,
       "model_tag": "qwen3-8b-mlx",
@@ -1254,7 +1966,7 @@
       "block_id": "bytes-qwen3-8b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-null-b10-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/bytes-qwen3-8b-null-b10-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/bytes-qwen3-8b-null-b10-a2.json",
       "config_sha256": "97e6219b198724e368d127c476a3e0cbeb2833f9b58fe060d432a80da2596e7b",
       "index": 20,
       "model_tag": "qwen3-8b-mlx",
@@ -1273,7 +1985,7 @@
       "block_id": null,
       "block_index": 1,
       "config": "bytes-qwen3-30b-a3b-abs-r01.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r01.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r01.json",
       "config_sha256": "80634af1c1bb9207c5984f237a70332a5ea5f98d43a6d12352dbc4f2b8ad5409",
       "index": 1,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1292,7 +2004,7 @@
       "block_id": null,
       "block_index": 2,
       "config": "bytes-qwen3-30b-a3b-abs-r02.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r02.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r02.json",
       "config_sha256": "460842c12b58461f80ca38acd2801fab00592fb104c991eafa61b3b01762425a",
       "index": 2,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1311,7 +2023,7 @@
       "block_id": null,
       "block_index": 3,
       "config": "bytes-qwen3-30b-a3b-abs-r03.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r03.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r03.json",
       "config_sha256": "72cc1048bb044480a1bad419966a43814b6247a8b0f6c2ff27d5d8ecd323ecef",
       "index": 3,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1330,7 +2042,7 @@
       "block_id": null,
       "block_index": 4,
       "config": "bytes-qwen3-30b-a3b-abs-r04.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r04.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r04.json",
       "config_sha256": "c8b02674e47ea223fbee7369f15376eb969958c481a75b160e3bd4b100e2713f",
       "index": 4,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1349,7 +2061,7 @@
       "block_id": null,
       "block_index": 5,
       "config": "bytes-qwen3-30b-a3b-abs-r05.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r05.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r05.json",
       "config_sha256": "c2027b98cf832a72c92fd09df8b3b02508f51a8afefd550d593226a1221b8935",
       "index": 5,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1368,7 +2080,7 @@
       "block_id": null,
       "block_index": 6,
       "config": "bytes-qwen3-30b-a3b-abs-r06.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r06.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r06.json",
       "config_sha256": "a58cc204b704f5cb01b3cbafcfcf22e8440a9258de6c189a41ec5c274d439bf1",
       "index": 6,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1387,7 +2099,7 @@
       "block_id": null,
       "block_index": 7,
       "config": "bytes-qwen3-30b-a3b-abs-r07.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r07.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r07.json",
       "config_sha256": "d8c9a7bc19e72154e34310c8b0841e7e5e301b9dc10a618afa3827fae94c24ac",
       "index": 7,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1406,7 +2118,7 @@
       "block_id": null,
       "block_index": 8,
       "config": "bytes-qwen3-30b-a3b-abs-r08.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r08.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r08.json",
       "config_sha256": "6afa3a97059c1dcf1c5b71a0b048333e44bc44aad0984a4b66e5906782d0d511",
       "index": 8,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1425,7 +2137,7 @@
       "block_id": null,
       "block_index": 9,
       "config": "bytes-qwen3-30b-a3b-abs-r09.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r09.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r09.json",
       "config_sha256": "49f5be5a5ebf58d55db9c06fdd31f85074da59c17807eb3d97891739c66bfc14",
       "index": 9,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1444,7 +2156,7 @@
       "block_id": null,
       "block_index": 10,
       "config": "bytes-qwen3-30b-a3b-abs-r10.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/bytes-qwen3-30b-a3b-abs-r10.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/bytes-qwen3-30b-a3b-abs-r10.json",
       "config_sha256": "fe5b86436de199ce7648463ed7ae7307ee3e80e693b6b4d7a2faa3308b8cba51",
       "index": 10,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1463,7 +2175,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-30b-a3b-null-b01-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b01-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-a1.json",
       "config_sha256": "38f272b40e6e1fe7eb0c0d8cf8f4435d675741eb9b01c56d8558b5f3ea4ee46a",
       "index": 1,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1482,7 +2194,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-30b-a3b-null-b01-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b01-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-b1.json",
       "config_sha256": "612cea8f78ad17f3f669fe1fad214f29f231e2655d63ca6b2dec242a5cb92ed3",
       "index": 2,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1501,7 +2213,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-30b-a3b-null-b01-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b01-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-b2.json",
       "config_sha256": "c104573d9b3cb1d6ad0accb312eb53f615cca2b5c667d8fd49be503b637f60de",
       "index": 3,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1520,7 +2232,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-30b-a3b-null-b01-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b01-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b01-a2.json",
       "config_sha256": "78d2b9dfbad27afa705949c429a30f9c48f1bca34695ad1321dc00c711ec345a",
       "index": 4,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1539,7 +2251,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-30b-a3b-null-b02-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b02-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-a1.json",
       "config_sha256": "a2d47ef8d39e36423f58ff375d12ac1de71d303e75f15077f93cc3d6f66db62e",
       "index": 5,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1558,7 +2270,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-30b-a3b-null-b02-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b02-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-b1.json",
       "config_sha256": "e6d7fc806c8e2e66167283ff34ba5db620a9d83bc7f4b834b86d8690b091a133",
       "index": 6,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1577,7 +2289,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-30b-a3b-null-b02-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b02-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-b2.json",
       "config_sha256": "3c3c91952c1662ec27b0ab6fbe479a01e73897a28ed3cede89bc1d81ba2508b2",
       "index": 7,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1596,7 +2308,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-30b-a3b-null-b02-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b02-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b02-a2.json",
       "config_sha256": "521ac50e975c61751334104dc05466ce3b0349d20d61f302606c809204ad99e9",
       "index": 8,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1615,7 +2327,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-30b-a3b-null-b03-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b03-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-a1.json",
       "config_sha256": "2fee4d4b1dc265fc8b47fdcb5150010939861aae060eadf890a740032f33a41b",
       "index": 9,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1634,7 +2346,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-30b-a3b-null-b03-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b03-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-b1.json",
       "config_sha256": "31571dc95c2aec437732201ef88bd3ba3d6fa0312df48561be802b82360a00df",
       "index": 10,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1653,7 +2365,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-30b-a3b-null-b03-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b03-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-b2.json",
       "config_sha256": "400e30072fea7cb1bbf4f95f5493fbb947ebb2a31a151b2f399d759519b49a8f",
       "index": 11,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1672,7 +2384,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-30b-a3b-null-b03-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b03-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b03-a2.json",
       "config_sha256": "04d5ecaf927b3318f8b73873c67a2d26cf69c60674d0cd203fdf950c27e8041a",
       "index": 12,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1691,7 +2403,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-30b-a3b-null-b04-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b04-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-a1.json",
       "config_sha256": "4bf137d998da0edd564a07addb83dc47af05b2226ee724dd036c1e8f77679c12",
       "index": 13,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1710,7 +2422,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-30b-a3b-null-b04-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b04-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-b1.json",
       "config_sha256": "a99ada0944f82234f83956671ed88164c8ab05ebfab693d6e511f8498995eeba",
       "index": 14,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1729,7 +2441,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-30b-a3b-null-b04-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b04-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-b2.json",
       "config_sha256": "a753860d4a5fc1db858dd97ad1ff270f9fa083fef8521b85f529ce2b31d58d96",
       "index": 15,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1748,7 +2460,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-30b-a3b-null-b04-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b04-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b04-a2.json",
       "config_sha256": "017168211cf5e4baa986cdb76225138990c873f94b88b14b4afca37de5019d19",
       "index": 16,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1767,7 +2479,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-30b-a3b-null-b05-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b05-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-a1.json",
       "config_sha256": "ae6c3d3af9660d667a5d805343bcf33d5e8a124e7ee9735941cc5688af848198",
       "index": 17,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1786,7 +2498,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-30b-a3b-null-b05-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b05-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-b1.json",
       "config_sha256": "fee4e608d63eef33b9b3c47730d99d2827e40de0b186e75be41918ac3044fa80",
       "index": 18,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1805,7 +2517,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-30b-a3b-null-b05-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b05-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-b2.json",
       "config_sha256": "f5b604b7ae02b8fe2d7105911f774ba97a138ddd45cf2f64d294073618c6fc02",
       "index": 19,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1824,7 +2536,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-30b-a3b-null-b05-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/bytes-qwen3-30b-a3b-null-b05-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/bytes-qwen3-30b-a3b-null-b05-a2.json",
       "config_sha256": "abf6458cfa9be25e05e3f4a96b9efe27a7e6fc98b906068b485f26a3c3e23a61",
       "index": 20,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1843,7 +2555,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-30b-a3b-null-b06-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b06-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-a1.json",
       "config_sha256": "1bd20b245f1054ea1f565de9deeb2787cfaf7a4fe9d523aca8f47ea6b91ed31b",
       "index": 1,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1862,7 +2574,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-30b-a3b-null-b06-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b06-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-b1.json",
       "config_sha256": "8c8a5c30115d0b8c6cbdb3e1d367b43c34453911d3b1b00562d13478fb1cf50e",
       "index": 2,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1881,7 +2593,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-30b-a3b-null-b06-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b06-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-b2.json",
       "config_sha256": "9f671bb8c1c71d16d895ba2c06bb8c9cc421f0582779d91b173ccd9dfa8b8e3b",
       "index": 3,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1900,7 +2612,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-30b-a3b-null-b06-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b06-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b06-a2.json",
       "config_sha256": "a2bd6717da6a96cd3962a1205733a50ab0594fd571a898d6cea772fa38f8a363",
       "index": 4,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1919,7 +2631,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-30b-a3b-null-b07-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b07-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-a1.json",
       "config_sha256": "f50ba0fda6f878550e0940dc9224dcdc452b8225f2b0678845a1b18700f9e2e5",
       "index": 5,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1938,7 +2650,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-30b-a3b-null-b07-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b07-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-b1.json",
       "config_sha256": "c4a842068aa63b5561db3593809e071534f19bc164057566f295b8dd4abb9038",
       "index": 6,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1957,7 +2669,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-30b-a3b-null-b07-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b07-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-b2.json",
       "config_sha256": "6fc12902ea4cf5a8c1e60439b650e6bd8cbe76e8aaff59fab45695833b4af700",
       "index": 7,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1976,7 +2688,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-30b-a3b-null-b07-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b07-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b07-a2.json",
       "config_sha256": "014394d081555ae693de00012e28d1382e397904faa622bc48167c5d5f1f67ce",
       "index": 8,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -1995,7 +2707,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-30b-a3b-null-b08-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b08-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-a1.json",
       "config_sha256": "6becad8fd2b716844ad908fbd0557f7f3d8eb8f8493a8f2e55c64a6ecce26039",
       "index": 9,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2014,7 +2726,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-30b-a3b-null-b08-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b08-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-b1.json",
       "config_sha256": "489d6505ebe78e924028e9fa70dfb128c64b41f92169f3e3562a6ccd00703f15",
       "index": 10,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2033,7 +2745,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-30b-a3b-null-b08-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b08-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-b2.json",
       "config_sha256": "6133a909d19441514972182ce73381742033a6e5c61410d27c84c7ce2b5d26de",
       "index": 11,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2052,7 +2764,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-30b-a3b-null-b08-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b08-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b08-a2.json",
       "config_sha256": "2ddb3a98d01455c348392321e0ce1d894d579ce84297de8b540442ad43b68d95",
       "index": 12,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2071,7 +2783,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-30b-a3b-null-b09-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b09-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-a1.json",
       "config_sha256": "e3402d9576312912402353249e643ae57b74af96c7142caf9d4a5c71d494b038",
       "index": 13,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2090,7 +2802,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-30b-a3b-null-b09-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b09-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-b1.json",
       "config_sha256": "9a0ea6e5b5969ec7dc9de7930bd32c4d8ccc5aa90bb9256940e8df3464e65627",
       "index": 14,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2109,7 +2821,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-30b-a3b-null-b09-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b09-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-b2.json",
       "config_sha256": "4d94357baa3a98dfe974c70799b19260187d2321589b07bfc9b31d08e11ff536",
       "index": 15,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2128,7 +2840,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-30b-a3b-null-b09-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b09-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b09-a2.json",
       "config_sha256": "672ccf890a9599cad2caeaa86d14f988dcc3a8b1880dc707bc5612dda5ba32f8",
       "index": 16,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2147,7 +2859,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-30b-a3b-null-b10-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b10-a1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-a1.json",
       "config_sha256": "e45d9a6cd616983607c905aea3ff4a0566942eb46ef6289d7090f4d5f29d6233",
       "index": 17,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2166,7 +2878,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-30b-a3b-null-b10-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b10-b1.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-b1.json",
       "config_sha256": "a783298e69d65392f05e489e93aaf9601af393514e59b812762555041c333bc8",
       "index": 18,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2185,7 +2897,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-30b-a3b-null-b10-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b10-b2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-b2.json",
       "config_sha256": "aedda7924f9a7240ecdee9a79da2fd0b8ab8ff2c0b21843ece2f877563ee910a",
       "index": 19,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2204,7 +2916,7 @@
       "block_id": "bytes-qwen3-30b-a3b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-30b-a3b-null-b10-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/bytes-qwen3-30b-a3b-null-b10-a2.json",
+      "config_path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/bytes-qwen3-30b-a3b-null-b10-a2.json",
       "config_sha256": "86f470d426e6df9bbad8c9a9b0902ebcfe81cde5359562deb997f31d45eabab5",
       "index": 20,
       "model_tag": "qwen3-30b-a3b-mlx",
@@ -2465,8 +3177,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-reference-corpus-order-v2",
-        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection/order_manifest.json",
+        "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2476,7 +3188,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-bound-collection"
                 },
                 {
                   "kind": "literal",
@@ -2626,8 +3338,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-start-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-start/order_manifest.json",
+        "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2637,7 +3349,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-start"
                 },
                 {
                   "kind": "literal",
@@ -2727,7 +3439,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-8b-01_decode_absolute",
-        "path": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute/order_manifest.json",
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute/order_manifest.json",
         "sha256": "1a7e82f7b4e1cb85e49537377f94928aaf43030d0a3988664c85e15b10611e2c"
       },
       "kind": "campaign_collection",
@@ -2738,7 +3450,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-8b/01_decode_absolute"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-absolute"
                 },
                 {
                   "kind": "literal",
@@ -2828,7 +3540,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-8b-02_decode_abba_01_05",
-        "path": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05/order_manifest.json",
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05/order_manifest.json",
         "sha256": "d89fc5780dee77aa334d0c77b9672df67991def25d6c32757bb8964e258eb75f"
       },
       "kind": "campaign_collection",
@@ -2839,7 +3551,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-8b/02_decode_abba_01_05"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-01-05"
                 },
                 {
                   "kind": "literal",
@@ -2929,7 +3641,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-8b-03_decode_abba_06_10",
-        "path": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10/order_manifest.json",
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10/order_manifest.json",
         "sha256": "7270a236b2483f6f9e25bab730be42abf7109e40001cf4ad70f21d382c879a4b"
       },
       "kind": "campaign_collection",
@@ -2940,7 +3652,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-8b/03_decode_abba_06_10"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-8b-quads-06-10"
                 },
                 {
                   "kind": "literal",
@@ -3030,8 +3742,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-midpoint-v1",
-        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-midpoint/order_manifest.json",
+        "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3041,7 +3753,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-midpoint"
                 },
                 {
                   "kind": "literal",
@@ -3131,7 +3843,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-30b-a3b-01_decode_absolute",
-        "path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute/order_manifest.json",
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute/order_manifest.json",
         "sha256": "f54fd04807e37242071dd15728175038fff9a6879e67ba868922d37ff2ede415"
       },
       "kind": "campaign_collection",
@@ -3142,7 +3854,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-30b-a3b/01_decode_absolute"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-absolute"
                 },
                 {
                   "kind": "literal",
@@ -3232,7 +3944,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-30b-a3b-02_decode_abba_01_05",
-        "path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05/order_manifest.json",
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05/order_manifest.json",
         "sha256": "6950a30a722210fa59c7947d941a19d4e38c2eb2344fc628320d6a657ca9863b"
       },
       "kind": "campaign_collection",
@@ -3243,7 +3955,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-30b-a3b/02_decode_abba_01_05"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-01-05"
                 },
                 {
                   "kind": "literal",
@@ -3333,7 +4045,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-30b-a3b-03_decode_abba_06_10",
-        "path": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10/order_manifest.json",
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10/order_manifest.json",
         "sha256": "fec78f3d6b57f71bcbc8cd61601731547d145dcd94ab53c529f355bf73a26484"
       },
       "kind": "campaign_collection",
@@ -3344,7 +4056,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-30b-a3b/03_decode_abba_06_10"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-qwen3-30b-a3b-quads-06-10"
                 },
                 {
                   "kind": "literal",
@@ -3434,8 +4146,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-end-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+        "path": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-end/order_manifest.json",
+        "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3445,7 +4157,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                  "value": "configs/campaigns/bytes-s2-p1/members/bytes-s2-p1-reference-end"
                 },
                 {
                   "kind": "literal",

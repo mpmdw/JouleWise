@@ -399,6 +399,29 @@ class HazardRefusalTests(unittest.TestCase):
         self.assertTrue(any("did not return" in reason for reason in decision["reasons"]))
         self.assertEqual(sorted(SIX), decision["not_pass"])
 
+    def test_production_arm_storage_stop_records_cause_and_launches_nothing(self):
+        # FIX-573i lead ruling: the saved arm refusal is the driver's stop.
+        from joulewise import calibration_bracketing as brackets
+        from joulewise.authentication_io import CompressedBundleRequiresRestore
+        from joulewise.hazards import arm as hazard_arm
+
+        harness = Harness(self, g10=False, arm=b5_driver._production_arm)
+        relative = brackets.DEFAULT_ACCEPTANCE_BOUND_PATH.relative_to(REPO_ROOT)
+        acceptance = harness.measurement / relative
+        acceptance.parent.mkdir(parents=True, exist_ok=True)
+        acceptance.unlink(missing_ok=True)
+        acceptance.with_name(acceptance.name + '.zst').write_bytes(b'plain read must stop')
+        expected = 'CompressedBundleRequiresRestore: ' + str(CompressedBundleRequiresRestore(acceptance))
+        with mock.patch.object(hazard_arm, 'run',
+                               side_effect=AssertionError('hardware seam must not be reached')) as arm_run:
+            result, _ = self.assert_null(harness, off_expected=False)
+        arm_run.assert_not_called()
+        self.assertEqual(b5_driver.REFUSED_HAZARD, result['aborted_reason'])
+        decision = json.loads((harness.night / b5_driver.ARM_DECISION).read_text())
+        self.assertFalse(decision['go'])
+        self.assertEqual(decision['arm_error'], expected)
+        self.assertIn('the hazard arm raised: ' + expected, decision['reasons'])
+
     def test_agent_census_refuses_before_any_action(self):
         harness = Harness(self)
         harness.census.responses.append(probe(night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="4242 claude\n"))
@@ -994,6 +1017,52 @@ class UnitTests(unittest.TestCase):
         mapping = fake_window.hazard_plan_mapping(root, plan_id="b5-alpha-1", t0_epoch_s=1_800_000_000.0,
                                                   authored_epoch_s=1_799_999_000.0)
         return night_gate.NightPlan.from_mapping(mapping)
+
+    def test_collector_identity_selection_preserves_block_five_argv(self):
+        seams = b5_driver.production_seams(REPO_ROOT)
+        b5 = "configs/campaigns/v5_claim_25g83/"
+        b6 = "configs/b6/registration/identity_pins.json"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            measurement = root / "measurement"
+            for relative in (b5 + "flag_catalog.json", b5 + "sealed_inventory.json",
+                             b5 + "identity_pins.json", b6):
+                target = measurement / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('{}\n')
+            for pack_id in ("alpha", "beta", "gamma", "bytes-s1-p1", "bytes-h-rem"):
+                for stage in ("arm", "post"):
+                    with self.subTest(pack=pack_id, stage=stage):
+                        pack = measurement / "configs/campaigns" / pack_id
+                        pack.mkdir(parents=True, exist_ok=True)
+                        (pack / "calibration_plan.json").write_text('{}\n')
+                        mapping = fake_window.hazard_plan_mapping(
+                            root, plan_id="collector-" + pack_id, t0_epoch_s=1_800_000_000.0,
+                            authored_epoch_s=1_799_999_000.0, pack_root=pack)
+                        mapping["hazard_window"]["pack"]["pack_sha256"] = "e" * 64
+                        plan = night_gate.NightPlan.from_mapping(mapping)
+                        window = plan.hazard_window
+                        # The complete pre-change command line for ALPHA/BETA/GAMMA;
+                        # only BYTES' identity-pins value differs.
+                        expected = [sys.executable, "-B", str(REPO_ROOT / "scripts/collect_window_flags.py"),
+                            "--stage", stage, "--custody", str(root), "--repo", str(measurement),
+                            "--pack", str(pack), "--plan-id", plan.plan_id, "--attempt", "1",
+                            "--h-claim", "b" * 40, "--chain", plan.chain_path,
+                            "--chain-sidecar", plan.chain_sha256_path,
+                            "--ledger", window["bindings"]["ledger_path"],
+                            "--head-pin", str(measurement / "configs/calibration/calibration_ledger_head.json"),
+                            "--session-id", "fixture-calibration", "--expected-pack-tree-sha256", "e" * 64,
+                            "--calibration-plan", str(pack / "calibration_plan.json"),
+                            "--catalog", str(measurement / (b5 + "flag_catalog.json")),
+                            "--sealed-inventory", str(measurement / (b5 + "sealed_inventory.json")),
+                            "--identity-pins", str(measurement / (
+                                b6 if pack_id.startswith("bytes-") else b5 + "identity_pins.json"))]
+                        request = b5_driver.CollectorRequest(plan, root / "plan.json", root, stage)
+                        self.assertEqual(expected, seams.collectors_argv(request))
+            # A missing BYTES pin stays unpinned; it must not fall back to B5.
+            (measurement / b6).unlink()
+            argv = seams.collectors_argv(request)
+            self.assertNotIn("--identity-pins", argv)
 
     def test_production_seams_follow_the_other_lanes_command_lines(self):
         import types

@@ -29,8 +29,17 @@ class ClockThresholdTests(unittest.TestCase):
         self.assertEqual(clock.DEFAULT_THRESHOLDS["h_ms"], 3.7)
 
     def test_block5_sizing_copy_remains_identical(self):
-        self.assertEqual((ROOT / "configs/b6/registration/sizing_b5.json").read_bytes(),
-                         (ROOT / plan_inputs.SIZING).read_bytes())
+        # The block-6 copy may add BYTES pack rows; every block-5 field and row
+        # (ALPHA, BETA, GAMMA) must stay exactly as sealed.
+        sealed = json.loads((ROOT / plan_inputs.SIZING).read_text())
+        current = json.loads((ROOT / "configs/b6/registration/sizing_b5.json").read_text())
+        self.assertEqual({k: v for k, v in current.items() if k != "packs"},
+                         {k: v for k, v in sealed.items() if k != "packs"})
+        for key, row in sealed["packs"].items():
+            self.assertEqual(current["packs"].get(key), row, key)
+        added = set(current["packs"]) - set(sealed["packs"])
+        self.assertTrue(all(current["packs"][key]["pack_id"].startswith("bytes-s") for key in added),
+                        sorted(added))
 
     def test_registered_overrides_still_reach_both_paths(self):
         with tempfile.TemporaryDirectory() as directory:

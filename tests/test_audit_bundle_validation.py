@@ -352,20 +352,27 @@ class BundleValidationBugPins(BundleAuditCase):
     # B8: write_raw() can leave a partial raw artifact that blocks retry.
     def test_write_raw_partial_failure_does_not_poison_retry(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-raw-retry"), self.clock)
-        original_write_bytes = Path.write_bytes
+        import joulewise.bundle as bundle_module
+
+        original_fsync = bundle_module.os.fsync
         failed_once = False
 
-        def flaky_write_bytes(path: Path, data: bytes):
+        # The raw writer streams into a temporary file and fsyncs it before the
+        # rename (#567); fail that first fsync so the temporary file is left
+        # behind exactly as a crash mid-write would leave it.
+        def flaky_fsync(fd: int):
             nonlocal failed_once
-            if path.parent == writer.path / "raw" and path.name.startswith(".capture.bin.") and not failed_once:
+            if not failed_once:
                 failed_once = True
-                original_write_bytes(path, data[:2])
                 raise OSError("simulated crash during raw write")
-            return original_write_bytes(path, data)
+            return original_fsync(fd)
 
-        with mock.patch.object(Path, "write_bytes", flaky_write_bytes):
+        with mock.patch.object(bundle_module.os, "fsync", flaky_fsync):
             with self.assertRaises(OSError):
                 writer.write_raw("capture.bin", b"abcdef")
+        self.assertTrue(failed_once)
+        self.assertFalse((writer.path / "raw" / "capture.bin").exists())
+        self.assertEqual(list((writer.path / "raw").glob(".capture.bin.*")), [])
 
         try:
             path = writer.write_raw("capture.bin", b"abcdef")

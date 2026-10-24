@@ -478,10 +478,6 @@ class GatesTests(World):
         for mutate in (
             lambda m: m.update(non_claim=False),
             lambda m: m["runs"].pop(next(iter(m["runs"]))),
-            lambda m: m["regimes"].pop("llama-70b"),
-            lambda m: m["clock"].update(rate_ppm="NaN"),
-            lambda m: m["runs"][next(iter(m["runs"]))].update(request_s=-1),
-            lambda m: m["runs"][next(iter(m["runs"]))].update(retained_bytes=1.5),
         ):
             measured = deepcopy(self.measured)
             mutate(measured)
@@ -524,6 +520,78 @@ class StoppedSessionTests(World):
                 regime.update(F_min_j=None, census_resolution_w=None, outside_power_w=None, operative_bound_s=None)
             measured["sizing"] = {"fixed_desk_s": None, "collection_stage_overhead_s": None}
         return rows, measured, dropped
+
+    def test_remainder_without_checks_writes_independent_lines(self):
+        # BY-H2 runs only both soaks, three models' test-7s, and references.
+        plan = deepcopy(self.plan)
+        plan["members"] = [m for m in plan["members"] if m["purpose"] != "check"]
+        keep = {m["run_id"] for m in plan["members"]}
+        keep.update(r["run_id"] for r in self.rows if r["run_id"] not in {m["run_id"] for m in self.plan["members"]})
+        rows = [r for r in deepcopy(self.rows) if r["run_id"] in keep]
+        measured = deepcopy(self.measured)
+        measured["runs"] = {k: v for k, v in measured["runs"].items() if k in keep}
+        measured["cpu_contention"] = {"w_j_per_cpu_s": None, "c_q_cpu_s": None}
+        for regime in measured["regimes"].values():
+            regime.update(F_min_j=None, census_resolution_w=None, outside_power_w=None)
+        result = gates.calculate(rows, self.sidecar, measured, plan)
+        lines = {g["gate"]: g for g in result["gates"]}
+        self.assertEqual(lines["clock:llama-70b"]["status"], "pass")
+        self.assertEqual(lines["disk:bytes-s5-p1"]["status"], "pass")
+        self.assertEqual(lines["disk:bytes-s1-p1"]["status"], "unavailable")
+        self.assertEqual(lines["resolvability:llama-70b"]["status"], "unavailable")
+        self.assertTrue(any(f.get("input") == "llama-70b.check_decode_energies" for f in result["flags"]))
+
+    def test_zero_run_session_has_no_margin_reference_or_clock_operands(self):
+        rows, measured = deepcopy(self.rows), deepcopy(self.measured)
+        for row in rows:
+            row.update(status="failed", dur_decode_s="", phase_decode_j="")
+            measured["runs"][row["run_id"]] = {
+                **dict.fromkeys(gates.TIMING_FIELDS), "retained_bytes": 0, "raw_allocated_bytes": None}
+        measured["clock"] = {"rate_ppm": None, "frequency_word_ppm": None}
+        result = self.result(measured, rows)
+        lines = {g["gate"]: g for g in result["gates"]}
+        self.assertEqual(result["status"], "fail")  # Failed completeness, usable JSON.
+        self.assertEqual(lines["clock:session"]["status"], "unavailable")
+        self.assertEqual(lines["thermal"]["status"], "unavailable")
+        for pack in result["sessions"].values():
+            self.assertIsNone(pack["programmed_span_s"])
+            self.assertIsNone(pack["disk_derivation"])
+        self.assertTrue(any(f.get("input") == "measured_margin" for f in result["flags"]))
+
+    def test_missing_or_malformed_operands_disable_only_dependent_lines(self):
+        for value in (None, "", "not-a-number", "NaN", "Infinity", True, -1):
+            with self.subTest(value=value):
+                measured = deepcopy(self.measured)
+                measured["cpu_contention"]["w_j_per_cpu_s"] = value
+                measured["sizing"]["fixed_desk_s"] = value
+                measured["regimes"]["llama-70b"]["F_min_j"] = value
+                result = self.result(measured)
+                lines = {g["gate"]: g for g in result["gates"]}
+                self.assertEqual(lines["cpu_contention:llama-70b"]["status"], "unavailable")
+                self.assertEqual(lines["contention:llama-70b"]["status"], "unavailable")
+                self.assertEqual(lines["sizing:bytes-s1-p1"]["status"], "unavailable")
+                self.assertEqual(lines["disk:bytes-s1-p1"]["status"], "pass")
+                self.assertTrue(any(f["code"] == "receipt.operand_unavailable" for f in result["flags"]))
+        measured, rows = deepcopy(self.measured), deepcopy(self.rows)
+        measured["regimes"].pop("llama-70b")
+        measured["clock"]["rate_ppm"] = "NaN"
+        rid = next(m["run_id"] for m in self.plan["members"] if m["purpose"] == "check")
+        row = next(r for r in rows if r["run_id"] == rid)
+        row.update(dur_decode_s="", phase_decode_j="")
+        result = self.result(measured, rows)
+        lines = {g["gate"]: g for g in result["gates"]}
+        self.assertEqual(lines["clock:session"]["status"], "unavailable")
+        self.assertEqual(lines["contention:qwen3-1p7b"]["status"], "unavailable")
+        self.assertEqual(lines["resolvability:qwen3-1p7b"]["status"], "unavailable")
+        self.assertTrue(any(f.get("input") == rid + ".dur_decode_s" for f in result["flags"]))
+        for k in (None, "2", True, 1.5):
+            with self.subTest(census_quanta=k):
+                measured = deepcopy(self.measured)
+                measured['runs'][rid]['census_quanta'] = k
+                result = self.result(measured)
+                lines = {g['gate']: g for g in result['gates']}
+                self.assertEqual(lines['cpu_contention:qwen3-1p7b']['status'], 'unavailable')
+                self.assertTrue(any(f.get('input') == rid + '.census_quanta' for f in result['flags']))
 
     def test_model_never_ran_cli_writes_unavailable_dependent_packs(self):
         rows, measured = deepcopy(self.rows), deepcopy(self.measured)
@@ -639,9 +707,16 @@ class StoppedSessionTests(World):
             self.assertEqual(cli.returncode, 1, cli.stderr)
             self.assertEqual(gates.read(out)["status"], "unavailable")
 
-    def test_succeeded_member_with_null_timing_is_still_refused(self):
-        measured = deepcopy(self.measured)
+    def test_bad_mandatory_operand_never_drops_a_run_from_sizing(self):
         rid = next(r["run_id"] for r in self.rows if r["status"] == "succeeded")
-        measured["runs"][rid].update({f: None for f in gates.TIMING_FIELDS})
-        with self.assertRaises((ValueError, ArithmeticError)):
-            self.result(measured)
+        for key, value in (("request_s", None), ("request_s", -1), ("stream_s", ""),
+                           ("retained_bytes", 1.5), ("thermal_level", None)):
+            with self.subTest(key=key, value=value):
+                measured = deepcopy(self.measured)
+                measured["runs"][rid][key] = value
+                result = self.result(measured)
+                self.assertEqual(result['status'], 'unavailable')
+                self.assertEqual(result['gates'][0]['status'], 'unavailable')
+                self.assertEqual(result['flags'][0]['code'], 'receipt.operand_unavailable')
+                self.assertIn(rid + '.' + key, result['flags'][0]['reason'])
+                self.assertTrue(all(s['disk_derivation'] is None for s in result['sessions'].values()))
