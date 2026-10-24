@@ -49,9 +49,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
+from pathlib import Path
 
+from tests.desk_restore_support import compress_member, ample_space_command
+from joulewise.desk_restore import RestoreRefused
+from joulewise import desk_restore
 from joulewise import aggregate
 from joulewise import bytes_analysis as ba
 from joulewise.b6 import blinding, export_runs
@@ -71,7 +74,8 @@ archive_campaign = _campaign.archive_campaign
 PASS_SCALES = (1, 2)
 CLOCK_LATENCY_MS = (-8, 3)
 # name: (world, seed, planted defects).  Seeds are each world's first in campaign_design.json.
-# bytes/resident/time are the three truths; defects plants the review's five defects (p08);
+# bytes/resident/time are the three truths; defects plants p08's five defects
+# plus FIX-573's unresolved-anchor validity failure;
 # minimum removes six of one model's pass-1 repeats so that one pass refuses (Addendum 7 D9).
 DEFECTS = [
     (1, "Qwen3-14B-4bit", 15, "lost_member"),        # quad unit 1: bundle and stored reduction gone
@@ -79,6 +83,7 @@ DEFECTS = [
     (1, "Qwen3-30B-A3B-4bit", 0, "battery_assist"),   # repeat: meter halved over decode, flag battery.assist
     (2, "Qwen3-8B-4bit", 2, "thermal"),               # repeat: thermal.os_level_nonzero
     (1, "Qwen3-8B-4bit", 20, "cooldown"),             # quad unit 2: member.cooldown_cap_hit (NUMBER class)
+    (1, "Qwen3-8B-4bit", 4, "anchor_not_bounded"),   # repeat: invalid energy never restored
 ]
 DEFECTS_MINIMUM = [(1, "Qwen3-32B-4bit", i, "strict_validation") for i in range(6)]
 ANCHOR_DEFECTS = [(1, "Qwen3-1.7B-4bit", 0, "member.anchor_not_bounded")]
@@ -135,6 +140,7 @@ CAMPAIGNS = {
     "first_batch_tail_replayed": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                                   "battery_publication": "delayed", "battery_reference_assist": True,
                                   "marker_stream_mode": "first_batch_tail_replayed"}, ()),
+    "compressed": ("bytes", 1100, [], NR1_KNOBS, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -1312,6 +1318,8 @@ def plant(archive, acceptance, models, pass_id, defects, log):
             codes = ["member.strict_validation_failed"]
         elif kind in ("member.anchor_not_bounded", "member.target_phase_precheck_failed"):
             codes = [kind]
+        elif kind == "anchor_not_bounded":
+            codes = ["member.anchor_not_bounded"]
         elif kind == "cooldown":
             codes = ["member.cooldown_cap_hit"]
         elif kind == "battery_assist":
@@ -1380,6 +1388,13 @@ def build(root, name):
         store = sidecar.parent / info["path"]
         store.unlink()
         removed.append({"session_id": session_id, "store": str(store), "row_count": info["row_count"]})
+    if name == "compressed":
+        # Desk layout from the cold probe: both primary-byte files of every
+        # Qwen3-8B claim run, after export, with the plain originals removed.
+        for session in manifest["sessions"]:
+            for events in Path(session["archive"]).glob("sources/claim-runs/qwen3-8b-4bit-*/events.jsonl"):
+                for path in (events, events.with_name("metadata.json")):
+                    compress_member(path, Path(session["archive"]))
     _write(root / "manifest.json", manifest)
     _write(root / "build.json", {"name": name, "world": world, "seed": seed, "defects": log, "knobs": knobs,
                                  "missing_stores": removed,
@@ -1402,7 +1417,7 @@ def run_both(root, manifest):
         twin += ["--archive", session["archive"]]
 
     def run(tag, command):
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True, check=False)
         (o / (tag + ".exit")).write_text(str(result.returncode) + "\n")
         (o / (tag + ".stdout")).write_text(result.stdout)
         (o / (tag + ".stderr")).write_text(result.stderr)
@@ -1493,6 +1508,119 @@ def whole_sample_flips(name):
     return {"runs": runs, "flips": flips, "largest_error_j": largest,
             "label_offset_s": manifest["synthetic_parameters"]["min_receive_latency_ms"] / 1000,
             "sample_interval_s": kp.STEP_MS[1] / 1000}
+@unittest.skipUnless(shutil.which("zstd"), "compressed refusal probes require zstd on PATH")
+class CompressedRefusalTests(unittest.TestCase):
+    """Fable variants 01-03: storage corruption terminates both programs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory(prefix="bytes-compressed-refusal-")
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.root = Path(cls.temporary.name) / "compressed"
+        cls.manifest = build(cls.root, "compressed")
+        cls.session = next(s for s in cls.manifest["sessions"] if s["pass_id"] == 1)
+        cls.archive = Path(cls.session["archive"])
+        cls.run_id = "qwen3-8b-4bit-0"
+        cls.bundle = cls.archive / "sources/claim-runs" / cls.run_id
+
+    def replay(self, name, payload, variant):
+        path = self.bundle / (name + ".zst")
+        original = path.read_bytes()
+        try:
+            path.write_bytes(payload(original))
+            keys = self.root / "private-keys/bytes/blinding"
+            records = ba.archive_records(self.archive, self.manifest, self.session,
+                                         stage="fit", key_dir=keys)
+            with mock.patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 1024**4})()):
+                with self.assertRaisesRegex(RestoreRefused, "restore_refused: "):
+                    list(records)
+            output = self.root / (variant + ".json")
+            argv = [sys.executable, "-B", str(ROOT / "scripts/bytes_twin.py"),
+                    "--export-dir", str(self.root / "export"),
+                    "--manifest", str(self.root / "manifest.json"),
+                    "--key-dir", str(keys), "--stage", "1", "--out", str(output)]
+            for session in self.manifest["sessions"]:
+                argv += ["--archive", session["archive"]]
+            result = subprocess.run(ample_space_command(argv), cwd=ROOT, capture_output=True, text=True)
+            print(f"\ncompressed probe {variant}: analysis=restore_refused "
+                  f"twin_exit={result.returncode} refusal={result.stdout.startswith('refused: ')}",
+                  flush=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertTrue(result.stdout.startswith("refused: restore_refused: "), result.stdout)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertFalse(output.exists())
+        finally:
+            path.write_bytes(original)
+
+    def test_01_truncated_events_frame_analysis_unusable_twin_refuses(self):
+        self.replay("events.jsonl", lambda frame: frame[:len(frame) // 2], "01-truncated-frame")
+
+    def test_02_flipped_metadata_bytes_analysis_unusable_twin_refuses(self):
+        def flip(frame):
+            damaged = bytearray(frame)
+            # Reproduce Fable's 16 mid-frame byte flips (not a numeric bar).
+            middle = len(frame) // 2
+            for index in range(middle, middle + 16):
+                damaged[index] ^= 0xff
+            return bytes(damaged)
+        self.replay("metadata.json", flip, "02-flipped-bytes")
+
+    def test_03_non_json_metadata_payload_analysis_unusable_twin_refuses(self):
+        frame = subprocess.run(["zstd", "-qc"], input=b"not JSON", capture_output=True,
+                               check=True).stdout
+        self.replay("metadata.json", lambda _: frame, "03-non-json-payload")
+
+    def test_short_reserve_stops_both_programs(self):
+        keys = self.root / 'private-keys/bytes/blinding'
+        with mock.patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 0})()):
+            with self.assertRaisesRegex(RestoreRefused, 'restore_refused: insufficient scratch space'):
+                list(ba.archive_records(self.archive, self.manifest, self.session, stage='fit', key_dir=keys))
+        commands = [
+            [sys.executable, '-B', str(ROOT / 'scripts/bytes_analyze.py'), '--export', str(self.root / 'export'),
+             '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', 'fit',
+             '--out', str(self.root / 'short-analysis')],
+            [sys.executable, '-B', str(ROOT / 'scripts/bytes_twin.py'), '--export-dir', str(self.root / 'export'),
+             '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', '1',
+             '--out', str(self.root / 'short-twin.json')]]
+        for session in self.manifest['sessions']:
+            commands[1] += ['--archive', session['archive']]
+        for command in commands:
+            result = subprocess.run(ample_space_command(command, free=0), cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn('restore_refused: insufficient scratch space', result.stdout + result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
+        self.assertFalse((self.root / 'short-analysis/predictions.json').exists())
+        self.assertFalse((self.root / 'short-twin.json').exists())
+
+
+    def test_journal_less_campaign_stops_both_programs(self):
+        journal = Path(str(self.archive) + '.desk') / 'compression.jsonl'
+        saved = journal.read_bytes()
+        journal.unlink()
+        keys = self.root / 'private-keys/bytes/blinding'
+        try:
+            with self.assertRaisesRegex(RestoreRefused, 'restore_refused:.*compression.jsonl'):
+                list(ba.archive_records(self.archive, self.manifest, self.session, stage='fit', key_dir=keys))
+            programs = [
+                [sys.executable, '-B', str(ROOT / 'scripts/bytes_analyze.py'), '--export', str(self.root / 'export'),
+                 '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', 'fit',
+                 '--out', str(self.root / 'journal-less-analysis')],
+                [sys.executable, '-B', str(ROOT / 'scripts/bytes_twin.py'), '--export-dir', str(self.root / 'export'),
+                 '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', '1',
+                 '--out', str(self.root / 'journal-less-twin.json')]]
+            for session in self.manifest['sessions']:
+                programs[1] += ['--archive', session['archive']]
+            for command in programs:
+                result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('restore_refused:', result.stdout + result.stderr)
+                self.assertIn('compression.jsonl', result.stdout + result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertFalse((self.root / 'journal-less-analysis/predictions.json').exists())
+                self.assertFalse((self.root / 'journal-less-twin.json').exists())
+        finally:
+            journal.write_bytes(saved)
+
 
 
 class AgreementTests(unittest.TestCase):
@@ -1686,6 +1814,13 @@ class AgreementTests(unittest.TestCase):
         ids = {run_id for _, run_id in unusable}
         self.assertTrue(all(not (ids & set(r[side])) for r in kept for side in ("a", "t")))
 
+    @unittest.skipUnless(shutil.which("zstd"), "compressed-bundle campaign requires zstd on PATH")
+    def test_compressed_bundle_campaign(self):
+        # Same words and fits as bytes: compression changes storage only.
+        # check uses the existing per-field derived agreement bars above.
+        self.check("compressed", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
+                                      "h2/rest/passes_mean": (11, 11)})
+
     def test_resident_world(self):
         # The NR1 regression's world (Addendum 9 item 1): about delta / dt = 10% of the runs take or
         # lose a whole sample; at this seed every registered decision survives the alternative
@@ -1763,11 +1898,16 @@ class AgreementTests(unittest.TestCase):
     def test_defects_campaign(self):
         R = self.check("defects", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                        "h2/rest/passes_mean": (11, 11)})
-        # The five planted defects reach both sides: D5's cooldown restore and D10's without-assisted line.
+        # D5 restores cooldown, but FIX-573's invalid-anchor repeat stays out
+        # on both primary and flagged-inclusive lines of both implementations.
         kept = {r["group"]: r for r in R.rows if r["key"] == "n_b" and r["stage"] == "heldout"}
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/gross"]["a"], 9)
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive"]["a"], 10)
         self.assertEqual(kept["cell/qwen3-14b-4bit/pass1/rails/flagged_inclusive"]["a"], 9)
+        repeats = {r['group']: r for r in R.rows if r['key'] == 'n_r' and r['stage'] == 'heldout'}
+        for variant in ('gross', 'flagged_inclusive'):
+            row = repeats['cell/qwen3-8b-4bit/pass1/rails/' + variant]
+            self.assertEqual((row['a'], row['t']), (9, 9))
         without = [r for r in R.rows if "/without_assisted" in r["group"] and r["key"] == "status"
                    and r["stage"] in ("fit", "heldout")]
         self.assertTrue(without and all(r["a"] == r["t"] == "computed" for r in without))
@@ -2305,7 +2445,14 @@ class MarkerPathAgreementTests(unittest.TestCase):
 
     def test_unreadable_stream_has_no_marker_on_either_side(self):
         self.write(self.items())
-        with mock.patch.object(Path, "open", side_effect=OSError("unreadable stream")):
+        original_open = Path.open
+        def unreadable_stream(path, *args, **kwargs):
+            if path == self.path:
+                raise OSError("unreadable stream")
+            return original_open(path, *args, **kwargs)
+        # #573 propagates custody read errors. Fail the intended meter stream,
+        # while absent acceptance/roster files retain their missing-file path.
+        with mock.patch.object(Path, "open", unreadable_stream):
             self.assert_agreement()
 
     def test_non_object_transport_has_the_primarys_parse_failure(self):

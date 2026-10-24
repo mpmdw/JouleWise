@@ -8,8 +8,11 @@ Run from the repository root:
 import importlib.util
 import json
 import math
+import shutil
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from unittest.mock import patch
 
@@ -90,6 +93,88 @@ class ConstantsTests(QuantityTestCase):
         self.assertQuantityEqual(q["e_printed_j_per_token"], 2.0)
         self.assertEqual(q["printed_label"], bt.PER_TOKEN_LABEL)
         self.assertQuantityEqual(q["e_half_width_j_per_step"], 24.0 / 512)
+
+
+class BatteryWorkedExamples(unittest.TestCase):
+    @staticmethod
+    def stream():
+        # 1 V makes signed powers exactly -current_mA/1000 W. Decode [4,8)
+        # has 2,4,2,4 W; own idle [0,2) charges at -1 W. All values/results
+        # below are exact binary fractions, so equality (no bar) is intended.
+        powers = {0: -1, 1: -1, 4: 2, 5: 4, 6: 2, 7: 4, 8: 3, 9: 5, 10: 7}
+        return {"poll_ns": [t * 10**9 for t in range(15)],
+                "smc": [{"B0AC": -1000 * powers.get(t, 0), "B0AV": 1000} for t in range(15)]}
+
+    @staticmethod
+    def terms(stream, window=(4 * 10**9, 8 * 10**9), idle=(0, 2 * 10**9)):
+        # Adapt #573's worked SMC inputs to #574's independently decoded arrays.
+        if "smc" in stream:
+            stream = {**stream,
+                "battery_current_ma": [v.get("B0AC") for v in stream["smc"]],
+                "battery_watts": [-v["B0AC"] * v["B0AV"] / 1e6
+                    if v.get("B0AC") is not None and v.get("B0AV") is not None else None
+                    for v in stream["smc"]]}
+        return bt.battery_terms(stream, window, idle)
+
+    def test_signed_bases_and_two_forward_edges_have_closed_form_values(self):
+        got = self.terms(self.stream(), [4 * 10**9, 8 * 10**9], [0, 2 * 10**9])
+        # Decode 4*3=12 J; subtract own charging idle -> 12-(-1)*4=16 J.
+        # tau=1+1+1=3 s; T/n=1 s. Forward sums are 2+4+2=8 and 3+5+7=15 J.
+        for key, value in {"battery_gross_j": 12, "battery_secondary_j": 16,
+                           "battery_idle_w": -1, "battery_v_start_j": 8,
+                           "battery_v_end_j": 15, "battery_phase_edge_j": 23,
+                           "battery_tau_s": 3,
+                           "battery_decode_polls": 4, "battery_idle_polls": 2}.items():
+            self.assertEqual(got[key], value, key)
+        self.assertIs(got["decode_assisted"], True)
+        self.assertIs(got["battery_end_window_complete"], True)
+
+    def test_partial_voltage_poll_is_not_integrated_but_its_current_marks_assist(self):
+        stream = self.stream()
+        for values in stream["smc"]:
+            values["B0AC"] = 0
+        stream["smc"][7] = {"B0AC": -2000, "B0AV": None}
+        got = self.terms(stream, [4 * 10**9, 8 * 10**9], [0, 2 * 10**9])
+        self.assertEqual((got["battery_gross_j"], got["battery_decode_polls"]), (0, 3))
+        self.assertIs(got["decode_assisted"], True)
+        for t in (4, 5, 6):
+            stream["smc"][t]["B0AV"] = None
+        self.assertEqual(self.terms(stream)["status"], "battery reading missing")
+        self.assertIs(self.terms(stream)["decode_assisted"], True)
+
+    def test_delay_uses_polls_outside_the_phase_and_marker_is_half_open(self):
+        stream = self.stream()
+        # Remove receive times 12 and 13: the largest interval is 3 s outside
+        # decode. BAT-2's average+hold adds exactly 2 s, giving tau=5 s.
+        for key in ("poll_ns", "smc"):
+            stream[key] = [v for i, v in enumerate(stream[key]) if i not in (12, 13)]
+        self.assertEqual(self.terms(stream)["battery_tau_s"], 5)
+        stream = self.stream()
+        for values in stream["smc"]:
+            values["B0AC"] = 0
+        stream["smc"][6]["B0AC"] = stream["smc"][11]["B0AC"] = -1000
+        self.assertIs(self.terms(stream)["decode_assisted"], False)
+        stream["smc"][7]["B0AC"] = -1000
+        self.assertIs(self.terms(stream)["decode_assisted"], True)
+
+    def test_empty_meter_batches_retain_ordered_current_polls_without_a_clock_fit(self):
+        records = [{"k": "h", "rate_idx": synth.RATE_IDX, "start_raw_ns": 10 * 10**9,
+                    "start_mono_ns": 9 * 10**9}]
+        for second in (13, 11, 12):
+            records.append({"k": "b", "rx": second * 10**9, "n": 0, "p": "",
+                            "smc": {"B0AC": -1000 if second == 13 else 0,
+                                    "B0AV": None if second == 13 else 1000}})
+        records.append({"k": "t", "end_raw_ns": 20 * 10**9, "end_mono_ns": 19 * 10**9})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stream.jsonl"
+            path.write_text("".join(json.dumps(row) + "\n" for row in records))
+            stream = bt.parse_meter_stream(path)
+        self.assertIs(stream["aligned"], False)
+        self.assertEqual(stream["raw_offset_ns"], 10**9)
+        self.assertEqual(stream["poll_ns"], [11 * 10**9, 12 * 10**9, 13 * 10**9])
+        # Raw decode [10,12), delay 3 s -> marker [13,15). The incomplete
+        # voltage at 13 s still marks assist; no meter fit is needed.
+        self.assertIs(self.terms(stream, [10 * 10**9, 12 * 10**9])["decode_assisted"], True)
 
 
 class StudentTTests(QuantityTestCase):
@@ -320,6 +405,120 @@ class H1Tests(QuantityTestCase):
         self.assertEqual(words["models"]["qwen3-30b-a3b-4bit"]["word"], "neither")
         self.assertEqual(words["active_or_resident"]["answer"], "mixed")
         self.assertTrue(words["active_or_resident"]["misses"])
+
+
+class DeskBundleReadTests(unittest.TestCase):
+    def test_missing_files_keep_existing_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            self.assertEqual(bt.read_json(bundle / "metadata.json", {"missing": True}), {"missing": True})
+            self.assertIsNone(bt.member_spans(bundle))
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
+    def test_compressed_json_and_events_and_plain_precedence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
+                "sampling_started": {"epoch_s": 2000, "monotonic_before_s": 1000}}}}}
+            events = [{"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000},
+                      {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001}]
+            for name, text in (("metadata.json", json.dumps(metadata)),
+                               ("events.jsonl", "".join(json.dumps(e) + "\n" for e in events))):
+                path = bundle / name
+                path.write_text(text, encoding="utf-8")
+                subprocess.run(["zstd", "-q", str(path), "-o", str(path) + ".zst"], check=True)
+                path.unlink()
+            self.assertEqual(bt.read_json(bundle / "metadata.json"), metadata)
+            # Exact integer ns: one second after the 1000 s monotonic anchor.
+            self.assertEqual(bt.member_spans(bundle), {
+                "decode_ns": [1_000_000_000_000, 1_001_000_000_000],
+                "request_ns": [1_000_000_000_000, 1_001_000_000_000], "idle_ns": None})
+            (bundle / "metadata.json").write_text('{"plain":true}', encoding="utf-8")
+            self.assertEqual(bt.read_json(bundle / "metadata.json"), {"plain": True})
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
+    def test_existing_unreadable_compressed_files_refuse_instead_of_defaulting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "metadata.json.zst").write_bytes(b"not a zstd frame")
+            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+                bt.read_json(bundle / "metadata.json", {"missing": True})
+            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+                bt.member_spans(bundle)
+            (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {
+                "clock_anchor": {"clock_stamps": {"sampling_started": {
+                    "epoch_s": 2000, "monotonic_before_s": 1000}}}}}), encoding="utf-8")
+            (bundle / "events.jsonl.zst").write_bytes(b"not a zstd frame")
+            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+                bt.member_spans(bundle)
+            # Analysis marks these runs unusable; the independent twin refuses
+            # under D7, as it does for a truncated plain events.jsonl.
+            for name in ("metadata.json", "events.jsonl"):
+                path = bundle / name
+                raw = path.read_bytes() if path.exists() else None
+                for payload in (b"\xff", b"not JSON"):
+                    with self.subTest(name=name, payload=payload):
+                        result = subprocess.run(["zstd", "-qc"], input=payload,
+                                                capture_output=True, check=True)
+                        Path(str(path) + ".zst").write_bytes(result.stdout)
+                        path.unlink(missing_ok=True)
+                        with self.assertRaises((bt.StorageStop, ValueError)):
+                            bt.read_json(path) if name == "metadata.json" else bt.member_spans(bundle)
+                if raw is not None:
+                    path.write_bytes(raw)
+
+    def test_present_plain_files_refuse_read_and_parse_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "metadata.json"
+            for payload in (b"\xff", b"not JSON"):
+                with self.subTest(payload=payload):
+                    path.write_bytes(payload)
+                    with self.assertRaises(ValueError):
+                        bt.read_json(path, {"missing": True})
+            with patch.object(Path, "read_text", side_effect=PermissionError("unreadable")):
+                with self.assertRaises(PermissionError):
+                    bt.read_json(path, {"missing": True})
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
+    def test_present_non_file_compressed_sibling_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "metadata.json"
+            Path(str(path) + ".zst").mkdir()
+            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+                bt.read_json(path, {"missing": True})
+
+    def test_compressed_reader_resolves_path_or_homebrew_fallback_independently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "metadata.json"
+            Path(str(path) + ".zst").write_bytes(b"synthetic frame; subprocess mocked")
+            for executable in ("/synthetic/bin/zstd", None):
+                with self.subTest(executable=executable), \
+                        patch.object(shutil, "which", return_value=executable), \
+                        patch.object(bt.subprocess, "run", return_value=subprocess.CompletedProcess(
+                            [], 0, stdout=b'{}')) as run:
+                    self.assertEqual(bt.read_json(path), {})
+                    self.assertEqual(run.call_args.args[0],
+                                     [executable or "/opt/homebrew/bin/zstd", "-dc", str(path) + ".zst"])
+
+    def test_present_compressed_file_refuses_when_zstd_cannot_execute(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            for name in ("metadata.json", "events.jsonl"):
+                path = bundle / name
+                compressed = Path(str(path) + ".zst")
+                compressed.write_bytes(b"synthetic frame; subprocess mocked")
+                for error in (FileNotFoundError("zstd"), PermissionError("zstd")):
+                    with self.subTest(name=name, error=type(error).__name__), \
+                            patch.object(shutil, "which", return_value=None), \
+                            patch.object(bt.subprocess, "run", side_effect=error):
+                        with self.assertRaisesRegex(bt.StorageStop, "zstd unavailable: ") as caught:
+                            bt.read_json(path) if name == "metadata.json" else bt.member_spans(bundle)
+                        self.assertEqual(str(caught.exception), "restore_refused: zstd unavailable: " + str(compressed))
+                # Supply the anchor for the events reader, without a decompressor.
+                if name == "metadata.json":
+                    path.write_text(json.dumps({"uncertainty_evidence": {"clock_anchor": {
+                        "clock_stamps": {"sampling_started": {
+                            "epoch_s": 2000, "monotonic_before_s": 1000}}}}}), encoding="utf-8")
 
 
 class MeterTests(QuantityTestCase):
@@ -752,6 +951,7 @@ class SyntheticWorldTests(QuantityTestCase):
         # A request-level harvest disclosure alone cannot select the BAT-2 decode diagnostic.
         self.assertNotIn("without_assisted", cell)
         self.assertEqual(cell["gross"]["decode_assisted_member_counts"], {"repeat": 0, "quad": 0})
+        self.assertEqual(cell["gross"]["harvest_assisted_member_counts"], {"repeat": 1, "quad": 0})
         codes = {r["codes"]: r["restorable"] for r in cell["removed_members"]}
         self.assertEqual(codes, {"thermal.os_level_nonzero": True, "member.status_not_succeeded": False,
                                  "battery.member_span": True, "member.cooldown_cap_hit": True})
@@ -767,6 +967,8 @@ class SyntheticWorldTests(QuantityTestCase):
                                        "exclusion_codes": "member.cooldown_cap_hit"}))
         self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
                                         "exclusion_codes": "member.bytes_missing"}))
+        self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
+                                        "exclusion_codes": "member.anchor_not_bounded"}))
         self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
                                         "exclusion_codes": "roster.not_in_plan"}))
         self.assertIn("p1-s1-m-qwen3-4b-4bit-b02", cell["flagged_inclusive"]["kept_quad_ids"])

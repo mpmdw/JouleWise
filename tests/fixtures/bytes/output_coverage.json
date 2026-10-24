@@ -1866,7 +1866,7 @@
       ]
     },
     {
-      "reason": "Primary custody/provenance: input paths, stage, module and commitment digests differ between independent programs. Semantic commitment rebuild/stability and release exits are tested separately.",
+      "reason": "Primary custody/provenance: input paths, stage, module and commitment digests differ between independent programs. Semantic commitment rebuild/stability and release exits are tested separately. The primary restore-module digest is pinned by test_bytes_analysis.Q2CommitmentCLIChainTests.test_changed_module_evaluates_original_commitment_and_labels_rebuild (the exact source digest assertion); the twin implements storage independently.",
       "fields": [
         "analysis_record.json/boundaries/[]",
         "analysis_record.json/bytes_analysis_sha256/committed",
@@ -1877,7 +1877,8 @@
         "analysis_record.json/non_claim",
         "analysis_record.json/predictions_sha256",
         "analysis_record.json/stage",
-        "analysis_record.json/synthetic"
+        "analysis_record.json/synthetic",
+        "predictions.json/desk_restore_sha256"
       ]
     },
     {
@@ -1960,7 +1961,8 @@
     "empty_payload_n",
     "replayed_batch",
     "replayed_tail",
-    "first_batch_tail_replayed"
+    "first_batch_tail_replayed",
+    "compressed"
   ],
   "mutation_sampling": "Fixed semantic row identities: gross-primary decision rows first for H1/H2/MoE; all campaigns inventoried. Meter projection preserves every emitted schema on both sides.",
   "row_exemptions": [

@@ -1,0 +1,154 @@
+[
+  {
+    "path": "/Users/edr/night-bytes/h-20261021T185555Z/custody/hazards/meter/stream-001.jsonl",
+    "sha256": "009d0e688678cb4c887f42e5007dbb671772ce78b5607b011014d23db3417389",
+    "polls": 93533,
+    "primary_retained_smc_polls": 48952,
+    "smc_view_differences_outside_selection": 44581,
+    "sample_counts": [
+      935345,
+      467975,
+      935345
+    ],
+    "samples_sha256": "ab8e6df864c21bca4734f2aeb9187b40455e5ff5ba2c946ae291cb6ebd45a478",
+    "points": [
+      93532,
+      93532,
+      93532
+    ],
+    "fit_points_sha256": [
+      "17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf",
+      "17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf",
+      "17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf"
+    ],
+    "poll_times_sha256": "af339bfb7398609cc5f27e290f443cfdf7915214fcf404eae2fee271cd6fc6fe",
+    "marker_smc_sha256": "6629b32b6458f251bf9f75f5745b98a5302644780a95cc19b342d065d4bfc01e",
+    "marker_inputs_sha256": "c646d7445fe09e09ef13689ae4b3491f6fc11eede4bc9a5007e93f11e2f5d61f",
+    "marker_windows": 95,
+    "marker_smc_observations": 7598,
+    "tau_ns": 2302440875,
+    "shapes": {
+      "empty_payload_n": 0,
+      "partial_sample": 0,
+      "nested_p": 0,
+      "sample_batches_without_fit_point": 0
+    },
+    "differences": [],
+    "session": "h-20261021T185555Z",
+    "unreadable_member_spans": []
+  },
+  {
+    "path": "/Users/edr/night-bytes/h-20261021T185555Z/archive/sources/night-custody/hazards/meter/stream-001.jsonl",
+    "sha256": "009d0e688678cb4c887f42e5007dbb671772ce78b5607b011014d23db3417389",
+    "polls": 93533,
+    "primary_retained_smc_polls": 48952,
+    "smc_view_differences_outside_selection": 44581,
+    "sample_counts": [
+      935345,
+      467975,
+      935345
+    ],
+    "samples_sha256": "ab8e6df864c21bca4734f2aeb9187b40455e5ff5ba2c946ae291cb6ebd45a478",
+    "points": [
+      93532,
+      93532,
+      93532
+    ],
+    "fit_points_sha256": [
+      "17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf",
+      "17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf",
+      "17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf"
+    ],
+    "poll_times_sha256": "af339bfb7398609cc5f27e290f443cfdf7915214fcf404eae2fee271cd6fc6fe",
+    "marker_smc_sha256": "6629b32b6458f251bf9f75f5745b98a5302644780a95cc19b342d065d4bfc01e",
+    "marker_inputs_sha256": "c646d7445fe09e09ef13689ae4b3491f6fc11eede4bc9a5007e93f11e2f5d61f",
+    "marker_windows": 95,
+    "marker_smc_observations": 7598,
+    "tau_ns": 2302440875,
+    "shapes": {
+      "empty_payload_n": 0,
+      "partial_sample": 0,
+      "nested_p": 0,
+      "sample_batches_without_fit_point": 0
+    },
+    "differences": [],
+    "session": "h-20261021T185555Z",
+    "unreadable_member_spans": []
+  },
+  {
+    "path": "/Users/edr/night-bytes/h2-20261023T144711Z/custody/hazards/meter/stream-001.jsonl",
+    "sha256": "b94f5fe67649f3a5755f0663ddedba7f1b69097a21dbada365c7c77db484651a",
+    "polls": 76116,
+    "primary_retained_smc_polls": 38136,
+    "smc_view_differences_outside_selection": 37980,
+    "sample_counts": [
+      761159,
+      365413,
+      761159
+    ],
+    "samples_sha256": "75c932cb4340275be3de0ac8697d35783fb9fa2fbad6e6beea84325a2ae0d060",
+    "points": [
+      76115,
+      76115,
+      76115
+    ],
+    "fit_points_sha256": [
+      "96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150",
+      "96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150",
+      "96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150"
+    ],
+    "poll_times_sha256": "cd9d369f7f75a06d8d18007afb3a7d3dda94e447883ffb06ce239a63f443c712",
+    "marker_smc_sha256": "954e76ea326ef88d3789c991ddb3931464fda87cb09cf0498bacdfbdcaca7d18",
+    "marker_inputs_sha256": "4c3cbd7c70802a79659f067d3ef5453b7706027df67d50563b003d34014fe9a1",
+    "marker_windows": 73,
+    "marker_smc_observations": 5683,
+    "tau_ns": 2212469250,
+    "shapes": {
+      "empty_payload_n": 0,
+      "partial_sample": 0,
+      "nested_p": 0,
+      "sample_batches_without_fit_point": 0
+    },
+    "differences": [],
+    "session": "h2-20261023T144711Z",
+    "unreadable_member_spans": []
+  },
+  {
+    "path": "/Users/edr/night-bytes/h2-20261023T144711Z/archive/sources/night-custody/hazards/meter/stream-001.jsonl",
+    "sha256": "b94f5fe67649f3a5755f0663ddedba7f1b69097a21dbada365c7c77db484651a",
+    "polls": 76116,
+    "primary_retained_smc_polls": 38136,
+    "smc_view_differences_outside_selection": 37980,
+    "sample_counts": [
+      761159,
+      365413,
+      761159
+    ],
+    "samples_sha256": "75c932cb4340275be3de0ac8697d35783fb9fa2fbad6e6beea84325a2ae0d060",
+    "points": [
+      76115,
+      76115,
+      76115
+    ],
+    "fit_points_sha256": [
+      "96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150",
+      "96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150",
+      "96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150"
+    ],
+    "poll_times_sha256": "cd9d369f7f75a06d8d18007afb3a7d3dda94e447883ffb06ce239a63f443c712",
+    "marker_smc_sha256": "954e76ea326ef88d3789c991ddb3931464fda87cb09cf0498bacdfbdcaca7d18",
+    "marker_inputs_sha256": "4c3cbd7c70802a79659f067d3ef5453b7706027df67d50563b003d34014fe9a1",
+    "marker_windows": 73,
+    "marker_smc_observations": 5683,
+    "tau_ns": 2212469250,
+    "shapes": {
+      "empty_payload_n": 0,
+      "partial_sample": 0,
+      "nested_p": 0,
+      "sample_batches_without_fit_point": 0
+    },
+    "differences": [],
+    "session": "h2-20261023T144711Z",
+    "unreadable_member_spans": []
+  }
+]

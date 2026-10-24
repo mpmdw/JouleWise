@@ -10,6 +10,8 @@ and of block 5's analysis plan (``analysis_plan_block5.md`` section 4).  Standar
 only; nothing is imported from ``joulewise`` (R8 item 4: the twin shares no code with
 ``joulewise/bytes_analysis.py``; ``tests/test_bytes_agreement.py`` fences it).  The choices
 the ruling left open are recorded in JouleWise-data ``bytes/twin/CHOICES.md``.
+Battery energy, forward edges and the delayed decode diagnostic follow BAT-2
+in ``docs/contracts/bytes_tables.md``; harvest assist flags disclose only.
 
 Pass identity (lead ruling of 2026-10-20, item 2): a model's passes are ordered by the
 registered pass identity, never by a clock.  The identity of a session is read from the
@@ -39,14 +41,29 @@ from __future__ import annotations
 import argparse
 import bisect
 import csv
+import fcntl
+import os
+import tempfile
+from contextlib import contextmanager, ExitStack
 import hashlib
 import json
 import math
 import re
+import shutil
 import statistics
 import struct
+import subprocess
 import sys
 from pathlib import Path
+
+
+class StorageStop(BaseException):
+    """Independent custody stop; ordinary data handlers must not absorb it."""
+
+    def __init__(self, reason):
+        self.reason = str(reason).removeprefix("restore_refused: ")
+        super().__init__(f"restore_refused: {self.reason}")
+
 
 SCHEMA = "joulewise.bytes_twin.v1"
 GB = 1e9                      # the pilot's convention: GB means 10^9 bytes
@@ -887,10 +904,36 @@ def battery_terms(stream, window, idle):
 # ----------------------------------------------------------------------------
 # Harvest archive: member spans in monotonic ns, meter join for the decode phase.
 
+def _read_text(path):
+    """Read a logical UTF-8 file, including a desk-compressed sibling.
+
+    Keep this reader independent of joulewise: the twin's no-shared-code
+    fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH
+    or the desk's literal Homebrew fallback, independently of the analysis.
+    Only an absent sibling follows the caller's missing-file path. An
+    existing unreadable file propagates to main's Addendum 7 D7 refusal.
+    """
+    path = Path(path)
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        compressed = Path(str(path) + ".zst")
+        if not compressed.exists():
+            raise
+    try:
+        result = subprocess.run([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(compressed)],
+                                capture_output=True, check=True)
+        return result.stdout.decode("utf-8")
+    except OSError:
+        raise StorageStop("zstd unavailable: " + str(compressed)) from None
+    except (subprocess.CalledProcessError, UnicodeDecodeError):
+        raise StorageStop("compressed file unreadable: " + str(compressed)) from None
+
+
 def read_json(path, default=None):
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return json.loads(_read_text(path))
+    except FileNotFoundError:
         return default
 
 
@@ -915,8 +958,8 @@ def member_spans(bundle):
         return int(round((mono + (float(wall) - epoch)) * 1_000_000_000))   # Addendum 7 N1: nearest ns
     spans = {}
     try:
-        lines = (bundle / "events.jsonl").read_text(encoding="utf-8").splitlines()
-    except OSError:
+        lines = _read_text(bundle / "events.jsonl").splitlines()
+    except FileNotFoundError:
         return None
     for line in lines:
         if not line.strip():
@@ -959,13 +1002,119 @@ def load_archive(root):
             "streams": streams}
 
 
+@contextmanager
+def _readable_bundle(source, journal):
+    """Independent storage gate: verify custody and consume a private plain copy."""
+    source = Path(source)
+    if not any(not p.with_suffix("").is_file() for p in source.rglob("*.zst")):
+        yield source
+        return
+    with ExitStack() as cleanup:
+        try:
+            if not journal.is_file():
+                raise ValueError("compressed run requires compression.jsonl")
+            records = {}
+            for line in journal.read_bytes().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        raise ValueError
+                    if row.get("event") in ("compress", "restore"):
+                        if (not isinstance(row.get("path"), str) or not isinstance(row.get("root"), str)
+                                or type(row.get("size")) is not int or row["size"] < 0
+                                or not isinstance(row.get("sha256"), str)
+                                or not Path(row["path"]).is_absolute()
+                                or not re.fullmatch(r"[0-9a-f]{64}", row["sha256"])):
+                            raise ValueError
+                        records[Path(row["path"]).resolve()] = row
+                except (ValueError, UnicodeError):
+                    raise ValueError("invalid compression journal") from None
+            records = {path: row for path, row in records.items() if row['event'] == 'compress'}
+            entries, targets = [], set()
+            for directory, dirs, files in os.walk(source, followlinks=False,
+                                                   onerror=lambda exc: (_ for _ in ()).throw(exc)):
+                for name in dirs + files:
+                    if (Path(directory) / name).is_symlink():
+                        raise ValueError("symlinks are not supported")
+                for name in files:
+                    path = Path(directory) / name
+                    if not path.is_file():
+                        raise ValueError("nonregular input")
+                    compressed = path.suffix == ".zst"
+                    logical = path.with_suffix("") if compressed else path
+                    relative = logical.relative_to(source)
+                    if relative in targets:
+                        raise ValueError("plain and compressed siblings are ambiguous")
+                    targets.add(relative)
+                    record = records.get(logical.resolve())
+                    if compressed and (record is None or record["event"] != "compress"):
+                        raise ValueError("compressed input has no digest record")
+                    size = record["size"] if record is not None else path.stat().st_size
+                    entries.append((path, relative, compressed, record, size))
+            scratch = Path(tempfile.gettempdir())
+            # Same standing 40 GiB floor as the desk restore tool; no scientific gate.
+            with _scratch_lock(scratch):
+                if shutil.disk_usage(scratch).free < sum(e[4] for e in entries) + 40 * 1024**3:
+                    raise ValueError("insufficient scratch space")
+                plain = Path(cleanup.enter_context(tempfile.TemporaryDirectory(prefix="twin-restored-")))
+                for path, relative, compressed, record, size in entries:
+                    target = plain / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if compressed:
+                        process = subprocess.Popen([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(path)],
+                                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        try:
+                            with process.stdout:
+                                count, digest = _copy_restored_stream(process.stdout, target, size)
+                            if process.wait() != 0:
+                                raise ValueError("compressed file unreadable")
+                        finally:
+                            if process.poll() is None:
+                                process.kill()
+                            process.wait()
+                            process.stderr.close()
+                    else:
+                        with path.open('rb') as stream:
+                            count, digest = _copy_restored_stream(stream, target, size)
+                    if count != size or (record is not None and digest.hexdigest() != record["sha256"]):
+                        raise ValueError("restored size or digest mismatch")
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            raise StorageStop(exc) from exc
+        yield plain
+
+
+def _copy_restored_stream(stream, target, size):
+    digest, count = hashlib.sha256(), 0
+    with target.open('xb') as output:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            count += len(chunk)
+            if count > size:
+                raise ValueError('restored size mismatch')
+            digest.update(chunk)
+            output.write(chunk)
+    return count, digest
+
+
+@contextmanager
+def _scratch_lock(root):
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
 def dc_join(archive, run_id):
     """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
     bundle = _bundle(archive["root"], run_id)
     if bundle is None:
         return {"status": "bundle_missing", "decode_assist_evaluated_reason":
                 f"decode marker not evaluated: selected bundle missing (run {run_id})"}
-    spans = member_spans(bundle)
+    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
+        spans = member_spans(plain)
     if spans is None:
         return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
                 f"decode marker not evaluated: member spans unreadable (run {run_id})"}
@@ -2110,6 +2259,9 @@ def main(argv=None):
                          sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld)
         if args.stage == "blinded" and args.archive:
             result["notes"].append("DC-input skipped at the blinded stage; raw meter streams were not opened")
+    except StorageStop as exc:
+        print(f"refused: {exc}")
+        return 1
     except Exception as exc:  # noqa: BLE001 - every failure is a refusal line
         print("refused: " + (str(exc) or type(exc).__name__))
         return 1

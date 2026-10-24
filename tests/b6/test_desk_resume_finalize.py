@@ -15,6 +15,11 @@ from tests.b6.support import DeskCase
 class DeskResumeFinalizeTests(DeskCase):
     def stopped_round(self, control):
         r = Round(self.root)
+        # Recovery authenticates the issued estimator pin before touching the
+        # ledger. Re-key only this disposable fixture after the reducer's
+        # authentication-seam byte change; preserve the real issued artifact.
+        from tests.test_calibration_exits import _rekey_private_writer_acceptance
+        _rekey_private_writer_acceptance(r.measurement)
         r.until('SESSION_RUN')
         write(r.control, {**read(r.control), **control})
         r.loop.tick()  # Install/launch; driver status has not polled yet.

@@ -215,17 +215,37 @@ from pathlib import Path
 _original = Path.read_bytes
 _target = os.environ.get("JW_CUSTODY_BARRIER_TARGET")
 _marker = os.environ.get("JW_CUSTODY_BARRIER_MARKER")
+_original_open = Path.open
+_in_barrier = False
+def _barrier(self):
+    global _in_barrier
+    if _target and str(self) == _target and not _in_barrier:
+        _in_barrier = True
+        try:
+            with open(_marker, "a+") as handle:
+                handle.seek(0)
+                count = len(handle.readlines())
+                handle.write(json.dumps({"pid": os.getpid(), "read": count + 1}) + "\\n")
+                handle.flush()
+            if count >= int(os.environ["JW_CUSTODY_BARRIER_AFTER"]):
+                time.sleep(float(os.environ["JW_CUSTODY_BARRIER_DELAY"]))
+        finally:
+            _in_barrier = False
 def read_bytes(self):
-    if _target and str(self) == _target:
-        with open(_marker, "a+") as handle:
-            handle.seek(0)
-            count = len(handle.readlines())
-            handle.write(json.dumps({"pid": os.getpid(), "read": count + 1}) + "\\n")
-            handle.flush()
-        if count >= int(os.environ["JW_CUSTODY_BARRIER_AFTER"]):
-            time.sleep(float(os.environ["JW_CUSTODY_BARRIER_DELAY"]))
-    return _original(self)
+    # Path.read_bytes opens through Path.open: count the pair as one read.
+    global _in_barrier
+    _barrier(self)
+    outer, _in_barrier = _in_barrier, True
+    try:
+        return _original(self)
+    finally:
+        _in_barrier = outer
+def open_(self, *args, **kwargs):
+    # desk_compress.open_bytes reads the logical file through Path.open.
+    _barrier(self)
+    return _original_open(self, *args, **kwargs)
 Path.read_bytes = read_bytes
+Path.open = open_
 ''')
     if metadata:
         custom.write_text(custom.read_text() + '''

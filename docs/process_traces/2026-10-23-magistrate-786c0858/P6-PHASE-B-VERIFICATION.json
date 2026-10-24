@@ -1,0 +1,561 @@
+{
+  "environment": {
+    "TMPDIR": "/private/tmp/by-p6b/run-20261024",
+    "JW_B5_SYNTHETIC_ONLY": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "python": "/opt/homebrew/bin/python3.13 -B"
+  },
+  "verification": [
+    {
+      "id": "V1",
+      "label": "repin-post-b2",
+      "kind": "other",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B scripts/repin.py --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "  scripts/run_campaign.py",
+          "  scripts/run_night.py",
+          "  scripts/test_timings.json",
+          "  scripts/validate_powermetrics_fiducial.py",
+          "PASS 16 pin families current"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "PASS|verified|REAL PARITY|pass-1 battery variants|scope_gaps"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/repin-post-b2.log"
+    },
+    {
+      "id": "V2",
+      "label": "state",
+      "kind": "other",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B scripts/gen_state.py --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": []
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "^$"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/state.log"
+    },
+    {
+      "id": "V3",
+      "label": "plan-trees-initial",
+      "kind": "other",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B scripts/bytes_plan_trees.py --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "verified 12 BYTES draft registrations and 12 fixed pass trees"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "PASS|verified|REAL PARITY|pass-1 battery variants|scope_gaps"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/plan-trees-initial.log"
+    },
+    {
+      "id": "V4",
+      "label": "configs",
+      "kind": "other",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B configs/campaigns/bytes_v1/generate_configs.py --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "verified 500 BYTES science configs (10 models x 50)"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "PASS|verified|REAL PARITY|pass-1 battery variants|scope_gaps"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/configs.log"
+    },
+    {
+      "id": "V5",
+      "label": "refusal-census",
+      "kind": "other",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m tests.hazards.refusal_census",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          " \"stale\": [],",
+          " \"miscounted\": [],",
+          " \"guard_changed\": [],",
+          " \"scope_gaps\": []",
+          "}"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "PASS|verified|REAL PARITY|pass-1 battery variants|scope_gaps"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/refusal-census.log"
+    },
+    {
+      "id": "V6",
+      "label": "agreement-final",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_agreement",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 45 tests in 488.711s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/agreement-final.log"
+    },
+    {
+      "id": "V7",
+      "label": "agreement-marker-rerun",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_agreement.MarkerPathAgreementTests",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 16 tests in 0.077s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/agreement-marker-rerun.log"
+    },
+    {
+      "id": "V8",
+      "label": "twin",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_twin",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 98 tests in 27.809s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/twin.log"
+    },
+    {
+      "id": "V9",
+      "label": "focused",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_coverage_map tests.test_bytes_gates tests.b6.test_bytes_packs tests.test_b6_registration tests.b6.test_plan_inputs tests.test_fix573f_restore tests.test_fix573g_restore tests.test_fix573h_restore tests.test_fix573i_restore tests.test_restore_run_to_scratch tests.test_harvest_b5_window",
+      "cwd": ".",
+      "observed": {
+        "result": "fail",
+        "exit_code": 1,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 310 tests in 1263.976s",
+          "",
+          "FAILED (errors=1, skipped=10)"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/focused.log"
+    },
+    {
+      "id": "V10",
+      "label": "analysis",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_analysis",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 106 tests in 1355.108s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/analysis.log"
+    },
+    {
+      "id": "V11",
+      "label": "native-storage",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.external.test_km003c_parse tests.test_desk_compressed_readers",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 52 tests in 192.250s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/native-storage.log"
+    },
+    {
+      "id": "V12",
+      "label": "registration-prose",
+      "kind": "test",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.b6.test_bytes_packs.BytesPackTests.test_registration_prose_lists_every_slot_and_maps_every_ruling_item",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 1 test in 0.001s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/registration-prose.log"
+    },
+    {
+      "id": "V13",
+      "label": "battery-variants",
+      "kind": "test",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/by-p6b/run-20261024/battery_variants.py",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "agreement battery_instant: compared 417517, equal 410231, under the bar 7286, above the bar 0",
+          "agreement battery_delayed: compared 416077, equal 408784, under the bar 7293, above the bar 0",
+          "pass-1 battery variants: PASS (2 campaigns; 0 fields above the bar)"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "PASS|verified|REAL PARITY|pass-1 battery variants|scope_gaps"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/battery-variants.log"
+    },
+    {
+      "id": "V14",
+      "label": "archive-parity",
+      "kind": "inspection",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/by-p6b/run-20261024/archive_parity.py /Users/edr/code/jw-wt/by-slots /private/tmp/by-p6b/run-20261024/archive-parity.json --require-parity",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "{\"differences\": [], \"fit_points_sha256\": [\"17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf\", \"17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf\", \"17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf\"], \"marker_inputs_sha256\": \"c646d7445fe09e09ef13689ae4b3491f6fc11eede4bc9a5007e93f11e2f5d61f\", \"marker_smc_observations\": 7598, \"marker_smc_sha256\": \"6629b32b6458f251bf9f75f5745b98a5302644780a95cc19b342d065d4bfc01e\", \"marker_windows\": 95, \"path\": \"/Users/edr/night-bytes/h-20261021T185555Z/custody/hazards/meter/stream-001.jsonl\", \"points\": [93532, 93532, 93532], \"poll_times_sha256\": \"af339bfb7398609cc5f27e290f443cfdf7915214fcf404eae2fee271cd6fc6fe\", \"polls\": 93533, \"primary_retained_smc_polls\": 48952, \"sample_counts\": [935345, 467975, 935345], \"samples_sha256\": \"ab8e6df864c21bca4734f2aeb9187b40455e5ff5ba2c946ae291cb6ebd45a478\", \"session\": \"h-20261021T185555Z\", \"sha256\": \"009d0e688678cb4c887f42e5007dbb671772ce78b5607b011014d23db3417389\", \"shapes\": {\"empty_payload_n\": 0, \"nested_p\": 0, \"partial_sample\": 0, \"sample_batches_without_fit_point\": 0}, \"smc_view_differences_outside_selection\": 44581, \"tau_ns\": 2302440875, \"unreadable_member_spans\": []}",
+          "{\"differences\": [], \"fit_points_sha256\": [\"17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf\", \"17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf\", \"17bdf29846002f3b0c1b5becce2b7f273fe26189890729df065b8ae9f992dfbf\"], \"marker_inputs_sha256\": \"c646d7445fe09e09ef13689ae4b3491f6fc11eede4bc9a5007e93f11e2f5d61f\", \"marker_smc_observations\": 7598, \"marker_smc_sha256\": \"6629b32b6458f251bf9f75f5745b98a5302644780a95cc19b342d065d4bfc01e\", \"marker_windows\": 95, \"path\": \"/Users/edr/night-bytes/h-20261021T185555Z/archive/sources/night-custody/hazards/meter/stream-001.jsonl\", \"points\": [93532, 93532, 93532], \"poll_times_sha256\": \"af339bfb7398609cc5f27e290f443cfdf7915214fcf404eae2fee271cd6fc6fe\", \"polls\": 93533, \"primary_retained_smc_polls\": 48952, \"sample_counts\": [935345, 467975, 935345], \"samples_sha256\": \"ab8e6df864c21bca4734f2aeb9187b40455e5ff5ba2c946ae291cb6ebd45a478\", \"session\": \"h-20261021T185555Z\", \"sha256\": \"009d0e688678cb4c887f42e5007dbb671772ce78b5607b011014d23db3417389\", \"shapes\": {\"empty_payload_n\": 0, \"nested_p\": 0, \"partial_sample\": 0, \"sample_batches_without_fit_point\": 0}, \"smc_view_differences_outside_selection\": 44581, \"tau_ns\": 2302440875, \"unreadable_member_spans\": []}",
+          "{\"differences\": [], \"fit_points_sha256\": [\"96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150\", \"96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150\", \"96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150\"], \"marker_inputs_sha256\": \"4c3cbd7c70802a79659f067d3ef5453b7706027df67d50563b003d34014fe9a1\", \"marker_smc_observations\": 5683, \"marker_smc_sha256\": \"954e76ea326ef88d3789c991ddb3931464fda87cb09cf0498bacdfbdcaca7d18\", \"marker_windows\": 73, \"path\": \"/Users/edr/night-bytes/h2-20261023T144711Z/custody/hazards/meter/stream-001.jsonl\", \"points\": [76115, 76115, 76115], \"poll_times_sha256\": \"cd9d369f7f75a06d8d18007afb3a7d3dda94e447883ffb06ce239a63f443c712\", \"polls\": 76116, \"primary_retained_smc_polls\": 38136, \"sample_counts\": [761159, 365413, 761159], \"samples_sha256\": \"75c932cb4340275be3de0ac8697d35783fb9fa2fbad6e6beea84325a2ae0d060\", \"session\": \"h2-20261023T144711Z\", \"sha256\": \"b94f5fe67649f3a5755f0663ddedba7f1b69097a21dbada365c7c77db484651a\", \"shapes\": {\"empty_payload_n\": 0, \"nested_p\": 0, \"partial_sample\": 0, \"sample_batches_without_fit_point\": 0}, \"smc_view_differences_outside_selection\": 37980, \"tau_ns\": 2212469250, \"unreadable_member_spans\": []}",
+          "{\"differences\": [], \"fit_points_sha256\": [\"96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150\", \"96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150\", \"96565536097d4a9d1b8e9578273b85d6d9206a69397e3ad077e13581eaab9150\"], \"marker_inputs_sha256\": \"4c3cbd7c70802a79659f067d3ef5453b7706027df67d50563b003d34014fe9a1\", \"marker_smc_observations\": 5683, \"marker_smc_sha256\": \"954e76ea326ef88d3789c991ddb3931464fda87cb09cf0498bacdfbdcaca7d18\", \"marker_windows\": 73, \"path\": \"/Users/edr/night-bytes/h2-20261023T144711Z/archive/sources/night-custody/hazards/meter/stream-001.jsonl\", \"points\": [76115, 76115, 76115], \"poll_times_sha256\": \"cd9d369f7f75a06d8d18007afb3a7d3dda94e447883ffb06ce239a63f443c712\", \"polls\": 76116, \"primary_retained_smc_polls\": 38136, \"sample_counts\": [761159, 365413, 761159], \"samples_sha256\": \"75c932cb4340275be3de0ac8697d35783fb9fa2fbad6e6beea84325a2ae0d060\", \"session\": \"h2-20261023T144711Z\", \"sha256\": \"b94f5fe67649f3a5755f0663ddedba7f1b69097a21dbada365c7c77db484651a\", \"shapes\": {\"empty_payload_n\": 0, \"nested_p\": 0, \"partial_sample\": 0, \"sample_batches_without_fit_point\": 0}, \"smc_view_differences_outside_selection\": 37980, \"tau_ns\": 2212469250, \"unreadable_member_spans\": []}",
+          "REAL PARITY: 4 streams; 0 differences"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "PASS|verified|REAL PARITY|pass-1 battery variants|scope_gaps"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/archive-parity.log"
+    },
+    {
+      "id": "V15",
+      "label": "hazards",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest discover -s tests/hazards -t . -v",
+      "cwd": ".",
+      "observed": {
+        "result": "fail",
+        "exit_code": 1,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 312 tests in 125.204s",
+          "",
+          "FAILED (failures=27, skipped=9)"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/hazards.log"
+    },
+    {
+      "id": "V16",
+      "label": "agreement",
+      "kind": "suite",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_agreement",
+      "cwd": ".",
+      "observed": {
+        "result": "fail",
+        "exit_code": 1,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 45 tests in 488.469s",
+          "",
+          "FAILED (errors=1)"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/agreement.log"
+    },
+    {
+      "id": "V17",
+      "label": "fix573i-fixture-diagnostic",
+      "kind": "test",
+      "cmd": "env TMPDIR=/private/tmp/by-p6b/run-20261024 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/by-p6b/run-20261024/fix573i_fixture_diagnostic.py",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "",
+          "----------------------------------------------------------------------",
+          "Ran 1 test in 0.001s",
+          "",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "OK"
+      },
+      "log": "/private/tmp/by-p6b/run-20261024/fix573i-fixture-diagnostic.log"
+    },
+    {
+      "id": "V18",
+      "label": "diff-check",
+      "kind": "other",
+      "cmd": "git diff --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": []
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "^$"
+      }
+    }
+  ],
+  "arithmetic_audit": {
+    "joulewise/bytes_analysis.py": {
+      "_filtered_stream": true,
+      "_decode_battery_marker": true,
+      "_battery_delay_ns": true,
+      "meter_decode": true,
+      "combine_passes": true,
+      "h2": true
+    },
+    "scripts/bytes_twin.py": {
+      "parse_meter_stream": true,
+      "_battery_delay_ns": true,
+      "battery_terms": true,
+      "_kept": true,
+      "compute_cell": true
+    },
+    "joulewise/external/km003c_parse.py": {
+      "samples": true,
+      "clock_fit": true,
+      "raw_offset_ns": true
+    },
+    "reducer_sha256": "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
+  },
+  "hazard_failures": [
+    {
+      "test": "test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read (tests.hazards.test_arm.ArmTests.test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_agent_that_starts_during_the_dwell_gets_no_go (tests.hazards.test_arm.ArmTests.test_agent_that_starts_during_the_dwell_gets_no_go)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_charging_that_starts_during_the_dwell_refuses_at_the_final_read (tests.hazards.test_arm.ArmTests.test_charging_that_starts_during_the_dwell_refuses_at_the_final_read)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_clock_step_during_the_dwell_refuses (tests.hazards.test_arm.ArmTests.test_clock_step_during_the_dwell_refuses)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_contending_daemon_times_the_dwell_out (tests.hazards.test_arm.ArmTests.test_contending_daemon_times_the_dwell_out)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_frequency_word_change_at_the_end_of_the_dwell_refuses (tests.hazards.test_arm.ArmTests.test_frequency_word_change_at_the_end_of_the_dwell_refuses)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_go_records_a_clean_census_taken_after_the_final_reads (tests.hazards.test_arm.ArmTests.test_go_records_a_clean_census_taken_after_the_final_reads)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_go_records_the_smc_current_beside_the_registry_cross_check (tests.hazards.test_arm.ArmTests.test_go_records_the_smc_current_beside_the_registry_cross_check)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_network_time_off_output_is_recorded_not_judged (tests.hazards.test_arm.ArmTests.test_network_time_off_output_is_recorded_not_judged)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_quiet_float_mac_arms_go_in_the_registered_order (tests.hazards.test_arm.ArmTests.test_quiet_float_mac_arms_go_in_the_registered_order)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_record_only_collectors_never_change_the_decision (tests.hazards.test_arm.ArmTests.test_record_only_collectors_never_change_the_decision)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='battery')",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='thermal')",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='disk')",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='clock')",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='contention')",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback (tests.hazards.test_arm.ArmTests.test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_empty_epoch_list_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_empty_epoch_list_never_refuses)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_failed_read_is_recorded_and_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses) [spawn error]",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_failed_read_is_recorded_and_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses) [nonzero exit]",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_failed_read_is_recorded_and_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses) [empty output]",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_judged_identity_proceeds_to_go (tests.hazards.test_arm_identity.ArmIdentityTests.test_judged_identity_proceeds_to_go)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_no_expected_epochs_reads_no_identity (tests.hazards.test_arm_identity.ArmIdentityTests.test_no_expected_epochs_reads_no_identity)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_a_complete_arm_and_monitor_run_load_no_retired_module (tests.hazards.test_import_graph.ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module)",
+      "explicit_pgrep_message": false
+    },
+    {
+      "test": "test_block3_interactive_capture_at_130_ms_passes (tests.hazards.test_instrument.CadenceProbeTests.test_block3_interactive_capture_at_130_ms_passes)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_privilege_prefix_is_prepended_to_the_adapter_command (tests.hazards.test_instrument.CadenceProbeTests.test_privilege_prefix_is_prepended_to_the_adapter_command)",
+      "explicit_pgrep_message": true
+    },
+    {
+      "test": "test_timeout_kills_the_capture_group (tests.hazards.test_instrument.ProductionCommandTests.test_timeout_kills_the_capture_group)",
+      "explicit_pgrep_message": false
+    }
+  ],
+  "hazard_baseline": {
+    "same_phase_a_failure_methods": true,
+    "methods": [
+      "tests.hazards.test_arm.ArmTests.test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read",
+      "tests.hazards.test_arm.ArmTests.test_agent_that_starts_during_the_dwell_gets_no_go",
+      "tests.hazards.test_arm.ArmTests.test_charging_that_starts_during_the_dwell_refuses_at_the_final_read",
+      "tests.hazards.test_arm.ArmTests.test_clock_step_during_the_dwell_refuses",
+      "tests.hazards.test_arm.ArmTests.test_contending_daemon_times_the_dwell_out",
+      "tests.hazards.test_arm.ArmTests.test_frequency_word_change_at_the_end_of_the_dwell_refuses",
+      "tests.hazards.test_arm.ArmTests.test_go_records_a_clean_census_taken_after_the_final_reads",
+      "tests.hazards.test_arm.ArmTests.test_go_records_the_smc_current_beside_the_registry_cross_check",
+      "tests.hazards.test_arm.ArmTests.test_network_time_off_output_is_recorded_not_judged",
+      "tests.hazards.test_arm.ArmTests.test_quiet_float_mac_arms_go_in_the_registered_order",
+      "tests.hazards.test_arm.ArmTests.test_record_only_collectors_never_change_the_decision",
+      "tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument",
+      "tests.hazards.test_arm.ArmTests.test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback",
+      "tests.hazards.test_arm_identity.ArmIdentityTests.test_empty_epoch_list_never_refuses",
+      "tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses",
+      "tests.hazards.test_arm_identity.ArmIdentityTests.test_judged_identity_proceeds_to_go",
+      "tests.hazards.test_arm_identity.ArmIdentityTests.test_no_expected_epochs_reads_no_identity",
+      "tests.hazards.test_import_graph.ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module",
+      "tests.hazards.test_instrument.CadenceProbeTests.test_block3_interactive_capture_at_130_ms_passes",
+      "tests.hazards.test_instrument.CadenceProbeTests.test_privilege_prefix_is_prepended_to_the_adapter_command",
+      "tests.hazards.test_instrument.ProductionCommandTests.test_timeout_kills_the_capture_group"
+    ]
+  },
+  "note": "Initial agreement error was a broad Path.open test mock; exact-stream mock fixed it, marker 16-test and whole 45-test reruns pass. Focused has one unresolved out-of-scope test fixture error in test_fix573i_restore.py; a read-only diagnostic of the proposed mock-argument completion passes. Hazard failures match phase A; no process census was shimmed."
+}

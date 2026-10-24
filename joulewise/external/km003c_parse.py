@@ -66,6 +66,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.desk_compress import read_bytes
 
 STEP_MS = {0: 500, 1: 100, 2: 20, 3: 1}
 SAMPLE = struct.Struct("<HHiiHHHH")
@@ -116,8 +117,7 @@ def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[d
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
-    with open(path) as handle:
-        lines = handle.read().split("\n")
+    lines = read_bytes(Path(path)).decode("utf-8").split("\n")
     for number, line in enumerate(lines, 1):
         if not line.strip():
             continue
