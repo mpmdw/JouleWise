@@ -12,7 +12,7 @@ from unittest import mock
 
 from joulewise import authentication_io as auth, cli, desk_restore as restore
 from scripts import bytes_analyze, bytes_twin, harvest_b6_session, harvest_v5_g2b_window
-from scripts import restore_run_to_scratch, run_campaign
+from scripts import extract_detection_floors, harvest_b5_window, restore_run_to_scratch, run_campaign
 
 
 def _stop_worker(kind):
@@ -111,6 +111,52 @@ class EntryPointTests(unittest.TestCase):
 
     def test_v5_harvest_main_reports_stop(self):
         self.check_main(harvest_v5_g2b_window, SimpleNamespace(), 'harvest', 3)
+
+    def test_b5_harvest_main_reports_stop_from_resolution_and_harvest(self):
+        args = SimpleNamespace(**{name: None for name in harvest_b5_window.OVERRIDES},
+            plan=Path('plan'), archive_root=Path('archive'), thresholds=None,
+            workers=1, prepare_desk=False, skip_g3=False, allow_missing_terminal=False)
+        for seam in ('resolve_inputs', 'harvest'):
+            with self.subTest(seam=seam), \
+                 mock.patch.object(harvest_b5_window, 'build_parser') as parser, \
+                 mock.patch.object(harvest_b5_window.h, 'resolve_inputs', return_value=object()), \
+                 mock.patch.object(harvest_b5_window.h, seam,
+                                   side_effect=restore.StorageStop('fixture storage cause')), \
+                 redirect_stdout(io.StringIO()) as out, redirect_stderr(io.StringIO()) as err:
+                parser.return_value.parse_args.return_value = args
+                self.assertEqual(harvest_b5_window.main([]), 3)
+            self.assertEqual(err.getvalue(), 'refused: restore_refused: fixture storage cause\n')
+            self.assertEqual(out.getvalue(), '')
+
+    def test_floor_extraction_main_reports_stop_without_writing_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            spec, output = root / 'spec.json', root / 'output/report.json'
+            spec.write_text('{}')
+            with mock.patch.object(extract_detection_floors, 'extract_cells',
+                                   side_effect=restore.StorageStop('fixture storage cause')), \
+                 redirect_stderr(io.StringIO()) as err:
+                code = extract_detection_floors.main([
+                    '--runs-root', str(root), '--spec', str(spec), '--out', str(output)])
+            self.assertEqual(code, 2)
+            self.assertEqual(err.getvalue(), 'refused: restore_refused: fixture storage cause\n')
+            self.assertFalse(output.parent.exists())
+
+    def test_survivor_archive_reader_propagates_stop_without_library_logging(self):
+        from joulewise import whole_window
+        from joulewise.b6 import survivor_screen
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / 'sources/claim-runs/run'
+            bundle.mkdir(parents=True)
+            (bundle / 'summary_metrics.json').write_text('{}')
+            with mock.patch.object(whole_window, '_neg8_writer_reference_energy', None, create=True), \
+                 mock.patch.object(whole_window, '_reference_energy_evidence',
+                                   side_effect=restore.StorageStop('fixture storage cause')), \
+                 redirect_stderr(io.StringIO()) as err:
+                with self.assertRaisesRegex(restore.StorageStop, 'fixture storage cause'):
+                    survivor_screen.archive_energy_of(root)({'run_id': 'run'})
+            self.assertEqual(err.getvalue(), '')
 
     def test_twin_independent_storage_stop_escapes_data_handler(self):
         with tempfile.TemporaryDirectory() as tmp:
