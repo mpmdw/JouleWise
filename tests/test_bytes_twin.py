@@ -276,6 +276,22 @@ class PhaseEstimateTests(QuantityTestCase):
 
 
 class Neg8Tests(QuantityTestCase):
+    def test_meter_reference_drops_print_registered_codes(self):
+        row = {"run_id": "reference", "role": "start", "order_index": 0,
+               "status": "succeeded", "excluded": False, "flag_codes": "",
+               "reference_request_duration_s": 2.0, "reference_request_gross_j": 10.0,
+               "reference_request_idle_subtracted_j": 8.0}
+        for joined, reason in (({}, "bytes.meter_decode_unavailable"),
+                               ({"status": "no_aligned_stream_covers_span"}, "bytes.meter_decode_unavailable"),
+                               ({"status": "battery reading missing"}, "bytes.meter_decode_unavailable"),
+                               ({"status": "meter_gap", "flags": ["bytes.meter_gap"]}, "bytes.meter_gap")):
+            for family in ("dc_gross", "dc_idle_subtracted", "rest_gross", "rest_idle_subtracted"):
+                with self.subTest(joined=joined, family=family):
+                    result = bt.neg8_allowance([row], family, {"reference": joined})
+                    self.assertEqual(result["dropped_reference_count"], 1)
+                    self.assertEqual(result["dropped_references"],
+                                     [{"run_id": "reference", "role": "start", "reason": reason}])
+
     def test_old_reference_columns_refuse_and_disclosed_drops_are_printed(self):
         row = {"run_id": "old-reference", "role": "start", "order_index": 0,
                "status": "succeeded", "excluded": False, "flag_codes": ""}

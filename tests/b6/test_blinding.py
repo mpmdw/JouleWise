@@ -4,7 +4,10 @@ import json
 import math
 import multiprocessing
 import secrets
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -15,11 +18,6 @@ from joulewise.b6 import blinding
 def factor_child(directory, gate, queue):
     gate.wait(10)
     queue.put(blinding.factor(directory, "synthetic-key"))
-
-
-def binding_child(directory, names, gate):
-    gate.wait(10)
-    blinding.bind_session_keys(directory, "same-session", names)
 
 
 class BlindingTests(unittest.TestCase):
@@ -77,15 +75,47 @@ class BlindingTests(unittest.TestCase):
             for key in ("first", "second"):
                 blinding.factor(directory, key)
                 names.append({"pack.json", blinding._config_filename(key)})
-            context = multiprocessing.get_context("spawn")
-            gate = context.Event()
-            workers = [context.Process(target=binding_child, args=(directory, group, gate)) for group in names]
-            for worker in workers:
-                worker.start()
-            gate.set()
-            for worker in workers:
-                worker.join(15)
-                self.assertEqual(worker.exitcode, 0)
+            # CI runs its shard program on stdin, which spawn cannot reopen.
+            # Import production directly so children need no test-module/main import.
+            gate = Path(tmp) / "go"
+            program = """
+import json
+from pathlib import Path
+import sys
+import time
+from joulewise.b6 import blinding
+directory, names, gate, ready = sys.argv[1:]
+Path(ready).touch()
+deadline = time.monotonic() + 10
+while not Path(gate).exists():
+    if time.monotonic() >= deadline:
+        raise TimeoutError("binding barrier was not released")
+    time.sleep(.01)
+blinding.bind_session_keys(Path(directory), "same-session", set(json.loads(names)))
+"""
+            workers = []
+            try:
+                ready = [Path(tmp) / f"ready-{index}" for index in range(len(names))]
+                for group, marker in zip(names, ready):
+                    workers.append(subprocess.Popen(
+                        [sys.executable, "-B", "-c", program, str(directory), json.dumps(sorted(group)),
+                         str(gate), str(marker)], cwd=Path(__file__).resolve().parents[2],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+                deadline = time.monotonic() + 10
+                while not all(marker.exists() for marker in ready):
+                    if time.monotonic() >= deadline or any(worker.poll() is not None for worker in workers):
+                        self.fail("binding children failed to reach barrier: " + repr([
+                            worker.communicate(timeout=1) for worker in workers if worker.poll() is not None]))
+                    time.sleep(.01)
+                gate.touch()
+                for worker in workers:
+                    stdout, stderr = worker.communicate(timeout=15)
+                    self.assertEqual(worker.returncode, 0, stdout + stderr)
+            finally:
+                for worker in workers:
+                    if worker.poll() is None:
+                        worker.kill()
+                    worker.communicate()
             doc = json.loads((directory.parent / "blinding-sessions/same-session.json").read_bytes())
             self.assertEqual(set(doc["key_sha256"]), set.union(*names))
 

@@ -532,7 +532,10 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
                 raise ValueError(f"NEG-8 reference {row['run_id']}: missing or invalid reference_request columns; re-export required")
             if energy(row) is None:
                 joined = dc_by_run.get(row["run_id"], {})
-                reason = str(joined.get("reason") or joined.get("status") or "meter request unavailable")
+                # Registration section 6: print the registered disclosure code,
+                # not this reader's internal meter-join status or diagnostic prose.
+                reason = ("bytes.meter_gap" if "bytes.meter_gap" in joined.get("flags", [])
+                          else "bytes.meter_decode_unavailable")
         if reason is not None:
             dropped.append({"run_id": row["run_id"], "role": row["role"], "reason": reason})
         else:

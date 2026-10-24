@@ -558,7 +558,32 @@ def compare_cells(R, stage, a_rows, t):
                     R.exact(stage, gw, "kept_runs", sorted(wa.get("kept_runs", [])), t_kept(wt))
 
 
+def reference_reason_code(reason):
+    """Compare registered words; the bound analysis retains meter diagnostic prose.
+
+    Only meter-unavailable diagnostics lack a printed code: clock/mapping,
+    span coverage, absent samples/battery readings, and absent meter requests.
+    Their registered disclosure is bytes.meter_decode_unavailable, except a
+    dropped device sample, whose disclosure is bytes.meter_gap. Do not fold
+    status/exclusion words or unknown text into a generic unavailable value.
+    """
+    if reason == "dropped device sample in meter span":
+        return "bytes.meter_gap"
+    if reason in ("meter does not cover decode and own idle spans", "meter span has no samples",
+                  "battery reading missing", "meter request unavailable",
+                  "meter clock fit or raw/monotonic mapping unavailable") or (
+            isinstance(reason, str) and reason.startswith(
+                "meter clock fit or raw/monotonic mapping unavailable: ")):
+        return "bytes.meter_decode_unavailable"
+    return reason
+
+
 def compare_neg8(R, stage, a_rows, t):
+    def drops(record):
+        value = record.get("dropped_references")
+        return sorted(({**r, "reason": reference_reason_code(r["reason"])} for r in value),
+                      key=lambda r: r["run_id"]) if isinstance(value, list) else value
+
     seen = set()
     for row in a_rows:
         sid = row["session_id"]
@@ -568,10 +593,27 @@ def compare_neg8(R, stage, a_rows, t):
         tn = ((t.get("sessions") or {}).get(sid) or {}).get("neg8") or {}
         rails = tn.get("rails/gross") or {}
         R.exact(stage, f"neg8/{sid}/rails", "dropped reference census and reasons",
-                sorted(row["neg8_inputs"].get("dropped_references", []), key=lambda r: r["run_id"]),
-                sorted(rails.get("dropped_references", []), key=lambda r: r["run_id"]))
+                drops(row["neg8_inputs"]), drops(rails))
         R.exact(stage, f"neg8/{sid}/rails", "dropped reference count",
                 row["neg8_inputs"].get("dropped_reference_count", 0), rails.get("dropped_reference_count", 0))
+        # Registration section 6 requires both readers to print each dropped
+        # reference's identity and reason, including unavailable DC/rest joins.
+        for b in (("rails",) if stage.startswith("blinded") else BMAP):
+            boundary = row["neg8_inputs"].get("boundary_reference_drops", {}).get(b, {})
+            for family in ("gross", "idle"):
+                target = tn.get(f"{BMAP[b]}/{family}") or {}
+                g = f"neg8/{sid}/{BMAP[b]}/{family}"
+                R.exact(stage, g, "boundary dropped reference census and reasons", drops(boundary), drops(target))
+                R.exact(stage, g, "boundary dropped reference count",
+                        boundary.get("dropped_reference_count"), target.get("dropped_reference_count"))
+        references = row["neg8_inputs"].get("references", [])
+        reference_ids = {ref["run_id"] for ref in references}
+        target_drops = (tn.get("dc_input/gross") or {}).get("dropped_references", [])
+        R.exact(stage, f"neg8/{sid}", "reference meter unavailable reasons",
+                {ref["run_id"]: reference_reason_code(ref["meter_unavailable_reason"]) for ref in references
+                 if "meter_unavailable_reason" in ref},
+                {ref["run_id"]: reference_reason_code(ref["reason"]) for ref in target_drops
+                 if ref["run_id"] in reference_ids})
         for b, ref in (row["neg8_inputs"].get("boundaries") or {}).items():
             g = f"neg8/{sid}/{BMAP[b]}"
             for family, fa in (ref.get("families") or {}).items():
@@ -1226,6 +1268,7 @@ def compare_campaign(root):
         if tb is not None and (o / "a-blinded-post").is_dir():
             rows = load(o / "a-blinded-post/blinded_pass_estimates.json")
             compare_cells(R, "blinded-post", rows, tb)
+            compare_neg8(R, "blinded-post", rows, tb)
             ap = load(o / "a-blinded-post/model_estimates.json")
             compare_points(R, "blinded-post", ap, tb)
             compare_primary_copies(R, "blinded-post", rows, ap,
@@ -1962,6 +2005,17 @@ class AgreementTests(unittest.TestCase):
 
 
 class ComparerRegressionTests(unittest.TestCase):
+    def test_reference_reasons_compare_codes_and_preserve_unknown_words(self):
+        for prose in ("meter does not cover decode and own idle spans", "meter span has no samples",
+                      "battery reading missing", "meter request unavailable",
+                      "meter clock fit or raw/monotonic mapping unavailable: fewer than two batches with samples"):
+            self.assertEqual(reference_reason_code(prose), "bytes.meter_decode_unavailable")
+        self.assertEqual(reference_reason_code("dropped device sample in meter span"), "bytes.meter_gap")
+        for reason in ("bytes.reference_request_unavailable", "bytes.meter_gap", "status: failed",
+                       "excluded: member.anchor_not_bounded", "bytes.__coverage_fault__",
+                       "unrecognized diagnostic", "bytes.meter_gap__coverage_fault__"):
+            self.assertEqual(reference_reason_code(reason), reason)
+
     def test_unprinted_differences_are_counted_without_gating_or_a_tolerance(self):
         recorder = Recorder()
         for key in ("variance", "mse", "d_beta_d_delta_per_ms"):

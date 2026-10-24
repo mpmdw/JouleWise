@@ -142,8 +142,13 @@ def mutation_is_compared(root, documents, sample):
         parent[key] = copy.copy(parent[key])
         parent = parent[key]
     # Reason comparisons use the named run set, so plant a changed run identity.
-    parent[actual[-1]] = (leaf + " (run __coverage_fault__)" if isinstance(leaf, str)
-                         and str(actual[-1]).endswith("reason") else corrupt(leaf))
+    if "neg8_inputs" in actual and str(actual[-1]).endswith("reason"):
+        # NEG-8 compares registered codes, not the meter's free diagnostic
+        # suffix. Replace the code itself, rather than appending prose to it.
+        parent[actual[-1]] = "bytes.__coverage_fault__"
+    else:
+        parent[actual[-1]] = (leaf + " (run __coverage_fault__)" if isinstance(leaf, str)
+                             and str(actual[-1]).endswith("reason") else corrupt(leaf))
     original = agreement.load
     def load(path):
         if str(path) in cache:

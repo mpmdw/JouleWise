@@ -14,6 +14,7 @@ import unittest
 from joulewise.b6 import export_runs
 from joulewise.b6.acceptance_interface import MemberEvidence, StageEvidence, SessionEvidence
 from scripts import bytes_gates as gates
+from tests.b6.test_export_runs import seal_reference_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,6 +50,7 @@ def synthetic_harvest(root):
             cfg = json.loads(json.dumps(cfg, default=float))
             bundle = archive / "sources/claim-runs" / rid
             write(bundle / "config.json", cfg)
+            write(bundle / "metadata.json", {"device": {"telemetry": "mock", "rail_manifest": ["mock"]}})
             member = members.get(rid, {"model_id": "reference", "purpose": "reference", "end": "middle"})
             mid = member["model_id"]
             long = mid in plan["long_regimes"]
@@ -60,10 +62,14 @@ def synthetic_harvest(root):
             request = duration + 10 + rep * (10 if member["purpose"] == "soak" else 1)
             start = 1000 + order * 400
             (bundle / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in (
+                {"event_type": "phase_start", "phase": "tokenize", "timestamp_s": start - 1},
                 {"event_type": "phase_start", "phase": "decode", "timestamp_s": start},
                 {"event_type": "phase_end", "phase": "decode", "timestamp_s": start + duration})))
+            (bundle / "power_trace.csv").write_text("timestamp_s,power_w,rail,source\n" +
+                "".join(f"{t},20,mock,mock\n" for t in range(start - 1, start + duration + 1)))
             write(archive / "withheld/reductions" / (rid + ".summary_metrics.rereduced.json"),
-                  {"phase_energy_j": {"decode": duration * 20}})
+                  {"phase_energy_j": {"decode": duration * 20},
+                   "idle_baseline": {"power_w_mean": 3}})
             measured["runs"][rid] = {"request_s": request, "member_wall_s": request + 80,
                                       "stream_s": request + 60, "retained_bytes": 2 * 1024**2, "raw_allocated_bytes": 1024**2,
                                       "thermal_level": 0, "outside_cpu_s": "1.08", "census_quanta": 2}
@@ -79,7 +85,9 @@ def synthetic_harvest(root):
     write(archive / "derived/roster.json", {"pack_id": "bytes-mac-check", "members": roster})
     session = measured["session_id"]
     evidence = SessionEvidence("bytes-mac-check", tuple(stages), (), {}, True, (), session_id=session)
-    result = export_runs.export(archive, {}, root / "registration", root / "private", root / "export",
+    seal_reference_inputs(archive)
+    registration = ROOT / "configs/campaigns/bytes_mac_check/registration"
+    result = export_runs.export(archive, {}, registration, root / "private", root / "export",
         non_claim=True, evidence=evidence, acceptance_record={"pack_id": "bytes-mac-check", "session_id": session,
                                                            "counting": False, "verdict": "NON_CLAIM"})
     write(root / "measurements.json", measured)
