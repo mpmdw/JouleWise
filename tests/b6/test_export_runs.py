@@ -68,6 +68,7 @@ def archive_fixture(root):
             {"scope": "member", "run_id": "failed", "code": "member.status_not_succeeded"}],
         "emitted_flags": [], "calibration": {"operative_bound_s": "0.05"}, "neg8": {"corpus_clean_n": 1}}
     write_json(archive / "derived/b6-acceptance.json", record)
+    write_json(archive / "sources/pack/registration.json", {"pack_id": "desk-pack"})
     write_json(root / "plan.json", plan)
     return archive, reg, plan, record
 

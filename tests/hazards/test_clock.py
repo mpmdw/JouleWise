@@ -42,12 +42,13 @@ class FrequencyGateTests(unittest.TestCase):
         self.assertTrue(gate["passes"])
         self.assertAlmostEqual(gate["bound_ms"], 4.8457, places=3)
 
+    # Retain the historical physics-coverage id; the ruled result is now PASS.
     def test_frequency_3p7_ppm_at_335_s_refuses(self):
         clocks = FakeClocks(drift_word=ppm_word(3.7))
         ctx = base.Context(run=boot_runner(), clocks=clocks)
         verdict = clock.judge(clock.measure(ctx, frequency_reader=FrequencyReader(clocks)), LIMITS)
-        self.assertEqual(verdict.status, base.REFUSE)
-        self.assertIn("frequency gate", verdict.reasons[0])
+        self.assertEqual(verdict.status, base.PASS)
+        self.assertEqual(verdict.reasons, ())
         self.assertGreater(verdict.observed["frequency_gate"]["bound_ms"], 5.0)
 
     def test_limit_is_3p63_ppm_and_matches_kernel_clock(self):
@@ -125,6 +126,27 @@ class InstantJudgeTests(unittest.TestCase):
 
 
 class DwellResidualTests(unittest.TestCase):
+    def test_measured_rate_refuses_even_when_kernel_word_is_zero(self):
+        clocks = FakeClocks(drift_word=ppm_word(100))
+        verdict = clock.judge(dwell(clocks, 60, reader=lambda: frequency_probe(0)), LIMITS)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertTrue(any('measured rate gate' in r for r in verdict.reasons))
+        self.assertGreater(verdict.observed['measured_rate_gate']['rate_ppm'], 99)
+
+    def test_rate_bound_exact_equality_and_precheck_use_the_same_fit(self):
+        from fractions import Fraction
+        from joulewise.b6 import precheck
+        limits = {**LIMITS, 'h_ms': 0, 't_stream_max_s': 200, 'series_min_s': 50}
+        edge = Fraction(5000, 200) - Fraction(1, 4)
+        self.assertTrue(clock.measured_rate_bound(edge, limits)['passes'])
+        self.assertFalse(clock.measured_rate_bound(edge + Fraction(1, 10**9), limits)['passes'])
+        measured = dwell(FakeClocks(drift_word=ppm_word(4)), 60)
+        reading, codes = precheck.clock_rate(measured.values['samples'], BOOT_UUID, BOOT_UUID, limits)
+        judged = clock.judge(measured, limits)
+        self.assertEqual(reading['rate_ppm'], judged.observed['measured_rate_gate']['rate_ppm'])
+        self.assertEqual(reading['bound_ms'], judged.observed['measured_rate_gate']['bound_ms'])
+        self.assertEqual(codes, [])
+
     def test_minus_3p17_ppm_drift_over_1600_s_passes_under_the_residual_form(self):
         clocks = FakeClocks(drift_word=ppm_word(-3.17))
         series = dwell(clocks, 1600)
@@ -141,6 +163,7 @@ class DwellResidualTests(unittest.TestCase):
         self.assertEqual(verdict.status, base.REFUSE)
         self.assertTrue(any("residual" in reason for reason in verdict.reasons))
 
+    # Historical coverage id; the frequency change is now diagnostic.
     def test_changed_frequency_word_refuses(self):
         clocks = FakeClocks(drift_word=ppm_word(-3.17))
         reader = FrequencyReader(clocks)
@@ -155,8 +178,8 @@ class DwellResidualTests(unittest.TestCase):
         series = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
                               started=started, finished=ctx.stamp())
         verdict = clock.judge(series, LIMITS)
-        self.assertEqual(verdict.status, base.REFUSE)
-        self.assertTrue(any("frequency word changed" in reason for reason in verdict.reasons))
+        self.assertEqual(verdict.status, base.PASS)
+        self.assertTrue(verdict.observed["frequency_word_changed"])
 
     def test_boot_session_change_refuses(self):
         clocks = FakeClocks()

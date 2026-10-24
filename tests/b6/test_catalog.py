@@ -21,6 +21,9 @@ class CatalogTests(unittest.TestCase):
         entry = catalog_from_bytes(builder.build()).entry("bytes.decode_battery_assist")
         self.assertEqual((entry["family"], entry["klass"], entry["effect"]),
                          ("RECORDS", "REPRESENTATION", "DISCLOSE"))
+        for code in ("bytes.meter_decode_unavailable", "bytes.meter_gap", "catalog.digest_mismatch"):
+            entry = catalog_from_bytes(builder.build()).entry(code)
+            self.assertEqual((entry["effect"], entry["blinding"]), ("DISCLOSE", "STRUCTURE"), code)
         result = subprocess.run([sys.executable, str(ROOT / "scripts/build_b6_flag_catalog.py"), "--check"],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

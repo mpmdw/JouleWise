@@ -116,6 +116,13 @@ class BlockSixAcceptance:
             pins = {}
             problems.append("model.identity_unpinned")
         repo = Path(code_identity.get("repo_root", code_identity.get("repo", ROOT)))
+        pack_id = (plan_tree.get("window_identity") or {}).get("window_id", reg["pack_id"])
+        pack_candidates = ([Path(pack_root) / "registration.json"] if pack_root else []) + [
+            repo / "configs/b6/packs" / pack_id / "registration.json"]
+        pack_registration = next((doc for path in pack_candidates
+                                  if isinstance(doc := _json(path), Mapping)
+                                  and doc.get("pack_id") == pack_id), {})
+        reg["pack_registration"] = pack_registration
         catalog = load_catalog(repo / reg["catalog"])
         if reg["cell_unit_minimum"] != catalog.cell_unit_minimum:
             catalog = Catalog(catalog.codes, catalog.sha256, catalog.path,
@@ -153,6 +160,15 @@ class BlockSixAcceptance:
     def evaluate(self, prepared: Prepared, evidence: SessionEvidence) -> AcceptanceResult:
         """Deterministic: no file reads, clock or energy quantities."""
         catalog, reg = prepared.catalog, prepared.registration
+        pack_registration = reg.get("pack_registration", {})
+        cell_minimum_disclosed = (pack_registration.get("pack_id") == evidence.pack_id
+            and pack_registration.get("blinding_group") == "bytes"
+            and pack_registration.get("bytes_pass") in (1, 2)
+            and pack_registration.get("flag_effects", {}).get("cell.below_minimum") == "DISCLOSE")
+        if cell_minimum_disclosed:
+            catalog = Catalog({**catalog.codes, "cell.below_minimum": {
+                **catalog.codes["cell.below_minimum"], "effect": "DISCLOSE"}},
+                catalog.sha256, catalog.path, catalog.rules)
         internal = evidence.runtime.get("_b6", {})
         mode = "synthetic" if evidence.synthetic else "smoke" if internal.get("smoke") else "archive"
         members = [member for stage in evidence.stages for member in stage.members]
@@ -163,6 +179,10 @@ class BlockSixAcceptance:
                                  stage_id=member.stage_id if member else None, observed=observed))
 
         flags = list(internal.get("flags", ()))
+        registered_digest = pack_registration.get("flag_catalog_sha256")
+        if registered_digest is not None and registered_digest != catalog.sha256:
+            emit("catalog.digest_mismatch", observed={"registered": registered_digest,
+                                                      "running": catalog.sha256})
         existing = {(row["code"], row["scope"].get("run_id")) for row in flags}
         for code in evidence.window_flags:
             if (code, None) not in existing:
@@ -231,6 +251,11 @@ class BlockSixAcceptance:
         roster = {"pack_id": evidence.pack_id, "plan_id": internal.get("plan_id"),
                   "attempt": internal.get("attempt"), "members": roster_members, "cells": cell_specs}
         applied = compute(flags + emitted, roster, internal.get("spans", {}), catalog, pack_scoped=False)
+        # BYTES §6: the cell is unavailable; the session still counts. Closed
+        # replication packs keep the global catalog's window-level minimum.
+        if cell_minimum_disclosed and any(not c["resolvable"] for c in applied["cells"]):
+            emit("cell.below_minimum", observed={"scope": "cell", "cells": [
+                c["cell_id"] for c in applied["cells"] if not c["resolvable"]]})
         for code in sorted({row["code"] for row in flags + emitted if row["code"] not in catalog.codes}):
             emit("catalog.code_unclassified", observed={"code": code})
         excluding = [{"code": code, "scope": "window", "why": catalog.codes.get(code, {}).get("note", code)}

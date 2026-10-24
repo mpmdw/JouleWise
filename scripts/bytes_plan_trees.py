@@ -193,6 +193,8 @@ def registration(number, pass_number, repo_root=ROOT):
     value["bytes_pass"] = pass_number
     catalog = load_catalog(ROOT / value["flag_catalog"])
     value["flag_effects"] = {code: catalog.entry(code)["effect"] for code in sorted(catalog.codes)}
+    value["flag_effects"]["cell.below_minimum"] = "DISCLOSE"
+    value["flag_catalog_sha256"] = catalog.sha256
     value["draft_notes"] = [
         "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
         "C6/C7 use blinding_group=bytes. Group keys: <pack_records_root>/bytes/blinding; withheld rows: <pack_records_root>/bytes/withheld/<pack_id>/<session_id>.runs.csv; missing-store flag: bytes.withheld_missing. The stage1-commit interface is validated now; its actual prediction hash is supplied at held-out release (BYTES-P0 ruling 7). Runtime config: configs/b6/loop_bytes.json.",

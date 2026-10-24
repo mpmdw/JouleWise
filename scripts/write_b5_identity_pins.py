@@ -598,8 +598,96 @@ def _atomic_write(path: Path, raw: bytes) -> None:
         raise
 
 
+def issue_bytes_stacks(repo_root: Path, observation: Path, reference_roots: Sequence[Path], *, check=False):
+    """Issue C4 from observed bundles, installed versions and pinned local files.
+
+    Uses the same eleven-field builder and domain hash as the block-5 issuer.
+    No imports of MLX, model loads, runtime execution, or weight writes.
+    """
+    observed_raw = observation.read_bytes()
+    observed = json.loads(observed_raw[observed_raw.index(b"{"):])
+    versions = observed["runtime_versions"]
+    _require(runtime_versions_sha256(versions) == observed["runtime_versions_sha256"],
+             "observed runtime digest differs")
+    source_path = repo_root / "configs/bytes/identity_pins.json"
+    consumed_path = repo_root / "configs/b6/registration/identity_pins.json"
+    source, consumed = json.loads(source_path.read_bytes()), json.loads(consumed_path.read_bytes())
+    _require(consumed["runtime_versions"] == versions, "consumed installed runtime differs from observation")
+    references, _ = load_references(reference_roots)
+    evidence = {}
+    for name, unit in sorted(source["units"].items()):
+        matching = [r for r in references if r.config.get("model", {}).get("name") == unit["model_name"]]
+        _require(bool(matching), f"no observed runtime bundle for {name}")
+        stacks = {stack_identity_sha256(r.stack): r.stack for r in matching}
+        _require(len(stacks) == 1, f"observed stacks disagree for {name}")
+        digest, stack = next(iter(stacks.items()))
+        pin = consumed["units"][name]
+        _require(stack["model_artifact_sha256"] == unit["model_artifact_sha256"],
+                 f"observed weights differ for {name}")
+        files = pin["bytes_file_evidence"]["tokenizer_and_config_files"]
+        for filename, record in files.items():
+            _require(sha256_bytes(Path(record["path"]).read_bytes()) == record["sha256"],
+                     f"pinned {filename} differs for {name}")
+        checkpoint = json.loads(Path(files["config.json"]["path"]).read_bytes())
+        quant = checkpoint.get("quantization", checkpoint.get("quantization_config", {}))
+        for field in ("bits", "group_size"):
+            declared = stack["quantization"].get(field)
+            _require(declared is None or declared == quant.get(field),
+                     f"checkpoint quantization {field} differs for {name}")
+        _require(stack["runtime_version"]["version"] == versions["packages"]["mlx"],
+                 f"observed runtime version differs for {name}")
+        _require(stack["tokenizer_identity"].get("revision") in (None, unit["model_revision"]),
+                 f"observed tokenizer revision differs for {name}")
+        for reference in matching:
+            prepare = reference.metadata["adapters"]["runtime"]["prepare_metadata"]
+            for field, package in REFERENCE_PACKAGE_FIELDS:
+                value = prepare.get(field)
+                _require(value is None or value == versions["packages"].get(package),
+                         f"observed {package} differs for {name}")
+        unit.update(stack_identity=copy.deepcopy(stack), runtime_identity_sha256=digest,
+                    flags=[f for f in unit.get("flags", []) if f != "runtime_stack_unobserved"])
+        pin.update(stack_identity=copy.deepcopy(stack), runtime_identity_sha256=digest)
+        pin["bytes_file_evidence"]["runtime_stack_observed"] = True
+        evidence[name] = [{"path": str(r.path), "metadata_sha256": sha256_bytes(
+            (r.path / "metadata.json").read_bytes()), "runtime_identity_sha256": digest}
+            for r in sorted(matching, key=lambda r: str(r.path))]
+    source.update(status="C4_OBSERVED_STACK_IDENTITIES", runtime_versions=versions,
+                  scope="C4 model files and observed runtime stacks for the twelve BYTES sub-packs")
+    source["derivation"]["per_pack_label_note"] = (
+        "The original per-pack census supplied file identities only. This C4 issue adds the observed H/BY-H2 "
+        "stacks; no model is loaded by this issuer.")
+    issuer = {"path": "scripts/write_b5_identity_pins.py",
+              "sha256": sha256_bytes(Path(__file__).read_bytes())}
+    source["derivation"]["stack_issuer"] = issuer
+    source["derivation"]["stack_identity"] = (
+        "scripts/write_b5_identity_pins.py --bytes-observed; build_stack_identity and stack_identity_sha256 "
+        "of real H/BY-H2 metadata; checkpoint quantization and pinned tokenizer/config hashes verified")
+    source["stack_evidence"] = evidence
+    for row in source["packs"].values():
+        row["tree_sha256"] = sha256_bytes((repo_root / row["tree_path"]).read_bytes())
+    source_raw = render(source)
+    source_sha = sha256_bytes(source_raw)
+    consumed["bytes_c4"].update(status="C4_OBSERVED_STACK_IDENTITIES", runtime_stack_observed=True,
+        issuer=issuer, runtime_observation_source={"path": str(observation.relative_to(repo_root)),
+                                    "sha256": sha256_bytes(observed_raw)}, stack_evidence=evidence)
+    consumed["bytes_c4"]["file_source"]["sha256"] = source_sha
+    for row in consumed["bytes_c4"]["packs"]:
+        row["plan_tree"]["sha256"] = sha256_bytes((repo_root / row["plan_tree"]["path"]).read_bytes())
+    for unit in consumed["units"].values():
+        if "bytes_file_evidence" in unit:
+            unit["bytes_file_evidence"]["source"]["sha256"] = source_sha
+    for path, raw in ((source_path, source_raw), (consumed_path, render(consumed))):
+        if check:
+            _require(path.read_bytes() == raw, f"C4 pins need reissue: {path}")
+        else:
+            _atomic_write(path, raw)
+    return {"units": len(evidence), "source_sha256": source_sha,
+            "consumed_sha256": sha256_bytes(render(consumed))}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--bytes-observed", type=Path, help="issue BYTES C4 from this recorded runtime observation")
     parser.add_argument("--repo", type=Path, default=REPO_ROOT, help="checkout holding the packs (default: this one)")
     parser.add_argument("--pack", action="append", default=None,
                         help="pack directory, relative to --repo (repeatable; default: the three _v5 packs)")
@@ -619,6 +707,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     repo = args.repo.resolve()
+    if args.bytes_observed:
+        if not args.reference_root:
+            raise ValueError("BYTES C4 needs explicit observed bundle roots")
+        print(json.dumps(issue_bytes_stacks(repo, args.bytes_observed.resolve(), args.reference_root,
+                                           check=args.check), sort_keys=True))
+        return 0
     packs = [repo / relative for relative in (args.pack or DEFAULT_PACKS)]
     roots = list(args.reference_root or [Path(root) for root in DEFAULT_REFERENCE_ROOTS])
     neg8_roots = list(args.neg8_reference_root or [Path(root) for root in DEFAULT_NEG8_REFERENCE_ROOTS])

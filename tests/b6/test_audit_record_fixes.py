@@ -46,6 +46,9 @@ class AuditRecordTests(unittest.TestCase):
         plan['hazard_window']['bindings']['capture_screen'] = {}
         support.write_json(window.plan_path, plan)
         reg = support.registration_dir(self.root / 'selected-cli-inputs')
+        # A resolved pack registration is required even for this non-claim
+        # desk export. The fixture uses the legacy, ungrouped pack.
+        support.write_json(reg / 'registration.json', {'pack_id': windows.PACK_ID})
         registration_paths = [reg / 'acceptance.json', reg / 'identity_pins.json']
         digests = {str(path): hashlib.sha256(path.read_bytes()).hexdigest()
                    for path in registration_paths}

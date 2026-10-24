@@ -7,9 +7,10 @@ from pathlib import Path
 import unittest
 
 from joulewise.b5 import plan
-from joulewise.b6 import registration, session_paths
+from joulewise.b6 import registration, session_paths, model_files
 from joulewise.flags.collect import read_identity_pins, runtime_versions_sha256
-from joulewise.identity_pins import validate_identity_pin_projection, _read_unit_configs
+from joulewise.identity_pins import (validate_identity_pin_projection, _read_unit_configs,
+                                    STACK_IDENTITY_FIELDS, stack_identity_sha256)
 from scripts import bytes_plan_trees as generator
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,7 +76,7 @@ class BytesPlanTreesTests(unittest.TestCase):
         consumed = read_identity_pins(path)
         self.assertEqual(consumed["runtime_versions_sha256"], runtime_versions_sha256(pins["runtime_versions"]))
         evidence = pins["bytes_c4"]
-        self.assertFalse(evidence["runtime_stack_observed"])
+        self.assertTrue(evidence["runtime_stack_observed"])
         self.assertFalse(evidence["runtime_observation"]["model_loaded"])
         self.assertEqual(evidence["runtime_observation"]["executed_interpreter"]["executable"],
                          "/Users/edr/code/JouleWise/.venv/bin/python")
@@ -87,7 +88,7 @@ class BytesPlanTreesTests(unittest.TestCase):
             entry = pins["units"][name]
             self.assertEqual(consumed["model_artifact_sha256"][name], original["model_artifact_sha256"])
             files = entry["bytes_file_evidence"]
-            self.assertFalse(files["runtime_stack_observed"])
+            self.assertTrue(files["runtime_stack_observed"])
             self.assertEqual(files["config_count"], len(files["config_inventory"]))
             self.assertIn("tokenizer.json", files["tokenizer_and_config_files"])
             self.assertIn("config.json", files["tokenizer_and_config_files"])
@@ -95,13 +96,35 @@ class BytesPlanTreesTests(unittest.TestCase):
     def test_generator_check(self):
         generator.generate(check=True)
 
+    def test_c4_stacks_bind_tokenizer_quantization_and_runtime(self):
+        pins = read(ROOT / 'configs/b6/registration/identity_pins.json')
+        expected = model_files.expected(pins)
+        for name in [name for group in generator.GROUPS for name in group]:
+            pin = pins['units'][name]
+            stack = pin['stack_identity']
+            self.assertEqual(set(stack), set(STACK_IDENTITY_FIELDS), name)
+            self.assertEqual(pin['runtime_identity_sha256'], stack_identity_sha256(stack), name)
+            observed = {'status': 'ok', 'model_source': pin['model_source'],
+                        'model_artifact_sha256': pin['model_artifact_sha256'],
+                        'runtime': stack['runtime_version']['name'],
+                        'runtime_version': stack['runtime_version']['version'],
+                        'quantization': deepcopy(stack['quantization']),
+                        'tokenizer': deepcopy(stack['tokenizer_identity'])}
+            self.assertEqual(model_files.compare(expected, observed), [], name)
+            for field, value in (('runtime_version', 'different'),
+                                 ('quantization', {'bits': 3, 'group_size': 32, 'name': 'different'}),
+                                 ('tokenizer', {'identifier': 'different', 'vocab_size': 1})):
+                changed = {**observed, field: value}
+                self.assertIn('model.stack_differs_from_registered',
+                              [row['code'] for row in model_files.compare(expected, changed)], (name, field))
+
     def test_module_minutes_use_c5_operands_and_keep_registration_gate_open(self):
         sizing_path = ROOT / generator.SIZING_PATH
         sized = read(sizing_path)
         agreed_version = "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
         estimator_section = (ROOT / "docs/registrations/bytes_pack_v1.md").read_text().split(
             "## 13. Estimators\n", 1)[1].split("\n## 14.", 1)[0]
-        self.assertIn(f"**`{agreed_version}`**", estimator_section)
+        self.assertIn("bound to the agreeing SHA-256 recorded in each pass-1 pack registration", estimator_section)
         for number in range(1, 7):
             allowances = sized["packs"][f"bytes-s{number}-p1"]["disk_derivation"]["allowances_by_model"]
             for pass_number in (1, 2):

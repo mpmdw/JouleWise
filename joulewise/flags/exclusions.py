@@ -366,7 +366,7 @@ def compute(
             }
         )
 
-    if any_target_unresolvable:
+    if any_target_unresolvable and catalog.entry("cell.below_minimum")["effect"] == EXCLUDE_WINDOW:
         window_reasons.add("cell.below_minimum")
 
     members_excluded = [

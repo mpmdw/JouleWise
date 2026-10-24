@@ -8,8 +8,8 @@ Measured directly, never parsed from a settings string:
 - the kernel **frequency word** f, read without privileges by
   ``ntp_adjtime(modes=0)`` (``kernel_clock.read_kernel_frequency``).  With
   network time OFF the anchor drifts linearly at f;
-- the **residual**: the anchor's movement after removing f x elapsed RAW time.
-  The sign was checked live on 10-05 (f = -207591, -3.1676 ppm): over 90 s
+- the arm **residual**: anchor departure from the measured least-squares line.
+  The in-window f residual’s sign was checked live on 10-05 (f = -207591, -3.1676 ppm): over 90 s
   the anchor moved -285.71 us against -285.23 us predicted, and every 10 s
   residual stayed under 1 us;
 - the boot session (``kern.bootsessionuuid``): a reboot makes anchors
@@ -17,14 +17,12 @@ Measured directly, never parsed from a settings string:
 
 Arm (plan §2.3; thresholds from the window plan, defaults below):
 
-(i)   frequency hold: h + (|f| + 0.25 ppm) x T_stream_max <= 5 ms.
-      Block 5 uses h = 3.7 ms (3.6306 ppm at 335 s). Block-6 plans use
-      h = 0 (14.6754 ppm) and flag the band above block 5's budget;
-(ii)  over the dwell, sampled at 1 Hz, the signed residual stays within
-      +-1 ms of its start value;
+(i)   measured-rate hold: h + (|r| + 0.25 ppm) x T_stream_max <= 5 ms,
+      using the precheck's estimator and bound on the arm's own dwell anchors;
+(ii)  residuals from that fitted line stay within +-1 ms;
 (iii) every anchor read pair has skew <= 1 ms;
-(iv)  f is identical at dwell start, dwell end and GO; the boot session is
-      unchanged.
+(iv)  the boot session is unchanged. The frequency word and its changes
+      are diagnostic observations, never arm refusals.
 
 In the window (flag only): ``clock.step`` when the residual moves more than
 1 ms between consecutive 1 Hz samples, ``clock.frequency_changed`` when f
@@ -251,24 +249,42 @@ def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
 # Arithmetic (exact)
 
 
-def frequency_bound(raw_word: int, thresholds: Mapping[str, Any]) -> dict[str, Any]:
-    """Registered h + drift budget; h = 0 selects block 6's hold and flag band."""
+def fit_anchor_rate(anchors: Sequence[Mapping[str, int]]) -> tuple[Fraction, list[Fraction]]:
+    """Precheck's exact least-squares rate (ppm) and residuals from its line."""
+    if len(anchors) < 2:
+        raise ValueError("rate fit needs at least two anchors")
+    origin = anchors[0]["monotonic_raw_ns"]
+    xs = [Fraction(item["monotonic_raw_ns"] - origin) for item in anchors]
+    if any(b <= a for a, b in zip(xs, xs[1:])):
+        raise ValueError("rate fit needs increasing RAW times")
+    ys = [Fraction(item["anchor_ns"]) for item in anchors]
+    xm, ym = sum(xs) / len(xs), sum(ys) / len(ys)
+    slope = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / sum((x - xm)**2 for x in xs)
+    return slope * 10**6, [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
 
-    rate_ppm = Fraction(abs(int(raw_word)), FREQUENCY_SCALE)
+
+def measured_rate_bound(rate_ppm: Fraction, thresholds: Mapping[str, Any]) -> dict[str, Any]:
+    """The registered precheck hold, shared with the arm; no rounded operands."""
     span_s = Fraction(str(thresholds["t_stream_max_s"]))
-    h_s = Fraction(str(thresholds["h_ms"])) / 1000
+    h_ms = Fraction(str(thresholds["h_ms"]))
     margin = Fraction(str(thresholds["frequency_margin_ppm"]))
-    limit_s = Fraction(str(thresholds["limit_ms"])) / 1000
-    bound_s = h_s + (rate_ppm + margin) * span_s / 1_000_000
-    max_ppm = (limit_s - h_s) * 1_000_000 / span_s - margin
-    gate = {"frequency_ppm": float(Fraction(int(raw_word), FREQUENCY_SCALE)),
-            "bound_ms": float(bound_s * 1000), "limit_ms": float(limit_s * 1000),
-            "max_abs_frequency_ppm": float(max_ppm), "passes": bound_s <= limit_s}
-    if h_s == 0:
-        # Only block-6 plans select h = 0. The original block-5 allowance
-        # remains the diagnostic line, never a second arm refusal.
-        budget_h_s = Fraction(str(DEFAULT_THRESHOLDS["h_ms"])) / 1000
-        gate["rate_above_budget"] = gate["passes"] and bound_s + budget_h_s > limit_s
+    limit_ms = Fraction(str(thresholds["limit_ms"]))
+    bound = h_ms + (abs(rate_ppm) + margin) * span_s / 1000
+    maximum = (limit_ms - h_ms) * 1000 / span_s - margin
+    gate = {"rate_ppm": float(rate_ppm), "bound_ms": float(bound),
+            "limit_ms": float(limit_ms), "max_abs_rate_ppm": float(maximum),
+            "passes": bound <= limit_ms}
+    if h_ms == 0:
+        gate["rate_above_budget"] = gate["passes"] and (
+            bound + Fraction(str(DEFAULT_THRESHOLDS["h_ms"])) > limit_ms)
+    return gate
+
+
+def frequency_bound(raw_word: int, thresholds: Mapping[str, Any]) -> dict[str, Any]:
+    """Diagnostic projection of the kernel word through the registered budget."""
+    gate = measured_rate_bound(Fraction(int(raw_word), FREQUENCY_SCALE), thresholds)
+    gate["frequency_ppm"] = gate.pop("rate_ppm")
+    gate["max_abs_frequency_ppm"] = gate.pop("max_abs_rate_ppm")
     return gate
 
 
@@ -315,15 +331,11 @@ def _judge_instant(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verd
                        limits)
     reasons = []
     gate = frequency_bound(frequency["raw_word"], limits)
-    if not gate["passes"]:
-        reasons.append(
-            f"frequency gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms "
-            f"(|f| {abs(gate['frequency_ppm']):.4f} ppm > {gate['max_abs_frequency_ppm']:.4f} ppm)")
     if anchor["read_skew_ns"] < 0 or anchor["read_skew_ns"] > limits["skew_max_ns"]:
         reasons.append(f"anchor read skew {anchor['read_skew_ns']} ns exceeds "
                        f"{limits['skew_max_ns']} ns")
     observed = {"frequency_gate": gate, "read_skew_ns": anchor["read_skew_ns"],
-                "raw_word": frequency["raw_word"], "flags": rate_flags(gate)}
+                "raw_word": frequency["raw_word"], "flags": []}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 
@@ -339,24 +351,28 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
         reasons.append("boot session changed during the dwell")
     words = [item["frequency"]["raw_word"] for item in samples if item.get("frequency")]
     f0 = words[0]
-    if any(word != f0 for word in words):
-        reasons.append(f"frequency word changed during the dwell: {sorted(set(words))}")
-    gate = frequency_bound(f0, limits)
+    try:
+        rate, residuals = fit_anchor_rate([item["anchor"] for item in samples])
+    except (KeyError, TypeError, ValueError) as exc:
+        return Verdict(MODULE, UNMEASURED, (str(exc),), limits)
+    gate = measured_rate_bound(rate, limits)
     if not gate["passes"]:
-        reasons.append(f"frequency gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms")
+        reasons.append(f"measured rate gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms")
     skews = [item["anchor"]["read_skew_ns"] for item in samples]
     worst_skew = max(skews)
     if min(skews) < 0 or worst_skew > limits["skew_max_ns"]:
         reasons.append(f"anchor read skew {worst_skew} ns exceeds {limits['skew_max_ns']} ns")
     first = samples[0]["anchor"]
-    residuals = [residual_ns(first, item["anchor"], f0) for item in samples]
     worst = max(residuals, key=abs)
     if abs(worst) > limits["residual_max_ns"]:
         reasons.append(f"dwell residual {float(worst) / 1e6:+.4f} ms exceeds "
-                       f"+-{limits['residual_max_ns'] / 1e6} ms of its start value")
+                       f"+-{limits['residual_max_ns'] / 1e6} ms from the fitted line")
     raw_span = samples[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
-    observed = {"frequency_gate": gate, "samples": len(samples), "raw_span_ns": raw_span,
-                "flags": rate_flags(gate),
+    observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits),
+                "frequency_words": words, "frequency_word_changed": len(set(words)) > 1,
+                "samples": len(samples), "raw_span_ns": raw_span,
+                "flags": rate_flags(gate) + ([{"code": "clock.frequency_changed"}]
+                                              if len(set(words)) > 1 else []),
                 "max_abs_residual_ns": float(abs(worst)), "max_read_skew_ns": worst_skew,
                 "anchor_movement_ns": samples[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)

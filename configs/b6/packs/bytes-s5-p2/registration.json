@@ -46,6 +46,7 @@
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
+  "flag_catalog_sha256": "3195da19c91ddab7047c117924529bc92ab4d7b80563cadaf1be7303323fd9c2",
   "flag_effects": {
     "agent.capture_overlap": "DISCLOSE",
     "agent.pause_marker_stale": "DISCLOSE",
@@ -69,6 +70,8 @@
     "battery.unmeasured": "EXCLUDE_MEMBER",
     "bytes.commitment_not_rebuilt": "DISCLOSE",
     "bytes.decode_battery_assist": "DISCLOSE",
+    "bytes.meter_decode_unavailable": "DISCLOSE",
+    "bytes.meter_gap": "DISCLOSE",
     "bytes.module_changed_after_commitment": "DISCLOSE",
     "bytes.withheld_missing": "DISCLOSE",
     "calibration.acceptance_mismatch": "DISCLOSE",
@@ -108,7 +111,8 @@
     "calibration.writer_record_flagged": "DISCLOSE",
     "campaign.runner_record_flagged": "DISCLOSE",
     "catalog.code_unclassified": "DISCLOSE",
-    "cell.below_minimum": "EXCLUDE_WINDOW",
+    "catalog.digest_mismatch": "DISCLOSE",
+    "cell.below_minimum": "DISCLOSE",
     "census.journal_write_failed": "DISCLOSE",
     "census.unmeasured": "DISCLOSE",
     "chain.stopped_before_collection": "DISCLOSE",

@@ -154,6 +154,20 @@
       "klass": "REPRESENTATION",
       "note": "BAT-2 sections 3-4: a negative battery current received in [decode_start + tau, decode_end + tau) marks decode assistance; only the labelled description omits its whole unit; the harvest's battery.assist is counted only."
     },
+    "bytes.meter_decode_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "BYTES section 6: the decode meter value is unavailable; disclose the affected DC-input and rest cells."
+    },
+    "bytes.meter_gap": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "FIX-416 disposition: a dropped device sample in a decode or reference span leaves that run without a DC-input value; rails selection is unchanged."
+    },
     "bytes.module_changed_after_commitment": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -426,6 +440,13 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION",
       "note": "HV-8: code missing from block-six catalog is recorded for classification."
+    },
+    "catalog.digest_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "FIX-416: the running flag catalog digest differs from the pack registration; record both digests."
     },
     "cell.below_minimum": {
       "blinding": "STRUCTURE",

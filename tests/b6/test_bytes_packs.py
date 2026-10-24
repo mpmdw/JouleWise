@@ -106,7 +106,8 @@ class BytesPackTests(unittest.TestCase):
                     self.assertEqual([m['module_id'] for m in reg.modules], expected if pass_number == 1 else expected[::-1])
                     self.assertNotIn('pass_plan_tree_refs', reg.data)
                     for code in self.catalog.codes:
-                        self.assertEqual(reg.flag_effects[code], self.catalog.entry(code)['effect'])
+                        self.assertEqual(reg.flag_effects[code], 'DISCLOSE' if code == 'cell.below_minimum'
+                                         else self.catalog.entry(code)['effect'])
                     self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
                     self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
 
@@ -308,13 +309,14 @@ class BytesHarvestAcceptanceTests(unittest.TestCase):
                     block_ids = list(dict.fromkeys(m['block_id'] for m in quads if m['run_id'].startswith(model + '-null-')))
                     for lost, verdict in (({first['run_id']}, 'ACCEPT'),
                         ({m['run_id'] for m in quads if m['run_id'].startswith(model + '-null-')
-                          and m['block_id'] in block_ids[:6]}, 'EXCLUDE')):
+                          and m['block_id'] in block_ids[:6]}, 'ACCEPT')):
                         altered = replace(evidence, stages=tuple(replace(s, members=tuple(
                             replace(m, status='failed') if m.run_id in lost else m for m in s.members))
                             for s in evidence.stages))
                         result = ACCEPTANCE.evaluate(prepared, altered)
                         self.assertEqual(result.verdict, verdict)
                         self.assertEqual(result.counting, verdict == 'ACCEPT')
-                        if verdict == 'EXCLUDE':
-                            self.assertIn('cell.below_minimum', result.reasons)
+                        self.assertNotIn('cell.below_minimum', result.reasons)
+                        if len(lost) > 1:
+                            self.assertIn('cell.below_minimum', result.flags)
                         print(pack.name, 'lost members', len(lost), result.verdict, result.counting, result.reasons)

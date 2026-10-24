@@ -109,8 +109,24 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                       root / "sources/repo/configs/b6/packs" / pack_id / "registration.json",
                       Path(registration_dir) / "registration.json",
                       Path(__file__).resolve().parents[2] / "configs/b6/packs" / pack_id / "registration.json")
+        # Closed replication archives name their campaign (d117_...), while
+        # their registrations are alpha/beta/gamma. Resolve the registered
+        # plan reference rather than treating that known alias as unregistered.
+        plan_ref = f"configs/campaigns/{pack_id}/plan_tree.json"
+        for packs in (root / "sources/repo/configs/b6/packs",
+                      Path(__file__).resolve().parents[2] / "configs/b6/packs"):
+            candidates += tuple(path for path in sorted(packs.glob("*/registration.json"))
+                                if isinstance(doc := read_json(path), Mapping)
+                                and doc.get("plan_tree_ref") == plan_ref)
         pack_registration = next((doc for path in candidates
-                                  if (doc := read_json(path)) is not None), {})
+                                  if isinstance(doc := read_json(path), Mapping) and doc
+                                  and (doc.get("pack_id", pack_id) == pack_id
+                                       or doc.get("plan_tree_ref") == plan_ref)), None)
+        if not isinstance(pack_registration, Mapping) or not pack_registration:
+            raise ValueError(f"pack registration unresolved for {pack_id}: "
+                             + ", ".join(str(path) for path in candidates))
+    elif not isinstance(pack_registration, Mapping) or not pack_registration:
+        raise ValueError(f"explicit pack registration empty or malformed for {pack_id}")
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
     for item in record.get("excluding", []):
@@ -121,7 +137,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         run_id = flag["scope"].get("run_id")
         if run_id:
             codes[run_id].add(flag["code"])
-    rows, withheld = [], []
+    rows, withheld, key_names = [], [], set()
     group = pack_registration.get("blinding_group")
     grouped_blind = bool(group)
     # Every grouped table is offset, including non-claim smoke sessions. The
@@ -173,6 +189,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
             row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
         if not non_claim or grouped_blind:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
+            key_names.update(("pack.json", blinding._config_filename(key)))
         if grouped_blind:
             # The registered stage walk supplies order_index; no wall/monotonic
             # clock enters the pre-commit table. Durations remain observables.
@@ -194,6 +211,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
 
     withheld_record = None
     if grouped_blind:
+        key_sha256 = blinding.bind_session_keys(key_dir, session_id, key_names)
         store = blinding.withheld_path(key_dir, pack_id, session_id)
         def write_withheld(stream):
             writer = csv.DictWriter(stream, fieldnames=columns)
@@ -213,6 +231,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                "neg8": record.get("neg8"), "non_claim": non_claim,
                "blinding": {"applied": not non_claim or grouped_blind, "key_dir": os.path.relpath(key_dir, destination)}}
     if grouped_blind:
+        session["blinding"]["key_sha256"] = key_sha256
         session["blinding"].update(group=group, pass_id=pack_registration.get("bytes_pass"),
                                     withheld=withheld_record)
     atomic_write(sidecar, lambda stream: stream.write(json.dumps(session, sort_keys=True, indent=2) + "\n"))

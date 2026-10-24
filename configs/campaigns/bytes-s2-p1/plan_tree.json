@@ -1012,7 +1012,7 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "92faf04889d4a21101bf13152224785fbec9d9b878ceb71342ef5814d3ba7db4"
+    "sha256": "bf1df122f31e5fd2046a93612eae98504785fbfd9c950e4ba568e7b81de010fe"
   },
   "module_order": [
     "bytes-qwen3-8b",
