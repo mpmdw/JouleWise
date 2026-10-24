@@ -177,8 +177,10 @@ class EntryPointTests(unittest.TestCase):
                         self.fail('missing custody reached reader')
                 except Exception:
                     self.fail('twin storage stop became a data decision')
-        args = SimpleNamespace(export=[Path('fixture.csv')], export_dir=None)
-        self.check_main(bytes_twin, args, 'read_export', 1, stdout=True, error_type=bytes_twin.StorageStop)
+        args = SimpleNamespace(export=[Path('fixture.csv')], export_dir=None,
+                               stage='blinded', stage1_commit=None, manifest=Path('manifest'))
+        with mock.patch.object(bytes_twin, 'read_manifest', return_value={}):
+            self.check_main(bytes_twin, args, 'read_export', 1, stdout=True, error_type=bytes_twin.StorageStop)
 
     def test_operator_restore_formats_storage_stop(self):
         args = SimpleNamespace(command=['reader', '{run}'], run_dir=Path('run'),

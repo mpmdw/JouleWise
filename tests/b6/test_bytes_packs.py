@@ -110,17 +110,20 @@ class BytesPackTests(unittest.TestCase):
                     self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
                     self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
 
-    def test_estimators_name_the_analysis_stage_functions_with_version_slot_while_draft(self):
+    def test_estimators_name_the_analysis_stage_functions_with_pass_specific_versions_while_draft(self):
         from joulewise import bytes_analysis
+        agreeing_sha = '94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b'
         for n in range(1, 7):
             for pass_number in (1, 2):
                 with self.subTest(subpack=n, pass_number=pass_number):
                     reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
-                    self.assertEqual(reg.data['estimators'], plans.ESTIMATORS)
+                    expected = deepcopy(plans.ESTIMATORS)
+                    for entry in expected:
+                        entry['version'] = agreeing_sha if pass_number == 1 else None
+                    self.assertEqual(reg.data['estimators'], expected)
                     for entry in reg.data['estimators']:
                         self.assertTrue(callable(getattr(bytes_analysis, entry['function'])))
-                        # Registration section 13: the agreeing pin's SHA-256 replaces null.
-                        self.assertIsNone(entry['version'])
+                        self.assertEqual(entry['version'], agreeing_sha if pass_number == 1 else None)
                     self.assertEqual(reg.status, 'draft')
                     self.assertTrue(any('docs/registrations/bytes_pack_v1.md' in note for note in reg.data['draft_notes']))
 

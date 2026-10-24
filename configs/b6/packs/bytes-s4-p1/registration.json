@@ -30,19 +30,19 @@
       "function": "reduce_models",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_phase_cells",
-      "version": null
+      "version": "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
     },
     {
       "function": "frozen_predictions",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_frozen_predictions",
-      "version": null
+      "version": "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
     },
     {
       "function": "evaluate",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_held_out_evaluation",
-      "version": null
+      "version": "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",

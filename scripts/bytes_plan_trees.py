@@ -58,9 +58,9 @@ def module_estimate(model_id, number, repo_root):
         "formula": "count * member_allowance_s / 60; no additional margin"}}
 
 
-# Registration section 13: one library, three stage entry points. Version stays
-# null (allowed in a draft) until the twin agrees at Addendum 8's bar; it then
-# becomes the SHA-256 of joulewise/bytes_analysis.py at that pin.
+# Registration section 13: the pass-one twin agrees at Addendum 8's bar at
+# this joulewise/bytes_analysis.py SHA-256. Pass-two versions remain null.
+AGREED_ESTIMATOR_VERSION = "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
 ESTIMATORS = [{"name": name, "library": "joulewise.bytes_analysis", "function": function, "version": None}
               for name, function in (("bytes_phase_cells", "reduce_models"),
                                      ("bytes_frozen_predictions", "frozen_predictions"),
@@ -181,6 +181,9 @@ def registration(number, pass_number, repo_root=ROOT):
                  flag_catalog="configs/b6/flag_catalog_b6.json",
                  stopping={"count": 1, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
+    if pass_number == 1:
+        for estimator in value["estimators"]:
+            estimator["version"] = AGREED_ESTIMATOR_VERSION
     value["modules"] = [{"module_id": "bytes-" + model_id, "kind": "floor", "phase": "decode",
                          "config_dirs": configs.config_dirs(model_id), "run_count": 50,
                          **module_estimate(model_id, number, repo_root)} for model_id in GROUPS[number - 1]]
