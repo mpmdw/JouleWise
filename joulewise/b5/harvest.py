@@ -4697,7 +4697,10 @@ class _Harvest:
         authentic = False
         try:
             authentic = bool(len(matches) == 1 and matches[0] == raw
-                             and validate_whole_window_verdict_row(row, runs, set(row.get("bundle_ids", []))).authentic)
+                             and validate_whole_window_verdict_row(
+                                 row, runs, set(row.get("bundle_ids", [])),
+                                 compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl",
+                             ).authentic)
         except RestoreRefused:
             raise
         except Exception:

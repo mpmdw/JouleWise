@@ -21,6 +21,7 @@ from joulewise.calibration_dispositions import (
     decisions_disposing, disposed_content_ids_for,
 )
 from joulewise.bundle_read import BundleReadError, BundleReader
+from joulewise.desk_restore import RestoreRefused
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
     LEDGER_SCHEMA,
@@ -2808,6 +2809,8 @@ def calibration_bracket_for_bundles(
                 raise ValueError("member omits calibration binding evidence")
             windows.append(window)
             bindings.append(binding)
+    except RestoreRefused:
+        raise
     except (BundleReadError, OSError, TypeError, ValueError):
         empty, _ = evaluate_calibration_bracket(
             (),

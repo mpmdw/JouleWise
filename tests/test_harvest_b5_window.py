@@ -1882,8 +1882,8 @@ def neg8_reference_gates(points: dict[str, float]):
     def strict_invalid(path, *args, **kwargs):
         return False if ours(path) else real["_custody_strict_invalid"](path, *args, **kwargs)
 
-    def current(summary, bundle_path=None):
-        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path)
+    def current(summary, bundle_path=None, **kwargs):
+        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path, **kwargs)
 
     def identity(path):
         return ("d" * 64, True) if ours(path) else real["_scientific_config_identity"](path)

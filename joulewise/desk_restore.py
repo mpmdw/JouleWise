@@ -45,12 +45,12 @@ def _restore_stack():
 
 @contextmanager
 def restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=MIN_RESERVE_GIB,
-                 _lock_root=None, _require_bundle=True):
+                 _require_bundle=True):
     # Catch materialization failures only. Reader exceptions retain their identity.
     with _restore_stack() as stack:
         try:
             plain = stack.enter_context(_restored_run(run_dir, scratch_dir,
-                compression_records=compression_records, reserve_gib=reserve_gib, _lock_root=_lock_root,
+                compression_records=compression_records, reserve_gib=reserve_gib,
                 _require_bundle=_require_bundle))
         except (OSError, ValueError) as exc:
             raise RestoreRefused(exc) from exc
@@ -123,7 +123,7 @@ def _copy(stream, target, size, record):
 
 @contextmanager
 def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=MIN_RESERVE_GIB,
-                  _lock_root=None, _require_bundle=True):
+                  _require_bundle=True):
     """Yield one private, plain bundle; clean it up on success or failure."""
     if not math.isfinite(reserve_gib) or reserve_gib < MIN_RESERVE_GIB:
         raise ValueError(f"reserve-gib must be finite and at least {MIN_RESERVE_GIB}")
@@ -150,10 +150,11 @@ def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib
             raise ValueError("scratch must be outside the compression records")
     entries = _inventory(source, _records(compression_records))
     scratch.mkdir(parents=True, exist_ok=True)
-    # Check and materialize atomically against every worker using this root.
+    # Reader and operator restores share the TMPDIR lock, even when the
+    # operator chooses another scratch directory on the same filesystem.
     # Once copied, disk_usage includes these bytes; readers may then overlap.
     with ExitStack() as cleanup:
-        with _scratch_lock(Path(_lock_root) if _lock_root is not None else scratch):
+        with _scratch_lock(Path(tempfile.gettempdir())):
             required = sum(entry[4] for entry in entries)
             if shutil.disk_usage(scratch).free < required + reserve_gib * 1024**3:
                 raise ValueError("insufficient scratch space")
@@ -208,7 +209,7 @@ def readable_run(run_dir, *, compression_records=None, _require_bundle=True):
         try:
             scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="joulewise-reader-"))
             restored = stack.enter_context(restored_run(source, scratch,
-                compression_records=compression_records, _lock_root=tempfile.gettempdir(),
+                compression_records=compression_records,
                 _require_bundle=_require_bundle))
         except RestoreRefused:
             raise

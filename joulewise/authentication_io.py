@@ -25,12 +25,19 @@ from types import MappingProxyType
 from typing import Any, BinaryIO, Literal, Mapping, TextIO
 
 from joulewise import desk_compress
+from joulewise.desk_restore import RestoreRefused
 
-class CompressedBundleRequiresRestore(RuntimeError):
+
+class CompressedBundleRequiresRestore(RestoreRefused):
     """Compressed primary bytes must be restored before ordinary reads."""
 
     def __init__(self, path):
-        super().__init__(f"compressed_bundle_requires_restore: {path}")
+        self.path = str(path)
+        super().__init__(f"compressed_bundle_requires_restore: {self.path}")
+
+    def __reduce__(self):
+        # Exception.args contains the rendered cause, not the constructor path.
+        return type(self), (self.path,)
 
 
 def _require_plain(path, *, allow_compressed=False):
