@@ -15,3 +15,18 @@ Source: the inventory of what stands between today and the first pass-1 t0 (`~/n
 10. **Launch declarations (`arm_attachments.launch`, fourteen bindings) and identity projections for the six pass-1 trees** are assigned to a build seat (BY-PIN). It follows the non-claim H pattern (`scripts/bytes_h_session.py:139-155, 225`) through the plan-tree generator, then regenerates all tree, config and projection pins.
 11. **Release line.** BYTES collects from the reviewed pass-1 lane pin. It does not wait for block 5's release or for a merge to main (block-6 registration: pinned-lane collection is allowed). The laptop whole-suite run of §19 is done on the final integrated pass-1 tree before the registration gate.
 12. **BY-VALIDITY and BURN-TRIAGE source findings** are risk lists, not confirmed defects (0 executed). Only findings on the BYTES claim path that an executing review confirms are fixed before the registration gate. The rest are named as deferred in the gate charge.
+
+## Executed evidence
+
+Ruling 2's fallback is the code path at scripts/bytes_gates.py:327 (an absent regime receipt gives an "unavailable" contention line; an absent registered phase line gives "flag_only"). Ruling 6's largest P was re-derived by hand from the s4 row's terms (B, WAIT, fixed in configs/b6/registration/sizing_b5.json), and the pin fence was run on this tree:
+
+```text
+$ /opt/homebrew/bin/python3.13 -c "print(2*(38166208818+18010999755)+4046531103)"
+116400948249
+exit 0
+$ /opt/homebrew/bin/python3.13 -B scripts/repin.py --check
+PASS 16 pin families current
+exit 0
+```
+
+The test-7 computation of ruling 3 is in docs/process_traces/2026-10-23-magistrate-786c0858/TEST7.md and TEST7.json; the runtime observation behind ruling 10 is RUNTIME-OBSERVE.txt beside this file.
