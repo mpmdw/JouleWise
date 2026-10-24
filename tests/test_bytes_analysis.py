@@ -255,6 +255,26 @@ class MeterWorkedExamples(NumericTestCase):
             with self.subTest(window=window):
                 self.assertIs(ba._decode_battery_marker(stream, window, tau_ns), assisted)
 
+    def test_filtered_stream_uses_native_decoded_voltage_current_and_power(self):
+        # These payload digits distinguish native v*i from the former chained
+        # division/multiplication expression at binary floating-point precision.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stream.jsonl"
+            items = [{"k": "h", "rate_idx": 1, "status": "streaming",
+                      "start_raw_ns": 0, "start_mono_ns": 0}]
+            for i in range(13):
+                word = kp.SAMPLE.pack(i * 100, 0, 28_034_517 + i, 539_131 + i, 0, 0, 0, 0)
+                items.append({"k": "b", "rx": i * 100_000_000, "tx": i * 100_000_000 - 1_000_000,
+                              "n": 1, "p": word.hex(), "smc": {"B0AC": 0, "B0AV": 12000}})
+            items.append({"k": "t", "end_raw_ns": 1_200_000_000, "end_mono_ns": 1_200_000_000})
+            path.write_text("".join(json.dumps(item) + "\n" for item in items))
+            native = kp.parse(path)
+            filtered = ba._filtered_stream(path, [(0, 1_200_000_000)])
+        self.assertEqual(filtered.samples, native.samples)
+        self.assertEqual(filtered.host_ns, native.host_ns)
+        self.assertEqual(filtered.watts, native.watts)
+        self.assertEqual(filtered.fit, native.fit)
+
     def stream(self, watts=None):
         # Exact host/device clock line, with two batches; parse calls clock_fit.
         samples = kp.Samples([i * 100 for i in range(101)], [1] * 101,

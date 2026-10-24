@@ -33,10 +33,14 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     or closes the header (header_closed), independently of key export.
     empty_payload_n and replayed_batch leave one sample-bearing poll without
     any new samples, while preserving that poll's receive time and SMC data.
+    replayed_tail appends an older batch after new words in a science poll;
+    first_batch_tail_replayed appends the first word after the first batch's
+    new words. Both preserve the native last-kept-sample timing point.
     """
     if battery_publication not in ("instant", "delayed"):
         raise ValueError("battery publication must be instant or delayed")
-    if marker_stream_mode not in (None, "polls_only", "header_closed", "empty_payload_n", "replayed_batch"):
+    if marker_stream_mode not in (None, "polls_only", "header_closed", "empty_payload_n", "replayed_batch",
+                                  "replayed_tail", "first_batch_tail_replayed"):
         raise ValueError("unknown marker stream mode")
     if len(pass_duration_scales) != 2 or any(v <= 0 for v in pass_duration_scales):
         raise ValueError("two positive pass duration scales required")
@@ -321,7 +325,10 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
             polls = [item for item in items if item.get("k") == "b"]
             if marker_stream_mode == "empty_payload_n":
                 polls[100]["p"] = ""  # Keep the nonzero n and the battery poll.
-            elif marker_stream_mode == "replayed_batch":
+            elif marker_stream_mode == "first_batch_tail_replayed":
+                polls[0]["p"] += polls[0]["p"][:kp.SAMPLE.size * 2]
+                polls[0]["n"] += 1
+            elif marker_stream_mode in ("replayed_batch", "replayed_tail"):
                 archive = Path(session["archive"])
                 first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
                              if m["role"] == "science")
@@ -329,7 +336,11 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
                 start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))
                 index = [i for i, item in enumerate(polls) if start <= item["rx"] < end][3]
-                polls[index]["p"] = polls[index - 5]["p"]
+                if marker_stream_mode == "replayed_batch":
+                    polls[index]["p"] = polls[index - 5]["p"]
+                else:
+                    polls[index]["p"] += polls[index - 5]["p"]
+                    polls[index]["n"] += polls[index - 5]["n"]
             for item in items:
                 if marker_stream_mode == "polls_only" and item.get("k") == "b":
                     item.update(n=0, p="")

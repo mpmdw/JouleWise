@@ -703,7 +703,6 @@ def percentile(values, q):
 def parse_meter_stream(path):
     header = trailer = None
     batches = []
-    payloads = {}
     text = Path(path).read_text(encoding="utf-8")
     lines = text.splitlines()
     for number, line in enumerate(lines, 1):
@@ -715,22 +714,8 @@ def parse_meter_stream(path):
             trailer = item
         elif kind == "b":
             batches.append(item)
-            payload = item.get("p")
-            if item.get("n") and isinstance(payload, str) and re.fullmatch(r'[0-9a-fA-F]*', payload):
-                payloads[id(item)] = payload
     polls = sorted(batches, key=lambda b: b["rx"])
-    with_samples = [b for b in polls if id(b) in payloads]
-    # The primary scans sample endpoint timing before its header/fit early returns.
-    # Missing/non-hex payload fields supply no timing batch; malformed hex fails
-    # the whole transport even if the header is closed.
-    for batch in with_samples:
-        payload = payloads[id(batch)]
-        # samples() in the instrument's reference reader refuses a partial
-        # word before yielding any samples from that batch.
-        if len(payload) % (SAMPLE.size * 2):
-            raise ValueError("partial meter sample")
-        bytes.fromhex(payload[-SAMPLE.size * 2:][:4])
-        bytes.fromhex(payload[:4])
+    with_samples = [b for b in polls if b.get("n")]
     offset = None
     try:
         start = header["start_raw_ns"] - header["start_mono_ns"]
@@ -760,27 +745,31 @@ def parse_meter_stream(path):
     step = STEP_MS[header["rate_idx"]]
     dev_ms, watts, batch_of = [], [], []
     previous_seq, current, running_max, previous_rx = None, 0, None, None
-    for j, batch in enumerate(with_samples):
-        raw = bytes.fromhex(payloads[id(batch)])
-        for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
-            if previous_seq is None:
-                current = 0
-            else:
-                d = ((seq - previous_seq + WRAP // 2) % WRAP) - WRAP // 2
-                if k == 0 and previous_rx is not None:
-                    host_ms = (batch["rx"] - previous_rx) / 1e6
-                    if host_ms > WRAP // 2:
-                        d += round((host_ms - d) / WRAP) * WRAP
-                current += d
-            previous_seq = seq
-            if running_max is not None and current <= running_max:
-                continue
-            running_max = current
-            dev_ms.append(current)
-            watts.append(v_uv / 1e6 * i_ua / 1e6)
-            batch_of.append(j)
-        if raw:
-            previous_rx = batch["rx"]
+    try:
+        for j, batch in enumerate(with_samples):
+            raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
+            for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
+                if previous_seq is None:
+                    current = 0
+                else:
+                    d = ((seq - previous_seq + WRAP // 2) % WRAP) - WRAP // 2
+                    if k == 0 and previous_rx is not None:
+                        host_ms = (batch["rx"] - previous_rx) / 1e6
+                        if host_ms > WRAP // 2:
+                            d += round((host_ms - d) / WRAP) * WRAP
+                    current += d
+                previous_seq = seq
+                if running_max is not None and current <= running_max:
+                    continue
+                running_max = current
+                dev_ms.append(current)
+                watts.append((v_uv / 1e6) * (i_ua / 1e6))
+                batch_of.append(j)
+            if raw:
+                previous_rx = batch["rx"]
+    except (ValueError, TypeError, struct.error) as exc:
+        # Bad sample words refuse the energy stream, not its battery polls.
+        return {**common, "reason": str(exc)}
     newest = {}
     for dev, j in zip(dev_ms, batch_of):
         newest[j] = dev
@@ -850,6 +839,13 @@ def integrate(times_ns, watts, t0, t1):
     return math.fsum(watts[lo:hi]) / (hi - lo) * (t1 - t0) / 1e9, hi - lo
 
 
+def _battery_delay_ns(stream):
+    tau_ns = stream.get("battery_tau_ns")
+    times = stream.get("poll_ns", [])
+    return tau_ns if tau_ns is not None else 2_000_000_000 + max(
+        (b - a for a, b in zip(times, times[1:])), default=0)
+
+
 def battery_terms(stream, window, idle):
     """Registration 6/7, independently from the text: signed mean-times-span energy,
     forward one-sided publication windows, and the tau-delayed decode marker.
@@ -865,9 +861,7 @@ def battery_terms(stream, window, idle):
 
     decode, baseline = span_values(window), span_values(idle)
     # Two 1 s SMC publication intervals plus the largest poll interval: BAT-2's delay bound.
-    tau_ns = stream.get("battery_tau_ns")
-    if tau_ns is None:
-        tau_ns = 2_000_000_000 + max((b - a for a, b in zip(times, times[1:])), default=0)
+    tau_ns = _battery_delay_ns(stream)
     end_complete = bool(times and times[-1] >= window[1] + tau_ns)
     lo, hi = bisect.bisect_left(times, window[0] + tau_ns), bisect.bisect_left(times, window[1] + tau_ns)
     marker_values = [c for c in stream.get("battery_current_ma", [None] * len(times))[lo:hi] if is_number(c)]
@@ -1048,7 +1042,7 @@ def dc_join(archive, run_id):
         result.update(gross_j=result["decode_energy_j"], secondary_j=result["meter_secondary_j"] + result["battery_secondary_j"],
                       phase_edge_j=result["edge_bound_j"], decode_battery_assist=result["decode_assisted"],
                       battery_n=result["battery_decode_polls"], battery_n_idle=result["battery_idle_polls"],
-                      battery_poll_interval_max_s=result["battery_tau_s"] - 2,
+                      battery_poll_interval_max_s=(_battery_delay_ns(stream) - 2_000_000_000) / 1e9,
                       battery_idle_power_w=result["battery_idle_w"],
                       meter_idle_power_w=result["idle_power_w"] - result["battery_idle_w"],
                       n=n, n_idle=result["idle_samples"], r_max_s=r_max_s, sample_interval_s=dt_meter_s,

@@ -1949,7 +1949,9 @@
     "polls_only",
     "header_closed",
     "empty_payload_n",
-    "replayed_batch"
+    "replayed_batch",
+    "replayed_tail",
+    "first_batch_tail_replayed"
   ],
   "mutation_sampling": "Fixed semantic row identities: gross-primary decision rows first for H1/H2/MoE; all campaigns inventoried. Meter projection preserves every emitted schema on both sides.",
   "row_exemptions": [

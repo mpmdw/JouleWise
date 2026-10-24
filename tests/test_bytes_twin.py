@@ -545,6 +545,26 @@ class BatteryTermsTests(QuantityTestCase):
                 self.assertFalse(r["battery_end_window_complete"])
                 self.assertIs(r["decode_assisted"], expected)
 
+    def test_printed_poll_interval_comes_from_integer_delay(self):
+        for gap in (208_000_000, 100_000_001):
+            with self.subTest(gap=gap):
+                polls = [i * gap for i in range(130)]
+                stream = {**self.stream(), "aligned": True, "raw_offset_ns": 0, "name": "meter",
+                          "host_ns": [i * 1_000_000_000 for i in range(13)], "watts": [10.0] * 13,
+                          "poll_ns": polls, "battery_watts": [0.0] * len(polls),
+                          "battery_current_ma": [0] * len(polls), "battery_tau_ns": 2_000_000_000 + gap,
+                          "step_ms": 1000, "fit": dict.fromkeys(("excess_latency_ms_absmax", "excess_latency_ms_p95",
+                              "excess_latency_ms_max", "excess_latency_ms_min", "clock_rate_ppm"), 0.0)}
+                spans = {"decode_ns": [4_000_000_000, 8_000_000_000], "idle_ns": [0, 2_000_000_000],
+                         "request_ns": [2_000_000_000, 8_000_000_000]}
+                with patch.object(bt, "_bundle", return_value=Path("unused")), patch.object(
+                        bt, "member_spans", return_value=spans):
+                    result = bt.dc_join({"root": Path("unused"), "streams": [stream]}, "member")
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["battery_poll_interval_max_s"], gap / 1e9)
+                if gap == 208_000_000:
+                    self.assertEqual(json.dumps(result["battery_poll_interval_max_s"]), "0.208")
+
     def test_later_covering_stream_can_supply_missing_battery_readings(self):
         good = {**self.stream(), "aligned": True, "raw_offset_ns": 0, "name": "good",
                 "host_ns": [i * 1_000_000_000 for i in range(13)], "watts": [10.0] * 13,

@@ -129,6 +129,12 @@ CAMPAIGNS = {
     "replayed_batch": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                        "battery_publication": "delayed", "battery_reference_assist": True,
                        "marker_stream_mode": "replayed_batch"}, ()),
+    "replayed_tail": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                      "battery_publication": "delayed", "battery_reference_assist": True,
+                      "marker_stream_mode": "replayed_tail"}, ()),
+    "first_batch_tail_replayed": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                                  "battery_publication": "delayed", "battery_reference_assist": True,
+                                  "marker_stream_mode": "first_batch_tail_replayed"}, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -1631,7 +1637,7 @@ class AgreementTests(unittest.TestCase):
         self.assertTrue(any(r["battery_end_window_complete"] for r in partial))
 
     def test_meter_batches_without_new_samples_campaigns(self):
-        for name in ("empty_payload_n", "replayed_batch"):
+        for name in ("empty_payload_n", "replayed_batch", "replayed_tail", "first_batch_tail_replayed"):
             with self.subTest(campaign=name):
                 recorder = campaign(name)
                 self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
@@ -2021,22 +2027,181 @@ class MarkerPathAgreementTests(unittest.TestCase):
                 self.assertEqual(native.fit.stats["points"], 12)
                 self.assertEqual(stream.poll_ns, native.poll_ns)
 
-    def test_partial_sample_words_discard_the_stream(self):
-        for case, index in (("trunc_tail", -2), ("trunc_mid", 7)):
-            with self.subTest(path=case):
-                items = self.items()
-                items[index]["p"] += "ab"  # 21 bytes: a full sample and a partial word.
+    def shape_cases(self):
+        """Cold rounds b/c/d probes, including replay within a native batch."""
+        cases = {}
+        for name in ("baseline", "empty_p_n0", "empty_p_n1", "seq_equals_running_max",
+                     "replayed_batch", "tail_word_replayed", "new_word_then_replayed_tail", "first_batch_tail_replayed",
+                     "mid_word_replayed_last_advances", "partial_tail", "partial_mid",
+                     "partial_mid_payload_n0", "only_partial", "one_partial",
+                     "header_closed", "only_partial_header_closed", "one_partial_header_closed",
+                     "nonhex_payload", "nonstring_payload", "whitespace_hex",
+                     "n0_nonhex", "n0_nonstring", "missing_payload", "reversed_polls",
+                     "dup_poll", "dup_rx_diff_payload", "smc_with_p_key", "voltage_missing",
+                     "edge_poll_start", "edge_poll_end",
+                     "dropped_edge_sample", "dropped_start_sample", "dropped_idle_end_sample",
+                     "wrap", "long_stall"):
+            items = self.items()
+            if name in ("empty_p_n0", "empty_p_n1"):
+                items[7].update(n=int(name.endswith("n1")), p="")
+            if name in ("seq_equals_running_max", "replayed_batch"):
+                items[7]["p"] = items[6 if name == "seq_equals_running_max" else 2]["p"]
+            if name in ("tail_word_replayed", "new_word_then_replayed_tail"):
+                # The cold probe puts the next batch's word here, then an
+                # old tail. Native has no fit point at that following batch.
+                word = items[8 if name == "tail_word_replayed" else 7]["p"]
+                items[7].update(n=2, p=word + items[2]["p"])
+            if name == "first_batch_tail_replayed":
+                word = kp.SAMPLE.pack(100, 0, 12_000_000, 1_000_000, 0, 0, 0, 0).hex()
+                items[1].update(n=2, p=word + items[1]["p"])
+            if name == "mid_word_replayed_last_advances":
+                word = kp.SAMPLE.pack(6100, 0, 12_000_000, 1_000_000, 0, 0, 0, 0).hex()
+                items[7].update(n=3, p=items[7]["p"] + items[2]["p"] + word)
+            if name == "partial_tail":
+                items[-2]["p"] += "ab"
+            if name in ("partial_mid", "partial_mid_payload_n0"):
+                items[7]["p"] += "ab" + items[7]["p"]
+                if name.endswith("n0"):
+                    items[7]["n"] = 0
+            if name.startswith("only_partial"):
+                for batch in items[1:-1]:
+                    batch["p"] = "ab"
+            if name.startswith("one_partial"):
+                items[7]["p"] = "ab"
+            if name.endswith("header_closed"):
+                items[0]["status"] = "closed"
+            if name in ("nonhex_payload", "nonstring_payload", "n0_nonhex", "n0_nonstring"):
+                items[7]["p"] = 42 if "nonstring" in name else "not-hex"
+                if name.startswith("n0_"):
+                    items[7]["n"] = 0
+            if name == "missing_payload":
+                items[7].pop("p")
+            if name == "whitespace_hex":
+                for batch in items[1:-1]:
+                    batch["p"] = " ".join(batch["p"][i:i + 2] for i in range(0, len(batch["p"]), 2))
+            if name == "dup_poll":
+                items.insert(8, copy.deepcopy(items[7]))
+            if name == "dup_rx_diff_payload":
+                for key in ("rx", "tx"):
+                    items[8][key] = items[7][key]
+            if name == "smc_with_p_key":
+                batch = items[7]
+                items[7] = {"k": "b", "tx": batch["tx"], "rx": batch["rx"], "n": batch["n"],
+                            "smc": {"p": "ab", **batch["smc"]}, "p": batch["p"]}
+            if name == "voltage_missing":
+                for batch in items[1:-1:3]:
+                    batch["smc"].pop("B0AV")
+            if name in ("edge_poll_start", "edge_poll_end"):
+                for batch in items[1:-1]:
+                    batch["smc"]["B0AC"] = 0
+                items[8 if name == "edge_poll_start" else 12]["smc"]["B0AC"] = -1000
+            if name == "reversed_polls":
+                items[1:-1] = reversed(items[1:-1])
+            if name.startswith("dropped_"):
+                edge = {"dropped_edge_sample": 8, "dropped_start_sample": 4,
+                        "dropped_idle_end_sample": 2}[name] * 1_000_000_000
+                items = [b for b in items if b.get("k") != "b" or b["rx"] != edge]
+            if name in ("wrap", "long_stall"):
+                for i, batch in enumerate(items[1:-1]):
+                    shift = 65000 if name == "wrap" else (70000 if i >= 7 else 0)
+                    batch["p"] = kp.SAMPLE.pack((i * 1000 + shift) % kp.WRAP, 0,
+                                                12_000_000, 1_000_000, 0, 0, 0, 0).hex()
+                    if name == "long_stall" and i >= 7:
+                        batch["rx"] += 70_000_000_000
+                        batch["tx"] += 70_000_000_000
+            cases[name] = items
+        return cases
+
+    def test_review_shapes_native_samples_fit_and_marker_inputs(self):
+        for name, items in self.shape_cases().items():
+            with self.subTest(shape=name):
                 self.write(items)
-                with self.assertRaises(struct.error):
-                    kp.parse(self.path)
-                with self.assertRaisesRegex(ValueError, "partial meter sample"):
-                    ba._filtered_stream(self.path, list(self.spans.values()))
-                with self.assertRaisesRegex(ValueError, "partial meter sample"):
-                    bt.parse_meter_stream(self.path)
+                # Full selection observes every native kept sample. The join
+                # below independently exercises the actual decode/idle spans.
+                primary = ba._filtered_stream(self.path, [(-10**15, 10**15)])
+                twin = bt.parse_meter_stream(self.path)
+                try:
+                    native = kp.parse(self.path)
+                except (ValueError, TypeError, struct.error):
+                    self.assertIsNone(primary.fit)
+                    self.assertIsNone(primary.samples)
+                    self.assertFalse(twin["aligned"])
+                else:
+                    if native.fit is not None:
+                        cold_fit = {"tail_word_replayed": (12, -82191780.82191849, 968036.5296803653),
+                                    "first_batch_tail_replayed": (13, 17440170.526111603, 1008623.1954267997)}
+                        if name in cold_fit:
+                            self.assertEqual((native.fit.stats["points"], native.fit.a_ns,
+                                              native.fit.b_ns_per_ms), cold_fit[name])
+                        self.assertEqual(primary.fit, native.fit)
+                        self.assertEqual(primary.samples, native.samples)
+                        self.assertEqual(primary.host_ns, native.host_ns)
+                        self.assertEqual(primary.watts, native.watts)
+                        self.assertEqual(twin["host_ns"], native.host_ns)
+                        self.assertEqual(twin["watts"], native.watts)
+                        for key in ("a_ns", "b_ns_per_ms"):
+                            self.assertEqual(twin["fit"][key], getattr(native.fit, key))
+                        for key in ("points", "points_used", "clock_rate_ppm", "excess_latency_ms_p50",
+                                    "excess_latency_ms_p95", "excess_latency_ms_min", "excess_latency_ms_max"):
+                            self.assertEqual(twin["fit"][key], native.fit.stats[key])
+                    else:
+                        self.assertIsNone(primary.fit)
+                        self.assertFalse(twin["aligned"])
+                # Native parse intentionally has no polls on a closed header,
+                # and raises on bad sample words. Ruling F2 keeps load()'s
+                # polls as the independent marker oracle in both cases.
+                header, trailer, batches, errors = kp.load(self.path)
+                polls = sorted(batches, key=lambda b: b["rx"])
+                marker = kp.Stream(header, trailer, polls, errors, None, None, [], [],
+                                   [b["rx"] for b in polls], [dict(b.get("smc") or {}) for b in polls])
+                self.assertEqual(primary.poll_ns, marker.poll_ns)
+                self.assertEqual(primary.smc, marker.smc)
+                self.assertEqual(twin["poll_ns"], marker.poll_ns)
+                self.assertEqual(twin["battery_current_ma"], [b.get("B0AC") for b in marker.smc])
+                self.assertEqual(twin["battery_voltage_mv"], [b.get("B0AV") for b in marker.smc])
+                tau = ba._battery_delay_ns(marker)
+                self.assertEqual(ba._battery_delay_ns(primary), tau)
+                self.assertEqual(twin["battery_tau_ns"], tau)
+                self.assertEqual(ba._decode_battery_marker(primary, self.spans["decode_ns"], tau),
+                                 ba._decode_battery_marker(marker, self.spans["decode_ns"], tau))
+                self.assert_agreement()
+
+    def test_crlf_stream_keeps_native_samples_and_markers(self):
+        self.write(self.items())
+        self.path.write_bytes(self.path.read_bytes().replace(b"\n", b"\r\n"))
+        native = kp.parse(self.path)
+        primary, twin, actual = self.assert_agreement()
+        self.assertEqual(primary[0][1].fit, native.fit)
+        self.assertEqual(twin["streams"][0]["host_ns"], native.host_ns)
+        self.assertEqual(actual["status"], "ok")
+
+    def test_partial_words_keep_polls_and_marker_without_energy(self):
+        for name, items in self.shape_cases().items():
+            if "partial" not in name or name.endswith("n0"):
+                continue
+            with self.subTest(shape=name):
+                self.write(items)
                 primary, twin, actual = self.assert_agreement()
-                self.assertEqual(primary[0][1].poll_ns, [])
-                self.assertEqual(twin["streams"][0]["poll_ns"], [])
-                self.assertIsNone(actual.get("decode_assisted"))
+                self.assertIsNone(primary[0][1].fit)
+                self.assertFalse(twin["streams"][0]["aligned"])
+                self.assertEqual(primary[0][1].poll_ns, [b["rx"] for b in items if b["k"] == "b"])
+                self.assertIs(actual.get("decode_assisted"), True)
+                self.assertIs(actual.get("battery_end_window_complete"), True)
+                self.assertNotEqual(actual["status"], "ok")
+
+    def test_dropped_edge_samples_keep_actual_neighbours_and_native_terms(self):
+        for name, items in self.shape_cases().items():
+            if not name.startswith("dropped_"):
+                continue
+            with self.subTest(shape=name):
+                self.write(items)
+                native = kp.parse(self.path)
+                primary, _, result = self.assert_agreement()
+                expected = ba.meter_decode(native, self.spans["decode_ns"], self.spans["idle_ns"])
+                self.assertEqual(ba.meter_decode(primary[0][1], self.spans["decode_ns"], self.spans["idle_ns"]), expected)
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["edge_powers_w"], expected["edge_powers_w"])
+                self.assertEqual(result["n"], expected["n"])
 
     def test_smc_with_p_key_uses_the_native_top_level_payload(self):
         items = self.items()
@@ -2094,13 +2259,9 @@ class MarkerPathAgreementTests(unittest.TestCase):
                     self.assertEqual(stream["battery_voltage_mv"][9], 12000)
 
     def test_transport_failures_discard_the_stream_like_the_primary(self):
-        for case in ("invalid_json", "blank_line", "bad_payload", "closed_bad_payload", "missing_rx", "missing_rate"):
+        for case in ("invalid_json", "blank_line", "missing_rx", "missing_rate"):
             with self.subTest(path=case):
                 items = self.items()
-                if case in ("bad_payload", "closed_bad_payload"):
-                    items[1]["p"] = "f"
-                if case == "closed_bad_payload":
-                    items[0]["status"] = "closed"
                 if case == "missing_rx":
                     items[1].pop("rx")
                 if case == "missing_rate":
