@@ -16,3 +16,15 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
 10. **Cold delta passes** (Fable 5.1 and Opus 5.5, blind, executing, local because they need real data; worktrees jw-wt/cold416-{fable,opus} at 24718b166): launched 11:5x. The brief asks specifically how big a dwell step the fitted-line clock residual can absorb. Test shards of the touched modules are running on the merged tree.
 11. **Merged-tree tests (lead).** tests/hazards 314 OK; tests/flags and the twin, plan-tree and identity modules OK. tests/b6: 306 tests, 1 expected failure (review rows). Agreement and analysis were red: seat B's fail-closed export broke seat A's fixture. Fixed in 2ed536739; agreement rerun 48 OK, 0 above the bar. Analysis: 111 tests, 3 failures (SubsetReleaseChain wrapper, FIX-416-C item 1). Draft PR #579 opened for CI.
 12. **Cold delta passes:** Fable REFUSE, Opus ADMIT-WITH-CORRECTIONS. Both seats were killed by my 2 h background limit after writing their reports (lesson: launch long seats so they can outlast the 2 h cap, or brief them to finish inside it). The lead re-executed Fable's blocker 2 and confirmed it. Email to Ed: Gmail 1a16fa8f5681d1f3. Dispositions appended to DISPOSITIONS-416.md. FIX-416-C (Sol 6.1 xhigh, worktree jw-wt/int416, `~/night-archive/seats-7209/fix416c/`) launched 13:5x.
+13. **FIX-416-C done** (86a0185da). Checked by re-running the seat's evidence:
+   - A reference with a corrupt or unreadable trace now stops the export with its cause.
+   - A BY-H2 re-export agrees with Fable's independent integral on 24/24 references (21/21 on H).
+   - A missing frequency word now gives REFUSE in all four variants of a 40 ppm slope.
+   - Sampler, OS and hardware mutations go from 0/168 to 168/168 flagged.
+   - 19 campaigns, 0 above the bar.
+   - Estimator 18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71; catalog 36971fe0 (268 codes).
+
+   The seat flagged that the largest undetected injected step is 1.009 ms, not ≤ 1 ms. Lead disposition: accepted. The registered bar is step_ns = 1 ms, and the excess is the fitted line absorbing 1.5/N of a step (N = 183). My "≤ 1 ms" in the brief was over-specified. The text states the 1.009 ms figure.
+
+   Lead outside the sandbox: tests/hazards 316 OK, after updating one expectation (10c9cf70b: a failed frequency read no longer makes the dwell unmeasured). Registration text applied in fcc0ac921, including the stale-sentence and edge-count fixes; repin and plan-tree checks pass.
+14. **Round-2 cold delta passes** (Fable and Opus, blind, executing, local; worktrees jw-wt/cold416b-*, hard stop at 110 min): launched 14:4x on 2ed536739..fcc0ac921. The full analysis module is running locally in two shards; CI runs on fcc0ac921.
