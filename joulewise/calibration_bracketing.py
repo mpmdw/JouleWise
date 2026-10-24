@@ -1686,6 +1686,8 @@ def _load_calibration_candidate_unbounded(
             label=f"calibration candidate {directory.name} manifest",
         )
         manifest = json.loads(manifest_raw)
+    except RestoreRefused:
+        raise
     except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     artifacts = manifest.get("artifacts") if isinstance(manifest, Mapping) else None
@@ -1708,6 +1710,8 @@ def _load_calibration_candidate_unbounded(
                 grammar="raw",
                 label=f"calibration candidate {directory.name} artifact {name}",
             )
+        except RestoreRefused:
+            raise
         except (OSError, ValueError):
             return None
         if not _valid_sha256(expected) or hashlib.sha256(raw).hexdigest() != expected:

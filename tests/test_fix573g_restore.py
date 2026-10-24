@@ -82,6 +82,8 @@ class ColdReviewProbe3Tests(unittest.TestCase):
         self.live = self.case / 'live-runs/corpus0'
         shutil.copytree(self.source, self.live)
         (self.live / 'rich_telemetry_idle.jsonl').write_text('{"fixture":1}\n')
+        self.plain_runs = self.case / 'plain-runs'
+        shutil.copytree(self.live.parent, self.plain_runs)
         self.journal = Path(str(self.archive) + '.desk') / 'compression.jsonl'
         self.kwargs = {'compression_records': self.journal}
         self.plain = self.values()
@@ -146,7 +148,7 @@ class ColdReviewProbe3Tests(unittest.TestCase):
         core = {'schema_version': ww.IDLE_ADMISSION_CORE_SCHEMA, 'policy_sha256': policy_sha}
         return policy_sha, manifest, core
 
-    def test_probe3_f_g_real_harvest_verdict_replay_stops_with_compressed_member_cause(self):
+    def test_probe3_f_g_real_harvest_verdict_replay_equals_plain_with_journal(self):
         policy_sha, manifest, core = self.replay_inputs()
         raw_manifest = json.dumps(manifest).encode()
         row = {'record_type': 'idle_admission_whole_window_verdict',
@@ -157,22 +159,44 @@ class ColdReviewProbe3Tests(unittest.TestCase):
                    {'path': 'campaign_manifests/fixture.json',
                     'sha256': hashlib.sha256(raw_manifest).hexdigest()}]}}
         raw = json.dumps(row).encode() + b'\n'
-        (self.live.parent / 'whole-window-verdict.json').write_bytes(raw)
-        (self.live.parent / 'campaign_log.jsonl').write_bytes(raw)
-        fake = SimpleNamespace(archive=self.archive,
-                               inputs=SimpleNamespace(claim_runs_root=self.live.parent),
-                               emit=mock.Mock(), _record_error=mock.Mock())
-        def replay(*_args, **_kwargs):
-            harvest._Harvest.step(fake, 'whole_window', lambda: harvest._Harvest.whole_window(fake))
-        err = io.StringIO()
+        for runs in (self.plain_runs, self.live.parent):
+            (runs / 'whole-window-verdict.json').write_bytes(raw)
+            (runs / 'campaign_log.jsonl').write_bytes(raw)
+        validate = ww.validate_whole_window_verdict_row
+        validations = []
+        def observe(*args, **kwargs):
+            result = validate(*args, **kwargs)
+            validations.append(result)
+            return result
+        def replay(runs):
+            fake = SimpleNamespace(archive=self.archive,
+                                   inputs=SimpleNamespace(claim_runs_root=runs),
+                                   emit=mock.Mock(), _record_error=mock.Mock())
+            fake.whole_window_member_failures = lambda row: harvest._Harvest.whole_window_member_failures(fake, row)
+            harvest._Harvest.step(fake, 'whole_window',
+                                  lambda: harvest._Harvest.whole_window(fake))
+            fake._record_error.assert_not_called()
+            return fake
         with mock.patch.object(ww, 'load_authenticated_campaign_manifest',
                                return_value=SimpleNamespace(raw_bytes=raw_manifest, value=manifest)), \
-             mock.patch.object(harvest, '_harvest', side_effect=replay), redirect_stderr(err):
-            with self.assertRaisesRegex(auth.CompressedBundleRequiresRestore, 'compressed_bundle_requires_restore'):
-                harvest.harvest(None, self.archive)
-        self.assertIn('compressed_bundle_requires_restore:', err.getvalue())
-        fake.emit.assert_not_called()
-        fake._record_error.assert_not_called()
+             mock.patch.object(ww, 'validate_whole_window_verdict_row', side_effect=observe):
+            plain = replay(self.plain_runs)
+            compressed = replay(self.live.parent)
+            self.assertEqual(len(validations), 2)
+            self.assertEqual(validations[1], validations[0])
+            self.assertEqual(compressed.emit.call_args_list, plain.emit.call_args_list)
+            self.assertEqual(compressed.neg8_pending, plain.neg8_pending)
+            # The intentionally incomplete fixture has the same scientific
+            # refusals in both layouts; storage adds none.
+            self.assertFalse(validations[0].authentic)
+            self.journal.unlink()
+            err = io.StringIO()
+            with mock.patch.object(harvest, '_harvest',
+                                   side_effect=lambda *_a, **_k: replay(self.live.parent)), \
+                 redirect_stderr(err):
+                with self.assertRaisesRegex(restore.RestoreRefused, 'compression.jsonl'):
+                    harvest.harvest(None, self.archive)
+            self.assertIn('restore_refused:', err.getvalue())
         with self.assertRaises(auth.CompressedBundleRequiresRestore):
             BundleReader(self.live)
 
@@ -204,6 +228,26 @@ class ColdReviewProbe3Tests(unittest.TestCase):
                 with self.assertRaisesRegex(restore.RestoreRefused, 'late prepare'):
                     session._prepare_plain(bundle_paths={'corpus0': plain}, policy=policy,
                                            original_paths={'corpus0': self.live})
+
+    def test_prepare_plain_passes_dominated_rederivation_restore_refusal(self):
+        with restore.readable_run(self.live, **self.kwargs) as plain:
+            session = ww.AuthenticatedConsumptionSession(
+                plain.parent, {'corpus0'},
+                calibration_ledger_snapshot=SimpleNamespace(refusal_reasons=()),
+            )
+            policy = ww.CampaignPolicy.from_mapping(json.loads(
+                (ROOT / 'configs/campaign_policies/quiet_mac_p2_production.json').read_bytes()))
+            metadata = BundleReader(plain).metadata()
+            bound = metadata['instrument_calibration']['verified_effective_b_fiducial_s']
+            with mock.patch.object(ww, 'calibration_bracket_for_bundles',
+                                   return_value=({'b_fiducial_s': bound + 1}, ())), \
+                 mock.patch.object(ww, '_verify_instrument_calibration', return_value=(bound, None)), \
+                 mock.patch.object(ww, '_rederive_summary_for_authenticated_fiducial_bound',
+                                   side_effect=restore.RestoreRefused('late dominated prepare')) as rederive:
+                with self.assertRaisesRegex(restore.RestoreRefused, 'late dominated prepare'):
+                    session._prepare_plain(bundle_paths={'corpus0': plain}, policy=policy,
+                                           original_paths={'corpus0': self.live})
+                rederive.assert_called_once()
 
     def test_evaluation_basis_primary_hashes_restore_with_the_archive_journal(self):
         occurrence = {'bundle_id': 'corpus0', 'bundle_path': 'corpus0'}

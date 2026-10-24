@@ -68,6 +68,7 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
     ACTIVE_CAPTURE_ANCHOR_METHOD,
     SCHEMA_FOR_ANCHOR_METHOD,
 )
+from joulewise.desk_restore import RestoreRefused  # noqa: E402
 from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
@@ -1372,6 +1373,8 @@ def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
             registry_path = _resolve_analysis_reference(config_dir, reference_path)
             try:
                 load_and_validate_analysis_manifest_v2(path, registry_path)
+            except RestoreRefused:
+                raise
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 problems.append(f"AXI analysis manifest validation failed: {exc}")
     else:
@@ -2883,6 +2886,8 @@ def evaluate_member(
     if bundle_dir.exists():
         try:
             problems = validate_bundle(bundle_dir, strict=not strict_deferred)
+        except RestoreRefused:
+            raise
         except Exception as exc:
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
         strict_valid = not problems
@@ -5013,6 +5018,8 @@ def _hazard_window_opening_anchor(
             if not root.is_dir():
                 continue
             anchor = prior_campaign_cooldown_anchor(root, None, policy_sha256)
+        except RestoreRefused:
+            raise
         except Exception:  # noqa: BLE001 - an unreadable root offers no anchor
             continue
         if isinstance(anchor, dict):
@@ -5358,6 +5365,8 @@ def _hazard_measured_cooldown(
             )
         else:
             note.update({"result": "unknown", "reason": "cooldown trace was empty"})
+    except RestoreRefused:
+        raise
     except Exception as exc:  # noqa: BLE001 - evidence failure stays an unknown result
         note.update({"result": "unknown", "reason": f"{type(exc).__name__}: {exc}"})
     if note.get("result") in {"recovered", "cap_hit"}:
@@ -6622,6 +6631,8 @@ def _current_member_environment_refusals(
         return ("environment_admission_missing",)
     try:
         measured_window = BundleReader(evaluation.bundle_path).measured_window()
+    except RestoreRefused:
+        raise
     except (BundleReadError, OSError, TypeError, ValueError):
         measured_window = None
     if measured_window is None:
@@ -6852,6 +6863,8 @@ def _reference_window_span(
 ) -> tuple[float, float] | None:
     try:
         window = BundleReader(evaluation.bundle_path).measured_window()
+    except RestoreRefused:
+        raise
     except (BundleReadError, OSError, TypeError, ValueError):
         return None
     if window is None or window.end_s < window.start_s:
@@ -7562,6 +7575,8 @@ def _whole_window_member(
     else:
         try:
             problems = validate_bundle(bundle_path, strict=True)
+        except RestoreRefused:
+            raise
         except Exception as exc:  # noqa: BLE001 - validator failure is invalid
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
     collection_flags = _prompt_realization_collection_flags(problems)
@@ -8142,6 +8157,8 @@ def _whole_window_campaign_membership(
                     runs_root=runs_dir,
                     waivers=waivers,
                 )
+            except RestoreRefused:
+                raise
             except (OSError, SalvageAuthorizationError, ValueError):
                 continue
         elif absent:
@@ -11690,6 +11707,8 @@ def main(argv: list[str] | None = None) -> int:
     except (LaunchLineageError, SupersessionRecorderError) as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
         return 2
+    except RestoreRefused:
+        raise
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

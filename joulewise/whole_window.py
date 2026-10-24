@@ -18,6 +18,7 @@ import math
 import statistics
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
@@ -662,7 +663,6 @@ class AuthenticatedConsumptionSession:
         policy: CampaignPolicy,
         compression_records: Path | None = None,
     ) -> None:
-        from contextlib import ExitStack
         with ExitStack() as stack:
             plain = {key: stack.enter_context(readable_run(path, compression_records=compression_records))
                      for key, path in bundle_paths.items()}
@@ -888,6 +888,8 @@ class AuthenticatedConsumptionSession:
                                 _instrument_calibration_physics_cache=physics_cache,
                             )
                         )
+                except RestoreRefused:
+                    raise
                 except (
                     BundleReadError,
                     OSError,
@@ -1744,6 +1746,8 @@ def _neg8_corpus_identity_is_authenticated(
             label="registered NEG-8 settled reference corpus",
             allow_compressed=True,
         )
+    except RestoreRefused:
+        raise
     except (OSError, UnicodeDecodeError, ValueError):
         return False
     return _neg8_corpus_identity_matches_bytes(corpus, raw)
@@ -1861,6 +1865,8 @@ def load_neg8_drift_bound_artifact(path: str | Path | None) -> dict[str, Any] | 
         )
 
         value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_pairs)
+    except RestoreRefused:
+        raise
     except (OSError, UnicodeDecodeError, ValueError):
         return None
     return (
@@ -3751,6 +3757,8 @@ def validated_attempt_selection(
             strict_evidence=strict_evidence,
             finalized_bundles=finalized,
         )
+    except RestoreRefused:
+        raise
     except (OSError, TypeError, ValueError):
         return None
     expected_descriptors = {
@@ -5553,20 +5561,22 @@ def _current_core_rederivation_reasons(
             )
             calibration_reasons = consumption_session.refusal_reasons
         else:
-            # Frozen/pre-D-109 row-verifier tests retain their historical
-            # pointwise seam. Current D-109 consumers always supply the
-            # session above, which is the sole route that can validate a v2
-            # acceptance record and its recorded ledger head.
-            calibration_bracket, calibration_reasons = (
-                calibration_bracket_for_bundles(
-                    runs_root,
-                    [
-                        path
-                        for _bundle_id, path, _metadata, _cpu in derived_members
-                    ],
-                    registered_typed_policy.calibration_bracketing,
+            # The harvest also uses this pointwise seam without a session.
+            # Keep each authenticated restore alive through bracket replay.
+            with ExitStack() as stack:
+                plain_paths = [
+                    stack.enter_context(
+                        readable_run(path, compression_records=compression_records)
+                    )
+                    for _bundle_id, path, _metadata, _cpu in derived_members
+                ]
+                calibration_bracket, calibration_reasons = (
+                    calibration_bracket_for_bundles(
+                        runs_root,
+                        plain_paths,
+                        registered_typed_policy.calibration_bracketing,
+                    )
                 )
-            )
         stored_calibration_bracket = core.get("instrument_calibration_bracket")
         if (
             not isinstance(stored_calibration_bracket, Mapping)

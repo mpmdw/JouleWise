@@ -846,6 +846,8 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path, *,
         with readable_run(paths[0], compression_records=compression_records) as path:
             try:
                 digest = ww._bundle_evidence_sha256(path)
+            except RestoreRefused:
+                raise
             except (OSError, ValueError):
                 digest = None
             if digest is None or digest != member.get("bundle_evidence_sha256"):
@@ -4220,6 +4222,8 @@ class _Harvest:
                     try:
                         joined.update({key: value for key, value in campaign_cooldown_evidence(root, identifier).items()
                                        if key not in joined})
+                    except RestoreRefused:
+                        raise
                     except Exception:  # an unreadable join verifies nothing
                         continue
         for run_id, result in self.members.items():
@@ -4251,6 +4255,8 @@ class _Harvest:
         try:
             acceptance = brackets.load_calibration_acceptance_bound(acceptance_path) \
                 if acceptance_path.is_file() else None
+        except RestoreRefused:
+            raise
         except Exception:  # an unreadable acceptance sets no bound; flagged below
             acceptance = None
         # The acceptance sets the bracket bound, so its bytes are pinned against
@@ -4271,6 +4277,8 @@ class _Harvest:
             return
         try:
             candidate = terminal_head_pin_for_session(ledger, session_id=session_id)
+        except RestoreRefused:
+            raise
         except Exception as exc:
             self.emit("calibration.no_bracket", level="window", collector="calibration",
                       observed={"terminal_pin": f"{type(exc).__name__}"})
@@ -5291,6 +5299,8 @@ class _Harvest:
                     else None)
                 valid = ww.validate_neg8_drift_bound_artifact(clean, reference_corpus_bytes=clean_raw,
                                                               require_corpus_identity=True)
+            except RestoreRefused:
+                raise
             except Exception as exc:  # the core refusing derives nothing
                 clean, valid = None, False
                 problems.append(f"clean_bound_raised:{type(exc).__name__}")
@@ -5530,6 +5540,8 @@ class _Harvest:
         inputs = self.inputs
         try:
             terminal = terminal_head_pin_for_session(inputs.ledger_path, session_id=inputs.bracket_session_id)
+        except RestoreRefused:
+            raise
         except Exception as exc:  # an open or absent session has no terminal head
             code = getattr(getattr(exc, "code", None), "value", None)
             return {"reason": "session_not_terminal", "error_type": type(exc).__name__,
@@ -5538,6 +5550,8 @@ class _Harvest:
             snapshot = load_calibration_ledger_snapshot(
                 inputs.ledger_path, inputs.head_pin_path, require_committed_pin=True, verify_custody=False,
                 mode="read_replay", repo_root=inputs.measurement_root)
+        except RestoreRefused:
+            raise
         except Exception as exc:
             return {"reason": "pin_unreadable", "error_type": type(exc).__name__,
                     "terminal_sequence": terminal.get("sequence")}
@@ -5585,6 +5599,8 @@ class _Harvest:
                     plan_id=tree["plan"]["plan_id"], plan_sha256=sha256_file(frozen),
                     evidence_root_id=tree["window_identity"]["evidence_root_id"],
                     runs_root=inputs.claim_runs_root), None
+        except RestoreRefused:
+            raise
         except Exception as exc:
             return None, _exception_text(exc)
 
@@ -5665,6 +5681,8 @@ class _Harvest:
                 return None
             write_once(target, raw_binding)
             return target
+        except RestoreRefused:
+            raise
         except Exception as exc:  # the verdict is still written; its membership is then unresolved
             failed("probe_raised", **self._desk_failure("desk-membership.txt", _exception_text(exc)))
             return None
