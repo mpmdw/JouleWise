@@ -1,6 +1,6 @@
 # #416 pre-arm triple audit at c84bb34c2: lead dispositions (activation 7209d1b0, 2026-10-24)
 
-Reports: Astra 6 xhigh `~/night-archive/seats-786c/audit416/astra-report.md` (ids A*); Fable 5.1 `~/night-archive/seats-7209/fable-report-draft.md`, final in `fable-resume.jsonl` (ids F-B*, F-S*, F-N*); Opus 5.5 `~/night-archive/seats-7209/opus-report.md` (ids O-B*, O-S*). Auditor probes copied to `~/night-archive/seats-7209/probes/<seat>/`. All three verdicts: ARM AFTER LISTED BLOCKERS. All three reproduced the six sizing rows exactly, and showed native parser = analysis = twin on the real H and BY-H2 streams.
+Reports: Astra 6 xhigh `~/night-archive/seats-786c/audit416/astra-report.md` (ids A*); Fable 5.1 `~/night-archive/seats-7209/fable-report.md` (final, 09:37; same findings as the draft) (ids F-B*, F-S*, F-N*); Opus 5.5 `~/night-archive/seats-7209/opus-report.md` (ids O-B*, O-S*). Auditor probes copied to `~/night-archive/seats-7209/probes/<seat>/`. All three verdicts: ARM AFTER LISTED BLOCKERS. All three reproduced the six sizing rows exactly, and showed native parser = analysis = twin on the real H and BY-H2 streams.
 
 Seat A is `fix/2026-10-24-416-analysis` (worktree `jw-wt/fix416-analysis`). Seat B is `fix/2026-10-24-416-gates` (worktree `jw-wt/fix416-gates`). Both are cut from c84bb34c2 and run Sol 6.1 xhigh.
 
@@ -24,6 +24,7 @@ Seat A is `fix/2026-10-24-416-analysis` (worktree `jw-wt/fix416-analysis`). Seat
 | Catalog lacks `bytes.meter_decode_unavailable` and the new `bytes.meter_gap` (F-N1) | grep → 0. | Both added as DISCLOSE in the catalog and the six pass-1 packs' `flag_effects`. | B |
 | No test ties the sizing rows to `derivation.json` (O-S11) | Opus A3 probe. | Test added. | B |
 | Registration text stale: estimator versions "null"; §7 "100 ms at 10 Hz"; BAT-RULING.md absent; §5 clock wording; C4 slot (A5, F-S13, O-S10) | Verified by all three. | Text corrected; BAT-RULING.md brought into the tree from 1531dfbac. Seat A reports its text changes; the lead applies them at integration. | B + lead |
+| Nine number-bearing modules outside both pinned sets (F-S3: bundle_read, whole_window, aggregate, b6/calibration, export_runs, b5/harvest, km003c_parse, analysis_engine/distributions, desk_restore) | `git diff --stat 3bb305d7a..HEAD` per Fable. | Added to `configs/b6/registration/acceptance.json` `number_bearing_paths` at integration, so a later edit needs a review row. The integrated head's rows cover them. | lead |
 | Number-bearing `joulewise/b5/driver.py` (a8e871293) and `joulewise/bundle.py` (fcc063249) have no executing-review rows, so every session would be EXCLUDE (F-B1, O-B2) | Expected (record 786c0858 item 26). | The three #416 reports are executing reviews of the whole head. Rows are added for the final integrated head after the delta cold passes, before the registration gate. | lead |
 
 ## Kept, deferred or rejected
