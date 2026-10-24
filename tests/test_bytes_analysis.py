@@ -38,6 +38,34 @@ class NumericTestCase(unittest.TestCase):
         return super().assertAlmostEqual(first, second, msg=msg, delta=delta)
 
 
+class MarkerPassReasonTests(unittest.TestCase):
+    def row(self, pass_id, reason):
+        diagnostic = {"status": "not_evaluated", "reason": reason, "mean_j": None,
+                      "h_j": None, "B_j": None, "below_minimum": False}
+        return {"model": "model", "boundary": "rails", "basis": "gross primary", "selection": "primary",
+                "bytes": 1.0, "resident": 1.0, "role": "heldout", "moe": False, "tier": True,
+                "pass_id": pass_id, "status": "computed", "mean_j": 12.0, "h_j": .1, "B_j": .2,
+                "duration_s": 1.0, "meter_phase_edge_mean_j": 0.0, "attribution_floor_j": .1,
+                "meter_attribution_floor_j": None, "without_assisted": diagnostic}
+
+    def test_heldout_mean_carries_each_unevaluated_pass_reason(self):
+        for ids in ((1,), (2,), (1, 2)):
+            with self.subTest(passes=ids):
+                rows = [self.row(i, f"no mapped meter stream has polls in the marker window (run member-{i})") for i in ids]
+                point = ba.combine_passes(list(reversed(rows)))[0]
+                reason = "; ".join(f"pass {r['pass_id']}: {r['without_assisted']['reason']}" for r in rows)
+                self.assertEqual(point["without_assisted"]["reason"], reason)
+                self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
+                self.assertIsNone(point["without_assisted"]["mean_j"])
+                self.assertEqual(point["mean_j"], 12.0)
+
+    def test_blinded_mean_keeps_the_registered_text(self):
+        rows = [self.row(i, "not evaluated at the blinded stage") for i in (1, 2)]
+        diagnostic = ba.combine_passes(rows)[0]["without_assisted"]
+        self.assertEqual(diagnostic["reason"], "not evaluated at the blinded stage")
+        self.assertEqual(diagnostic["label"], "without assisted members; not evaluated at the blinded stage")
+
+
 def assert_d3_exercised(test, records, manifest):
     """Run the competing D3 method: substitute rails allowance AND scale."""
     changed = []
@@ -215,6 +243,38 @@ class H2WorkedExamples(NumericTestCase):
 
 
 class MeterWorkedExamples(NumericTestCase):
+    def test_marker_window_uses_integer_nanoseconds_at_both_edges(self):
+        stream = self.stream()
+        gap = 100_000_001
+        stream.poll_ns = [i * gap for i in range(11)]
+        stream.smc = [{"B0AC": -1000, "B0AV": 12000} for _ in stream.poll_ns]
+        tau_ns = 2_000_000_000 + gap
+        edge = stream.poll_ns[-1] - tau_ns
+        self.assertEqual(ba._battery_delay_ns(stream), tau_ns)
+        for window, assisted in (([edge, edge + 1], True), ([edge - 1, edge], None)):
+            with self.subTest(window=window):
+                self.assertIs(ba._decode_battery_marker(stream, window, tau_ns), assisted)
+
+    def test_filtered_stream_uses_native_decoded_voltage_current_and_power(self):
+        # These payload digits distinguish native v*i from the former chained
+        # division/multiplication expression at binary floating-point precision.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stream.jsonl"
+            items = [{"k": "h", "rate_idx": 1, "status": "streaming",
+                      "start_raw_ns": 0, "start_mono_ns": 0}]
+            for i in range(13):
+                word = kp.SAMPLE.pack(i * 100, 0, 28_034_517 + i, 539_131 + i, 0, 0, 0, 0)
+                items.append({"k": "b", "rx": i * 100_000_000, "tx": i * 100_000_000 - 1_000_000,
+                              "n": 1, "p": word.hex(), "smc": {"B0AC": 0, "B0AV": 12000}})
+            items.append({"k": "t", "end_raw_ns": 1_200_000_000, "end_mono_ns": 1_200_000_000})
+            path.write_text("".join(json.dumps(item) + "\n" for item in items))
+            native = kp.parse(path)
+            filtered = ba._filtered_stream(path, [(0, 1_200_000_000)])
+        self.assertEqual(filtered.samples, native.samples)
+        self.assertEqual(filtered.host_ns, native.host_ns)
+        self.assertEqual(filtered.watts, native.watts)
+        self.assertEqual(filtered.fit, native.fit)
+
     def stream(self, watts=None):
         # Exact host/device clock line, with two batches; parse calls clock_fit.
         samples = kp.Samples([i * 100 for i in range(101)], [1] * 101,
@@ -323,7 +383,8 @@ class BatteryRulingWorkedExamples(NumericTestCase):
         self.assertEqual(result["battery_n"], 56)
         self.assertEqual(result["battery_v_end_j"], 0)
         self.assertFalse(result["decode_battery_assist"])
-        self.assertEqual(result["battery_tau_s"], 2 + .302440875)
+        # No own half-width: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+        self.assertAlmostEqual(result["battery_tau_s"], 2 + .302440875, delta=1e-6 * (2 + .302440875))
         self.assertAlmostEqual(result["gross_j"] - result["meter_gross_j"], .776577, delta=1e-5)
         for key, expected in (("gross_j", 885.276128), ("secondary_j", 857.327851),
                               ("phase_edge_j", 7.163877), ("offset_bound_j", 4.068644)):
@@ -2223,6 +2284,24 @@ class BatteryCampaignTests(NumericTestCase):
     def tearDownClass(cls):
         cls.directory.cleanup()
 
+    def test_valid_precheck_record_returns_only_on_inclusive_line(self):
+        path = self.archive / "derived/b6-acceptance.json"
+        acceptance = ba.read_json(path)
+        run_id = self.target["run_id"]
+        acceptance["excluding"].append({"scope": "member", "run_id": run_id,
+                                         "code": "member.target_phase_precheck_failed"})
+        original = ba.read_json
+        with patch.object(ba, "read_json", side_effect=lambda p: acceptance if Path(p) == path else original(p)):
+            rows = ba.load_records(self.root / "export", self.manifest, stage="all")
+        target = next(r for r in rows if r["run_id"] == run_id and r["session_id"] == self.session["session_id"])
+        self.assertEqual(target["status"], "succeeded")
+        self.assertTrue(target["excluded"])
+        self.assertFalse(target["invalid_energy_record"])
+        for inclusive in (False, True):
+            cells = ba.reduce_models(rows, self.manifest, inclusive=inclusive, boundaries=("rails",))
+            cell = next(r for r in cells if r["model"] == target["model"] and r["pass_id"] == target["pass_id"])
+            self.assertEqual(run_id in cell["kept_runs"], inclusive)
+
     def spans(self, run_id):
         from joulewise.b6.archive import bundle_of
         bundle = bundle_of(self.archive, {}, run_id)
@@ -2394,9 +2473,9 @@ class BatteryCampaignTests(NumericTestCase):
                     else:
                         peer["without_assisted"]["reason"] = second
                     point = ba.combine_passes([peer, cell])[0]
-                    reason = first if second == first else first + "; " + (
+                    reason = f"pass {cell['pass_id']}: {first}; pass {peer['pass_id']}: " + (
                         second if second is not None else "not evaluated at the blinded stage")
-                    # Exact strings: same pass causes, deduplicated in pass order.
+                    # PR #574 preserves each actual pass's cause, in pass order.
                     self.assertEqual(point["without_assisted"]["reason"], reason)
                     self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
                     self.assertIn(self.target["run_id"], reason)
@@ -2606,7 +2685,8 @@ class BatteryCampaignTests(NumericTestCase):
         finally:
             self.path.write_bytes(self.original)
         self.assertIn(rx, stream.poll_ns)  # Exact integer receive time is retained.
-        self.assertEqual(result["battery_tau_s"], 2 * 1.0 + .6)  # Identical input arithmetic.
+        # No own half-width: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+        self.assertAlmostEqual(result["battery_tau_s"], 2 * 1.0 + .6, delta=2.6e-6)
 
     def test_neg8_request_battery_correction_reaches_dc_and_rest_references(self):
         span = self.spans("neg8-start-0")["measured_run"]

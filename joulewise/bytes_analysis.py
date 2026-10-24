@@ -12,6 +12,7 @@ import json
 import math
 import re
 import statistics
+import struct
 import sys
 from pathlib import Path
 
@@ -444,16 +445,18 @@ def _battery_stream_data(stream):
     return times, watts, interval
 
 
-def _battery_delay_s(poll_interval):
+def _battery_delay_ns(stream):
     # One second averaged, one held, then the stream's largest poll interval.
-    return 2 * T_SMC_S + poll_interval
+    # Keep window boundaries on the poll clock; seconds are display values.
+    return round(2 * T_SMC_S * 1e9) + max(
+        (b - a for a, b in zip(stream.poll_ns, stream.poll_ns[1:])), default=0)
 
 
-def _decode_battery_marker(stream, raw_span, tau):
+def _decode_battery_marker(stream, raw_span, tau_ns):
     # BAT-2 §4 defines the marker by current, independently of whether a
     # voltage was available to calculate energy at that poll.
-    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
-    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
+    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau_ns)
+    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau_ns)
     currents = [values["B0AC"] for values in stream.smc[lo:hi]
                 if values.get("B0AC") is not None]
     return any(current < 0 for current in currents) if currents else None
@@ -493,14 +496,15 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     battery_secondary = battery - battery_idle * duration
     # BAT-2 §3: one averaged second, one held second, then the stream's own
     # largest poll interval, over ALL polls (including incomplete SMC reads).
-    tau = _battery_delay_s(poll_interval)
+    tau_ns = _battery_delay_ns(stream)
+    tau = tau_ns / 1e9  # display from the integer poll clock (no float tail)
     battery_edges = []
     for edge in spans[0]:
         lo = bisect.bisect_left(battery_times, edge)
-        hi = bisect.bisect_left(battery_times, edge + tau * 1e9)
+        hi = bisect.bisect_left(battery_times, edge + tau_ns)
         battery_edges.append(duration / battery_n * sum(abs(w) for w in battery_watts[lo:hi]))
     v = sum(battery_edges)
-    assisted = _decode_battery_marker(stream, spans[0], tau)
+    assisted = _decode_battery_marker(stream, spans[0], tau_ns)
     stats = stream.fit.stats
     residual = max(abs(number(stats[key], key)) for key in
                    ("excess_latency_ms_min", "excess_latency_ms_max")) / 1000
@@ -522,7 +526,7 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
             "battery_v_start_j": battery_edges[0], "battery_v_end_j": battery_edges[1],
             "battery_tau_s": tau, "battery_poll_interval_max_s": poll_interval,
             "battery_end_window_complete": bool(stream.poll_ns and
-                stream.poll_ns[-1] >= spans[0][1] + tau * 1e9),
+                stream.poll_ns[-1] >= spans[0][1] + tau_ns),
             "battery_n": battery_n, "battery_n_idle": battery_nb,
             "decode_battery_assist": bool(assisted),
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
@@ -566,116 +570,111 @@ def operative_summary(bundle, acceptance, *, synthetic=False, stored=None, physi
 
 
 def _filtered_stream(path, spans):
-    """Fit the clock from timing only; decode power only in selected run spans.
+    """Read native samples/fit points, retaining only selected run spans.
 
-    The JSONL transport must be scanned, but payloads outside these spans are
-    never unpacked into power samples or retained. Batch endpoint *sequence
-    numbers* alone provide the same clock-fit points as the native parser.
-    One sample on either side is retained for the ruled meter edge bound.
+    Native samples() owns decoding, unwrap and replay filtering; clock_fit()
+    consumes its last kept sample in each original batch. A timing-only native
+    pass zeroes power fields, so unreleased power is never decoded. A second
+    native pass decodes only selected words. One nearest sample on each side is kept
+    for the ruled meter edge bound, including across dropped-sample gaps.
     All poll receive times are retained for BAT-2's largest poll interval.
     SMC readings are retained only in selected raw-clock [start, end + tau)
     windows using the header/trailer raw/monotonic mapping, independently of
-    the meter clock fit, including its early failure paths. Without that
-    mapping, none are retained. No unselected meter power is decoded.
+    sample decoding and the meter clock fit. Without that mapping, none are
+    retained. Invalid sample payloads leave the polls available to the marker.
     """
     from joulewise.external import km003c_parse as kp
     header = trailer = None
-    polls, batches, newest, positions = [], [], [], []
-    previous_seq = previous_rx = None
-    current = 0
-    payload_re = re.compile(r'"p"\s*:\s*"([0-9a-fA-F]*)"')
+    polls = []
     with Path(path).open() as handle:
-        while True:
-            location = handle.tell()
-            raw = handle.readline()
-            if not raw:
-                break
-            match = payload_re.search(raw)
-            # Parse transport/timing without materializing the payload as JSON.
-            item = json.loads(raw[:match.start(1)] + raw[match.end(1):] if match else raw)
-            if item.get("k") == "h":
+        for raw in handle:
+            item = json.loads(raw)
+            kind = item.get("k")
+            if kind == "h":
                 header = item
-            elif item.get("k") == "t":
+            elif kind == "t":
                 trailer = item
-            elif item.get("k") == "b":
-                polls.append((item, location))
+            elif kind == "b":
+                polls.append(item)
+    if header is not None and "status" not in header:
+        header = {**header, "status": "streaming"}
     # Match km003c_parse.parse: transport line order is not receive order.
-    polls.sort(key=lambda row: row[0]["rx"])
-    poll_ns = [item["rx"] for item, _ in polls]
+    polls.sort(key=lambda item: item["rx"])
+    poll_ns = [item["rx"] for item in polls]
     smc = [{} for _ in polls]
     shell = kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
     offset = kp.raw_offset_ns(shell)
     if offset is not None:
-        tau = _battery_delay_s(_battery_stream_data(shell)[2])
+        tau_ns = _battery_delay_ns(shell)
         for a, b in spans:
             lo = bisect.bisect_left(poll_ns, a + offset)
-            hi = bisect.bisect_left(poll_ns, b + offset + tau * 1e9)
+            hi = bisect.bisect_left(poll_ns, b + offset + tau_ns)
             for i in range(lo, hi):
-                smc[i] = dict(polls[i][0].get("smc") or {})
-    with Path(path).open() as handle:
-        for item, location in polls:
-            if item.get("n"):
-                handle.seek(location)
-                match = payload_re.search(handle.readline())
-                if match is None:
-                    continue
-                payload = match.group(1)
-                seq = int.from_bytes(bytes.fromhex(payload[-kp.SAMPLE.size * 2:][:4]), "little")
-                if previous_seq is None:
-                    first = int.from_bytes(bytes.fromhex(payload[:4]), "little")
-                    current = (seq - first) % kp.WRAP
-                else:
-                    delta = ((seq - previous_seq + kp.WRAP // 2) % kp.WRAP) - kp.WRAP // 2
-                    elapsed = (item["rx"] - previous_rx) / 1e6
-                    if elapsed > kp.WRAP // 2:
-                        delta += round((elapsed - delta) / kp.WRAP) * kp.WRAP
-                    current += delta
-                previous_seq, previous_rx = seq, item["rx"]
-                newest.append(current)
-                positions.append((seq, current, location))
-                batches.append(item)
-    if header is None or header.get("status", "streaming") != "streaming" or not batches:
-        return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
-    step = kp.STEP_MS[header["rate_idx"]]
-    clock_samples = kp.Samples(newest, [], [], list(range(len(batches))), 0, step)
+                smc[i] = dict(polls[i].get("smc") or {})
+    if header is None or header.get("status") != "streaming":
+        return shell
+    batches = [item for item in polls if item.get("n")]
+    # A bad rate is a transport/header failure, as before. Sample failures
+    # affect only the energy join: BAT-2 still reads the mapped polls.
+    kp.STEP_MS[header["rate_idx"]]
+    word_batches = []
+    def native_batches(selected=None):
+        # Give each word its own native batch index, so samples().batch tells
+        # us exactly which raw words survived native replay filtering. Splitting
+        # a batch preserves the native k==0 stall rule: subsequent words have
+        # the same rx, hence zero host gap. Fit uses the ORIGINAL batch indices.
+        word_index = 0
+        for j, batch in enumerate(batches):
+            raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
+            for start in range(0, len(raw), kp.SAMPLE.size):
+                word = raw[start:start + kp.SAMPLE.size]
+                if selected is None:
+                    word_batches.append(j)
+                if selected is None or word_index not in selected:
+                    # Preserve the sequence and length (including partial
+                    # words); no voltage/current from this word is decoded.
+                    word = word[:2] + bytes(max(0, len(word) - 2))
+                yield {"rx": batch["rx"], "p": word.hex()}
+                word_index += 1
     try:
-        fit = kp.clock_fit(clock_samples, batches)
+        samples = kp.samples(header, native_batches())
+    except (ValueError, TypeError, struct.error) as exc:
+        shell.fit_error = str(exc)
+        return shell
+    words = samples.batch
+    samples.batch = [word_batches[i] for i in words]
+    try:
+        # Native parse catches only ValueError here; a non-numeric transport
+        # field (n, tx) is a transport failure that discards the stream.
+        fit = kp.clock_fit(samples, batches)
     except ValueError as exc:
-        return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc, str(exc))
-    shell = kp.Stream(header, trailer, [], [], None, fit, [], [], poll_ns, smc)
+        shell.fit_error = str(exc)
+        return shell
+    shell.fit = fit
     if offset is None:
         return shell
-    # Sorted disjoint time ranges permit O(log n) selection per sample.
-    ranges = sorted((a + offset - step * 1_000_000, b + offset + step * 1_000_000) for a, b in spans)
+    host = [fit.host_ns(dev) for dev in samples.dev_ms]
+    # Indices, rather than a fixed time margin, keep the actual neighbours
+    # when a device sample next to an edge was dropped.
+    ranges = sorted((max(0, bisect.bisect_left(host, a + offset) - 1),
+                     min(len(host), bisect.bisect_left(host, b + offset) + 1))
+                    for a, b in spans)
     merged = []
-    for a, b in ranges:
-        if merged and a <= merged[-1][1]:
-            merged[-1][1] = max(b, merged[-1][1])
+    for lo, hi in ranges:
+        if merged and lo <= merged[-1][1]:
+            merged[-1][1] = max(hi, merged[-1][1])
         else:
-            merged.append([a, b])
-    starts = [a for a, _ in merged]
-    def selected(t):
-        i = bisect.bisect_right(starts, t) - 1
-        return i >= 0 and t <= merged[i][1]
-    host, watts, devs = [], [], []
-    with Path(path).open() as handle:
-        for seq_last, dev_last, location in positions:
-            handle.seek(location)
-            match = payload_re.search(handle.readline())
-            payload = match.group(1)
-            for pos in range(0, len(payload), kp.SAMPLE.size * 2):
-                word = payload[pos:pos + kp.SAMPLE.size * 2]
-                seq = int.from_bytes(bytes.fromhex(word[:4]), "little")
-                dev = dev_last + ((seq - seq_last + kp.WRAP // 2) % kp.WRAP) - kp.WRAP // 2
-                stamp = fit.host_ns(dev)
-                if not selected(stamp) or (host and stamp <= host[-1]):
-                    continue
-                fields = kp.SAMPLE.unpack(bytes.fromhex(word))
-                host.append(stamp)
-                watts.append(fields[2] / 1e6 * fields[3] / 1e6)
-                devs.append(dev)
-    samples = kp.Samples(devs, [], [], [], 0, step)
-    return kp.Stream(header, trailer, [], [], samples, fit, host, watts, poll_ns, smc)
+            merged.append([lo, hi])
+    indices = [i for lo, hi in merged for i in range(lo, hi)]
+    decoded = kp.samples(header, native_batches({words[i] for i in indices}))
+    shell.samples = kp.Samples([decoded.dev_ms[i] for i in indices],
+                               [decoded.vbus_v[i] for i in indices],
+                               [decoded.ibus_a[i] for i in indices],
+                               [samples.batch[i] for i in indices],
+                               samples.duplicates, samples.step_ms)
+    shell.host_ns = [host[i] for i in indices]
+    shell.watts = shell.samples.watts
+    return shell
 
 
 def _session_streams(root, spans):
@@ -685,7 +684,7 @@ def _session_streams(root, spans):
     for path in sorted(directory.glob("stream-*.jsonl")):
         try:
             stream = _filtered_stream(path, spans)
-        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError, struct.error) as exc:
             stream = kp.Stream(None, None, [], [], None, None, [], [], [], [], str(exc))
         streams.append((path.name, stream))
     return streams
@@ -695,7 +694,9 @@ def _session_streams(root, spans):
 # Other catalog exclusions, including NUMBER cooldown/idle/envelope flags,
 # can be restored if the record itself passes the checks below.
 INVALID_RECORD_CODES = frozenset({"member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
-    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch"})
+    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch",
+    # F15: a fallback anchor cannot place a valid energy record on the phase clock.
+    "member.anchor_not_bounded"})
 REFERENCE_ROLES = ("corpus", "start", "midpoint", "end")
 
 
@@ -964,7 +965,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                                                   battery_readings=battery_readings), "stream": name}
                     from joulewise.external import km003c_parse as kp
                     raw_span = [edge + kp.raw_offset_ns(stream) for edge in spans[row["run_id"]][0]]
-                    if _decode_battery_marker(stream, raw_span, row["meter"]["battery_tau_s"]) is None:
+                    if _decode_battery_marker(stream, raw_span, _battery_delay_ns(stream)) is None:
                         row["decode_assist_evaluated"] = False
                         row["decode_assist_evaluated_reason"] = (
                             "decode marker not evaluated: selected meter stream has no polls carrying B0AC"
@@ -983,11 +984,11 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     if offset is None:
                         continue
                     raw_span = [edge + offset for edge in spans[row["run_id"]][0]]
-                    tau = _battery_delay_s(battery_readings[2])
-                    marker = _decode_battery_marker(stream, raw_span, tau)
+                    tau_ns = _battery_delay_ns(stream)
+                    marker = _decode_battery_marker(stream, raw_span, tau_ns)
                     if marker is None:
                         continue
-                    marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau * 1e9)
+                    marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau_ns)
                     if marker:
                         row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
                 row["decode_assist_evaluated"] = bool(marker_windows)
@@ -1302,6 +1303,7 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                 n_r = sum(r["stratum"] == "repeat" for r in without)
                 n_b = len({r["unit_id"] for r in without if r["stratum"] == "quad"})
                 below = min(n_r, n_b) < 5
+                # Two units are the smallest sample with an estimable sample variance.
                 diagnostic = _phase_cell(without, removed + [r["run_id"] for r in kept if r not in without],
                                          module, boundary, secondary, minimum_units=2,
                                          h1_family=h1_checks(manifest)) if n_r and n_b else {
@@ -1398,8 +1400,11 @@ def combine_passes(rows):
                 "output_label": OUTPUT_LABEL,
                 "passes": [{"pass_id": r["pass_id"], **d} for r, d in zip(group, diagnostics)]}
             if any(d.get("status") == "not_evaluated" for d in diagnostics):
-                reason = "; ".join(dict.fromkeys(d.get("reason", "not evaluated at the blinded stage")
-                    for d in diagnostics if d.get("status") == "not_evaluated"))
+                reasons = [(r["pass_id"], d.get("reason", "not evaluated at the blinded stage"))
+                           for r, d in zip(group, diagnostics) if d.get("status") == "not_evaluated"]
+                reason = ("not evaluated at the blinded stage" if all(
+                    text == "not evaluated at the blinded stage" for _, text in reasons) else
+                    "; ".join(f"pass {pass_id}: {text}" for pass_id, text in reasons))
                 point["without_assisted"].update(status="not_evaluated",
                     reason=reason, label="without assisted members; " + reason)
         points.append(point)

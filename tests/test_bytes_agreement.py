@@ -20,7 +20,7 @@ Addendum 9 (NR1, the meter label-offset alternative) and B4 (the withheld store,
 C_j and the offset interval's endpoints at 1% of that alternative's own half-width, t SE_j + C_j
 (``bar_offset_interval``; the labelled OLS alternative at 1% of its own); the per-point bound at the
 energy bar (J) and the power bar (W); the sensitivities at the no-half-width bar; the zero/sign
-decisions under both intervals as labels with the usual slack; units, flag presence, scope and
+decisions under both intervals as exact labels (registration §12); units, flag presence, scope and
 disclosure presence (and the 22 and 25 ms the disclosure states), `missing` statuses, pass labels
 and withheld row counts exactly.  Two campaigns join the five: the edge-locked meter of Addendum
 9.1 (every run flips a whole sample) and a withholding campaign on R6's six sub-packs with one
@@ -37,15 +37,20 @@ Run from the repository root (about three minutes):
 from __future__ import annotations
 
 import ast
+import bisect
+import copy
 import importlib.util
 import json
 import math
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from joulewise import aggregate
 from joulewise import bytes_analysis as ba
@@ -76,6 +81,7 @@ DEFECTS = [
     (1, "Qwen3-8B-4bit", 20, "cooldown"),             # quad unit 2: member.cooldown_cap_hit (NUMBER class)
 ]
 DEFECTS_MINIMUM = [(1, "Qwen3-32B-4bit", i, "strict_validation") for i in range(6)]
+ANCHOR_DEFECTS = [(1, "Qwen3-1.7B-4bit", 0, "member.anchor_not_bounded")]
 # Addendum 9 item 1: the generator's NR1 knobs (samples 50 ms into the interval, science-run edges
 # at a uniform phase, a 10 ms minimum receive latency) are its defaults, so every campaign below is
 # the ruled fixture in which a constant label offset flips a whole sample with probability
@@ -98,17 +104,42 @@ WITHHELD_KNOBS = {"subpack_sessions": True, "uncollected_sessions": ("bytes-s4-p
 MISSING_STORES = ("bytes-s2-p2", "bytes-s6-p1", "bytes-s6-p2")
 # name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
-    "bytes": ("bytes", 1100, [], NR1_KNOBS, ()),
+    "bytes": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True, "battery_publication": "delayed", "battery_reference_assist": True}, ()),
     "resident": ("resident", 3100, [], NR1_KNOBS, ()),
     "time": ("time", 2100, [], NR1_KNOBS, ()),
     "defects": ("bytes", 1100, DEFECTS, NR1_KNOBS, ()),
     "minimum": ("bytes", 1100, DEFECTS_MINIMUM, NR1_KNOBS, ()),
     "edge_locked": ("resident", 3100, [], EDGE_LOCKED_KNOBS, ()),
     "withheld": ("bytes", 1100, [], {**NR1_KNOBS, **WITHHELD_KNOBS}, MISSING_STORES),
+    "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
+    "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                           "truncate_marker_window": True}, ()),
+    "late_start": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                   "battery_publication": "delayed", "battery_reference_assist": True,
+                   "late_start_stream": True}, ()),
+    "polls_only": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                   "battery_publication": "delayed", "battery_reference_assist": True,
+                   "marker_stream_mode": "polls_only"}, ()),
+    "header_closed": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                      "battery_publication": "delayed", "battery_reference_assist": True,
+                      "marker_stream_mode": "header_closed"}, ()),
+    "empty_payload_n": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                        "battery_publication": "delayed", "battery_reference_assist": True,
+                        "marker_stream_mode": "empty_payload_n"}, ()),
+    "replayed_batch": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                       "battery_publication": "delayed", "battery_reference_assist": True,
+                       "marker_stream_mode": "replayed_batch"}, ()),
+    "replayed_tail": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                      "battery_publication": "delayed", "battery_reference_assist": True,
+                      "marker_stream_mode": "replayed_tail"}, ()),
+    "first_batch_tail_replayed": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
+                                  "battery_publication": "delayed", "battery_reference_assist": True,
+                                  "marker_stream_mode": "first_batch_tail_replayed"}, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
-        ("gross primary", "flagged-inclusive"): "flagged_inclusive"}
+        ("gross primary", "flagged-inclusive"): "flagged_inclusive",
+        ("idle-subtracted secondary", "flagged-inclusive"): "idle_flagged_inclusive"}
 ANCHOR, INTERP, DRIFT, METER = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                                 "E_whole_window_drift_allowance_j", "E_meter_edge_bound_j")
 FAMILY_KEY = {"gross": "gross", "idle_subtracted": "idle"}
@@ -135,33 +166,24 @@ def bar_coefficient(half_width):
     return 0.01 * half_width
 
 
-FLOAT_EPS = 2.2e-16     # double precision relative float noise (the brief, section 5)
+def bar_rest_intercept_floor(vif, inputs):
+    """Doctrine's lower edge: 1e6 × binary64 noise × 4 VIF × RMS(P_rest).
+
+    The centred two-regressor Gram condition number is approximately 4 VIF.
+    The response RMS is the intercept's natural W scale. Registration §12 /
+    Addendum 8.6 declares c unidentified and draws no word from it; where this
+    floor exceeds 1% of a printed interval, that interval's 1% ceiling governs
+    and the comparison record discloses the floor/ceiling crossing ratio.
+    """
+    response_rms = math.sqrt(math.fsum(p[0] ** 2 for p in inputs) / len(inputs))
+    return 1e6 * sys.float_info.epsilon * 4 * vif * response_rms
 
 
-def bar_float_noise_coefficient(vif, scale):
-    """The lower edge of the bar window (the brief, section 5: a bar sits above 1e6 x float noise),
-    for a coefficient of a two-regressor fit whose VIF is printed (the rest model, Addendum 3 item 9).
-    An input perturbation of relative size d (float noise on the fitted powers, 1e6 x eps at the
-    window's edge) moves a least-squares coefficient by about kappa(X'X) x d x its natural scale, the
-    response's size over its regressor's size (1 for the intercept).  For the centred two-regressor
-    Gram matrix kappa = (1 + |r|)/(1 - |r|) and 1 - r^2 = 1/VIF, so kappa is about 4 x VIF.  The floor
-    is therefore 1e6 x eps x 4 VIF x scale.  It matters only where the design is near-singular
-    (Addendum 8.6: with VIF 3.4e6, input noise of 3e-10 moves the rest model's c by 6%, so c is not
-    identified and no word is drawn from it); elsewhere 1% of the HC3 half-width is far above it.  A
-    VIF the analysis prints as infinite (|r| = 1) makes every coefficient of that fit pure float
-    noise, so the floor is unbounded there."""
-    if vif is None or not math.isfinite(vif):
-        return math.inf
-    return 1e6 * FLOAT_EPS * 4 * vif * scale
-
-
-def coefficient_scales(points):
-    """Natural scales of (c, epsilon_rest, lambda) for the rest model P_rest = c + e BW + l P_rails:
-    the RMS response over 1, over the RMS of BW and over the RMS of P_rails."""
-    def rms(values):
-        return math.sqrt(math.fsum(v * v for v in values) / len(values))
-    y = rms([p[0] for p in points])
-    return [y, y / rms([p[1] for p in points]), y / rms([p[2] for p in points])]
+def coefficient_bar_note(ceiling, floor):
+    """Record an empty doctrine window beside the unchanged 1% ceiling."""
+    if floor > ceiling:
+        return f"float-noise lower edge / 1% ceiling = {floor / ceiling:.12g}; window empty, ceiling governs"
+    return None
 
 
 # Durations compare to 1 ms: Addendum 8.5 (the printed precision F13 asks B6 to fix; 1 ms is the
@@ -214,6 +236,11 @@ def states_delta_bound(text):
     return (22 in numbers, 25 in numbers, "M13" in (text or ""))
 
 
+def reason_run_ids(text):
+    """Reason wording is descriptive; the set of affected kept runs is exact."""
+    return sorted(set(re.findall(r"\(run ([^)]+)\)", text or "")))
+
+
 # ---------------------------------------------------------------------------------------------
 # The recorder: every compared field is one record.
 
@@ -243,16 +270,6 @@ class Recorder:
         self.rows.append(row)
         return row
 
-    def label_with_slack(self, stage, group, key, a, t, under_bar):
-        """A label (sign, 'adds nothing') drawn from a number: exact, unless the number it rests on
-        is itself within its bar of the decision boundary (then the difference is under the bar)."""
-        if a == t:
-            return self.exact(stage, group, key, a, t)
-        row = self.exact(stage, group, key, a, t)
-        if under_bar:
-            row["status"] = "under_bar"
-            row["note"] = "the deciding number is within its bar of the boundary"
-        return row
 
     def counts(self):
         out = {"compared": len(self.rows), "equal": 0, "under_bar": 0, "above_bar": 0}
@@ -304,7 +321,10 @@ def t_kept(est):
 def compare_cell_numbers(R, stage, g, row, est):
     """One per-pass cell line (or the without-assisted diagnostic): m, h, B, kinds, interval, T, n."""
     hb = row["h_j"] + row["B_j"]
+    R.exact(stage, g, "drift_family", row.get("drift_family"), est.get("drift_family"))
     for key in ("mean_j", "h_j", "B_j", "lower_j", "upper_j"):
+        R.number(stage, g, key, row.get(key), est.get(key), bar_energy(hb))
+    for key in ("attribution_floor_j", "rails_attribution_floor_j", "meter_attribution_floor_j", "meter_phase_edge_mean_j"):
         R.number(stage, g, key, row.get(key), est.get(key), bar_energy(hb))
     # variance = (h / t)^2: the h bar propagated, d(var) = 2 var dh / h with dh = 1% of (h + B).
     var_bar = 0.02 * row["variance"] * hb / row["h_j"] if row.get("h_j") else None
@@ -316,11 +336,44 @@ def compare_cell_numbers(R, stage, g, row, est):
     for kind in ("anchor", "interp", "drift", "meter_edge"):
         R.number(stage, g, "B_kind:" + kind, ak[kind], tk[kind], bar_energy(hb))
     if row["boundary"] != "rails":
+        compare_battery_columns(R, stage, g, row, est, hb)
         # Addendum 9: the pass's coherent-offset bound (J, at the cell's energy bar) and signed
         # sensitivity (W, no half-width); rails has neither (checked in compare_cells).
         offset = est.get("meter_offset") or {}
         R.number(stage, g, "meter_offset_bound_j", row.get("meter_offset_bound_j"), offset.get("bound_j"), bar_energy(hb))
         R.number(stage, g, "meter_offset_sensitivity_w", row.get("meter_offset_sensitivity_w"), offset.get("sensitivity_w"), None)
+
+
+def compare_battery_columns(R, stage, g, row, est, half):
+    """BAT-2: diagnostic energies use the same cell half-width; counts and boundary words are exact."""
+    for key in ("battery_term_mean_j", "battery_term_max_j", "battery_phase_edge_max_j"):
+        R.number(stage, g, key, row.get(key), est.get(key), bar_energy(half))
+    for key in ("battery_nonzero_run_count", "boundary_description"):
+        R.exact(stage, g, key, row.get(key), est.get(key))
+    # Run terms use their enclosing cell's energy bar. Missing polls remove DC/rest only.
+    tm = {r["run_id"]: r for r in est.get("meter_run_terms", [])}
+    R.exact(stage, g, "meter run census", sorted(r["run_id"] for r in row.get("meter_run_terms", [])),
+            sorted(r["run_id"] for r in est.get("meter_run_terms", [])))
+    for run in row.get("meter_run_terms", []):
+        other = tm.get(run["run_id"], {})
+        rg = g + "/meter/" + run["run_id"]
+        for key in ("meter_gross_j", "meter_secondary_j", "battery_gross_j", "battery_secondary_j",
+                    "battery_v_start_j", "battery_v_end_j", "battery_phase_edge_j", "offset_bound_j",
+                    "gross_j", "secondary_j", "phase_edge_j", "meter_phase_edge_j"):
+            R.number(stage, rg, key, run.get(key), other.get(key), bar_energy(half))
+        for key in ("battery_tau_s", "battery_poll_interval_max_s", "sample_interval_s", "r_max_s"):
+            # These per-run durations have no own half-width or fixed printed
+            # precision: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+            R.number(stage, rg, key, run.get(key), other.get(key), None)
+        for key in ("battery_idle_power_w", "meter_idle_power_w", "idle_power_w", "offset_sensitivity_w"):
+            R.number(stage, rg, key, run.get(key), other.get(key), None)
+        for key in ("edge_powers_w", "adjacent_before_edge_powers_w"):
+            for i, value in enumerate(run.get(key, [])):
+                R.number(stage, rg, key + f"[{i}]", value, (other.get(key) or [None, None])[i], None)
+        for key in ("battery_n", "battery_n_idle", "n", "n_idle", "decode_battery_assist"):
+            R.exact(stage, rg, key, run.get(key), other.get(key))
+        R.exact(stage, rg, "battery_end_window_complete", run.get("battery_end_window_complete"),
+                other.get("battery_end_window_complete"))
 
 
 def compare_missing(R, stage, g, row, est):
@@ -332,11 +385,87 @@ def compare_missing(R, stage, g, row, est):
             R.exact(stage, g, key, row.get(key), est.get(key))
 
 
+def row_key(row, *, point=False):
+    return (canon(row["model"]), "mean" if point else str(row["pass_id"]),
+            row["boundary"], row["basis"], row["selection"])
+
+
+def compare_census(R, stage, rows, t, *, point=False, table=None):
+    """Compare identities both ways, including unavailable rows and duplicate rows."""
+    if table is not None:
+        primary = [r for r in rows if (r["basis"], r["selection"]) == ("gross primary", "primary")]
+        expected = []
+        # Before withheld rows are admitted, the blinded primary has fit points
+        # only and emits no hypothesis tables (bytes_analyze's evaluation gate).
+        tables = t.get("h2" if table == "h2" else "h1", {}) if any(
+            model not in bt.FIT_SET for model in t.get("cells", {})) else {}
+        for boundary, passes in tables.items():
+            if stage.startswith("blinded") and boundary != "rails":
+                continue
+            if table == "moe":
+                if "passes_mean" in passes:
+                    expected.append((boundary,))
+            elif table == "h1":
+                for pk, block in passes.items():
+                    models = block.get("models", {})
+                    for model, cells in t.get("cells", {}).items():
+                        if model in bt.FIT_SET:
+                            continue
+                        quantity = cells.get(pk, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
+                        if block.get("status") == "refused_fit_set_incomplete":
+                            present = pk == "passes_mean" and quantity.get("status") != "ok"
+                        else:
+                            member = models.get(model)
+                            present = member is not None and (pk == "passes_mean" or
+                                ("refused" not in member and member.get("status") != "missing"))
+                        if present:
+                            expected.append((model, boundary, "mean" if pk == "passes_mean" else pk[4:]))
+            elif "passes_mean" in passes:
+                expected.append((boundary, "primary"))
+                quantities = [cells.get("passes_mean", {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
+                              for cells in t.get("cells", {}).values()]
+                if "two_pass_sensitivity" in passes["passes_mean"] or any(
+                    q.get("status") != "ok" or q.get("passes_computed", 1) < 2 for q in quantities):
+                    expected.append((boundary, "two_pass_sensitivity"))
+        if table == "h1":
+            actual = [(canon(r["model"]), BMAP.get(r["boundary"], r["boundary"]), str(r["pass_id"]))
+                      for r in primary if r["role"] == "heldout"]
+        elif table == "h2":
+            actual = [(BMAP.get(r["boundary"], r["boundary"]), r["analysis"]) for r in primary]
+        else:
+            actual = [(BMAP.get(r["boundary"], r["boundary"]),) for r in primary]
+        R.exact(stage, table + " census", "row keys", sorted(actual), sorted(expected))
+        return
+    expected = []
+    reverse_b = {v: k for k, v in BMAP.items()}
+    for model, passes in (t.get("cells") or {}).items():
+        for pk, block in passes.items():
+            if (pk == "passes_mean") != point:
+                continue
+            for boundary, cell in block.get("boundaries", {}).items():
+                if stage.startswith("blinded") and boundary != "rails":
+                    # Registration Addendum 3.4: no DC/rest table exists at
+                    # this stage, including missing-withheld placeholders.
+                    continue
+                # At blinded stages the twin explicitly prints no_archive_join;
+                # primary has rails only, also for the model's pass mean.
+                if cell.get("status") == "no_archive_join" or (point and all(
+                    p.get("boundaries", {}).get(boundary, {}).get("status") == "no_archive_join"
+                    for key, p in passes.items() if key != "passes_mean")):
+                    continue
+                for basis, selection in VMAP:
+                    expected.append((model, "mean" if point else pk[4:], reverse_b[boundary], basis, selection))
+    R.exact(stage, "point census" if point else "cell census", "row keys",
+            sorted(row_key(r, point=point) for r in rows), sorted(expected))
+
+
 def compare_cells(R, stage, a_rows, t):
+    compare_census(R, stage, a_rows, t)
     for row in a_rows:
         variant = VMAP.get((row["basis"], row["selection"]))
-        if variant is None:
-            continue    # idle-subtracted x flagged-inclusive: the twin prints no such line (recorded)
+        if variant is None or row["boundary"] not in BMAP:
+            R.exact(stage, "cell census", "known labels", row_key(row), "registered labels required")
+            continue
         model, b = canon(row["model"]), BMAP[row["boundary"]]
         g = f"cell/{model}/pass{row['pass_id']}/{b}/{variant}"
         cell = (((t.get("cells") or {}).get(model) or {}).get(f"pass{row['pass_id']}") or {}).get("boundaries", {}).get(b)
@@ -345,6 +474,7 @@ def compare_cells(R, stage, a_rows, t):
             continue
         est = cell.get(variant) if cell.get("status", "ok") == "ok" else cell
         est = est if est is not None else {"status": cell.get("status", "absent")}
+        R.exact(stage, g, "flags", row.get("flags", []), est.get("flags", []))
         if row["status"] == "missing" or est.get("status") == "missing":
             # B6 ruling Q1: the pass prints `missing` with the flag and the sidecar's counts.
             R.exact(stage, g, "status", row["status"], est.get("status"))
@@ -359,10 +489,21 @@ def compare_cells(R, stage, a_rows, t):
         if not (a_ok and t_ok):
             continue
         compare_cell_numbers(R, stage, g, row, est)
+        for key in ("decode_assisted_member_counts", "harvest_assisted_member_counts"):
+            R.exact(stage, g, key, row.get(key), est.get(key))
+        R.exact(stage, g, "decode_assisted_member_counts_reason:run_ids",
+                reason_run_ids(row.get("decode_assisted_member_counts_reason")),
+                reason_run_ids(est.get("decode_assisted_member_counts_reason")))
         R.exact(stage, g, "kept_runs", sorted(row.get("kept_runs", [])), t_kept(est))
-        if variant == "gross":
+        if "assisted_unit_counts" in row:
+            assists = set(cell.get("assist_members", []))
+            members = est.get("members", {})
+            R.exact(stage, g, "assisted_unit_counts", row["assisted_unit_counts"], {
+                "repeat": sum(r in assists for r in members.get("repeats", [])),
+                "quad": sum(bool(set(q) & assists) for q in members.get("quads", {}).values())})
+        if variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive"):
             da = cell.get("drift_allowance") or {}
-            R.number(stage, g, "drift_scale", row.get("drift_scale"), da.get("scale"), None)
+            R.number(stage, g, "drift_scale", row.get("drift_scale"), est.get("drift_scale", da.get("scale")), None)
             hb = row["h_j"] + row["B_j"]
             if b == "rails":
                 R.number(stage, g, "attribution_floor_j", row.get("rails_attribution_floor_j"),
@@ -371,14 +512,27 @@ def compare_cells(R, stage, a_rows, t):
                 R.number(stage, g, "meter_attribution_floor_j", row.get("meter_attribution_floor_j"),
                          (cell.get("meter_attribution_floor") or {}).get("value_j"), bar_energy(hb))
             # Addendum 7 D10: block 5's without-assisted line wherever a cell holds an assist member.
-            wa, wt = row.get("without_assisted"), cell.get("without_assisted")
+            wa, wt = row.get("without_assisted"), est.get("without_assisted")
             if wa is not None or wt is not None:
                 gw = g + "/without_assisted"
                 a_ok = wa is not None and wa.get("status") == "computed"
                 t_ok = wt is not None and wt.get("status") == "ok"
                 R.exact(stage, gw, "status", "computed" if a_ok else "unavailable", "computed" if t_ok else "unavailable")
+                if wa is not None and wt is not None:
+                    R.exact(stage, gw, "description_only", wa.get("description_only"), True)
+                    R.exact(stage, gw, "below_minimum", wa.get("below_minimum"), wt.get("below_minimum"))
+                    if wa.get("status") == "not_evaluated" or wt.get("status") == "not_evaluated":
+                        R.exact(stage, gw, "evaluation status", wa.get("status"), wt.get("status"))
+                        R.exact(stage, gw, "reason:run_ids", reason_run_ids(wa.get("reason")),
+                                reason_run_ids(wt.get("reason")))
+                        for key in ("mean_j", "h_j", "B_j", "lower_j", "upper_j", "n_r", "n_b"):
+                            R.exact(stage, gw, key + ":not evaluated is null", wa.get(key), None)
                 if a_ok and t_ok:
                     compare_cell_numbers(R, stage, gw, {**wa, "boundary": row["boundary"]}, wt)
+                    R.number(stage, gw, "drift_scale", wa.get("drift_scale"), wt.get("drift_scale"), None)
+                    R.exact(stage, gw, "drift_family", wa.get("drift_family"), wt.get("drift_family"))
+                    R.exact(stage, gw, "flags", wa.get("flags", []), wt.get("flags", []))
+                    R.exact(stage, gw, "kept_runs", sorted(wa.get("kept_runs", [])), t_kept(wt))
 
 
 def compare_neg8(R, stage, a_rows, t):
@@ -401,6 +555,19 @@ def compare_neg8(R, stage, a_rows, t):
                 R.number(stage, gf, "allowance_j", fa.get("allowance_j"), tf.get("allowance_j"), None)
                 for key in ("bound_j", "envelope_j", "prediction_j"):
                     R.number(stage, gf, key, fa["bound_terms"].get(key), (tf.get("bound_terms") or {}).get(key), None)
+                for key in ("n_start", "n_end"):
+                    R.exact(stage, gf, key, fa["bound_terms"].get(key), (tf.get("bound_terms") or {}).get(key))
+                for role, value in fa.get("means_j", {}).items():
+                    R.number(stage, gf, "endpoint mean:" + role, value, tf.get("endpoint_means_j", {}).get(role), None)
+                source = [r for r in row["neg8_inputs"].get("references", []) if b in r]
+                target = {r["run_id"]: r for r in tf.get("reference_values", [])}
+                R.exact(stage, gf, "source reference census", sorted(r["run_id"] for r in source), sorted(target))
+                for ref_row in source:
+                    other = target.get(ref_row["run_id"], {})
+                    gr = gf + "/" + ref_row["run_id"]
+                    R.exact(stage, gr, "role", ref_row["role"], other.get("role"))
+                    R.number(stage, gr, "duration_s", ref_row["duration_s"], other.get("duration_s"), DURATION_BAR_S)
+                    R.number(stage, gr, "energy_j", ref_row[b].get(family), other.get("energy_j"), None)
             tg = tn.get(f"{BMAP[b]}/gross") or {}
             R.number(stage, g, "E_ref_j", ref["energy_j"], tg.get("E_ref_j"), None)
             R.number(stage, g, "T_ref_s", ref["duration_s"], tg.get("T_ref_s"), DURATION_BAR_S)
@@ -409,9 +576,11 @@ def compare_neg8(R, stage, a_rows, t):
 
 
 def compare_points(R, stage, a_points, t):
+    compare_census(R, stage, a_points, t, point=True)
     for p in a_points:
         variant = VMAP.get((p["basis"], p["selection"]))
-        if variant not in ("gross", "idle_subtracted"):
+        if variant is None or p["boundary"] not in BMAP:
+            R.exact(stage, "point census", "known labels", row_key(p, point=True), "registered labels required")
             continue
         model, b = canon(p["model"]), BMAP[p["boundary"]]
         g = f"point/{model}/mean/{b}/{variant}"
@@ -437,7 +606,10 @@ def compare_points(R, stage, a_points, t):
                 WITHHELD_MISSING in (q.get("flags") or []))
         hb = p["h_j"] + p["B_j"]
         T = p["duration_s"]
+        for key in ("attribution_floor_j", "meter_attribution_floor_j", "meter_phase_edge_mean_j"):
+            R.number(stage, g, key, p.get(key), q.get(key), bar_energy(hb))
         if b != "rails":
+            compare_battery_columns(R, stage, g, p, q, hb)
             # Addendum 9 (cold disposition M1): the point's bound in J (pass-averaged, the energy bar),
             # in W (over the point's mean decode time, the power bar), and the sensitivity in W.
             R.number(stage, g, "meter_offset_bound_j", p.get("meter_offset_bound_j"), q.get("meter_offset_bound_j"), bar_energy(hb))
@@ -449,6 +621,7 @@ def compare_points(R, stage, a_points, t):
             R.exact(stage, g, "no meter offset terms on rails (Addendum 9)", p.get("meter_offset_bound_w") is None,
                     q.get("meter_offset_bound_w") is None)
         R.number(stage, g, "mean_j", p["mean_j"], q["E_dec_j"], bar_energy(hb))
+        R.exact(stage, g, "output_label", p.get("output_label"), q.get("printed_label"))
         R.number(stage, g, "duration_s", p["duration_s"], q["T_dec_s"], DURATION_BAR_S)
         for ak, tk in (("e", "e_j_per_step"), ("lower", "e_lower_j_per_step"), ("upper", "e_upper_j_per_step"),
                        ("printed_j_per_output_token", "e_printed_j_per_token")):
@@ -465,9 +638,26 @@ def compare_points(R, stage, a_points, t):
         for i, (va, vt) in enumerate(zip(p.get("pass_values_j", []), q.get("pass_values_E_dec_j", []))):
             R.number(stage, g, f"pass_values_j[{i}]", va, vt, bar_energy(hb))
         R.number(stage, g, "pass_difference_j", p.get("pass_difference_j"), q.get("pass_difference_E_dec_j"), bar_energy(hb))
+        if "without_assisted" in p:
+            wa, wt = p["without_assisted"], q.get("without_assisted", {})
+            if wa.get("status") == "not_evaluated" or wt.get("status") == "not_evaluated":
+                R.exact(stage, g + "/without_assisted", "evaluation status", wa.get("status"), wt.get("status"))
+                R.exact(stage, g + "/without_assisted", "reason", wa.get("reason"), wt.get("reason"))
+            R.exact(stage, g + "/without_assisted", "below_minimum", wa.get("below_minimum", False), wt.get("below_minimum", False))
+            R.exact(stage, g + "/without_assisted", "evaluated", wa.get("mean_j") is not None, wt.get("status") == "ok")
+            if wa.get("mean_j") is not None and wt.get("status") == "ok":
+                # This descriptive line has its own (h+B) half-width, exactly as the primary.
+                half = wa["h_j"] + wa["B_j"]
+                for ak, tk in (("mean_j", "E_dec_j"), ("h_j", "h_j"), ("B_j", "B_j"),
+                               ("lower_j", "E_dec_lower_j"), ("upper_j", "E_dec_upper_j")):
+                    R.number(stage, g + "/without_assisted", ak, wa.get(ak), wt.get(tk), bar_energy(half))
+                R.number(stage, g + "/without_assisted", "printed_j_per_output_token",
+                         wa.get("printed_j_per_output_token"), wt.get("e_printed_j_per_token"), bar_energy(half) / 512)
 
 
 def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
+    compare_census(R, stage, a_h1, t, table="h1")
+    compare_census(R, stage, a_moe, t, table="moe")
     for row in a_h1:
         if (row["basis"], row["selection"]) != ("gross primary", "primary"):
             continue
@@ -477,6 +667,12 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         th = (t.get("h1") or {}).get(b, {}).get(pk) or {}
         tm = (th.get("models") or {}).get(model)
         if tm is None:
+            if th.get("status") == "refused_fit_set_incomplete" and row.get("status") == "missing":
+                # Same unavailable boundary: primary emits null words per model;
+                # twin emits the parent fit-set refusal, with no model words.
+                R.exact(stage, g, "word", row.get("word"), None)
+                R.exact(stage, g, "fit unavailable", row["status"], "missing")
+                continue
             R.exact(stage, g, "word", row.get("word") if row["role"] == "heldout" else None, "absent:" + str(th.get("status")))
             continue
         if row.get("status") == "missing" or tm.get("status") == "missing":
@@ -493,6 +689,9 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
             R.exact(stage, g, "flag:" + WITHHELD_MISSING, WITHHELD_MISSING in (row.get("flags") or []),
                     WITHHELD_MISSING in (tm.get("flags") or []))
         for c in row["checks"]:
+            if c["hypothesis"] not in tm["checks"]:
+                R.exact(stage, g, "known hypothesis", c["hypothesis"], sorted(tm["checks"]))
+                continue
             tc = tm["checks"][c["hypothesis"]]
             h = c["hypothesis"]
             # The held-out model's own measured half-width per step, (h + B)/512, is the cell's.
@@ -506,11 +705,20 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
             # ln(e / predicted): the prediction's bar divided by the prediction, dimensionless.
             ln_bar = bar_energy(w) / c["predicted"] if c.get("predicted") else None
             R.number(stage, g, h + ":ln_ratio", c["log_ratio"], tc["ln_measured_over_predicted"], ln_bar)
+            R.exact(stage, g, h + ":log_status", c.get("log_status"),
+                    "computed" if tc["ln_measured_over_predicted"] is not None else "undefined_nonpositive")
     for row in a_moe:
         if (row["basis"], row["selection"]) != ("gross primary", "primary"):
             continue
         b = BMAP[row["boundary"]]
-        tm = ((t.get("h1") or {}).get(b, {}).get("passes_mean") or {}).get("active_or_resident") or {}
+        group = (t.get("h1") or {}).get(b, {}).get("passes_mean") or {}
+        tm = group.get("active_or_resident") or {}
+        if group.get("status") == "refused_fit_set_incomplete":
+            # No MoE answer can be drawn from an unavailable fit set. Recover
+            # the missing-point census from the twin's explicit model statuses.
+            missing = sorted(m for m, block in t.get("cells", {}).items() if
+                block.get("passes_mean", {}).get("boundaries", {}).get(b, {}).get("quantities", {}).get("gross", {}).get("status") != "ok")
+            tm = {"answer": "missing", "missing_models": missing}
         R.exact(stage, f"moe/{b}/passes_mean", "answer", row["answer"], tm.get("answer"))
         if row.get("status") == "missing" or tm.get("missing_models"):
             # B6 ruling Q1: an MoE model without a point leaves the answer `missing`, naming the models.
@@ -538,37 +746,36 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
                 R.number(stage, g, f"corner[{i}].slope", x[1], y[1], None)
 
 
-def _interval(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0, offset=False):
+def _interval(R, stage, g, name, a_fit, idx, t_iv, *, offset=False, floor=0.0):
     """One coefficient: estimate and HC3 interval at 1% of the HC3 half-width; the labelled OLS
-    interval beside it at 1% of its own half-width.  floor: the float-noise floor of the bar (the
-    rest model only, from its printed VIF); 0 for a fit that prints no VIF.  offset: Addendum 9's
+    interval beside it at 1% of its own half-width, without a VIF multiplier. offset: Addendum 9's
     labelled alternative beside the coefficient (DC input and rest)."""
     half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
-    bar = max(bar_coefficient(half), floor)
-    R.number(stage, g, name + ":estimate", a_fit["coefficients"][idx], t_iv["value"], bar)
-    R.number(stage, g, name + ":lower[HC3]", a_fit["intervals"][idx][0], t_iv["lower"], bar)
-    R.number(stage, g, name + ":upper[HC3]", a_fit["intervals"][idx][1], t_iv["upper"], bar)
+    bar = bar_coefficient(half)
+    note = coefficient_bar_note(bar, floor)
+    R.number(stage, g, name + ":estimate", a_fit["coefficients"][idx], t_iv["value"], bar, note)
+    R.number(stage, g, name + ":lower[HC3]", a_fit["intervals"][idx][0], t_iv["lower"], bar, note)
+    R.number(stage, g, name + ":upper[HC3]", a_fit["intervals"][idx][1], t_iv["upper"], bar, note)
     half_ols = (a_fit["ols_intervals"][idx][1] - a_fit["ols_intervals"][idx][0]) / 2
     t_ols = t_iv.get("ols") or {}
-    bar_ols = max(bar_coefficient(half_ols), floor)
-    R.number(stage, g, name + ":lower[OLS label]", a_fit["ols_intervals"][idx][0], t_ols.get("lower"), bar_ols)
-    R.number(stage, g, name + ":upper[OLS label]", a_fit["ols_intervals"][idx][1], t_ols.get("upper"), bar_ols)
+    bar_ols = bar_coefficient(half_ols)
+    note_ols = coefficient_bar_note(bar_ols, floor)
+    R.number(stage, g, name + ":lower[OLS label]", a_fit["ols_intervals"][idx][0], t_ols.get("lower"), bar_ols, note_ols)
+    R.number(stage, g, name + ":upper[OLS label]", a_fit["ols_intervals"][idx][1], t_ols.get("upper"), bar_ols, note_ols)
+    # A standard error is its coefficient half-width divided by the same critical t.
+    R.number(stage, g, name + ":SE[HC3]", a_fit["standard_errors"][idx], t_iv["half_width"] / a_fit["critical"], bar / a_fit["critical"], note)
+    R.number(stage, g, name + ":SE[OLS]", a_fit["ols_standard_errors"][idx], t_ols["half_width"] / a_fit["critical"], bar_ols / a_fit["critical"], note_ols)
     if offset:
         _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, floor=floor)
     elif "coefficient_C" in a_fit or "offset" in t_iv:
         R.exact(stage, g, name + ":no offset alternative on rails (Addendum 9)", "coefficient_C" in a_fit, "offset" in t_iv)
 
 
-def _decision_near(lower, upper, bar):
-    """A zero/sign decision rests on the endpoint nearest zero: slack when it is within the bar of 0."""
-    return lower is not None and upper is not None and min(abs(lower), abs(upper)) <= bar
-
-
 def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
     """Addendum 9 items 3 and 4 beside one coefficient at DC input or rest.  C_j and the offset
     interval's endpoints at 1% of the alternative's own half-width (bar_offset_interval); the labelled
     OLS alternative at 1% of its own; dbeta/ddelta at the no-half-width bar; units exact; the
-    zero/sign decisions under both intervals as labels with the usual slack."""
+    zero/sign decisions under both intervals as exact labels (registration §12)."""
     o = t_iv.get("offset") or {}
     a_flag, t_flag = a_fit.get("systematics_flag"), o.get("systematics_flag")
     R.exact(stage, g, name + ":systematics_flag", a_flag is not None, t_flag is not None,
@@ -578,23 +785,20 @@ def _offset_alternative(R, stage, g, name, a_fit, idx, t_iv, *, floor=0.0):
             None if (a_sflag is None) == (t_sflag is None) else f"analysis: {a_sflag}; twin: {t_sflag}")
     R.exact(stage, g, name + ":sensitivity_units", (a_fit.get("sensitivity_units") or [None] * (idx + 1))[idx],
             o.get("sensitivity_units"))
-    # The registered decision rests on the HC3 endpoint nearest zero, at the HC3 bar.
-    half = (a_fit["intervals"][idx][1] - a_fit["intervals"][idx][0]) / 2
-    bar = max(bar_coefficient(half), floor)
-    R.label_with_slack(stage, g, name + ":coefficient_decision", a_fit["coefficient_decisions"][idx], o.get("coefficient_decision"),
-                       _decision_near(a_fit["intervals"][idx][0], a_fit["intervals"][idx][1], bar))
+    R.exact(stage, g, name + ":coefficient_decision", a_fit["coefficient_decisions"][idx], o.get("coefficient_decision"))
     if a_flag is None and t_flag is None:
         lo, hi = a_fit["offset_intervals"][idx]
-        bar_off = max(bar_offset_interval(lo, hi), floor)
-        R.number(stage, g, name + ":coefficient_C", a_fit["coefficient_C"][idx], o.get("coefficient_C"), bar_off)
-        R.number(stage, g, name + ":offset_lower", lo, o.get("offset_lower"), bar_off)
-        R.number(stage, g, name + ":offset_upper", hi, o.get("offset_upper"), bar_off)
+        bar_off = bar_offset_interval(lo, hi)
+        note = coefficient_bar_note(bar_off, floor)
+        R.number(stage, g, name + ":coefficient_C", a_fit["coefficient_C"][idx], o.get("coefficient_C"), bar_off, note)
+        R.number(stage, g, name + ":offset_lower", lo, o.get("offset_lower"), bar_off, note)
+        R.number(stage, g, name + ":offset_upper", hi, o.get("offset_upper"), bar_off, note)
         lo_ols, hi_ols = a_fit["offset_ols_intervals"][idx]
-        bar_ols = max(bar_offset_interval(lo_ols, hi_ols), floor)
-        R.number(stage, g, name + ":offset_ols_lower", lo_ols, o.get("offset_ols_lower"), bar_ols)
-        R.number(stage, g, name + ":offset_ols_upper", hi_ols, o.get("offset_ols_upper"), bar_ols)
-        R.label_with_slack(stage, g, name + ":offset_decision", a_fit["offset_decisions"][idx], o.get("offset_decision"),
-                           _decision_near(lo, hi, bar_off))
+        bar_ols = bar_offset_interval(lo_ols, hi_ols)
+        note_ols = coefficient_bar_note(bar_ols, floor)
+        R.number(stage, g, name + ":offset_ols_lower", lo_ols, o.get("offset_ols_lower"), bar_ols, note_ols)
+        R.number(stage, g, name + ":offset_ols_upper", hi_ols, o.get("offset_ols_upper"), bar_ols, note_ols)
+        R.exact(stage, g, name + ":offset_decision", a_fit["offset_decisions"][idx], o.get("offset_decision"))
     if a_sflag is None and t_sflag is None:
         R.number(stage, g, name + ":d_beta_d_delta_per_ms", a_fit["d_beta_d_delta_per_ms"][idx], o.get("d_beta_d_delta_per_ms"), None)
 
@@ -634,13 +838,10 @@ def compare_offset_rows(R, stage, g, row, th):
         t_iv = twin_terms[term]
         o = t_iv.get("offset") or {}
         half = (item["upper"] - item["lower"]) / 2
-        R.label_with_slack(stage, g + "/primary", term + ":coefficient_decision", item["coefficient_decision"],
-                           o.get("coefficient_decision") if offset else t_iv.get("decision"),
-                           _decision_near(item["lower"], item["upper"], bar_coefficient(half)))
+        R.exact(stage, g + "/primary", term + ":coefficient_decision", item["coefficient_decision"], o.get("coefficient_decision") if offset else t_iv.get("decision"))
         if offset and item.get("offset_intervals") and o.get("coefficient_C") is not None:
             lo, hi = item["offset_intervals"]
-            R.label_with_slack(stage, g + "/primary", term + ":offset_decision", item["offset_decision"], o.get("offset_decision"),
-                               _decision_near(lo, hi, bar_offset_interval(lo, hi)))
+            R.exact(stage, g + "/primary", term + ":offset_decision", item["offset_decision"], o.get("offset_decision"))
             R.number(stage, g + "/primary", term + ":coefficient_C", item["coefficient_C"], o.get("coefficient_C"), bar_offset_interval(lo, hi))
 
 
@@ -649,8 +850,25 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
     BW, P_rails)} of the analysis's points, for the rest model's coefficient scales."""
     R.exact(stage, g, "n", row["n"], th.get("n"))
     compare_offset_rows(R, stage, g, row, th)
+    for ak, tk in (("two_term", "simple"), ("resident_extended", "resident_extended"), ("tier", "tier"), ("rest", "rest_model")):
+        af, tf = row.get(ak) or {}, (th.get(tk) or {}).get("details") or {}
+        if af.get("status") != "computed" or not tf:
+            continue
+        for key in ("n", "p", "df", "se_method", "family_size"):
+            R.exact(stage, g + "/" + ak, key, af.get(key), tf.get(key))
+        for key in ("critical", "mse"):
+            R.number(stage, g + "/" + ak, key, af.get(key), tf.get(key), None)
+        R.exact(stage, g + "/" + ak, "point_models", sorted(canon(p["model"]) for p in af["point_labels"]), sorted(tf["models"]))
+        for key, se in (("covariance", "standard_errors"), ("ols_covariance", "ols_standard_errors")):
+            for i, values in enumerate(af[key]):
+                for j, value in enumerate(values):
+                    # Cov_ij has coefficient_i * coefficient_j units. Propagate 1% of
+                    # each SE: d(SE_i SE_j) = 2% SE_i SE_j, including near-zero off-diagonals.
+                    bar = .02 * af[se][i] * af[se][j]
+                    R.number(stage, g + "/" + ak, f"{key}[{i},{j}]", value, tf[key][i][j], bar)
     if row["two_term"]["status"] != "computed" or th.get("status") != "ok":
-        R.exact(stage, g, "status", row["two_term"]["status"], th.get("status"))
+        status = th.get("status")
+        R.exact(stage, g, "status", row["two_term"]["status"], "refused" if str(status).startswith("refused_") else status)
         return
     offset = b != "rails"      # Addendum 9: the alternative at DC input and rest; rails has no C term
     R.exact(stage, g, "simple:df", row["two_term"]["df"], th["simple"]["df"])
@@ -663,17 +881,10 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
         _interval(R, stage, g, "extended:P0", ext_a, 0, _p0(ext_t, "P0", ext_a, 0), offset=offset)
         _interval(R, stage, g, "extended:epsilon", ext_a, 1, ext_t["epsilon_j_per_GB"], offset=offset)
         _interval(R, stage, g, "extended:rho", ext_a, 2, ext_t["rho_j_per_GB"], offset=offset)
-        lo, hi = ext_a["intervals"][2]
-        slack = bar_coefficient((hi - lo) / 2)
-        near = min(abs(lo), abs(hi), abs(ext_a["coefficients"][2])) <= slack
-        R.label_with_slack(stage, g, "resident_adds_nothing", row["resident_adds_nothing"], ext_t["resident_adds_nothing"], near)
+        R.exact(stage, g, "resident_adds_nothing", row["resident_adds_nothing"], ext_t["resident_adds_nothing"])
         if offset and ext_a.get("systematics_flag") is None and "resident_adds_nothing_offset" in row:
-            # Addendum 9 item 3: "resident adds nothing" under the offset interval, with slack when
-            # the offset endpoint nearest zero is within its bar of zero.
-            lo, hi = ext_a["offset_intervals"][2]
-            near = min(abs(lo), abs(hi), abs(ext_a["coefficients"][2])) <= bar_offset_interval(lo, hi)
-            R.label_with_slack(stage, g, "resident_adds_nothing_offset", row["resident_adds_nothing_offset"],
-                               ext_t.get("resident_adds_nothing_offset"), near)
+            # Registration §12 requires exact words under the offset alternative too.
+            R.exact(stage, g, "resident_adds_nothing_offset", row["resident_adds_nothing_offset"], ext_t.get("resident_adds_nothing_offset"))
     tier_a, tier_t = row["tier"], th.get("tier")
     R.exact(stage, g, "tier:status", tier_a["status"], "computed" if tier_t else "refused")
     if tier_a["status"] == "computed" and tier_t:
@@ -697,27 +908,34 @@ def compare_h2_fit(R, stage, g, row, th, own_half, b, rest_inputs=None):
                      td["half_width_w"] - td["measured_half_width_w"], bar_power(dev["prediction_half_w"]))
             R.number(stage, gd, "lower_w", dev["lower_w"], td["lower_w"], bar_power(half))
             R.number(stage, gd, "upper_w", dev["upper_w"], td["upper_w"], bar_power(half))
-            near = abs(dev["deviation_w"]) <= bar_power(half) or abs(td["deviation_w"]) <= bar_power(half)
-            R.label_with_slack(stage, gd, "sign", "+" if dev["deviation_w"] > 0 else "-" if dev["deviation_w"] < 0 else "0",
-                               td["sign"], near)
+            R.exact(stage, gd, "sign", "+" if dev["deviation_w"] > 0 else "-" if dev["deviation_w"] < 0 else "0", td["sign"])
     if b == "rest":
         rm, tr = row["rest"], th.get("rest_model")
         R.exact(stage, g, "rest:status", rm["status"], "computed" if tr else "refused")
         if rm["status"] == "computed" and tr:
             vif_a, vif_t = rm.get("vif"), tr.get("vif_BW_and_P_rails")
-            fitted = [rest_inputs[canon(p["model"])] for p in rm["point_labels"]]
-            floors = [bar_float_noise_coefficient(vif_a, scale) for scale in coefficient_scales(fitted)]
-            _interval(R, stage, g, "rest:c", rm, 0, _p0(tr, "c", rm, 0), floor=floors[0], offset=True)
-            _interval(R, stage, g, "rest:epsilon_rest", rm, 1, tr["epsilon_rest_j_per_GB"], floor=floors[1], offset=True)
-            _interval(R, stage, g, "rest:lambda", rm, 2, tr["lambda"], floor=floors[2], offset=True)
+            fitted = [rest_inputs[canon(p["model"])] for p in rm["point_labels"]
+                      if canon(p["model"]) in (rest_inputs or {})]
+            R.exact(stage, g, "rest:c scale inputs present", len(fitted), len(rm["point_labels"]))
+            floor = bar_rest_intercept_floor(vif_a, fitted) if fitted and vif_a is not None else 0.0
+            _interval(R, stage, g, "rest:c", rm, 0, _p0(tr, "c", rm, 0), offset=True, floor=floor)
+            _interval(R, stage, g, "rest:epsilon_rest", rm, 1, tr["epsilon_rest_j_per_GB"], offset=True)
+            _interval(R, stage, g, "rest:lambda", rm, 2, tr["lambda"], offset=True)
             vif_bar = bar_two_significant_figures(vif_a, vif_t) if vif_a is not None and vif_t is not None else None
             R.number(stage, g, "rest:vif", vif_a, vif_t, vif_bar)
+            R.exact(stage, g, "rest:vif_status", rm.get("vif_status"), "computed" if vif_t is not None else "infinite")
+            # Registration §14 prints r to 9 decimals: half a last digit, 5e-10,
+            # above 1e6 * 2.2e-16 = 2.2e-10 roundoff on this dimensionless quantity.
+            R.number(stage, g, "rest:correlation_r", rm.get("correlation"), tr.get("correlation_r"), 5e-10)
     for item in row["loo_description"]:
         m = canon(item["model"])
         tl = (th.get("leave_one_out") or {}).get(m) or {}
         R.exact(stage, g + "/loo", m + ":status", item["status"], "computed" if tl else "refused")
         if item["status"] == "computed" and tl:
-            R.number(stage, g + "/loo", m, item["predicted_w"], tl.get("predicted_w"), bar_power(own_half.get(m, 0.0)))
+            half = own_half.get(m)
+            R.exact(stage, g + "/loo", m + ":own half-width present", half is not None, True)
+            if half is not None:
+                R.number(stage, g + "/loo", m, item["predicted_w"], tl.get("predicted_w"), bar_power(half))
 
 
 def _p0(t_fit, key, a_fit, idx):
@@ -728,6 +946,7 @@ def _p0(t_fit, key, a_fit, idx):
 
 
 def compare_h2(R, stage, a_h2, t, a_points):
+    compare_census(R, stage, a_h2, t, table="h2")
     for row in a_h2:
         if (row["basis"], row["selection"]) != ("gross primary", "primary"):
             continue
@@ -744,6 +963,15 @@ def compare_h2(R, stage, a_h2, t, a_points):
         if row.get("analysis") == "two_pass_sensitivity":
             g = f"h2/{b}/passes_mean/two_pass_sensitivity"
             ts = th.get("two_pass_sensitivity")
+            if ts is None:
+                eligible = [m for m, block in t.get("cells", {}).items() if
+                    (block.get("passes_mean", {}).get("boundaries", {}).get(b, {}).get("quantities", {}).get("gross") or {}).get("passes_computed", 0) >= 2]
+                if not eligible and row.get("n") == 0:
+                    # Primary prints an empty, refused sensitivity; twin has no
+                    # line when there are no two-pass points (Addendum 7 D9).
+                    R.exact(stage, g, "n", row["n"], len(eligible))
+                    R.exact(stage, g, "status", row["two_term"]["status"], "refused")
+                    continue
             R.exact(stage, g, "present", True, ts is not None)
             if ts is not None:
                 compare_h2_fit(R, stage, g, row, ts, own_half, b, rest_inputs)
@@ -762,6 +990,9 @@ def compare_commit(R, a_frozen, t1, t2):
     for p in (a_frozen or {}).get("fit_points", []):
         if (p["basis"], p["selection"]) != ("gross primary", "primary") or p.get("status") != "computed":
             continue
+        if p["boundary"] not in BMAP:
+            R.exact(stage, "commit/fit_point", "known boundary", p["boundary"], sorted(BMAP))
+            continue
         b, m = BMAP[p["boundary"]], canon(p["model"])
         tp = ((content.get("fit_cells") or {}).get(b) or {}).get("passes_mean", {}).get(m)
         g = f"commit/fit_point/{b}/{m}"
@@ -777,6 +1008,9 @@ def compare_commit(R, a_frozen, t1, t2):
     for p in (a_frozen or {}).get("tier_fit_inputs", []):
         if (p["basis"], p["selection"]) != ("gross primary", "primary"):
             continue
+        if p["boundary"] not in BMAP:
+            R.exact(stage, "commit/tier_input", "known boundary", p["boundary"], sorted(BMAP))
+            continue
         b, m = BMAP[p["boundary"]], canon(p["model"])
         tp = ((content.get("h2_tier1_inputs") or {}).get(b) or {}).get("passes_mean", {}).get(m)
         g = f"commit/tier_input/{b}/{m}"
@@ -791,6 +1025,162 @@ def compare_commit(R, a_frozen, t1, t2):
     if t1 and t2:
         R.exact(stage, "commit/twin_hash", "stage1 == stage2 (twin's own property)",
                 t1["stage1_commit"]["sha256"], t2["stage1_commit"]["sha256"])
+
+
+def compare_primary_copies(R, stage, rows, points, *, frozen=None, h2_rows=(), h1_rows=(), moe_rows=(), unavailable=()):
+    """Bit identity is required only for copies within the primary's artifacts.
+
+    Independent arithmetic still uses the registered bars. These assertions make
+    the exemptions for pass copies, aliases, and repeated fit disclosures real.
+    """
+    source = {row_key(r): r for r in rows}
+    point_source = {row_key(p, point=True): p for p in points}
+    references = {}
+    for row in rows:
+        g = "primary copies/" + repr(row_key(row))
+        owner = point_source.get(row_key(row, point=True), {})
+        for key in ("n_passes", "pass_status"):
+            if key in row:
+                R.exact(stage, g, "pass label copy:" + key, row[key], owner.get(key))
+        if "assisted_member_counts" in row:
+            R.exact(stage, g, "assisted member alias", row["assisted_member_counts"], row.get("decode_assisted_member_counts"))
+        ref = row.get("neg8_inputs")
+        if ref is not None:
+            sid = row["session_id"]
+            references.setdefault(sid, ref)
+            R.exact(stage, g, "NEG-8 session copy", ref, references[sid])
+    for point in points:
+        g = "primary copies/" + repr(row_key(point, point=True))
+        for item in point.get("passes", []):
+            for key in ("model", "boundary", "basis", "selection", "bytes", "resident", "role", "moe", "tier"):
+                R.exact(stage, g, "point input copy:" + key, point.get(key), item.get(key))
+        for item in point.get("passes", []):
+            original = source.get(row_key({**point, "pass_id": item["pass_id"]}))
+            expected = None if original is None else {**original, "pass_status": point["pass_status"], "n_passes": point["n_passes"]}
+            R.exact(stage, g, "pass copy:" + str(item["pass_id"]), item, expected)
+        wa = point.get("without_assisted", {})
+        if wa:
+            R.exact(stage, g, "without-assisted description_only", wa.get("description_only"), True)
+            for key in ("model", "n_passes", "pass_status", "output_label"):
+                R.exact(stage, g, "without-assisted label copy:" + key, wa.get(key), point.get(key))
+            if stage.startswith("blinded"):
+                R.exact(stage, g, "without-assisted evaluation status", wa.get("status"), "not_evaluated")
+                for key in ("mean_j", "h_j", "B_j", "lower_j", "upper_j", "printed_j_per_output_token"):
+                    R.exact(stage, g, "without-assisted blinded null:" + key, wa.get(key), None)
+        for item in wa.get("passes", []):
+            original = source.get(row_key({**point, "pass_id": item["pass_id"]}))
+            expected = None if original is None else {"pass_id": item["pass_id"], **original.get("without_assisted",
+                {k: v for k, v in original.items() if k not in ("pass_status", "n_passes")})}
+            R.exact(stage, g, "without-assisted pass copy:" + str(item["pass_id"]), item, expected)
+        if point.get("status") == "computed":
+            # These are independently formed endpoints, so use the energy bar,
+            # rather than exact float equality after multiplication/division.
+            half = point["h_j"] + point["B_j"]
+            for key, endpoint in (("lower_j", "lower"), ("upper_j", "upper")):
+                R.number(stage, g, key, point.get(key), point[endpoint] * bt.DECODE_STEPS, bar_energy(half))
+    if frozen is not None:
+        for point in frozen.get("fit_points", []):
+            expected = point_source.get(row_key(point, point=True))
+            R.exact(stage, "primary copies/frozen", repr(row_key(point, point=True)), point, expected)
+        for sid, ref in frozen.get("neg8_inputs", {}).items():
+            R.exact(stage, "primary copies/frozen", "NEG-8:" + sid, ref, references.get(sid))
+        for item in frozen.get("tier_fit_inputs", []):
+            original = point_source.get(row_key(item, point=True), {})
+            R.exact(stage, "primary copies/frozen", "tier:" + repr(row_key(item, point=True)), item,
+                    {k: original[k] for k in item if k in original})
+    for group in unavailable:
+        missing = {p["model"]: p for p in points if p.get("status") != "computed" and
+                   (p["boundary"], p["basis"], p["selection"]) == (group["boundary"], group["basis"], group["selection"])}
+        R.exact(stage, "primary copies/unavailable", "models", sorted(group["models"]), sorted(missing))
+        for item in group.get("refusals", []):
+            original = missing.get(item["model"], {})
+            keys = ("model", "n_passes", "pass_status", "flags", "reason", "passes")
+            R.exact(stage, "primary copies/unavailable", item["model"],
+                    {k: item[k] for k in keys if k in item}, {k: original[k] for k in keys if k in original})
+    for row in h1_rows:
+        original = point_source.get(row_key(row, point=True), {})
+        for key in ("model", "n_passes", "pass_status", "role"):
+            R.exact(stage, "primary copies/h1", key + ":" + repr(row_key(row, point=True)), row.get(key), original.get(key))
+        if "flags" in row:
+            flags = set(original.get("flags", []))
+            if row.get("status") == "missing":
+                flags.update(f for p in original.get("passes", []) for f in p.get("flags", []))
+            R.exact(stage, "primary copies/h1", "flags:" + repr(row_key(row, point=True)), row["flags"], sorted(flags))
+        measured = original if row["pass_id"] == "mean" else source.get(row_key(row), {})
+        if measured.get("status") == "computed":
+            energy = measured.get("e", measured["mean_j"] / bt.DECODE_STEPS)
+            half = (measured["h_j"] + measured["B_j"]) / bt.DECODE_STEPS
+            for check in row.get("checks", []):
+                R.number(stage, "primary copies/h1", "measured:" + check["hypothesis"], check.get("measured"), energy, bar_energy(half))
+    for row in moe_rows:
+        for item in row.get("misses", []) + row.get("missing_models", []):
+            original = point_source.get(row_key({**row, "model": item["model"]}, point=True), {})
+            for key in ("model", "n_passes", "pass_status", "flags"):
+                if key in item or key in original:
+                    R.exact(stage, "primary copies/moe", key + ":" + item["model"], item.get(key), original.get(key))
+        for item in row.get("misses", []):
+            h1 = next((h for h in h1_rows if h["model"] == item["model"] and h["pass_id"] == "mean" and
+                       (h["boundary"], h["basis"], h["selection"]) == (row["boundary"], row["basis"], row["selection"])), {})
+            checks = {c["hypothesis"]: c for c in h1.get("checks", [])}
+            for key, hypothesis in (("resident_above", "resident"), ("bytes_below", "bytes")):
+                check = checks.get(hypothesis)
+                expected = None if check is None else not check["consistent"] and (
+                    check["prediction_lower"] > check["measured_upper"] if key == "resident_above" else
+                    check["prediction_upper"] < check["measured_lower"])
+                R.exact(stage, "primary copies/moe", key + ":" + item["model"], item.get(key), expected)
+        if row.get("status") == "missing":
+            missing = [p for p in points if p.get("status") != "computed" and
+                       (p["boundary"], p["basis"], p["selection"]) == (row["boundary"], row["basis"], row["selection"])]
+            flags = sorted({f for p in missing for item in p.get("passes", []) for f in item.get("flags", [])})
+            R.exact(stage, "primary copies/moe", "missing flags", row.get("flags", []), flags)
+        if "missing_models" in row:
+            R.exact(stage, "primary copies/moe", "status of missing answer", row.get("status"), "missing")
+    for row in h2_rows:
+        subset = {p["model"]: p for p in points if
+                  (p["boundary"], p["basis"], p["selection"]) == (row["boundary"], row["basis"], row["selection"])}
+        g = "primary copies/h2/" + repr((row["boundary"], row.get("analysis"), row["basis"], row["selection"]))
+        def check_label(item):
+            original = subset.get(item["model"], {})
+            keys = ("model", "n_passes", "pass_status", "flags")
+            R.exact(stage, g, "point label:" + item["model"],
+                    {k: item[k] for k in keys if k in item}, {k: original[k] for k in keys if k in original})
+        for item in row.get("point_labels", []):
+            check_label(item)
+        for fit_name in ("two_term", "resident_extended", "tier", "rest"):
+            for item in (row.get(fit_name) or {}).get("point_labels", []):
+                check_label(item)
+        for item in row.get("loo_description", []):
+            check_label(item)
+            R.exact(stage, g, "observed power copy:" + item["model"], item.get("observed_w"), subset.get(item["model"], {}).get("power"))
+        for item in row.get("tier_deviations", []):
+            check_label(item)
+        terms = {"epsilon": ("two_term", 1), "extended_epsilon": ("resident_extended", 1),
+                 "rho": ("resident_extended", 2), "tier_epsilon": ("tier", 1),
+                 "tier_rho": ("tier", 2), "rest_epsilon": ("rest", 1), "lambda": ("rest", 2)}
+        for item in row.get("primary_intervals", row.get("sensitivity_intervals", [])):
+            term = item["term"]
+            if term.startswith("tier_deviation:"):
+                R.exact(stage, g, "deviation term identity", term, "tier_deviation:" + item["model"])
+                original = next((v for v in row["tier_deviations"] if v["model"] == item["model"]), {})
+                for key, field in (("estimate", "deviation_w"), ("lower", "lower_w"), ("upper", "upper_w")):
+                    R.exact(stage, g, term + ":" + key, item.get(key), original.get(field))
+                check_label(item)
+                continue
+            if term not in terms:
+                R.exact(stage, g, "registered interval term", term, sorted(terms))
+                continue
+            fit_name, index = terms[term]
+            fit = row[fit_name]
+            copies = {"estimate": fit["coefficients"][index], "lower": fit["intervals"][index][0],
+                      "upper": fit["intervals"][index][1], "HC3_se": fit["standard_errors"][index],
+                      "OLS_se": fit["ols_standard_errors"][index]}
+            for target, field in (("coefficient_C", "coefficient_C"), ("offset_intervals", "offset_intervals"),
+                                  ("offset_ols_intervals", "offset_ols_intervals"), ("coefficient_decision", "coefficient_decisions"),
+                                  ("offset_decision", "offset_decisions"), ("d_beta_d_delta_per_ms", "d_beta_d_delta_per_ms"),
+                                  ("sensitivity_units", "sensitivity_units")):
+                if field in fit:
+                    copies[target] = fit[field][index]
+            R.exact(stage, g, term + ":interval copy", {k: v for k, v in item.items() if k != "term"}, copies)
 
 
 def compare_campaign(root):
@@ -812,6 +1202,8 @@ def compare_campaign(root):
             compare_cells(R, "blinded-post", rows, tb)
             ap = load(o / "a-blinded-post/model_estimates.json")
             compare_points(R, "blinded-post", ap, tb)
+            compare_primary_copies(R, "blinded-post", rows, ap,
+                                   h2_rows=load(o / "a-blinded-post/h2.json"), h1_rows=load(o / "a-blinded-post/h1.json"), moe_rows=load(o / "a-blinded-post/moe.json"), unavailable=load(o / "a-blinded-post/unavailable.json"))
             compare_h1(R, "blinded-post", load(o / "a-blinded-post/h1.json"), load(o / "a-blinded-post/moe.json"), tb, None)
             compare_h2(R, "blinded-post", load(o / "a-blinded-post/h2.json"), tb, ap)
     R.exact("refusal", "exit", "fit/stage1 before any release (must refuse)", exits.get("a-fit-nokeys"), exits.get("t-1-nokeys"))
@@ -825,6 +1217,7 @@ def compare_campaign(root):
         compare_neg8(R, "blinded", rows, tb)
         ap = load(o / "a-blinded/model_estimates.json")
         compare_points(R, "blinded", ap, tb)
+        compare_primary_copies(R, "blinded", rows, ap, h2_rows=load(o / "a-blinded/h2.json"), h1_rows=load(o / "a-blinded/h1.json"), moe_rows=load(o / "a-blinded/moe.json"), unavailable=load(o / "a-blinded/unavailable.json"))
         compare_h1(R, "blinded", load(o / "a-blinded/h1.json"), load(o / "a-blinded/moe.json"), tb, None)
         compare_h2(R, "blinded", load(o / "a-blinded/h2.json"), tb, ap)
         R.exact("blinded", "boundaries", "DC input and rest absent at the blinded stage (Addendum 3 item 4)",
@@ -844,8 +1237,16 @@ def compare_campaign(root):
         compare_neg8(R, "heldout", load(o / "a-held/heldout_pass_estimates.json"), t2)
         ap = load(o / "a-held/model_estimates.json")
         compare_points(R, "heldout", ap, t2)
+        compare_primary_copies(R, "heldout", held_rows, ap, frozen=frozen, h2_rows=load(o / "a-held/h2.json"), h1_rows=load(o / "a-held/h1.json"), moe_rows=load(o / "a-held/moe.json"), unavailable=load(o / "a-held/unavailable.json"))
         compare_h1(R, "heldout", load(o / "a-held/h1.json"), load(o / "a-held/moe.json"), t2, frozen)
         compare_h2(R, "heldout", load(o / "a-held/h2.json"), t2, ap)
+        record = load(o / "a-held/analysis_record.json")
+        R.exact("heldout", "primary copies/analysis record", "H1_checks", record.get("H1_checks"), frozen.get("H1_checks"))
+        primary_h2 = [r for r in load(o / "a-held/h2.json") if not r["description_only"]]
+        R.exact("heldout", "primary copies/analysis record", "H2_intervals", record.get("H2_intervals"),
+                [{k: r[k] for k in ("selection", "basis", "boundary", "n", "k")} for r in primary_h2])
+        R.exact("heldout", "primary copies/analysis record", "output_label", record.get("output_label"), bt.PER_TOKEN_LABEL)
+        R.exact("heldout", "primary copies/analysis record", "note", record.get("note"), frozen.get("note"))
     return R
 
 
@@ -909,6 +1310,8 @@ def plant(archive, acceptance, models, pass_id, defects, log):
             codes = ["thermal.os_level_nonzero"]
         elif kind == "strict_validation":
             codes = ["member.strict_validation_failed"]
+        elif kind in ("member.anchor_not_bounded", "member.target_phase_precheck_failed"):
+            codes = [kind]
         elif kind == "cooldown":
             codes = ["member.cooldown_cap_hit"]
         elif kind == "battery_assist":
@@ -927,6 +1330,8 @@ def plant(archive, acceptance, models, pass_id, defects, log):
 
 def build(root, name):
     world, seed, defects, knobs, missing_stores = CAMPAIGNS[name]
+    knobs = dict(knobs)
+    truncate_marker = knobs.pop("truncate_marker_window", False)
     root.mkdir(parents=True)
     log = []
     original = export_runs.export
@@ -944,6 +1349,28 @@ def build(root, name):
                                     pass_duration_scales=PASS_SCALES, clock_latency_ms=CLOCK_LATENCY_MS, **knobs)
     finally:
         export_runs.export = original
+    if truncate_marker:
+        for session in manifest["sessions"]:
+            archive = Path(session["archive"])
+            roster = load(archive / "derived/roster.json")["members"]
+            ends = []
+            for member in roster:
+                if member["role"] == "science":
+                    bundle = archive / "sources/claim-runs" / member["run_id"]
+                    events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+                    ends.append(ba._event_span(events, "decode", load(bundle / "metadata.json"))[1])
+            # Pass 1 ends inside the delayed end window, after science decode.
+            # Pass 2 ends before the last decode's delayed marker window starts,
+            # leaving no marker polls and making not_evaluated non-vacuous.
+            last_member = next(member for member in reversed(roster) if member["role"] == "science")
+            bundle = archive / "sources/claim-runs" / last_member["run_id"]
+            events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+            last_start = ba._event_span(events, "decode", load(bundle / "metadata.json"))[0]
+            cutoff = (max(ends) if session["pass_id"] == 1 else last_start) + 1_000_000_000
+            stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
+            batches = [json.loads(line) for line in stream.read_text().splitlines()]
+            stream.write_text("".join(json.dumps(b) + "\n" for b in batches
+                                       if b.get("k") != "b" or b["rx"] <= cutoff))
     # B6 ruling Q1: a withheld file goes missing after the export wrote it (a file-custody fault);
     # the sidecar's count-only locator stays.
     removed = []
@@ -1135,6 +1562,129 @@ class AgreementTests(unittest.TestCase):
         # 7 held-out models x 3 boundaries x (2 passes + their mean) = 63 primary-and-description words.
         self.check("bytes", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                  "h2/rest/passes_mean": (11, 11)})
+        root = WORK["root"] / "bytes"
+        rows = load(root / "out/a-held/heldout_pass_estimates.json")
+        terms = [t for r in rows if r["boundary"] == "DC input" and r["selection"] == "primary"
+                 and r["basis"] == "gross primary" for t in r.get("meter_run_terms", [])]
+        # Fixture discharges at 12.774 W for 0.8--1 s: at least 10 J, above the
+        # registered approximately 1 J per-run attribution limit, both in decode and at its edges.
+        self.assertTrue(any(t["battery_gross_j"] > 1 for t in terms))
+        self.assertTrue(any(t["battery_v_start_j"] > 1 for t in terms))
+        self.assertTrue(any(t["battery_v_end_j"] > 1 for t in terms))
+
+    def test_neg8_reference_battery_omission_is_detected(self):
+        campaign("bytes")
+        root = WORK["root"] / "bytes"
+        # Fault the independent program's request term only. NEG-8 consumes
+        # request energy; science cells consume decode energy and stay intact.
+        source = (ROOT / "scripts/bytes_twin.py").read_text()
+        expression = 'request_energy + request_battery["battery_gross_j"]'
+        self.assertEqual(source.count(expression), 1)
+        mutant = root / "twin-no-reference-battery.py"
+        mutant.write_text(source.replace(expression, "request_energy"))
+        manifest = load(root / "manifest.json")
+        output = root / "no-reference-battery.json"
+        command = [sys.executable, str(mutant), "--export-dir", str(root / "export"),
+                   "--manifest", str(root / "manifest.json"), "--stage", "2",
+                   "--key-dir", str(root / "released-keys/bytes/blinding"), "--out", str(output)]
+        for session in manifest["sessions"]:
+            command += ["--archive", session["archive"]]
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        wrong = load(output)
+        original = load
+        with mock.patch(__name__ + ".load", side_effect=lambda p: wrong if Path(p) == root / "out/t-2.json" else original(p)):
+            above = compare_campaign(root).above()
+        self.assertTrue(any(r["group"].startswith("neg8/") and r["stage"] == "heldout" for r in above),
+                        "omitting reference battery energy must fail NEG-8 agreement itself")
+
+    def test_incomplete_marker_window_campaign(self):
+        R = campaign("marker_incomplete")
+        self.assertEqual(R.above(), [], "\n".join(describe(r) for r in R.above()[:40]))
+        counts = R.counts()
+        print(f"\nagreement marker_incomplete: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        root = WORK["root"] / "marker_incomplete"
+        manifest = load(root / "manifest.json")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        self.assertTrue(any(r.get("meter") and not r["meter"]["battery_end_window_complete"] for r in records))
+        twin = load(root / "out/t-2.json")
+        reasons = [str(est.get("without_assisted", {}).get("reason", ""))
+                   for model in twin["cells"].values() for pk, block in model.items() if pk != "passes_mean"
+                   for cell in block["boundaries"].values() for variant in VMAP.values()
+                   for est in [cell.get(variant, {})]]
+        self.assertFalse(any("blinded stage" in reason for reason in reasons))
+        unevaluated = [cell[variant]["without_assisted"]
+                       for model in twin["cells"].values() for pk, block in model.items() if pk != "passes_mean"
+                       for cell in block["boundaries"].values() for variant in VMAP.values()
+                       if cell.get(variant, {}).get("without_assisted", {}).get("status") == "not_evaluated"]
+        self.assertTrue(unevaluated, "campaign must exercise cells with no marker-window polls")
+        for line in unevaluated:
+            self.assertIn("no mapped meter stream has polls carrying B0AC in the marker window", line["reason"])
+
+    def test_late_start_marker_window_campaign(self):
+        recorder = campaign("late_start")
+        self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
+        counts = recorder.counts()
+        print(f"\nagreement late_start: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        root = WORK["root"] / "late_start"
+        manifest = load(root / "manifest.json")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        partial = [r for r in records if r.get("meter") is None and r.get("decode_assist_evaluated")]
+        self.assertTrue(partial, "late-start stream must miss decode coverage but reach the marker window")
+        self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in partial))
+        self.assertTrue(any(r["battery_end_window_complete"] for r in partial))
+
+    def test_meter_batches_without_new_samples_campaigns(self):
+        for name in ("empty_payload_n", "replayed_batch", "replayed_tail", "first_batch_tail_replayed"):
+            with self.subTest(campaign=name):
+                recorder = campaign(name)
+                self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
+                counts = recorder.counts()
+                print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+                      f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+
+    def test_unaligned_marker_campaigns(self):
+        for name in ("polls_only", "header_closed"):
+            with self.subTest(campaign=name):
+                recorder = campaign(name)
+                self.assertEqual(recorder.above(), [], "\n".join(describe(r) for r in recorder.above()[:40]))
+                counts = recorder.counts()
+                print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+                      f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+                root = WORK["root"] / name
+                records = ba.load_records(root / "export", load(root / "manifest.json"), stage="all",
+                                          key_dir=root / "released-keys/bytes/blinding")
+                self.assertEqual(len(records), 1000)
+                self.assertTrue(all(r["meter"] is None and r.get("decode_assist_evaluated") for r in records))
+                self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in records))
+
+    def test_unresolved_anchors_are_unusable_in_both_selections(self):
+        R = self.check("invalid_anchor", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
+                                              "h2/rest/passes_mean": (11, 11)})
+        root = WORK["root"] / "invalid_anchor"
+        planted = load(root / "build.json")["defects"]
+        manifest = ba.read_json(root / "manifest.json")
+        # This generator reuses run IDs across passes; session + run is the identity.
+        unusable = {(s["session_id"], d["run_id"]) for d in planted for s in manifest["sessions"]
+                    if s["pass_id"] == d["pass"]}
+        primary = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        bad = [r for r in primary if (r["session_id"], r["run_id"]) in unusable]
+        self.assertEqual(len(bad), len(unusable))
+        self.assertTrue(all(r["status"] == "unusable" and r["invalid_energy_record"] for r in bad))
+        twin = load(root / "out/t-2.json")
+        removed = [(cell["session_id"], r) for model in twin["cells"].values() for key, cell in model.items() if key != "passes_mean"
+                   for boundary in cell["boundaries"].values() for r in boundary.get("removed_members", [])
+                   if (cell["session_id"], r["run_id"]) in unusable]
+        self.assertEqual({(session, r["run_id"]) for session, r in removed}, unusable)
+        self.assertTrue(all(r["status"] == "unusable" and not r["restorable"] for _, r in removed))
+        passes = {f"pass{d['pass']}" for d in planted}
+        kept = [r for r in R.rows if r["stage"] == "heldout" and r["key"] == "kept_runs"
+                and r["group"].split("/")[2] in passes]
+        self.assertTrue(kept)
+        ids = {run_id for _, run_id in unusable}
+        self.assertTrue(all(not (ids & set(r[side])) for r in kept for side in ("a", "t")))
 
     def test_resident_world(self):
         # The NR1 regression's world (Addendum 9 item 1): about delta / dt = 10% of the runs take or
@@ -1218,7 +1768,8 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/gross"]["a"], 9)
         self.assertEqual(kept["cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive"]["a"], 10)
         self.assertEqual(kept["cell/qwen3-14b-4bit/pass1/rails/flagged_inclusive"]["a"], 9)
-        without = [r for r in R.rows if "/without_assisted" in r["group"] and r["key"] == "status"]
+        without = [r for r in R.rows if "/without_assisted" in r["group"] and r["key"] == "status"
+                   and r["stage"] in ("fit", "heldout")]
         self.assertTrue(without and all(r["a"] == r["t"] == "computed" for r in without))
 
     def test_minimum_campaign_one_pass_refused(self):
@@ -1232,8 +1783,628 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(labels["point/qwen3-8b-4bit/mean/rails/gross"]["a"], "pass_mean")
         statuses = {r["group"]: r for r in R.rows if r["key"] == "status" and r["stage"] == "heldout"}
         self.assertEqual(statuses["cell/qwen3-32b-4bit/pass1/rails/gross"]["a"], "unavailable")
-        sensitivity = [r for r in R.rows if "two_pass_sensitivity" in r["group"] and r["key"] == "n"]
+        sensitivity = [r for r in R.rows if r["group"].endswith("two_pass_sensitivity") and r["key"] == "n"]
         self.assertEqual({(r["a"], r["t"]) for r in sensitivity}, {(9, 9)})
+
+
+class ComparerRegressionTests(unittest.TestCase):
+    def test_not_evaluated_reason_run_sets_are_compared_in_both_directions(self):
+        campaign("marker_incomplete")
+        root = WORK["root"] / "marker_incomplete"
+        primary_path = root / "out/a-held/heldout_pass_estimates.json"
+        twin_path = root / "out/t-2.json"
+        primary, twin = load(primary_path), load(twin_path)
+        row = next(r for r in primary if r.get("decode_assisted_member_counts_reason"))
+        block = twin["cells"][canon(row["model"])][f"pass{row['pass_id']}"]["boundaries"][BMAP[row["boundary"]]]
+        est = block[VMAP[(row["basis"], row["selection"])]]
+        for field in ("decode_assisted_member_counts_reason", "without_assisted"):
+            for side in ("primary", "twin"):
+                with self.subTest(field=field, side=side):
+                    target = row if side == "primary" else est
+                    parent, key = (target[field], "reason") if field == "without_assisted" else (target, field)
+                    original_value = parent[key]
+                    parent[key] += "; no polls (run planted-run-id)"
+                    original_load = load
+                    try:
+                        with mock.patch(__name__ + ".load", side_effect=lambda p: (
+                                primary if Path(p) == primary_path else twin if Path(p) == twin_path else original_load(p))):
+                            above = compare_campaign(root).above()
+                        expected_key = "reason:run_ids" if field == "without_assisted" else field + ":run_ids"
+                        self.assertTrue(any(r["key"] == expected_key for r in above))
+                    finally:
+                        parent[key] = original_value
+        self.assertEqual(reason_run_ids("cause (run b); cause (run a); again (run b)"), ["a", "b"])
+
+    def test_row_census_detects_deletions_additions_and_unknown_labels(self):
+        rows = [{"model": "Qwen3-1.7B-4bit", "pass_id": 1, "boundary": "rails", "basis": basis,
+                 "selection": selection, "status": "unavailable"} for basis, selection in VMAP]
+        cell = {variant: {"status": "unavailable"} for variant in VMAP.values()}
+        twin = {"cells": {canon(rows[0]["model"]): {
+            "pass1": {"boundaries": {"rails": cell}},
+            "passes_mean": {"boundaries": {"rails": {"quantities": cell}}}}}}
+        for point, compare in ((False, compare_cells), (True, compare_points)):
+            baseline = Recorder()
+            compare(baseline, "fixture", rows, twin)
+            self.assertEqual(baseline.above(), [])
+            for index in range(len(rows)):
+                for kind in ("delete", "extra", "basis", "selection"):
+                    with self.subTest(point=point, index=index, kind=kind):
+                        changed = copy.deepcopy(rows)
+                        if kind == "delete":
+                            changed.pop(index)
+                        elif kind == "extra":
+                            changed.append(dict(rows[index]))
+                        else:
+                            changed[index][kind] = "unregistered"
+                        recorder = Recorder()
+                        compare(recorder, "fixture", changed, twin)
+                        self.assertTrue(recorder.above())
+            recorder = Recorder()
+            extra = copy.deepcopy(twin)
+            extra["cells"]["unexpected-model"] = copy.deepcopy(next(iter(twin["cells"].values())))
+            compare(recorder, "fixture", rows, extra)
+            self.assertTrue(recorder.above())
+
+    def test_meter_census_and_no_half_width_duration_bars(self):
+        for key in ("battery_tau_s", "battery_poll_interval_max_s", "sample_interval_s", "r_max_s"):
+            with self.subTest(key=key):
+                row = {"meter_run_terms": [{"run_id": "member", key: .008}]}
+                other = {"meter_run_terms": [{"run_id": "member", key: .0085}]}
+                recorder = Recorder()
+                compare_battery_columns(recorder, "fixture", "meter", row, other, 100)
+                self.assertTrue(recorder.above())
+        for row, other in (({"meter_run_terms": []}, {"meter_run_terms": [{"run_id": "member"}]}),
+                           ({"meter_run_terms": [{"run_id": "member"}]}, {"meter_run_terms": []})):
+            recorder = Recorder()
+            compare_battery_columns(recorder, "fixture", "meter", row, other, 100)
+            self.assertTrue(recorder.above())
+
+    def test_missing_own_half_width_is_an_explicit_failure(self):
+        campaign("bytes")
+        root = WORK["root"] / "bytes" / "out"
+        points = load(root / "a-held/model_estimates.json")
+        missing = canon("Qwen3-1.7B-4bit")
+        points = [p for p in points if canon(p["model"]) != missing]
+        rows = [r for r in load(root / "a-held/h2.json") if r["boundary"] == "rails"]
+        recorder = Recorder()
+        compare_h2(recorder, "fixture", rows, load(root / "t-2.json"), points)
+        self.assertTrue(any(r["key"].endswith(":own half-width present") for r in recorder.above()))
+        self.assertFalse(any(r.get("bar") == 0 and r["group"].endswith("/loo") for r in recorder.rows))
+
+    def test_rest_intercept_bar_uses_ceiling_and_clears_observed_noise(self):
+        recorder = campaign("bytes")
+        root = WORK["root"] / "bytes" / "out"
+        h2 = next(r for r in load(root / "a-held/h2.json") if
+                  (r["boundary"], r["basis"], r["selection"]) == ("rest", "gross primary", "primary"))
+        powers = [p["power"] for p in load(root / "a-held/model_estimates.json") if
+                  (p["boundary"], p["basis"], p["selection"]) == ("rest", "gross primary", "primary")]
+        # Independent lower-edge calculation from the doctrine's 1e6 × noise,
+        # the centred Gram condition number ~4 VIF and the RMS response scale.
+        floor = 1e6 * sys.float_info.epsilon * 4 * h2["rest"]["vif"] * math.sqrt(sum(v*v for v in powers) / len(powers))
+        fit = h2["rest"]
+        ceilings = {}
+        for field, keys in (("intervals", ("estimate", "lower[HC3]", "upper[HC3]")),
+                            ("ols_intervals", ("lower[OLS label]", "upper[OLS label]")),
+                            ("offset_intervals", ("coefficient_C", "offset_lower", "offset_upper")),
+                            ("offset_ols_intervals", ("offset_ols_lower", "offset_ols_upper"))):
+            lo, hi = fit[field][0]
+            ceilings.update({"rest:c:" + key: .01 * (hi - lo) / 2 for key in keys})
+        rows = [r for r in recorder.rows if r["stage"] == "heldout" and r["key"] in ceilings]
+        self.assertEqual({r["key"] for r in rows}, set(ceilings))
+        self.assertGreater(floor, min(ceilings.values()), "bytes campaign must have an empty doctrine window")
+        for row in rows:
+            with self.subTest(key=row["key"]):
+                self.assertEqual(row["bar"], ceilings[row["key"]])
+                self.assertLessEqual(row["abs"], row["bar"])
+                if floor > row["bar"]:
+                    self.assertIn(f"{floor / row['bar']:.12g}", row.get("note", ""))
+
+    def test_hypothesis_censuses_detect_missing_extra_and_relabelled_rows(self):
+        campaign("bytes")
+        root = WORK["root"] / "bytes" / "out"
+        h1, moe, h2 = [load(root / ("a-held/" + name + ".json")) for name in ("h1", "moe", "h2")]
+        twin = load(root / "t-2.json")
+        points = load(root / "a-held/model_estimates.json")
+        for table, rows in (("h1", h1), ("moe", moe), ("h2", h2)):
+            baseline = Recorder()
+            if table == "h2":
+                compare_h2(baseline, "heldout", rows, twin, points)
+            else:
+                compare_h1(baseline, "heldout", h1, moe, twin, None)
+            self.assertEqual(baseline.above(), [])
+            indices = [i for i, r in enumerate(rows) if
+                       (r["basis"], r["selection"]) == ("gross primary", "primary") and
+                       (table != "h1" or r["role"] == "heldout")]
+            self.assertTrue(indices)
+            for index in indices:
+                for kind in ("delete", "duplicate", "relabel"):
+                    with self.subTest(table=table, index=index, kind=kind):
+                        changed = copy.deepcopy(rows)
+                        if kind == "delete":
+                            changed.pop(index)
+                        elif kind == "duplicate":
+                            changed.append(dict(rows[index]))
+                        else:
+                            changed[index]["selection"] = "flagged-inclusive"
+                        result = Recorder()
+                        if table == "h2":
+                            compare_h2(result, "heldout", changed, twin, points)
+                        else:
+                            compare_h1(result, "heldout", changed if table == "h1" else h1,
+                                       changed if table == "moe" else moe, twin, None)
+                        self.assertTrue(any(r["group"] == table + " census" for r in result.above()),
+                                        "the comparer itself must detect changed row identities")
+
+
+class WordRuleTests(unittest.TestCase):
+    def test_near_zero_endpoint_never_excuses_unequal_decision_words(self):
+        # Planted edge case: the lower endpoints differ by 2e-10, far inside
+        # 1% of this 5e-5 half-width (5e-7), but lie on opposite sides of zero.
+        # This is a fixture placement, not a smaller numerical agreement bar.
+        fit = {"intervals": [[-1e-10, 1e-4]], "coefficient_decisions": ["contains zero"],
+               "systematics_flag": "fixture has no bound", "sensitivity_flag": "fixture has no sensitivity",
+               "sensitivity_units": ["J/GB per ms"]}
+        twin = {"offset": {"coefficient_decision": "positive", "systematics_flag": fit["systematics_flag"],
+                           "sensitivity_flag": fit["sensitivity_flag"], "sensitivity_units": "J/GB per ms"}}
+        recorder = Recorder()
+        half = (fit["intervals"][0][1] - fit["intervals"][0][0]) / 2
+        numeric = recorder.number("fixture", "edge", "lower", -1e-10, 1e-10, bar_coefficient(half))
+        _offset_alternative(recorder, "fixture", "edge", "epsilon", fit, 0, twin)
+        self.assertEqual(numeric["status"], "under_bar")
+        self.assertEqual([row["key"] for row in recorder.above()], ["epsilon:coefficient_decision"])
+
+
+class MarkerPathAgreementTests(unittest.TestCase):
+    """Small real stream files exercise every parser/join marker gate without a campaign."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="marker-paths-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.directory = self.root / "sources/night-custody/hazards/meter"
+        self.directory.mkdir(parents=True)
+        self.path = self.directory / "stream-001.jsonl"
+        self.spans = {"decode_ns": [4_000_000_000, 8_000_000_000],
+                      "idle_ns": [0, 2_000_000_000], "request_ns": [2_000_000_000, 8_000_000_000]}
+
+    def items(self):
+        return [{"k": "h", "status": "streaming", "rate_idx": 0,
+                 "start_raw_ns": 0, "start_mono_ns": 0}] + [
+            {"k": "b", "rx": i * 1_000_000_000, "tx": i * 1_000_000_000 - 1_000_000,
+             "n": 1, "p": kp.SAMPLE.pack(i * 1000, 0, 12_000_000, 1_000_000, 0, 0, 0, 0).hex(),
+             "smc": {"B0AC": -1000 if i == 9 else 0, "B0AV": 12000}} for i in range(13)
+        ] + [{"k": "t", "end_raw_ns": 12_000_000_000, "end_mono_ns": 12_000_000_000}]
+
+    def write(self, items):
+        self.path.write_text("".join(json.dumps(item) + "\n" for item in items))
+
+    def primary_decision(self, streams):
+        """Use the primary's energy join first, then its registered marker fallback."""
+        for _, stream in streams:
+            try:
+                result = ba.meter_decode(stream, self.spans["decode_ns"], self.spans["idle_ns"])
+                offset = kp.raw_offset_ns(stream)
+                window = [t + offset for t in self.spans["decode_ns"]]
+                marker = ba._decode_battery_marker(stream, window, ba._battery_delay_ns(stream))
+                return True, marker, result["battery_end_window_complete"]
+            except ba.AnalysisError:
+                pass
+        markers, complete = [], []
+        for _, stream in streams:
+            offset = kp.raw_offset_ns(stream)
+            if offset is None:
+                continue
+            window = [t + offset for t in self.spans["decode_ns"]]
+            tau_ns = ba._battery_delay_ns(stream)
+            marker = ba._decode_battery_marker(stream, window, tau_ns)
+            if marker is None:
+                continue
+            markers.append(marker)
+            complete.append(stream.poll_ns[-1] >= window[1] + tau_ns)
+        return False, any(markers) if markers else None, any(complete)
+
+    def assert_agreement(self):
+        selected = [self.spans["decode_ns"], self.spans["idle_ns"]]
+        primary = ba._session_streams(self.root, selected)
+        twin = bt.load_archive(self.root)
+        with mock.patch.object(bt, "_bundle", return_value=self.root), mock.patch.object(
+                bt, "member_spans", return_value=self.spans):
+            actual = bt.dc_join(twin, "member")
+        expected = self.primary_decision(primary)
+        self.assertEqual((actual["status"] == "ok", actual.get("decode_assisted"),
+                          actual.get("battery_end_window_complete")), expected)
+        return primary, twin, actual
+
+    def test_marker_without_current_is_unknown_on_energy_and_marker_only_paths(self):
+        for successful in (False, True):
+            with self.subTest(successful=successful):
+                items = self.items()
+                if not successful:
+                    items[0]["status"] = "closed"
+                for item in items:
+                    if item.get("k") == "b" and 7_000_000_000 <= item["rx"] < 11_000_000_000:
+                        item["smc"].pop("B0AC")
+                self.write(items)
+                _, _, actual = self.assert_agreement()
+                self.assertEqual(actual["status"] == "ok", successful)
+                self.assertIsNone(actual.get("decode_assisted"))
+                reason = actual["decode_assist_evaluated_reason"]
+                self.assertIn("selected meter stream" if successful else "no mapped meter stream", reason)
+                self.assertIn("B0AC", reason)
+                self.assertIn("member", reason)
+
+    def test_batches_without_new_samples_match_native_fit_points(self):
+        for case in ("empty_payload_n", "replayed_batch"):
+            with self.subTest(path=case):
+                items = self.items()
+                items[7]["p"] = "" if case == "empty_payload_n" else items[2]["p"]
+                self.write(items)
+                native = kp.parse(self.path)
+                primary, twin, _ = self.assert_agreement()
+                stream = primary[0][1]
+                self.assertEqual(stream.fit.stats, native.fit.stats)
+                self.assertEqual(twin["streams"][0]["fit"]["points"], native.fit.stats["points"])
+                self.assertEqual(native.fit.stats["points"], 12)
+                self.assertEqual(stream.poll_ns, native.poll_ns)
+
+    def shape_cases(self):
+        """Cold rounds b/c/d probes, including replay within a native batch."""
+        cases = {}
+        for name in ("baseline", "empty_p_n0", "empty_p_n1", "seq_equals_running_max",
+                     "replayed_batch", "tail_word_replayed", "new_word_then_replayed_tail", "first_batch_tail_replayed",
+                     "mid_word_replayed_last_advances", "partial_tail", "partial_mid",
+                     "partial_mid_payload_n0", "only_partial", "one_partial",
+                     "header_closed", "only_partial_header_closed", "one_partial_header_closed",
+                     "nonhex_payload", "nonstring_payload", "whitespace_hex",
+                     "n0_nonhex", "n0_nonstring", "missing_payload", "reversed_polls",
+                     "dup_poll", "dup_rx_diff_payload", "smc_with_p_key", "voltage_missing",
+                     "edge_poll_start", "edge_poll_end",
+                     "dropped_edge_sample", "dropped_start_sample", "dropped_idle_end_sample",
+                     "wrap", "long_stall"):
+            items = self.items()
+            if name in ("empty_p_n0", "empty_p_n1"):
+                items[7].update(n=int(name.endswith("n1")), p="")
+            if name in ("seq_equals_running_max", "replayed_batch"):
+                items[7]["p"] = items[6 if name == "seq_equals_running_max" else 2]["p"]
+            if name in ("tail_word_replayed", "new_word_then_replayed_tail"):
+                # The cold probe puts the next batch's word here, then an
+                # old tail. Native has no fit point at that following batch.
+                word = items[8 if name == "tail_word_replayed" else 7]["p"]
+                items[7].update(n=2, p=word + items[2]["p"])
+            if name == "first_batch_tail_replayed":
+                word = kp.SAMPLE.pack(100, 0, 12_000_000, 1_000_000, 0, 0, 0, 0).hex()
+                items[1].update(n=2, p=word + items[1]["p"])
+            if name == "mid_word_replayed_last_advances":
+                word = kp.SAMPLE.pack(6100, 0, 12_000_000, 1_000_000, 0, 0, 0, 0).hex()
+                items[7].update(n=3, p=items[7]["p"] + items[2]["p"] + word)
+            if name == "partial_tail":
+                items[-2]["p"] += "ab"
+            if name in ("partial_mid", "partial_mid_payload_n0"):
+                items[7]["p"] += "ab" + items[7]["p"]
+                if name.endswith("n0"):
+                    items[7]["n"] = 0
+            if name.startswith("only_partial"):
+                for batch in items[1:-1]:
+                    batch["p"] = "ab"
+            if name.startswith("one_partial"):
+                items[7]["p"] = "ab"
+            if name.endswith("header_closed"):
+                items[0]["status"] = "closed"
+            if name in ("nonhex_payload", "nonstring_payload", "n0_nonhex", "n0_nonstring"):
+                items[7]["p"] = 42 if "nonstring" in name else "not-hex"
+                if name.startswith("n0_"):
+                    items[7]["n"] = 0
+            if name == "missing_payload":
+                items[7].pop("p")
+            if name == "whitespace_hex":
+                for batch in items[1:-1]:
+                    batch["p"] = " ".join(batch["p"][i:i + 2] for i in range(0, len(batch["p"]), 2))
+            if name == "dup_poll":
+                items.insert(8, copy.deepcopy(items[7]))
+            if name == "dup_rx_diff_payload":
+                for key in ("rx", "tx"):
+                    items[8][key] = items[7][key]
+            if name == "smc_with_p_key":
+                batch = items[7]
+                items[7] = {"k": "b", "tx": batch["tx"], "rx": batch["rx"], "n": batch["n"],
+                            "smc": {"p": "ab", **batch["smc"]}, "p": batch["p"]}
+            if name == "voltage_missing":
+                for batch in items[1:-1:3]:
+                    batch["smc"].pop("B0AV")
+            if name in ("edge_poll_start", "edge_poll_end"):
+                for batch in items[1:-1]:
+                    batch["smc"]["B0AC"] = 0
+                items[8 if name == "edge_poll_start" else 12]["smc"]["B0AC"] = -1000
+            if name == "reversed_polls":
+                items[1:-1] = reversed(items[1:-1])
+            if name.startswith("dropped_"):
+                edge = {"dropped_edge_sample": 8, "dropped_start_sample": 4,
+                        "dropped_idle_end_sample": 2}[name] * 1_000_000_000
+                items = [b for b in items if b.get("k") != "b" or b["rx"] != edge]
+            if name in ("wrap", "long_stall"):
+                for i, batch in enumerate(items[1:-1]):
+                    shift = 65000 if name == "wrap" else (70000 if i >= 7 else 0)
+                    batch["p"] = kp.SAMPLE.pack((i * 1000 + shift) % kp.WRAP, 0,
+                                                12_000_000, 1_000_000, 0, 0, 0, 0).hex()
+                    if name == "long_stall" and i >= 7:
+                        batch["rx"] += 70_000_000_000
+                        batch["tx"] += 70_000_000_000
+            cases[name] = items
+        return cases
+
+    def test_review_shapes_native_samples_fit_and_marker_inputs(self):
+        for name, items in self.shape_cases().items():
+            with self.subTest(shape=name):
+                self.write(items)
+                # Full selection observes every native kept sample. The join
+                # below independently exercises the actual decode/idle spans.
+                primary = ba._filtered_stream(self.path, [(-10**15, 10**15)])
+                twin = bt.parse_meter_stream(self.path)
+                try:
+                    native = kp.parse(self.path)
+                except (ValueError, TypeError, struct.error):
+                    self.assertIsNone(primary.fit)
+                    self.assertIsNone(primary.samples)
+                    self.assertFalse(twin["aligned"])
+                else:
+                    if native.fit is not None:
+                        cold_fit = {"tail_word_replayed": (12, -82191780.82191849, 968036.5296803653),
+                                    "first_batch_tail_replayed": (13, 17440170.526111603, 1008623.1954267997)}
+                        if name in cold_fit:
+                            self.assertEqual((native.fit.stats["points"], native.fit.a_ns,
+                                              native.fit.b_ns_per_ms), cold_fit[name])
+                        self.assertEqual(primary.fit, native.fit)
+                        self.assertEqual(primary.samples, native.samples)
+                        self.assertEqual(primary.host_ns, native.host_ns)
+                        self.assertEqual(primary.watts, native.watts)
+                        self.assertEqual(twin["host_ns"], native.host_ns)
+                        self.assertEqual(twin["watts"], native.watts)
+                        for key in ("a_ns", "b_ns_per_ms"):
+                            self.assertEqual(twin["fit"][key], getattr(native.fit, key))
+                        for key in ("points", "points_used", "clock_rate_ppm", "excess_latency_ms_p50",
+                                    "excess_latency_ms_p95", "excess_latency_ms_min", "excess_latency_ms_max"):
+                            self.assertEqual(twin["fit"][key], native.fit.stats[key])
+                    else:
+                        self.assertIsNone(primary.fit)
+                        self.assertFalse(twin["aligned"])
+                # Native parse intentionally has no polls on a closed header,
+                # and raises on bad sample words. Ruling F2 keeps load()'s
+                # polls as the independent marker oracle in both cases.
+                header, trailer, batches, errors = kp.load(self.path)
+                polls = sorted(batches, key=lambda b: b["rx"])
+                marker = kp.Stream(header, trailer, polls, errors, None, None, [], [],
+                                   [b["rx"] for b in polls], [dict(b.get("smc") or {}) for b in polls])
+                self.assertEqual(primary.poll_ns, marker.poll_ns)
+                self.assertEqual(primary.smc, marker.smc)
+                self.assertEqual(twin["poll_ns"], marker.poll_ns)
+                self.assertEqual(twin["battery_current_ma"], [b.get("B0AC") for b in marker.smc])
+                self.assertEqual(twin["battery_voltage_mv"], [b.get("B0AV") for b in marker.smc])
+                tau = ba._battery_delay_ns(marker)
+                self.assertEqual(ba._battery_delay_ns(primary), tau)
+                self.assertEqual(twin["battery_tau_ns"], tau)
+                self.assertEqual(ba._decode_battery_marker(primary, self.spans["decode_ns"], tau),
+                                 ba._decode_battery_marker(marker, self.spans["decode_ns"], tau))
+                self.assert_agreement()
+
+    def test_crlf_stream_keeps_native_samples_and_markers(self):
+        self.write(self.items())
+        self.path.write_bytes(self.path.read_bytes().replace(b"\n", b"\r\n"))
+        native = kp.parse(self.path)
+        primary, twin, actual = self.assert_agreement()
+        self.assertEqual(primary[0][1].fit, native.fit)
+        self.assertEqual(twin["streams"][0]["host_ns"], native.host_ns)
+        self.assertEqual(actual["status"], "ok")
+
+    def test_partial_words_keep_polls_and_marker_without_energy(self):
+        for name, items in self.shape_cases().items():
+            if "partial" not in name or name.endswith("n0"):
+                continue
+            with self.subTest(shape=name):
+                self.write(items)
+                primary, twin, actual = self.assert_agreement()
+                self.assertIsNone(primary[0][1].fit)
+                self.assertFalse(twin["streams"][0]["aligned"])
+                self.assertEqual(primary[0][1].poll_ns, [b["rx"] for b in items if b["k"] == "b"])
+                self.assertIs(actual.get("decode_assisted"), True)
+                self.assertIs(actual.get("battery_end_window_complete"), True)
+                self.assertNotEqual(actual["status"], "ok")
+
+    def test_dropped_edge_samples_keep_actual_neighbours_and_native_terms(self):
+        for name, items in self.shape_cases().items():
+            if not name.startswith("dropped_"):
+                continue
+            with self.subTest(shape=name):
+                self.write(items)
+                native = kp.parse(self.path)
+                primary, _, result = self.assert_agreement()
+                expected = ba.meter_decode(native, self.spans["decode_ns"], self.spans["idle_ns"])
+                self.assertEqual(ba.meter_decode(primary[0][1], self.spans["decode_ns"], self.spans["idle_ns"]), expected)
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["edge_powers_w"], expected["edge_powers_w"])
+                self.assertEqual(result["n"], expected["n"])
+
+    def test_smc_with_p_key_uses_the_native_top_level_payload(self):
+        items = self.items()
+        batch = items[7]
+        items[7] = {"k": "b", "tx": batch["tx"], "rx": batch["rx"], "n": batch["n"],
+                    "smc": {"p": "ab", **batch["smc"]}, "p": batch["p"]}
+        self.write(items)
+        native = kp.parse(self.path)
+        primary, twin, _ = self.assert_agreement()
+        self.assertEqual(primary[0][1].fit.stats, native.fit.stats)
+        self.assertEqual(twin["streams"][0]["host_ns"], native.host_ns)
+        native_power = dict(zip(native.host_ns, native.watts))
+        self.assertEqual(primary[0][1].watts, [native_power[t] for t in primary[0][1].host_ns])
+
+    def test_parser_early_returns_preserve_mapped_polls(self):
+        for case in ("streaming", "header_closed", "polls_only", "one_batch", "duplicate_sequences",
+                     "missing_payload", "nonhex_payload", "no_header", "no_trailer", "no_polls", "implicit_streaming",
+                     "offset_at_limit", "offset_drift"):
+            with self.subTest(path=case):
+                items = self.items()
+                if case == "header_closed":
+                    items[0].update(status="closed", rate_idx=99)  # rate is irrelevant without a fit
+                if case == "implicit_streaming":
+                    items[0].pop("status")
+                if case in ("polls_only", "one_batch"):
+                    for i, item in enumerate(items[1:-1]):
+                        if case == "polls_only" or i != 0:
+                            item.update(n=0, p="")
+                if case == "duplicate_sequences":
+                    for item in items[1:-1]:
+                        item["p"] = items[1]["p"]
+                if case == "missing_payload":
+                    for item in items[1:-1]:
+                        item.pop("p")
+                if case == "nonhex_payload":
+                    for item in items[1:-1]:
+                        item["p"] = "not-hex"
+                if case == "no_header":
+                    items = items[1:]
+                if case == "no_trailer":
+                    items = items[:-1]
+                if case == "no_polls":
+                    items = [items[0], items[-1]]
+                if case in ("offset_at_limit", "offset_drift"):
+                    items[-1]["end_raw_ns"] += 1_000_000 + (case == "offset_drift")
+                self.write(items)
+                primary, twin, _ = self.assert_agreement()
+                stream = twin["streams"][0]
+                self.assertEqual(stream["poll_ns"], primary[0][1].poll_ns)
+                self.assertEqual(stream["raw_offset_ns"], kp.raw_offset_ns(primary[0][1]))
+                self.assertEqual(stream["battery_tau_ns"], 3_000_000_000 if stream["poll_ns"] else 2_000_000_000)
+                if case in ("header_closed", "polls_only", "one_batch", "duplicate_sequences", "missing_payload", "nonhex_payload"):
+                    self.assertFalse(stream["aligned"])
+                    self.assertEqual(stream["battery_current_ma"][9], -1000)
+                    self.assertEqual(stream["battery_voltage_mv"][9], 12000)
+
+    def test_transport_failures_discard_the_stream_like_the_primary(self):
+        for case in ("invalid_json", "blank_line", "missing_rx", "missing_rate"):
+            with self.subTest(path=case):
+                items = self.items()
+                if case == "missing_rx":
+                    items[1].pop("rx")
+                if case == "missing_rate":
+                    items[0].pop("rate_idx")
+                self.write(items)
+                if case in ("invalid_json", "blank_line"):
+                    with self.path.open("a") as handle:
+                        handle.write("{broken\n" if case == "invalid_json" else "\n")
+                primary, twin, actual = self.assert_agreement()
+                self.assertIsNone(actual.get("decode_assisted"))
+                self.assertEqual(primary[0][1].poll_ns, [])
+                self.assertEqual(twin["streams"][0]["poll_ns"], [])
+
+    def test_missing_canonical_stream_directory_does_not_read_a_fallback(self):
+        self.write(self.items())
+        fallback = self.root / "hazards/meter"
+        fallback.parent.mkdir(parents=True)
+        self.directory.rename(fallback)
+        self.assert_agreement()
+        self.assertEqual(bt.load_archive(self.root)["streams"], [])
+
+    def test_unreadable_stream_has_no_marker_on_either_side(self):
+        self.write(self.items())
+        with mock.patch.object(Path, "open", side_effect=OSError("unreadable stream")):
+            self.assert_agreement()
+
+    def test_non_object_transport_has_the_primarys_parse_failure(self):
+        self.write(self.items())
+        with self.path.open("a") as handle:
+            handle.write("[]\n")
+        with self.assertRaises(AttributeError):
+            ba._session_streams(self.root, list(self.spans.values()))
+        with self.assertRaises(AttributeError):
+            bt.load_archive(self.root)
+
+    def test_clock_fit_failure_and_envelope_fallback_preserve_marker(self):
+        self.write(self.items())
+        with mock.patch.object(kp, "clock_fit", side_effect=ValueError("fit failed")), mock.patch.object(
+                bt, "_linear_fit", side_effect=ValueError("fit failed")):
+            _, _, result = self.assert_agreement()
+            self.assertIs(result["decode_assisted"], True)
+        def fail_second(original):
+            calls = 0
+            def fit(*args):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise ValueError("envelope fit failed")
+                return original(*args)
+            return fit
+        with mock.patch.object(kp, "_linear_fit", side_effect=fail_second(kp._linear_fit)), mock.patch.object(
+                bt, "_linear_fit", side_effect=fail_second(bt._linear_fit)):
+            _, _, result = self.assert_agreement()
+            self.assertEqual(result["status"], "ok")
+            self.assertIs(result["decode_assisted"], True)
+
+    def test_energy_join_skip_paths_keep_the_marker(self):
+        for case in ("late_start", "end_in_decode", "idle_outside", "decode_samples_missing", "idle_samples_missing",
+                     "decode_voltage_missing", "idle_voltage_missing", "all_voltage_missing",
+                     "quiet_marker", "no_marker_polls"):
+            with self.subTest(path=case):
+                items = self.items()
+                if case == "late_start":
+                    items = [b for b in items if b["k"] != "b" or b["rx"] >= 6_000_000_000]
+                if case == "end_in_decode":
+                    items = [b for b in items if b["k"] != "b" or b["rx"] <= 7_000_000_000]
+                if case == "no_marker_polls":
+                    items = [b for b in items if b["k"] != "b" or b["rx"] <= 6_000_000_000]
+                if case == "idle_outside":
+                    self.spans["idle_ns"] = [-2_000_000_000, -1_000_000_000]
+                else:
+                    self.spans["idle_ns"] = [0, 2_000_000_000]
+                if case == "idle_samples_missing":
+                    self.spans["idle_ns"] = [1_000_000_000, 2_000_000_000]
+                for b in items[1:-1]:
+                    if case == "decode_samples_missing" and 4_000_000_000 <= b["rx"] < 8_000_000_000:
+                        b.update(n=0, p="")
+                    if case == "idle_samples_missing" and b["rx"] == 1_000_000_000:
+                        b.update(n=0, p="")
+                    if (case == "all_voltage_missing" or
+                        case == "decode_voltage_missing" and 4_000_000_000 <= b["rx"] < 8_000_000_000 or
+                        case == "idle_voltage_missing" and b["rx"] < 2_000_000_000):
+                        b["smc"].pop("B0AV")
+                    if case == "quiet_marker":
+                        b["smc"]["B0AC"] = 0
+                self.write(items)
+                self.assert_agreement()
+
+    def test_successful_join_uses_its_stream_before_marker_only_fallbacks(self):
+        self.write(self.items())
+        assisted = self.path.read_text()
+        quiet = self.items()
+        for b in quiet[1:-1]:
+            b["smc"]["B0AC"] = 0
+        self.write(quiet)
+        second = self.directory / "stream-002.jsonl"
+        second.write_text(assisted)
+        _, _, result = self.assert_agreement()
+        self.assertEqual(result["status"], "ok")
+        self.assertFalse(result["decode_assisted"])
+        # A prior unaligned assisted stream also yields to the successful join.
+        assisted_items = self.items()
+        assisted_items[0]["status"] = "closed"
+        self.write(assisted_items)
+        second.write_text("".join(json.dumps(b) + "\n" for b in quiet))
+        _, _, result = self.assert_agreement()
+        self.assertEqual(result["stream"], "stream-002.jsonl")
+        self.assertFalse(result["decode_assisted"])
+
+    def test_marker_only_streams_are_combined_in_both_orders(self):
+        quiet = self.items()
+        quiet[0]["status"] = "closed"
+        for b in quiet[1:-1]:
+            b["smc"]["B0AC"] = 0
+        assisted = self.items()
+        for b in assisted[1:-1]:
+            b.update(n=0, p="")
+        for first, second in ((quiet, assisted), (assisted, quiet)):
+            with self.subTest(assisted_first=first is assisted):
+                self.write(first)
+                (self.directory / "stream-002.jsonl").write_text("".join(json.dumps(b) + "\n" for b in second))
+                _, _, result = self.assert_agreement()
+                self.assertIs(result["decode_assisted"], True)
 
 
 class FenceTests(unittest.TestCase):
