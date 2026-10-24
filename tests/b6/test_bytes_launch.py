@@ -91,7 +91,8 @@ class BytesLaunchTests(unittest.TestCase):
             with self.subTest(pack=pack):
                 reg = load(ROOT / f"configs/b6/packs/{pack}/registration.json")
                 self.assertEqual(reg.status, "draft")
-                self.assertTrue(all(e["version"] is None for e in reg.estimators))
+                self.assertEqual({e["version"] for e in reg.estimators},
+                                 {"94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"})
                 self.assertEqual(validate(reg, catalog, root=ROOT), [])
                 inputs, disk = render_inputs(self.measurement, self.scratch, pack)
                 self.assertEqual(inputs["programmed_span_s"]["seconds"], sized["packs"][pack]["programmed_span_s"])

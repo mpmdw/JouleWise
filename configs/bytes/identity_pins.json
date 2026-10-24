@@ -582,7 +582,7 @@
   "packs": {
     "bytes-s1-p1": {
       "tree_path": "configs/campaigns/bytes-s1-p1/plan_tree.json",
-      "tree_sha256": "c59170ceba0bf0fb5c33a4862642b2d8b842b7244ea8b051e459e6e05964addc",
+      "tree_sha256": "074c8a900499d7a424a41240dfbdda545cd2f5f396bf7dc2107c2b0222f677b6",
       "units": [
         "neg8_reference",
         "qwen3-1p7b",
@@ -591,7 +591,7 @@
     },
     "bytes-s1-p2": {
       "tree_path": "configs/campaigns/bytes-s1-p2/plan_tree.json",
-      "tree_sha256": "e55146534dd7cfca284c4922435b58f8e3c73e7c6bb1891a7cd041f599f78b21",
+      "tree_sha256": "869fccb0b0b551d19b0e69e757c1be8789781fc69fad8101f1d42422339d226c",
       "units": [
         "neg8_reference",
         "qwen3-1p7b",
@@ -600,7 +600,7 @@
     },
     "bytes-s2-p1": {
       "tree_path": "configs/campaigns/bytes-s2-p1/plan_tree.json",
-      "tree_sha256": "3c5e46119a0a94675b042b980545d09ce96ec24c0f6eb1f8750f40f777c394f1",
+      "tree_sha256": "a423afe03863688e5804d7e97e08571f53ac57e22936be613324fb73a19440b7",
       "units": [
         "neg8_reference",
         "qwen3-30b-a3b",
@@ -609,7 +609,7 @@
     },
     "bytes-s2-p2": {
       "tree_path": "configs/campaigns/bytes-s2-p2/plan_tree.json",
-      "tree_sha256": "3aad61794763e83ad80a1ab0da21f4a8ed4c49d383259bd8d05ec58d5881803d",
+      "tree_sha256": "9c2c431abca2cdfcc77baa8b86bf423644e3502b80e0fc6621bfdc488803d629",
       "units": [
         "neg8_reference",
         "qwen3-30b-a3b",
@@ -618,7 +618,7 @@
     },
     "bytes-s3-p1": {
       "tree_path": "configs/campaigns/bytes-s3-p1/plan_tree.json",
-      "tree_sha256": "a65e7bfec219aa07c179943ea5d48196d52956e105e7fdded3e68c9e48781ef0",
+      "tree_sha256": "fc3abb68ba2f5065d351eb375171c04a0a93fb99f6b5693c69ac66f4346f16b5",
       "units": [
         "neg8_reference",
         "qwen3-14b",
@@ -627,7 +627,7 @@
     },
     "bytes-s3-p2": {
       "tree_path": "configs/campaigns/bytes-s3-p2/plan_tree.json",
-      "tree_sha256": "dc583b3cf01bfe7dbea03eff5750703f0c5339ea23a408fc80666fb0e6ecc565",
+      "tree_sha256": "99f97431a64bbd2598fa69e7a5aabdc1a2376d47008e8c29c7f58f5d250422d0",
       "units": [
         "neg8_reference",
         "qwen3-14b",
@@ -636,7 +636,7 @@
     },
     "bytes-s4-p1": {
       "tree_path": "configs/campaigns/bytes-s4-p1/plan_tree.json",
-      "tree_sha256": "054a0d21df1dad966b219e077f07a0b9603221315fd4cc2f49183654a265bd72",
+      "tree_sha256": "4e2e684a1500633733012b66d56018ef2dfdc98ea00ceeb339619bcb8c18f2ec",
       "units": [
         "neg8_reference",
         "qwen3-32b",
@@ -645,7 +645,7 @@
     },
     "bytes-s4-p2": {
       "tree_path": "configs/campaigns/bytes-s4-p2/plan_tree.json",
-      "tree_sha256": "2d872993964e4b2a2556d779ff1cd7ec13353a144b69f5e51e9af1bbfc3a593d",
+      "tree_sha256": "fae9afbbefaf354c2f581c0b4633d380e676951a073cd5294490b0f920a32f85",
       "units": [
         "neg8_reference",
         "qwen3-32b",
@@ -654,7 +654,7 @@
     },
     "bytes-s5-p1": {
       "tree_path": "configs/campaigns/bytes-s5-p1/plan_tree.json",
-      "tree_sha256": "c191e223affd542b4af5e0a134f8d230bc51bbe52c111cbfc1e4f7f9877b7aed",
+      "tree_sha256": "d3b8029333729e2adbd3cbf5ba92c10d21994a9c371d9bc94845822ea2ed85e8",
       "units": [
         "llama-70b",
         "neg8_reference"
@@ -662,7 +662,7 @@
     },
     "bytes-s5-p2": {
       "tree_path": "configs/campaigns/bytes-s5-p2/plan_tree.json",
-      "tree_sha256": "67b7826361a837bc39dc89292bd9c68842ea7d53c2a91fb8195b4ef1627fbf6d",
+      "tree_sha256": "76cc1e1551ec7401111a14d789c8260519a8dcee78ddd305e3af58c4c4659380",
       "units": [
         "llama-70b",
         "neg8_reference"
@@ -670,7 +670,7 @@
     },
     "bytes-s6-p1": {
       "tree_path": "configs/campaigns/bytes-s6-p1/plan_tree.json",
-      "tree_sha256": "7c521adb9c8c3c474f7b4b8637517103b3d63ee03c9404e8d4636863d0fda161",
+      "tree_sha256": "35e08f751ec1943de3fcb2ad1b04fe04154813321b39304e64b76aa1750d67ef",
       "units": [
         "neg8_reference",
         "qwen35-122b"
@@ -678,7 +678,7 @@
     },
     "bytes-s6-p2": {
       "tree_path": "configs/campaigns/bytes-s6-p2/plan_tree.json",
-      "tree_sha256": "b2be24faa4faa979a13ac4a677e71827b8ebeffd65c4915a57239248b8fcfe6c",
+      "tree_sha256": "c6dff1e8fea15e6ddeed94b451443331ceefadc5e96c0bc98f1e234a0e570b7b",
       "units": [
         "neg8_reference",
         "qwen35-122b"

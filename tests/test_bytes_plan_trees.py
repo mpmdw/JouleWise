@@ -98,6 +98,10 @@ class BytesPlanTreesTests(unittest.TestCase):
     def test_module_minutes_use_c5_operands_and_keep_registration_gate_open(self):
         sizing_path = ROOT / generator.SIZING_PATH
         sized = read(sizing_path)
+        agreed_version = "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
+        estimator_section = (ROOT / "docs/registrations/bytes_pack_v1.md").read_text().split(
+            "## 13. Estimators\n", 1)[1].split("\n## 14.", 1)[0]
+        self.assertIn(f"**`{agreed_version}`**", estimator_section)
         for number in range(1, 7):
             allowances = sized["packs"][f"bytes-s{number}-p1"]["disk_derivation"]["allowances_by_model"]
             for pass_number in (1, 2):
@@ -107,7 +111,8 @@ class BytesPlanTreesTests(unittest.TestCase):
                 self.assertEqual(reg["status"], "draft")
                 self.assertEqual(collection["status"], "draft")
                 self.assertEqual(collection["modules"], reg["modules"])
-                self.assertTrue(all(entry["version"] is None for entry in reg["estimators"]))
+                expected_version = agreed_version if pass_number == 1 else None
+                self.assertEqual({entry["version"] for entry in reg["estimators"]}, {expected_version})
                 for module in reg["modules"]:
                     terms = allowances[module["module_id"].removeprefix("bytes-")]
                     seconds = terms["member_allowance_s"]
