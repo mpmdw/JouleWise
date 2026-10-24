@@ -443,12 +443,8 @@ def _battery_stream_data(stream):
     return times, watts, interval
 
 
-def _battery_delay_s(poll_interval):
-    # One second averaged, one held, then the stream's largest poll interval.
-    return 2 * T_SMC_S + poll_interval
-
-
 def _battery_delay_ns(stream):
+    # One second averaged, one held, then the stream's largest poll interval.
     # Keep window boundaries on the poll clock; seconds are display values.
     return round(2 * T_SMC_S * 1e9) + max(
         (b - a for a, b in zip(stream.poll_ns, stream.poll_ns[1:])), default=0)
@@ -497,8 +493,8 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     battery_secondary = battery - battery_idle * duration
     # BAT-2 §3: one averaged second, one held second, then the stream's own
     # largest poll interval, over ALL polls (including incomplete SMC reads).
-    tau = _battery_delay_s(poll_interval)
     tau_ns = _battery_delay_ns(stream)
+    tau = tau_ns / 1e9  # display from the integer poll clock (no float tail)
     battery_edges = []
     for edge in spans[0]:
         lo = bisect.bisect_left(battery_times, edge)
@@ -639,10 +635,16 @@ def _filtered_stream(path, spans):
                 word_index += 1
     try:
         samples = kp.samples(header, native_batches())
-        words = samples.batch
-        samples.batch = [word_batches[i] for i in words]
-        fit = kp.clock_fit(samples, batches)
     except (ValueError, TypeError, struct.error) as exc:
+        shell.fit_error = str(exc)
+        return shell
+    words = samples.batch
+    samples.batch = [word_batches[i] for i in words]
+    try:
+        # Native parse catches only ValueError here; a non-numeric transport
+        # field (n, tx) is a transport failure that discards the stream.
+        fit = kp.clock_fit(samples, batches)
+    except ValueError as exc:
         shell.fit_error = str(exc)
         return shell
     shell.fit = fit
