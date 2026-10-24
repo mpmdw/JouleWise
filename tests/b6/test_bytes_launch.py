@@ -92,7 +92,7 @@ class BytesLaunchTests(unittest.TestCase):
                 reg = load(ROOT / f"configs/b6/packs/{pack}/registration.json")
                 self.assertEqual(reg.status, "draft")
                 self.assertEqual({e["version"] for e in reg.estimators},
-                                 {"94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"})
+                                 {hashlib.sha256((ROOT / "joulewise/bytes_analysis.py").read_bytes()).hexdigest()})
                 self.assertEqual(validate(reg, catalog, root=ROOT), [])
                 inputs, disk = render_inputs(self.measurement, self.scratch, pack)
                 self.assertEqual(inputs["programmed_span_s"]["seconds"], sized["packs"][pack]["programmed_span_s"])

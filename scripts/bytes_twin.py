@@ -83,16 +83,13 @@ DC_KINDS = ("E_meter_edge_bound_j", "E_whole_window_drift_allowance_j")
 REST_KINDS = ("E_clock_anchor_shift_bound_j", "E_meter_edge_bound_j", "E_whole_window_drift_allowance_j")
 # Addendum 7 D5 (Addendum 4 item 6): the flagged-inclusive line restores every catalog exclusion,
 # NUMBER class included, of a run with a valid energy record. Only status, bundle and validity
-# failures stay out: these codes, and every roster / model / records / lineage / code / pack code.
+# failures stay out. Registration section 6 names these seven invalid-record conditions.
 VALIDITY_CODES = frozenset({
     "member.status_not_succeeded", "member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
-    "member.strict_validation_failed", "member.token_count_mismatch", "member.reduction_mismatch",
-    "member.anchor_recompute_mismatch", "member.config_not_in_inventory", "member.timeout",
-    "member.span_unknown", "member.idle_admission_telemetry_missing",
+    "member.strict_validation_failed", "member.token_count_mismatch",
     # The catalog's unresolved/fallback anchor has no valid phase placement (audit F15).
     "member.anchor_not_bounded",
 })
-VALIDITY_PREFIXES = ("roster.", "model.", "records.", "lineage.", "code.", "pack.", "cell.")
 # Addendum 7 D8: block 5's tabulated two-sided 95% t (aggregate.student_t_critical_95), reproduced
 # here value by value and never imported.  The table lists df 1 to 30, 40, 60 and 120; a df that is
 # not listed takes the value of the largest listed df below it (block 5's floor rule, conservative).
@@ -490,7 +487,7 @@ FAMILIES = {("rails", "gross"): "gross", ("rails", "idle"): "idle_subtracted",
 
 def family_energy(row, family, dc=None):
     """A reference row's whole-request energy in one NEG-8 family (Addendum 7 D2, D3, D6), or None."""
-    rails_gross, rails_idle = row.get("gross_energy_j"), row.get("idle_subtracted_energy_j")
+    rails_gross, rails_idle = row.get("reference_request_gross_j"), row.get("reference_request_idle_subtracted_j")
     if family == "gross":
         return rails_gross if is_number(rails_gross) else None
     if family == "idle_subtracted":
@@ -518,7 +515,10 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
         return family_energy(row, family, dc_by_run.get(row["run_id"]))
 
     def kept(row):
-        return row["status"] == "succeeded" and not row["excluded"] and energy(row) is not None
+        return (row["status"] == "succeeded" and not row["excluded"]
+                and is_number(request_duration(row)) and request_duration(row) > 0
+                and is_number(row.get("reference_request_gross_j"))
+                and is_number(row.get("reference_request_idle_subtracted_j")) and energy(row) is not None)
     by_role = {}
     for row in sorted(session_rows, key=lambda r: r["order_index"]):
         if row["role"] in ("corpus", "start", "midpoint", "end") and kept(row):
@@ -553,7 +553,7 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
 
 
 def request_duration(row):
-    return math.fsum(row.get("dur_" + phase + "_s") or 0.0 for phase in PHASES)
+    return row.get("reference_request_duration_s")
 
 
 # ----------------------------------------------------------------------------
@@ -656,6 +656,18 @@ def _pick(entry, keys):
 
 def read_manifest(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict) and any(s.get("test7_passed", False) is not False
+                                     for s in data.get("sessions", [])):
+        raise ValueError("test7_passed must be false: no regime passed test 7")
+    registered_path = Path(__file__).resolve().parents[1] / "configs/bytes/bytes_manifest.json"
+    if not registered_path.is_file():
+        # Standalone copies (including the agreement mutants) still authenticate
+        # the repository's exact registered bytes before consuming predictors.
+        registered_path = Path.cwd() / "configs/bytes/bytes_manifest.json"
+    registered_bytes = registered_path.read_bytes()
+    if hashlib.sha256(registered_bytes).hexdigest() != "76452108c1a10b1f63b48fc95b306b6c4aa936a0d2e94244be65dc067c356264":
+        raise ValueError("registered manifest digest differs from registration section 4")
+    registered = {canon(m["model"]): m for m in json.loads(registered_bytes)["models"]}
     models = data.get("models", data) if isinstance(data, dict) else data
     entries = []
     if isinstance(models, dict):
@@ -672,8 +684,14 @@ def read_manifest(path):
             raise ValueError("duplicate manifest model")
         w, kv, r = _pick(entry, W_KEYS), _pick(entry, KV_KEYS), _pick(entry, R_KEYS)
         if not name or w is None or r is None:
-            continue
+            raise ValueError("model predictors differ from registered manifest: " + str(name))
         kv = kv if kv is not None else 0.0
+        expected = registered.get(name)
+        if expected is None or (w, kv, r) != tuple(expected[k] for k in ("W_bytes", "KV_bytes", "R_bytes")):
+            raise ValueError("model predictors differ from registered manifest: " + name)
+        for key in ("b_bytes", "W_GB", "KV_GB", "R_GB", "b_GB"):
+            if key in entry and (not is_number(entry[key]) or entry[key] != expected[key]):
+                raise ValueError("model predictors differ from registered manifest: " + name)
         manifest[name] = {"model": entry.get("_name"), "W_bytes": w, "KV_bytes": kv, "R_bytes": r,
                           "b_GB": (w + kv) / GB, "R_GB": r / GB,
                           "revision": entry.get("revision"), "kind": ROSTER.get(name, {}).get("kind"),
@@ -820,6 +838,7 @@ def parse_meter_stream(path):
     a_ns = y0 + a1 - b1 * x0
     host_ns = [int(round(a_ns + b1 * d)) for d in dev_ms]
     return {**common, "aligned": True, "host_ns": host_ns, "watts": watts, "step_ms": step,
+            "dev_ms": dev_ms,
             "fit": {"a_ns": a_ns, "b_ns_per_ms": b1, "points": len(points), "points_used": len(used),
                     "clock_rate_ppm": (b1 / 1e6 - 1) * 1e6,
                     "excess_latency_ms_p50": percentile(above, 50),
@@ -828,13 +847,32 @@ def parse_meter_stream(path):
                     "excess_latency_ms_absmax": max(abs(v) for v in above)}}
 
 
-def edge_powers(times_ns, watts, window):
-    """Addendum 7 D4: at each edge of window, the larger power of the two samples adjacent to it."""
+def meter_gap(stream, window):
+    """Section 7: missing integer device counters inside the selected energy span."""
+    host, device = stream["host_ns"], stream.get("dev_ms", [])
+    lo = max(0, bisect.bisect_left(host, window[0]) - 1)
+    hi = min(len(host), bisect.bisect_left(host, window[1]) + 1)
+    fit, step = stream["fit"], stream["step_ms"]
+    for left, right in zip(device[lo:hi], device[lo + 1:hi]):
+        count = (right - left - 1) // step
+        if count > 0:
+            first = round(fit["a_ns"] + fit["b_ns_per_ms"] * (left + step))
+            last = round(fit["a_ns"] + fit["b_ns_per_ms"] * (left + count * step))
+            if first < window[1] and last >= window[0]:
+                return True
+    return False
+
+
+def edge_powers(times_ns, watts, window, r_max_s=0.0):
+    """The two adjacent samples, plus all samples at most r_max from each edge."""
     last = len(watts) - 1
-    lo, hi = bisect.bisect_left(times_ns, window[0]), bisect.bisect_left(times_ns, window[1])
-    p_start = max(watts[max(lo - 1, 0)], watts[min(lo, last)])
-    p_end = max(watts[max(hi - 1, 0)], watts[min(hi, last)])
-    return p_start, p_end
+    powers = []
+    for edge in window:
+        neighbour = bisect.bisect_left(times_ns, edge)
+        first = max(0, min(neighbour - 1, bisect.bisect_left(times_ns, edge - r_max_s * 1e9)))
+        stop = min(last + 1, max(neighbour + 1, bisect.bisect_right(times_ns, edge + r_max_s * 1e9)))
+        powers.append(max(watts[first:stop]))
+    return tuple(powers)
 
 
 def before_edge_powers(times_ns, watts, window):
@@ -967,7 +1005,7 @@ def member_spans(bundle):
         event = json.loads(line)
         kind, phase = event.get("event_type"), event.get("phase")
         meta = event.get("metadata") or {}
-        if kind == "phase_start" and "request_start" not in spans:
+        if kind == "phase_start" and phase == "tokenize":
             spans["request_start"] = mapped(event["timestamp_s"])
         if phase == "decode" and kind == "phase_start":
             spans["decode_start"] = mapped(event["timestamp_s"])
@@ -978,7 +1016,7 @@ def member_spans(bundle):
                 else mapped(event["timestamp_s"])
         elif phase == "idle_baseline" and kind == "stage_completed":
             spans["idle_end"] = mapped(event["timestamp_s"])
-    if "decode_start" not in spans or "decode_end" not in spans:
+    if "decode_start" not in spans or "decode_end" not in spans or "request_start" not in spans:
         return None
     return {"decode_ns": [spans["decode_start"], spans["decode_end"]],
             "request_ns": [spans["request_start"], spans["decode_end"]],
@@ -1107,7 +1145,7 @@ def _scratch_lock(root):
         os.close(descriptor)
 
 
-def dc_join(archive, run_id):
+def dc_join(archive, run_id, *, reference=False):
     """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
     bundle = _bundle(archive["root"], run_id)
     if bundle is None:
@@ -1134,6 +1172,10 @@ def dc_join(archive, run_id):
         host = stream["host_ns"]
         if not host or not base or any(a < host[0] or z > host[-1] or z <= a for a, z in (window, base)):
             continue
+        checked = [v + offset for v in spans["request_ns"]] if reference else window
+        if meter_gap(stream, checked):
+            failure = {"status": "meter_gap", "flags": ["bytes.meter_gap"]}
+            continue
         energy, n = integrate(host, stream["watts"], window[0], window[1])
         if energy is None:
             continue
@@ -1143,8 +1185,8 @@ def dc_join(archive, run_id):
         # and P_end the meter power at the phase's two edges (the first and last sample inside the
         # span), r_max the clock fit's largest excess latency and dt_meter one sample period.
         watts = stream["watts"]
-        p_start, p_end = edge_powers(host, watts, window)
         r_max_s = stream["fit"]["excess_latency_ms_absmax"] / 1e3   # Addendum 7 item 12: absolute
+        p_start, p_end = edge_powers(host, watts, window, r_max_s)
         dt_meter_s = stream["step_ms"] / 1e3
         # Addendum 9 item 3: the per-run coherent-offset bound max(P_start, P_end)(r_max + dt_meter) in
         # joules (the time factor is u's own); item 4: the signed sensitivity to delta in watts.
@@ -1238,7 +1280,7 @@ def restorable(row) -> bool:
     if row["status"] != "succeeded" or not is_number(row.get("phase_decode_j")) or not is_number(row.get("dur_decode_s")):
         return False
     codes = [c for c in (row.get("exclusion_codes") or "").split(";") if c]
-    return bool(codes) and not any(c in VALIDITY_CODES or c.startswith(VALIDITY_PREFIXES) for c in codes)
+    return bool(codes) and not any(c in VALIDITY_CODES for c in codes)
 
 
 def _kept(row, *, restore_load_correlated=False):
@@ -2006,7 +2048,9 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         archive = archive_by_session.get(session_id)
         references = [r for r in srows if r["role"] in ("corpus", "start", "midpoint", "end")]
         if archive is not None and references and all(r["_unblinded"] for r in references):
-            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"]) for r in references}
+            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True) for r in references}
+            flags.extend({"flag": "bytes.meter_gap", "session_id": session_id, "run_id": run_id}
+                         for run_id, joined in reference_dc[session_id].items() if joined["status"] == "meter_gap")
             for (boundary, variant), family in FAMILIES.items():
                 if boundary != "rails":
                     record[(boundary, variant)] = neg8_allowance(srows, family, reference_dc[session_id])
@@ -2046,7 +2090,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
                 r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
                 if valid and unblinded and dc_by_run.get(r["run_id"], {}).get("status") != "ok":
-                    r["_meter_flags"].append("bytes.meter_decode_unavailable")
+                    r["_meter_flags"].append("bytes.meter_gap" if
+                        dc_by_run.get(r["run_id"], {}).get("status") == "meter_gap" else "bytes.meter_decode_unavailable")
             per_boundary = {}
             for boundary in BOUNDARIES:
                 if boundary != "rails" and not dc_by_run:

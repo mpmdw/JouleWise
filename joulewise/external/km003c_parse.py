@@ -381,6 +381,28 @@ def raw_offset_ns(stream: Stream) -> int | None:
 # Energy
 
 
+def span_has_drops(stream: Stream, t0: int, t1: int) -> bool:
+    """Whether a missing device-counter sample maps into [t0, t1).
+
+    The counter is integer device milliseconds, independent of host arrival
+    jitter. Inspect neighbouring samples too: a missing first or last sample
+    need not have both surviving neighbours inside the requested span.
+    """
+    if stream.samples is None or stream.fit is None:
+        return False
+    lo = max(0, bisect.bisect_left(stream.host_ns, t0) - 1)
+    hi = min(len(stream.host_ns), bisect.bisect_left(stream.host_ns, t1) + 1)
+    device = stream.samples.dev_ms
+    step = stream.samples.step_ms
+    for i in range(lo + 1, hi):
+        previous, following = device[i - 1], device[i]
+        missing = (following - previous - 1) // step
+        if missing > 0 and (stream.fit.host_ns(previous + step) < t1 and
+                            stream.fit.host_ns(previous + missing * step) >= t0):
+            return True
+    return False
+
+
 def integrate(times_ns: Sequence[int], watts: Sequence[float], t0: int, t1: int
               ) -> tuple[float | None, int]:
     """(energy J, samples used): mean power of samples in [t0, t1) x (t1 - t0).

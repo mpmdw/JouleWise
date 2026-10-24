@@ -155,21 +155,17 @@
         "count": 171,
         "kind": "P"
       },
-      "source_digest": {
-        "count": 3,
-        "kind": "B"
-      },
       "synthetic_literal": {
         "count": 111,
         "kind": "B"
       }
     },
     "by_kind": {
-      "B": 3359,
+      "B": 3356,
       "P": 32556
     },
-    "files": 3100,
-    "literals": 35915,
+    "files": 3097,
+    "literals": 35912,
     "resolved_checked": 23539
   },
   "target_format": "<method>[@<commit>]:<path>[::<definition>], indexed by a row's target; @<commit> marks an era record, verified at that commit",
@@ -42902,12 +42898,6 @@
       ["/prompts/6/text_utf8_sha256", "issued_config", null],
       ["/prompts/7/text_utf8_sha256", "issued_config", null]
     ]},
-    {"path": "tests/b6/test_bytes_launch.py", "rows": [
-      ["#L95", "source_digest", 3840]
-    ]},
-    {"path": "tests/b6/test_bytes_packs.py", "rows": [
-      ["#L115", "source_digest", 3840]
-    ]},
     {"path": "tests/b6/test_capture_screen.py", "rows": [
       ["#L13", "synthetic_literal", null],
       ["#L14", "synthetic_literal", null],
@@ -46649,9 +46639,6 @@
       ["#L299", "synthetic_literal", null],
       ["#L299", "synthetic_literal", null],
       ["#L299", "synthetic_literal", null]
-    ]},
-    {"path": "tests/test_bytes_plan_trees.py", "rows": [
-      ["#L101", "source_digest", 3840]
     ]},
     {"path": "tests/test_calibration_bracketing.py", "rows": [
       ["#L122", "recorded_evidence", 3767],

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import bisect
 import csv
+import functools
 import hashlib
 import itertools
 import json
@@ -36,6 +37,7 @@ REGISTERED_MODELS = frozenset((
     "Qwen3-32B-4bit", "Qwen3-8B-8bit", "Llama-3.3-70B-Instruct-4bit",
     "Qwen3-30B-A3B-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit", "Qwen3.5-122B-A10B-4bit"))
 DROPPABLE_MODEL = "Qwen3-8B-8bit"
+REGISTERED_MANIFEST_SHA256 = "76452108c1a10b1f63b48fc95b306b6c4aa936a0d2e94244be65dc067c356264"
 SCHEMA = "joulewise.bytes_predictions.v1"
 BOUND_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                "E_whole_window_drift_allowance_j")
@@ -43,6 +45,10 @@ BOUND_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound
 
 class AnalysisError(ValueError):
     """A member, cell or stage cannot support the requested calculation."""
+
+
+class MeterGapError(AnalysisError):
+    """The device counter proves a missing sample in the requested span."""
 
 
 def number(value, label="number", *, positive=False, nonnegative=False):
@@ -398,7 +404,35 @@ def h1_checks(manifest):
     return len(HYPOTHESES) * sum(m["role"] == "heldout" for m in manifest["models"])
 
 
+@functools.lru_cache(maxsize=1)
+def _registered_predictors():
+    raw = (Path(__file__).resolve().parents[1] / "configs/bytes/bytes_manifest.json").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != REGISTERED_MANIFEST_SHA256:
+        raise AnalysisError("registered manifest digest differs from registration section 4")
+    return {m["model"]: m for m in json.loads(raw)["models"]}
+
+
+def _validate_predictors(models):
+    registered = _registered_predictors()
+    for model in models:
+        expected = registered.get(model["model"])
+        if expected is None or any(type(model.get(k)) not in (int, float) or
+                                   model[k] != expected[k] for k in ("W_bytes", "KV_bytes", "R_bytes")):
+            raise AnalysisError("model predictors differ from registered manifest: " + model["model"])
+        for key in ("b_bytes", "W_GB", "KV_GB", "R_GB", "b_GB"):
+            if key in model and (type(model[key]) not in (int, float) or model[key] != expected[key]):
+                raise AnalysisError("model predictors differ from registered manifest: " + model["model"])
+
+
+def _validate_test7(manifest):
+    # P0 ruling 3 establishes no passing regime. Missing means the registered false default.
+    if any(session.get("test7_passed", False) is not False for session in manifest.get("sessions", [])):
+        raise AnalysisError("test7_passed must be false: no regime passed test 7")
+
+
 def validate_manifest(manifest):
+    _validate_test7(manifest)
+    _validate_predictors(manifest["models"])
     models = manifest["models"]
     names = {m["model"] for m in models}
     if len(names) != len(models) or names not in (
@@ -442,6 +476,12 @@ def _event_span(events, phase, metadata):
     return span
 
 
+def _request_span(events, metadata):
+    """The runtime request, including gaps between tokenize and decode phases."""
+    return [_event_span(events, "tokenize", metadata)[0],
+            _event_span(events, "decode", metadata)[1]]
+
+
 def _battery_stream_data(stream):
     times, watts = stream.battery_watts()
     interval = max((b - a for a, b in zip(stream.poll_ns, stream.poll_ns[1:])), default=0) / 1e9
@@ -468,8 +508,8 @@ def _decode_battery_marker(stream, raw_span, tau_ns):
 def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     """R3 DC input, including BAT-2's signed SMC battery term and edge v.
 
-    Each edge takes the larger of its two adjacent sample powers, including
-    the in-phase sample at an exactly aligned end. The bound covers both bases.
+    Each edge uses both adjacent samples and all samples within +/- r_max,
+    including the in-phase sample at an exactly aligned end. The bound covers both bases.
     It is an attribution bound, not a physical-energy confidence statement.
     """
     from joulewise.external import km003c_parse as kp
@@ -481,6 +521,8 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     if any(span[0] < stream.host_ns[0] or span[1] > stream.host_ns[-1] or
            span[1] <= span[0] for span in spans):
         raise AnalysisError("meter does not cover decode and own idle spans")
+    if kp.span_has_drops(stream, *spans[0]):
+        raise MeterGapError("dropped device sample in meter span")
     duration = (spans[0][1] - spans[0][0]) / 1e9
     idle_duration = (spans[1][1] - spans[1][0]) / 1e9
     gross, n = kp.integrate(stream.host_ns, stream.watts, *spans[0])
@@ -515,8 +557,9 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
     powers, before = [], []
     for edge in spans[0]:
         right = bisect.bisect_left(stream.host_ns, edge)
-        adjacent = [i for i in (right - 1, right) if 0 <= i < len(stream.host_ns)]
-        powers.append(max(number(stream.watts[i], "meter edge power", nonnegative=True) for i in adjacent))
+        lo = min(max(0, right - 1), bisect.bisect_left(stream.host_ns, edge - residual * 1e9))
+        hi = max(min(len(stream.host_ns), right + 1), bisect.bisect_right(stream.host_ns, edge + residual * 1e9))
+        powers.append(max(number(w, "meter edge power", nonnegative=True) for w in stream.watts[lo:hi]))
         before.append(stream.watts[max(0, right - 1)])
     u = math.fsum(powers) * (residual + interval)
     meter_secondary = gross - base / idle_duration * duration
@@ -659,10 +702,13 @@ def _filtered_stream(path, spans):
     if offset is None:
         return shell
     host = [fit.host_ns(dev) for dev in samples.dev_ms]
-    # Indices, rather than a fixed time margin, keep the actual neighbours
-    # when a device sample next to an edge was dropped.
-    ranges = sorted((max(0, bisect.bisect_left(host, a + offset) - 1),
-                     min(len(host), bisect.bisect_left(host, b + offset) + 1))
+    # Retain both adjacent samples and every sample in the ruled +/- r_max
+    # neighbourhood, including when latency is larger than a device period.
+    radius = max(abs(fit.stats[k]) for k in ("excess_latency_ms_min", "excess_latency_ms_max")) * 1e6
+    ranges = sorted((max(0, min(bisect.bisect_left(host, a + offset) - 1,
+                               bisect.bisect_left(host, a + offset - radius))),
+                     min(len(host), max(bisect.bisect_left(host, b + offset) + 1,
+                                        bisect.bisect_right(host, b + offset + radius))))
                     for a, b in spans)
     merged = []
     for lo, hi in ranges:
@@ -797,10 +843,9 @@ def neg8_inputs(rows, *, streams=(), spans=None, test7_passed=False, blinded=Fal
     values = []
     for row in kept:
         try:
-            gross = number(float(row["gross_energy_j"]), "NEG-8 gross")
-            secondary = number(float(row["idle_subtracted_energy_j"]), "NEG-8 secondary")
-            duration = math.fsum(float(row.get("dur_" + phase + "_s") or 0)
-                                 for phase in ("tokenize", "generation_setup", "prefill", "decode"))
+            gross = number(float(row["reference_request_gross_j"]), "NEG-8 request gross")
+            secondary = number(float(row["reference_request_idle_subtracted_j"]), "NEG-8 request secondary")
+            duration = float(row["reference_request_duration_s"])
             number(duration, "NEG-8 whole-request duration", positive=True)
         except (ValueError, TypeError, KeyError):
             continue
@@ -813,11 +858,15 @@ def neg8_inputs(rows, *, streams=(), spans=None, test7_passed=False, blinded=Fal
             for _, stream in streams:
                 try:
                     dc = meter_decode(stream, request, idle)
+                except MeterGapError:
+                    item["flags"] = ["bytes.meter_gap"]
+                    continue
                 except AnalysisError:
                     continue
                 item["DC input"] = {"gross": dc["gross_j"], "idle_subtracted": dc["secondary_j"]}
                 item["rest"] = {family: item["DC input"][family] - item["rails"][family]
                                 for family in ("gross", "idle_subtracted")}
+                item.pop("flags", None)
                 break
         values.append(item)
     result = {"test7_passed": test7_passed, "references": values, "boundaries": {}}
@@ -955,7 +1004,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                 with readable_run(bundle, compression_records=Path(str(root) + ".desk") / "compression.jsonl") as bundle:
                     metadata = read_json(bundle / "metadata.json")
                     events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
-                    spans[ref["run_id"]] = (_event_span(events, "measured_run", metadata),
+                    spans[ref["run_id"]] = (_request_span(events, metadata),
                                              _event_span(events, "idle_baseline", metadata))
             except (OSError, ValueError, KeyError, TypeError):
                 continue
@@ -967,6 +1016,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
     prepared_streams = [(name, stream, _battery_stream_data(stream)) for name, stream in streams]
     for row in records:
         errors = []
+        meter_gap = False
         if row["status"] == "succeeded" and stage != "blinded":
             for name, stream, battery_readings in prepared_streams:
                 try:
@@ -982,10 +1032,14 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     if row["meter"]["decode_battery_assist"]:
                         row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
                     break
+                except MeterGapError as exc:
+                    errors.append(str(exc))
+                    meter_gap = True
                 except AnalysisError as exc:
                     errors.append(str(exc))
             if row["meter"] is None:
-                row["flags"] = sorted(set(row["flags"]) | {"bytes.meter_decode_unavailable"})
+                row["flags"] = sorted(set(row["flags"]) | {
+                    "bytes.meter_gap" if meter_gap else "bytes.meter_decode_unavailable"})
                 from joulewise.external import km003c_parse as kp
                 marker_windows = []
                 for name, stream, battery_readings in prepared_streams:
@@ -1256,6 +1310,8 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5, 
 
 
 def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
+    _validate_test7(manifest)
+    _validate_predictors(manifest["models"])
     grouped = {}
     for row in records:
         grouped.setdefault((row["model"], row["pass_id"], row["session_id"]), []).append(row)

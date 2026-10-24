@@ -288,7 +288,8 @@ class Neg8Tests(QuantityTestCase):
     def test_allowance_from_session_rows(self):
         def row(role, index, e, dur=2.0):
             return {"role": role, "order_index": index, "status": "succeeded", "excluded": False, "run_id": f"{role}{index}",
-                    "gross_energy_j": e, "dur_tokenize_s": 0, "dur_generation_setup_s": 0, "dur_prefill_s": dur / 2,
+                    "gross_energy_j": e, "reference_request_gross_j": e, "reference_request_idle_subtracted_j": e-1,
+                    "reference_request_duration_s": dur, "dur_tokenize_s": 0, "dur_generation_setup_s": 0, "dur_prefill_s": dur / 2,
                     "dur_decode_s": dur / 2}
         rows = [row("corpus", i, 37.0 + 0.1 * i) for i in range(18)]
         rows += [row("start", 20 + i, 37.5) for i in range(3)] + [row("midpoint", 30, 38.3)] + [row("end", 40 + i, 37.6) for i in range(3)]
@@ -420,7 +421,8 @@ class DeskBundleReadTests(unittest.TestCase):
             bundle = Path(tmp)
             metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 2000, "monotonic_before_s": 1000}}}}}
-            events = [{"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000},
+            events = [{"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000},
+                      {"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000},
                       {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001}]
             for name, text in (("metadata.json", json.dumps(metadata)),
                                ("events.jsonl", "".join(json.dumps(e) + "\n" for e in events))):
@@ -522,6 +524,23 @@ class DeskBundleReadTests(unittest.TestCase):
 
 
 class MeterTests(QuantityTestCase):
+    def test_edge_power_unions_adjacent_pair_and_residual_window(self):
+        times = [i * 100_000_000 for i in range(11)]
+        watts = [100, 2, 3, 4, 5, 6, 7, 8, 9, 10, 200]
+        window = [200_000_000, 800_000_000]
+        self.assertEqual(bt.edge_powers(times, watts, window, .01), (3, 9))
+        self.assertEqual(bt.edge_powers(times, watts, window, .2), (100, 200))
+
+    def test_missing_device_counter_in_span_is_exact(self):
+        stream = {"host_ns": [0, 20_000_000, 60_000_000, 80_000_000],
+                  "dev_ms": [0, 20, 60, 80], "step_ms": 20,
+                  "fit": {"a_ns": 0, "b_ns_per_ms": 1_000_000}}
+        self.assertTrue(bt.meter_gap(stream, [40_000_000, 60_000_000]))
+        self.assertFalse(bt.meter_gap(stream, [0, 40_000_000]))
+        self.assertFalse(bt.meter_gap(stream, [40_000_001, 80_000_000]))
+        stream["dev_ms"] = [0, 20, 40, 60]
+        self.assertFalse(bt.meter_gap(stream, [0, 80_000_000]))
+
     def test_integrate_mean_power_times_duration(self):
         times = [0, 1_000_000_000, 2_000_000_000, 3_000_000_000]
         energy, n = bt.integrate(times, [1.0, 2.0, 3.0, 4.0], 0, 2_000_000_000)
@@ -559,7 +578,7 @@ class MeterTests(QuantityTestCase):
             bundle = Path(tmp)
             (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 2000.0, "monotonic_before_s": 1000.0}}}}}))
-            events = [{"event_type": "phase_start", "phase": "prefill", "timestamp_s": 2000.0},
+            events = [{"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000.0},
                       {"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000.0000000006},
                       {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001.0000000004}]
             (bundle / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
@@ -588,7 +607,8 @@ class MeterTests(QuantityTestCase):
         self.assertLessEqual(abs(joined["meter_gross_j"] - expected_power * joined["decode_span_s"]),
                              joined["meter_phase_edge_j"] + noise_w * joined["decode_span_s"])
         # Same synthetic sampler noise and payload quantization on the idle mean.
-        self.assertLessEqual(abs(joined["idle_power_w"] - truth["DC_IDLE_W"]),
+        idle_truth = json.loads((archive_root / "sources/claim-runs" / run_id / "metadata.json").read_text())["synthetic_idle_dc_w"]
+        self.assertLessEqual(abs(joined["idle_power_w"] - idle_truth),
                              3 * .02 / math.sqrt(joined["idle_samples"]) + 0.5 * 28e-6)
         self.assertGreaterEqual(joined["edge_bound_j"], 0.0)
 
@@ -889,16 +909,34 @@ class BlindingTests(QuantityTestCase):
 
 
 class ManifestTests(QuantityTestCase):
+    def test_registered_invalid_record_set_restores_other_catalog_codes(self):
+        invalid = {"member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
+                   "member.status_not_succeeded", "member.strict_validation_failed",
+                   "member.token_count_mismatch", "member.anchor_not_bounded"}
+        self.assertEqual(bt.VALIDITY_CODES, invalid)
+        for code in sorted(invalid | {"member.timeout", "member.reduction_mismatch", "model.identity_mismatch",
+                                      "roster.foreign_attempt", "cell.below_minimum"}):
+            row = {"status": "succeeded", "phase_decode_j": 10, "dur_decode_s": 1,
+                   "exclusion_codes": code, "excluded": True}
+            with self.subTest(code=code):
+                self.assertIs(bt.restorable(row), code not in invalid)
+
     def test_dict_and_list_forms(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp, "m.json")
-            path.write_text(json.dumps({"models": {"mlx-community/Qwen3-8B-4bit": {"W_bytes": 4e9, "KV_bytes": 3e8, "R_bytes": 4.6e9}}}))
-            m = bt.read_manifest(path)
-            self.assertQuantityEqual(m["qwen3-8b-4bit"]["b_GB"], 4.3)
-            self.assertQuantityEqual(m["qwen3-8b-4bit"]["R_GB"], 4.6)
-            path.write_text(json.dumps([{"model": "Qwen3-4B-4bit", "W_GB": 2.0, "KV_GB": 0.5, "R_GB": 2.1}]))
-            m = bt.read_manifest(path)
-            self.assertQuantityEqual(m["qwen3-4b-4bit"]["b_GB"], 2.5)
+            registered = json.loads((ROOT / "configs/bytes/bytes_manifest.json").read_text())["models"]
+            for model in registered:
+                path.write_text(json.dumps({"models": {"mlx-community/" + model["model"]: model}}))
+                result = bt.read_manifest(path)[bt.canon(model["model"])]
+                self.assertEqual(result["b_GB"], model["b_GB"])
+                for key in ("W_bytes", "KV_bytes", "R_bytes", "b_bytes"):
+                    changed = dict(model, **{key: model[key] + 1})
+                    path.write_text(json.dumps({"models": [changed]}))
+                    with self.assertRaisesRegex(ValueError, "predictors differ"):
+                        bt.read_manifest(path)
+            path.write_text(json.dumps({"models": registered, "sessions": [{"test7_passed": True}]}))
+            with self.assertRaisesRegex(ValueError, "test7_passed must be false"):
+                bt.read_manifest(path)
         self.assertEqual(bt.canon("mlx-community/Qwen3_8B-4bit"), "qwen3-8b-4bit")
         self.assertEqual(bt.canon("Qwen3.5-122B-A10B-4bit (pinned jw_models copy, read only)"), "qwen3.5-122b-a10b-4bit")
 
@@ -969,7 +1007,7 @@ class SyntheticWorldTests(QuantityTestCase):
                                         "exclusion_codes": "member.bytes_missing"}))
         self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
                                         "exclusion_codes": "member.anchor_not_bounded"}))
-        self.assertFalse(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
+        self.assertTrue(bt.restorable({"status": "succeeded", "phase_decode_j": 1.0, "dur_decode_s": 1.0,
                                         "exclusion_codes": "roster.not_in_plan"}))
         self.assertIn("p1-s1-m-qwen3-4b-4bit-b02", cell["flagged_inclusive"]["kept_quad_ids"])
         self.assertNotIn("p1-s1-m-qwen3-4b-4bit-b05", cell["flagged_inclusive"]["kept_quad_ids"])
@@ -1534,7 +1572,9 @@ class MeterOffsetArithmeticTests(QuantityTestCase):
                     self.assertIsNone(o["systematics_flag"])
                     self.assertTrue(math.isfinite(o["d_beta_d_delta_per_ms"]))
             self.assertIn("resident_adds_nothing_offset", h2["resident_extended"])
-            self.assertTrue(h2["resident_extended"]["resident_adds_nothing_offset"])   # rho is 0 in this world
+            # This world's DC response includes nonzero resident standby power.
+            # Its offset budget shrinks at production's 50 SPS, resolving that term.
+            self.assertFalse(h2["resident_extended"]["resident_adds_nothing_offset"])
         rest = result["h2"]["rest"]["passes_mean"]["rest_model"]
         self.assertEqual(rest["lambda"]["offset"]["sensitivity_units"], "per ms")
         self.assertEqual(rest["c"]["offset"]["sensitivity_units"], "W per ms")

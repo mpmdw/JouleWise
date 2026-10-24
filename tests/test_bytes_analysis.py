@@ -245,6 +245,64 @@ class H2WorkedExamples(NumericTestCase):
 
 
 class MeterWorkedExamples(NumericTestCase):
+    def test_edge_power_adds_all_samples_within_residual_beyond_adjacent_pair(self):
+        stream = self.stream()
+        stream.watts[38] = 100
+        stream.watts[62] = 200
+        stream.fit.stats["excess_latency_ms_min"] = -250
+        stream.fit.stats["excess_latency_ms_max"] = 100
+        result = ba.meter_decode(stream, [4_000_000_000, 6_000_000_000],
+                                 [1_000_000_000, 3_000_000_000])
+        self.assertEqual(result["edge_powers_w"], [100, 200])
+        self.assertAlmostEqual(result["meter_phase_edge_j"], 300 * (.25 + .1))
+
+    def test_meter_gap_removes_the_whole_dc_and_rest_unit_only(self):
+        spec = ba.read_json(ROOT / "configs/bytes/bytes_manifest.json")["models"][0]
+        refs = {"test7_passed": False, "boundaries": {
+            boundary: {"energy_j": 100, "duration_s": 1, "families": {
+                family: {"allowance_j": 1} for family in ("gross", "idle_subtracted")}}
+            for boundary in ba.BOUNDARIES}}
+        rows = [{"run_id": str(i), "model": spec["model"], "pass_id": 1, "session_id": "s",
+                 "stratum": "repeat" if i < 10 else "quad", "unit_id": str(i if i < 10 else (i - 10) // 4),
+                 "status": "succeeded", "excluded": False, "flags": [], "duration_s": 2,
+                 "rails_j": 10, "rails_secondary_j": 8, "rails_anchor_j": .1, "rails_interpolation_j": 0,
+                 "operative": {}, "neg8_inputs": refs,
+                 "meter": {"gross_j": 16, "secondary_j": 12, "phase_edge_j": .2,
+                           "battery_gross_j": 0, "battery_secondary_j": 0, "battery_phase_edge_j": 0}}
+                for i in range(50)]
+        rows[10].update(meter=None, flags=["bytes.meter_gap"])
+        manifest = {"models": [spec], "sessions": [{"session_id": "s"}]}
+        for inclusive in (False, True):
+            for cell in ba.reduce_models(rows, manifest, inclusive=inclusive):
+                self.assertEqual(cell["n_r"], 10)
+                self.assertEqual(cell["n_b"], 10 if cell["boundary"] == "rails" else 9)
+                kept = set(cell["kept_runs"])
+                self.assertEqual(bool(kept & {str(i) for i in range(10, 14)}), cell["boundary"] == "rails")
+
+    def test_request_span_excludes_controller_overhead_and_includes_phase_gaps(self):
+        metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
+            "sampling_started": {"epoch_s": 0, "monotonic_before_s": 0}}}}}
+        events = [{"phase": phase, "event_type": kind, "timestamp_s": stamp}
+                  for phase, kind, stamp in (
+                      ("measured_run", "stage_started", 0),
+                      ("tokenize", "phase_start", 1), ("tokenize", "phase_end", 1.1),
+                      ("decode", "phase_start", 2), ("decode", "phase_end", 3),
+                      ("measured_run", "stage_completed", 10))]
+        self.assertEqual(ba._request_span(events, metadata), [1_000_000_000, 3_000_000_000])
+
+    def test_dropped_device_sample_removes_meter_value(self):
+        stream = self.stream()
+        for values in (stream.samples.dev_ms, stream.samples.vbus_v, stream.samples.ibus_a,
+                       stream.samples.batch, stream.host_ns, stream.watts):
+            del values[45]
+        with self.assertRaisesRegex(ba.MeterGapError, "dropped device sample"):
+            ba.meter_decode(stream, [4_000_000_000, 6_000_000_000],
+                            [1_000_000_000, 3_000_000_000])
+        # The same stream still supplies a disjoint run's value.
+        result = ba.meter_decode(stream, [7_000_000_000, 9_000_000_000],
+                                 [1_000_000_000, 3_000_000_000])
+        self.assertEqual(result["gross_j"], 20)
+
     def test_marker_window_uses_integer_nanoseconds_at_both_edges(self):
         stream = self.stream()
         gap = 100_000_001
@@ -366,7 +424,10 @@ class BatteryRulingWorkedExamples(NumericTestCase):
             stream.fit.stats.update(excess_latency_ms_min=-6.730335482299805,
                                     excess_latency_ms_max=17.762388349609374)
         stream.poll_ns, stream.smc = times, [values[t] for t in times]
-        return ba.meter_decode(stream, [0, duration_ns], [-10_000_000_000, -5_000_000_000])
+        # This battery-only arithmetic oracle has sparse reconstructed powers,
+        # not a device-counter trace. Native counter gaps have separate tests.
+        with patch.object(kp, "span_has_drops", return_value=False):
+            return ba.meter_decode(stream, [0, duration_ns], [-10_000_000_000, -5_000_000_000])
 
     def test_bat2_qwen_check_r01_seven_nonzero_polls(self):
         result = self.example(11_017_812_967, 56, 5_151_255, [
@@ -419,6 +480,27 @@ class BatteryRulingWorkedExamples(NumericTestCase):
 
 
 class RegisteredArithmeticTests(NumericTestCase):
+    def test_manifest_predictors_and_test7_are_registered(self):
+        manifest = ba.read_json(ROOT / "configs/bytes/bytes_manifest.json")
+        manifest["sessions"] = [{"session_id": "s", "pass_id": 1}]
+        ba.validate_manifest(manifest)
+        for model in manifest["models"]:
+            for key in ("W_bytes", "KV_bytes", "R_bytes", "b_bytes"):
+                changed = copy.deepcopy(manifest)
+                target = next(m for m in changed["models"] if m["model"] == model["model"])
+                target[key] += 1
+                with self.subTest(model=model["model"], key=key):
+                    with self.assertRaisesRegex(ba.AnalysisError, "predictors differ"):
+                        ba.validate_manifest(changed)
+                    with self.assertRaisesRegex(ba.AnalysisError, "predictors differ"):
+                        ba.reduce_models([], changed)
+        for invalid in (True, 1, 0, None, "false"):
+            changed = copy.deepcopy(manifest)
+            changed["sessions"][0]["test7_passed"] = invalid
+            with self.subTest(test7=invalid):
+                with self.assertRaisesRegex(ba.AnalysisError, "test7_passed must be false"):
+                    ba.validate_manifest(changed)
+
     def estimate(self, repeats, means):
         bounds = dict(zip(ba.BOUND_KINDS, (.01, 0, .05)))
         return ba.estimate_phase_energy(repeats, [[v] * 4 for v in means],
@@ -671,7 +753,7 @@ class ProductionArchiveTests(NumericTestCase):
             with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 manifest = archive_campaign(root, world="resident", seed=3100,
-                    non_claim=False, release="none", sample_phase_ms=50, edge_phase=True,
+                    non_claim=False, release="none", sample_phase_ms=10, edge_phase=True,
                     min_receive_latency_ms=latency)
                 output = cli_stage_chain(root, manifest)
                 records = ba.load_records(root / "export", manifest, stage="all")
@@ -733,8 +815,8 @@ class ProductionArchiveTests(NumericTestCase):
                                  Counter({"corpus": 6, "start": 3, "midpoint": 1, "end": 3}))
                 meter = Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl"
                 with meter.open() as stream:
-                    # Native KM003C rate_idx 1 denotes the required 10 Hz.
-                    self.assertEqual(json.loads(next(stream))["rate_idx"], 1)
+                    # Native KM003C rate_idx 2 denotes production 50 SPS.
+                    self.assertEqual(json.loads(next(stream))["rate_idx"], 2)
             _write_json(root / "manifest.json", manifest)
             args = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
                     "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
@@ -801,7 +883,7 @@ class ProductionArchiveTests(NumericTestCase):
             self.assertEqual(len(heldout), 700)
             self.assertEqual(len({(r["model"], r["pass_id"]) for r in fit + heldout}), 20)
             for row in fit + heldout:
-                # The independent native 10 Hz integration can move each
+                # The independent native 50 SPS integration can move each
                 # edge by r_max + 0.1 s; phase_edge_j is the resulting
                 # (P_start+P_end)*dt envelope. The meter stores integer uW,
                 # adding at most half a uW times the integrated duration.
@@ -1732,7 +1814,9 @@ class Addendum7RegressionTests(NumericTestCase):
                 meter = record["meter"]
                 extrema = [meter["clock_fit"]["excess_latency_ms_" + suffix] for suffix in ("min", "max")]
                 self.assertEqual(meter["r_max_s"], max(map(abs, extrema)) / 1000)
-                self.assertAlmostEqual(meter["phase_edge_j"], sum(meter["edge_powers_w"]) * (meter["r_max_s"] + .1))
+                self.assertEqual(meter["sample_interval_s"], .02)
+                self.assertAlmostEqual(meter["phase_edge_j"], sum(meter["edge_powers_w"]) *
+                                       (meter["r_max_s"] + meter["sample_interval_s"]))
 
     def test_a7_13_exact_512_decode_denominators_and_printed_label(self):
         self.assertEqual(ba.DECODE_STEPS, 512)
@@ -1923,7 +2007,7 @@ class SubsetReleaseChainTests(unittest.TestCase):
         from joulewise.b6 import blinding
         # Generate full harvest-shaped campaigns in a separate process. The
         # fixture calls the real export boundary; every analysis and release is
-        # another CLI process, with native keys and 10 Hz meter streams.
+        # another CLI process, with native keys and 50 SPS meter streams.
         for world in ("bytes", "resident", "time"):
             with self.subTest(world=world), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -2237,6 +2321,11 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
                     shutil.copytree(ROOT / "joulewise", tree / "joulewise")
                     (tree / "scripts").mkdir()
                     shutil.copyfile(ROOT / "scripts/bytes_analyze.py", tree / "scripts/bytes_analyze.py")
+                    # This isolated code checkout must carry the authenticated
+                    # registered predictor input, just as the real checkout does.
+                    (tree / "configs/bytes").mkdir(parents=True)
+                    shutil.copyfile(ROOT / "configs/bytes/bytes_manifest.json",
+                                    tree / "configs/bytes/bytes_manifest.json")
                     source = clean_source + "\n# Q2 comment-only provenance change.\n"
                     if case == "fit-line":
                         # A deliberately defective central line uses the existing upper
@@ -2751,7 +2840,9 @@ class BatteryCampaignTests(NumericTestCase):
         self.assertAlmostEqual(result["battery_tau_s"], 2 * 1.0 + .6, delta=2.6e-6)
 
     def test_neg8_request_battery_correction_reaches_dc_and_rest_references(self):
-        span = self.spans("neg8-start-0")["measured_run"]
+        bundle = self.archive / "sources/claim-runs/neg8-start-0"
+        events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+        span = ba._request_span(events, ba.read_json(bundle / "metadata.json"))
         def change(items):
             next(item for item in items if item.get("k") == "b" and
                  span[0] <= item["rx"] < span[1])["smc"]["B0AC"] = -1000

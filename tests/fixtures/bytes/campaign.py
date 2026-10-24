@@ -10,12 +10,16 @@ from joulewise.external import km003c_parse as kp
 
 FIXTURES = Path(__file__).resolve().parent
 
+def meter_ticks(start, end):
+    """100 ms campaign coordinates, sampled every 20 ms."""
+    return (i / 5 for i in range(start * 5, end * 5))
+
 def _write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value) + "\n")
 
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
-                     pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
+                     pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=10,
                      edge_phase=True, min_receive_latency_ms=10.0,
                      subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False,
                      battery_assist=False, battery_publication="instant", battery_reference_assist=False,
@@ -46,14 +50,14 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         raise ValueError("two positive pass duration scales required")
     if clock_latency_ms is not None and not clock_latency_ms[0] < 0 < clock_latency_ms[1]:
         raise ValueError("clock latency extremes must straddle zero")
-    # Knob 1 (opus): samples sit strictly inside the 100 ms interval, 50 ms being the point
+    # Knob 1 (opus): samples sit strictly inside the 20 ms interval, 10 ms being the point
     # farthest from both edges. Knob 2: science-run edges sit at a uniform random offset
     # inside the interval (the device clock is not phase-locked to host events; the recorded
     # label phase drifts at ~2 ppm and sweeps a period every few hours). Knob 3: every batch
     # arrives at least 10 ms late (lower end of the recorded 10-17 ms USB arrival latency), so
     # the envelope fit labels every sample ~10 ms late: the physical form of the NR1 residual.
-    if not 0 < sample_phase_ms < 100:
-        raise ValueError("meter sample phase must lie strictly inside the 100 ms interval")
+    if not 0 < sample_phase_ms < 20:
+        raise ValueError("meter sample phase must lie strictly inside the 20 ms interval")
     if min_receive_latency_ms < 0:
         raise ValueError("minimum receive latency must be nonnegative")
     from types import SimpleNamespace
@@ -105,9 +109,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         archive = root / session_id
         bundles = archive / "sources/claim-runs"
         roster, evidence_members, meter_samples, battery_episodes = [], [], [], []
-        # Native 10 Hz meter, with optional unequal passes and signed clock-fit excess latency.
+        # Native 50 SPS meter, with optional unequal passes and signed clock-fit excess latency.
         tick = 1000
-        meter_samples.extend([(.2, tick - 2), (.2, tick - 1)])
+        meter_samples.extend((.2, t) for t in meter_ticks(tick - 2, tick))
         jobs = []
         refs = design["neg8_references"]
         for ref in refs:
@@ -139,8 +143,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     (ref["gross_j"] - reference_drift["pivot_j"])) if ref else None
                 energy = reference_energy * duration / (duration + 1) if ref else truth * 512 * (1 + rng.gauss(0, .002))
                 power = energy / duration
-                start = tick / 10 + (phase_rng.random() * .1 if edge_phase and not ref else 0)
-                decode_start, end = start + 2, start + 2 + duration
+                start = tick / 10 + (phase_rng.random() * .02 if edge_phase and not ref else 0)
+                request_start = start + 1.35
+                decode_start, end = request_start + 1, request_start + 1 + duration
                 if battery_reference_assist and ref:
                     # Equal 1 s reference bursts retain the drift world. Each
                     # burst at 12.774 W exceeds the ~1 J
@@ -176,10 +181,15 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     "prompt_tokens": 2048, "output_tokens": 512, "repetitions": 1, "warmup_runs": 1})
                 with patch("joulewise.bundle._capture_source_state", return_value=source_state):
                     builder = BundleBuilder(bundles, config, FakeClock(start=1000))
-                builder.measured_window(start + 1, end)
+                # Controller stage includes spawn, the 1 s dwell, and stop wind-down.
+                builder.measured_window(start + 1, end + 7)
+                builder.add_event("sampling_started", "measured_run", request_start)
+                builder.add_event("sampling_stopped", "measured_run", end)
                 builder.add_event("stage_started", "idle_baseline", start)
                 builder.add_event("stage_completed", "idle_baseline", start + 1)
-                builder.add_phase("prefill", start + 1, decode_start)
+                builder.add_phase("tokenize", request_start, request_start + .001)
+                builder.add_phase("generation_setup", request_start + .003, request_start + .004)
+                builder.add_phase("prefill", request_start + .006, decode_start)
                 builder.add_phase("decode", decode_start, end,
                     metadata={"output_tokens": 512, "requested_output_tokens": 512})
                 # Compact constant-power point trace: all phase edges and at least
@@ -216,9 +226,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 evidence_members.append(SimpleNamespace(run_id=run_id, stage_id=ref["role"] + "_reference" if ref else "decode",
                                                        role=ref["role"] if ref else "science",
                                                        status="succeeded", config_key=model["model"]))
-                end_tick = tick + 20 + round(duration * 10)
+                end_tick = math.ceil(end * 10)
                 baseline = 2 * own_idle if ref else .2
-                active_tick = tick + (10 if ref else 20)
+                active_tick = request_start * 10 if ref else decode_start * 10
                 # Whole-request DC = rails + independently drifting rest. At the
                 # endpoints rest changes by 1 J (the attribution scale), while
                 # rails changes by 0.01 J. Science DC remains twice rails.
@@ -226,26 +236,25 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     (ref["gross_j"] - reference_drift["pivot_j"])) if ref else None
                 meter_power = power + rest_reference / (duration + 1) if ref else 2 * power
                 if ref or not edge_phase:
-                    meter_samples.extend((baseline if t < active_tick else meter_power, t) for t in range(tick, end_tick))
-                    meter_samples.extend([(.2, end_tick), (.2, end_tick + 1)])
+                    meter_samples.extend((baseline if t < active_tick else meter_power, t) for t in meter_ticks(tick, end_tick))
+
                 else:
                     # The meter samples the true waveform at its own instants (tick + phase); edges are off-grid.
                     meter_samples.extend((meter_power if decode_start <= t / 10 + sample_phase_ms / 1000 < end else baseline, t)
-                                         for t in range(tick, end_tick + 2))
-                # Leave the whole post-decode reporting window before the next
-                # run's own idle, so an end burst does not charge its baseline.
-                if battery_assist:
-                    meter_samples.extend((.2, t) for t in range(end_tick + 2, end_tick + 40))
-                tick = end_tick + (40 if battery_assist else 2)
-        header = {"k": "h", "status": "streaming", "rate_idx": 1, "start_raw_ns": 0, "start_mono_ns": 0}
+                                         for t in meter_ticks(tick, end_tick))
+                # Continuous 20 ms counters through dwell, wind-down and the
+                # reporting tail. No synthetic device dropout between members.
+                meter_samples.extend((.2, t) for t in meter_ticks(end_tick, end_tick + 80))
+                tick = end_tick + 80
+        header = {"k": "h", "status": "streaming", "rate_idx": 2, "sps": 50, "poll_s": .2, "start_raw_ns": 0, "start_mono_ns": 0}
         batches = []
         publications = {}
-        batch_size = 2 if battery_assist else 10  # 10 Hz samples; assisted polls match production's 5 Hz.
+        batch_size = 10  # Production: 50 SPS, five polls per second.
         for i in range(0, len(meter_samples), batch_size):
             part = meter_samples[i:i + batch_size]
-            payload = b"".join(kp.SAMPLE.pack((t * 100 + sample_phase_ms) % kp.WRAP, 0, 1_000_000,
+            payload = b"".join(kp.SAMPLE.pack(round(t * 100 + sample_phase_ms) % kp.WRAP, 0, 1_000_000,
                 round(w * 1e6), 0, 0, 0, 0) for w, t in part)
-            stamp = part[-1][1] * 100_000_000 + sample_phase_ms * 1_000_000
+            stamp = round(part[-1][1] * 100_000_000 + sample_phase_ms * 1_000_000)
             # One rare early receive and recurring late receives give the native
             # envelope fit both signs, with the negative extreme dominant.
             latency = 0 if clock_latency_ms is None else (clock_latency_ms[0]

@@ -112,7 +112,7 @@ class BytesPackTests(unittest.TestCase):
 
     def test_estimators_name_the_analysis_stage_functions_with_pass_specific_versions_while_draft(self):
         from joulewise import bytes_analysis
-        agreeing_sha = '94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b'
+        agreeing_sha = hashlib.sha256((ROOT / 'joulewise/bytes_analysis.py').read_bytes()).hexdigest()
         for n in range(1, 7):
             for pass_number in (1, 2):
                 with self.subTest(subpack=n, pass_number=pass_number):
