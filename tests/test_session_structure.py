@@ -166,6 +166,7 @@ class SessionStructureTests(unittest.TestCase):
         record = self.check()
         self.assertTrue(record['counting'], record)
         self.assertIs(record['b5_harvest_claim_usable'], False)
+        self.assertEqual(record['flags']['STRUCTURE']['records.claim_usable_counting_disagreement'], 1)
         self.assertEqual(record['counting_source'], 'b6_acceptance')
         self.put(self.custody / 'night/chain-stages.jsonl', '{"stage_id":"chain.stop","kind":"operative_bound_above_stop","rc":13}\n')
         self.put(self.custody / 'night/chain.exited', {'exit_code': 13})

@@ -352,5 +352,471 @@
     "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-delta-opus.md (main fc3306137)"
    }
   ]
- }
+ },
+{
+ "commit": "66ac0b8178f04d25c1a9aad13e8a713f8367d820",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/calibration.py",
+  "joulewise/b6/capture_screen.py",
+  "joulewise/flags/exclusions.py"
+ ],
+ "change": "Block 6 harvest lane round 1: acceptance A, own-capture calibration, survivor screen, blinding, code and model checks, block-6 flag catalog",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "34e1f7196d6a69fded73e9b80f4ece691f72af1e",
+ "number_bearing_paths": [
+  "joulewise/flags/core.py"
+ ],
+ "change": "Block 6 harvest lane round 3: register the capture tool's preflight flag; keeper tests follow the carried-preflight behaviour",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "83163e6a45fe45c0ea6407565c1ffc815e169c66",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/capture_screen.py"
+ ],
+ "change": "Block 6 harvest lane round 4: executing-review fixes",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "0192c32fdb970af68b96ca44c9ee9bf91457e8d6",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/calibration.py",
+  "joulewise/b6/capture_screen.py",
+  "joulewise/flags/core.py",
+  "joulewise/flags/exclusions.py"
+ ],
+ "change": "Merge lane/2026-10-14-b6-harvest (83163e6a4) into block-6 stage-1 integration",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "c208a16e93e72430248bf87613df282cf2e9745b",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py"
+ ],
+ "change": "Block-6 loop lane adapters: precheck, driver, desk, harvest and analysis behind resolve()",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "b2837ba38b8df502c787f9db54e6860be8a2e231",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py"
+ ],
+ "change": "Merge lane/2026-10-14-b6-adapters: block-6 loop lane adapters behind lanes.resolve()",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "90d9222dee322e15f82108af278a37b933f4d667",
+ "number_bearing_paths": [
+  "joulewise/b6/capture_screen.py"
+ ],
+ "change": "Merge lane/2026-10-15-b6-cold-chain: block-6 opening screen and no spare retries in block-6 chains (cold-pass R1/R2 chain half)",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5 disposition director, re-execution of every refusal finding",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-cold.md"
+  },
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "f67854d41f656191fb0368790ca364a0de2e7d15",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/calibration.py"
+ ],
+ "change": "Block-6 acceptance, desk and loop judge stops, references and counting as registered (cold passes R1-R3 and fix class)",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5 disposition director, re-execution of every refusal finding",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-cold.md"
+  },
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "dd9a9be35410746211dc5a84a726cdafe5364e3e",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/calibration.py"
+ ],
+ "change": "Merge lane/2026-10-15-b6-cold-acceptance: acceptance, desk and loop judge stops, references and counting as registered (cold-pass R1-R3, fix class)",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5 disposition director, re-execution of every refusal finding",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-cold.md"
+  },
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Fable.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing",
+   "covered": "850265137..696164b31",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Opus.md"
+  }
+ ]
+},
+{
+ "commit": "91e37e7c6d3df19164c236075a36be9fe0e3aa7d",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/capture_screen.py"
+ ],
+ "change": "Merge lane/2026-10-15-b6-s3-cold (d9ce14fcb): stage-3 cold-pass fixes",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1 and Opus 5.5, cold, blind, executing; Opus dispositions",
+   "covered": "696164b31..220166913",
+   "paper": "/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-delta-cold.md"
+  }
+ ]
+},
+{
+ "commit": "9c72980091de31218b4cf57c3c381e4ec7ee2bc6",
+ "number_bearing_paths": [
+  "joulewise/calibration_ledger.py"
+ ],
+ "change": "Keep block-6 capture levels diagnostic and preserve chain stop reasons",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1 cold pass (non-author, blind), executing: real capture tool and rendered chain at 36.5-300 ms, precheck and arm on synthetic anchor series across the hold, every flag through the real exclusion code",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  },
+  {
+   "reviewer": "Opus 5.5 cold pass (non-author, blind), executing: real capture main and RenderedRound to the 139 ms edge, clock_rate on synthetic series, flags.exclusions.compute on the shipped catalog",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  }
+ ]
+},
+{
+ "commit": "4d98205020d117af5d42659c60cb7ffb989d181c",
+ "number_bearing_paths": [
+  "joulewise/calibration_ledger.py"
+ ],
+ "change": "Register block-6 policy reads with the ledger authentication session",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1 cold pass (non-author, blind), executing: real capture tool and rendered chain at 36.5-300 ms, precheck and arm on synthetic anchor series across the hold, every flag through the real exclusion code",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  },
+  {
+   "reviewer": "Opus 5.5 cold pass (non-author, blind), executing: real capture main and RenderedRound to the 139 ms edge, clock_rate on synthetic series, flags.exclusions.compute on the shipped catalog",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  }
+ ]
+},
+{
+ "commit": "b2093a8b154a328b6f74093a925d48d6eb9ade6e",
+ "number_bearing_paths": [
+  "joulewise/calibration_ledger.py"
+ ],
+ "change": "Preserve legacy recovery argv and validate inputs before block-6 policy",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1 cold pass (non-author, blind), executing: real capture tool and rendered chain at 36.5-300 ms, precheck and arm on synthetic anchor series across the hold, every flag through the real exclusion code",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  },
+  {
+   "reviewer": "Opus 5.5 cold pass (non-author, blind), executing: real capture main and RenderedRound to the 139 ms edge, clock_rate on synthetic series, flags.exclusions.compute on the shipped catalog",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  }
+ ]
+},
+{
+ "commit": "282a81a0200c7523d7ecdd2f7ffd584358a4818e",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/b6/calibration.py",
+  "joulewise/b6/capture_screen.py"
+ ],
+ "change": "Block 6 round 2 (Sol, resumed): lead rulings applied: clock hold records clock.rate_hold and wakes the orchestrator; packs without a registered T10 line or T_phase get no stop line or P* exclusion, only a flag; block-4 clock test follows the registered hold",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1 cold pass (non-author, blind), executing: real capture tool and rendered chain at 36.5-300 ms, precheck and arm on synthetic anchor series across the hold, every flag through the real exclusion code",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  },
+  {
+   "reviewer": "Opus 5.5 cold pass (non-author, blind), executing: real capture main and RenderedRound to the 139 ms edge, clock_rate on synthetic series, flags.exclusions.compute on the shipped catalog",
+   "covered": "220166913..0421b1f9f",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+  }
+ ]
+},
+{
+ "commit": "0f5bb4ee5ac2fa20662e92d557fbf21f534fe3c0",
+ "number_bearing_paths": [
+  "joulewise/calibration_ledger.py"
+ ],
+ "change": "Block 6 round 2, cold-pass fixes (Sol): no-locator roots keep block 5's policy; malformed fallback plans never pick an agent courier; a resume that committed before its timeout is FINALIZED; run_night stubs accept plan=",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1 delta cold pass (non-author, blind), executing: byte identity against 220166913, five rates x three code paths for block-5 and block-6 plans, the real arm through the test rig",
+   "covered": "0421b1f9f..734d3e3c0",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (delta cold passes: JouleWise-data claude/b6-r2-delta-fable @ a8213b4 and claude/b6-r2-delta-opus-rmmapr @ 11a63d5, cold/REPORT.md with cold/probes)"
+  },
+  {
+   "reviewer": "Opus 5.5 delta cold pass (non-author, blind), executing: clock_rate and frequency_bound across the hold for block-5 and block-6 thresholds, the no-locator capture matrix",
+   "covered": "0421b1f9f..734d3e3c0",
+   "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (delta cold passes: JouleWise-data claude/b6-r2-delta-fable @ a8213b4 and claude/b6-r2-delta-opus-rmmapr @ 11a63d5, cold/REPORT.md with cold/probes)"
+  }
+ ]
+},
+{
+ "commit": "9d23e5b46ca7ed9fbf26e6bbc330803b8d733b42",
+ "number_bearing_paths": [
+  "joulewise/reduce.py",
+  "joulewise/b5/harvest.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 F4: route five reducer reads through the authentication seam without changing integration arithmetic. Cold-pass corrections per /Users/edr/night-archive/forward-20261021/coldpass-audit/FIX-573.md (FIX-573, Sol 6.1 xhigh); lead verification 2026-10-22 (Opus 5.5, interactive 8a9fb7fe): the reducer max->min mutant fails the new regression and the re-issued D-138 byte pin; tests.test_reduce, test_desk_compress, test_desk_compressed_readers, test_restore_run_to_scratch, tests.b6.test_audit_record_fixes, test_authentication_io OK; tests.hazards 288/289 (the one failure is the load-sensitive background-QoS CPU-share test, unchanged by this PR, passing when the Mac is less loaded).",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-fable.report.md (JouleWise-data claude/cold-audit-pr573-fable)"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-opus.report.md (JouleWise-data claude/cold-audit-pr573-opus-0in1nh)"
+  }
+ ]
+},
+{
+ "commit": "111705ee02299b4053c7cd5550e158781346b116",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/flags/catalog.py"
+ ],
+ "change": "PR #573 F8/F11/F15/F17: block-6 harvest records, claim usability, unresolved anchors and checkout identity.",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-fable.report.md (JouleWise-data claude/cold-audit-pr573-fable)"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "fda9b380d..9ce9074a0 (PR #573)",
+   "paper": "/Users/edr/night-archive/forward-20261021/coldpass-audit/pr573-opus.report.md (JouleWise-data claude/cold-audit-pr573-opus-0in1nh)"
+  }
+ ]
+},
+{
+ "commit": "db9e8ab3878d6eb121de1b996362cb537514a8dd",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 cold-pass corrections: compressed harvest readers, unresolved anchors and block-6 checkout records.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "9ce9074a0..db9e8ab38 (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/fix573c/cold-delta-573-opus.md (JouleWise-data claude/cold-delta-573-opus-u8szk8)"
+  }
+ ]
+},
+{
+ "commit": "fa974480552acd9901b674fa2736b7c02e4aab95",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py"
+ ],
+ "change": "PR #573 cold Opus delta corrections: block-6 harvest_checkout digests six more program files (F5); the twin reader, F8 coverage, open_bytes, joint-bound test and restore reserve are outside verdict paths.",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "db9e8ab38..fa9744805 (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573c/report.md (JouleWise-data claude/cold-delta-573c-fable)"
+  }
+ ]
+},
+{
+ "commit": "2545b1732c5868342d664fb01c547e60e106b4cd",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/b6/survivor_screen.py",
+  "joulewise/bytes_analysis.py",
+  "joulewise/reduce.py"
+ ],
+ "change": "PR #573 FIX-573e: reduce.py back to the issued bytes; three callers restore compressed archives to scratch first.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "eb31fe385..2545b1732 (PR #573 delta; verdict REFUSE, re-executed by the lead; findings fixed in 903b5a2fc/79dbfb952)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573e/report.md (JouleWise-data claude/cold-delta-573e-opus)"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "244600a45..79dbfb952 (re-check of the REFUSE findings)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573f/report.md (JouleWise-data claude/cold-delta-573f-opus)"
+  }
+ ]
+},
+{
+ "commit": "903b5a2fccdde2e1339ba5b47219e157be428241",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/b6/survivor_screen.py",
+  "joulewise/bytes_analysis.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573f (WIP part): fail-closed compressed reader, restore-first re-reduction, storage refusals stop the program, desk_restore module.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "244600a45..79dbfb952 (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573f/report.md (JouleWise-data claude/cold-delta-573f-opus)"
+  }
+ ]
+},
+{
+ "commit": "f46a1235a0cec83cc001f10a58f845f00a486e28",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/calibration_bracketing.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573g: reader exception joins the stop path; number-feeding reads restore with the journal.",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "79dbfb952..f46a1235a (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573g/report.md (JouleWise-data claude/cold-delta-573g-fable)"
+  }
+ ]
+},
+{
+ "commit": "cce6361b1c950b704b56e2f68ab10330d8d5f59a",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/calibration_bracketing.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573h (WIP): compressed whole-window replay restores with the harvest journal.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-24",
+   "covered": "f46a1235a..f19d0929c (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573i/report.md (JouleWise-data claude/cold-delta-573i-opus)"
+  }
+ ]
+},
+{
+ "commit": "9f93a035cc5482e19627c2fc427703b16840441c",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/bytes_analysis.py",
+  "joulewise/calibration_bracketing.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573i (WIP): StorageStop(BaseException) base; entry points name the cause; redundant guards reverted.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-24",
+   "covered": "f46a1235a..f19d0929c (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573i/report.md (JouleWise-data claude/cold-delta-573i-opus)"
+  }
+ ]
+}
 ]

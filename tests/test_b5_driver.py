@@ -399,6 +399,29 @@ class HazardRefusalTests(unittest.TestCase):
         self.assertTrue(any("did not return" in reason for reason in decision["reasons"]))
         self.assertEqual(sorted(SIX), decision["not_pass"])
 
+    def test_production_arm_storage_stop_records_cause_and_launches_nothing(self):
+        # FIX-573i lead ruling: the saved arm refusal is the driver's stop.
+        from joulewise import calibration_bracketing as brackets
+        from joulewise.authentication_io import CompressedBundleRequiresRestore
+        from joulewise.hazards import arm as hazard_arm
+
+        harness = Harness(self, g10=False, arm=b5_driver._production_arm)
+        relative = brackets.DEFAULT_ACCEPTANCE_BOUND_PATH.relative_to(REPO_ROOT)
+        acceptance = harness.measurement / relative
+        acceptance.parent.mkdir(parents=True, exist_ok=True)
+        acceptance.unlink(missing_ok=True)
+        acceptance.with_name(acceptance.name + '.zst').write_bytes(b'plain read must stop')
+        expected = 'CompressedBundleRequiresRestore: ' + str(CompressedBundleRequiresRestore(acceptance))
+        with mock.patch.object(hazard_arm, 'run',
+                               side_effect=AssertionError('hardware seam must not be reached')) as arm_run:
+            result, _ = self.assert_null(harness, off_expected=False)
+        arm_run.assert_not_called()
+        self.assertEqual(b5_driver.REFUSED_HAZARD, result['aborted_reason'])
+        decision = json.loads((harness.night / b5_driver.ARM_DECISION).read_text())
+        self.assertFalse(decision['go'])
+        self.assertEqual(decision['arm_error'], expected)
+        self.assertIn('the hazard arm raised: ' + expected, decision['reasons'])
+
     def test_agent_census_refuses_before_any_action(self):
         harness = Harness(self)
         harness.census.responses.append(probe(night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="4242 claude\n"))

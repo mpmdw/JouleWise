@@ -31,6 +31,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.b5 import harvest as h  # noqa: E402
+from joulewise.desk_restore import StorageStop  # noqa: E402
 
 OVERRIDES = (
     "custody_root", "measurement_root", "pack_root", "pack_id", "claim_runs_root", "bound_runs_root",
@@ -80,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
         record = h.harvest(inputs, args.archive_root, seams=h.Seams(workers=args.workers),
                            prepare_desk=args.prepare_desk, run_g3=not args.skip_g3,
                            allow_missing_terminal=args.allow_missing_terminal)
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 3
     except h.NotReady as exc:
         print(f"verdict=NOT_READY reason={exc}")
         return 4

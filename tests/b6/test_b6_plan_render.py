@@ -41,8 +41,14 @@ class ProductionPlanRenderTests(DeskCase):
         # as this process, rather than the clone's HEAD-only source.
         for relative in ("joulewise/b5/chain.py", "joulewise/b5/plan.py", "joulewise/night_gate.py",
                          "joulewise/b6/plan_inputs.py", "joulewise/b6/capture_screen.py",
+                         "joulewise/reduce.py", "joulewise/calibration_bracketing.py",
                          "scripts/check_b5_chain.py"):
             shutil.copyfile(ROOT / relative, self.measurement / relative)
+        # FIX-573 reissues the reducer byte pin after the authenticated reads.
+        # Give this disposable checkout a matching synthetic acceptance; keep
+        # every issued acceptance artifact and digest in the real tree intact.
+        from tests.test_calibration_exits import _rekey_private_writer_acceptance
+        _rekey_private_writer_acceptance(self.measurement)
 
     def git(self, *args, **kwargs):
         return subprocess.run(["git", "-c", "maintenance.auto=false", "-c", "gc.auto=0", *args],
@@ -95,7 +101,7 @@ class ProductionPlanRenderTests(DeskCase):
                               capture_output=True, text=True, timeout=10)
 
     def check_plan(self, prepared):
-        return subprocess.run([sys.executable, "-B", str(ROOT / "scripts/check_b5_chain.py"),
+        return subprocess.run([sys.executable, "-B", str(self.measurement / "scripts/check_b5_chain.py"),
                                "--plan", prepared.plan_path, "--no-live-identity"],
                               capture_output=True, text=True, timeout=60)
 

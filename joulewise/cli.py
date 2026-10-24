@@ -22,6 +22,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from joulewise.desk_compress import is_file as desk_is_file
 from joulewise.authentication_io import (
     active_v2_authentication_session,
     read_authentication_input,
@@ -50,6 +51,7 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
+from joulewise.desk_restore import readable_run, StorageStop
 from joulewise.bundle_read import (
     FROZEN_LEGACY_BUNDLE_IDENTITIES,
     BundleReader,
@@ -466,15 +468,16 @@ def validate_bundle(
     its own manifest, evidence, plist and events hash checks.  ``None`` keeps
     today's behaviour (the active V2 authentication session's cache, if any).
     """
-    reader = BundleReader(Path(path))
-    problems = reader.problems()
-    if strict:
-        problems.extend(
-            _strict_problems(reader)
-            if physics_cache is None
-            else _strict_problems(reader, physics_cache=physics_cache)
-        )
-    return problems
+    with readable_run(path) as plain:
+        reader = BundleReader(Path(plain))
+        problems = reader.problems()
+        if strict:
+            problems.extend(
+                _strict_problems(reader)
+                if physics_cache is None
+                else _strict_problems(reader, physics_cache=physics_cache)
+            )
+        return problems
 
 
 def _strict_problems(
@@ -491,6 +494,11 @@ def _strict_problems(
     ``physics_cache``: see :func:`validate_bundle` (J2).  An explicit dict is
     used as given and never replaced by a V2 authentication session's cache.
     """
+    with readable_run(reader.path) as plain:
+        return _plain_strict_problems(BundleReader(plain), physics_cache=physics_cache)
+
+
+def _plain_strict_problems(reader: BundleReader, *, physics_cache=None) -> list[str]:
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
     summary = reader.raw_summary()
@@ -975,7 +983,7 @@ def _strict_suite_prompt_rollup(
     reader: BundleReader,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     path = reader.path / "outputs" / "suite_items.jsonl"
-    if not path.is_file():
+    if not desk_is_file(path):
         return None, ["strict: outputs/suite_items.jsonl is missing for suite rollup"]
     try:
         text = read_authentication_text(
@@ -1440,7 +1448,7 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         return problems
     pre_path = reader.path / "raw" / RAW_IDLE_NAME
     post_path = reader.path / "raw" / RAW_IDLE_POST_NAME
-    if post_path.is_file() and pre_path.is_file():
+    if desk_is_file(post_path) and desk_is_file(pre_path):
         try:
             pre_data = read_authentication_input(
                 pre_path,
@@ -1565,7 +1573,7 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
 
 def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
@@ -1663,7 +1671,7 @@ def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
         return []
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     rich_path = reader.path / RICH_TELEMETRY_NAME
-    if not rich_path.is_file():
+    if not desk_is_file(rich_path):
         device = metadata.get("device")
         if isinstance(device, dict) and device.get("rich_telemetry_error"):
             return []
@@ -1709,7 +1717,7 @@ def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
 
 def _verify_nvidia_smi_raw_to_trace(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / NVIDIA_SMI_RAW_SAMPLES_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return [
             "strict: raw-to-trace: nvidia_smi missing "
             f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}"
@@ -1908,41 +1916,43 @@ def _cmd_validate_bundle(args: argparse.Namespace) -> int:
 def _cmd_reduce(args: argparse.Namespace) -> int:
     """Write a prospective reduction without mutating stored summary bytes."""
     bundle_path = Path(args.path)
-    if not bundle_path.is_dir() or not (bundle_path / "config.json").is_file():
-        print(
-            f"error: not a run bundle directory (no config.json): {bundle_path}",
-            file=sys.stderr,
-        )
-        return 2
-    try:
-        authenticated_launch = authenticate_bundle_launch_lineage(
-            bundle_path,
-            require_completion=False,
-        )
-    except LaunchLineageError as exc:
-        print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
-        return 2
-    stored_path = bundle_path / "summary_metrics.json"
-    recorded_version: str | None = None
-    if stored_path.is_file():
-        try:
-            stored = json.loads(
-                read_authentication_text(
-                    stored_path,
-                    grammar="json",
-                    label=f"bundle {bundle_path.name} stored summary",
-                    encoding="utf-8",
-                )
+    with readable_run(bundle_path) as plain:
+        if not plain.is_dir() or not (plain / "config.json").is_file():
+            print(
+                f"error: not a run bundle directory (no config.json): {plain}",
+                file=sys.stderr,
             )
-        except (OSError, json.JSONDecodeError):
-            stored = None
-        provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
-        value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
-        recorded_version = value if isinstance(value, str) else None
-    requested_version = args.reducer_version
-    if requested_version is None and stored_path.is_file():
-        requested_version = recorded_version
-    summary = reduce_bundle(bundle_path, reducer_version=requested_version)
+            return 2
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                plain,
+                require_completion=False,
+            )
+        except LaunchLineageError as exc:
+            print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
+            return 2
+        stored_path = plain / "summary_metrics.json"
+        recorded_version: str | None = None
+        if stored_path.is_file():
+            try:
+                stored = json.loads(
+                    read_authentication_text(
+                        stored_path,
+                        grammar="json",
+                        label=f"bundle {plain.name} stored summary",
+                        encoding="utf-8",
+                    )
+                )
+            except (OSError, json.JSONDecodeError):
+                stored = None
+            provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
+            value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+            recorded_version = value if isinstance(value, str) else None
+        requested_version = args.reducer_version
+        if requested_version is None and stored_path.is_file():
+            requested_version = recorded_version
+        summary = reduce_bundle(plain, reducer_version=requested_version)
+    stored_path = bundle_path / "summary_metrics.json"
     try:
         payload = summary.to_dict()
     except SchemaError as exc:
@@ -2454,6 +2464,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     except (
         OSError,
         json.JSONDecodeError,

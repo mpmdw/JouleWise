@@ -64,6 +64,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Proposed block-6 collection vocabulary belongs to its future pack catalog,
 # never to the immutable block-5 seal. Shared block-5 entries still match exactly.
 B6_COLLECTION_CODES = frozenset({
+    # F11 is a block-six desk disclosure, outside block five's sealed vocabulary.
+    "records.claim_usable_counting_disagreement",
     "clock.rate_above_budget", "instrument.single_interval_above_screen",
     "agent.presence", "agent.presence_overlap", "agent.capture_overlap", "agent.pause_marker_stale",
     "sleep.in_run", "sleep.between_runs", "sleep.in_chain", "sleep.reading_unmeasured",
@@ -1880,8 +1882,8 @@ def neg8_reference_gates(points: dict[str, float]):
     def strict_invalid(path, *args, **kwargs):
         return False if ours(path) else real["_custody_strict_invalid"](path, *args, **kwargs)
 
-    def current(summary, bundle_path=None):
-        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path)
+    def current(summary, bundle_path=None, **kwargs):
+        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path, **kwargs)
 
     def identity(path):
         return ("d" * 64, True) if ours(path) else real["_scientific_config_identity"](path)
@@ -3566,7 +3568,8 @@ class IdentityReplayTests(WindowTestCase):
                 self.assertNotIn("code.identity_unmeasured", window.codes())
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1" and (B3W1 / "harvest.json").is_file(),
+                     "local block-3 archives are disabled in synthetic-only runs or unavailable")
 class RehearsalRound1Tests(WindowTestCase):
     """The breaks the block-5 end-to-end rehearsal (round 1, 2026-10-06) found, each through the real harvest."""
 
@@ -4387,7 +4390,7 @@ def hazard_member_gates(omitted: str | None = None):
 
 def mint_drops_patch(drops: object, asked: list | None = None):
     """The core's ``neg8_corpus_mint_drops`` replaced: ``drops`` (rows, an exception to raise, or ABSENT)."""
-    def function(runs_root, manifest_path):
+    def function(runs_root, manifest_path, *, compression_records=None):
         if asked is not None:
             listed = json.loads(Path(manifest_path).read_bytes())["members"]
             asked.append((Path(runs_root), [member["bundle_id"] for member in listed]))
@@ -4972,7 +4975,8 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
             self.assertEqual("DISCLOSE", DRAFT_CODES[code]["effect"])
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1" and (B3W1 / "harvest.json").is_file(),
+                     "local block-3 archives are disabled in synthetic-only runs or unavailable")
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 

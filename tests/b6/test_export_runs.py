@@ -13,8 +13,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-# At 10 J, rel 1e-6 is 10 uJ: above float noise and below 1% of
-# the smallest printed half-width (0.013 J). Variance scales quadratically.
 from joulewise.b6 import blinding, export_runs
 from scripts import b6_export_runs, b6_unblind
 from tests.b6.support import registration_dir, write_json
@@ -135,9 +133,10 @@ class ExportTests(unittest.TestCase):
             self.assertNotIn("run_start_utc", row)
             if row["status"] == "succeeded":
                 factor = blinding.stored_factor(self.root / "packs/bytes/blinding", row["config_key"])
-                # P2: 1e-9 relative lies above 1e6 x degree-2 float noise and
-                # below 1% of the smallest printed energy half-width (0.013 J).
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]) / factor, 10, rel_tol=1e-9))
+                # Smallest printed energy half-width: 0.013 J, so 1% is
+                # 1.3e-4 J. At 10 J this bar is 1e-5 J, above 1e6 x
+                # double noise (2.2e-9 J); the near-zero floor is 1e-6 J.
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]) / factor, 10, rel_tol=1e-6, abs_tol=1e-6))
         # Re-export uses the same keys and row bytes, rather than a fresh draw.
         before = store.read_bytes()
         self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
@@ -158,9 +157,10 @@ class ExportTests(unittest.TestCase):
         from joulewise.bytes_analysis import _released_rows
         released = _released_rows(rows, self.root / "packs/bytes/blinding", blinded=False)
         for row in released:
-            # P2: degree-2 roundoff x 1e6 < 1e-9 relative < 1% of the
-            # smallest printed uncertainty at the campaign's 1e4 J scale.
-            self.assertTrue(math.isclose(row["phase_decode_j"], 10, rel_tol=1e-9))
+            # At 10 J the bar is 1e-5 J: above 1e6 x float noise
+            # (2.2e-9 J), below 1% of the printed 0.013 J half-width
+            # (1.3e-4 J). The near-zero absolute floor is 1e-6 J.
+            self.assertTrue(math.isclose(row["phase_decode_j"], 10, rel_tol=1e-6, abs_tol=1e-6))
 
     def test_group_unblind_uses_registered_order_and_flags_missing_store(self):
         result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
@@ -180,9 +180,10 @@ class ExportTests(unittest.TestCase):
         self.assertEqual([r["run_id"] for r in rows], ["corpus", "ref", "q0", "q1", "q2", "q3", "gamma-a", "gamma-b", "failed"])
         for row in rows:
             if row["status"] == "succeeded":
-                # P2: 1e-9 relative exceeds 1e6 x degree-2 roundoff and at
-                # 1e4 J remains below 1% of the 0.013 J printed half-width.
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-9))
+                # At 10 J, 1e-6 relative gives 1e-5 J, between 1e6 x
+                # float noise (2.2e-9 J) and 1% of the smallest printed
+                # half-width (0.013 J -> 1.3e-4 J); floor 1e-6 J near zero.
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6, abs_tol=1e-6))
         info = json.loads(result.sidecar_path.read_text())["blinding"]["withheld"]
         (result.csv_path.parent / info["path"]).unlink()
         with contextlib.redirect_stdout(io.StringIO()) as stdout:
@@ -208,8 +209,13 @@ class ExportTests(unittest.TestCase):
                 self.assertTrue(all(row[key] == "" for key in export_runs.ENERGIES))
                 self.assertEqual(row["excluded"], "True")
             else:
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10 * 1.1 * .99, rel_tol=1e-6))
-                self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2 * (1.1 * .99) ** 2, rel_tol=1e-6))
+                # Energy at 10.89 J: bar 1.089e-5 J, above float noise x
+                # 1e6 (2.4e-9 J), below 1% of 0.013 J (1.3e-4 J);
+                # floor 1e-6 J. Variance has no printed W^2 half-width:
+                # COMMON gives 1e-6 relative / 1e-6 W^2 absolute, above
+                # float noise x 1e6 at 2.4 W^2 (5.3e-10 W^2).
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10 * 1.1 * .99, rel_tol=1e-6, abs_tol=1e-6))
+                self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2 * (1.1 * .99) ** 2, rel_tol=1e-6, abs_tol=1e-6))
 
     def test_null_quads_and_references_share_offsets_gamma_models_do_not(self):
         draws = iter([1.1, .99, .98, 1.02, 1.01])
@@ -232,6 +238,7 @@ class ExportTests(unittest.TestCase):
         refs = [row for row in first + second if row["run_id"] == "ref"]
         self.assertEqual(len(refs), 2)
         self.assertEqual({row["config_key"] for row in refs}, {export_runs.REFERENCE_KEY})
+        # Exact serialization: identical energies and the identical stored reference factor.
         self.assertEqual(refs[0]["gross_energy_j"], refs[1]["gross_energy_j"])
         self.assertEqual(next(row for row in second if row["run_id"] == "corpus")["config_key"], export_runs.REFERENCE_KEY)
 
@@ -287,8 +294,13 @@ class ExportTests(unittest.TestCase):
         with unblinded.open() as stream:
             for row in csv.DictReader(stream):
                 if row["status"] == "succeeded":
-                    self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6))
-                    self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2, rel_tol=1e-6))
+                    # Energy at 10 J: 1e-5 J bar lies between float noise x
+                    # 1e6 (2.2e-9 J) and 1% of 0.013 J (1.3e-4 J), with
+                    # floor 1e-6 J. Variance has no W^2 half-width: COMMON
+                    # gives 1e-6 relative / 1e-6 W^2 absolute, above float
+                    # noise x 1e6 at 2 W^2 (4.4e-10 W^2).
+                    self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6, abs_tol=1e-6))
+                    self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2, rel_tol=1e-6, abs_tol=1e-6))
         sidecar = json.loads(Path(result["session"]).read_text())
         self.assertEqual(sidecar["blinding"]["applied"], True)
         self.assertFalse(Path(sidecar["blinding"]["key_dir"]).is_absolute())

@@ -24,6 +24,27 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO, Literal, Mapping, TextIO
 
+from joulewise import desk_compress
+from joulewise.desk_restore import RestoreRefused
+
+
+class CompressedBundleRequiresRestore(RestoreRefused):
+    """Compressed primary bytes must be restored before ordinary reads."""
+
+    def __init__(self, path):
+        self.path = str(path)
+        super().__init__(f"compressed_bundle_requires_restore: {self.path}")
+
+    def __reduce__(self):
+        # Exception.args contains the rendered cause, not the constructor path.
+        return type(self), (self.path,)
+
+
+def _require_plain(path, *, allow_compressed=False):
+    path = Path(path)
+    if not allow_compressed and not path.is_file() and Path(str(path) + ".zst").exists():
+        raise CompressedBundleRequiresRestore(path)
+
 
 AuthenticationGrammar = Literal["json", "jsonl", "raw"]
 V2_AUTHENTICATION_INPUT_CHANGED = "v2_authentication_input_changed"
@@ -407,12 +428,17 @@ class V2AuthenticationReadSession:
         *,
         grammar: AuthenticationGrammar,
         label: str,
+        allow_compressed: bool = False,
     ) -> bytes:
+        _require_plain(path, allow_compressed=allow_compressed)
         normalized = str(Path(path).resolve(strict=False))
         effective = _forced_grammar(normalized, grammar)
         with self._lock:
-            with builtins.open(path, "rb") as handle:
-                raw = handle.read()
+            if Path(path).exists():
+                with builtins.open(path, "rb") as handle:
+                    raw = handle.read()
+            else:
+                raw = desk_compress.read_bytes(Path(path))
             _parse_strict(
                 raw,
                 effective,
@@ -518,18 +544,24 @@ class V2AuthenticationReadSession:
         *,
         label: str,
         chunk_size: int = 1024 * 1024,
+        allow_compressed: bool = False,
     ) -> str:
         """Hash one large raw input and finish through the same registry."""
 
+        _require_plain(path, allow_compressed=allow_compressed)
         normalized = str(Path(path).resolve(strict=False))
         effective = _forced_grammar(normalized, "raw")
         if effective != "raw":
             return hashlib.sha256(
-                self.read(path, grammar=effective, label=label)
+                self.read(path, grammar=effective, label=label, allow_compressed=allow_compressed)
             ).hexdigest()
         with self._lock:
             digest = hashlib.sha256()
-            with builtins.open(path, "rb") as handle:
+            # Keep ordinary plain-file I/O unchanged. The registry identity
+            # and grammar above always refer to the logical, uncompressed path.
+            stream = (builtins.open(path, "rb") if Path(path).exists()
+                      else desk_compress.open_bytes(Path(path)))
+            with stream as handle:
                 while True:
                     chunk = handle.read(chunk_size)
                     if not chunk:
@@ -549,11 +581,13 @@ def read_authentication_input(
     *,
     grammar: AuthenticationGrammar,
     label: str,
+    allow_compressed: bool = False,
 ) -> bytes:
+    _require_plain(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
     if session is None:
-        return Path(path).read_bytes()
-    return session.read(path, grammar=grammar, label=label)
+        return desk_compress.read_bytes(Path(path))
+    return session.read(path, grammar=grammar, label=label, allow_compressed=allow_compressed)
 
 
 def read_authentication_text(
@@ -563,7 +597,9 @@ def read_authentication_text(
     label: str,
     encoding: str | None = None,
     errors: str | None = None,
+    allow_compressed: bool = False,
 ) -> str:
+    _require_plain(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
     if session is None:
         kwargs: dict[str, str] = {}
@@ -571,8 +607,12 @@ def read_authentication_text(
             kwargs["encoding"] = encoding
         if errors is not None:
             kwargs["errors"] = errors
-        return Path(path).read_text(**kwargs)
-    raw = session.read(path, grammar=grammar, label=label)
+        if Path(path).exists():
+            return Path(path).read_text(**kwargs)
+        with open_authentication_input(path, grammar=grammar, label=label,
+                                       encoding=encoding, errors=errors, allow_compressed=allow_compressed) as handle:
+            return handle.read()
+    raw = session.read(path, grammar=grammar, label=label, allow_compressed=allow_compressed)
     return raw.decode(encoding or "utf-8", errors or "strict")
 
 
@@ -585,24 +625,27 @@ def open_authentication_input(
     encoding: str | None = None,
     errors: str | None = None,
     newline: str | None = None,
+    allow_compressed: bool = False,
 ) -> BinaryIO | TextIO:
     """Open an input while preserving ordinary file semantics outside v2."""
 
+    _require_plain(path, allow_compressed=allow_compressed)
     if any(flag in mode for flag in ("w", "a", "x", "+")):
         raise ValueError("open_authentication_input only supports read modes")
     session = _ACTIVE_SESSION.get()
-    if session is None:
+    if session is None and Path(path).exists():
         kwargs: dict[str, str | None] = {}
         if "b" not in mode:
             kwargs.update(encoding=encoding, errors=errors, newline=newline)
         return Path(path).open(mode, **kwargs)
-    raw = session.read(path, grammar=grammar, label=label)
+    raw = (desk_compress.read_bytes(Path(path)) if session is None
+           else session.read(path, grammar=grammar, label=label, allow_compressed=allow_compressed))
     buffer = io.BytesIO(raw)
     if "b" in mode:
         return buffer
     return io.TextIOWrapper(
         buffer,
-        encoding=encoding or "utf-8",
+        encoding=encoding if session is None else (encoding or "utf-8"),
         errors=errors or "strict",
         newline=newline,
     )
@@ -642,18 +685,22 @@ def sha256_authentication_input(
     path: Path | str,
     *,
     label: str,
+    allow_compressed: bool = False,
 ) -> str:
+    _require_plain(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
     if session is None:
         digest = hashlib.sha256()
-        with Path(path).open("rb") as handle:
+        stream = (Path(path).open("rb") if Path(path).exists()
+                  else desk_compress.open_bytes(Path(path)))
+        with stream as handle:
             while True:
                 chunk = handle.read(1024 * 1024)
                 if not chunk:
                     break
                 digest.update(chunk)
         return digest.hexdigest()
-    return session.sha256_streaming_raw(path, label=label)
+    return session.sha256_streaming_raw(path, label=label, allow_compressed=allow_compressed)
 
 
 def direct_read_violations(

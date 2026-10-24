@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import errno
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -47,22 +49,109 @@ def _decompressed_hash(path: Path) -> str:
         return digest
 
 
-def read_bytes(path: Path) -> bytes:
-    """Read a plain file, or its compressed sibling when the plain file is absent."""
+class _EOFTrackingReader(io.BufferedReader):
+    """Keep EOF observable after a consumer (including TextIOWrapper) closes."""
+
+    reached_eof = False
+
+    def read(self, size=-1):
+        data = super().read(size)
+        # An unbounded or short blocking read drains to EOF even when nonempty.
+        self.reached_eof |= size is None or size < 0 or (size > 0 and len(data) < size)
+        return data
+
+    def read1(self, size=-1):
+        data = super().read1(size)
+        self.reached_eof |= size != 0 and not data
+        return data
+
+    def readinto(self, buffer):
+        count = super().readinto(buffer)
+        self.reached_eof |= bool(len(buffer)) and count < len(buffer)
+        return count
+
+    def readinto1(self, buffer):
+        count = super().readinto1(buffer)
+        self.reached_eof |= bool(len(buffer)) and count == 0
+        return count
+
+    def readline(self, size=-1):
+        data = super().readline(size)
+        self.reached_eof |= size != 0 and not data
+        return data
+
+    def __next__(self):
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
+
+
+@contextmanager
+def open_bytes(path: Path):
+    """Stream a logical plain file, falling back to its .zst sibling.
+
+    Reading to EOF checks the decompressor's exit status even if the consumer
+    then closes the stream. A partial reader cancels decompression on exit;
+    it does not verify the unread remainder.
+    The process is also reaped when a consumer fails before reaching EOF.
+    """
     path = Path(path)
-    if path.exists():
-        return path.read_bytes()
+    try:
+        plain = path.open("rb")
+    except FileNotFoundError:
+        pass
+    else:
+        # Attempt the owning read before falling back, preserving audit-hook
+        # policy checks even for an absent logical file in a protected root.
+        with plain as stream:
+            yield stream
+        return
     compressed = Path(str(path) + ".zst")
     if not compressed.exists():
         raise FileNotFoundError(errno.ENOENT, "file not found", str(compressed))
     try:
-        return subprocess.run([zstd_path(), "-d", "-q", "-c", str(compressed)],
-                              check=True, stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL).stdout
+        process = subprocess.Popen([zstd_path(), "-d", "-q", "-c", str(compressed)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as exc:
         raise OSError(exc.errno, "zstd_unavailable", str(compressed)) from None
-    except subprocess.CalledProcessError:
-        raise OSError(errno.EIO, "decompression_failed", str(compressed)) from None
+    with process:
+        # No bytes have been read: transfer the raw pipe without double buffering.
+        process.stdout = _EOFTrackingReader(process.stdout.detach())
+        try:
+            yield process.stdout
+            # A producer can be blocked on a full pipe after a partial read.
+            # Inspect buffered output before waiting, then cancel that producer.
+            # A consumer-closed stream is partial only if EOF was not seen.
+            if not process.stdout.reached_eof and (process.stdout.closed or process.stdout.peek(1)):
+                process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+                return
+            if process.wait() != 0:
+                raise OSError(errno.EIO, "decompression_failed", str(compressed))
+        finally:
+            if process.poll() is None:
+                process.kill()
+
+
+def read_bytes(path: Path) -> bytes:
+    """Read a plain file, or its compressed sibling when the plain file is absent."""
+    with open_bytes(path) as stream:
+        return stream.read()
+
+
+def is_file(path: Path) -> bool:
+    """Test the same logical file as read_bytes; an existing plain path wins."""
+    path = Path(path)
+    return path.is_file() if path.exists() else Path(str(path) + ".zst").is_file()
+
+
+def exists(path: Path) -> bool:
+    """Logical counterpart of Path.exists, including a .zst sibling."""
+    path = Path(path)
+    return path.exists() or Path(str(path) + ".zst").exists()
 
 
 def _free(path: Path) -> int:
@@ -101,9 +190,10 @@ def _protected(path: Path, protected_roots: list[Path]) -> bool:
     parts = real.parts
     if any(_under(real, root) for root in protected_roots):
         return True
-    if any(part in parts for part in ("instrument_validation", "derived", "withheld")):
+    if any(part in parts for part in (".git", "hazards", "instrument_validation", "derived", "withheld")):
         return True
-    if real.name in ("calibration_observation_ledger.jsonl", "calibration_ledger_head.json", "harvest.json"):
+    if real.name in ("campaign_log.jsonl", "calibration_observation_ledger.jsonl",
+                     "calibration_ledger_head.json", "harvest.json"):
         return True
     for index, part in enumerate(parts[:-1]):
         if part == "sources" and parts[index + 1] in ("ledger", "inputs", "repo", "SHA256SUMS"):

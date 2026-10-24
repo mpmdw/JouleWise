@@ -19,6 +19,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.desk_restore_support import compress_member
+from joulewise import desk_restore
 from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_analyze
@@ -1157,6 +1159,64 @@ class Addendum4RegressionTests(NumericTestCase):
                 self.assertTrue(all("member.cooldown_cap_hit" in r["flags"] for r in cells))
                 self.assertTrue(all(rid in r["kept_runs"] and bad in r["removed_runs"] for r in cells))
 
+    def test_unbounded_anchor_is_not_restored_by_flagged_inclusive_analysis(self):
+        root, session, rid = self.target()
+        def exclude(value):
+            value['excluding'].append({'scope': 'member', 'run_id': rid,
+                                       'code': 'member.anchor_not_bounded'})
+        # Leave production-shaped bundle bytes and succeeded export intact:
+        # the validity code itself must prevent restoration of this record.
+        with self.changed_json(root / 'derived/b6-acceptance.json', exclude):
+            records = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+        row = next(r for r in records if r['run_id'] == rid)
+        self.assertEqual(row['status'], 'unusable')
+        self.assertTrue(row['invalid_energy_record'])
+        for inclusive in (False, True):
+            cells = [r for r in ba.reduce_models(records, self.manifest, inclusive=inclusive)
+                     if r['model'] == row['model']]
+            self.assertTrue(cells)
+            self.assertTrue(all(rid in r['removed_runs'] and rid not in r['kept_runs'] for r in cells))
+
+    def test_archive_respects_unsucceeded_export_even_with_valid_bundle(self):
+        root, session, rid = self.target()
+        export = root.parent / 'export/bytes' / (session['session_id'] + '.runs.csv')
+        raw = export.read_bytes()
+        rows = ba._export_rows(export)
+        try:
+            for status in ('member.anchor_not_bounded', 'failed', ''):
+                with self.subTest(status=status):
+                    next(r for r in rows if r['run_id'] == rid)['status'] = status
+                    with export.open('w', newline='') as stream:
+                        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+                        writer.writeheader()
+                        writer.writerows(rows)
+                    records = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+                    row = next(r for r in records if r['run_id'] == rid)
+                    self.assertEqual(row['status'], 'unusable')
+                    self.assertTrue(row['invalid_energy_record'])
+                    self.assertEqual(row['unusable_reason'], 'export status not succeeded')
+        finally:
+            export.write_bytes(raw)
+
+    @unittest.skipUnless(shutil.which('zstd') or Path('/opt/homebrew/bin/zstd').is_file(), 'zstd CLI required')
+    def test_archive_reads_compressed_science_and_reference_events(self):
+        root, session, rid = self.target()
+        before = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+        # Exercise both event readers; reference spans also feed NEG-8.
+        paths = [root / 'sources/claim-runs' / run / 'events.jsonl'
+                 for run in (rid, 'neg8-start-0')]
+        saved = {path: path.read_bytes() for path in paths}
+        try:
+            for path in paths:
+                compress_member(path, root)
+            with patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 1024**4})()):
+                after = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+            self.assertEqual(after, before)  # Same parser and exact decompressed bytes.
+        finally:
+            for path, raw in saved.items():
+                path.write_bytes(raw)
+                Path(str(path) + '.zst').unlink(missing_ok=True)
+
     def test_a4_07_neg8_export_inputs_whole_request_and_two_families(self):
         p = next(r for r in self.passes if (r["model"],r["pass_id"],r["boundary"],r["basis"],r["selection"]) ==
                  ("Qwen3-4B-4bit",1,"rails","gross primary","primary"))
@@ -2108,6 +2168,8 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
             manifest = archive_campaign(root, non_claim=False, release="all")
             _write_json(root / "manifest.json", manifest)
             clean_source = (ROOT / "joulewise/bytes_analysis.py").read_text()
+            self.assertEqual(ba.frozen_predictions([], manifest)["desk_restore_sha256"],
+                hashlib.sha256(Path(desk_restore.__file__).read_bytes()).hexdigest())
             for case in ("comment", "fit-line"):
                 with self.subTest(case=case):
                     tree = root / case

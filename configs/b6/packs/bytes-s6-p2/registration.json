@@ -249,6 +249,7 @@
     "records.attempt_history": "DISCLOSE",
     "records.auxiliary_match_raised": "DISCLOSE",
     "records.checkout_untracked": "DISCLOSE",
+    "records.claim_usable_counting_disagreement": "DISCLOSE",
     "records.collector_failed": "DISCLOSE",
     "records.flag_unbuilt": "DISCLOSE",
     "records.identity_unmeasured_superseded": "DISCLOSE",
