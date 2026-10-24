@@ -444,7 +444,8 @@ def span_findings(samples: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
     ``time.monotonic_ns`` domain (the member's sampler stream).
     ``clock.unmeasured`` is a coverage gap longer than ``max_gap_ns``, or a
     sample inside the span left unmeasured by its read skew
-    (:func:`skew_unmeasured`), which is disclosed and never compared.
+    (:func:`skew_unmeasured`). Missing frequency evidence, including a
+    failed refresh until the next successful read, is also unmeasured.
     """
 
     start, stop = span["monotonic_ns"]
@@ -460,6 +461,11 @@ def span_findings(samples: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
     if gap is not None:
         found.append(finding("clock.unmeasured", span=span, observed=gap, expected=max_gap_ns,
                              detail="the 1 Hz clock journal has a gap overlapping the stream"))
+    frequency_gap = _frequency_gap(samples, start, stop)
+    if frequency_gap is not None:
+        found.append(finding("clock.unmeasured", span=span, observed=frequency_gap, expected=None,
+                             detail="no successful kernel frequency read, or a failed refresh "
+                                    "not yet superseded, overlaps the stream"))
     skewed = [item for item in samples if skew_unmeasured(item, max_skew_ns)
               and start <= item["finished"]["monotonic_ns"] <= stop]
     if skewed:
@@ -475,6 +481,36 @@ def span_findings(samples: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
             detail=(f"{len(skewed)} clock sample(s) in the stream read no anchor within "
                     f"{max_skew_ns} ns of read skew (preempted reads); unmeasured, not compared")))
     return found
+
+
+def _frequency_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int) -> list[int] | None:
+    """Missing/stale f evidence, without inventing a frequency expiry threshold.
+
+    Anchor-only samples between scheduled f probes inherit the last read.
+    An error with no f invalidates it until a successful refresh, except
+    an anchor-skew-only error: that can occur without an f probe. This uses
+    the recorded probe outcome, independent of the configured f cadence.
+    """
+
+    missing_since = None
+    have_frequency = False
+    for item in samples:
+        a = item["started"]["monotonic_ns"]
+        b = item["finished"]["monotonic_ns"]
+        failed = any(not part.startswith("clock.unmeasured: anchor read skew")
+                     for part in str(item.get("error") or "").split("; ") if part)
+        if item.get("frequency") is not None:
+            if missing_since is not None and missing_since <= stop and b >= start:
+                return [missing_since, b]
+            missing_since = None
+            have_frequency = True
+        elif failed or not have_frequency:
+            if missing_since is None:
+                missing_since = a
+            have_frequency = False
+    if missing_since is not None and missing_since <= stop:
+        return [missing_since, stop]
+    return None
 
 
 def coverage_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int,

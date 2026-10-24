@@ -2707,6 +2707,71 @@ class JoinTests(unittest.TestCase):
         self.assertEqual([(change["monotonic_ns"], change["ppm"]) for change in changes],
                          [(30 * NS, -3.0), (35 * NS, DRIFT_WORD / kernel_clock.FREQUENCY_SCALE)])
 
+    def test_clock_frequency_coverage_parity_including_anchor_skew(self):
+        from collections import Counter
+        from joulewise.hazards import clock, monitor
+
+        cases = (
+            ('healthy', None, None, (11, 14), []),
+            ('startup', 0, None, (1, 4), ['clock.unmeasured']),
+            ('failed_refresh', 10, None, (11, 14), ['clock.unmeasured']),
+            ('unrecovered', 'after_first', None, (11, 14), ['clock.unmeasured']),
+            ('every_probe_failed', 'every', None, (11, 14), ['clock.unmeasured']),
+            ('restored', 10, None, (16, 19), []),
+            ('anchor_only_skew', None, 12, (13, 14), []),
+            ('anchor_skew_in_span', None, 12, (11, 14), ['clock.unmeasured']),
+            ('skew_and_failed_refresh', 10, 10, (11, 14), ['clock.unmeasured']),
+        )
+        for name, failed, rejected, member, expected in cases:
+            with self.subTest(name=name):
+                journal = L1Journal('clock')
+                for second in range(21):
+                    values = clock_values(second * NS + RAW_OFFSET_NS, 10**15, frequency=False)
+                    values['frequency'] = (frequency_probe(0)
+                                           if second % monitor.DEFAULT_CADENCE['frequency_s'] == 0 else None)
+                    errors = []
+                    if second == rejected:
+                        # Twice the registered read-skew bound rejects an anchor.
+                        values['rejected_anchors'] = [dict(values['anchor'],
+                            read_skew_ns=2 * clock.WINDOW_SKEW_MAX_NS)] * clock.ANCHOR_TRIES
+                        values['anchor'] = None
+                        errors.append('clock.unmeasured: anchor read skew above bound on all reads')
+                    if (second == failed or failed == 'every'
+                            or (failed == 'after_first' and second >= 10
+                                and second % monitor.DEFAULT_CADENCE['frequency_s'] == 0)):
+                        values['frequency'] = None
+                        errors.append('OSError: frequency read failed')
+                    journal.write('reading', second * NS - 600, second * NS,
+                                  values=values, error='; '.join(errors) or None)
+                span = [member[0] * NS, member[1] * NS]
+                ours = Counter(code for code, *_ in h.clock_member_flags(span, parsed(journal), self.T))
+                theirs = Counter(f['code'] for f in clock.span_findings(
+                    monitor.clock_samples(journal.lines), {'monotonic_ns': span}))
+                self.assertEqual(ours, theirs)
+                self.assertEqual(ours, Counter(expected))
+                if name == 'unrecovered':
+                    ((_, observed, interval),) = h.clock_member_flags(span, parsed(journal), self.T)
+                    self.assertIsNone(observed['gap_monotonic_ns'][1])
+                    self.assertIsNone(interval['monotonic_ns'])
+
+    def test_errored_contention_retains_measured_hazard_parity(self):
+        from collections import Counter
+        from joulewise.hazards import contention, monitor
+
+        journal = L1Journal('contention')
+        # Twelve times the registered per-process limit, measured beside
+        # another counter whose unbounded regression leaves coverage open.
+        rate = 12 * self.T['contention_cpu_s_per_s']
+        journal.write('interval', 0, 10 * NS, values=contention_values(0, 10 * NS, [
+            {'pid': 9600, 'command': 'outside_zombie', 'cpu_s_per_s': rate}]),
+            error='outside process CPU counter regressed without a host bound')
+        request = [2 * NS, 8 * NS]
+        ours = Counter(code for code, *_ in h.contention_member_flags(request, parsed(journal), self.T))
+        theirs = Counter(f['code'] for f in contention.span_findings(
+            monitor.contention_intervals(journal.lines), {'monotonic_ns': request}))
+        self.assertEqual(ours, theirs)
+        self.assertEqual(ours, Counter(['contention.request_overlap', 'contention.unmeasured']))
+
     def test_disk_low_from_targets_and_marker(self):
         journal = L1Journal("disk")
         journal.write("reading", 0, values=disk_values(200 * GIB))
@@ -2805,6 +2870,40 @@ class BatteryRuleParityTests(unittest.TestCase):
         hazard = {finding["code"] for finding in l1.span_findings(journal.lines, {"monotonic_ns": span},
                                                                   self.LIMITS)}
         return harvest, hazard
+
+    def test_carried_registry_state_parity(self):
+        from collections import Counter
+        from joulewise.hazards import battery as l1
+
+        cases = (
+            ('ac_loss_before_start', {'external_connected': False}, None, False, True),
+            ('charging_before_start', {'is_charging': True}, None, False, True),
+            ('superseded_before_start', {'external_connected': False}, 8, False, False),
+            ('superseded_inside_span', {'external_connected': False}, 15, False, True),
+            ('state_survives_error', {'external_connected': False}, 8, True, True),
+            ('state_after_stop', {'external_connected': False}, None, False, False),
+        )
+        for name, state, restored, error, hazard in cases:
+            with self.subTest(name=name):
+                journal = self.journal()
+                second = 25 if name == 'state_after_stop' else 5
+                moment = publication_ns(second)
+                journal.write('reading', moment, moment + 1_000,
+                              values=battery_values(10_000, publication=False,
+                                                    power_telemetry=STEADY_TELEMETRY, **state))
+                if restored is not None:
+                    moment = publication_ns(restored)
+                    journal.write('reading', moment, moment + 1_000,
+                                  values=battery_values(10_000, publication=False,
+                                                        power_telemetry=STEADY_TELEMETRY),
+                                  error='ioreg read failed' if error else None)
+                journal.lines.sort(key=lambda line: line['finished']['monotonic_ns'])
+                span = [publication_ns(second) for second in self.SPAN]
+                ours = Counter(code for code, *_ in h.battery_member_flags(span, parsed(journal), self.T))
+                theirs = Counter(f['code'] for f in l1.span_findings(journal.lines,
+                    {'monotonic_ns': span}, self.LIMITS))
+                self.assertEqual(ours, theirs)
+                self.assertEqual(ours['battery.member_span'], int(hazard))
 
     CASES = {
         # name: (journal keywords, expected codes in both copies, smc_unavailable aside)

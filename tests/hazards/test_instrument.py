@@ -62,6 +62,53 @@ class CadenceProbeTests(unittest.TestCase):
         self.assertEqual(verdict.status, base.REFUSE)
         self.assertTrue(any("299 frames" in reason for reason in verdict.reasons))
 
+    def test_zero_duration_frames_are_unmeasured(self):
+        self.check_frame_intervals(0, all_frames=True)
+
+    def test_one_zero_duration_frame_is_unmeasured(self):
+        self.check_frame_intervals(0, all_frames=False)
+
+    def test_negative_duration_frames_are_unmeasured(self):
+        # -1 ns is one elapsed_ns representation quantum below the physical
+        # boundary: a measured frame duration must be strictly positive.
+        self.check_frame_intervals(-1, all_frames=True)
+
+    def test_one_negative_duration_frame_is_unmeasured(self):
+        self.check_frame_intervals(-1, all_frames=False)
+
+    def test_positive_duration_frame_control_passes(self):
+        # 10 Hz means 1/10 s per frame, the production requested cadence.
+        self.check_frame_intervals(1_000_000_000 // 10, all_frames=True, expected=base.PASS)
+
+    def check_frame_intervals(self, duration_ns, *, all_frames, expected=base.UNMEASURED):
+        fixture = json.loads(BLOCK3.read_text())
+        # Production captures 30 s at 10 Hz (300 frames). Other durations
+        # are 1/10 s, so a single impossible frame hides below both existing
+        # upper cadence bounds unless every parsed interval is validated.
+        intervals = [1_000_000_000 // 10] * LIMITS["frames"]
+        if all_frames:
+            intervals = [duration_ns] * LIMITS["frames"]
+        else:
+            intervals[len(intervals) // 2] = duration_ns
+        fixture["elapsed_ns"] = intervals
+        path = self.raw / "nonpositive.json"
+        path.write_text(json.dumps(fixture))
+        # Process-group census is a separate gate, unavailable in a sandbox
+        # without sysmond. Fake only that seam inside the real capture child;
+        # the subprocess, plist bytes, production parser and judge stay real.
+        bootstrap = instrument.CHILD_BOOTSTRAP.replace(
+            "raise SystemExit", "from joulewise.hazards import instrument; "
+            "instrument.group_absent = lambda pgid: (True, []); raise SystemExit")
+        with mock.patch.object(instrument, "CHILD_BOOTSTRAP", bootstrap):
+            measurement, verdict = self.probe(path)
+        self.assertEqual(verdict.status, expected, verdict.reasons)
+        self.assertEqual(measurement.values["frames"], LIMITS["frames"])
+        self.assertEqual(measurement.values["intervals_ns"], intervals)
+        self.assertEqual(len(measurement.raw), 1)  # retain the invalid capture as evidence
+        if expected == base.UNMEASURED:
+            self.assertIsNone(measurement.values.get("median_ms"))
+            self.assertIsNone(measurement.values.get("max_ms"))
+
     def test_surviving_process_in_the_capture_group_refuses(self):
         measurement, verdict = self.probe(BLOCK3, FAKE_PM_SPAWN_ORPHAN=1)
         self.assertEqual(verdict.status, base.REFUSE)

@@ -21,7 +21,8 @@ Runs inside the launchd job after t0, in this fixed order:
    a child process with a timeout.  Their result never changes the decision.
 5. **Instrument cadence probe** (about 40 s).
 6. **Dwell** (180-2700 s): contention in 30 s intervals; the clock sampled at
-   1 Hz for its linearity.
+   1 Hz for its linearity. At cap expiry without a qualifying clean run,
+   measured contention refuses; missing evidence alone is UNMEASURED.
 7. **Final reads** of battery, thermal and the frequency word (f must equal
    its dwell value), then the **agent census again** (an agent that started
    during the dwell must not get GO), then GO.

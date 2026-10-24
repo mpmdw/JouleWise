@@ -2370,6 +2370,7 @@ class Reading:
     values: Mapping[str, Any]
     status: str = "ok"
     interval: tuple[int, int] | None = None  # contention: the ps interval in monotonic_ns
+    error: str | None = None  # retain probe parts: anchor skew alone is not an f failure
 
 
 def _num(value: Any) -> float | None:
@@ -2426,7 +2427,7 @@ def parse_monitor_line(module: str, value: Any) -> Reading | None:
             raise MonitorLineError("contention interval lacks interval.monotonic_ns")
     status = "event" if disk_event else ("error" if value.get("error") is not None else "ok")
     return Reading(module, finished["monotonic_ns"], finished["monotonic_raw_ns"], finished["wall_ns"],
-                   started["monotonic_ns"], started["wall_ns"], values, status, interval)
+                   started["monotonic_ns"], started["wall_ns"], values, status, interval, value.get("error"))
 
 
 def read_monitor_journal(path: Path, module: str) -> tuple[list[Reading], int]:
@@ -2664,7 +2665,7 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
 
     * an SMC B0AC read in force above +limit (charging);
     * IsCharging Yes or ExternalConnected No at a publication in force or at
-      any good poll inside the span;
+      the latest good registry state at or before the start or any good poll inside the span;
     * without SMC coverage only, the registry InstantAmperage/Amperage above
       +limit at a publication in force;
     * ``battery.accumulator_excursion``: the charge accumulator's mean above
@@ -2720,13 +2721,19 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
         if reasons:
             violations.append({"publication_monotonic_ns": item.monotonic_ns, "update_time_s": item.update_time_s,
                                "instant_ma": item.instant_ma, "amperage_ma": item.amperage_ma, "reasons": reasons})
-    for reading in readings:  # every good poll inside the span, published or not
-        if reading.status == "ok" and span[0] <= reading.monotonic_ns <= span[1]:
-            values = reading.values
-            reasons = _float_reasons(None, None, _bool(values.get("is_charging")),
-                                     _bool(values.get("external_connected")), limit)
-            if reasons:
-                violations.append({"poll_monotonic_ns": reading.monotonic_ns, "reasons": reasons})
+    states = sorted((reading for reading in readings if reading.status == "ok"
+                     and "external_connected" in reading.values), key=lambda reading: reading.monotonic_ns)
+    before = [reading for reading in states if reading.monotonic_ns <= span[0]]
+    active_states = ([before[-1]] if before else []) + [
+        reading for reading in states if span[0] < reading.monotonic_ns <= span[1]]
+    publication_reads = {id(item.values) for item in in_force_pubs}
+    for reading in active_states:
+        if id(reading.values) in publication_reads:  # already judged at its publication
+            continue
+        reasons = _float_reasons(None, None, _bool(reading.values.get("is_charging")),
+                                 _bool(reading.values.get("external_connected")), limit)
+        if reasons:
+            violations.append({"poll_monotonic_ns": reading.monotonic_ns, "reasons": reasons})
     smc_times = [entry["monotonic_ns"] for entry in good]
     for index in in_force(smc_times, span[0], span[1]):
         entry = good[index]
@@ -3069,7 +3076,7 @@ def contention_member_flags(request: Sequence[int], readings: Sequence[Reading],
                             ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """``contention.request_overlap`` and ``contention.unmeasured`` for one request."""
     limit = float(thresholds["contention_cpu_s_per_s"])
-    intervals = [reading for reading in readings if reading.status == "ok" and reading.interval]
+    intervals = [reading for reading in readings if reading.interval]
     offenders = []
     for reading in intervals:
         if not _overlaps(reading.interval, request):
@@ -3085,7 +3092,7 @@ def contention_member_flags(request: Sequence[int], readings: Sequence[Reading],
     # A hole is named by the interval edges around it (None where the journal
     # has no interval on that side), never by the request's own edges.  A
     # failed ps interval covers nothing.
-    every = sorted(reading.interval for reading in intervals)
+    every = sorted(reading.interval for reading in intervals if reading.status == "ok")
     ended = [end for _start, end in every if end <= request[0]]
     previous_end: int | None = max(ended) if ended else None
     cursor: int = request[0]
@@ -3120,7 +3127,8 @@ def _clock_point(reading: Reading, max_skew_ns: int) -> tuple[int, int] | None:
     3.9-8.3 ms in the 10-06 rehearsal, R3-1) carries up to half its skew of
     anchor error and is never compared; nor is one whose skew is unrecorded.
     """
-    anchor = reading.values.get("anchor") if reading.status == "ok" else None
+    # A failed f read does not erase a separately measured, usable anchor.
+    anchor = reading.values.get("anchor")
     if not isinstance(anchor, Mapping):
         return None
     skew = anchor.get("read_skew_ns")
@@ -3139,14 +3147,44 @@ def _clock_skew_unmeasured(reading: Reading, max_skew_ns: int) -> bool:
     return bool(reading.values.get("rejected_anchors"))
 
 
+def _clock_frequency_gap(readings: Sequence[Reading], span: Sequence[int]) -> list[int | None] | None:
+    """L1 frequency coverage, using journal edges only in structure outputs.
+
+    Anchor-only skew errors preserve the last f. A failed refresh invalidates
+    it until success. An open gap ends at None, never the member's own edge.
+    """
+    missing_since = None
+    have_frequency = False
+    for reading in readings:
+        failed = any(not part.startswith("clock.unmeasured: anchor read skew")
+                     for part in str(reading.error or "").split("; ") if part)
+        if reading.values.get("frequency") is not None:
+            if missing_since is not None and missing_since <= span[1] and reading.monotonic_ns >= span[0]:
+                return [missing_since, reading.monotonic_ns]
+            missing_since = None
+            have_frequency = True
+        elif failed or not have_frequency:
+            if missing_since is None:
+                missing_since = reading.started_monotonic_ns
+            have_frequency = False
+    if missing_since is not None and missing_since <= span[1]:
+        return [missing_since, None]
+    return None
+
+
 def clock_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
                        ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """``clock.unmeasured`` when the 1 Hz anchor journal has a hole overlapping the span, or a
-    sample inside the span read no anchor within the read-skew bound (L1's ``clock.span_findings``)."""
+    sample inside the span read no anchor within the read-skew bound, or frequency
+    evidence is missing/stale (L1's ``clock.span_findings``)."""
     max_skew_ns = _clock_skew_max_ns(thresholds)
     times = [reading.monotonic_ns for reading in readings if _clock_point(reading, max_skew_ns) is not None]
     holes = _uncovered(times, span, int(float(thresholds["clock_unmeasured_gap_s"]) * 1e9))
     out = [("clock.unmeasured", {"holes_monotonic_ns": holes[:8]}, _hole_interval(holes[0]))] if holes else []
+    frequency_gap = _clock_frequency_gap(readings, span)
+    if frequency_gap is not None:
+        out.append(("clock.unmeasured", {"rule": "frequency_coverage", "gap_monotonic_ns": frequency_gap},
+                    _hole_interval(frequency_gap)))
     skewed = [reading for reading in readings
               if span[0] <= reading.monotonic_ns <= span[1] and _clock_skew_unmeasured(reading, max_skew_ns)]
     if skewed:
