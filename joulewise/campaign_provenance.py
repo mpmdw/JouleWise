@@ -811,6 +811,7 @@ def load_campaign_log_rows(log_path: Path) -> list[Mapping[str, Any]] | None:
             log_path,
             grammar="jsonl",
             label="campaign provenance log",
+            allow_compressed=True,
         )
     except FileNotFoundError:
         return []
@@ -957,6 +958,7 @@ def load_campaign_provenance_manifest(
             path,
             grammar="json",
             label="campaign provenance manifest",
+            allow_compressed=True,
         )
         raw = json.loads(raw_bytes.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):

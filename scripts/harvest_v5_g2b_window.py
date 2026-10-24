@@ -25,6 +25,7 @@ from joulewise import arm_readiness as readiness, battery_float, calibration_bra
 from joulewise import network_time_off, night_gate, v5_qualification as q
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from joulewise.cli import validate_bundle
+from joulewise.desk_restore import RestoreRefused, readable_run, readable_tree
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import CampaignPolicy, CampaignPolicyProfile, AdmissionFailureAction
 from joulewise.whole_window import validate_whole_window_verdict_row
@@ -333,12 +334,13 @@ def empty_floors(path):
         raise q.HarvestRefusal("l10_floors_not_empty")
 
 
-def member_assessment(run_id, path, transcript, *, validator=validate_bundle):
+def member_assessment(run_id, path, transcript, *, validator=validate_bundle, compression_records=None):
     """The shared strict-valid, successful, bounded-clock member predicate."""
-    problems = q.captured_call(validator, transcript, path, strict=True)
-    clock = anchor_status(path)
-    clock = clock if clock in {"bounded", "unbounded", "invalid", "missing", "not recorded"} else "unbounded"
-    succeeded = (path / "summary_metrics.json").is_file() and q.read(path / "summary_metrics.json").get("status") == "succeeded"
+    with readable_run(path, compression_records=compression_records) as plain:
+        problems = q.captured_call(validator, transcript, plain, strict=True)
+        clock = anchor_status(plain)
+        clock = clock if clock in {"bounded", "unbounded", "invalid", "missing", "not recorded"} else "unbounded"
+        succeeded = (plain / "summary_metrics.json").is_file() and q.read(plain / "summary_metrics.json").get("status") == "succeeded"
     return {"run_id": q.identifier(run_id), "strict_valid": not bool(problems),
             "succeeded": succeeded, "clock_anchor_status": clock,
             "valid": not problems and succeeded and clock == "bounded"}
@@ -359,7 +361,7 @@ def capture_clock_members(members, capture_paths):
 
 
 def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, python=sys.executable,
-          additional_bundles=None,
+          additional_bundles=None, compression_records=None,
           validator=validate_bundle, reducer=reduce_bundle):
     root = destination / "withheld/l10-a"
     root.mkdir(parents=True)
@@ -369,22 +371,25 @@ def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, pyth
     before = q.tree_hash(source_runs)
     reductions, members, causes = [], [], []
     paths = {run_id: source_runs / run_id for run_id in bundle_ids}
+    if compression_records is None:
+        compression_records = Path(str(destination) + ".desk") / "compression.jsonl"
     for run_id, path in (additional_bundles or {}).items():
         if run_id in paths:
             raise q.HarvestRefusal("bound_science_identity_overlap")
         paths[run_id] = path
     for run_id, path in sorted(paths.items()):
-        member = member_assessment(run_id, path, transcripts / f"{run_id}-strict.txt", validator=validator)
-        members.append(member)
-        if not member["valid"]:
-            causes.append("member_not_strict_valid_bounded_success")
-        if member["strict_valid"]:
-            metrics = q.captured_call(reducer, transcripts / f"{run_id}-reduce.txt", path)
-            if hasattr(metrics, "to_dict"):
-                metrics = metrics.to_dict()
-            metric_path = root / "reductions" / f"{run_id}.summary_metrics.rereduced.json"
-            q.write(metric_path, metrics)
-            reductions.append({"run_id": run_id, "source": str(path), "source_tree_sha256": q.tree_hash(path), "metrics": metrics})
+        with readable_run(path, compression_records=compression_records) as plain:
+            member = member_assessment(run_id, plain, transcripts / f"{run_id}-strict.txt", validator=validator)
+            members.append(member)
+            if not member["valid"]:
+                causes.append("member_not_strict_valid_bounded_success")
+            if member["strict_valid"]:
+                metrics = q.captured_call(reducer, transcripts / f"{run_id}-reduce.txt", plain)
+                if hasattr(metrics, "to_dict"):
+                    metrics = metrics.to_dict()
+                metric_path = root / "reductions" / f"{run_id}.summary_metrics.rereduced.json"
+                q.write(metric_path, metrics)
+                reductions.append({"run_id": run_id, "source": str(path), "source_tree_sha256": q.tree_hash(path), "metrics": metrics})
     q.write(destination / "withheld/s1-reductions.json",
             {"schema": "joulewise.v5_qualification_reductions.v1", "members": reductions})
     staging = root / "staging"
@@ -397,16 +402,38 @@ def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, pyth
         raise q.HarvestRefusal("l10_staging_tree_mismatch")
     required = ["prospective/analysis_manifest_v3.json", "prospective/plan_tree.json", "g2b/whole-window-verdict.json",
                 "g2b/bracket-binding.json", "calibration/calibration_observation_ledger.jsonl"]
-    if not all((staging / name).is_file() for name in required):
-        raise q.HarvestRefusal("l10_staging_incomplete")
     scratch = root / "scratch"
     scratch.mkdir()
-    argv = [python, "-B", ROOT / "scripts/check_window_provenance.py", "--expect-finalize-refusal",
-        "--scratch-dir", scratch, "--prospective-manifest", staging / required[0], "--plan-tree", staging / required[1],
-        "--custody-root", staging, "--runs-root", staging / "g2b", "--whole-window-verdict", staging / required[2],
-        "--bracket-binding", staging / required[3], "--calibration-ledger", staging / required[4],
-        "--aggregate-floor-artifact", staging / "floors/d117-v5-aggregate-floor.json", "--output-dir", staging]
-    result = command(argv, transcripts / "finalization.txt", runner=runner)
+    # Keep the exact archival staging copy for custody checks. The finalizer
+    # consumes a complete plain tree, including manifests and partial runs.
+    with readable_tree(custody, compression_records=compression_records) as plain_custody:
+        finalizer_root, finalizer_runs = staging, staging / "g2b"
+        if plain_custody != custody:
+            try:
+                finalizer_root = plain_custody.parent / "finalizer"
+                finalizer_root.mkdir()
+                # Rename only private restored directories within their temporary
+                # parent: retain the canonical projection without a second copy.
+                for source, name in (("runs", "g2b"), ("prospective", "prospective"),
+                                     ("calibration", "calibration"), ("floors", "floors")):
+                    (plain_custody / source).rename(finalizer_root / name)
+            except OSError as error:
+                raise RestoreRefused(error) from error
+            finalizer_runs = finalizer_root / "g2b"
+        if not all((finalizer_root / name).is_file() for name in required):
+            raise q.HarvestRefusal("l10_staging_incomplete")
+        input_hashes = {name: q.sha(finalizer_root / name) for name in required}
+        finalizer_tree_before = q.tree_hash(finalizer_runs)
+        argv = [python, "-B", ROOT / "scripts/check_window_provenance.py", "--expect-finalize-refusal",
+            "--scratch-dir", scratch, "--prospective-manifest", finalizer_root / required[0],
+            "--plan-tree", finalizer_root / required[1], "--custody-root", finalizer_root,
+            "--runs-root", finalizer_runs, "--whole-window-verdict", finalizer_runs / "whole-window-verdict.json",
+            "--bracket-binding", finalizer_runs / "bracket-binding.json", "--calibration-ledger", finalizer_root / required[4],
+            "--aggregate-floor-artifact", finalizer_root / "floors/d117-v5-aggregate-floor.json", "--output-dir", finalizer_root]
+        result = command(argv, transcripts / "finalization.txt", runner=runner)
+        empty_floors(finalizer_root / "floors")
+        if q.tree_hash(finalizer_runs) != finalizer_tree_before:
+            raise q.HarvestRefusal("source_tree_mutated")
     good = (result.returncode == 0 and result.stdout.splitlines() == [
         f"PASS FINALIZE-REFUSAL observed={{{FINALIZER_REASON}}} expected={{{FINALIZER_REASON}}}",
         "SUMMARY pass=1 skip=0 fail=0"] and not result.stderr)
@@ -427,7 +454,7 @@ def l10_a(custody, destination, bundle_ids, head, *, runner=subprocess.run, pyth
               "g2b_tree_after": after, "staged_tree_sha256": q.tree_hash(staging / "g2b"),
               "floors_empty_before_after": True, "source_unchanged": True,
               "observed_reason_codes": [FINALIZER_REASON] if good else observed or ["unexpected_finalizer_result"],
-              "input_hashes": {name: q.sha(staging / name) for name in required},
+              "input_hashes": input_hashes,
               "transcript_sha256": q.sha(transcripts / "finalization.txt")}
     q.write(destination / "l10-a/record.json", record)
     return members, causes
@@ -540,6 +567,11 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                "harvest-inputs": input_path, "policy": policy_path, "acceptance": acceptance_path,
                "chain": Path(plan.chain_path), "chain-sidecar": Path(plan.chain_sha256_path),
                "bound-runs": Path(inputs["bound_runs_root"])}
+    # The historical full-harvest census uses physical paths. Refuse before
+    # it can classify compressed members as absent; L10-A restores its own inputs.
+    for runs in (custody, Path(inputs["bound_runs_root"])):
+        if any(not path.with_suffix("").is_file() for path in runs.rglob("*.zst")):
+            raise RestoreRefused(f"compressed_bundle_requires_restore: {runs}")
     started = (night / "chain.started").exists()
     admission_abort, admission_other_causes = None, []
     if started:
@@ -573,6 +605,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                 if not (custody / "runs" / name).is_file():
                     missing_after_start.append(name.replace("-", "_").replace(".json", "_missing"))
     destination = args.archive_root.absolute()
+    compression_records = Path(str(args.previous_harvest or destination) + ".desk") / "compression.jsonl"
     q.attempt_destination(plan, destination, replay=args.previous_harvest)
     # No recovery authority is inferred from a harvester's classification.
     if occurrence == "s2":
@@ -630,7 +663,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
                     if summary.is_file() and q.read(summary).get("status") == "succeeded":
                         member = member_assessment(path.name, path,
                             destination / "withheld/member-assessment" / f"{q.identifier(path.name)}-strict.txt",
-                            validator=validate_bundle)
+                            validator=validate_bundle,
+                            compression_records=compression_records)
                         members.append(member)
                         if not member["valid"]:
                             causes.append("member_not_strict_valid_bounded_success")
@@ -722,6 +756,7 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
             if not bound_ids or bound_ids != bound_declared:
                 causes.append("bound_roster_incomplete_or_extra")
             members, l10_causes = l10_a(custody, destination, sorted(bundle_ids), plan.measurement_head, runner=runner,
+                compression_records=compression_records,
                 additional_bundles={bid: bound_runs / bid for bid in bound_ids | bound_declared})
             if occurrence == "s2":
                 (destination / "withheld/s1-reductions.json").rename(destination / "withheld/s2-reductions.json")
@@ -756,6 +791,8 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         q.unchanged(sources, original)
         if not clear(night, plan_id=plan.plan_id):
             raise q.HarvestRefusal("launcher_group_alive")
+    except RestoreRefused:
+        raise
     except Exception as error:
         record.update(verdict="REFUSED", cause_codes=[str(error) if isinstance(error, q.HarvestRefusal)
                       else "archive_authentication_or_tool_fault"], cause_classes=["tooling"])
@@ -789,6 +826,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         record = harvest(args)
+    except RestoreRefused as error:
+        print(str(error), file=sys.stderr)
+        return 3
     except Exception:
         q.preflight_refusal(SCHEMA, args.scratch_root)
         return 3

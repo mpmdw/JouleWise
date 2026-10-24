@@ -83,6 +83,36 @@ class RestoreRunTests(unittest.TestCase):
                 self.assertEqual(run, self.run)
 
     @unittest.skipUnless(ZSTD, "zstd is optional")
+    def test_tree_reader_preserves_root_manifests_and_partial_directories(self):
+        source = self.run.parent
+        manifest = source / "campaign_manifests/manifest.json"
+        manifest.parent.mkdir()
+        manifest.write_bytes(b'{"members":[]}\n')
+        partial = source / "failed-partial/raw/capture.txt"
+        partial.parent.mkdir(parents=True)
+        partial.write_bytes(b"retained partial evidence\n")
+        (source / "failed-empty").mkdir()
+        expected = self.snapshot(source)
+        rc, _ = desk.compress(archive=self.archive, custody=self.custody,
+                              record_dir=self.record_dir, min_bytes=0)
+        self.assertEqual(rc, 0)
+        before, journal = self.snapshot(source), self.records.read_bytes()
+        required = sum(row[4] for row in restore._inventory(source.resolve(), restore._records(self.records)))
+        with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(
+                free=restore.MIN_RESERVE_GIB * 1024**3 + required)):
+            # The per-run API keeps its bundle-shape requirement.
+            with self.assertRaisesRegex(restore.RestoreRefused, "run-dir must name one bundle"):
+                with restore.readable_run(source, compression_records=self.records):
+                    self.fail("non-bundle reached the run reader")
+            with restore.readable_tree(source, compression_records=self.records) as plain:
+                self.assertEqual(self.snapshot(plain), expected)
+                self.assertTrue((plain / "failed-empty").is_dir())
+                restored = plain
+        self.assertFalse(restored.exists())
+        self.assertEqual(self.snapshot(source), before)
+        self.assertEqual(self.records.read_bytes(), journal)
+
+    @unittest.skipUnless(ZSTD, "zstd is optional")
     def test_reader_discovers_journal_and_cleans_scratch_on_success_and_error(self):
         expected = self.snapshot(self.run)
         self.compress()

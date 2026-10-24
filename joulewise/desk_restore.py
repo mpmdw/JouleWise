@@ -45,12 +45,13 @@ def _restore_stack():
 
 @contextmanager
 def restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=MIN_RESERVE_GIB,
-                 _lock_root=None):
+                 _lock_root=None, _require_bundle=True):
     # Catch materialization failures only. Reader exceptions retain their identity.
     with _restore_stack() as stack:
         try:
             plain = stack.enter_context(_restored_run(run_dir, scratch_dir,
-                compression_records=compression_records, reserve_gib=reserve_gib, _lock_root=_lock_root))
+                compression_records=compression_records, reserve_gib=reserve_gib, _lock_root=_lock_root,
+                _require_bundle=_require_bundle))
         except (OSError, ValueError) as exc:
             raise RestoreRefused(exc) from exc
         yield plain
@@ -122,7 +123,7 @@ def _copy(stream, target, size, record):
 
 @contextmanager
 def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=MIN_RESERVE_GIB,
-                  _lock_root=None):
+                  _lock_root=None, _require_bundle=True):
     """Yield one private, plain bundle; clean it up on success or failure."""
     if not math.isfinite(reserve_gib) or reserve_gib < MIN_RESERVE_GIB:
         raise ValueError(f"reserve-gib must be finite and at least {MIN_RESERVE_GIB}")
@@ -130,8 +131,8 @@ def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib
     if source.is_symlink():
         raise ValueError("symlinks are not supported")
     source = source.resolve(strict=True)
-    if not source.is_dir() or not any((source / name).is_file()
-                                     for name in ("metadata.json", "metadata.json.zst")):
+    if not source.is_dir() or (_require_bundle and not any((source / name).is_file()
+                                      for name in ("metadata.json", "metadata.json.zst"))):
         raise ValueError("run-dir must name one bundle containing metadata.json[.zst]")
     scratch = Path(scratch_dir).resolve()
     if source == scratch or source in scratch.parents or scratch in source.parents:
@@ -159,6 +160,9 @@ def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib
             temporary = cleanup.enter_context(tempfile.TemporaryDirectory(prefix="restored-run-", dir=scratch))
             restored = Path(temporary) / source.name
             restored.mkdir()
+            if not _require_bundle:
+                for directory, _dirs, _files in os.walk(source, followlinks=False, onerror=_walk_error):
+                    (restored / Path(directory).relative_to(source)).mkdir(parents=True, exist_ok=True)
             for path, relative, compressed, record, size in entries:
                 target = restored / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -180,7 +184,7 @@ def _scratch_lock(root):
 
 
 @contextmanager
-def readable_run(run_dir, *, compression_records=None):
+def readable_run(run_dir, *, compression_records=None, _require_bundle=True):
     """Keep plain runs in place; verify and restore compressed runs for readers.
 
     The standard desk journal is ARCHIVE.desk/compression.jsonl. Callers
@@ -204,9 +208,19 @@ def readable_run(run_dir, *, compression_records=None):
         try:
             scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="joulewise-reader-"))
             restored = stack.enter_context(restored_run(source, scratch,
-                compression_records=compression_records, _lock_root=tempfile.gettempdir()))
+                compression_records=compression_records, _lock_root=tempfile.gettempdir(),
+                _require_bundle=_require_bundle))
         except RestoreRefused:
             raise
         except (OSError, ValueError) as exc:
             raise RestoreRefused(exc) from exc
         yield restored
+
+
+def readable_tree(source, *, compression_records=None):
+    """Restore a complete custody subtree with the same journal, reserve and lock.
+
+    Multi-bundle consumers must preserve root manifests and failed/partial
+    directories as well as successful members; no root metadata is required.
+    """
+    return readable_run(source, compression_records=compression_records, _require_bundle=False)
