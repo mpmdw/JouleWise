@@ -1,10 +1,11 @@
 """Storage/custody stops bypass data handlers and survive process transport."""
 from concurrent.futures import ProcessPoolExecutor
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 import io
 import multiprocessing
 from pathlib import Path
 import pickle
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -49,7 +50,14 @@ class StorageStopTests(unittest.TestCase):
 
     def test_process_pool_preserves_storage_stop_class_and_cause(self):
         # spawn exercises importability and exception reconstruction, not fork inheritance.
-        with ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context('spawn')) as pool:
+        # A spawned child re-runs its parent's __main__ by path; a parent started from
+        # stdin (CI shards run `python - <<PY`) names '<stdin>', which does not exist,
+        # so the worker would die before taking the task. Hide only that dangling path.
+        main = sys.modules['__main__']
+        main_file = getattr(main, '__file__', None)
+        hide_main = main_file is not None and not Path(main_file).exists()
+        with mock.patch.object(main, '__file__', None) if hide_main else nullcontext(), \
+                ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context('spawn')) as pool:
             for kind, expected, cause in (
                     ('base', restore.StorageStop, 'fixture storage cause'),
                     ('restore', restore.RestoreRefused, 'fixture custody cause'),

@@ -111,12 +111,12 @@ class _CorpusFixture(_SentinelMixin):
 
         real_inventory = whole_window._bundle_evidence_sha256
 
-        def inventory(path: Path):
+        def inventory(path: Path, **kwargs):
             if _member_number(path) in self.inventory_error:
                 raise ValueError("fixture inventory")
-            return real_inventory(path)
+            return real_inventory(path, **kwargs)
 
-        def span_end(path: Path):
+        def span_end(path: Path, **_kwargs):
             number = _member_number(path)
             return None if number in self.span_missing else SPAN_BASE_S + 100.0 * number
 

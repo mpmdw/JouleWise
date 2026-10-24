@@ -532,7 +532,7 @@ class HazardNeg8MintTests(_SentinelMixin, unittest.TestCase):
             value = 10.0 + float(path.name.rsplit("r", 1)[1])
             return {"point_j": value, "lower_j": value, "upper_j": value}, value - 1.0, None, None
 
-        def span_end(path: Path):
+        def span_end(path: Path, **_kwargs):
             return 1_800_000_000.0 + float(path.name.rsplit("r", 1)[1])
 
         def fields(metadata):

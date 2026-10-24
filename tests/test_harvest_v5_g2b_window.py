@@ -585,7 +585,7 @@ class FoldedL10Tests(unittest.TestCase):
                            "--archive-root", str(self.dest), "--scratch-root", str(self.base / "scratch")])
         self.assertEqual(code, 3)
         self.assertEqual(output.getvalue(), "")
-        self.assertEqual(errors.getvalue(), "restore_refused: compressed run requires compression.jsonl\n")
+        self.assertEqual(errors.getvalue(), "refused: restore_refused: compressed run requires compression.jsonl\n")
 
     def test_compressed_finalizer_preserves_floor_and_tree_immutability_checks(self):
         from joulewise import desk_restore
