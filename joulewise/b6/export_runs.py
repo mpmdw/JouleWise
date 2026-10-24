@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import os
 import tempfile
 from collections import defaultdict
@@ -28,6 +29,8 @@ ENERGIES = tuple("phase_" + phase + "_j" for phase in PHASES) + (
     "idle_power_w", "idle_variance_of_mean_w2",
 )
 REFERENCE_KEY = "neg8_reference"
+REFERENCE_REQUEST_COLUMNS = ("reference_request_gross_j", "reference_request_idle_subtracted_j",
+                             "reference_request_duration_s")
 COLUMNS = (
     "pack_id", "session_id", "attempt", "run_id", "stage_id", "role", "order_index",
     "cell_ids", "strata", "unit_ids", "abba_block_id", "abba_label", "config_key",
@@ -92,6 +95,54 @@ def _event_fields(events: list[dict]) -> dict:
     return result
 
 
+def _reference_request_fields(bundle, events, summary, record, archive_root, *, physics_cache=None):
+    """Clock-free reference integrals on tokenize start through decode end.
+
+    Use the reducer's native reconstructed curve, rather than a sum of phase
+    energies: gaps between phases are part of the request too.
+    """
+    from joulewise.bundle_read import BundleReader, BundleReadError
+    from joulewise.desk_restore import readable_run
+    from joulewise.reduce import (REDUCER_VERSION, _derive_anchor_context,
+                                  _assert_trace_matches_raw, _integrate)
+    starts = [e["timestamp_s"] for e in events
+              if e.get("phase") == "tokenize" and e.get("event_type") == "phase_start"]
+    ends = [e["timestamp_s"] for e in events
+            if e.get("phase") == "decode" and e.get("event_type") == "phase_end"]
+    if bundle is None or len(starts) != 1 or len(ends) != 1:
+        return {}
+    start, end = starts[0], ends[0]
+    if any(type(v) not in (int, float) or not math.isfinite(v) for v in (start, end)) or end <= start:
+        return {}
+    try:
+        journal = Path(str(archive_root) + ".desk") / "compression.jsonl"
+        with readable_run(bundle, compression_records=journal) as plain:
+            reader = BundleReader(plain)
+            curve = reader.summed_curve()
+            bound = (record.get("calibration") or {}).get("operative_bound_s")
+            version = (summary.get("summary_provenance") or {}).get("reducer_version", REDUCER_VERSION)
+            context = _derive_anchor_context(reader, reader.metadata(), reducer_version=version,
+                authenticated_fiducial_bound_override_s=float(bound) if bound is not None else None,
+                instrument_calibration_physics_cache=physics_cache)
+            if context.telemetry_is_powermetrics:
+                if context.unresolved or context.curve is None:
+                    return {}
+                _assert_trace_matches_raw(curve, context.curve)
+                curve = context.curve
+            if not curve:
+                return {}
+            gross = _integrate(curve, start, end)
+        idle = (summary.get("idle_baseline") or {}).get("power_w_mean")
+        if type(idle) not in (int, float) or not math.isfinite(idle):
+            return {}
+        return dict(zip(REFERENCE_REQUEST_COLUMNS, (gross, gross - idle * (end - start), end - start)))
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, BundleReadError):
+        # A reference without a usable request record cannot supply NEG-8.
+        # Keep the row and its existing status; the BYTES reader records the
+        # missing reference input rather than manufacturing an energy value.
+        return {}
+
+
 def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str,
            pack_records_root: Path | str, export_dir: Path | str, *, non_claim: bool = False,
            evidence=None, acceptance_record: Mapping | None = None,
@@ -146,6 +197,10 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     # and omit that bit. This lets _released_rows remain unchanged.
     columns = (tuple(c for c in COLUMNS if c not in ("run_start_utc", "non_claim")) + ("pass_id",)
                if grouped_blind else COLUMNS)
+    bytes_request = group == "bytes" or pack_id == "bytes" or pack_id.startswith("bytes-")
+    if bytes_request:
+        columns += REFERENCE_REQUEST_COLUMNS
+    reference_physics_cache = {}
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
@@ -169,7 +224,8 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                "exclusion_codes": ";".join(sorted(excluded[run_id])),
                "flag_codes": ";".join(sorted(codes[run_id])), "non_claim": non_claim}
         summary = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"), {})
-        row.update(_event_fields(_events(bundle)))
+        events = _events(bundle)
+        row.update(_event_fields(events))
         row["run_start_utc"] = row.get("run_start_utc") or summary.get("started_at")
         row.update({key: summary.get(key) for key in ("ttft_s", "decode_latency_s")})
         idle = summary.get("idle_baseline") or {}
@@ -187,6 +243,9 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                         for term in BOUND_TERMS})
             row["idle_power_w"] = idle.get("power_w_mean")
             row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
+            if bytes_request and key == REFERENCE_KEY:
+                row.update(_reference_request_fields(bundle, events, summary, record, root,
+                                                     physics_cache=reference_physics_cache))
         if not non_claim or grouped_blind:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
             key_names.update(("pack.json", blinding._config_filename(key)))

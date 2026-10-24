@@ -60,7 +60,7 @@ def module_estimate(model_id, number, repo_root):
 
 # Registration section 13: the pass-one twin agrees at Addendum 8's bar at
 # this joulewise/bytes_analysis.py SHA-256. Pass-two versions remain null.
-AGREED_ESTIMATOR_VERSION = "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
+AGREED_ESTIMATOR_VERSION = "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
 ESTIMATORS = [{"name": name, "library": "joulewise.bytes_analysis", "function": function, "version": None}
               for name, function in (("bytes_phase_cells", "reduce_models"),
                                      ("bytes_frozen_predictions", "frozen_predictions"),

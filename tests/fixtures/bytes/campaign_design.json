@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "notice": "Pilot-scale regressors; 8-bit row is invented. Not an R4 manifest or measurement.",
+  "notice": "Registered section 4 predictors; synthetic energies and durations. No measurement.",
   "models": [
     {
       "model": "Llama-3.3-70B-Instruct-4bit",
@@ -9,7 +9,7 @@
       "tier": false,
       "W_bytes": 39097356800.0,
       "KV_bytes": 754974720.0,
-      "R_bytes": 39688355840.0,
+      "R_bytes": 39688355840,
       "cell_ids": [
         "Llama-3.3-70B-Instruct-4bit-decode"
       ],
@@ -22,7 +22,7 @@
       "tier": true,
       "W_bytes": 7870210880.0,
       "KV_bytes": 377487360.0,
-      "R_bytes": 8307783680.0,
+      "R_bytes": 8307783680,
       "cell_ids": [
         "Qwen3-14B-4bit-decode"
       ],
@@ -34,8 +34,8 @@
       "moe": true,
       "tier": true,
       "W_bytes": 1711355008.0,
-      "KV_bytes": 226492415.99999997,
-      "R_bytes": 17174622207.999998,
+      "KV_bytes": 226492416.0,
+      "R_bytes": 17174622208,
       "cell_ids": [
         "Qwen3-30B-A3B-4bit-decode"
       ],
@@ -47,8 +47,8 @@
       "moe": false,
       "tier": true,
       "W_bytes": 17992094528.0,
-      "KV_bytes": 603979776.0000001,
-      "R_bytes": 18429667328.0,
+      "KV_bytes": 603979776.0,
+      "R_bytes": 18429667328,
       "cell_ids": [
         "Qwen3-32B-4bit-decode"
       ],
@@ -61,7 +61,7 @@
       "tier": true,
       "W_bytes": 2262921632.0,
       "KV_bytes": 339738624.0,
-      "R_bytes": 2262920192.0,
+      "R_bytes": 2262920192,
       "cell_ids": [
         "Qwen3-4B-4bit-decode"
       ],
@@ -72,9 +72,9 @@
       "role": "fit",
       "moe": false,
       "tier": true,
-      "W_bytes": 4257673471.9999995,
+      "W_bytes": 4257673472.0,
       "KV_bytes": 339738624.0,
-      "R_bytes": 4607731712.0,
+      "R_bytes": 4607731712,
       "cell_ids": [
         "Qwen3-8B-4bit-decode"
       ],
@@ -86,8 +86,8 @@
       "moe": true,
       "tier": false,
       "W_bytes": 2031833728.0,
-      "KV_bytes": 126163353.60000002,
-      "R_bytes": 44844060160.0,
+      "KV_bytes": 133890048.0,
+      "R_bytes": 44844060160,
       "cell_ids": [
         "Qwen3-Next-80B-A3B-Instruct-4bit-decode"
       ],
@@ -99,8 +99,8 @@
       "moe": true,
       "tier": false,
       "W_bytes": 5070253248.0,
-      "KV_bytes": 194907340.79999998,
-      "R_bytes": 68690732544.0,
+      "KV_bytes": 210272256.0,
+      "R_bytes": 68690732544,
       "cell_ids": [
         "Qwen3.5-122B-A10B-4bit-decode"
       ],
@@ -112,8 +112,8 @@
       "moe": false,
       "tier": true,
       "W_bytes": 968002688.0,
-      "KV_bytes": 264241152.00000003,
-      "R_bytes": 968001536.0,
+      "KV_bytes": 264241152.0,
+      "R_bytes": 968001536,
       "cell_ids": [
         "Qwen3-1.7B-4bit-decode"
       ],
@@ -124,9 +124,9 @@
       "role": "heldout",
       "moe": false,
       "tier": false,
-      "W_bytes": 8500000000.0,
-      "KV_bytes": 340000000.0,
-      "R_bytes": 9200000000.0,
+      "W_bytes": 8041724160.0,
+      "KV_bytes": 339738624.0,
+      "R_bytes": 8702945280,
       "cell_ids": [
         "Qwen3-8B-8bit-decode"
       ],
@@ -288,7 +288,11 @@
     "derivation": "Synthetic D3 stress: 0.01 J rails endpoint drift versus 1 J DC-minus-rails drift (the approximate per-run attribution limit); checked against 0.10 B in every cell, not a measured spread."
   },
   "battery_assist": {
-    "models": ["Llama-3.3-70B-Instruct-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit", "Qwen3.5-122B-A10B-4bit"],
+    "models": [
+      "Llama-3.3-70B-Instruct-4bit",
+      "Qwen3-Next-80B-A3B-Instruct-4bit",
+      "Qwen3.5-122B-A10B-4bit"
+    ],
     "current_ma": -1000,
     "voltage_mv": 12774,
     "publication_phase_ns": 370000000,
@@ -297,7 +301,12 @@
       "duration_s": 1.0,
       "derivation": "100 mA * 12774 mV / 1e6 * 1 s = 1.2774 J, above BAT-2's approximately 1 J attribution scale; below harvest's 200 mA charging exclusion, so the signed run stays in the primary cell and carries no battery.assist."
     },
-    "episodes": ["inside_decode", "across_start", "across_end", "prefill_only"],
+    "episodes": [
+      "inside_decode",
+      "across_start",
+      "across_end",
+      "prefill_only"
+    ],
     "derivation": "12.774 W for 0.8 to 1 s supplies at least 10.2192 J, above BAT-2's approximately 1 J attribution limit. The assisted fixture polls every 0.2 s, as production does. The no-assist fixture retains the original meter batches and random draws for exact output identity."
   },
   "main_campaign": {

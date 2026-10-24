@@ -87,6 +87,33 @@ class ExportTests(unittest.TestCase):
         with result.csv_path.open() as stream:
             return list(csv.DictReader(stream))
 
+    def test_bytes_reference_request_columns_integrate_interphase_gaps_and_unblind(self):
+        for run in ("ref", "corpus"):
+            bundle = self.archive / "sources/claim-runs" / run
+            write_json(bundle / "metadata.json", {"device": {"telemetry": "mock", "rail_manifest": ["mock"]}})
+            (bundle / "power_trace.csv").write_text(
+                "timestamp_s,power_w,rail,source\n" +
+                "".join(f"{i},10,mock,mock\n" for i in range(21)))
+        result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        from joulewise.bytes_analysis import _released_rows
+        released = _released_rows(self.rows(result), self.root / "packs/bytes/blinding", blinded=False)
+        references = [r for r in released if r["role"] in ("start", "corpus")]
+        self.assertEqual(len(references), 2)
+        for row in references:
+            # Four 2 s phases span 14 s, with three 2 s gaps. The old summary
+            # columns remain the reducer's sampling-window values.
+            self.assertAlmostEqual(row["gross_energy_j"], 40)
+            self.assertAlmostEqual(row["reference_request_gross_j"], 140)
+            self.assertAlmostEqual(row["reference_request_idle_subtracted_j"], 98)
+            self.assertEqual(float(row["reference_request_duration_s"]), 14)
+
+    def test_bytes_reference_without_a_request_curve_has_no_fabricated_value(self):
+        result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        references = [r for r in self.rows(result) if r["role"] in ("start", "corpus")]
+        self.assertEqual(len(references), 2)
+        for row in references:
+            self.assertTrue(all(row[key] == "" for key in export_runs.REFERENCE_REQUEST_COLUMNS))
+
     def test_replication_csv_and_sidecar_bytes_equal_verified_base(self):
         # Bit identity is the registered property for alpha/beta/gamma. Execute
         # B1's actual exporter against the same fixture and stored factors.

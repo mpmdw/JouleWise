@@ -30,19 +30,19 @@
       "function": "reduce_models",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_phase_cells",
-      "version": "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
+      "version": "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
     },
     {
       "function": "frozen_predictions",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_frozen_predictions",
-      "version": "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
+      "version": "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
     },
     {
       "function": "evaluate",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_held_out_evaluation",
-      "version": "94e9c9f86297bad4883ba0347be3d9feb05f847ce4f22dce41cd944ee800b56b"
+      "version": "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
