@@ -29,3 +29,11 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    Lead outside the sandbox: tests/hazards 316 OK, after updating one expectation (10c9cf70b: a failed frequency read no longer makes the dwell unmeasured). Registration text applied in fcc0ac921, including the stale-sentence and edge-count fixes; repin and plan-tree checks pass.
 14. **Round-2 cold delta passes** (Fable and Opus, blind, executing, local; worktrees jw-wt/cold416b-*, hard stop at 110 min): launched 14:1x on 2ed536739..fcc0ac921. The full analysis module is running locally in two shards; CI runs on fcc0ac921.
 15. **Round-2 cold passes: both ADMIT-WITH-CORRECTIONS** (Fable, Opus; about 25 min each). Opus's blocker is the same reference-drop class again. Structural ruling instead of a consult: default-stop with positively established absences (see DISPOSITIONS-416.md, round 2). FIX-416-D (Sol 6.1 xhigh, own worktree jw-wt/fix416d, branch fix/2026-10-24-416-d from fcc0ac921, `~/night-archive/seats-7209/fix416d/`) launched 14:5x. Local analysis shards on fcc0ac921's code: 'rest' (all classes but word rates) OK; selected b6, G10, plan-tree, identity, twin and parser modules OK; word rates running.
+16. **FIX-416-D done** (d6500b81c, merged into integrate/2026-10-24-416). Storage classes that used to flag now stop with path and cause (28/28). The two registered absences still flag (5/5). 25 real archives replay with 0 stops and identical reference columns. The estimator is unchanged. Full local analysis module on the pre-D tree: OK (both shards).
+17. **CI on fcc0ac921 (PR #579) found real gaps:**
+   - the output coverage map lacked FIX-416-C's dropped-reference fields;
+   - the H-session test fixtures relied on the old unresolved-registration path;
+   - the concurrent blinding test failed on Linux (a spawn child reopening `<stdin>`; harness only);
+   - review rows (expected).
+
+   Locally, FIX-416-D's new stop sites were missing from the refusal registry. FIX-416-E (Sol 6.1 high) fixed the fixtures, the blinding test and the registry. The exact comparison of dropped-reference reasons showed that the twin words them differently. Lead ruling: reasons are registered codes, and the twin prints the analysis's code vocabulary; scripts/bytes_twin.py granted, bytes_analysis.py not (no re-bind). Round 2 is running.
