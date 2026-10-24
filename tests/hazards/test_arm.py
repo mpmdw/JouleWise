@@ -272,7 +272,9 @@ class ArmTests(unittest.TestCase):
                     base.Verdict("battery", base.PASS, (), {})]
         self.assertEqual(arm._refusals(verdicts), ["instrument UNMEASURED: powermetrics did not start"])
         phases = {"battery": ["instant", "final"], "thermal": ["instant", "final"], "disk": ["instant"],
-                  "clock": ["instant", "dwell_and_go"], "contention": ["dwell"]}
+                  # A failed frequency-word read leaves the dwell judged from its
+                  # anchors (#416 FIX-416-C: the word is diagnostic only).
+                  "clock": ["instant"], "contention": ["dwell"]}
         for module in ("battery", "thermal", "disk", "clock", "contention"):
             with self.subTest(module=module):
                 rig = Rig(Path(tempfile.mkdtemp(dir=self.tmp.name)))
