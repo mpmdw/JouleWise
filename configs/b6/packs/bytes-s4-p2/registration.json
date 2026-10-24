@@ -46,7 +46,7 @@
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
-  "flag_catalog_sha256": "3195da19c91ddab7047c117924529bc92ab4d7b80563cadaf1be7303323fd9c2",
+  "flag_catalog_sha256": "36971fe0ce0e9bd6b55fc496d10cdf223bdc8e8f4ac3178011226b64c6e854ae",
   "flag_effects": {
     "agent.capture_overlap": "DISCLOSE",
     "agent.pause_marker_stale": "DISCLOSE",
@@ -73,6 +73,7 @@
     "bytes.meter_decode_unavailable": "DISCLOSE",
     "bytes.meter_gap": "DISCLOSE",
     "bytes.module_changed_after_commitment": "DISCLOSE",
+    "bytes.reference_request_unavailable": "DISCLOSE",
     "bytes.withheld_missing": "DISCLOSE",
     "calibration.acceptance_mismatch": "DISCLOSE",
     "calibration.acceptance_preflight_unverified": "DISCLOSE",

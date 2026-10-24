@@ -133,6 +133,23 @@ class DwellResidualTests(unittest.TestCase):
         self.assertTrue(any('measured rate gate' in r for r in verdict.reasons))
         self.assertGreater(verdict.observed['measured_rate_gate']['rate_ppm'], 99)
 
+    def test_missing_frequency_never_hides_a_measured_rate_hazard(self):
+        def absent():
+            raise OSError("frequency unavailable")
+        for reader in (absent, lambda: frequency_probe(0)):
+            measured = dwell(FakeClocks(drift_word=ppm_word(40)), 60, reader=reader)
+            verdict = clock.judge(measured, LIMITS)
+            self.assertEqual(verdict.status, base.REFUSE)
+            self.assertTrue(any("measured rate gate" in reason for reason in verdict.reasons))
+
+    def test_mid_dwell_step_above_one_ms_refuses_under_the_fit_residual_limit(self):
+        clocks = FakeClocks()
+        clocks.step_at(90.5, 1_100_000)
+        verdict = clock.judge(dwell(clocks, 180), LIMITS)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertLess(verdict.observed["max_abs_residual_ns"], LIMITS["residual_max_ns"])
+        self.assertTrue(any("dwell step" in reason for reason in verdict.reasons))
+
     def test_rate_bound_exact_equality_and_precheck_use_the_same_fit(self):
         from fractions import Fraction
         from joulewise.b6 import precheck
@@ -200,7 +217,7 @@ class DwellResidualTests(unittest.TestCase):
         self.assertEqual(verdict.status, base.REFUSE)
         self.assertEqual(verdict.reasons, ("anchor read skew 1000001 ns exceeds 1000000 ns",))
 
-    def test_failed_sample_makes_the_dwell_unmeasured(self):
+    def test_failed_frequency_read_keeps_the_dwell_anchors_measured(self):
         clocks = FakeClocks()
         reader = FrequencyReader(clocks)
         ctx = base.Context(run=boot_runner(), clocks=clocks)
@@ -210,7 +227,8 @@ class DwellResidualTests(unittest.TestCase):
         samples.append(clock.sample(ctx, frequency_reader=reader))
         series = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID, started=started,
                               finished=ctx.stamp())
-        self.assertEqual(clock.judge(series, LIMITS).status, base.UNMEASURED)
+        self.assertEqual(clock.judge(series, LIMITS).status, base.PASS)
+        self.assertTrue(clock.judge(series, LIMITS).observed["frequency_word_absent"])
 
     def test_residual_arithmetic_is_exact(self):
         first = {"anchor_ns": 0, "monotonic_raw_ns": 0}

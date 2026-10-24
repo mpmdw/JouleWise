@@ -76,8 +76,8 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "frequency_margin_ppm": 0.25,
     "limit_ms": 5.0,
     "skew_max_ns": 1_000_000,
-    "residual_max_ns": 1_000_000,   # dwell linearity, +-1 ms of the start value
-    "step_ns": 1_000_000,           # in-window step between consecutive samples
+    "residual_max_ns": 1_000_000,   # dwell linearity, +-1 ms from the fitted line
+    "step_ns": 1_000_000,           # step between consecutive residuals / window samples
 }
 THRESHOLD_KEYS = tuple(DEFAULT_THRESHOLDS)
 
@@ -229,9 +229,9 @@ def measure(ctx: Context, *, frequency_reader: FrequencyReader = read_frequency,
 
 def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
            boot_end: str | None, started: Stamp, finished: Stamp) -> Measurement:
-    """A dwell series (1 Hz samples, f at least at start and end) as one Measurement."""
+    """A dwell anchor series with optional diagnostic frequency words."""
 
-    errors = [item["error"] for item in samples if item.get("error")]
+    errors = [item["error"] for item in samples if item.get("error") and not item.get("anchor")]
     error = None
     if errors:
         error = f"{len(errors)} sample(s) failed; first: {errors[0]}"
@@ -341,16 +341,13 @@ def _judge_instant(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verd
 
 def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdict:
     samples = list(values.get("samples") or [])
-    if len(samples) < 2 or samples[0].get("frequency") is None:
-        return Verdict(MODULE, UNMEASURED,
-                       ("dwell series needs >= 2 samples and f at its start",), limits)
-    if samples[-1].get("frequency") is None:
-        return Verdict(MODULE, UNMEASURED, ("dwell series has no f at its end",), limits)
+    if len(samples) < 2:
+        return Verdict(MODULE, UNMEASURED, ("dwell series needs >= 2 samples",), limits)
     reasons = []
     if values.get("boot_session_uuid_start") != values.get("boot_session_uuid_end"):
         reasons.append("boot session changed during the dwell")
     words = [item["frequency"]["raw_word"] for item in samples if item.get("frequency")]
-    f0 = words[0]
+    f0 = words[0] if words else None
     try:
         rate, residuals = fit_anchor_rate([item["anchor"] for item in samples])
     except (KeyError, TypeError, ValueError) as exc:
@@ -367,8 +364,12 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
     if abs(worst) > limits["residual_max_ns"]:
         reasons.append(f"dwell residual {float(worst) / 1e6:+.4f} ms exceeds "
                        f"+-{limits['residual_max_ns'] / 1e6} ms from the fitted line")
+    step = max(abs(b - a) for a, b in zip(residuals, residuals[1:]))
+    if step > limits["step_ns"]:
+        reasons.append(f"dwell step {float(step) / 1e6:.4f} ms exceeds {limits['step_ns'] / 1e6} ms")
     raw_span = samples[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
-    observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits),
+    observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits) if f0 is not None else None,
+                "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step),
                 "frequency_words": words, "frequency_word_changed": len(set(words)) > 1,
                 "samples": len(samples), "raw_span_ns": raw_span,
                 "flags": rate_flags(gate) + ([{"code": "clock.frequency_changed"}]

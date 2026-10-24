@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import secrets
 import time
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -42,18 +44,44 @@ def bind_session_keys(directory: Path, session_id: str, names: set[str]) -> dict
                for name in sorted(names)}
     target = directory.parent / "blinding-sessions" / (session_id + ".json")
     target.parent.mkdir(parents=True, exist_ok=True)
-    document = {"session_id": session_id, "key_sha256": digests}
-    try:
-        fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        if json.loads(target.read_bytes()) != document:
-            raise ValueError(f"blinding session key bytes changed: {target}") from None
-    else:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(document, stream, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+    # Serialize read/merge/publish, while readers see only complete JSON files.
+    with target.with_suffix(".lock").open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            previous = json.loads(target.read_bytes())
+            if previous["session_id"] != session_id or not isinstance(previous["key_sha256"], dict):
+                raise ValueError("invalid session binding")
+            stored = previous["key_sha256"]
+        except FileNotFoundError:
+            stored = None
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ValueError(f"blinding session binding unreadable: {target}: {exc}") from exc
+        if stored is not None:
+            if any(name in stored and stored[name] != digest for name, digest in digests.items()):
+                raise ValueError(f"blinding session key bytes changed: {target}")
+            digests = {**stored, **digests}
+            if digests == stored:
+                return digests
+        document = {"session_id": session_id, "key_sha256": digests}
+        fd, temporary = tempfile.mkstemp(prefix="." + target.name + ".", dir=target.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(document, stream, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            if stored is None:
+                # An exclusive atomic publication, equivalent to O_EXCL.
+                os.link(temporary, target)
+            else:
+                os.replace(temporary, target)
+            directory_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
     return digests
 
 

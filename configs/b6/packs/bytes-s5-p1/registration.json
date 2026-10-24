@@ -30,23 +30,23 @@
       "function": "reduce_models",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_phase_cells",
-      "version": "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
+      "version": "18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71"
     },
     {
       "function": "frozen_predictions",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_frozen_predictions",
-      "version": "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
+      "version": "18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71"
     },
     {
       "function": "evaluate",
       "library": "joulewise.bytes_analysis",
       "name": "bytes_held_out_evaluation",
-      "version": "76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a"
+      "version": "18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71"
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
-  "flag_catalog_sha256": "3195da19c91ddab7047c117924529bc92ab4d7b80563cadaf1be7303323fd9c2",
+  "flag_catalog_sha256": "36971fe0ce0e9bd6b55fc496d10cdf223bdc8e8f4ac3178011226b64c6e854ae",
   "flag_effects": {
     "agent.capture_overlap": "DISCLOSE",
     "agent.pause_marker_stale": "DISCLOSE",
@@ -73,6 +73,7 @@
     "bytes.meter_decode_unavailable": "DISCLOSE",
     "bytes.meter_gap": "DISCLOSE",
     "bytes.module_changed_after_commitment": "DISCLOSE",
+    "bytes.reference_request_unavailable": "DISCLOSE",
     "bytes.withheld_missing": "DISCLOSE",
     "calibration.acceptance_mismatch": "DISCLOSE",
     "calibration.acceptance_preflight_unverified": "DISCLOSE",

@@ -34,7 +34,9 @@ def archive_fixture(root):
         members.append({"run_id": run, "stage_id": stage, "role": role,
                         "units": [{"cell_id": "cell", "stratum": "repeat", "unit_id": run}]})
         bundle = archive / "sources/claim-runs" / run
-        write_json(bundle / "metadata.json", {})
+        write_json(bundle / "metadata.json", {"device": {"telemetry": "mock", "rail_manifest": ["mock"]}})
+        (bundle / "power_trace.csv").write_text("timestamp_s,power_w,rail,source\n" +
+            "".join(f"{i},10,mock,mock\n" for i in range(21)))
         write_json(bundle / "status.json", {"status": {"state": status}})
         tags = ["df-condition=" + condition]
         if run.startswith("q"):
@@ -107,12 +109,57 @@ class ExportTests(unittest.TestCase):
             self.assertAlmostEqual(row["reference_request_idle_subtracted_j"], 98)
             self.assertEqual(float(row["reference_request_duration_s"]), 14)
 
-    def test_bytes_reference_without_a_request_curve_has_no_fabricated_value(self):
+    def test_bytes_reference_without_request_inputs_is_disclosed(self):
+        for run in ("ref", "corpus"):
+            path = self.archive / "withheld/reductions" / (run + ".summary_metrics.rereduced.json")
+            doc = json.loads(path.read_bytes())
+            doc.pop("idle_baseline")
+            write_json(path, doc)
         result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
         references = [r for r in self.rows(result) if r["role"] in ("start", "corpus")]
         self.assertEqual(len(references), 2)
         for row in references:
             self.assertTrue(all(row[key] == "" for key in export_runs.REFERENCE_REQUEST_COLUMNS))
+            self.assertIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+        self.assertEqual(json.loads(result.sidecar_path.read_bytes())["flag_counts"][export_runs.REFERENCE_UNAVAILABLE], 2)
+
+    def test_reference_storage_and_parse_errors_stop_export_with_cause(self):
+        from joulewise.desk_restore import StorageStop
+        bundle = self.archive / "sources/claim-runs/ref"
+        trace = bundle / "power_trace.csv"
+        trace.write_text("timestamp_s,power_w,rail,source\nnot,a,number,x\n")
+        with self.assertRaisesRegex(StorageStop, "reference request.*ref"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        trace.unlink()
+        with self.assertRaisesRegex(StorageStop, "power_trace.csv"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        summary = self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json"
+        summary.write_text("bad summary bytes")
+        with self.assertRaisesRegex(StorageStop, "reference bytes.*summary_metrics"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_harvest_prints_every_export_value_error_cause(self):
+        from scripts import harvest_b6_session as program
+        from types import SimpleNamespace
+        args = ["--plan", str(self.root / "plan.json"), "--archive-root", str(self.archive),
+                "--registration-dir", str(self.reg), "--pack-records-root", str(self.root / "packs"),
+                "--export-dir", str(self.root / "out")]
+        for cause in ("blinding session binding unreadable: custody.json", "pack registration unresolved: diagnostic"):
+            stderr = io.StringIO()
+            with patch.object(program, "resolve_inputs"), patch.object(program, "harvest", return_value={}), \
+                 patch.object(program, "accept_archive", return_value=(SimpleNamespace(record=self.record), None)), \
+                 patch.object(program, "export", side_effect=ValueError(cause)), contextlib.redirect_stderr(stderr):
+                self.assertEqual(program.main(args), 5)
+            self.assertIn(cause, stderr.getvalue())
+
+    def test_reference_missing_markers_are_disclosed(self):
+        bundle = self.archive / "sources/claim-runs/ref"
+        events = bundle / "events.jsonl"
+        events.write_text("\n".join(line for line in events.read_text().splitlines() if 'tokenize' not in line))
+        result = self.export(pack_registration={"blinding_group": "bytes"})
+        row = next(r for r in self.rows(result) if r["run_id"] == "ref")
+        self.assertIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+        self.assertEqual(row["reference_request_duration_s"], "")
 
     def test_replication_csv_and_sidecar_bytes_equal_verified_base(self):
         # Bit identity is the registered property for alpha/beta/gamma. Execute

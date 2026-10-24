@@ -837,18 +837,29 @@ def neg8_inputs(rows, *, streams=(), spans=None, test7_passed=False, blinded=Fal
     DC/rest whole-request references use the authorized meter join.
     """
     from joulewise.whole_window import neg8_count_adjusted_bound
-    kept = [r for r in rows if r["role"] in REFERENCE_ROLES and r.get("config_key") == "neg8_reference"
-            and r.get("status") == "succeeded"
-            and str(r.get("excluded", "")).lower() != "true"]
-    values = []
-    for row in kept:
+    values, dropped = [], []
+    for row in rows:
+        if row["role"] not in REFERENCE_ROLES:
+            continue
+        reason = None
+        if row.get("config_key") != "neg8_reference":
+            reason = "configuration is not neg8_reference"
+        elif row.get("status") != "succeeded":
+            reason = "status: " + str(row.get("status"))
+        elif str(row.get("excluded", "")).lower() == "true":
+            reason = "excluded: " + str(row.get("exclusion_codes") or "harvest exclusion")
+        elif "bytes.reference_request_unavailable" in str(row.get("flag_codes", "")).split(";"):
+            reason = "bytes.reference_request_unavailable"
+        if reason is not None:
+            dropped.append({"run_id": row["run_id"], "role": row["role"], "reason": reason})
+            continue
         try:
             gross = number(float(row["reference_request_gross_j"]), "NEG-8 request gross")
             secondary = number(float(row["reference_request_idle_subtracted_j"]), "NEG-8 request secondary")
             duration = float(row["reference_request_duration_s"])
             number(duration, "NEG-8 whole-request duration", positive=True)
-        except (ValueError, TypeError, KeyError):
-            continue
+        except (ValueError, TypeError, KeyError) as exc:
+            raise AnalysisError(f"NEG-8 reference {row['run_id']}: missing or invalid reference_request columns; re-export required") from exc
         item = {"run_id": row["run_id"], "role": row["role"], "duration_s": duration,
                 "rails": {"gross": gross, "idle_subtracted": secondary}}
         if not blinded and spans and row["run_id"] in spans:
@@ -858,20 +869,30 @@ def neg8_inputs(rows, *, streams=(), spans=None, test7_passed=False, blinded=Fal
             for _, stream in streams:
                 try:
                     dc = meter_decode(stream, request, idle)
-                except MeterGapError:
+                except MeterGapError as exc:
+                    item["meter_unavailable_reason"] = str(exc)
                     item["flags"] = ["bytes.meter_gap"]
                     continue
-                except AnalysisError:
+                except AnalysisError as exc:
+                    item["meter_unavailable_reason"] = str(exc)
                     continue
                 item["DC input"] = {"gross": dc["gross_j"], "idle_subtracted": dc["secondary_j"]}
                 item["rest"] = {family: item["DC input"][family] - item["rails"][family]
                                 for family in ("gross", "idle_subtracted")}
                 item.pop("flags", None)
+                item.pop("meter_unavailable_reason", None)
                 break
         values.append(item)
-    result = {"test7_passed": test7_passed, "references": values, "boundaries": {}}
+    result = {"test7_passed": test7_passed, "references": values, "boundaries": {},
+              "dropped_references": dropped, "dropped_reference_count": len(dropped),
+              "boundary_reference_drops": {}}
     for boundary in (("rails",) if blinded else BOUNDARIES):
         available = [r for r in values if boundary in r]
+        boundary_drops = dropped + [{"run_id": r["run_id"], "role": r["role"],
+            "reason": r.get("meter_unavailable_reason", "meter request unavailable")}
+            for r in values if boundary not in r]
+        result["boundary_reference_drops"][boundary] = {
+            "dropped_references": boundary_drops, "dropped_reference_count": len(boundary_drops)}
         slots = {slot: [r for r in available if r["role"] == slot] for slot in REFERENCE_ROLES}
         # B6's registered corpus minimum/cap and survivor endpoint minimum.
         corpus = slots["corpus"][:12]

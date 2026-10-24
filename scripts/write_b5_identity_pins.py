@@ -604,6 +604,7 @@ def issue_bytes_stacks(repo_root: Path, observation: Path, reference_roots: Sequ
     Uses the same eleven-field builder and domain hash as the block-5 issuer.
     No imports of MLX, model loads, runtime execution, or weight writes.
     """
+    reference_roots = [Path(root).resolve() for root in reference_roots]
     observed_raw = observation.read_bytes()
     observed = json.loads(observed_raw[observed_raw.index(b"{"):])
     versions = observed["runtime_versions"]
@@ -620,7 +621,14 @@ def issue_bytes_stacks(repo_root: Path, observation: Path, reference_roots: Sequ
         _require(bool(matching), f"no observed runtime bundle for {name}")
         stacks = {stack_identity_sha256(r.stack): r.stack for r in matching}
         _require(len(stacks) == 1, f"observed stacks disagree for {name}")
-        digest, stack = next(iter(stacks.items()))
+        observed_digest, observed_stack = next(iter(stacks.items()))
+        stack = copy.deepcopy(observed_stack)
+        # The registered snapshot and verified tokenizer files supply the
+        # revision omitted from this model's old prepare metadata.
+        if name == "qwen3-8b-8bit" and stack["tokenizer_identity"].get("revision") is None:
+            stack["tokenizer_identity"]["revision"] = unit["model_revision"]
+            unit["tokenizer_revision_source"] = "model_revision; verified pinned tokenizer/config files"
+        digest = stack_identity_sha256(stack)
         pin = consumed["units"][name]
         _require(stack["model_artifact_sha256"] == unit["model_artifact_sha256"],
                  f"observed weights differ for {name}")
@@ -649,7 +657,7 @@ def issue_bytes_stacks(repo_root: Path, observation: Path, reference_roots: Sequ
         pin.update(stack_identity=copy.deepcopy(stack), runtime_identity_sha256=digest)
         pin["bytes_file_evidence"]["runtime_stack_observed"] = True
         evidence[name] = [{"path": str(r.path), "metadata_sha256": sha256_bytes(
-            (r.path / "metadata.json").read_bytes()), "runtime_identity_sha256": digest}
+            (r.path / "metadata.json").read_bytes()), "runtime_identity_sha256": observed_digest}
             for r in sorted(matching, key=lambda r: str(r.path))]
     source.update(status="C4_OBSERVED_STACK_IDENTITIES", runtime_versions=versions,
                   scope="C4 model files and observed runtime stacks for the twelve BYTES sub-packs")
@@ -659,6 +667,7 @@ def issue_bytes_stacks(repo_root: Path, observation: Path, reference_roots: Sequ
     issuer = {"path": "scripts/write_b5_identity_pins.py",
               "sha256": sha256_bytes(Path(__file__).read_bytes())}
     source["derivation"]["stack_issuer"] = issuer
+    source["derivation"]["stack_reference_roots"] = [str(Path(root).resolve()) for root in reference_roots]
     source["derivation"]["stack_identity"] = (
         "scripts/write_b5_identity_pins.py --bytes-observed; build_stack_identity and stack_identity_sha256 "
         "of real H/BY-H2 metadata; checkpoint quantization and pinned tokenizer/config hashes verified")
@@ -708,9 +717,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     repo = args.repo.resolve()
     if args.bytes_observed:
-        if not args.reference_root:
-            raise ValueError("BYTES C4 needs explicit observed bundle roots")
-        print(json.dumps(issue_bytes_stacks(repo, args.bytes_observed.resolve(), args.reference_root,
+        roots = args.reference_root or json.loads((repo / "configs/bytes/identity_pins.json").read_bytes()).get(
+            "derivation", {}).get("stack_reference_roots")
+        if not roots:
+            raise ValueError("BYTES C4 needs explicit or recorded observed bundle roots")
+        print(json.dumps(issue_bytes_stacks(repo, args.bytes_observed.resolve(), [Path(root) for root in roots],
                                            check=args.check), sort_keys=True))
         return 0
     packs = [repo / relative for relative in (args.pack or DEFAULT_PACKS)]

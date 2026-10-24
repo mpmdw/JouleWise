@@ -31,7 +31,8 @@ def _run_identity(metadata: Mapping) -> dict[str, Any]:
     if "model_artifact_sha256" in metadata:
         identity = {key: metadata[key] for key in
                     ("model_source", "model_artifact_sha256", "status", "packages", "quantization", "runtime",
-                     "runtime_version", "kernel_library", "tokenizer") if key in metadata}
+                     "runtime_version", "kernel_library", "tokenizer", "sampler_output_policy",
+                     "os_version", "hardware_unit", "telemetry_backend") if key in metadata}
         if identity.get("tokenizer"):
             identity["tokenizer"] = _tokenizer(identity["tokenizer"])
         return identity
@@ -54,6 +55,15 @@ def _run_identity(metadata: Mapping) -> dict[str, Any]:
         "runtime_version": prepare.get("version") or prepare.get("mlx_version") or prepare.get("mlx_lm_version"),
         "kernel_library": prepare.get("kernel_library"),
         "tokenizer": _tokenizer((metadata.get("workload_provenance") or {}).get("tokenizer") or {}),
+        "sampler_output_policy": {
+            "sampler": (metadata.get("workload_provenance") or {}).get("sampler"),
+            "output_policy": {key: ((metadata.get("workload_provenance") or {}).get("output_policy") or {}).get(key)
+                              for key in ("name", "requested_tokens", "stop_condition")}} if (metadata.get("workload_provenance") or {}).get("sampler") is not None else None,
+        "os_version": metadata.get("platform"),
+        "hardware_unit": {key: value for key, value in {
+            "device": (metadata.get("device") or {}).get("device"),
+            "machine": metadata.get("machine")}.items() if value is not None},
+        "telemetry_backend": ((metadata.get("adapters") or {}).get("telemetry") or {}).get("name"),
     }.items():
         if value is not None and value != {}:
             identity[key] = value
@@ -74,7 +84,9 @@ def expected(identity_pins: Mapping) -> dict[str, Any]:
                   "runtime_version": (stack.get("runtime_version") or {}).get("version"),
                   "kernel_library": stack.get("kernel_library"),
                   "tokenizer": _tokenizer(stack.get("tokenizer_identity") or {}),
-                  "quantization": stack.get("quantization"), "model_artifact_sha256": digest}
+                  "quantization": stack.get("quantization"), "model_artifact_sha256": digest,
+                  **{key: stack.get(key) for key in ("sampler_output_policy", "os_version",
+                                                   "hardware_unit", "telemetry_backend")}}
         if actual not in entry["stacks"]:
             entry["stacks"].append(actual)
     return {"models": models, "runtime_versions": {
@@ -101,6 +113,9 @@ def compare(expected: Mapping, observed: Mapping) -> list[dict]:
     if pin:
         candidate = {key: observed[key] for key in ("runtime", "runtime_version", "quantization", "kernel_library")
                      if observed.get(key) is not None and not (key == "kernel_library" and observed[key] == "unavailable")}
+        for key in ("sampler_output_policy", "os_version", "telemetry_backend"):
+            if observed.get(key) is not None:
+                candidate[key] = observed[key]
         tokenizer = _tokenizer(observed.get("tokenizer") or {})
 
         def differs(stack: Mapping) -> list[str]:
@@ -110,6 +125,9 @@ def compare(expected: Mapping, observed: Mapping) -> list[dict]:
             fields.extend("tokenizer." + key for key, value in tokenizer.items()
                           if (stack.get("tokenizer") or {}).get(key) is not None
                           and value != stack["tokenizer"][key])
+            fields.extend("hardware_unit." + key for key, value in (observed.get("hardware_unit") or {}).items()
+                          if value is not None and (stack.get("hardware_unit") or {}).get(key) is not None
+                          and value != stack["hardware_unit"][key])
             return fields
         # Prepare records sometimes name quantization only; metadata normally
         # supplies its complete registered object.

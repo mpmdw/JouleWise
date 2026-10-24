@@ -514,19 +514,34 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
     def energy(row):
         return family_energy(row, family, dc_by_run.get(row["run_id"]))
 
-    def kept(row):
-        return (row["status"] == "succeeded" and not row["excluded"]
-                and is_number(request_duration(row)) and request_duration(row) > 0
-                and is_number(row.get("reference_request_gross_j"))
-                and is_number(row.get("reference_request_idle_subtracted_j")) and energy(row) is not None)
-    by_role = {}
+    by_role, dropped = {}, []
     for row in sorted(session_rows, key=lambda r: r["order_index"]):
-        if row["role"] in ("corpus", "start", "midpoint", "end") and kept(row):
+        if row["role"] not in ("corpus", "start", "midpoint", "end"):
+            continue
+        reason = None
+        if row["status"] != "succeeded":
+            reason = "status: " + str(row["status"])
+        elif row["excluded"]:
+            reason = "excluded: " + str(row.get("exclusion_codes") or "harvest exclusion")
+        elif "bytes.reference_request_unavailable" in str(row.get("flag_codes", "")).split(";"):
+            reason = "bytes.reference_request_unavailable"
+        else:
+            if not (is_number(request_duration(row)) and request_duration(row) > 0
+                    and is_number(row.get("reference_request_gross_j"))
+                    and is_number(row.get("reference_request_idle_subtracted_j"))):
+                raise ValueError(f"NEG-8 reference {row['run_id']}: missing or invalid reference_request columns; re-export required")
+            if energy(row) is None:
+                joined = dc_by_run.get(row["run_id"], {})
+                reason = str(joined.get("reason") or joined.get("status") or "meter request unavailable")
+        if reason is not None:
+            dropped.append({"run_id": row["run_id"], "role": row["role"], "reason": reason})
+        else:
             by_role.setdefault(row["role"], []).append(row)
     corpus = by_role.get("corpus", [])[:CORPUS_CAP]
     start, mid, end = by_role.get("start", []), by_role.get("midpoint", []), by_role.get("end", [])
     record = {"family": family, "corpus_n": len(corpus), "n_start": len(start), "n_midpoint": len(mid),
               "n_end": len(end), "status": "ok",
+              "dropped_references": dropped, "dropped_reference_count": len(dropped),
               "reference_values": [{"run_id": r["run_id"], "role": r["role"], "duration_s": request_duration(r),
                                     "energy_j": energy(r)} for group in by_role.values() for r in group]}
     if len(corpus) < CORPUS_MINIMUM or len(start) < 2 or len(end) < 2:

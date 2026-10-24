@@ -19,6 +19,7 @@ from joulewise.b6.acceptance import evidence_from_archive
 from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, ordered_roster, read_json,
                                 unresolved_clock_anchor)
 from joulewise.desk_compress import read_bytes
+from joulewise.desk_restore import StorageStop
 
 PHASES = ("tokenize", "generation_setup", "prefill", "decode")
 BOUND_TERMS = ("E_clock_anchor_shift_bound", "E_drift_bound",
@@ -29,6 +30,7 @@ ENERGIES = tuple("phase_" + phase + "_j" for phase in PHASES) + (
     "idle_power_w", "idle_variance_of_mean_w2",
 )
 REFERENCE_KEY = "neg8_reference"
+REFERENCE_UNAVAILABLE = "bytes.reference_request_unavailable"
 REFERENCE_REQUEST_COLUMNS = ("reference_request_gross_j", "reference_request_idle_subtracted_j",
                              "reference_request_duration_s")
 COLUMNS = (
@@ -63,14 +65,30 @@ def atomic_write(path: Path, writer) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
-def _events(bundle: Path | None) -> list[dict]:
+def _reference_json(path: Path):
+    try:
+        return json.loads(read_bytes(path))
+    except (OSError, ValueError) as exc:
+        raise StorageStop(f"reference bytes {path}: {exc}") from exc
+
+
+def _events(bundle: Path | None, *, reference=False) -> list[dict]:
     if bundle is None:
         return []
     try:
         lines = read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines()
-    except FileNotFoundError:
-        return []
-    return [json.loads(line) for line in lines if line.strip()]
+    except (OSError, ValueError) as exc:
+        if reference:
+            raise StorageStop(f"reference events {bundle}: {exc}") from exc
+        if isinstance(exc, FileNotFoundError):
+            return []
+        raise
+    try:
+        return [json.loads(line) for line in lines if line.strip()]
+    except ValueError as exc:
+        if reference:
+            raise StorageStop(f"reference events {bundle}: {exc}") from exc
+        raise
 
 
 def _event_fields(events: list[dict]) -> dict:
@@ -130,17 +148,14 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
                 _assert_trace_matches_raw(curve, context.curve)
                 curve = context.curve
             if not curve:
-                return {}
+                raise BundleReadError("reference power_trace.csv has no usable curve")
             gross = _integrate(curve, start, end)
         idle = (summary.get("idle_baseline") or {}).get("power_w_mean")
         if type(idle) not in (int, float) or not math.isfinite(idle):
             return {}
         return dict(zip(REFERENCE_REQUEST_COLUMNS, (gross, gross - idle * (end - start), end - start)))
-    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, BundleReadError):
-        # A reference without a usable request record cannot supply NEG-8.
-        # Keep the row and its existing status; the BYTES reader records the
-        # missing reference input rather than manufacturing an energy value.
-        return {}
+    except (OSError, ValueError, BundleReadError) as exc:
+        raise StorageStop(f"reference request {bundle}: {exc}") from exc
 
 
 def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str,
@@ -223,8 +238,10 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                "status": member["status"], "excluded": bool(excluded[run_id]),
                "exclusion_codes": ";".join(sorted(excluded[run_id])),
                "flag_codes": ";".join(sorted(codes[run_id])), "non_claim": non_claim}
-        summary = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"), {})
-        events = _events(bundle)
+        reference = bytes_request and key == REFERENCE_KEY and member["status"] == "succeeded"
+        summary_path = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
+        summary = (_reference_json(summary_path) if reference and bundle else read_json(summary_path, {}))
+        events = _events(bundle, reference=reference)
         row.update(_event_fields(events))
         row["run_start_utc"] = row.get("run_start_utc") or summary.get("started_at")
         row.update({key: summary.get(key) for key in ("ttft_s", "decode_latency_s")})
@@ -244,8 +261,12 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
             row["idle_power_w"] = idle.get("power_w_mean")
             row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
             if bytes_request and key == REFERENCE_KEY:
-                row.update(_reference_request_fields(bundle, events, summary, record, root,
-                                                     physics_cache=reference_physics_cache))
+                fields = _reference_request_fields(bundle, events, summary, record, root,
+                                                   physics_cache=reference_physics_cache)
+                row.update(fields)
+                if not fields:
+                    codes[run_id].add(REFERENCE_UNAVAILABLE)
+                    row["flag_codes"] = ";".join(sorted(codes[run_id]))
         if not non_claim or grouped_blind:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
             key_names.update(("pack.json", blinding._config_filename(key)))
@@ -289,6 +310,9 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                "operative_bound_s": record.get("calibration", {}).get("operative_bound_s"),
                "neg8": record.get("neg8"), "non_claim": non_claim,
                "blinding": {"applied": not non_claim or grouped_blind, "key_dir": os.path.relpath(key_dir, destination)}}
+    unavailable = sum(REFERENCE_UNAVAILABLE in r["flag_codes"].split(";") for r in rows)
+    if unavailable:
+        session["flag_counts"] = {**(session.get("flag_counts") or {}), REFERENCE_UNAVAILABLE: unavailable}
     if grouped_blind:
         session["blinding"]["key_sha256"] = key_sha256
         session["blinding"].update(group=group, pass_id=pack_registration.get("bytes_pass"),

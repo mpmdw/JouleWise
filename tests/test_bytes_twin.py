@@ -276,6 +276,16 @@ class PhaseEstimateTests(QuantityTestCase):
 
 
 class Neg8Tests(QuantityTestCase):
+    def test_old_reference_columns_refuse_and_disclosed_drops_are_printed(self):
+        row = {"run_id": "old-reference", "role": "start", "order_index": 0,
+               "status": "succeeded", "excluded": False, "flag_codes": ""}
+        with self.assertRaisesRegex(ValueError, "old-reference.*re-export required"):
+            bt.neg8_allowance([row])
+        dropped = bt.neg8_allowance([{**row, "flag_codes": "bytes.reference_request_unavailable"}])
+        self.assertEqual(dropped["dropped_reference_count"], 1)
+        self.assertEqual(dropped["dropped_references"], [{"run_id": "old-reference", "role": "start",
+                                                        "reason": "bytes.reference_request_unavailable"}])
+
     def test_count_adjusted_bound_by_hand(self):
         bound = bt.neg8_bound([1, 2, 3, 4, 5, 6], 2, 2)
         self.assertQuantityEqual(bound["envelope_j"], 4.0)

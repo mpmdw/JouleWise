@@ -175,6 +175,13 @@
       "klass": "REPRESENTATION",
       "note": "B6 Q2: the analysis module evaluating the held-out stage differs from the module that wrote the stage-1 commitment; the second commitment prints beside the registered result as the post-agreement fix."
     },
+    "bytes.reference_request_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "BYTES section 6: the read reference bundle cannot define a whole request; print the dropped reference and reason in NEG-8 inputs."
+    },
     "bytes.withheld_missing": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

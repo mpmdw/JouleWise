@@ -48,6 +48,7 @@ def _entry(family: str, klass: str, effect: str, note: str) -> dict:
 
 
 NEW_CODES = {
+    "bytes.reference_request_unavailable": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "BYTES section 6: the read reference bundle cannot define a whole request; print the dropped reference and reason in NEG-8 inputs."),
     'bytes.meter_decode_unavailable': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'BYTES section 6: the decode meter value is unavailable; disclose the affected DC-input and rest cells.'),
     'bytes.meter_gap': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'FIX-416 disposition: a dropped device sample in a decode or reference span leaves that run without a DC-input value; rails selection is unchanged.'),
     'catalog.digest_mismatch': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'FIX-416: the running flag catalog digest differs from the pack registration; record both digests.'),

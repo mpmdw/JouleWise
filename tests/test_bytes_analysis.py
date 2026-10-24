@@ -40,6 +40,22 @@ class NumericTestCase(unittest.TestCase):
         return super().assertAlmostEqual(first, second, msg=msg, delta=delta)
 
 
+class ReferenceRequestInputTests(unittest.TestCase):
+    def test_missing_legacy_columns_refuse_and_disclosed_drops_are_printed(self):
+        row = {"run_id": "old-reference", "role": "start", "config_key": "neg8_reference",
+               "status": "succeeded", "excluded": False, "flag_codes": ""}
+        with self.assertRaisesRegex(ba.AnalysisError, "old-reference.*re-export required"):
+            ba.neg8_inputs([row])
+        disclosed = {**row, "flag_codes": "bytes.reference_request_unavailable"}
+        failed = {**row, "run_id": "failed-reference", "status": "failed"}
+        excluded = {**row, "run_id": "excluded-reference", "excluded": True, "exclusion_codes": "member.anchor_not_bounded"}
+        result = ba.neg8_inputs([disclosed, failed, excluded])
+        self.assertEqual(result["dropped_reference_count"], 3)
+        self.assertEqual([r["reason"] for r in result["dropped_references"]],
+                         ["bytes.reference_request_unavailable", "status: failed", "excluded: member.anchor_not_bounded"])
+        self.assertEqual(result["references"], [])
+
+
 class MarkerPassReasonTests(unittest.TestCase):
     def row(self, pass_id, reason):
         diagnostic = {"status": "not_evaluated", "reason": reason, "mean_j": None,
@@ -2023,8 +2039,8 @@ root = Path(sys.argv[1])
 original = export_runs.export
 def grouped(*args, **kwargs):
     # Retain an actual pre-change full export using the very same drawn keys.
-    original(*args[:4], root / "legacy-export", **kwargs)
-    return original(*args, **kwargs, pack_registration={"blinding_group": "bytes", "bytes_pass": int(args[0].name[-1])})
+    original(*args[:4], root / "legacy-export", **{**kwargs, "pack_registration": {"pack_id": "bytes"}})
+    return original(*args, **{**kwargs, "pack_registration": {"blinding_group": "bytes", "bytes_pass": int(args[0].name[-1])}})
 with patch.object(export_runs, "export", side_effect=grouped):
     manifest = fixture.archive_campaign(root, world=sys.argv[2], non_claim=False, release="none",
         pass_duration_scales=(1, 2), clock_latency_ms=(-8, 3))

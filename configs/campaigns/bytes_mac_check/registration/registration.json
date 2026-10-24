@@ -1,0 +1,5 @@
+{
+  "pack_id": "bytes-mac-check",
+  "non_claim": true,
+  "note": "Non-claim H/BY-H2 diagnostic archives; no grouped claim blinding or estimator registration."
+}

@@ -566,6 +566,12 @@ def compare_neg8(R, stage, a_rows, t):
             continue
         seen.add(sid)
         tn = ((t.get("sessions") or {}).get(sid) or {}).get("neg8") or {}
+        rails = tn.get("rails/gross") or {}
+        R.exact(stage, f"neg8/{sid}/rails", "dropped reference census and reasons",
+                sorted(row["neg8_inputs"].get("dropped_references", []), key=lambda r: r["run_id"]),
+                sorted(rails.get("dropped_references", []), key=lambda r: r["run_id"]))
+        R.exact(stage, f"neg8/{sid}/rails", "dropped reference count",
+                row["neg8_inputs"].get("dropped_reference_count", 0), rails.get("dropped_reference_count", 0))
         for b, ref in (row["neg8_inputs"].get("boundaries") or {}).items():
             g = f"neg8/{sid}/{BMAP[b]}"
             for family, fa in (ref.get("families") or {}).items():

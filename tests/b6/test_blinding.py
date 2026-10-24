@@ -17,6 +17,11 @@ def factor_child(directory, gate, queue):
     queue.put(blinding.factor(directory, "synthetic-key"))
 
 
+def binding_child(directory, names, gate):
+    gate.wait(10)
+    blinding.bind_session_keys(directory, "same-session", names)
+
+
 class BlindingTests(unittest.TestCase):
     def test_twelve_bytes_drafts_share_custody_replication_paths_unchanged(self):
         root = Path(__file__).resolve().parents[2]
@@ -31,6 +36,60 @@ class BlindingTests(unittest.TestCase):
             for group in ("../escape", "/outside", ".", ".."):
                 with self.assertRaises(ValueError):
                     blinding.key_directory(records, "pack", {"blinding_group": group})
+
+    def test_binding_merges_names_and_preserves_old_digests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "blinding"
+            blinding.factor(directory, "first")
+            first = blinding._config_filename("first")
+            one = blinding.bind_session_keys(directory, "s", {"pack.json", first})
+            blinding.factor(directory, "second")
+            second = blinding._config_filename("second")
+            merged = blinding.bind_session_keys(directory, "s", {"pack.json", second})
+            self.assertEqual(merged, {**one, second: __import__("hashlib").sha256((directory / second).read_bytes()).hexdigest()})
+            self.assertEqual(blinding.bind_session_keys(directory, "s", {first}), merged)
+            (directory / first).write_text("changed bytes")
+            with self.assertRaisesRegex(ValueError, "key bytes changed"):
+                blinding.bind_session_keys(directory, "s", {first})
+
+    def test_concurrent_session_merges_keep_both_name_sets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "blinding"
+            names = []
+            for key in ("first", "second"):
+                blinding.factor(directory, key)
+                names.append({"pack.json", blinding._config_filename(key)})
+            context = multiprocessing.get_context("spawn")
+            gate = context.Event()
+            workers = [context.Process(target=binding_child, args=(directory, group, gate)) for group in names]
+            for worker in workers:
+                worker.start()
+            gate.set()
+            for worker in workers:
+                worker.join(15)
+                self.assertEqual(worker.exitcode, 0)
+            doc = json.loads((directory.parent / "blinding-sessions/same-session.json").read_bytes())
+            self.assertEqual(set(doc["key_sha256"]), set.union(*names))
+
+    def test_interrupted_binding_publication_leaves_no_partial_sidecar(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "blinding"
+            blinding.factor(directory, "first")
+            names = {"pack.json", blinding._config_filename("first")}
+            target = directory.parent / "blinding-sessions/s.json"
+            with patch.object(blinding.os, "link", side_effect=OSError("interrupted publish")):
+                with self.assertRaisesRegex(OSError, "interrupted publish"):
+                    blinding.bind_session_keys(directory, "s", names)
+            self.assertFalse(target.exists())
+            self.assertFalse(list(target.parent.glob(".s.json.*")))
+            initial = blinding.bind_session_keys(directory, "s", names)
+            raw = target.read_bytes()
+            blinding.factor(directory, "second")
+            with patch.object(blinding.os, "replace", side_effect=OSError("interrupted merge")):
+                with self.assertRaises(OSError):
+                    blinding.bind_session_keys(directory, "s", names | {blinding._config_filename("second")})
+            self.assertEqual(target.read_bytes(), raw)
+            self.assertEqual(blinding.bind_session_keys(directory, "s", names), initial)
 
     def test_ranges_over_ten_thousand_draws(self):
         # Distribution support is the registered blinding range, not an agreement tolerance.

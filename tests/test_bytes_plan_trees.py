@@ -109,9 +109,13 @@ class BytesPlanTreesTests(unittest.TestCase):
                         'runtime': stack['runtime_version']['name'],
                         'runtime_version': stack['runtime_version']['version'],
                         'quantization': deepcopy(stack['quantization']),
+                        **{key: deepcopy(stack[key]) for key in ('os_version', 'hardware_unit', 'sampler_output_policy', 'telemetry_backend')},
                         'tokenizer': deepcopy(stack['tokenizer_identity'])}
             self.assertEqual(model_files.compare(expected, observed), [], name)
             for field, value in (('runtime_version', 'different'),
+                                 ('os_version', 'different'), ('hardware_unit', {'device': 'different'}),
+                                 ('sampler_output_policy', {'sampler': {'temperature': 0.7}}),
+                                 ('telemetry_backend', 'different'),
                                  ('quantization', {'bits': 3, 'group_size': 32, 'name': 'different'}),
                                  ('tokenizer', {'identifier': 'different', 'vocab_size': 1})):
                 changed = {**observed, field: value}

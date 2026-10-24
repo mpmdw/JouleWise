@@ -81,8 +81,14 @@
     "stack_identity": "scripts/write_b5_identity_pins.py --bytes-observed; build_stack_identity and stack_identity_sha256 of real H/BY-H2 metadata; checkpoint quantization and pinned tokenizer/config hashes verified",
     "stack_issuer": {
       "path": "scripts/write_b5_identity_pins.py",
-      "sha256": "974945cd8d48173f6fccd13cf6a0e3fb360d60726d289080715fb2e7d147b88b"
-    }
+      "sha256": "cba2930bf1550ebbc74e50c97ef510600b69d8e48bd0cc4d2484c8b60b202be5"
+    },
+    "stack_reference_roots": [
+      "/Users/edr/night-bytes/h-20261021T185555Z/runs-parent/runs_bytes_mac_check",
+      "/Users/edr/night-bytes/h-20261021T185555Z/runs-parent/runs_bytes_mac_check_bound",
+      "/Users/edr/night-bytes/h2-20261023T144711Z/runs-parent/runs_bytes_mac_check",
+      "/Users/edr/night-bytes/h2-20261023T144711Z/runs-parent/runs_bytes_mac_check_bound"
+    ]
   },
   "model_artifact_inventory": {
     "llama-70b": {
@@ -586,7 +592,7 @@
   "packs": {
     "bytes-s1-p1": {
       "tree_path": "configs/campaigns/bytes-s1-p1/plan_tree.json",
-      "tree_sha256": "4ed562a228e0abef779319bb3dcc7938c81a2304be54499f86d32e3d1398d930",
+      "tree_sha256": "2ea62ae23bd218cc12316dbede209ce9239cbaeef9dc0f2c74b047561025251b",
       "units": [
         "neg8_reference",
         "qwen3-1p7b",
@@ -595,7 +601,7 @@
     },
     "bytes-s1-p2": {
       "tree_path": "configs/campaigns/bytes-s1-p2/plan_tree.json",
-      "tree_sha256": "161ed822f3ed7ee2bbd5681e08d673c8d677f283760721bab25c1691dd7499bf",
+      "tree_sha256": "d0e86bf09c9938bc0ddf849c2bfc02516076203143388180b262d41c64cb773c",
       "units": [
         "neg8_reference",
         "qwen3-1p7b",
@@ -604,7 +610,7 @@
     },
     "bytes-s2-p1": {
       "tree_path": "configs/campaigns/bytes-s2-p1/plan_tree.json",
-      "tree_sha256": "f527a763db9fac77d10cc169dcb21ca2521b9b1e091eb414ce0116cee834f587",
+      "tree_sha256": "389d815493fb1552431ff9bb31f9d1cc57597f17d210b19ab70fcd8f5c95c0b7",
       "units": [
         "neg8_reference",
         "qwen3-30b-a3b",
@@ -613,7 +619,7 @@
     },
     "bytes-s2-p2": {
       "tree_path": "configs/campaigns/bytes-s2-p2/plan_tree.json",
-      "tree_sha256": "8b2c21bc44f2586ea7a3b90b2f9e28d9bb3d7a739b02f5d76f38d7f3d081a93b",
+      "tree_sha256": "4fd446a8ebf13e0f7bc59018528d0051882c58a76a2d87ca82e8083b88b2666b",
       "units": [
         "neg8_reference",
         "qwen3-30b-a3b",
@@ -622,7 +628,7 @@
     },
     "bytes-s3-p1": {
       "tree_path": "configs/campaigns/bytes-s3-p1/plan_tree.json",
-      "tree_sha256": "2c2da4cbc9444aba091ea35ad6be384ea1bcb065aefd1e58fe38b849a04aa1be",
+      "tree_sha256": "4d5311475901505723bea5034205e11df98700bcd37c09cd90b7484ea7d97d90",
       "units": [
         "neg8_reference",
         "qwen3-14b",
@@ -631,7 +637,7 @@
     },
     "bytes-s3-p2": {
       "tree_path": "configs/campaigns/bytes-s3-p2/plan_tree.json",
-      "tree_sha256": "5649a40bf6bf64d6d2c6aa1726847e30f8516cd6dad544b1488c2ca9952a04bc",
+      "tree_sha256": "425c108d8d28b4dd428b91d55e15fab0f0c5398f8aef5c92378646b517728873",
       "units": [
         "neg8_reference",
         "qwen3-14b",
@@ -640,7 +646,7 @@
     },
     "bytes-s4-p1": {
       "tree_path": "configs/campaigns/bytes-s4-p1/plan_tree.json",
-      "tree_sha256": "cd5400ef54b9d5e791f48926014ea154413e5cbaad661b5e73eaafaf5cd7784f",
+      "tree_sha256": "cb5e3220489f2c7a7148c8af9339a991cd11dd34baf67d8889f9917ff47546a0",
       "units": [
         "neg8_reference",
         "qwen3-32b",
@@ -649,7 +655,7 @@
     },
     "bytes-s4-p2": {
       "tree_path": "configs/campaigns/bytes-s4-p2/plan_tree.json",
-      "tree_sha256": "ca8cdc6c6cfe9aef3561b94ae052a64724fd2e12f7f81f0950082920f8ad6f0d",
+      "tree_sha256": "a73cced128ebe33d609514a2844bc9b9c027f925ba005b87e251d45d6fa716e7",
       "units": [
         "neg8_reference",
         "qwen3-32b",
@@ -658,7 +664,7 @@
     },
     "bytes-s5-p1": {
       "tree_path": "configs/campaigns/bytes-s5-p1/plan_tree.json",
-      "tree_sha256": "bab7c54495b6ab541a6600b0dcbcc18385a658d7ce47798f6844ebdcd50e5bb1",
+      "tree_sha256": "e1dcba0020d31d2a30166894f8a146ea3468026ba2789c03dccd3cfe2026ac02",
       "units": [
         "llama-70b",
         "neg8_reference"
@@ -666,7 +672,7 @@
     },
     "bytes-s5-p2": {
       "tree_path": "configs/campaigns/bytes-s5-p2/plan_tree.json",
-      "tree_sha256": "16b3f75b4403b0d0bce7002b71bf89a073e9610a35a4df436bf5b8bd33878929",
+      "tree_sha256": "48746dd7d6d84881380a5ce0b5bfb7e1598cac26c7827af36e167bb98ddad0c9",
       "units": [
         "llama-70b",
         "neg8_reference"
@@ -674,7 +680,7 @@
     },
     "bytes-s6-p1": {
       "tree_path": "configs/campaigns/bytes-s6-p1/plan_tree.json",
-      "tree_sha256": "887a0ab715ceb710d1db154dfe3a232358bc4bc63eb4382b5ebac1af96a3bc43",
+      "tree_sha256": "a1f8565eca33498a2f2779fd189b5aed8d92b00055e2092c44dfea3585a98bec",
       "units": [
         "neg8_reference",
         "qwen35-122b"
@@ -682,7 +688,7 @@
     },
     "bytes-s6-p2": {
       "tree_path": "configs/campaigns/bytes-s6-p2/plan_tree.json",
-      "tree_sha256": "d00a282170ac92bb37365b8ec0df206a37a88eb440fc8b46fdf3fa3aa0dd54c4",
+      "tree_sha256": "26d8d165677ae94fec3ec98e50f960891175ff5ababc5d834653e01bd018db42",
       "units": [
         "neg8_reference",
         "qwen35-122b"
@@ -3221,7 +3227,7 @@
         "bytes-s4-p1",
         "bytes-s4-p2"
       ],
-      "runtime_identity_sha256": "98768c7227c7dea19a9a49c1af82bf536a636f06063672bc5c2bc97bf19ecc0c",
+      "runtime_identity_sha256": "47b08df0020c9940f6c7b60bf35bbd823edca3a4e08b8dc9b8b651b2e09dd5c4",
       "stack_identity": {
         "batching_concurrency_policy": "single-request sequential",
         "hardware_unit": {
@@ -3269,10 +3275,11 @@
           "backend": "mlx",
           "class": "TokenizerWrapper",
           "identifier": "Qwen3-8B-8bit",
-          "revision": null,
+          "revision": "48a0b75b1ae72503e21e1558d040bc227510ff06",
           "vocab_size": 151643
         }
-      }
+      },
+      "tokenizer_revision_source": "model_revision; verified pinned tokenizer/config files"
     },
     "qwen3-next-80b": {
       "config_count": 100,

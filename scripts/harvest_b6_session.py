@@ -65,7 +65,7 @@ def main(argv=None) -> int:
         print(f"refused: {exc}", file=sys.stderr)
         return phase
     except Exception as exc:
-        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
+        detail = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
         print("block-six session program fault: " + detail, file=sys.stderr)
         return phase
 
