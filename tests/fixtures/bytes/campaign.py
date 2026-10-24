@@ -297,8 +297,10 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
         export_runs.export(archive, {}, root / "registration", root / "private-keys", root / "export", non_claim=non_claim,
                            evidence=evidence, acceptance_record=acceptance,
-                           **({"pack_registration": {"blinding_group": "bytes", "bytes_pass": pass_id}}
-                              if subpack_sessions else {}))
+                           # Export stops on an unresolved registration (#416 F-S9); an
+                           # ungrouped synthetic pack names itself explicitly.
+                           pack_registration=({"blinding_group": "bytes", "bytes_pass": pass_id}
+                                              if subpack_sessions else {"pack_id": pack_id}))
         manifest["sessions"].append({"session_id": session_id, "archive": str(archive), "pass_id": pass_id,
             "released_key_dir": "../released-keys/bytes/blinding", "test7_passed": False,
             # Deliberately false legacy values: the consumer must ignore these.
