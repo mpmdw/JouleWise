@@ -22,7 +22,7 @@ from joulewise.cli import validate_bundle
 from joulewise.external import km003c_parse as kp
 from joulewise.hazards import monitor
 from joulewise.reduce import reduce_bundle
-from scripts import restore_run_to_scratch as restore
+from joulewise import desk_restore as restore
 from tests.external.test_km003c_parse import Synthetic, NS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -136,18 +136,19 @@ class CompressedReaderTests(unittest.TestCase):
         raw_path.write_bytes(b'column,value\r\nfixture,1\r\n')
 
         def read():
-            outside = [auth.read_authentication_input(path, grammar="json", label="fixture"),
-                       auth.read_authentication_text(path, grammar="json", label="fixture"),
-                       auth.sha256_authentication_input(raw_path, label="fixture raw")]
+            outside = [auth.read_authentication_input(path, grammar="json", label="fixture", allow_compressed=True),
+                       auth.read_authentication_text(path, grammar="json", label="fixture", allow_compressed=True),
+                       auth.sha256_authentication_input(raw_path, label="fixture raw", allow_compressed=True)]
             with auth.open_authentication_input(raw_path, grammar="raw", label="fixture raw",
-                                                newline="") as stream:
+                                                newline="", allow_compressed=True) as stream:
                 outside.append(stream.read())
             with auth.V2AuthenticationReadSession() as session:
                 capability = auth.v2_authentication_path(path)
-                inside = [capability.read_bytes(), capability.read_text(),
-                          auth.sha256_authentication_input(path, label="fixture JSON"),
-                          auth.sha256_authentication_input(raw_path, label="fixture raw")]
-                with capability.open("rb") as stream:
+                inside = [auth.read_authentication_input(path, grammar="json", label="fixture", allow_compressed=True),
+                          auth.read_authentication_text(path, grammar="json", label="fixture", allow_compressed=True),
+                          auth.sha256_authentication_input(path, label="fixture JSON", allow_compressed=True),
+                          auth.sha256_authentication_input(raw_path, label="fixture raw", allow_compressed=True)]
+                with auth.open_authentication_input(path, "rb", grammar="json", label="fixture", allow_compressed=True) as stream:
                     inside.append(stream.read())
                 self.assertEqual(set(session.records), {str(path.resolve()), str(raw_path.resolve())})
                 self.assertTrue(session.records[str(path.resolve())].strict_parse_succeeded)
@@ -158,10 +159,10 @@ class CompressedReaderTests(unittest.TestCase):
         self.assertEqual(read(), plain)
         # The same session sees decompressed bytes under the original identity.
         with auth.V2AuthenticationReadSession() as session:
-            auth.read_authentication_input(path, grammar="raw", label="fixture")
+            auth.read_authentication_input(path, grammar="raw", label="fixture", allow_compressed=True)
             path.write_bytes(b'{"fixture":false}\n')
             with self.assertRaisesRegex(auth.V2AuthenticationInputError, "input_changed"):
-                auth.read_authentication_input(path, grammar="json", label="fixture")
+                auth.read_authentication_input(path, grammar="json", label="fixture", allow_compressed=True)
             self.assertEqual(set(session.records), {str(path.resolve())})
 
     def test_compressed_authentication_preserves_strict_parsing_before_registration(self):
@@ -178,7 +179,7 @@ class CompressedReaderTests(unittest.TestCase):
                 with self.assertRaisesRegex(auth.V2AuthenticationInputError, reason):
                     # A logical .json suffix still forces JSON even when the
                     # caller requests raw; storage compression cannot downgrade it.
-                    auth.read_authentication_input(root / name, grammar="raw", label="fixture")
+                    auth.read_authentication_input(root / name, grammar="raw", label="fixture", allow_compressed=True)
                 self.assertEqual(dict(session.records), {})
 
     def test_bundle_read_reduce_strict_validation_and_survivor_screen_are_identical(self):
@@ -200,7 +201,7 @@ class CompressedReaderTests(unittest.TestCase):
         bundle = runs / members[0]["run_id"]
 
         def read():
-            reader = BundleReader(bundle)
+            reader = BundleReader(bundle, allow_compressed=True)
             # Direct CLI/strict/reference readers use the same verified
             # restore interface as the automatic archive callers below.
             with restore.readable_run(bundle) as plain_bundle:
@@ -235,7 +236,7 @@ class CompressedReaderTests(unittest.TestCase):
             return {"config": reader.config().to_dict(), "metadata": reader.metadata(),
                     "events": reader.events(), "trace": reader.trace_rows(),
                     "raw": reader.raw_artifact_bytes("powermetrics.plist"),
-                    "validation": reader.problems(), "strict": problems,
+                    "validation": validate_bundle(bundle), "strict": problems,
                     "reduced": reduced, "energy": energy, "screen": result,
                     "assessment": assessment, "operative": operative}
 

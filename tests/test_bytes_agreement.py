@@ -34,8 +34,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
+from tests.desk_restore_support import compress_member, ample_space_command
+from joulewise.desk_restore import RestoreRefused
+from joulewise import desk_restore
 from joulewise import aggregate
 from joulewise import bytes_analysis as ba
 from joulewise.b6 import blinding, export_runs
@@ -725,8 +729,7 @@ def build(root, name):
         for session in manifest["sessions"]:
             for events in Path(session["archive"]).glob("sources/claim-runs/qwen3-8b-4bit-*/events.jsonl"):
                 for path in (events, events.with_name("metadata.json")):
-                    subprocess.run(["zstd", "-q", str(path), "-o", str(path) + ".zst"], check=True)
-                    path.unlink()
+                    compress_member(path, Path(session["archive"]))
     _write(root / "manifest.json", manifest)
     _write(root / "build.json", {"name": name, "world": world, "seed": seed, "defects": log,
                                  "pass_duration_scales": PASS_SCALES, "clock_latency_ms": CLOCK_LATENCY_MS})
@@ -748,7 +751,7 @@ def run_both(root, manifest):
         twin += ["--archive", session["archive"]]
 
     def run(tag, command):
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True, check=False)
         (o / (tag + ".exit")).write_text(str(result.returncode) + "\n")
         (o / (tag + ".stdout")).write_text(result.stdout)
         (o / (tag + ".stderr")).write_text(result.stderr)
@@ -803,7 +806,7 @@ def describe(row):
 
 @unittest.skipUnless(shutil.which("zstd"), "compressed refusal probes require zstd on PATH")
 class CompressedRefusalTests(unittest.TestCase):
-    """Fable variants 01-03: analysis marks the run unusable; twin refuses D7."""
+    """Fable variants 01-03: storage corruption terminates both programs."""
 
     @classmethod
     def setUpClass(cls):
@@ -824,9 +827,9 @@ class CompressedRefusalTests(unittest.TestCase):
             keys = self.root / "private-keys/bytes/blinding"
             records = ba.archive_records(self.archive, self.manifest, self.session,
                                          stage="fit", key_dir=keys)
-            row = next(r for r in records if r["run_id"] == self.run_id)
-            self.assertEqual(row["status"], "unusable")
-            self.assertTrue(row["invalid_energy_record"])
+            with mock.patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 1024**4})()):
+                with self.assertRaisesRegex(RestoreRefused, "restore_refused: "):
+                    list(records)
             output = self.root / (variant + ".json")
             argv = [sys.executable, "-B", str(ROOT / "scripts/bytes_twin.py"),
                     "--export-dir", str(self.root / "export"),
@@ -834,12 +837,12 @@ class CompressedRefusalTests(unittest.TestCase):
                     "--key-dir", str(keys), "--stage", "1", "--out", str(output)]
             for session in self.manifest["sessions"]:
                 argv += ["--archive", session["archive"]]
-            result = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
-            print(f"\ncompressed probe {variant}: analysis={row['status']} "
+            result = subprocess.run(ample_space_command(argv), cwd=ROOT, capture_output=True, text=True)
+            print(f"\ncompressed probe {variant}: analysis=restore_refused "
                   f"twin_exit={result.returncode} refusal={result.stdout.startswith('refused: ')}",
                   flush=True)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-            self.assertTrue(result.stdout.startswith("refused: "), result.stdout)
+            self.assertTrue(result.stdout.startswith("refused: restore_refused: "), result.stdout)
             self.assertNotIn("Traceback", result.stderr)
             self.assertFalse(output.exists())
         finally:
@@ -862,6 +865,58 @@ class CompressedRefusalTests(unittest.TestCase):
         frame = subprocess.run(["zstd", "-qc"], input=b"not JSON", capture_output=True,
                                check=True).stdout
         self.replay("metadata.json", lambda _: frame, "03-non-json-payload")
+
+    def test_short_reserve_stops_both_programs(self):
+        keys = self.root / 'private-keys/bytes/blinding'
+        with mock.patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 0})()):
+            with self.assertRaisesRegex(RestoreRefused, 'restore_refused: insufficient scratch space'):
+                list(ba.archive_records(self.archive, self.manifest, self.session, stage='fit', key_dir=keys))
+        commands = [
+            [sys.executable, '-B', str(ROOT / 'scripts/bytes_analyze.py'), '--export', str(self.root / 'export'),
+             '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', 'fit',
+             '--out', str(self.root / 'short-analysis')],
+            [sys.executable, '-B', str(ROOT / 'scripts/bytes_twin.py'), '--export-dir', str(self.root / 'export'),
+             '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', '1',
+             '--out', str(self.root / 'short-twin.json')]]
+        for session in self.manifest['sessions']:
+            commands[1] += ['--archive', session['archive']]
+        for command in commands:
+            result = subprocess.run(ample_space_command(command, free=0), cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn('restore_refused: insufficient scratch space', result.stdout + result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
+        self.assertFalse((self.root / 'short-analysis/predictions.json').exists())
+        self.assertFalse((self.root / 'short-twin.json').exists())
+
+
+    def test_journal_less_campaign_stops_both_programs(self):
+        journal = Path(str(self.archive) + '.desk') / 'compression.jsonl'
+        saved = journal.read_bytes()
+        journal.unlink()
+        keys = self.root / 'private-keys/bytes/blinding'
+        try:
+            with self.assertRaisesRegex(RestoreRefused, 'restore_refused:.*compression.jsonl'):
+                list(ba.archive_records(self.archive, self.manifest, self.session, stage='fit', key_dir=keys))
+            programs = [
+                [sys.executable, '-B', str(ROOT / 'scripts/bytes_analyze.py'), '--export', str(self.root / 'export'),
+                 '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', 'fit',
+                 '--out', str(self.root / 'journal-less-analysis')],
+                [sys.executable, '-B', str(ROOT / 'scripts/bytes_twin.py'), '--export-dir', str(self.root / 'export'),
+                 '--manifest', str(self.root / 'manifest.json'), '--key-dir', str(keys), '--stage', '1',
+                 '--out', str(self.root / 'journal-less-twin.json')]]
+            for session in self.manifest['sessions']:
+                programs[1] += ['--archive', session['archive']]
+            for command in programs:
+                result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('restore_refused:', result.stdout + result.stderr)
+                self.assertIn('compression.jsonl', result.stdout + result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertFalse((self.root / 'journal-less-analysis/predictions.json').exists())
+                self.assertFalse((self.root / 'journal-less-twin.json').exists())
+        finally:
+            journal.write_bytes(saved)
+
 
 
 class AgreementTests(unittest.TestCase):

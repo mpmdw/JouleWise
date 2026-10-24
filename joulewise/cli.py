@@ -51,6 +51,7 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
+from joulewise.desk_restore import readable_run, RestoreRefused
 from joulewise.bundle_read import (
     FROZEN_LEGACY_BUNDLE_IDENTITIES,
     BundleReader,
@@ -467,15 +468,16 @@ def validate_bundle(
     its own manifest, evidence, plist and events hash checks.  ``None`` keeps
     today's behaviour (the active V2 authentication session's cache, if any).
     """
-    reader = BundleReader(Path(path))
-    problems = reader.problems()
-    if strict:
-        problems.extend(
-            _strict_problems(reader)
-            if physics_cache is None
-            else _strict_problems(reader, physics_cache=physics_cache)
-        )
-    return problems
+    with readable_run(path) as plain:
+        reader = BundleReader(Path(plain))
+        problems = reader.problems()
+        if strict:
+            problems.extend(
+                _strict_problems(reader)
+                if physics_cache is None
+                else _strict_problems(reader, physics_cache=physics_cache)
+            )
+        return problems
 
 
 def _strict_problems(
@@ -492,6 +494,11 @@ def _strict_problems(
     ``physics_cache``: see :func:`validate_bundle` (J2).  An explicit dict is
     used as given and never replaced by a V2 authentication session's cache.
     """
+    with readable_run(reader.path) as plain:
+        return _plain_strict_problems(BundleReader(plain), physics_cache=physics_cache)
+
+
+def _plain_strict_problems(reader: BundleReader, *, physics_cache=None) -> list[str]:
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
     summary = reader.raw_summary()
@@ -1909,41 +1916,43 @@ def _cmd_validate_bundle(args: argparse.Namespace) -> int:
 def _cmd_reduce(args: argparse.Namespace) -> int:
     """Write a prospective reduction without mutating stored summary bytes."""
     bundle_path = Path(args.path)
-    if not bundle_path.is_dir() or not (bundle_path / "config.json").is_file():
-        print(
-            f"error: not a run bundle directory (no config.json): {bundle_path}",
-            file=sys.stderr,
-        )
-        return 2
-    try:
-        authenticated_launch = authenticate_bundle_launch_lineage(
-            bundle_path,
-            require_completion=False,
-        )
-    except LaunchLineageError as exc:
-        print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
-        return 2
-    stored_path = bundle_path / "summary_metrics.json"
-    recorded_version: str | None = None
-    if stored_path.is_file():
-        try:
-            stored = json.loads(
-                read_authentication_text(
-                    stored_path,
-                    grammar="json",
-                    label=f"bundle {bundle_path.name} stored summary",
-                    encoding="utf-8",
-                )
+    with readable_run(bundle_path) as plain:
+        if not plain.is_dir() or not (plain / "config.json").is_file():
+            print(
+                f"error: not a run bundle directory (no config.json): {plain}",
+                file=sys.stderr,
             )
-        except (OSError, json.JSONDecodeError):
-            stored = None
-        provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
-        value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
-        recorded_version = value if isinstance(value, str) else None
-    requested_version = args.reducer_version
-    if requested_version is None and stored_path.is_file():
-        requested_version = recorded_version
-    summary = reduce_bundle(bundle_path, reducer_version=requested_version)
+            return 2
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                plain,
+                require_completion=False,
+            )
+        except LaunchLineageError as exc:
+            print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
+            return 2
+        stored_path = plain / "summary_metrics.json"
+        recorded_version: str | None = None
+        if stored_path.is_file():
+            try:
+                stored = json.loads(
+                    read_authentication_text(
+                        stored_path,
+                        grammar="json",
+                        label=f"bundle {plain.name} stored summary",
+                        encoding="utf-8",
+                    )
+                )
+            except (OSError, json.JSONDecodeError):
+                stored = None
+            provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
+            value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+            recorded_version = value if isinstance(value, str) else None
+        requested_version = args.reducer_version
+        if requested_version is None and stored_path.is_file():
+            requested_version = recorded_version
+        summary = reduce_bundle(plain, reducer_version=requested_version)
+    stored_path = bundle_path / "summary_metrics.json"
     try:
         payload = summary.to_dict()
     except SchemaError as exc:
@@ -2456,6 +2465,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (
+        RestoreRefused,
         OSError,
         json.JSONDecodeError,
         KVSizeError,

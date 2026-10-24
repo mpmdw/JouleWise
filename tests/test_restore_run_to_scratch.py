@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from scripts import restore_run_to_scratch as restore
+from joulewise import desk_restore as restore
 from joulewise import desk_compress as desk
 
 
@@ -235,7 +235,7 @@ class RestoreRunTests(unittest.TestCase):
             return scandir(path)
 
         with mock.patch.object(restore.os, "scandir", side_effect=denied):
-            with self.assertRaisesRegex(PermissionError, "directory unreadable"):
+            with self.assertRaisesRegex(restore.RestoreRefused, "restore_refused:.*directory unreadable"):
                 with self.restored():
                     self.fail("reader reached")
         self.assertFalse(self.scratch.exists())
@@ -268,7 +268,7 @@ class RestoreRunTests(unittest.TestCase):
         code = ("from pathlib import Path; import sys; p=Path(sys.argv[1]); "
                 "assert (p/'metadata.json').is_file(); Path(sys.argv[2]).write_text(str(p)); "
                 "raise SystemExit(7)")
-        result = subprocess.run([sys.executable, "-B", str(Path(restore.__file__)),
+        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve().parents[1] / "scripts/restore_run_to_scratch.py"),
                                  "--run-dir", str(self.run), "--scratch-dir", str(self.scratch),
                                  *(["--compression-records", str(self.records)] if ZSTD else []),
                                  "--", sys.executable, "-B", "-c", code, "{run}", str(seen)],
@@ -307,7 +307,7 @@ class RestoreRunTests(unittest.TestCase):
         before = self.snapshot(self.archive)
         journal = self.records.read_bytes()
         observed = self.root / "observed.json"
-        result = subprocess.run([sys.executable, "-B", str(Path(restore.__file__)),
+        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve().parents[1] / "scripts/restore_run_to_scratch.py"),
                                  "--run-dir", str(self.run), "--scratch-dir", str(self.scratch),
                                  "--compression-records", str(self.records), "--",
                                  sys.executable, "-B", "-c", reader, "{run}", str(observed)],

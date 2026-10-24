@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import math
 import statistics
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from joulewise.desk_compress import is_file as desk_is_file, read_bytes
 from joulewise.whole_window import neg8_count_adjusted_bound
+from joulewise.desk_restore import RestoreRefused
 
 FAMILIES = ("gross", "idle_subtracted")
 SLOTS = {"start_reference": "start", "midpoint_reference": "midpoint", "end_reference": "end"}
@@ -98,6 +100,8 @@ def screen(roster: Mapping, member_effects: Mapping,
             value = energy_of(member)
             if not all(math.isfinite(value[family]) for family in FAMILIES):
                 raise ValueError("nonfinite reference energy")
+        except RestoreRefused:
+            raise
         except (OSError, ValueError, KeyError, TypeError, ArithmeticError):
             unreadable.append(member["run_id"])
             flags.add(f"neg8.{role}_energy_unreadable")
@@ -143,6 +147,8 @@ def screen(roster: Mapping, member_effects: Mapping,
                                           "endpoint_difference_j": difference}
             passed = passed and difference <= bound["bound_j"]
         return finish("passed" if passed else "failed")
+    except RestoreRefused:
+        raise
     except (OSError, ValueError, KeyError, TypeError, ArithmeticError):
         return finish("undefined", "bound_absent")
 
@@ -150,7 +156,7 @@ def screen(roster: Mapping, member_effects: Mapping,
 def archive_energy_of(archive_root: Path | str, bundle_roots: tuple[Path, ...] = ()) -> Callable:
     """Call the owning reader; do not reproduce its energy arithmetic."""
     from joulewise import whole_window
-    from scripts.restore_run_to_scratch import readable_run
+    from joulewise.desk_restore import readable_run
 
     helper = getattr(whole_window, "_neg8_writer_reference_energy", None)
 
@@ -174,8 +180,12 @@ def archive_energy_of(archive_root: Path | str, bundle_roots: tuple[Path, ...] =
             # members. Keep the archive locator as the reported source.
             summary = bundle / "summary_metrics.json"
             journal = Path(str(root) + ".desk") / "compression.jsonl"
-            with readable_run(bundle, compression_records=journal if journal.is_file() else None) as plain:
-                gross, idle, problem = whole_window._reference_energy_evidence(plain)
+            try:
+                with readable_run(bundle, compression_records=journal) as plain:
+                    gross, idle, problem = whole_window._reference_energy_evidence(plain)
+            except RestoreRefused as exc:
+                print(str(exc), file=sys.stderr)
+                raise
             if problem is not None:
                 raise ValueError("NEG8 reference energy is unavailable")
         if gross is None or idle is None:

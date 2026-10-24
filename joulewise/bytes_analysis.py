@@ -17,6 +17,8 @@ from pathlib import Path
 
 from joulewise.analysis_engine.distributions import student_t_quantile
 from joulewise.desk_compress import read_bytes
+from joulewise import desk_restore
+from joulewise.desk_restore import readable_run, RestoreRefused
 
 BOUNDARIES = ("rails", "DC input", "rest")
 HYPOTHESES = ("bytes", "resident", "time")
@@ -523,7 +525,7 @@ def operative_summary(bundle, acceptance, *, synthetic=False, stored=None, physi
     output-free reducer seam owns re-derivation and rejects narrowed bounds.
     """
     from joulewise.reduce import _rederive_summary_for_authenticated_fiducial_bound
-    from scripts.restore_run_to_scratch import readable_run
+    from joulewise.desk_restore import readable_run
     cal = acceptance.get("calibration") or {}
     value = cal.get("operative_bound_s")
     if value is None or isinstance(value, bool):
@@ -893,31 +895,34 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
             bundle = bundle_of(root, {}, run_id)
             if bundle is None:
                 raise AnalysisError("selected bundle missing")
-            config = read_json(bundle / "config.json")
-            if config["model"]["name"] != model["model"]:
-                raise AnalysisError("roster/config model mismatch")
-            metadata = read_json(bundle / "metadata.json")
-            if metadata.get("workload_observed", {}).get("output_token_count") != 512:
-                raise AnalysisError("runtime-observed output count must be 512")
-            events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
-            stored = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
-            summary, operative = operative_summary(bundle, acceptance,
-                synthetic=manifest.get("synthetic") is True, stored=stored, physics_cache=physics_cache)
-            if summary.get("status") != "succeeded":
-                raise AnalysisError("re-reduction not succeeded")
-            energy = number(summary["phase_energy_j"]["decode"], "phase energy", nonnegative=True)
-            envelope = summary["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]
-            anchor = number(envelope["max_abs_delta_j"], "decode anchor bound", nonnegative=True)
-            if summary.get("energy_bound_terms_j", {}).get("E_interpolation_joint_edge_bound_j") != 0:
-                raise AnalysisError("phase joint interpolation bound unavailable for non-interval trace")
-            decode = _event_span(events, "decode", metadata)
-            idle = _event_span(events, "idle_baseline", metadata)
-            duration = (decode[1] - decode[0]) / 1e9
-            own_idle = number(summary["idle_baseline"]["power_w_mean"], "own rails idle", nonnegative=True)
-            row.update(status="succeeded", duration_s=duration, rails_j=energy,
-                rails_secondary_j=energy - own_idle * duration, rails_anchor_j=anchor,
-                rails_interpolation_j=0.0, operative=operative)
-            spans[run_id] = (decode, idle)
+            with readable_run(bundle, compression_records=Path(str(root) + ".desk") / "compression.jsonl") as bundle:
+                config = read_json(bundle / "config.json")
+                if config["model"]["name"] != model["model"]:
+                    raise AnalysisError("roster/config model mismatch")
+                metadata = read_json(bundle / "metadata.json")
+                if metadata.get("workload_observed", {}).get("output_token_count") != 512:
+                    raise AnalysisError("runtime-observed output count must be 512")
+                events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
+                stored = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
+                summary, operative = operative_summary(bundle, acceptance,
+                    synthetic=manifest.get("synthetic") is True, stored=stored, physics_cache=physics_cache)
+                if summary.get("status") != "succeeded":
+                    raise AnalysisError("re-reduction not succeeded")
+                energy = number(summary["phase_energy_j"]["decode"], "phase energy", nonnegative=True)
+                envelope = summary["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]
+                anchor = number(envelope["max_abs_delta_j"], "decode anchor bound", nonnegative=True)
+                if summary.get("energy_bound_terms_j", {}).get("E_interpolation_joint_edge_bound_j") != 0:
+                    raise AnalysisError("phase joint interpolation bound unavailable for non-interval trace")
+                decode = _event_span(events, "decode", metadata)
+                idle = _event_span(events, "idle_baseline", metadata)
+                duration = (decode[1] - decode[0]) / 1e9
+                own_idle = number(summary["idle_baseline"]["power_w_mean"], "own rails idle", nonnegative=True)
+                row.update(status="succeeded", duration_s=duration, rails_j=energy,
+                    rails_secondary_j=energy - own_idle * duration, rails_anchor_j=anchor,
+                    rails_interpolation_j=0.0, operative=operative)
+                spans[run_id] = (decode, idle)
+        except RestoreRefused:
+            raise
         except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
             row.update(status="unusable", invalid_energy_record=True, unusable_reason=str(exc))
         records.append(row)
@@ -927,10 +932,13 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                 continue
             try:
                 bundle = bundle_of(root, {}, ref["run_id"])
-                metadata = read_json(bundle / "metadata.json")
-                events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
-                spans[ref["run_id"]] = (_event_span(events, "measured_run", metadata),
-                                         _event_span(events, "idle_baseline", metadata))
+                with readable_run(bundle, compression_records=Path(str(root) + ".desk") / "compression.jsonl") as bundle:
+                    metadata = read_json(bundle / "metadata.json")
+                    events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
+                    spans[ref["run_id"]] = (_event_span(events, "measured_run", metadata),
+                                             _event_span(events, "idle_baseline", metadata))
+            except RestoreRefused:
+                raise
             except (OSError, ValueError, KeyError, TypeError):
                 continue
     streams = _session_streams(root, [span for pair in spans.values() for span in pair]) if spans else []
@@ -1396,6 +1404,7 @@ def frozen_predictions(points, manifest, neg8_inputs=None):
     return {"schema": SCHEMA, "manifest_sha256": digest(manifest), "H1_checks": H1_CHECKS,
             "H2_intervals": H2_INTERVALS,  # full-roster expectation; actual k is printed with each fit
             "bytes_analysis_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "desk_restore_sha256": hashlib.sha256(Path(desk_restore.__file__).read_bytes()).hexdigest(),
             "neg8_inputs": neg8_inputs or {}, "fit_points": points, "rival_lines": lines,
             "tier_fit_inputs": [{**_point_label(p), **{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power", "resident", "time")}}
                                 for p in points if p["tier"] and p.get("status") != "unavailable"],

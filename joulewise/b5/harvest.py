@@ -54,6 +54,7 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 from __future__ import annotations
 
 from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
+from joulewise.desk_restore import RestoreRefused
 from joulewise.desk_compress import is_file as logical_is_file, read_bytes
 
 import concurrent.futures
@@ -763,7 +764,7 @@ from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_
 
 
 def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
-                    succeeded: Sequence[Any]) -> tuple[dict[str, str], str]:
+                    succeeded: Sequence[Any], *, compression_records: Path | None = None) -> tuple[dict[str, str], str]:
     """What the core's HAZARD NEG-8 mint drops from the corpus members that succeeded.
 
     Returns ``({bundle_id: reason}, rule)``, mirroring the chain's
@@ -782,6 +783,8 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
         from joulewise import window_lineage
         hazard = runs_root is not None and window_lineage.is_hazard_runs_root(runs_root)
         function = getattr(ww, "neg8_corpus_mint_drops", None)
+    except RestoreRefused:
+        raise
     except Exception as exc:  # an unusable core authorizes nothing
         return {}, f"unavailable: {type(exc).__name__}"
     if not hazard:
@@ -793,8 +796,11 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
             staged = Path(scratch) / "succeeded-members.json"
             staged.write_bytes((json.dumps({**committed, "members": list(succeeded)}, indent=2, sort_keys=True)
                                 + "\n").encode("utf-8"))
-            rows = function(Path(runs_root), staged)
+            rows = function(Path(runs_root), staged, **({"compression_records": compression_records}
+                            if compression_records is not None else {}))
         reasons = {row["bundle_id"]: row["reason"] for row in rows}
+    except RestoreRefused:
+        raise
     except Exception as exc:  # unknown evidence never authorizes an omission
         return {}, f"raised: {type(exc).__name__}"
     if not all(isinstance(key, str) and isinstance(value, str) for key, value in reasons.items()):
@@ -802,7 +808,8 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
     return reasons, "joulewise.whole_window.neg8_corpus_mint_drops"
 
 
-def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> list[str]:
+def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path, *,
+                               compression_records: Path | None = None) -> list[str]:
     """Each corpus member a NEG-8 bound names, re-checked against its bundle in the bound root.
 
     The bound's arithmetic and its manifest identity are validated by the
@@ -818,6 +825,7 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
     the core's tolerance.  Problems name the member, never a number.
     """
     from joulewise import whole_window as ww
+    from joulewise.desk_restore import readable_run
     corpus = bound.get("reference_corpus") if isinstance(bound, Mapping) else None
     members = corpus.get("members") if isinstance(corpus, Mapping) else None
     if not isinstance(members, list) or not members:
@@ -835,47 +843,49 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path) -> lis
         if len(paths) != 1 or paths[0].is_symlink():
             problems.append(f"bound_member_not_one_bundle:{bundle_id}")
             continue
-        path = paths[0]
-        try:
-            digest = ww._bundle_evidence_sha256(path)
-        except (OSError, ValueError):
-            digest = None
-        if digest is None or digest != member.get("bundle_evidence_sha256"):
-            problems.append(f"bound_member_bytes_differ:{bundle_id}")
-            continue
-        try:
-            summary = ww._read_json_object(path / "summary_metrics.json")
-            metadata = ww._read_json_object(path / "metadata.json")
-            config = ww._read_json_object(path / "config.json")
+        with readable_run(paths[0], compression_records=compression_records) as path:
             try:
-                authenticated = ww.authenticate_bundle_launch_lineage(path, config=config, metadata=metadata,
-                                                                      require_completion=False)
-            except ww.LaunchLineageError:
-                problems.append(f"bound_member_lineage_unauthenticated:{bundle_id}")
+                digest = ww._bundle_evidence_sha256(path)
+            except (OSError, ValueError):
+                digest = None
+            if digest is None or digest != member.get("bundle_evidence_sha256"):
+                problems.append(f"bound_member_bytes_differ:{bundle_id}")
                 continue
-            if authenticated is not None:
-                extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
-                lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
-                member_lineages[str(bundle_id)] = lineage
-            calibration = _neg8_member_calibration_identity(ww, metadata)
-            if calibration is None or calibration != bound_calibration:
-                problems.append(f"bound_member_calibration_differs:{bundle_id}")
+            try:
+                summary = ww._read_json_object(path / "summary_metrics.json")
+                metadata = ww._read_json_object(path / "metadata.json")
+                config = ww._read_json_object(path / "config.json")
+                try:
+                    authenticated = ww.authenticate_bundle_launch_lineage(path, config=config, metadata=metadata,
+                                                                          require_completion=False)
+                except ww.LaunchLineageError:
+                    problems.append(f"bound_member_lineage_unauthenticated:{bundle_id}")
+                    continue
+                if authenticated is not None:
+                    extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+                    lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+                    member_lineages[str(bundle_id)] = lineage
+                calibration = _neg8_member_calibration_identity(ww, metadata)
+                if calibration is None or calibration != bound_calibration:
+                    problems.append(f"bound_member_calibration_differs:{bundle_id}")
+                    continue
+                identity, canonical = ww._scientific_config_identity(path)
+                strict = (not ww._custody_strict_invalid(path, summary, metadata)
+                          and ww._current_strict_summary(summary, path))
+                gross, idle, problem = ww._reference_energy_evidence(path)
+            except RestoreRefused:
+                raise
+            except Exception:  # a member that cannot be re-derived does not support the bound
+                problems.append(f"bound_member_not_rederived:{bundle_id}")
                 continue
-            identity, canonical = ww._scientific_config_identity(path)
-            strict = (not ww._custody_strict_invalid(path, summary, metadata)
-                      and ww._current_strict_summary(summary, path))
-            gross, idle, problem = ww._reference_energy_evidence(path)
-        except Exception:  # a member that cannot be re-derived does not support the bound
-            problems.append(f"bound_member_not_rederived:{bundle_id}")
-            continue
-        if not strict:
-            problems.append(f"bound_member_not_strict:{bundle_id}")
-        elif identity is None or not canonical or identity != corpus.get("scientific_config_sha256"):
-            problems.append(f"bound_member_condition_differs:{bundle_id}")
-        elif problem is not None or not isinstance(gross, Mapping) or not _close(
-                gross.get("point_j"), member.get("point_gross_j")) \
-                or not _close(idle, member.get("point_idle_subtracted_j")):
-            problems.append(f"bound_member_energy_differs:{bundle_id}")
+            if not strict:
+                problems.append(f"bound_member_not_strict:{bundle_id}")
+            elif identity is None or not canonical or identity != corpus.get("scientific_config_sha256"):
+                problems.append(f"bound_member_condition_differs:{bundle_id}")
+            elif problem is not None or not isinstance(gross, Mapping) or not _close(
+                    gross.get("point_j"), member.get("point_gross_j")) \
+                    or not _close(idle, member.get("point_idle_subtracted_j")):
+                problems.append(f"bound_member_energy_differs:{bundle_id}")
     # Stamped members carry one lineage, and it is the bound's when the bound names one (the mint's rule).
     distinct = {json.dumps(value, sort_keys=True, default=str) for value in member_lineages.values()}
     if len(distinct) > 1 or (member_lineages and bound_lineage is not None
@@ -2203,16 +2213,10 @@ def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
 
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
-    from contextlib import ExitStack
-    from scripts.restore_run_to_scratch import readable_run
+    from joulewise.desk_restore import readable_run
 
     bundle = Path(task["bundle_path"])
-    with ExitStack() as stack:
-        try:
-            readable = stack.enter_context(readable_run(bundle))
-        except (OSError, ValueError, subprocess.SubprocessError) as exc:
-            return {"run_id": task["run_id"], "bundle_path": str(bundle),
-                    "present": bundle.is_dir(), "errors": {"restore": f"{type(exc).__name__}: {exc}"[:500]}}
+    with readable_run(bundle, compression_records=task.get("compression_records")) as readable:
         return _assess_plain_member(task, readable)
 
 
@@ -2234,6 +2238,8 @@ def _assess_plain_member(task: Mapping[str, Any], bundle: Path) -> dict[str, Any
     def guarded(name: str, function: Callable[[], Any]) -> Any:
         try:
             return function()
+        except RestoreRefused:
+            raise
         except Exception as exc:  # recorded per member; never a harvest fault
             result["errors"][name] = f"{type(exc).__name__}: {exc}"[:500]
             return None
@@ -3848,6 +3854,8 @@ class _Harvest:
         started = time.monotonic()
         try:
             return function()
+        except RestoreRefused:
+            raise
         except Exception as exc:
             self._record_error(name, exc, round(time.monotonic() - started, 3), fault=fault)
             return None
@@ -4019,7 +4027,8 @@ class _Harvest:
             # A discarded early result already wrote its re-reduction under withheld/.
             withheld = self.withheld / "reassessed" if member["run_id"] in (getattr(self, "_early", None) or {}) \
                 else self.withheld
-            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld), "block_six": self.block_six})
+            tasks.append({"run_id": member["run_id"], "bundle_path": str(path), "withheld_dir": str(withheld), "block_six": self.block_six,
+                              "compression_records": str(Path(str(self.archive) + ".desk") / "compression.jsonl")})
         if discarded:
             self.emit("records.source_changed_during_harvest", level="window", collector="members",
                       observed={"early_assessments_discarded": sorted(discarded)[:16],
@@ -4469,6 +4478,8 @@ class _Harvest:
         if isinstance(value, Mapping):
             try:
                 registered = ww.load_neg8_drift_bound_artifact(bound_path) is not None
+            except RestoreRefused:
+                raise
             except Exception:  # the core reader failing verifies nothing
                 registered = False
             derived_from = "registered_corpus" if registered else None
@@ -4480,6 +4491,8 @@ class _Harvest:
                     try:
                         valid = ww.validate_neg8_drift_bound_artifact(
                             value, reference_corpus_bytes=collected, require_corpus_identity=True)
+                    except RestoreRefused:
+                        raise
                     except Exception:
                         valid = False
                     if not valid:
@@ -4490,7 +4503,10 @@ class _Harvest:
                 # numbers to the bundles in this bound root (core-prune N2, F2).
                 check["members_rederived"] = False
                 try:
-                    member_problems = neg8_bound_member_problems(value, bound_root)
+                    member_problems = neg8_bound_member_problems(value, bound_root,
+                        compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl")
+                except RestoreRefused:
+                    raise
                 except Exception as exc:
                     member_problems = [f"bound_member_check_failed:{type(exc).__name__}"]
                 if member_problems:
@@ -4633,7 +4649,8 @@ class _Harvest:
         reasons: dict[str, str] = {}
         if dropped_succeeded:
             reasons, check["mint_rule"] = neg8_mint_drops(
-                root, committed, [member for member in listed if _corpus_member_status(root, member) == "succeeded"])
+                root, committed, [member for member in listed if _corpus_member_status(root, member) == "succeeded"],
+                compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl")
         omitted = [(member.get("bundle_id"), reasons[member.get("bundle_id")]) for member in dropped_succeeded
                    if reasons.get(member.get("bundle_id")) in NEG8_ACCEPTED_DROP_REASONS]
         selected = [member.get("bundle_id") for member in dropped_succeeded
@@ -4681,6 +4698,8 @@ class _Harvest:
         try:
             authentic = bool(len(matches) == 1 and matches[0] == raw
                              and validate_whole_window_verdict_row(row, runs, set(row.get("bundle_ids", []))).authentic)
+        except RestoreRefused:
+            raise
         except Exception:
             authentic = False
         if not authentic:
@@ -4916,6 +4935,8 @@ class _Harvest:
             return {}
         try:
             sources = verdict_neg8_sources(row, runs)
+        except RestoreRefused:
+            raise
         except Exception as exc:
             sources = f"sources_raised:{type(exc).__name__}"
         if isinstance(sources, str):
@@ -5144,6 +5165,8 @@ class _Harvest:
                             problems.append(f"rederivation_failed:{problem}")
                         elif not isinstance(derived, Mapping):
                             problems.append("rederivation_invalid")
+            except RestoreRefused:
+                raise
             except Exception as exc:  # the core failing evaluates nothing
                 problems.append(f"rederivation_raised:{type(exc).__name__}")
         survivor_bracket = None
@@ -5434,7 +5457,8 @@ class _Harvest:
             found = [root / member["run_id"] for root in self._runs_roots() if (root / member["run_id"]).is_dir()]
             if len(found) == 1 and _same_path(found[0].parent, runs):
                 tasks.append({"run_id": member["run_id"], "bundle_path": str(found[0]),
-                              "withheld_dir": str(self.withheld), "block_six": self.block_six})
+                              "withheld_dir": str(self.withheld), "block_six": self.block_six,
+                              "compression_records": str(Path(str(self.archive) + ".desk") / "compression.jsonl")})
         results = assess_members(tasks, workers=self.seams.workers)
         self._early = {result["run_id"]: result for result in results}
 
@@ -7776,7 +7800,7 @@ def _common_root(paths: Sequence[Path]) -> Path:
     return Path(os.path.commonpath([os.path.abspath(path) for path in paths]))
 
 
-def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
+def _harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
             prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False,
             registration_paths: Sequence[Path | str] = ()) -> dict[str, Any]:
     """Harvest one window.  Raises NotReady before the chain group is gone."""
@@ -7848,3 +7872,16 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
     run.step("diagnostics", run.diagnostics, fault=False)
     run.step("sources_unchanged", run.sources_unchanged)
     return run.finish(COLLECTED if collected else NO_COLLECTION)
+
+
+def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
+            prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False,
+            registration_paths: Sequence[Path | str] = ()) -> dict[str, Any]:
+    """Stop on storage refusals before a harvest verdict can be written."""
+    try:
+        return _harvest(inputs, archive_root, seams=seams, prepare_desk=prepare_desk,
+                        run_g3=run_g3, allow_missing_terminal=allow_missing_terminal,
+                        registration_paths=registration_paths)
+    except RestoreRefused as exc:
+        print(str(exc), file=sys.stderr)
+        raise

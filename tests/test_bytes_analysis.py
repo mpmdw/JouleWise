@@ -19,6 +19,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.desk_restore_support import compress_member
+from joulewise import desk_restore
 from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_analyze
@@ -1206,10 +1208,9 @@ class Addendum4RegressionTests(NumericTestCase):
         saved = {path: path.read_bytes() for path in paths}
         try:
             for path in paths:
-                subprocess.run([shutil.which('zstd') or '/opt/homebrew/bin/zstd', '-q', str(path),
-                                '-o', str(path) + '.zst'], check=True)
-                path.unlink()
-            after = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+                compress_member(path, root)
+            with patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 1024**4})()):
+                after = list(ba.archive_records(root, self.manifest, session, stage='fit'))
             self.assertEqual(after, before)  # Same parser and exact decompressed bytes.
         finally:
             for path, raw in saved.items():
@@ -2167,6 +2168,8 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
             manifest = archive_campaign(root, non_claim=False, release="all")
             _write_json(root / "manifest.json", manifest)
             clean_source = (ROOT / "joulewise/bytes_analysis.py").read_text()
+            self.assertEqual(ba.frozen_predictions([], manifest)["desk_restore_sha256"],
+                hashlib.sha256(Path(desk_restore.__file__).read_bytes()).hexdigest())
             for case in ("comment", "fit-line"):
                 with self.subTest(case=case):
                     tree = root / case
