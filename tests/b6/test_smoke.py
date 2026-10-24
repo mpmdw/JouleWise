@@ -241,12 +241,10 @@ class SmokeTests(DeskCase):
         prepared = self.production_prepared()
         site, = (prepared.measurement / '.venv/lib').glob('python*/site-packages')
         self.assertTrue((prepared.measurement / '.venv/bin' / site.parent.name).is_file())
-        # Liveness only (no measured quantity): the wrapper interpreter must
-        # start and report its prefix. 60 s is run_campaign's command cap; 5 s
-        # failed twice on a cold 4-core CI runner while the same probe passes
-        # in about a second on the Mac.
+        # Operational startup bound: the same 5 s scheduling floor used by
+        # the partial-reader probe, with no sampler or workload involved.
         interpreter = subprocess.run([str(prepared.measurement / '.venv/bin/python'),
-            '-c', 'import sys; print(sys.prefix)'], capture_output=True, text=True, timeout=60)
+            '-c', 'import sys; print(sys.prefix)'], capture_output=True, text=True, timeout=5)
         self.assertEqual(interpreter.returncode, 0, interpreter.stderr)
         self.assertEqual(Path(interpreter.stdout.strip()), prepared.measurement / '.venv')
         pack = prepared.measurement / 'configs/campaigns' / PACKS['alpha']
