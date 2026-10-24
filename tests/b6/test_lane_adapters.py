@@ -39,6 +39,10 @@ class AdapterTests(DeskCase):
             shutil.copyfile(ROOT / relative, target)
         sizing = self.measurement / 'configs/b6/registration/sizing_b5.json'
         sized = json.loads(sizing.read_text())
+        # The registered bytes-s1-p1 row would satisfy the lookup; this test
+        # replaces it with an absent or malformed disk derivation.
+        sized['packs'] = {key: value for key, value in sized['packs'].items()
+                          if value.get('pack_id') != 'bytes-s1-p1'}
         identities = {name: {'path': str(self.root / name), 'sha256': 'a' * 64}
                       for name in ('identity-epoch.json', 't1-bindings.json')}
         for label, terms in (('absent', None), ('malformed', {'required_free_bytes': 1})):
