@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
 
 from joulewise import desk_compress
@@ -36,6 +37,18 @@ class StorageStop(BaseException):
 
 class RestoreRefused(StorageStop):
     """A storage/custody refusal that must terminate the consuming program."""
+
+
+def _storage_stop_excepthook(kind, value, traceback, _previous=sys.excepthook):
+    # A program without its own top-level StorageStop catch still names the
+    # refusal (exit status stays nonzero) instead of printing a traceback.
+    if isinstance(value, StorageStop):
+        print(f"refused: {value}", file=sys.stderr)
+        return
+    _previous(kind, value, traceback)
+
+
+sys.excepthook = _storage_stop_excepthook
 
 
 @contextmanager

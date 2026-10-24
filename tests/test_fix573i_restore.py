@@ -182,3 +182,25 @@ class EntryPointTests(unittest.TestCase):
             restore_run_to_scratch.main([])
         self.assertEqual(caught.exception.code, 2)
         self.assertEqual(err.getvalue(), 'restore-to-scratch: restore_refused: fixture cause\n')
+
+
+class StorageStopExcepthookTests(unittest.TestCase):
+    def test_uncaught_storage_stop_prints_named_refusal_not_traceback(self):
+        import subprocess
+        import sys as _sys
+        completed = subprocess.run(
+            [_sys.executable, "-B", "-c",
+             "import joulewise.desk_restore as d; raise d.RestoreRefused('compressed run requires compression.jsonl')"],
+            cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr.strip(),
+                         "refused: restore_refused: compressed run requires compression.jsonl")
+
+    def test_ordinary_exceptions_keep_the_default_traceback(self):
+        import subprocess
+        import sys as _sys
+        completed = subprocess.run(
+            [_sys.executable, "-B", "-c", "import joulewise.desk_restore; raise ValueError('ordinary')"],
+            cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("Traceback", completed.stderr)
