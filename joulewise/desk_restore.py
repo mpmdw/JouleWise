@@ -23,12 +23,19 @@ from joulewise import desk_compress
 MIN_RESERVE_GIB = 40
 
 
-class RestoreRefused(ValueError):
-    """A storage/custody refusal that must terminate the consuming program."""
+class StorageStop(BaseException):
+    """Like KeyboardInterrupt, a storage or custody condition must stop the program.
+
+    Ordinary handlers must not absorb it.
+    """
 
     def __init__(self, reason):
         self.reason = str(reason).removeprefix("restore_refused: ")
         super().__init__(f"restore_refused: {self.reason}")
+
+
+class RestoreRefused(StorageStop):
+    """A storage/custody refusal that must terminate the consuming program."""
 
 
 @contextmanager
@@ -211,8 +218,6 @@ def readable_run(run_dir, *, compression_records=None, _require_bundle=True):
             restored = stack.enter_context(restored_run(source, scratch,
                 compression_records=compression_records,
                 _require_bundle=_require_bundle))
-        except RestoreRefused:
-            raise
         except (OSError, ValueError) as exc:
             raise RestoreRefused(exc) from exc
         yield restored

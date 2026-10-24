@@ -25,7 +25,7 @@ from joulewise import arm_readiness as readiness, battery_float, calibration_bra
 from joulewise import network_time_off, night_gate, v5_qualification as q
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from joulewise.cli import validate_bundle
-from joulewise.desk_restore import RestoreRefused, readable_run, readable_tree
+from joulewise.desk_restore import StorageStop, RestoreRefused, readable_run, readable_tree
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import CampaignPolicy, CampaignPolicyProfile, AdmissionFailureAction
 from joulewise.whole_window import validate_whole_window_verdict_row
@@ -791,8 +791,6 @@ def harvest(args, *, runner=subprocess.run, now=None, clear=q.group_clear):
         q.unchanged(sources, original)
         if not clear(night, plan_id=plan.plan_id):
             raise q.HarvestRefusal("launcher_group_alive")
-    except RestoreRefused:
-        raise
     except Exception as error:
         record.update(verdict="REFUSED", cause_codes=[str(error) if isinstance(error, q.HarvestRefusal)
                       else "archive_authentication_or_tool_fault"], cause_classes=["tooling"])
@@ -826,8 +824,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         record = harvest(args)
-    except RestoreRefused as error:
-        print(str(error), file=sys.stderr)
+    except StorageStop as error:
+        print(f"refused: {error}", file=sys.stderr)
         return 3
     except Exception:
         q.preflight_refusal(SCHEMA, args.scratch_root)

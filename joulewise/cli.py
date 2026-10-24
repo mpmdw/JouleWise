@@ -51,7 +51,7 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
-from joulewise.desk_restore import readable_run, RestoreRefused
+from joulewise.desk_restore import readable_run, StorageStop
 from joulewise.bundle_read import (
     FROZEN_LEGACY_BUNDLE_IDENTITIES,
     BundleReader,
@@ -2464,8 +2464,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     except (
-        RestoreRefused,
         OSError,
         json.JSONDecodeError,
         KVSizeError,

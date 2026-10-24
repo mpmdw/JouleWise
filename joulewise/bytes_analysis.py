@@ -18,7 +18,7 @@ from pathlib import Path
 from joulewise.analysis_engine.distributions import student_t_quantile
 from joulewise.desk_compress import read_bytes
 from joulewise import desk_restore
-from joulewise.desk_restore import readable_run, RestoreRefused
+from joulewise.desk_restore import readable_run
 
 BOUNDARIES = ("rails", "DC input", "rest")
 HYPOTHESES = ("bytes", "resident", "time")
@@ -921,8 +921,6 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     rails_secondary_j=energy - own_idle * duration, rails_anchor_j=anchor,
                     rails_interpolation_j=0.0, operative=operative)
                 spans[run_id] = (decode, idle)
-        except RestoreRefused:
-            raise
         except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
             row.update(status="unusable", invalid_energy_record=True, unusable_reason=str(exc))
         records.append(row)
@@ -937,8 +935,6 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                     events = [json.loads(t) for t in read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines() if t.strip()]
                     spans[ref["run_id"]] = (_event_span(events, "measured_run", metadata),
                                              _event_span(events, "idle_baseline", metadata))
-            except RestoreRefused:
-                raise
             except (OSError, ValueError, KeyError, TypeError):
                 continue
     streams = _session_streams(root, [span for pair in spans.values() for span in pair]) if spans else []

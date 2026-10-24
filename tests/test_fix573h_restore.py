@@ -40,9 +40,12 @@ class RealisticCompressedArchiveTests(unittest.TestCase):
         self.addCleanup(self.space.stop)
 
     def compress(self):
-        # The default desk threshold leaves small JSON plain. Compress a real
-        # raw member only, with a journal discoverable from the runs root.
+        # The default desk threshold leaves small JSON plain. Compress the raw
+        # plist and rich telemetry, with a journal discoverable from the runs root.
         compress_member(self.bundle / 'raw/powermetrics.plist', self.runs)
+        rich = self.bundle / 'rich_telemetry_idle.jsonl'
+        rich.write_text('{"fixture":true}\n' * 200)
+        compress_member(rich, self.runs)
         for name in ('metadata.json', 'config.json', 'summary_metrics.json', 'events.jsonl'):
             self.assertTrue((self.bundle / name).is_file())
         with self.assertRaises(restore.RestoreRefused):

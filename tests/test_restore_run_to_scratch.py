@@ -142,7 +142,7 @@ class RestoreRunTests(unittest.TestCase):
         self.compress()
         moved = self.root / "nonstandard"
         self.record_dir.rename(moved)
-        with self.assertRaisesRegex(ValueError, "compressed run requires compression.jsonl"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "compressed run requires compression.jsonl"):
             with restore.readable_run(self.run):
                 self.fail("reader reached")
         with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(
@@ -178,7 +178,7 @@ class RestoreRunTests(unittest.TestCase):
     def test_digest_mismatch_never_reaches_reader(self):
         self.compress()
         self.change_raw_record(sha256="0" * 64)
-        with self.assertRaisesRegex(ValueError, "digest mismatch"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "digest mismatch"):
             with self.restored(compression_records=self.records):
                 self.fail("reader reached")
         self.assertEqual(list(self.scratch.iterdir()), [])
@@ -187,12 +187,12 @@ class RestoreRunTests(unittest.TestCase):
     def test_bad_frame_and_wrong_size_are_rejected(self):
         self.compress()
         self.change_raw_record(size=1)
-        with self.assertRaisesRegex(ValueError, "size mismatch"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "size mismatch"):
             with self.restored(compression_records=self.records):
                 self.fail("reader reached")
         self.assertEqual(list(self.scratch.iterdir()), [])
         (self.run / "raw" / "powermetrics.plist.zst").write_bytes(b"invalid frame")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(restore.RestoreRefused):
             with self.restored(compression_records=self.records):
                 self.fail("reader reached")
         self.assertEqual(list(self.scratch.iterdir()), [])
@@ -200,11 +200,11 @@ class RestoreRunTests(unittest.TestCase):
     @unittest.skipUnless(ZSTD, "zstd is optional")
     def test_missing_record_and_ambiguous_siblings_are_rejected(self):
         self.compress()
-        with self.assertRaisesRegex(ValueError, "no digest record"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "no digest record"):
             with self.restored():
                 self.fail("reader reached")
         (self.run / "raw" / "powermetrics.plist").write_bytes(b"plain sibling")
-        with self.assertRaisesRegex(ValueError, "ambiguous"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "ambiguous"):
             with self.restored(compression_records=self.records):
                 self.fail("reader reached")
 
@@ -224,21 +224,21 @@ class RestoreRunTests(unittest.TestCase):
         for source, scratch in ((self.run.parent, self.scratch), (self.run, self.run / "scratch"),
                                 (self.run, self.archive / "scratch"),
                                 (self.run, self.run.parent / "scratch")):
-            with self.subTest(source=source, scratch=scratch), self.assertRaises(ValueError):
+            with self.subTest(source=source, scratch=scratch), self.assertRaises(restore.RestoreRefused):
                 with self.restored(source, scratch):
                     self.fail("reader reached")
-        with self.assertRaisesRegex(ValueError, "outside the compression records"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "outside the compression records"):
             with self.restored(scratch=self.record_dir / "scratch", compression_records=self.records):
                 self.fail("reader reached")
         (self.run / "linked").symlink_to(self.root)
-        with self.assertRaisesRegex(ValueError, "symlinks"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "symlinks"):
             with self.restored():
                 self.fail("reader reached")
         self.assertFalse(self.scratch.exists())
 
     def test_space_refusal_happens_before_restoration(self):
         with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(free=0)):
-            with self.assertRaisesRegex(ValueError, "insufficient scratch space"):
+            with self.assertRaisesRegex(restore.RestoreRefused, "insufficient scratch space"):
                 with restore.restored_run(self.run, self.scratch):
                     self.fail("reader reached")
         self.assertEqual(list(self.scratch.iterdir()), [])
@@ -248,7 +248,7 @@ class RestoreRunTests(unittest.TestCase):
         # One byte below reserve + required would cross the standing floor.
         free = restore.MIN_RESERVE_GIB * 1024**3 + required - 1
         with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(free=free)):
-            with self.assertRaisesRegex(ValueError, "insufficient scratch space"):
+            with self.assertRaisesRegex(restore.RestoreRefused, "insufficient scratch space"):
                 with restore.restored_run(self.run, self.scratch):
                     self.fail("reader reached")
         with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(free=free + 1)):
@@ -276,11 +276,11 @@ class RestoreRunTests(unittest.TestCase):
         self.assertEqual(restore.MIN_RESERVE_GIB, 40)
         # 39 GiB is one GiB below that reserve, even before fixture bytes.
         with mock.patch.object(restore.shutil, "disk_usage", return_value=mock.Mock(free=39 * 1024**3)):
-            with self.assertRaisesRegex(ValueError, "insufficient scratch space"):
+            with self.assertRaisesRegex(restore.RestoreRefused, "insufficient scratch space"):
                 with restore.restored_run(self.run, self.scratch):
                     self.fail("reader reached")
         for reserve in (-1, 0, 25, 29, 39, float("nan"), float("inf")):
-            with self.subTest(reserve=reserve), self.assertRaisesRegex(ValueError, "finite and at least 40"):
+            with self.subTest(reserve=reserve), self.assertRaisesRegex(restore.RestoreRefused, "finite and at least 40"):
                 with restore.restored_run(self.run, self.scratch, reserve_gib=reserve):
                     self.fail("reader reached")
 
@@ -355,7 +355,7 @@ class RestoreRunTests(unittest.TestCase):
         self.compress()
         with self.records.open("a") as stream:
             stream.write('{"event":"compress"')
-        with self.assertRaisesRegex(ValueError, "invalid compression journal"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "invalid compression journal"):
             with self.restored(compression_records=self.records):
                 self.fail("reader reached")
         rows = self.records.read_text().splitlines()[:-1]
@@ -363,7 +363,7 @@ class RestoreRunTests(unittest.TestCase):
                         if json.loads(row)["path"] == str(self.run / "raw/powermetrics.plist"))
         restored["event"] = "restore"
         self.records.write_text("\n".join([*rows, json.dumps(restored)]) + "\n")
-        with self.assertRaisesRegex(ValueError, "no digest record"):
+        with self.assertRaisesRegex(restore.RestoreRefused, "no digest record"):
             with self.restored(compression_records=self.records):
                 self.fail("reader reached")
 

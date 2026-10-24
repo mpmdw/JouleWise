@@ -17,7 +17,7 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from joulewise.desk_restore import (MIN_RESERVE_GIB, readable_run, restored_run,
+from joulewise.desk_restore import (StorageStop, MIN_RESERVE_GIB, readable_run, restored_run,
                                     _inventory, _records, shutil)
 
 
@@ -40,6 +40,8 @@ def main(argv=None):
                           reserve_gib=args.reserve_gib) as restored:
             return subprocess.run([arg.replace("{run}", str(restored)) for arg in command],
                                   check=False).returncode
+    except StorageStop as exc:
+        parser.exit(2, f"restore-to-scratch: {exc}\n")
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(2, f"restore-to-scratch: {exc}\n")
 

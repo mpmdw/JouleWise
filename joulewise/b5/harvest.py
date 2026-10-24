@@ -54,7 +54,6 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 from __future__ import annotations
 
 from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
-from joulewise.desk_restore import RestoreRefused
 from joulewise.desk_compress import is_file as logical_is_file, read_bytes
 
 import concurrent.futures
@@ -783,8 +782,6 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
         from joulewise import window_lineage
         hazard = runs_root is not None and window_lineage.is_hazard_runs_root(runs_root)
         function = getattr(ww, "neg8_corpus_mint_drops", None)
-    except RestoreRefused:
-        raise
     except Exception as exc:  # an unusable core authorizes nothing
         return {}, f"unavailable: {type(exc).__name__}"
     if not hazard:
@@ -799,8 +796,6 @@ def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
             rows = function(Path(runs_root), staged, **({"compression_records": compression_records}
                             if compression_records is not None else {}))
         reasons = {row["bundle_id"]: row["reason"] for row in rows}
-    except RestoreRefused:
-        raise
     except Exception as exc:  # unknown evidence never authorizes an omission
         return {}, f"raised: {type(exc).__name__}"
     if not all(isinstance(key, str) and isinstance(value, str) for key, value in reasons.items()):
@@ -846,8 +841,6 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path, *,
         with readable_run(paths[0], compression_records=compression_records) as path:
             try:
                 digest = ww._bundle_evidence_sha256(path)
-            except RestoreRefused:
-                raise
             except (OSError, ValueError):
                 digest = None
             if digest is None or digest != member.get("bundle_evidence_sha256"):
@@ -875,8 +868,6 @@ def neg8_bound_member_problems(bound: Mapping[str, Any], runs_root: Path, *,
                 strict = (not ww._custody_strict_invalid(path, summary, metadata)
                           and ww._current_strict_summary(summary, path))
                 gross, idle, problem = ww._reference_energy_evidence(path)
-            except RestoreRefused:
-                raise
             except Exception:  # a member that cannot be re-derived does not support the bound
                 problems.append(f"bound_member_not_rederived:{bundle_id}")
                 continue
@@ -2240,8 +2231,6 @@ def _assess_plain_member(task: Mapping[str, Any], bundle: Path) -> dict[str, Any
     def guarded(name: str, function: Callable[[], Any]) -> Any:
         try:
             return function()
-        except RestoreRefused:
-            raise
         except Exception as exc:  # recorded per member; never a harvest fault
             result["errors"][name] = f"{type(exc).__name__}: {exc}"[:500]
             return None
@@ -3856,8 +3845,6 @@ class _Harvest:
         started = time.monotonic()
         try:
             return function()
-        except RestoreRefused:
-            raise
         except Exception as exc:
             self._record_error(name, exc, round(time.monotonic() - started, 3), fault=fault)
             return None
@@ -4222,8 +4209,6 @@ class _Harvest:
                     try:
                         joined.update({key: value for key, value in campaign_cooldown_evidence(root, identifier).items()
                                        if key not in joined})
-                    except RestoreRefused:
-                        raise
                     except Exception:  # an unreadable join verifies nothing
                         continue
         for run_id, result in self.members.items():
@@ -4255,8 +4240,6 @@ class _Harvest:
         try:
             acceptance = brackets.load_calibration_acceptance_bound(acceptance_path) \
                 if acceptance_path.is_file() else None
-        except RestoreRefused:
-            raise
         except Exception:  # an unreadable acceptance sets no bound; flagged below
             acceptance = None
         # The acceptance sets the bracket bound, so its bytes are pinned against
@@ -4277,8 +4260,6 @@ class _Harvest:
             return
         try:
             candidate = terminal_head_pin_for_session(ledger, session_id=session_id)
-        except RestoreRefused:
-            raise
         except Exception as exc:
             self.emit("calibration.no_bracket", level="window", collector="calibration",
                       observed={"terminal_pin": f"{type(exc).__name__}"})
@@ -4486,8 +4467,6 @@ class _Harvest:
         if isinstance(value, Mapping):
             try:
                 registered = ww.load_neg8_drift_bound_artifact(bound_path) is not None
-            except RestoreRefused:
-                raise
             except Exception:  # the core reader failing verifies nothing
                 registered = False
             derived_from = "registered_corpus" if registered else None
@@ -4499,8 +4478,6 @@ class _Harvest:
                     try:
                         valid = ww.validate_neg8_drift_bound_artifact(
                             value, reference_corpus_bytes=collected, require_corpus_identity=True)
-                    except RestoreRefused:
-                        raise
                     except Exception:
                         valid = False
                     if not valid:
@@ -4513,8 +4490,6 @@ class _Harvest:
                 try:
                     member_problems = neg8_bound_member_problems(value, bound_root,
                         compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl")
-                except RestoreRefused:
-                    raise
                 except Exception as exc:
                     member_problems = [f"bound_member_check_failed:{type(exc).__name__}"]
                 if member_problems:
@@ -4709,8 +4684,6 @@ class _Harvest:
                                  row, runs, set(row.get("bundle_ids", [])),
                                  compression_records=Path(str(self.archive) + ".desk") / "compression.jsonl",
                              ).authentic)
-        except RestoreRefused:
-            raise
         except Exception:
             authentic = False
         if not authentic:
@@ -4946,8 +4919,6 @@ class _Harvest:
             return {}
         try:
             sources = verdict_neg8_sources(row, runs)
-        except RestoreRefused:
-            raise
         except Exception as exc:
             sources = f"sources_raised:{type(exc).__name__}"
         if isinstance(sources, str):
@@ -5176,8 +5147,6 @@ class _Harvest:
                             problems.append(f"rederivation_failed:{problem}")
                         elif not isinstance(derived, Mapping):
                             problems.append("rederivation_invalid")
-            except RestoreRefused:
-                raise
             except Exception as exc:  # the core failing evaluates nothing
                 problems.append(f"rederivation_raised:{type(exc).__name__}")
         survivor_bracket = None
@@ -5299,8 +5268,6 @@ class _Harvest:
                     else None)
                 valid = ww.validate_neg8_drift_bound_artifact(clean, reference_corpus_bytes=clean_raw,
                                                               require_corpus_identity=True)
-            except RestoreRefused:
-                raise
             except Exception as exc:  # the core refusing derives nothing
                 clean, valid = None, False
                 problems.append(f"clean_bound_raised:{type(exc).__name__}")
@@ -5540,8 +5507,6 @@ class _Harvest:
         inputs = self.inputs
         try:
             terminal = terminal_head_pin_for_session(inputs.ledger_path, session_id=inputs.bracket_session_id)
-        except RestoreRefused:
-            raise
         except Exception as exc:  # an open or absent session has no terminal head
             code = getattr(getattr(exc, "code", None), "value", None)
             return {"reason": "session_not_terminal", "error_type": type(exc).__name__,
@@ -5550,8 +5515,6 @@ class _Harvest:
             snapshot = load_calibration_ledger_snapshot(
                 inputs.ledger_path, inputs.head_pin_path, require_committed_pin=True, verify_custody=False,
                 mode="read_replay", repo_root=inputs.measurement_root)
-        except RestoreRefused:
-            raise
         except Exception as exc:
             return {"reason": "pin_unreadable", "error_type": type(exc).__name__,
                     "terminal_sequence": terminal.get("sequence")}
@@ -5599,8 +5562,6 @@ class _Harvest:
                     plan_id=tree["plan"]["plan_id"], plan_sha256=sha256_file(frozen),
                     evidence_root_id=tree["window_identity"]["evidence_root_id"],
                     runs_root=inputs.claim_runs_root), None
-        except RestoreRefused:
-            raise
         except Exception as exc:
             return None, _exception_text(exc)
 
@@ -5681,8 +5642,6 @@ class _Harvest:
                 return None
             write_once(target, raw_binding)
             return target
-        except RestoreRefused:
-            raise
         except Exception as exc:  # the verdict is still written; its membership is then unresolved
             failed("probe_raised", **self._desk_failure("desk-membership.txt", _exception_text(exc)))
             return None
@@ -7899,10 +7858,6 @@ def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | No
             prepare_desk: bool = False, run_g3: bool = True, allow_missing_terminal: bool = False,
             registration_paths: Sequence[Path | str] = ()) -> dict[str, Any]:
     """Stop on storage refusals before a harvest verdict can be written."""
-    try:
-        return _harvest(inputs, archive_root, seams=seams, prepare_desk=prepare_desk,
-                        run_g3=run_g3, allow_missing_terminal=allow_missing_terminal,
-                        registration_paths=registration_paths)
-    except RestoreRefused as exc:
-        print(str(exc), file=sys.stderr)
-        raise
+    return _harvest(inputs, archive_root, seams=seams, prepare_desk=prepare_desk,
+                    run_g3=run_g3, allow_missing_terminal=allow_missing_terminal,
+                    registration_paths=registration_paths)

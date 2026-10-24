@@ -109,7 +109,6 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.calibration_ledger import CalibrationLedgerSnapshot
-from joulewise.desk_restore import RestoreRefused
 from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
 from joulewise.reduce import (
     _corner_composed_anchor_shift_envelope,
@@ -1869,8 +1868,6 @@ def _cpu_admission_bundle_reasons(
     if _summary_reducer_version(summary) in {"0.5.2", "0.6.2"}:
         try:
             measured_window = BundleReader(path).measured_window()
-        except RestoreRefused:
-            raise
         except (BundleReadError, OSError, TypeError, ValueError):
             measured_window = None
         if measured_window is None:
@@ -2136,8 +2133,6 @@ def _evaluate_member(
     if hash_bundles and read_problem is None:
         try:
             bundle_sha256 = complete_bundle_sha256(path)
-        except RestoreRefused:
-            raise
         except ValueError:
             # A claim-bearing pin that cannot be computed is a refusal, never a
             # silent ``None`` (fail-open).
@@ -2413,8 +2408,6 @@ def _common_mode_block_inputs_from_evidence(
             curve = reader.summed_curve()
             windows = reader.phase_windows().get(phase)
             metadata = reader.metadata()
-        except RestoreRefused:
-            raise
         except (BundleReadError, OSError, TypeError, ValueError) as exc:
             raise CommonModeEstimatorRefusal(
                 "common_mode_precondition_failed",

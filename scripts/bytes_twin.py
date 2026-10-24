@@ -47,6 +47,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+class StorageStop(BaseException):
+    """Independent custody stop; ordinary data handlers must not absorb it."""
+
+    def __init__(self, reason):
+        self.reason = str(reason).removeprefix("restore_refused: ")
+        super().__init__(f"restore_refused: {self.reason}")
+
+
 SCHEMA = "joulewise.bytes_twin.v1"
 GB = 1e9                      # the pilot's convention: GB means 10^9 bytes
 DECODE_STEPS = 512            # decode forward passes in the measured request (Addendum 5 item 4)
@@ -767,9 +776,9 @@ def _read_text(path):
                                 capture_output=True, check=True)
         return result.stdout.decode("utf-8")
     except OSError:
-        raise RuntimeError("zstd unavailable: " + str(compressed)) from None
+        raise StorageStop("zstd unavailable: " + str(compressed)) from None
     except (subprocess.CalledProcessError, UnicodeDecodeError):
-        raise RuntimeError("compressed file unreadable: " + str(compressed)) from None
+        raise StorageStop("compressed file unreadable: " + str(compressed)) from None
 
 
 def read_json(path, default=None):
@@ -922,7 +931,7 @@ def _readable_bundle(source, journal):
                     if count != size or (record is not None and digest.hexdigest() != record["sha256"]):
                         raise ValueError("restored size or digest mismatch")
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
-            raise RuntimeError("restore_refused: " + str(exc)) from exc
+            raise StorageStop(exc) from exc
         yield plain
 
 
@@ -1712,6 +1721,9 @@ def main(argv=None):
         archives = [load_archive(root) for root in args.archive]
         result = analyse(rows, manifest, archives, stage=args.stage, key_dir=args.key_dir,
                          sidecars=sidecars, listed=listed_sessions(args.manifest))
+    except StorageStop as exc:
+        print(f"refused: {exc}")
+        return 1
     except Exception as exc:  # noqa: BLE001 - every failure is a refusal line
         print("refused: " + (str(exc) or type(exc).__name__))
         return 1

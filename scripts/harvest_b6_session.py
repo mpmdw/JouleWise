@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from joulewise.desk_restore import StorageStop
 from joulewise.b5.harvest import Seams, harvest, resolve_inputs
 from joulewise.b6 import registration
 from joulewise.b6.export_runs import export
@@ -60,6 +61,9 @@ def main(argv=None) -> int:
                           "counting": result.counting, "structural": result.structural,
                           "flag_counts": result.record["flag_counts"], "export": exported.structure()}, sort_keys=True))
         return PENDING_REGISTRATION if result.verdict == "UNAVAILABLE" else 0
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return phase
     except Exception as exc:
         detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
         print("block-six session program fault: " + detail, file=sys.stderr)

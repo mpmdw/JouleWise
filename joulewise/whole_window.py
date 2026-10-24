@@ -24,7 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from joulewise.desk_compress import is_file as desk_is_file
-from joulewise.desk_restore import readable_run, RestoreRefused
+from joulewise.desk_restore import readable_run, StorageStop
 from joulewise.tolerances import CALIBRATION_TIME_ABS_TOL_S, NEG8_ENERGY_ABS_TOL_J
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -818,8 +818,6 @@ class AuthenticatedConsumptionSession:
                             strict_physics=True,
                             physics_cache=physics_cache,
                         )
-                except RestoreRefused:
-                    raise
                 except (BundleReadError, OSError, TypeError, ValueError):
                     authenticated = None
                     detail = "instrument_calibration_invalid"
@@ -888,7 +886,7 @@ class AuthenticatedConsumptionSession:
                                 _instrument_calibration_physics_cache=physics_cache,
                             )
                         )
-                except RestoreRefused:
+                except StorageStop:
                     raise
                 except (
                     BundleReadError,
@@ -1746,8 +1744,6 @@ def _neg8_corpus_identity_is_authenticated(
             label="registered NEG-8 settled reference corpus",
             allow_compressed=True,
         )
-    except RestoreRefused:
-        raise
     except (OSError, UnicodeDecodeError, ValueError):
         return False
     return _neg8_corpus_identity_matches_bytes(corpus, raw)
@@ -1865,8 +1861,6 @@ def load_neg8_drift_bound_artifact(path: str | Path | None) -> dict[str, Any] | 
         )
 
         value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_pairs)
-    except RestoreRefused:
-        raise
     except (OSError, UnicodeDecodeError, ValueError):
         return None
     return (
@@ -3003,8 +2997,6 @@ def _hazard_bound_corpus_binding(
             )
         try:
             actual = _bundle_evidence_sha256(paths[0])
-        except RestoreRefused:
-            raise
         except (OSError, ValueError) as exc:
             raise LaunchLineageError(
                 "launch_binding_mismatch",
@@ -3757,8 +3749,6 @@ def validated_attempt_selection(
             strict_evidence=strict_evidence,
             finalized_bundles=finalized,
         )
-    except RestoreRefused:
-        raise
     except (OSError, TypeError, ValueError):
         return None
     expected_descriptors = {
@@ -4168,8 +4158,6 @@ def _plain_reference_energy_evidence_detail(
         from joulewise.reduce import reduce_bundle
 
         reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
-    except RestoreRefused:
-        raise
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)
@@ -4527,8 +4515,6 @@ def _measured_window_end_s(
     try:
         with readable_run(bundle_path, compression_records=compression_records) as plain:
             window = BundleReader(plain).measured_window()
-    except RestoreRefused:
-        raise
     except (BundleReadError, OSError, TypeError, ValueError, KeyError):
         return None
     if window is None or window.end_s < window.start_s:
@@ -4639,8 +4625,6 @@ def _hazard_neg8_corpus_selection(
                 continue
             try:
                 evidence_sha = _bundle_evidence_sha256(bundle_path, compression_records=compression_records)
-            except RestoreRefused:
-                raise
             except (OSError, ValueError):
                 refuse("bundle_inventory_invalid")
                 continue
@@ -4907,8 +4891,6 @@ def _scientific_config_identity(
                 label=f"bundle {bundle_path.name} scientific config",
             )
         normalized = BenchmarkConfig.from_mapping(dict(config or {})).to_dict()
-    except RestoreRefused:
-        raise
     except (OSError, TypeError, ValueError):
         return None, False
     if (
@@ -5473,8 +5455,6 @@ def _current_core_rederivation_reasons(
             try:
                 with readable_run(path, compression_records=compression_records) as plain:
                     window = BundleReader(plain).measured_window()
-            except RestoreRefused:
-                raise
             except (BundleReadError, OSError, TypeError, ValueError):
                 window = None
             if window is None:
@@ -5624,8 +5604,6 @@ def _current_core_rederivation_reasons(
                                 strict_physics=True,
                                 physics_cache=physics_cache,
                             )
-                    except RestoreRefused:
-                        raise
                     except (BundleReadError, OSError, TypeError, ValueError):
                         authenticated = None
                         detail = "instrument_calibration_invalid"
@@ -6503,8 +6481,6 @@ def _strict_validation_problems(
         if physics_cache is not None and _accepts_physics_cache(validator):
             return list(validator(path, strict=True, physics_cache=physics_cache))
         return list(validator(path, strict=True))
-    except RestoreRefused:
-        raise
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         return [f"strict validation raised {type(exc).__name__}: {exc}"]
 
@@ -6557,12 +6533,8 @@ def strict_validate_bundles(
                 for index, future in enumerate(futures):
                     try:
                         results[index] = list(future.result())
-                    except RestoreRefused:
-                        raise
                     except Exception:  # noqa: BLE001 - redo it in process
                         results[index] = None
-        except RestoreRefused:
-            raise
         except Exception:  # noqa: BLE001 - a pool that cannot start: in process
             pass
     cache: dict[Any, Any] = {}

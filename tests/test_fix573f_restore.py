@@ -311,7 +311,7 @@ class ColdReviewProbeTests(unittest.TestCase):
         with mock.patch.object(harvest, '_harvest', side_effect=restore.RestoreRefused('fixture storage')), redirect_stderr(err):
             with self.assertRaises(restore.RestoreRefused):
                 harvest.harvest(None, self.archive)
-        self.assertEqual(err.getvalue(), 'restore_refused: fixture storage\n')
+        self.assertEqual(err.getvalue(), '')  # The program entry point prints the stop.
 
 
 class SyntheticHarvestGateTests(unittest.TestCase):

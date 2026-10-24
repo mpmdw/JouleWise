@@ -196,7 +196,7 @@ class ColdReviewProbe3Tests(unittest.TestCase):
                  redirect_stderr(err):
                 with self.assertRaisesRegex(restore.RestoreRefused, 'compression.jsonl'):
                     harvest.harvest(None, self.archive)
-            self.assertIn('restore_refused:', err.getvalue())
+            self.assertEqual(err.getvalue(), '')  # Only entry points print program refusals.
         with self.assertRaises(auth.CompressedBundleRequiresRestore):
             BundleReader(self.live)
 
