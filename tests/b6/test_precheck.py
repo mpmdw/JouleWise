@@ -67,6 +67,8 @@ class PrecheckTests(DeskCase):
         required = 2 * (b + wait) + fixed
         terms = dict(B_bytes=b, extra_wait_raw_bytes=wait, fixed_retained_bytes=fixed,
             required_free_bytes=required, peak_copies=2, session_wait_budget_s=plan.SESSION_WAIT_BUDGET_S)
+        # Replace the registered row for this pack with the synthetic terms.
+        value['packs'] = {k: v for k, v in value['packs'].items() if v.get('pack_id') != pack}
         value['packs']['BYTES'] = dict(pack_id=pack, programmed_span_s=3600,
                                       T_stream_max_s=100, disk_derivation=terms)
         sizing.write_text(json.dumps(value))

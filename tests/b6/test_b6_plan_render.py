@@ -255,6 +255,8 @@ class ProductionPlanRenderTests(DeskCase):
                      peak_copies=2, session_wait_budget_s=7200, required_free_bytes=required)
         sizing = self.measurement / "configs/b6/registration/sizing_b5.json"
         value = read(sizing)
+        # Replace the registered bytes-s1-p1 row with the synthetic terms.
+        value["packs"] = {k: v for k, v in value["packs"].items() if v.get("pack_id") != "bytes-s1-p1"}
         value["packs"]["BYTES"] = dict(pack_id="bytes-s1-p1", programmed_span_s=3600,
                                         T_stream_max_s=100, disk_derivation=terms)
         write_json(sizing, value)
