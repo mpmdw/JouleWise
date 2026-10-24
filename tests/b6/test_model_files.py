@@ -7,6 +7,26 @@ from tests.b6.support import IDENTITY, ROOT
 
 
 class ModelFileTests(unittest.TestCase):
+    def test_sampler_comparison_projects_each_registered_setting(self):
+        settings = {"temperature": 0.0, "top_p": 1.0, "top_k": 0, "kind": "greedy"}
+        policy = {"sampler": settings, "output_policy": {"name": "fixed"}}
+        self.pins["units"]["one"]["stack_identity"]["sampler_output_policy"] = policy
+        expected = model_files.expected(self.pins)
+        observed = {**IDENTITY, "sampler_output_policy": copy.deepcopy(policy)}
+        observed["sampler_output_policy"]["sampler"]["provenance_note"] = "new adapter detail"
+        self.assertEqual(model_files.compare(expected, model_files.run_identity(observed)), [])
+        for key, value in (("temperature", 0.7), ("top_p", 0.9), ("top_k", 20), ("kind", "top_p")):
+            with self.subTest(key=key):
+                changed = copy.deepcopy(observed)
+                changed["sampler_output_policy"]["sampler"][key] = value
+                self.assertEqual(model_files.compare(expected, model_files.run_identity(changed)),
+                                 [{"code": "model.stack_differs_from_registered", "fields": ["sampler_output_policy"]}])
+        for value in ([], "garbled", None):
+            changed = copy.deepcopy(observed)
+            changed["sampler_output_policy"]["sampler"] = value
+            self.assertEqual(model_files.compare(expected, changed),
+                             [{"code": "model.stack_differs_from_registered", "fields": ["sampler_output_policy"]}])
+
     def test_malformed_runtime_record_is_unrecorded_identity(self):
         for value in ({'adapters': []}, {'environment': {'python_packages': []}},
                       {'adapters': {'runtime': {'prepare_metadata': ['bad']}}}):

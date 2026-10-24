@@ -18,6 +18,15 @@ from scripts import b6_export_runs, b6_unblind
 from tests.b6.support import registration_dir, write_json
 
 
+def seal_reference_inputs(archive):
+    paths = sorted(p for parent in (archive / "sources", archive / "withheld/reductions")
+                   for p in parent.rglob("*") if p.is_file() and p.name != "SHA256SUMS")
+    (archive / "sources/SHA256SUMS").write_text("".join(
+        hashlib.sha256(p.read_bytes()).hexdigest() + "  "
+        + (str(p.relative_to(archive / "sources")) if p.is_relative_to(archive / "sources")
+           else "../" + str(p.relative_to(archive))) + "\n" for p in paths))
+
+
 def archive_fixture(root):
     archive = root / "archive"
     reg = registration_dir(root)
@@ -72,6 +81,7 @@ def archive_fixture(root):
     write_json(archive / "derived/b6-acceptance.json", record)
     write_json(archive / "sources/pack/registration.json", {"pack_id": "desk-pack"})
     write_json(root / "plan.json", plan)
+    seal_reference_inputs(archive)
     return archive, reg, plan, record
 
 
@@ -115,6 +125,7 @@ class ExportTests(unittest.TestCase):
             doc = json.loads(path.read_bytes())
             doc.pop("idle_baseline")
             write_json(path, doc)
+        seal_reference_inputs(self.archive)
         result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
         references = [r for r in self.rows(result) if r["role"] in ("start", "corpus")]
         self.assertEqual(len(references), 2)
@@ -127,35 +138,210 @@ class ExportTests(unittest.TestCase):
         from joulewise.desk_restore import StorageStop
         bundle = self.archive / "sources/claim-runs/ref"
         trace = bundle / "power_trace.csv"
+        original = trace.read_bytes()
         trace.write_text("timestamp_s,power_w,rail,source\nnot,a,number,x\n")
-        with self.assertRaisesRegex(StorageStop, "reference request.*ref"):
+        with self.assertRaisesRegex(StorageStop, "reference bytes.*ref.*power_trace.csv.*digest mismatch"):
             self.export(pack_registration={"blinding_group": "bytes"})
         trace.unlink()
         with self.assertRaisesRegex(StorageStop, "power_trace.csv"):
             self.export(pack_registration={"blinding_group": "bytes"})
+        trace.write_bytes(original)
         summary = self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json"
         summary.write_text("bad summary bytes")
         with self.assertRaisesRegex(StorageStop, "reference bytes.*summary_metrics"):
             self.export(pack_registration={"blinding_group": "bytes"})
 
+    def test_only_authenticated_registered_absences_are_disclosed(self):
+        for absence in ("tokenize", "decode", "idle_baseline", "nonfinite_idle"):
+            with self.subTest(absence=absence), tempfile.TemporaryDirectory() as tmp:
+                archive, reg, plan, _ = archive_fixture(Path(tmp))
+                if absence in ("tokenize", "decode"):
+                    path = archive / "sources/claim-runs/ref/events.jsonl"
+                    kind = "phase_start" if absence == "tokenize" else "phase_end"
+                    events = [json.loads(line) for line in path.read_text().splitlines()]
+                    path.write_text("".join(json.dumps(e) + "\n" for e in events
+                                            if (e.get("phase"), e.get("event_type")) != (absence, kind)))
+                else:
+                    path = archive / "withheld/reductions/ref.summary_metrics.rereduced.json"
+                    summary = json.loads(path.read_bytes())
+                    if absence == "idle_baseline":
+                        summary.pop("idle_baseline")
+                    else:
+                        summary["idle_baseline"]["power_w_mean"] = float("nan")
+                    write_json(path, summary)
+                args = (archive, plan, reg, Path(tmp) / "packs", Path(tmp) / "out")
+                with self.assertRaisesRegex(export_runs.StorageStop, "digest mismatch"):
+                    export_runs.export(*args, pack_registration={"blinding_group": "bytes"})
+                seal_reference_inputs(archive)
+                result = export_runs.export(*args, pack_registration={"blinding_group": "bytes"})
+                row = next(r for r in self.rows(result) if r["run_id"] == "ref")
+                self.assertIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+                self.assertTrue(all(row[c] == "" for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+
+    def test_collected_reference_custody_faults_stop_before_publication(self):
+        cases = {
+            "bundle": lambda a: (write_json(a / "withheld/member-assessments.json", {
+                "members": {"ref": {"status": "succeeded"}}}), shutil.rmtree(a / "sources/claim-runs/ref")),
+            "inventory": lambda a: (a / "sources/SHA256SUMS").unlink(),
+            "config": lambda a: (a / "sources/claim-runs/ref/config.json").write_text("{bad"),
+            "status": lambda a: (a / "sources/claim-runs/ref/status.json").write_text("{bad"),
+            "status_list": lambda a: write_json(a / "sources/claim-runs/ref/status.json", []),
+            "metadata_list": lambda a: write_json(a / "sources/claim-runs/ref/metadata.json", []),
+            "summary": lambda a: (a / "withheld/reductions/ref.summary_metrics.rereduced.json").write_text("null"),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                archive, reg, plan, _ = archive_fixture(root)
+                mutate(archive)
+                with self.assertRaises(export_runs.StorageStop) as stopped:
+                    export_runs.export(archive, plan, reg, root / "packs", root / "out",
+                                       pack_registration={"blinding_group": "bytes"})
+                if name == "bundle":
+                    self.assertIn(str(archive / "sources/claim-runs/ref"), str(stopped.exception))
+                self.assertFalse((root / "out").exists())
+
+    def test_harvest_recorded_failure_is_not_reclassified_as_collected(self):
+        write_json(self.archive / "withheld/member-assessments.json", {"members": {
+            "ref": {"status": "failed", "present": True}}})
+        shutil.rmtree(self.archive / "sources/claim-runs/ref")
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "failed")
+        self.assertNotIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+
+    def test_listed_original_status_can_positively_establish_a_failed_collection(self):
+        status = self.archive / "sources/claim-runs/ref/status.json"
+        write_json(status, {"status": {"state": "failed"}})
+        with self.assertRaisesRegex(export_runs.StorageStop, "status.json.*digest mismatch"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        seal_reference_inputs(self.archive)
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "failed")
+        self.assertNotIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+
+    def test_harvest_roster_failure_is_preserved_over_export_time_bundle_status(self):
+        path = self.archive / "derived/roster.json"
+        roster = json.loads(path.read_bytes())
+        next(m for m in roster["members"] if m["run_id"] == "ref")["status"] = "failed"
+        write_json(path, roster)
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "failed")
+        self.assertNotIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+
+    def test_every_desk_export_requires_the_source_inventory(self):
+        (self.archive / "sources/SHA256SUMS").unlink()
+        with self.assertRaisesRegex(export_runs.StorageStop, "SHA256SUMS.*FileNotFoundError"):
+            self.export(non_claim=True)
+
+    def test_original_runs_fallback_cannot_replace_a_missing_archived_reference(self):
+        original = self.root / "original-runs"
+        shutil.copytree(self.archive / "sources/claim-runs/ref", original / "ref")
+        write_json(self.archive / "withheld/member-assessments.json", {
+            "members": {"ref": {"status": "succeeded"}}})
+        self.plan["claim_runs_root"] = str(original)
+        shutil.rmtree(self.archive / "sources/claim-runs/ref")
+        with self.assertRaisesRegex(export_runs.StorageStop, "missing from archive"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_parseable_but_invalid_request_records_stop_even_with_matching_digests(self):
+        bundle = self.archive / "sources/claim-runs/ref"
+        summary_path = self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json"
+        original = summary_path.read_bytes()
+        for value in (None, [], "summary", {"idle_baseline": "missing"}, {"summary_provenance": "bad"}):
+            with self.subTest(value=value):
+                write_json(summary_path, value)
+                seal_reference_inputs(self.archive)
+                with self.assertRaisesRegex(export_runs.StorageStop, "ValueError:.*object"):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+        summary_path.write_bytes(original)
+        events = bundle / "events.jsonl"
+        events.write_text(events.read_text() + json.dumps({"phase": "tokenize", "event_type": "phase_start",
+                                                          "timestamp_s": 0}) + "\n")
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "request markers must be unique"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_reducer_exceptions_and_unresolved_contexts_are_storage_stops(self):
+        import joulewise.reduce as reducer
+        from types import SimpleNamespace
+        for error in (RuntimeError("raw/powermetrics.plist exploded"),
+                      AttributeError("instrument_calibration/ invalid"),
+                      reducer._ReduceError("power_trace.csv mismatch")):
+            with self.subTest(error=error), patch.object(reducer, "_derive_anchor_context", side_effect=error):
+                with self.assertRaisesRegex(export_runs.StorageStop, type(error).__name__ + ": " + str(error)):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+        for context in (SimpleNamespace(unresolved=True, detail="new_failure_class"),
+                        SimpleNamespace(unresolved=False, telemetry_is_powermetrics=True, curve=None,
+                                        detail="raw_capture_unavailable")):
+            with self.subTest(context=context), patch.object(reducer, "_derive_anchor_context", return_value=context):
+                with self.assertRaisesRegex(export_runs.StorageStop, "anchor context"):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_curve_must_cover_both_request_edges(self):
+        trace = self.archive / "sources/claim-runs/ref/power_trace.csv"
+        for points in (range(9), range(1, 21)):
+            with self.subTest(points=points):
+                trace.write_text("timestamp_s,power_w,rail,source\n"
+                                 + "".join(f"{i},10,mock,mock\n" for i in points))
+                seal_reference_inputs(self.archive)
+                with self.assertRaisesRegex(export_runs.StorageStop, "curve support.*does not cover request"):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_registered_summary_absence_needs_a_listed_digest(self):
+        summary = self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json"
+        write_json(summary, {"phase_energy_j": {}})
+        seal_reference_inputs(self.archive)
+        inventory = self.archive / "sources/SHA256SUMS"
+        inventory.write_text("".join(line for line in inventory.read_text().splitlines(keepends=True)
+                                     if "ref.summary_metrics.rereduced.json" not in line))
+        with self.assertRaisesRegex(export_runs.StorageStop, "absence has no SHA256SUMS proof"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        write_json(self.archive / "sources/claim-runs/ref/summary_metrics.json", {"phase_energy_j": {}})
+        seal_reference_inputs(self.archive)
+        inventory.write_text("".join(line for line in inventory.read_text().splitlines(keepends=True)
+                                     if "ref.summary_metrics.rereduced.json" not in line))
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])
+        write_json(summary, {"phase_energy_j": {}, "idle_baseline": {"power_w_mean": 3}})
+        with self.assertRaisesRegex(export_runs.StorageStop, "summary_metrics.*digest mismatch"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_interval_curve_cannot_leave_an_uncovered_request_gap(self):
+        trace = self.archive / "sources/claim-runs/ref/power_trace.csv"
+        trace.write_text("timestamp_s,power_w,rail,source,interval_start_s,interval_end_s\n"
+                         "4,10,mock,mock,0,4\n14,10,mock,mock,6,14\n")
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "curve support has a gap"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
     def test_harvest_prints_every_export_value_error_cause(self):
         from scripts import harvest_b6_session as program
         from types import SimpleNamespace
+        from joulewise.reduce import _ReduceError
         args = ["--plan", str(self.root / "plan.json"), "--archive-root", str(self.archive),
                 "--registration-dir", str(self.reg), "--pack-records-root", str(self.root / "packs"),
                 "--export-dir", str(self.root / "out")]
-        for cause in ("blinding session binding unreadable: custody.json", "pack registration unresolved: diagnostic"):
+        for error in (ValueError("blinding session binding unreadable: custody.json"),
+                      ValueError("pack registration unresolved: diagnostic"),
+                      export_runs.StorageStop("raw/powermetrics.plist missing"),
+                      _ReduceError("power_trace.csv differs from raw evidence"),
+                      AttributeError("summary.json: missing object field")):
             stderr = io.StringIO()
             with patch.object(program, "resolve_inputs"), patch.object(program, "harvest", return_value={}), \
                  patch.object(program, "accept_archive", return_value=(SimpleNamespace(record=self.record), None)), \
-                 patch.object(program, "export", side_effect=ValueError(cause)), contextlib.redirect_stderr(stderr):
+                 patch.object(program, "export", side_effect=error), contextlib.redirect_stderr(stderr):
                 self.assertEqual(program.main(args), 5)
-            self.assertIn(cause, stderr.getvalue())
+            self.assertIn(f"{type(error).__name__}: {error}", stderr.getvalue())
 
     def test_reference_missing_markers_are_disclosed(self):
         bundle = self.archive / "sources/claim-runs/ref"
         events = bundle / "events.jsonl"
         events.write_text("\n".join(line for line in events.read_text().splitlines() if 'tokenize' not in line))
+        seal_reference_inputs(self.archive)
         result = self.export(pack_registration={"blinding_group": "bytes"})
         row = next(r for r in self.rows(result) if r["run_id"] == "ref")
         self.assertIn(export_runs.REFERENCE_UNAVAILABLE, row["flag_codes"])

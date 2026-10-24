@@ -231,12 +231,7 @@ def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
            boot_end: str | None, started: Stamp, finished: Stamp) -> Measurement:
     """A dwell anchor series with optional diagnostic frequency words."""
 
-    errors = [item["error"] for item in samples if item.get("error") and not item.get("anchor")]
-    error = None
-    if errors:
-        error = f"{len(errors)} sample(s) failed; first: {errors[0]}"
-    elif boot_start is None or boot_end is None:
-        error = "boot session unread at dwell start or end"
+    error = "boot session unread at dwell start or end" if boot_start is None or boot_end is None else None
     values = {"samples": [dict(item) for item in samples], "boot_session_uuid_start": boot_start,
               "boot_session_uuid_end": boot_end}
     encoded = canonical_json(values)
@@ -341,41 +336,47 @@ def _judge_instant(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verd
 
 def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdict:
     samples = list(values.get("samples") or [])
-    if len(samples) < 2:
-        return Verdict(MODULE, UNMEASURED, ("dwell series needs >= 2 samples",), limits)
+    anchored = [item for item in samples if item.get("anchor")]
+    unmeasured = [{"code": "clock.unmeasured", "sample_index": index,
+                   "error": item.get("error") or "anchor absent"}
+                  for index, item in enumerate(samples) if not item.get("anchor")]
+    if len(anchored) < 2:
+        return Verdict(MODULE, UNMEASURED, ("dwell series needs >= 2 anchored samples",), limits,
+                       {"flags": unmeasured, "samples": len(samples), "anchored_samples": len(anchored)})
     reasons = []
     if values.get("boot_session_uuid_start") != values.get("boot_session_uuid_end"):
         reasons.append("boot session changed during the dwell")
     words = [item["frequency"]["raw_word"] for item in samples if item.get("frequency")]
     f0 = words[0] if words else None
     try:
-        rate, residuals = fit_anchor_rate([item["anchor"] for item in samples])
+        rate, residuals = fit_anchor_rate([item["anchor"] for item in anchored])
     except (KeyError, TypeError, ValueError) as exc:
         return Verdict(MODULE, UNMEASURED, (str(exc),), limits)
     gate = measured_rate_bound(rate, limits)
     if not gate["passes"]:
         reasons.append(f"measured rate gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms")
-    skews = [item["anchor"]["read_skew_ns"] for item in samples]
+    skews = [item["anchor"]["read_skew_ns"] for item in anchored]
     worst_skew = max(skews)
     if min(skews) < 0 or worst_skew > limits["skew_max_ns"]:
         reasons.append(f"anchor read skew {worst_skew} ns exceeds {limits['skew_max_ns']} ns")
-    first = samples[0]["anchor"]
+    first = anchored[0]["anchor"]
     worst = max(residuals, key=abs)
     if abs(worst) > limits["residual_max_ns"]:
         reasons.append(f"dwell residual {float(worst) / 1e6:+.4f} ms exceeds "
                        f"+-{limits['residual_max_ns'] / 1e6} ms from the fitted line")
+    # Residuals retain the order of the remaining anchored samples.
     step = max(abs(b - a) for a, b in zip(residuals, residuals[1:]))
     if step > limits["step_ns"]:
         reasons.append(f"dwell step {float(step) / 1e6:.4f} ms exceeds {limits['step_ns'] / 1e6} ms")
-    raw_span = samples[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
+    raw_span = anchored[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
     observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits) if f0 is not None else None,
                 "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step),
                 "frequency_words": words, "frequency_word_changed": len(set(words)) > 1,
-                "samples": len(samples), "raw_span_ns": raw_span,
-                "flags": rate_flags(gate) + ([{"code": "clock.frequency_changed"}]
+                "samples": len(samples), "anchored_samples": len(anchored), "raw_span_ns": raw_span,
+                "flags": unmeasured + rate_flags(gate) + ([{"code": "clock.frequency_changed"}]
                                               if len(set(words)) > 1 else []),
                 "max_abs_residual_ns": float(abs(worst)), "max_read_skew_ns": worst_skew,
-                "anchor_movement_ns": samples[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}
+                "anchor_movement_ns": anchored[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 

@@ -23,6 +23,24 @@ def binding_child(directory, names, gate):
 
 
 class BlindingTests(unittest.TestCase):
+    def test_first_key_publication_never_exposes_incomplete_bytes(self):
+        for failure in ("dump", "link"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp) / "blinding"
+                target = directory / "pack.json"
+                module = blinding.json if failure == "dump" else blinding.os
+                def fail(*args, **kwargs):
+                    self.assertFalse(target.exists())
+                    raise OSError("interrupted key publication")
+                with patch.object(module, failure, side_effect=fail):
+                    with self.assertRaisesRegex(OSError, "interrupted key publication"):
+                        blinding.pack_factor(directory)
+                self.assertFalse(target.exists())
+                self.assertEqual(list(directory.iterdir()), [])
+                value = blinding.pack_factor(directory)
+                self.assertEqual(json.loads(target.read_bytes())["factor"], value)
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+
     def test_twelve_bytes_drafts_share_custody_replication_paths_unchanged(self):
         root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as tmp:

@@ -62,10 +62,10 @@ def main(argv=None) -> int:
                           "flag_counts": result.record["flag_counts"], "export": exported.structure()}, sort_keys=True))
         return PENDING_REGISTRATION if result.verdict == "UNAVAILABLE" else 0
     except StorageStop as exc:
-        print(f"refused: {exc}", file=sys.stderr)
+        print(f"refused: {type(exc).__name__}: {exc}", file=sys.stderr)
         return phase
     except Exception as exc:
-        detail = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+        detail = f"{type(exc).__name__}: {exc}"
         print("block-six session program fault: " + detail, file=sys.stderr)
         return phase
 

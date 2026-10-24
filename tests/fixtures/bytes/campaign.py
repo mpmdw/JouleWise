@@ -1,5 +1,6 @@
 """Production-shaped BYTES fixtures: mock reduction only, no inference/capture."""
 from __future__ import annotations
+import hashlib
 import json
 import math
 import random
@@ -17,6 +18,22 @@ def meter_ticks(start, end):
 def _write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value) + "\n")
+
+
+def _seal_archive_inputs(archive):
+    """Give synthetic harvest inputs the same checksum boundary as desk archives."""
+    sources = archive / "sources"
+    paths = sorted(p for parent in (sources, archive / "withheld/reductions")
+                   for p in parent.rglob("*") if p.is_file() and p.name != "SHA256SUMS")
+    lines = []
+    for path in paths:
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        relative = (str(path.relative_to(sources)) if path.is_relative_to(sources)
+                    else "../" + str(path.relative_to(archive)))
+        lines.append(f"{digest}  {relative}\n")
+    (sources / "SHA256SUMS").write_text("".join(lines))
+
 
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
                      pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=10,
@@ -295,6 +312,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         _write_json(archive / "derived/b6-acceptance.json", acceptance)
         (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in harvest_assist))
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
+        _seal_archive_inputs(archive)
         export_runs.export(archive, {}, root / "registration", root / "private-keys", root / "export", non_claim=non_claim,
                            evidence=evidence, acceptance_record=acceptance,
                            # Export stops on an unresolved registration (#416 F-S9); an

@@ -111,15 +111,26 @@ def _stored_or_draw(directory: Path, name: str, bounds: tuple[float, float],
                     "distribution": {"name": "uniform", "low": bounds[0], "high": bounds[1]},
                     "drawn_utc": datetime.now(timezone.utc).isoformat(),
                     "drawn_by_session": session_id}
+        fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", dir=directory)
         try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            continue
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(document, stream, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(document, stream, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                # Publish complete bytes exclusively; a losing creator reads
+                # the winner on the next iteration instead of replacing it.
+                os.link(temporary, path)
+            except FileExistsError:
+                continue
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
         return value
 
 

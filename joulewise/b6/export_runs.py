@@ -16,7 +16,7 @@ from typing import Mapping
 
 from joulewise.b6 import blinding
 from joulewise.b6.acceptance import evidence_from_archive
-from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, ordered_roster, read_json,
+from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, bundle_roots, ordered_roster, read_json,
                                 unresolved_clock_anchor)
 from joulewise.desk_compress import read_bytes
 from joulewise.desk_restore import StorageStop
@@ -65,29 +65,101 @@ def atomic_write(path: Path, writer) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
-def _reference_json(path: Path):
+class _ReferenceInputs:
+    """Authenticate reference inputs against the harvest's source inventory."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.digests = {}
+        self.checked_bundles = set()
+        path = root / "sources/SHA256SUMS"
+        try:
+            for line in read_bytes(path).decode("utf-8").splitlines():
+                digest, relative = line.split("  ", 1)
+                target = Path(os.path.abspath(root / "sources" / relative))
+                if (len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest)
+                        or not target.is_relative_to(Path(os.path.abspath(root)))):
+                    raise ValueError(f"invalid SHA256SUMS entry: {line!r}")
+                if target in self.digests and self.digests[target] != digest:
+                    raise ValueError(f"conflicting SHA256SUMS entry: {relative}")
+                self.digests[target] = digest
+            if not self.digests:
+                raise ValueError("SHA256SUMS is empty")
+        except Exception as exc:
+            raise StorageStop(f"reference inventory {path}: {type(exc).__name__}: {exc}") from exc
+
+    def read(self, path: Path, *, require_digest=False, equivalent: Path | None = None) -> bytes:
+        try:
+            raw = read_bytes(path)
+            digest = self.digests.get(Path(os.path.abspath(path)))
+            if digest is None and equivalent is not None:
+                digest = self.digests.get(Path(os.path.abspath(equivalent)))
+            if digest is None and require_digest:
+                raise ValueError("registered absence has no SHA256SUMS proof")
+            if digest is not None and hashlib.sha256(raw).hexdigest() != digest:
+                raise ValueError("SHA256SUMS digest mismatch")
+            return raw
+        except Exception as exc:
+            raise StorageStop(f"reference bytes {path}: {type(exc).__name__}: {exc}") from exc
+
+    def listed_bundle(self, run_id: str) -> bool:
+        return any(path.is_relative_to(Path(os.path.abspath(self.root / "sources" / kind / run_id)))
+                   for kind in ("claim-runs", "bound-runs") for path in self.digests)
+
+    def harvested_status(self, run_id: str) -> str | None:
+        # Older seam archives lack member assessments. A listed source status
+        # or original summary positively distinguishes a failed collection.
+        for kind in ("claim-runs", "bound-runs"):
+            for name in ("status.json", "summary_metrics.json"):
+                path = self.root / "sources" / kind / run_id / name
+                if Path(os.path.abspath(path)) not in self.digests:
+                    continue
+                value = _reference_json(path, self).get("status")
+                if isinstance(value, Mapping):
+                    value = value.get("state")
+                if value is not None:
+                    if not isinstance(value, str) or not value:
+                        raise StorageStop(f"reference bytes {path}: ValueError: status must name a state")
+                    return value
+        return None
+
+    def check_bundle(self, bundle: Path) -> None:
+        # Include listed files that have disappeared, including whole subtrees.
+        if bundle in self.checked_bundles:
+            return
+        for path in self.digests:
+            if path.is_relative_to(Path(os.path.abspath(bundle))):
+                self.read(path)
+        self.checked_bundles.add(bundle)
+
+
+def _reference_json(path: Path, inputs: _ReferenceInputs | None = None, *, equivalent: Path | None = None):
     try:
-        return json.loads(read_bytes(path))
-    except (OSError, ValueError) as exc:
-        raise StorageStop(f"reference bytes {path}: {exc}") from exc
+        value = json.loads(inputs.read(path, equivalent=equivalent) if inputs is not None else read_bytes(path))
+        if not isinstance(value, dict):
+            raise ValueError("JSON value must be an object")
+        return value
+    except Exception as exc:
+        raise StorageStop(f"reference bytes {path}: {type(exc).__name__}: {exc}") from exc
 
 
-def _events(bundle: Path | None, *, reference=False) -> list[dict]:
+def _events(bundle: Path | None, *, reference=False, inputs=None) -> list[dict]:
     if bundle is None:
-        return []
-    try:
-        lines = read_bytes(bundle / "events.jsonl").decode("utf-8").splitlines()
-    except (OSError, ValueError) as exc:
         if reference:
-            raise StorageStop(f"reference events {bundle}: {exc}") from exc
+            raise StorageStop("reference events: bundle directory missing")
+        return []
+    path = bundle / "events.jsonl"
+    try:
+        lines = (inputs.read(path) if inputs is not None else read_bytes(path)).decode("utf-8").splitlines()
+        events = [json.loads(line) for line in lines if line.strip()]
+        if reference and any(not isinstance(event, dict) for event in events):
+            raise ValueError("events.jsonl entries must be JSON objects")
+        return events
+    except Exception as exc:
+        if reference:
+            raise StorageStop(f"reference events {path}: {type(exc).__name__}: {exc}") from exc
         if isinstance(exc, FileNotFoundError):
             return []
-        raise
-    try:
-        return [json.loads(line) for line in lines if line.strip()]
-    except ValueError as exc:
-        if reference:
-            raise StorageStop(f"reference events {bundle}: {exc}") from exc
         raise
 
 
@@ -113,7 +185,7 @@ def _event_fields(events: list[dict]) -> dict:
     return result
 
 
-def _reference_request_fields(bundle, events, summary, record, archive_root, *, physics_cache=None):
+def _reference_request_fields(bundle, events, summary, record, archive_root, *, physics_cache=None, inputs=None):
     """Clock-free reference integrals on tokenize start through decode end.
 
     Use the reducer's native reconstructed curve, rather than a sum of phase
@@ -123,16 +195,17 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
     from joulewise.desk_restore import readable_run
     from joulewise.reduce import (REDUCER_VERSION, _derive_anchor_context,
                                   _assert_trace_matches_raw, _integrate)
-    starts = [e["timestamp_s"] for e in events
-              if e.get("phase") == "tokenize" and e.get("event_type") == "phase_start"]
-    ends = [e["timestamp_s"] for e in events
-            if e.get("phase") == "decode" and e.get("event_type") == "phase_end"]
-    if bundle is None or len(starts) != 1 or len(ends) != 1:
-        return {}
-    start, end = starts[0], ends[0]
-    if any(type(v) not in (int, float) or not math.isfinite(v) for v in (start, end)) or end <= start:
-        return {}
     try:
+        if bundle is None or not bundle.is_dir():
+            raise FileNotFoundError(f"bundle directory missing: {bundle}")
+        inputs = inputs or _ReferenceInputs(Path(archive_root))
+        inputs.check_bundle(bundle)
+        summary_path = Path(archive_root) / "withheld/reductions" / (bundle.name + ".summary_metrics.rereduced.json")
+        if not isinstance(summary, dict):
+            raise ValueError(f"{summary_path}: JSON value must be an object")
+        for key in ("idle_baseline", "summary_provenance"):
+            if key in summary and not isinstance(summary[key], dict):
+                raise ValueError(f"{summary_path}: {key} must be an object")
         journal = Path(str(archive_root) + ".desk") / "compression.jsonl"
         with readable_run(bundle, compression_records=journal) as plain:
             reader = BundleReader(plain)
@@ -142,20 +215,61 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
             context = _derive_anchor_context(reader, reader.metadata(), reducer_version=version,
                 authenticated_fiducial_bound_override_s=float(bound) if bound is not None else None,
                 instrument_calibration_physics_cache=physics_cache)
+            if context.unresolved:
+                raise ValueError(f"anchor context unresolved: {context.detail}")
             if context.telemetry_is_powermetrics:
-                if context.unresolved or context.curve is None:
-                    return {}
+                if context.curve is None:
+                    raise ValueError(f"raw/powermetrics.plist: anchor context has no curve: {context.detail}")
                 _assert_trace_matches_raw(curve, context.curve)
                 curve = context.curve
             if not curve:
-                raise BundleReadError("reference power_trace.csv has no usable curve")
+                raise BundleReadError("power_trace.csv has no usable curve")
+            starts = [e["timestamp_s"] for e in events
+                      if e.get("phase") == "tokenize" and e.get("event_type") == "phase_start"]
+            ends = [e["timestamp_s"] for e in events
+                    if e.get("phase") == "decode" and e.get("event_type") == "phase_end"]
+            if len(starts) > 1 or len(ends) > 1:
+                raise ValueError("events.jsonl: request markers must be unique")
+            if any(type(v) not in (int, float) or not math.isfinite(v) for v in starts + ends):
+                raise ValueError("events.jsonl: request endpoints must be finite numbers")
+            if not starts or not ends:
+                inputs.read(bundle / "events.jsonl", require_digest=True)
+                return {}
+            start, end = starts[0], ends[0]
+            if end <= start:
+                raise ValueError("events.jsonl: request interval must have increasing endpoints")
+            if curve[0].support_start_s is not None:
+                support_start, support_end = curve[0].support_start_s, curve[-1].support_end_s
+                if not context.telemetry_is_powermetrics:
+                    covered = start
+                    for left, right in sorted((p.support_start_s, p.support_end_s) for p in curve):
+                        if left > covered and covered < end:
+                            raise ValueError(f"power_trace.csv curve support has a gap at {covered}")
+                        covered = max(covered, right)
+                    support_end = covered
+                # The reducer constructs native powermetrics intervals from
+                # cumulative durations, so their interior is continuous without
+                # treating epoch-float rounding at shared edges as missing data.
+            else:
+                support_start, support_end = curve[0].t, curve[-1].t
+            if support_start > start or support_end is None or support_end < end:
+                raise ValueError(f"power_trace.csv curve support [{support_start}, {support_end}) "
+                                 f"does not cover request [{start}, {end})")
             gross = _integrate(curve, start, end)
-        idle = (summary.get("idle_baseline") or {}).get("power_w_mean")
+        idle = summary.get("idle_baseline", {}).get("power_w_mean")
         if type(idle) not in (int, float) or not math.isfinite(idle):
+            # Re-reduced summaries are outside sources/. An identical source
+            # summary is a valid checksum witness; a changed re-reduction is not.
+            inputs.read(summary_path, require_digest=True, equivalent=bundle / "summary_metrics.json")
             return {}
-        return dict(zip(REFERENCE_REQUEST_COLUMNS, (gross, gross - idle * (end - start), end - start)))
-    except (OSError, ValueError, BundleReadError) as exc:
-        raise StorageStop(f"reference request {bundle}: {exc}") from exc
+        values = (gross, gross - idle * (end - start), end - start)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("reference request integrals and duration must be finite")
+        return dict(zip(REFERENCE_REQUEST_COLUMNS, values))
+    except StorageStop as exc:
+        raise StorageStop(f"reference request {bundle}: {type(exc).__name__}: {exc}") from exc
+    except Exception as exc:
+        raise StorageStop(f"reference request {bundle}: {type(exc).__name__}: {exc}") from exc
 
 
 def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str,
@@ -163,11 +277,8 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
            evidence=None, acceptance_record: Mapping | None = None,
            pack_registration: Mapping | None = None) -> ExportResult:
     root = Path(archive_root)
-    evidence = evidence or evidence_from_archive(root, plan, registration_dir)
     record = acceptance_record or read_json(root / "derived/b6-acceptance.json")
-    roster = ordered_roster(read_json(root / "derived/roster.json", {}), evidence)
     pack_id = record["pack_id"]
-    session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     if pack_registration is None:
         # Prefer the harvested registration to the desk checkout. The explicit
         # argument is for synthetic/seam callers; normal harvest needs no flag.
@@ -193,6 +304,17 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                              + ", ".join(str(path) for path in candidates))
     elif not isinstance(pack_registration, Mapping) or not pack_registration:
         raise ValueError(f"explicit pack registration empty or malformed for {pack_id}")
+    bytes_request = (pack_registration.get("blinding_group") == "bytes" or pack_id == "bytes"
+                     or pack_id.startswith("bytes-"))
+    reference_inputs = _ReferenceInputs(root)
+    try:
+        evidence = evidence or evidence_from_archive(root, plan, registration_dir)
+    except Exception as exc:
+        if bytes_request:
+            raise StorageStop(f"reference archive {root}: {type(exc).__name__}: {exc}") from exc
+        raise
+    roster = ordered_roster(read_json(root / "derived/roster.json", {}), evidence)
+    session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
     for item in record.get("excluding", []):
@@ -212,61 +334,112 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     # and omit that bit. This lets _released_rows remain unchanged.
     columns = (tuple(c for c in COLUMNS if c not in ("run_start_utc", "non_claim")) + ("pass_id",)
                if grouped_blind else COLUMNS)
-    bytes_request = group == "bytes" or pack_id == "bytes" or pack_id.startswith("bytes-")
     if bytes_request:
         columns += REFERENCE_REQUEST_COLUMNS
     reference_physics_cache = {}
+    # ordered_roster projects export-time acceptance. Keep the harvest's own
+    # success evidence, so missing bytes cannot turn a collected run into failed.
+    harvested_roster = read_json(root / "derived/roster.json", {})
+    harvested_members = {m["run_id"]: m for m in harvested_roster.get("members", [])}
+    assessments = (read_json(root / "withheld/member-assessments.json", {}) or {}).get("members", {})
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
-        bundle = bundle_of(root, plan, run_id)
-        config = read_json(bundle / "config.json", {}) if bundle else {}
-        model, workload = config.get("model") or {}, config.get("workload_profile") or {}
-        key = blinding.configuration_key(config)
-        if member["role"] in ("corpus", "start", "midpoint", "end"):
-            key = REFERENCE_KEY
-        tags = dict(tag.split("=", 1) for tag in (config.get("run_metadata") or {}).get("tags", [])
-                    if isinstance(tag, str) and "=" in tag)
-        units = member.get("units", [])
-        row = {"pack_id": pack_id, "session_id": session_id, "attempt": roster.get("attempt"),
-               "run_id": run_id, "stage_id": member["stage_id"], "role": member["role"], "order_index": index,
-               "cell_ids": ";".join(u["cell_id"] for u in units),
-               "strata": ";".join(u["stratum"] for u in units),
-               "unit_ids": ";".join(str(u["unit_id"]) for u in units),
-               "abba_block_id": tags.get("calibration-abba-block-id"),
-               "abba_label": tags.get("calibration-abba-label"), "config_key": key,
-               "model_name": model.get("name"), "workload_name": workload.get("name"),
-               "status": member["status"], "excluded": bool(excluded[run_id]),
-               "exclusion_codes": ";".join(sorted(excluded[run_id])),
-               "flag_codes": ";".join(sorted(codes[run_id])), "non_claim": non_claim}
-        reference = bytes_request and key == REFERENCE_KEY and member["status"] == "succeeded"
-        summary_path = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
-        summary = (_reference_json(summary_path) if reference and bundle else read_json(summary_path, {}))
-        events = _events(bundle, reference=reference)
-        row.update(_event_fields(events))
-        row["run_start_utc"] = row.get("run_start_utc") or summary.get("started_at")
-        row.update({key: summary.get(key) for key in ("ttft_s", "decode_latency_s")})
-        idle = summary.get("idle_baseline") or {}
-        row["idle_baseline_s"] = idle.get("duration_s")
-        row.update(dict.fromkeys(ENERGIES))
-        unresolved = (summary.get("energy_status") == CLOCK_ANCHOR_STATUS
-                      or unresolved_clock_anchor(read_json(bundle / "metadata.json", {}) if bundle else {},
-                                                 summary, codes[run_id]))
-        if unresolved:
-            row["status"] = CLOCK_ANCHOR_STATUS
-        if member["status"] == "succeeded" and not unresolved:
-            row.update({"phase_" + phase + "_j": (summary.get("phase_energy_j") or {}).get(phase) for phase in PHASES})
-            row.update({key: summary.get(key) for key in ("gross_energy_j", "idle_subtracted_energy_j", "energy_request_j")})
-            row.update({"bound_" + term + "_j": (summary.get("energy_bound_terms_j") or {}).get(term + "_j")
-                        for term in BOUND_TERMS})
-            row["idle_power_w"] = idle.get("power_w_mean")
-            row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
-            if bytes_request and key == REFERENCE_KEY:
-                fields = _reference_request_fields(bundle, events, summary, record, root,
-                                                   physics_cache=reference_physics_cache)
-                row.update(fields)
-                if not fields:
-                    codes[run_id].add(REFERENCE_UNAVAILABLE)
-                    row["flag_codes"] = ";".join(sorted(codes[run_id]))
+        reference_role = member["role"] in ("corpus", "start", "midpoint", "end")
+        harvested_status = (assessments.get(run_id) or {}).get("status", harvested_members.get(run_id, {}).get("status"))
+        if isinstance(harvested_status, Mapping):
+            harvested_status = harvested_status.get("state")
+        if bytes_request and reference_role and not excluded[run_id] and harvested_status is None:
+            harvested_status = reference_inputs.harvested_status(run_id)
+        collected = (harvested_status == "succeeded" or harvested_status is None
+                     and (member["status"] == "succeeded"
+                          or reference_inputs is not None and reference_inputs.listed_bundle(run_id)))
+        reference = bytes_request and reference_role and collected and not excluded[run_id]
+        bundle = None
+        try:
+            bundle = bundle_of(root, plan, run_id)
+            if reference:
+                if bundle is None or not Path(os.path.abspath(bundle)).is_relative_to(Path(os.path.abspath(root))):
+                    candidates = ", ".join(str(base / run_id) for base in bundle_roots(root, plan)
+                                           if Path(os.path.abspath(base)).is_relative_to(Path(os.path.abspath(root))))
+                    fallback = f"; external fallback refused: {bundle}" if bundle is not None else ""
+                    raise FileNotFoundError(f"collected bundle directory missing from archive; tried {candidates}{fallback}")
+                reference_inputs.check_bundle(bundle)
+                config = _reference_json(bundle / "config.json", reference_inputs)
+                metadata = _reference_json(bundle / "metadata.json", reference_inputs)
+                status_path = bundle / "status.json"
+                if status_path.exists() or Path(str(status_path) + ".zst").exists():
+                    status_record = _reference_json(status_path, reference_inputs)
+                    status = status_record.get("status")
+                    if isinstance(status, Mapping):
+                        status = status.get("state")
+                    if status != "succeeded":
+                        raise ValueError(f"{status_path}: collected reference status is not succeeded: {status!r}")
+            else:
+                config = read_json(bundle / "config.json", {}) if bundle else {}
+                metadata = read_json(bundle / "metadata.json", {}) if bundle else {}
+            model, workload = config.get("model") or {}, config.get("workload_profile") or {}
+            key = blinding.configuration_key(config)
+            if member["role"] in ("corpus", "start", "midpoint", "end"):
+                key = REFERENCE_KEY
+            tags = dict(tag.split("=", 1) for tag in (config.get("run_metadata") or {}).get("tags", [])
+                        if isinstance(tag, str) and "=" in tag)
+            units = member.get("units", [])
+            status = member["status"]
+            if bytes_request and reference_role and harvested_status is not None:
+                status = harvested_status
+            if reference:
+                status = "succeeded"
+            row = {"pack_id": pack_id, "session_id": session_id, "attempt": roster.get("attempt"),
+                   "run_id": run_id, "stage_id": member["stage_id"], "role": member["role"], "order_index": index,
+                   "cell_ids": ";".join(u["cell_id"] for u in units),
+                   "strata": ";".join(u["stratum"] for u in units),
+                   "unit_ids": ";".join(str(u["unit_id"]) for u in units),
+                   "abba_block_id": tags.get("calibration-abba-block-id"),
+                   "abba_label": tags.get("calibration-abba-label"), "config_key": key,
+                   "model_name": model.get("name"), "workload_name": workload.get("name"),
+                   "status": status, "excluded": bool(excluded[run_id]),
+                   "exclusion_codes": ";".join(sorted(excluded[run_id])),
+                   "flag_codes": ";".join(sorted(codes[run_id])), "non_claim": non_claim}
+            summary_path = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
+            summary = (_reference_json(summary_path, reference_inputs, equivalent=bundle / "summary_metrics.json")
+                       if reference else read_json(summary_path, {}))
+            events = _events(bundle, reference=reference, inputs=reference_inputs if reference else None)
+            if reference:
+                for name in ("idle_baseline", "summary_provenance", "phase_energy_j", "energy_bound_terms_j", "idle_mean_uncertainty"):
+                    if name in summary and not isinstance(summary[name], Mapping):
+                        raise ValueError(f"{summary_path}: {name} must be an object")
+            row.update(_event_fields(events))
+            row["run_start_utc"] = row.get("run_start_utc") or summary.get("started_at")
+            row.update({key: summary.get(key) for key in ("ttft_s", "decode_latency_s")})
+            idle = summary.get("idle_baseline") or {}
+            row["idle_baseline_s"] = idle.get("duration_s")
+            row.update(dict.fromkeys(ENERGIES))
+            unresolved = (summary.get("energy_status") == CLOCK_ANCHOR_STATUS
+                          or unresolved_clock_anchor(metadata,
+                                                     summary, codes[run_id]))
+            if unresolved and reference:
+                raise ValueError(f"{bundle / 'metadata.json'}: previously collected reference anchor is unresolved")
+            if unresolved:
+                row["status"] = CLOCK_ANCHOR_STATUS
+            if row["status"] == "succeeded" and not unresolved:
+                row.update({"phase_" + phase + "_j": (summary.get("phase_energy_j") or {}).get(phase) for phase in PHASES})
+                row.update({key: summary.get(key) for key in ("gross_energy_j", "idle_subtracted_energy_j", "energy_request_j")})
+                row.update({"bound_" + term + "_j": (summary.get("energy_bound_terms_j") or {}).get(term + "_j")
+                            for term in BOUND_TERMS})
+                row["idle_power_w"] = idle.get("power_w_mean")
+                row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
+                if reference:
+                    fields = _reference_request_fields(bundle, events, summary, record, root,
+                                                       physics_cache=reference_physics_cache, inputs=reference_inputs)
+                    row.update(fields)
+                    if not fields:
+                        codes[run_id].add(REFERENCE_UNAVAILABLE)
+                        row["flag_codes"] = ";".join(sorted(codes[run_id]))
+        except Exception as exc:
+            if reference:
+                raise StorageStop(f"reference request {bundle or root / 'sources' / run_id}: "
+                                  f"{type(exc).__name__}: {exc}") from exc
+            raise
         if not non_claim or grouped_blind:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
             key_names.update(("pack.json", blinding._config_filename(key)))

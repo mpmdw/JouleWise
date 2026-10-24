@@ -126,6 +126,49 @@ class InstantJudgeTests(unittest.TestCase):
 
 
 class DwellResidualTests(unittest.TestCase):
+    def test_skew_rejected_sample_keeps_the_measured_rate_judgment_and_flag(self):
+        for ppm, status in ((0, base.PASS), (40, base.REFUSE)):
+            measured = dwell(FakeClocks(drift_word=ppm_word(ppm)), 60)
+            samples = [dict(item) for item in measured.values["samples"]]
+            samples[30].update(anchor=None, error="clock.unmeasured: anchor read skew above bound")
+            changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                                   started=measured.started, finished=measured.finished)
+            verdict = clock.judge(changed, LIMITS)
+            self.assertEqual(verdict.status, status)
+            self.assertEqual(verdict.observed["anchored_samples"], 60)
+            self.assertIn({"code": "clock.unmeasured", "sample_index": 30,
+                           "error": samples[30]["error"]}, verdict.observed["flags"])
+            if ppm:
+                self.assertTrue(any("measured rate gate" in reason for reason in verdict.reasons))
+
+    def test_rejected_edge_samples_and_two_remaining_anchors(self):
+        measured = dwell(FakeClocks(), 60)
+        samples = [dict(item, anchor=None, error="skew rejected") for item in measured.values["samples"]]
+        for index in (1, 59):
+            samples[index] = measured.values["samples"][index]
+        changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                               started=measured.started, finished=measured.finished)
+        verdict = clock.judge(changed, LIMITS)
+        self.assertEqual(verdict.status, base.PASS)
+        self.assertEqual(verdict.observed["anchored_samples"], 2)
+        self.assertEqual(len(verdict.observed["flags"]), 59)
+        samples[59] = dict(samples[59], anchor=None)
+        changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                               started=measured.started, finished=measured.finished)
+        self.assertEqual(clock.judge(changed, LIMITS).status, base.UNMEASURED)
+
+    def test_step_uses_adjacent_remaining_anchors_across_a_rejected_sample(self):
+        clocks = FakeClocks()
+        clocks.step_at(90.5, 1_100_000)
+        measured = dwell(clocks, 180)
+        samples = [dict(item) for item in measured.values["samples"]]
+        samples[90].update(anchor=None, error="skew rejected")
+        changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                               started=measured.started, finished=measured.finished)
+        verdict = clock.judge(changed, LIMITS)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertTrue(any("dwell step" in reason for reason in verdict.reasons))
+
     def test_measured_rate_refuses_even_when_kernel_word_is_zero(self):
         clocks = FakeClocks(drift_word=ppm_word(100))
         verdict = clock.judge(dwell(clocks, 60, reader=lambda: frequency_probe(0)), LIMITS)

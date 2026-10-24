@@ -467,8 +467,10 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
         if spare and bundle is None:
             continue
         metadata = _json(bundle / "metadata.json", {}) if bundle else {}
+        metadata = metadata if isinstance(metadata, Mapping) else {}
         assessment = assessments.get(run_id) or {}
         status_record = _json(bundle / "status.json", {}) if bundle else {}
+        status_record = status_record if isinstance(status_record, Mapping) else {}
         recorded_status = assessment.get("status", status_record.get("status", metadata.get("status"))) or {}
         status = recorded_status.get("state") if isinstance(recorded_status, Mapping) else recorded_status
         if status is None:

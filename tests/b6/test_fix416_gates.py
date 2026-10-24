@@ -117,13 +117,13 @@ class Fix416Tests(unittest.TestCase):
         self.assertEqual(blinding.PACK_RANGE, (0.8, 1.25))
         self.assertEqual(blinding.CONFIG_RANGE, (0.97, 1.03))
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(blinding.os, 'open', wraps=os.open) as opened:
+            with patch.object(blinding.os, 'link', wraps=os.link) as linked:
                 blinding.factor(tmp, 'science')
-            self.assertEqual(opened.call_count, 2)
-            for call in opened.call_args_list:
-                self.assertEqual(call.args[1], os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                self.assertEqual(call.args[2], 0o600)
-                self.assertEqual(stat.S_IMODE(Path(call.args[0]).stat().st_mode), 0o600)
+            self.assertEqual(linked.call_count, 2)
+            for call in linked.call_args_list:
+                self.assertTrue(Path(call.args[0]).name.startswith('.' + Path(call.args[1]).name + '.'))
+                self.assertEqual(stat.S_IMODE(Path(call.args[1]).stat().st_mode), 0o600)
+                self.assertFalse(Path(call.args[0]).exists())
             self.assertEqual(blinding.apply({'idle_power_w': 3, 'idle_variance_w2': 4}, 2),
                              {'idle_power_w': 6, 'idle_variance_w2': 16})
 

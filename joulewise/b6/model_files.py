@@ -113,7 +113,7 @@ def compare(expected: Mapping, observed: Mapping) -> list[dict]:
     if pin:
         candidate = {key: observed[key] for key in ("runtime", "runtime_version", "quantization", "kernel_library")
                      if observed.get(key) is not None and not (key == "kernel_library" and observed[key] == "unavailable")}
-        for key in ("sampler_output_policy", "os_version", "telemetry_backend"):
+        for key in ("os_version", "telemetry_backend"):
             if observed.get(key) is not None:
                 candidate[key] = observed[key]
         tokenizer = _tokenizer(observed.get("tokenizer") or {})
@@ -122,6 +122,15 @@ def compare(expected: Mapping, observed: Mapping) -> list[dict]:
             fields = [key for key, value in candidate.items() if stack.get(key) is not None and value != stack[key] and not
                       (key == "quantization" and isinstance(value, str) and isinstance(stack.get(key), Mapping)
                        and value == stack[key].get("name"))]
+            policy = observed.get("sampler_output_policy")
+            registered = stack.get("sampler_output_policy")
+            if policy is not None and registered is not None:
+                # Provenance extensions are not new registered sampler settings.
+                for section, settings in registered.items():
+                    values = policy.get(section) if isinstance(policy, Mapping) else None
+                    if not isinstance(values, Mapping) or {key: values.get(key) for key in settings} != settings:
+                        fields.append("sampler_output_policy")
+                        break
             fields.extend("tokenizer." + key for key, value in tokenizer.items()
                           if (stack.get("tokenizer") or {}).get(key) is not None
                           and value != stack["tokenizer"][key])
