@@ -730,5 +730,93 @@
    "paper": "/Users/edr/night-archive/seats-786c/cold573c/report.md (JouleWise-data claude/cold-delta-573c-fable)"
   }
  ]
+},
+{
+ "commit": "2545b1732c5868342d664fb01c547e60e106b4cd",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/b6/survivor_screen.py",
+  "joulewise/bytes_analysis.py",
+  "joulewise/reduce.py"
+ ],
+ "change": "PR #573 FIX-573e: reduce.py back to the issued bytes; three callers restore compressed archives to scratch first.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "eb31fe385..2545b1732 (PR #573 delta; verdict REFUSE, re-executed by the lead; findings fixed in 903b5a2fc/79dbfb952)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573e/report.md (JouleWise-data claude/cold-delta-573e-opus)"
+  },
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "244600a45..79dbfb952 (re-check of the REFUSE findings)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573f/report.md (JouleWise-data claude/cold-delta-573f-opus)"
+  }
+ ]
+},
+{
+ "commit": "903b5a2fccdde2e1339ba5b47219e157be428241",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/b6/survivor_screen.py",
+  "joulewise/bytes_analysis.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573f (WIP part): fail-closed compressed reader, restore-first re-reduction, storage refusals stop the program, desk_restore module.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "244600a45..79dbfb952 (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573f/report.md (JouleWise-data claude/cold-delta-573f-opus)"
+  }
+ ]
+},
+{
+ "commit": "f46a1235a0cec83cc001f10a58f845f00a486e28",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/calibration_bracketing.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573g: reader exception joins the stop path; number-feeding reads restore with the journal.",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold, blind, executing (non-author), 2026-10-23",
+   "covered": "79dbfb952..f46a1235a (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573g/report.md (JouleWise-data claude/cold-delta-573g-fable)"
+  }
+ ]
+},
+{
+ "commit": "cce6361b1c950b704b56e2f68ab10330d8d5f59a",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/calibration_bracketing.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573h (WIP): compressed whole-window replay restores with the harvest journal.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-24",
+   "covered": "f46a1235a..f19d0929c (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573i/report.md (JouleWise-data claude/cold-delta-573i-opus)"
+  }
+ ]
+},
+{
+ "commit": "9f93a035cc5482e19627c2fc427703b16840441c",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/bytes_analysis.py",
+  "joulewise/calibration_bracketing.py",
+  "joulewise/whole_window.py"
+ ],
+ "change": "PR #573 FIX-573i (WIP): StorageStop(BaseException) base; entry points name the cause; redundant guards reverted.",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold, blind, executing (non-author), 2026-10-24",
+   "covered": "f46a1235a..f19d0929c (PR #573 delta)",
+   "paper": "/Users/edr/night-archive/seats-786c/cold573i/report.md (JouleWise-data claude/cold-delta-573i-opus)"
+  }
+ ]
 }
 ]
