@@ -69,3 +69,13 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    - Lead checks outside the sandbox: tests/hazards 328 OK; touched modules 109 OK; repin and plan-tree checks pass.
    - Text applied; catalog 01767fe4.
    - Round-6 cold passes launched 23:0x, with strict severity guidance.
+28. **Round-6 cold passes: Fable ADMIT; Opus ADMIT-WITH-CORRECTIONS with one HIGH.**
+   - The HIGH: a BYTES smoke needs an un-reduced archived plan tree to enumerate the stages that keep 0 removed. The only such copy is the results-clone, a best-effort `git clone --depth 1 origin` of the default branch, which lacks the bytes-s* trees. Without it the export stops, the smoke fails, and the loop holds the packs: a collection stop on a non-physical condition.
+   - Ruling (FIX-416-I, brief `~/night-archive/seats-7209/fix416i/BRIEF.md`):
+     - `smoke.prepare` archives the pre-reduction tree from the pinned checkout as a custody-owned witness;
+     - with no witness, the export does not stop: the sidecar records the removed stages as unwitnessed (those rows carry no numbers; the smoke is non-claim);
+     - an inconsistent witness stops;
+     - Fable's plain-path membership hardening;
+     - the gap-bar comment restores its acknowledgement of the noise floor.
+   - Every other round-6 finding is LOW or INFO: guard bands of at most about 1.05 ms against the 5 ms budget, the factor-2 margin of u_j covering the fit noise (max W_j/u_j = 0.51 over 17,425 real pairs), and P_max as an estimate. They are dispositioned with no fix, under the stopping rule of item 26.
+   - At 23:2x the Bash permission classifier began failing transiently. FIX-416-I is not yet launched as of this line.
