@@ -104,3 +104,14 @@ Reports in `~/night-archive/seats-7209/cold416d/`.
 | Opus 6, Fable 2: 4 × ulp is not derived | 10 µs = 1 % of the 1 ms printed duration precision (the rule's ceiling; at epoch scale the floor exceeds it) |
 | Fable 3: `.DS_Store` inside a bundle stops the export | Ignore exactly `.DS_Store` (Finder metadata, never read) |
 | Opus 7: §5 overstatements; Fable 4-5 info | Text |
+
+## Round-5 cold delta passes on bc588a964..6b54a51d6 (Fable 5.1 and Opus 5.5 both ADMIT-WITH-CORRECTIONS)
+
+Reports in `~/night-archive/seats-7209/cold416e/`. Both found the a_j math exact (Opus: 0 mismatches over 3,000 layouts). Every remaining finding is an edge case that cannot occur on the real records.
+
+| finding | disposition (FIX-416-H) |
+|---|---|
+| Fable 1 medium: a smoke reduction that removes a whole stage (keep 0) leaves its references with no row | Iterate the full registered tree; every planned reference is a row or a printed `uncollected` |
+| Opus 1 medium, Fable 2: at sparse layouts (a_j → 1) the corrected bar falls below the anchors' read noise, so the decision is made by noise | Per pair, u_j = recorded read skew of anchors j and j+1 (measured). Testable only when step_ns(1 − a_j) > u_j, else disclosed `clock.step_unmeasured`. Refuse only when \|Δres\| > step_ns(1 − a_j) + u_j |
+| Opus 2: the 10 µs gap bar is in the wrong column (a gap loses P·g joules) | Bound the summed uncovered time: G_total · P_max ≤ 0.13 mJ (1 % of the smallest printed half-width 0.013 J) |
+| Opus 3 text nits; Opus 4 cosmetic `excluded=False` on a partial row | Text fixed; the cosmetic row is left as it is (its status already makes it unusable) |

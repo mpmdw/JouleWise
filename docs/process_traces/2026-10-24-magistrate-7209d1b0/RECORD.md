@@ -62,4 +62,5 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    - Text applied: §5 a_j rule, §6 smoke/partial/Finder rules, catalog digest 3c4b8280.
    - CI on bc588a964: everything green except the expected review-row test.
 
-   Round-5 cold passes launched 21:4x.
+   Round-5 cold passes launched 21:3x.
+26. **Round-5 cold passes: both ADMIT-WITH-CORRECTIONS**, with edge cases only (sparse-anchor noise, keep-0 smoke stages, gap energy). FIX-416-H (Sol 6.1 high) launched 22:1x. Stopping rule the lead adopts for this lane: if round 6 returns only LOW/INFO findings, those are dispositioned without another fix round, and the PR proceeds to review rows, CI and the registration gate.
