@@ -269,9 +269,13 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
          "commit", "--quiet", "--allow-empty", "-m", "SMOKE ledger pin copy", run=run)
     keep = dict(keep) if keep is not None else compose.registered_smoke_keep(pack_id, path=KEEP_PATH)
     pack_root = measurement / "configs/campaigns" / pack_id
-    tree = json.loads((pack_root / "plan_tree.json").read_text())
+    tree_bytes = (pack_root / "plan_tree.json").read_bytes()
+    tree = json.loads(tree_bytes)
     keeps = config_keeps(tree, keep)
     reduced = reduce_tree(tree, keep)
+    # Preserve the pinned checkout's exact pre-reduction bytes in the archived
+    # pack, independent of the best-effort results clone of origin's default.
+    (pack_root / "smoke-registered-tree.json").write_bytes(tree_bytes)
     (pack_root / "plan_tree.json").write_text(json.dumps(reduced, indent=2) + "\n")
     # Readiness authenticates exact bytes, not the parsed tree. Commit its
     # authenticator in the same clone commit before the plan writer binds both
@@ -279,7 +283,7 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     (pack_root / "plan_tree.sha256").write_text(_sha256(pack_root / "plan_tree.json")
                                                + "  plan_tree.json\n")
     _git(measurement, "add", *(str(pack_root.relative_to(measurement) / name)
-                              for name in ("plan_tree.json", "plan_tree.sha256")), run=run)
+                              for name in ("plan_tree.json", "plan_tree.sha256", "smoke-registered-tree.json")), run=run)
     _git(measurement, "-c", "user.name=B6 Smoke", "-c", "user.email=smoke@invalid",
          "commit", "--quiet", "-m", "SMOKE reduced stage tree", run=run)
     wrapper_writer(measurement, claim, smoke_dir, keeps, run=run)

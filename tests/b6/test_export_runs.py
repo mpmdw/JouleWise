@@ -409,7 +409,7 @@ class ExportTests(unittest.TestCase):
         write_json(self.archive / "derived/roster.json", {"pack_id": "bytes-s1-p1", "members": list(reversed(members))})
         tree_path = self.archive / "sources/pack/plan_tree.json"
         write_json(tree_path, reduced)
-        write_json(self.archive / "sources/night-custody/results-clone/configs/campaigns/bytes-s1-p1/plan_tree.json", tree)
+        write_json(self.archive / "sources/pack/smoke-registered-tree.json", tree)
         seal_reference_inputs(self.archive)
         rows = self.rows(self.export(pack_registration={"pack_id": "bytes-s1-p1", "blinding_group": "bytes"}))
         self.assertEqual(len(rows), 25)
@@ -505,7 +505,7 @@ class ExportTests(unittest.TestCase):
         roster_path = self.archive / "derived/roster.json"
         write_json(roster_path, {"members": list(reversed(members))})
         write_json(self.archive / "sources/pack/plan_tree.json", reduced)
-        original = self.archive / "sources/night-custody/results-clone/configs/campaigns/bytes-s1-p1/plan_tree.json"
+        original = self.archive / "sources/pack/smoke-registered-tree.json"
         write_json(original, tree)
         seal_reference_inputs(self.archive)
         rows = self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
@@ -552,28 +552,64 @@ class ExportTests(unittest.TestCase):
         row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
                    if r["run_id"] == removed)
         self.assertEqual(row["status"], "uncollected")
-        # Two originals must agree even on the stages that reduction deletes.
-        other = self.archive / "sources/other/configs/campaigns/bytes-s1-p1/plan_tree.json"
+        # An unrelated default-branch results clone is never a witness.
+        other = self.archive / "sources/night-custody/results-clone/configs/campaigns/bytes-s1-p1/plan_tree.json"
         conflicting = json.loads(json.dumps(tree))
         next(stage for stage in conflicting["stage_graph"]
              if stage["stage_id"] == stages[removed])["expected_count"] -= 1
         self.assertEqual(smoke.reduce_tree(conflicting, keep), reduced)
         write_json(other, conflicting)
         seal_reference_inputs(self.archive)
+        self.assertEqual(self.rows(self.export(pack_registration={"blinding_group": "bytes"})), rows)
+        # A present custody witness must reproduce the archived reduction.
+        inconsistent = {**tree, "witness_probe": "different top-level bytes"}
+        write_json(original, inconsistent)
+        seal_reference_inputs(self.archive)
         with self.assertRaisesRegex(export_runs.StorageStop, "reference membership smoke.*inconsistent"):
             self.export(pack_registration={"blinding_group": "bytes"})
-        other.unlink()
-        seal_reference_inputs(self.archive)
         original.write_text("{}")
-        with self.assertRaisesRegex(export_runs.StorageStop, "plan_tree.json.*digest mismatch"):
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke-registered-tree.json.*digest mismatch"):
             self.export(pack_registration={"blinding_group": "bytes"})
         seal_reference_inputs(self.archive)
         with self.assertRaisesRegex(export_runs.StorageStop, "reference membership smoke: KeyError.*stage_graph"):
             self.export(pack_registration={"blinding_group": "bytes"})
         original.unlink()
         seal_reference_inputs(self.archive)
-        with self.assertRaisesRegex(export_runs.StorageStop, "reference membership smoke.*archived registered tree"):
+        result = self.export(pack_registration={"blinding_group": "bytes"})
+        legacy_refs = [r for r in self.rows(result) if r["role"] in export_runs.REFERENCE_ROLES]
+        surviving_refs = [r for r in refs if stages[r["run_id"]] not in reduced["smoke_reduction"]["removed"]]
+        self.assertEqual({r["run_id"] for r in legacy_refs}, {r["run_id"] for r in surviving_refs})
+        self.assertEqual(sum(r["status"] == "uncollected" for r in legacy_refs), 4)
+        for row in legacy_refs:
+            if row["status"] == "uncollected":
+                self.assertTrue(all(row[c] == "" for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+        session = json.loads(result.sidecar_path.read_bytes())
+        self.assertEqual(session["removed_stage_references"], "unwitnessed")
+        self.assertEqual(session["removed_stage_ids"], reduced["smoke_reduction"]["removed"])
+        self.assertTrue(session["non_claim"])
+        # Both physical presence and a digest entry forbid the legacy fallback:
+        # an unlisted witness or a lost listed witness is a storage condition.
+        write_json(original, tree)
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke-registered-tree.json.*no SHA256SUMS proof"):
             self.export(pack_registration={"blinding_group": "bytes"})
+        seal_reference_inputs(self.archive)
+        original.unlink()
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke-registered-tree.json.*FileNotFoundError"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke-registered-tree.json.*FileNotFoundError"):
+            export_runs.export(Path(os.path.relpath(self.archive)), self.plan, self.reg,
+                               self.root / "packs", self.root / "out",
+                               pack_registration={"blinding_group": "bytes"})
+        seal_reference_inputs(self.archive)
+        original.symlink_to("missing-witness.json")
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke-registered-tree.json.*FileNotFoundError"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        original.unlink()
+        compressed = Path(str(original) + ".zst")
+        compressed.write_bytes(b"invalid compressed witness")
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke-registered-tree.json"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        compressed.unlink()
         # With every reference stage removed, an inline reduced tree cannot
         # bypass membership merely because no surviving stage assigns roles.
         reference_stages = {stages[run] for run in reference_order}
@@ -583,6 +619,29 @@ class ExportTests(unittest.TestCase):
         seal_reference_inputs(self.archive)
         with self.assertRaisesRegex(export_runs.StorageStop, "smoke: no archived checksum witness"):
             self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_plain_planned_reference_absent_from_roster_requires_acceptance_exclusion(self):
+        tree_path = self.archive / "sources/pack/plan_tree.json"
+        tree = json.loads(tree_path.read_bytes())
+        tree["external_inputs"] = {"manifests": [{"input_id": "start_reference",
+            "members": [{"run_id": "ref"}]}]}
+        tree["stage_graph"][0]["input_ref"] = {"input_id": "start_reference"}
+        write_json(tree_path, tree)
+        roster_path = self.archive / "derived/roster.json"
+        roster = json.loads(roster_path.read_bytes())
+        roster["members"] = [m for m in roster["members"] if m["run_id"] != "ref"]
+        write_json(roster_path, roster)
+        shutil.rmtree(self.archive / "sources/claim-runs/ref")
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "members without listed bundles.*ref"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        self.record["excluding"].append({"scope": "member", "run_id": "ref", "code": "member.bytes_missing"})
+        write_json(self.archive / "derived/b6-acceptance.json", self.record)
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "uncollected")
+        self.assertEqual(row["excluded"], "True")
+        self.assertTrue(all(row[c] == "" for c in export_runs.REFERENCE_REQUEST_COLUMNS))
 
     def test_bundle_without_inventory_entries_stops(self):
         bundle = self.archive / "sources/claim-runs/ref"
@@ -735,8 +794,7 @@ class ExportTests(unittest.TestCase):
                     from dataclasses import replace
                     evidence = replace(evidence, stages=tuple(replace(stage, members=tuple(
                         m for m in stage.members if m.run_id != "ref")) for stage in evidence.stages))
-                cause = "reference bundle.*unlisted" if missing == "roster_and_inventory" else "reference membership"
-                with self.assertRaisesRegex(export_runs.StorageStop, cause):
+                with self.assertRaisesRegex(export_runs.StorageStop, "reference membership"):
                     export_runs.export(archive, plan, reg, root / "keys", root / "out",
                                        evidence=evidence, pack_registration={"blinding_group": "bytes"})
                 self.assertFalse((root / "out").exists())

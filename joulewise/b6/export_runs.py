@@ -73,6 +73,7 @@ class _ReferenceInputs:
         self.root = root
         self.digests = {}
         self.checked_bundles = set()
+        self.unwitnessed_removed_stages = None
         path = root / "sources/SHA256SUMS"
         try:
             for line in read_bytes(path).decode("utf-8").splitlines():
@@ -145,23 +146,28 @@ class _ReferenceInputs:
             if directory is None:
                 raise StorageStop("reference membership smoke: no archived checksum witness for reduced tree")
             from joulewise.b6.smoke import reduce_tree
-            # The smoke checkout has already deleted keep-0 stages. The
-            # archived original checkout retains the registered stage walk;
-            # authenticate it and reproduce the reduction before using it.
-            suffix = f"/configs/campaigns/{pack_id}/plan_tree.json"
-            originals = [_reference_json(path, self) for path in sorted(self.digests)
-                         if str(path).endswith(suffix) and path != directory / "plan_tree.json"]
-            originals = [candidate for candidate in originals if not candidate.get("smoke_reduction")]
-            try:
-                if (not originals or any(candidate != originals[0] for candidate in originals)
-                        or any(reduce_tree(candidate, reduction.get("keep", {})) != tree
-                               for candidate in originals)):
-                    raise ValueError("missing or inconsistent archived registered tree")
-            except Exception as exc:
-                raise StorageStop(f"reference membership smoke: {type(exc).__name__}: {exc}") from exc
-            registered_tree = originals[0]
+            # Only smoke.prepare's pinned, custody-owned witness can restore
+            # keep-0 stages. Results-clone trees follow origin's default branch
+            # and are never candidates. Existing archives have no witness.
+            witnesses = [path for path in (
+                self.root / "sources/repo/configs/campaigns" / pack_id / "smoke-registered-tree.json",
+                self.root / "sources/pack/smoke-registered-tree.json")
+                if (Path(os.path.abspath(path)) in self.digests or path.exists() or path.is_symlink()
+                    or Path(str(path) + ".zst").exists())]
+            if witnesses:
+                originals = [_reference_json(path, self) for path in witnesses]
+                try:
+                    if (any(candidate.get("smoke_reduction") or candidate != originals[0]
+                            or reduce_tree(candidate, reduction.get("keep", {})) != tree
+                            for candidate in originals)):
+                        raise ValueError("inconsistent archived registered tree witness")
+                except Exception as exc:
+                    raise StorageStop(f"reference membership smoke: {type(exc).__name__}: {exc}") from exc
+                registered_tree = originals[0]
+            else:
+                self.unwitnessed_removed_stages = list(reduction.get("removed", []))
         stages, roles = _stage_roles(registered_tree)
-        if registered_tree is not tree:
+        if reduction.get("schema") == "joulewise.b6_smoke_reduction.v1":
             reduced_stages = {stage["stage_id"]: stage for stage in tree.get("stage_graph", [])}
             for stage in registered_tree.get("stage_graph", []):
                 stage_id = stage["stage_id"]
@@ -190,6 +196,12 @@ class _ReferenceInputs:
             listed_ids.update(path.relative_to(base).parts[0] for path in self.digests
                               if path.is_relative_to(base) and len(path.relative_to(base).parts) > 1)
         reference_ids = {run for run, role in roles.items() if role in REFERENCE_ROLES}
+        # A non-smoke session that collected nothing (empty harvest roster and no
+        # run bundle in the inventory, e.g. a t0 refusal) has no membership to
+        # protect: its planned references are not unioned in, and it exports
+        # its empty table as before (lead ruling on FIX-416-I F1).
+        if not reduction and not harvested.get("members") and not listed_ids:
+            reference_ids = set()
         sets = []
         for name, roster in (("harvest roster", harvested), ("acceptance", projected)):
             members = [m["run_id"] for m in roster.get("members", [])
@@ -197,7 +209,7 @@ class _ReferenceInputs:
             if len(members) != len(set(members)):
                 raise StorageStop(f"reference membership {name}: duplicate reference run ids")
             sets.append((name, set(members) | reference_ids
-                         if name == "harvest roster" and registered_tree is not tree else set(members)))
+                         if name == "harvest roster" else set(members)))
             reference_ids.update(members)
         inventory = listed_ids & reference_ids
         uncollected_ids = set()
@@ -472,6 +484,9 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
                     # lost energy by G_total * P_max <= 0.01 * 0.013 J = 0.13 mJ
                     # (§12/§14's smallest printed half-width), not each gap's
                     # duration. P_max is measured on this request's trace.
+                    # At epoch scale, the no-silly-numbers floor (10^6 times
+                    # float noise) exceeds 0.13 mJ; the ceiling governs by the
+                    # lead's ruling. Powermetrics data never take this path.
                     if uncovered * peak_power > 0.00013:
                         raise ValueError(f"power_trace.csv curve support has a gap: summed uncovered "
                                          f"{uncovered} s * request P_max {peak_power} W exceeds 0.13 mJ")
@@ -554,6 +569,8 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                                      if item.get("scope") == "member")
         roster["members"] = reference_inputs.check_membership(harvested_roster, roster, plan, pack_id,
                                                                excluded_members, assessments)
+        if reference_inputs.unwitnessed_removed_stages is not None:
+            non_claim = True
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
@@ -739,6 +756,9 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                "operative_bound_s": record.get("calibration", {}).get("operative_bound_s"),
                "neg8": record.get("neg8"), "non_claim": non_claim,
                "blinding": {"applied": not non_claim or grouped_blind, "key_dir": os.path.relpath(key_dir, destination)}}
+    if reference_inputs.unwitnessed_removed_stages is not None:
+        session.update(removed_stage_references="unwitnessed",
+                       removed_stage_ids=reference_inputs.unwitnessed_removed_stages)
     unavailable = sum(REFERENCE_UNAVAILABLE in r["flag_codes"].split(";") for r in rows)
     if unavailable:
         session["flag_counts"] = {**(session.get("flag_counts") or {}), REFERENCE_UNAVAILABLE: unavailable}
