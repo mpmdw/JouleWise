@@ -53,3 +53,13 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    - Registration text applied: §5 N ≥ 150 step rule, §6 bundle, membership and status rules, null idle baseline; catalog 269 codes, digest 90ef019f.
 23. **Round-4 cold delta passes** (81782d6a3..bc588a964; Fable and Opus, blind, executing) launched 20:0x. The brief asks them to probe the lead's `excluded_ids` exception against D-161.
 24. **Round-4 cold passes: both ADMIT-WITH-CORRECTIONS.** Opus HIGH: BYTES smokes would stop at export (smoke-reduced rosters). Both: the N ≥ 150 clock count is not sound on gapped dwells. FIX-416-G (Sol 6.1 xhigh) launched 20:3x; dispositions in DISPOSITIONS-416.md round 4. The findings are narrowing to edge paths (smoke, gaps, partial bundles); the real-data replays have been clean since round C.
+25. **FIX-416-G done** (6b54a51d6).
+   - Smoke-reduced uncollected references: 13 block-6 smokes run through the BYTES branch went from 13 stops to 0.
+   - Clock step bar step_ns·(1 − a_j) at every N ≥ 3: Opus's gap-aligned 1.05-1.2 ms steps now refuse; 24/24 real arm records unchanged.
+   - Partial bundle prints its reason; gap bar 10 µs; `.DS_Store` ignored.
+   - 25 real archives byte-identical.
+   - Lead outside the sandbox: tests/hazards 326 OK; export, gates, restore and plan-tree modules 83 OK; repin and plan-tree checks pass.
+   - Text applied: §5 a_j rule, §6 smoke/partial/Finder rules, catalog digest 3c4b8280.
+   - CI on bc588a964: everything green except the expected review-row test.
+
+   Round-5 cold passes launched 21:4x.
