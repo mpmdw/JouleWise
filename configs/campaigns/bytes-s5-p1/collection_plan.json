@@ -3,9 +3,6 @@
     "planned": 18,
     "stop_after_valid": 12
   },
-  "draft_notes": [
-    "Draft collection membership and C5 module allowances; estimator versions remain null until the agreeing SHA, registration cold gate and smoke fingerprints remain before first t0."
-  ],
   "minimum_kept_units_per_stratum": 5,
   "modules": [
     {
@@ -983,5 +980,5 @@
       "workload": "bytes_synthetic_2048_decode_512"
     }
   ],
-  "status": "draft"
+  "status": "registered"
 }

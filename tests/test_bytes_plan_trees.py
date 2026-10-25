@@ -137,8 +137,9 @@ class BytesPlanTreesTests(unittest.TestCase):
                 pack = f"bytes-s{number}-p{pass_number}"
                 reg = read(ROOT / f"configs/b6/packs/{pack}/registration.json")
                 collection = read(ROOT / f"configs/campaigns/{pack}/collection_plan.json")
-                self.assertEqual(reg["status"], "draft")
-                self.assertEqual(collection["status"], "draft")
+                expected_status = "registered" if pass_number == 1 else "draft"  # pass 1 gate 2026-10-25
+                self.assertEqual(reg["status"], expected_status)
+                self.assertEqual(collection["status"], expected_status)
                 self.assertEqual(collection["modules"], reg["modules"])
                 expected_version = agreed_version if pass_number == 1 else None
                 self.assertEqual({entry["version"] for entry in reg["estimators"]}, {expected_version})
@@ -148,7 +149,9 @@ class BytesPlanTreesTests(unittest.TestCase):
                     exact = Fraction(seconds["numerator"], seconds["denominator"]) * terms["count"] / 60
                     self.assertEqual(module["est_minutes"], float(exact))
                     self.assertEqual(module["est_minutes_source"]["sha256"], hashlib.sha256(sizing_path.read_bytes()).hexdigest())
-                notes = "\n".join(reg["draft_notes"])
+                # A registered pass carries no draft notes (pack_registration refuses them).
+                self.assertEqual("draft_notes" in reg, pass_number == 2)
+                notes = "\n".join(reg.get("draft_notes", []))
                 for stale in ("current blinding code does not consume", "group_size=64 is assumed",
                               "Sub-pack s4 is planned at 254", "Planning minutes use pilot"):
                     self.assertNotIn(stale, notes)

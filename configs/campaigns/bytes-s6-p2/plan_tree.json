@@ -769,7 +769,7 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "c1bfedde1c25cd6ea840434d485d98cdf1901dced986dece1941177353faa829"
+    "sha256": "c89d8a5a378152fc7b0615bd8c793cb1b4cc4f32a2affdb6ca3a3fd8e7344f6e"
   },
   "module_order": [
     "bytes-qwen35-122b"

@@ -95,7 +95,8 @@ class BytesPackTests(unittest.TestCase):
                 with self.subTest(subpack=n, pass_number=pass_number):
                     reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
                     self.assertEqual(validate(reg, self.catalog, root=ROOT), [])
-                    self.assertEqual((reg.status, reg.kind, reg.session_shape), ('draft', 'new', 'fixed'))
+                    expected = 'registered' if pass_number == 1 else 'draft'  # pass 1 gate 2026-10-25
+                    self.assertEqual((reg.status, reg.kind, reg.session_shape), (expected, 'new', 'fixed'))
                     self.assertEqual((reg.target_sessions, reg.minimum_sessions), (1, 1))
                     self.assertEqual(reg.corpus, {'planned': 18, 'stop_after_valid': 12})
                     self.assertEqual(reg.stopping, {'count': 1, 'end_t0_before': '2026-11-02T00:00:00-08:00', 'precision': None})
@@ -125,8 +126,11 @@ class BytesPackTests(unittest.TestCase):
                     for entry in reg.data['estimators']:
                         self.assertTrue(callable(getattr(bytes_analysis, entry['function'])))
                         self.assertEqual(entry['version'], agreeing_sha if pass_number == 1 else None)
-                    self.assertEqual(reg.status, 'draft')
-                    self.assertTrue(any('docs/registrations/bytes_pack_v1.md' in note for note in reg.data['draft_notes']))
+                    self.assertEqual(reg.status, 'registered' if pass_number == 1 else 'draft')
+                    if pass_number == 2:
+                        self.assertTrue(any('docs/registrations/bytes_pack_v1.md' in note for note in reg.data['draft_notes']))
+                    else:
+                        self.assertNotIn('draft_notes', reg.data)
 
     def test_registration_prose_lists_every_slot_and_maps_every_ruling_item(self):
         import re

@@ -61,6 +61,10 @@ def module_estimate(model_id, number, repo_root):
 # Registration section 13: the pass-one twin agrees at Addendum 8's bar at
 # this joulewise/bytes_analysis.py SHA-256. Pass-two versions remain null.
 AGREED_ESTIMATOR_VERSION = "18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71"
+# Passes whose registration cold gate has passed (pass 1: Fable 5.1 judge and
+# Opus 5.5 refuter, SEAL: ADMIT-WITH-CORRECTIONS on 81c78f79c, 2026-10-25).
+# A registered pass carries no draft notes (pack_registration refuses them).
+REGISTERED_PASSES = frozenset({1})
 ESTIMATORS = [{"name": name, "library": "joulewise.bytes_analysis", "function": function, "version": None}
               for name, function in (("bytes_phase_cells", "reduce_models"),
                                      ("bytes_frozen_predictions", "frozen_predictions"),
@@ -176,7 +180,7 @@ def registration(number, pass_number, repo_root=ROOT):
     value = json.loads((ROOT / "configs/b6/registration_template.json").read_bytes())
     value.update(pack_id=pack_id, title=f"BYTES sub-pack s{number}, pass {pass_number}",
                  question="Does decode energy follow format-derived bytes per token, resident size, or decode time?",
-                 status="draft", kind="new", session_shape="fixed", plan_tree_ref=(path / "plan_tree.json").as_posix(),
+                 status="registered" if pass_number in REGISTERED_PASSES else "draft", kind="new", session_shape="fixed", plan_tree_ref=(path / "plan_tree.json").as_posix(),
                  target_sessions=1, minimum_sessions=1, estimators=deepcopy(ESTIMATORS),
                  flag_catalog="configs/b6/flag_catalog_b6.json",
                  stopping={"count": 1, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
@@ -210,6 +214,8 @@ def registration(number, pass_number, repo_root=ROOT):
         "Fixed packs bypass the 265-minute science cap. The native window maximum comes from the C5 programmed span plus the existing stage, pause and session-wait allowances, not the former s4 pilot estimate.",
         "Module minutes = C5 count * own member_allowance_s / 60, using the exact rational sizing operands and no additional margin. Shared references, calibration and custody stay in the full programmed span. Pass two reuses the same measured model costs in reverse order.",
     ]
+    if pass_number in REGISTERED_PASSES:
+        del value["draft_notes"]
     return value
 
 
@@ -253,25 +259,26 @@ def tree_files(value, repo_root):
     # Keep its common reference/launch scaffold, remove its asserted authority.
     for key in ("plan", "condition_families", "downstream_contract", "decode_workload", "runtime_budget"):
         tree.pop(key, None)
-    tree.update(draft_status="draft", window_identity={"window_id": pack_id,
+    registered = pass_number in REGISTERED_PASSES
+    tree.update(draft_status="registered" if registered else "draft", window_identity={"window_id": pack_id,
                 "evidence_root_id": f"evidence-{pack_id}"},
                 roots={"claim_root_leaf": f"runs_{pack_id}",
                        "bound_root_leaf": f"runs_{pack_id}_bound"},
                 generator={"path": "scripts/bytes_plan_trees.py", "sha256": configs.sha(Path(__file__).read_bytes())},
                 arm_attachments={}, bytes_pass=pass_number, blinding_group="bytes",
                 module_order=[m["module_id"] for m in working["modules"]],
-                draft_notes=value["draft_notes"])
+                **({} if registered else {"draft_notes": value["draft_notes"]}))
     tree["arm_attachments"]["launch"] = launch_declaration(tree, repo_root)
     tree["attempt_policy"] = {"science_member_replacements": 0, "outcome_dependent_top_up": "forbidden",
                               "minimum_kept_units_per_stratum": 5, "authority": "R6; Block-6 catalog unchanged"}
     projected = identity_projection(tree, directory, repo_root)
     # The bracket reservation authenticates plan id/digest, without requiring
     # the old floor-plan schema. Bind BYTES membership, never BETA's plan.
-    collection = {"schema_version": "joulewise.bytes_collection_plan.v1", "status": "draft",
+    collection = {"schema_version": "joulewise.bytes_collection_plan.v1", "status": "registered" if registered else "draft",
                   "plan_id": pack_id, "pack_id": pack_id,
                   "pass": pass_number, "modules": working["modules"], "corpus": value["corpus"],
                   "minimum_kept_units_per_stratum": 5, "science": tree["science"],
-                  "draft_notes": ["Draft collection membership and C5 module allowances; estimator versions remain null until the agreeing SHA, registration cold gate and smoke fingerprints remain before first t0."]}
+                  **({} if registered else {"draft_notes": ["Draft collection membership and C5 module allowances; estimator versions remain null until the agreeing SHA, registration cold gate and smoke fingerprints remain before first t0."]})}
     collection_raw = configs.raw_json(collection)
     collection_path = directory / "collection_plan.json"
     tree["plan"] = {"path": "collection_plan.json", "plan_id": collection["plan_id"],
@@ -304,7 +311,7 @@ def tree_files(value, repo_root):
     if len(covered) != len(set(covered)) or set(covered) != {row["run_id"] for row in tree["science"]}:
         raise ValueError("extraction cells must cover every science run exactly once")
     extraction = configs.raw_json({"schema_version": "joulewise.detection_floor_extraction_spec.v1",
-                                  "draft_status": "draft", "cells": cells})
+                                  "draft_status": "registered" if registered else "draft", "cells": cells})
     files["extraction_spec.json"] = extraction
     tree["downstream_contract"] = {"extraction_spec": {
         "path": (directory / "extraction_spec.json").as_posix(), "sha256": configs.sha(extraction)}}
@@ -379,7 +386,7 @@ def main(argv=None):
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     generate(args.output_root, args.check)
-    print(("verified" if args.check else "generated") + " 12 BYTES draft registrations and 12 fixed pass trees")
+    print(("verified" if args.check else "generated") + " 12 BYTES registrations (pass 1 registered, pass 2 draft) and 12 fixed pass trees")
     return 0
 
 

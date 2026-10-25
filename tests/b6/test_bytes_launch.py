@@ -90,7 +90,7 @@ class BytesLaunchTests(unittest.TestCase):
             pack = f"bytes-s{number}-p1"
             with self.subTest(pack=pack):
                 reg = load(ROOT / f"configs/b6/packs/{pack}/registration.json")
-                self.assertEqual(reg.status, "draft")
+                self.assertEqual(reg.status, "registered")  # pass 1 registered (gate 2026-10-25)
                 self.assertEqual({e["version"] for e in reg.estimators},
                                  {hashlib.sha256((ROOT / "joulewise/bytes_analysis.py").read_bytes()).hexdigest()})
                 self.assertEqual(validate(reg, catalog, root=ROOT), [])
