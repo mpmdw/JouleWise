@@ -51,4 +51,5 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    - Lead replay of the 25 real archives with their real plans: 0 stops, columns identical.
    - Outside the sandbox: tests/hazards 323 OK; touched b6, gates and restore modules OK.
    - Registration text applied: §5 N ≥ 150 step rule, §6 bundle, membership and status rules, null idle baseline; catalog 269 codes, digest 90ef019f.
-23. **Round-4 cold delta passes** (81782d6a3..bc588a964; Fable and Opus, blind, executing) launched 20:2x. The brief asks them to probe the lead's `excluded_ids` exception against D-161.
+23. **Round-4 cold delta passes** (81782d6a3..bc588a964; Fable and Opus, blind, executing) launched 20:0x. The brief asks them to probe the lead's `excluded_ids` exception against D-161.
+24. **Round-4 cold passes: both ADMIT-WITH-CORRECTIONS.** Opus HIGH: BYTES smokes would stop at export (smoke-reduced rosters). Both: the N ≥ 150 clock count is not sound on gapped dwells. FIX-416-G (Sol 6.1 xhigh) launched 20:3x; dispositions in DISPOSITIONS-416.md round 4. The findings are narrowing to edge paths (smoke, gaps, partial bundles); the real-data replays have been clean since round C.

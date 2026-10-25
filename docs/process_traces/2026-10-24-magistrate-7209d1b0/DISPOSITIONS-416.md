@@ -90,3 +90,17 @@ Reports in `~/night-archive/seats-7209/cold416c/`. Neither found over-refusal on
 | Opus 5 low: exact gap comparison on the non-powermetrics path | Bar 4 × ulp(t) of the edge epoch (the representation limit, 2.4e-7 s near 1.79e9 s, far below the 1 ms printed duration precision) |
 | Fable 3 low: scripts/b6_export_runs.py hides messages and exits 1 on StorageStop | Print class and message; exit 5 |
 | Fable 4 note: bytes-mac-check resolves only via the registration dir | Recorded (production passes that dir) |
+
+## Round-4 cold delta passes on 81782d6a3..bc588a964 (Fable 5.1 and Opus 5.5 both ADMIT-WITH-CORRECTIONS)
+
+Reports in `~/night-archive/seats-7209/cold416d/`.
+
+| finding | disposition (FIX-416-G) |
+|---|---|
+| Opus 1 HIGH: every BYTES smoke stops at export. A smoke roster keeps the full order, only kept runs are collected, and acceptance does not exclude the rest. The 25-archive replay missed it because no BYTES smoke exists on disk yet | Uncollected also covers references beyond the stage's smoke `keep` count (read from the verified archived tree), denied when assessments or roster say succeeded. Block-6 smokes replayed through the BYTES branch must give 0 stops. Must land before any smoke is armed |
+| Opus 2-3, Fable 1: the N ≥ 150 count is not a sound derivation (dropped anchors widen gaps: 2-3 % absorption at N = 150 on real dwells), and below 150 it switches the step test off | Replaced by the exact per-pair absorption a_j from RAW positions: compare \|Δres\| with step_ns·(1 − a_j) at every N ≥ 3. No new number |
+| Opus 4: the uncollected exception ignores success evidence | Denied when assessments or roster report succeeded. D-161 judgment recorded: three coordinated edits are needed, which no single storage fault produces |
+| Opus 5: a reference killed mid-run (no summary) is a permanent desk stop | Not succeeded, printed with the harvest's `member.bytes_missing` reason |
+| Opus 6, Fable 2: 4 × ulp is not derived | 10 µs = 1 % of the 1 ms printed duration precision (the rule's ceiling; at epoch scale the floor exceeds it) |
+| Fable 3: `.DS_Store` inside a bundle stops the export | Ignore exactly `.DS_Store` (Finder metadata, never read) |
+| Opus 7: §5 overstatements; Fable 4-5 info | Text |
