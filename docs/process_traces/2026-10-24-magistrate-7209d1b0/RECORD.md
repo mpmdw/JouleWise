@@ -45,3 +45,10 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    - F2: harvest.json records no digest for b6-acceptance.json or member-assessments.json (post-harvest). Verify the derived files it does record; protect membership with the two-way roster-versus-SHA256SUMS check, and status with the verified-status cross-check. No digest gate on acceptance (D-161).
 
    Round 2 is running. CI on 81782d6a3: shard 7 has the expected review rows. Shard 11's test_fix573i_restore expects `refused: restore_refused: …`, but seat D's message adds the class name; the lead fixes it after F, keeping the established storage-stop form.
+22. **FIX-416-F done** (bc588a964), with lead edits:
+   - The seat stopped once more: H's three window-end references were planned but never collected. They have roster rows, no archived directory and no inventory entry, and acceptance excludes them. The lead granted a narrow exception: such a reference stays a printed excluded row only when acceptance records its exclusion (`check_membership`, `excluded_ids`).
+   - Storage stops keep the established `refused: <cause>` line. Seat D's class-name prefix had broken test_fix573i_restore in CI shard 11; the two newer tests were updated to match.
+   - Lead replay of the 25 real archives with their real plans: 0 stops, columns identical.
+   - Outside the sandbox: tests/hazards 323 OK; touched b6, gates and restore modules OK.
+   - Registration text applied: §5 N ≥ 150 step rule, §6 bundle, membership and status rules, null idle baseline; catalog 269 codes, digest 90ef019f.
+23. **Round-4 cold delta passes** (81782d6a3..bc588a964; Fable and Opus, blind, executing) launched 20:2x. The brief asks them to probe the lead's `excluded_ids` exception against D-161.
