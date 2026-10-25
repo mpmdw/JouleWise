@@ -818,5 +818,291 @@
    "paper": "/Users/edr/night-archive/seats-786c/cold573i/report.md (JouleWise-data claude/cold-delta-573i-opus)"
   }
  ]
+},
+{
+ "commit": "fcc063249bd4b1c993239193f7c2bedced3f9703",
+ "number_bearing_paths": [
+  "joulewise/bundle.py"
+ ],
+ "change": "Custody receipts: sync before rename, sync the directories, one F_FULLFSYNC per receipt on macOS (audit F14)",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "b49a9993e3f9e70117f03ee749df2dbb6c70a729",
+ "number_bearing_paths": [
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "Hazard monitor: fix BURN18 HAZARDS H1-H5 (PID reuse, regressed counters, missing frequency, pre-member AC loss, nonpositive frames)",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "acbb8c166d4b3c3bbeee010f6af319efbe4f7066",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "Hazard monitor round 2: census entry, persistent root pins, H3 anchor-skew exception, harvest ports, docstrings; H2 residual bound (to be revised)",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "58af870144bee0c35dbdd343de7b12c9061cddc7",
+ "number_bearing_paths": [],
+ "change": "Merge remote-tracking branch 'origin/main' into fix/2026-10-23-hazard-h1-h5",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "a8e871293ef3a04d767ebba8b3212b183c670e48",
+ "number_bearing_paths": [
+  "joulewise/b5/driver.py"
+ ],
+ "change": "BYTES pass 1 integration: 8B-8bit revision through generator and downstream pins; BYTES sessions read block-6 identity pins; tests use the present sizing rows; runtime observed",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "8ab2b3fbed2aa6df0b4b950da12c60322a58381e",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py",
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "Merge origin/main (#565, #567, #576, #577) into the BYTES pass-1 inputs",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "798982c81fddacc9189504db7d66137baf26116a",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py"
+ ],
+ "change": "Merge lane/2026-10-22-bytes-battery-term (PR #573) into the BYTES pass-1 inputs",
+ "executing_reviews": [
+  {
+   "reviewer": "Astra 6 xhigh, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-786c/audit416/astra-report.md"
+  },
+  {
+   "reviewer": "Fable 5.1, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/fable-report.md"
+  },
+  {
+   "reviewer": "Opus 5.5, #416 pre-arm triple audit, blind, executing (non-author), 2026-10-24",
+   "covered": "whole tree at c84bb34c2",
+   "paper": "/Users/edr/night-archive/seats-7209/opus-report.md"
+  }
+ ]
+},
+{
+ "commit": "7647bf11a193386fa7572cdfcb01a3b184ff68e4",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/flags/exclusions.py",
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "FIX-416-B: #416 audit gate fixes for BYTES pass 1",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold delta round 1, blind, executing (non-author), 2026-10-24",
+   "covered": "c84bb34c2..24718b166",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416/fable-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold delta round 1, blind, executing (non-author), 2026-10-24",
+   "covered": "c84bb34c2..24718b166",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416/opus-REPORT.md"
+  }
+ ]
+},
+{
+ "commit": "86a0185da3501a0b6971cc03b7f8c5833db4132b",
+ "number_bearing_paths": [
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "FIX-416-C: corrections from the cold delta passes on the #416 fixes",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold delta round 2, blind, executing (non-author), 2026-10-24",
+   "covered": "2ed536739..fcc0ac921",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416b/fable-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold delta round 2, blind, executing (non-author), 2026-10-24",
+   "covered": "2ed536739..fcc0ac921",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416b/opus-REPORT.md"
+  }
+ ]
+},
+{
+ "commit": "d6500b81c8e05914f88ae0e4122acd89f5a33a50",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "FIX-416-D: default-stop for reference request fields; round-2 corrections",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold delta round 3, blind, executing (non-author), 2026-10-24",
+   "covered": "fcc0ac921..81782d6a3",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416c/fable-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold delta round 3, blind, executing (non-author), 2026-10-24",
+   "covered": "fcc0ac921..81782d6a3",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416c/opus-REPORT.md"
+  }
+ ]
+},
+{
+ "commit": "bc588a964fb292b6dec6cfee1e1d8685b81d9b77",
+ "number_bearing_paths": [
+  "joulewise/b6/acceptance.py",
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "FIX-416-F: round-3 cold-pass corrections; lead exception and text",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold delta round 4, blind, executing (non-author), 2026-10-24",
+   "covered": "81782d6a3..bc588a964",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416d/fable-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold delta round 4, blind, executing (non-author), 2026-10-24",
+   "covered": "81782d6a3..bc588a964",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416d/opus-REPORT.md"
+  }
+ ]
+},
+{
+ "commit": "6b54a51d67140bc1ce13be94270c5bba62207226",
+ "number_bearing_paths": [
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "FIX-416-G: round-4 cold-pass corrections",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold delta round 5, blind, executing (non-author), 2026-10-24",
+   "covered": "bc588a964..6b54a51d6",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416e/fable-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold delta round 5, blind, executing (non-author), 2026-10-24",
+   "covered": "bc588a964..6b54a51d6",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416e/opus-REPORT.md"
+  }
+ ]
+},
+{
+ "commit": "7a3b585db737209449bcc82aadb026f661e3d512",
+ "number_bearing_paths": [
+  "joulewise/hazards/clock.py"
+ ],
+ "change": "FIX-416-H: round-5 cold-pass corrections",
+ "executing_reviews": [
+  {
+   "reviewer": "Fable 5.1, cold delta round 6, blind, executing (non-author), 2026-10-24",
+   "covered": "6b54a51d6..7a3b585db",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416f/fable-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, cold delta round 6, blind, executing (non-author), 2026-10-24",
+   "covered": "6b54a51d6..7a3b585db",
+   "paper": "/Users/edr/night-archive/seats-7209/cold416f/opus-REPORT.md"
+  }
+ ]
 }
 ]
