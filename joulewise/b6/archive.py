@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -30,7 +31,7 @@ def bindings(plan: Mapping) -> dict:
     return result
 
 
-def bundle_roots(root: Path, plan: Mapping) -> tuple[Path, ...]:
+def bundle_roots(root: Path, plan: Mapping, *, archive_only: bool = False) -> tuple[Path, ...]:
     bound = bindings(plan)
     roots = [root / "sources/claim-runs", root / "sources/bound-runs"]
     custody = Path(bound["custody_root"]) if bound.get("custody_root") else None
@@ -43,11 +44,16 @@ def bundle_roots(root: Path, plan: Mapping) -> tuple[Path, ...]:
                 except ValueError:
                     pass
             roots.append(original)
+    if archive_only:
+        # Keep lexical archive symlinks digest-verifiable, but do not let a
+        # plan's ".." components turn a copied-custody alias into an outside root.
+        sources = Path(os.path.abspath(root / "sources"))
+        roots = [base for base in roots if Path(os.path.abspath(base)).is_relative_to(sources)]
     return tuple(roots)
 
 
-def bundle_of(root: Path, plan: Mapping, run_id: str) -> Path | None:
-    return next((base / run_id for base in bundle_roots(root, plan)
+def bundle_of(root: Path, plan: Mapping, run_id: str, *, archive_only: bool = False) -> Path | None:
+    return next((base / run_id for base in bundle_roots(root, plan, archive_only=archive_only)
                  if (base / run_id).is_dir()), None)
 
 

@@ -15,9 +15,9 @@ from pathlib import Path
 from typing import Mapping
 
 from joulewise.b6 import blinding
-from joulewise.b6.acceptance import evidence_from_archive
+from joulewise.b6.acceptance import _stage_roles, evidence_from_archive
 from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, bundle_roots, ordered_roster, read_json,
-                                unresolved_clock_anchor)
+                                plan_tree, unresolved_clock_anchor)
 from joulewise.desk_compress import read_bytes
 from joulewise.desk_restore import StorageStop
 
@@ -30,6 +30,7 @@ ENERGIES = tuple("phase_" + phase + "_j" for phase in PHASES) + (
     "idle_power_w", "idle_variance_of_mean_w2",
 )
 REFERENCE_KEY = "neg8_reference"
+REFERENCE_ROLES = ("corpus", "start", "midpoint", "end")
 REFERENCE_UNAVAILABLE = "bytes.reference_request_unavailable"
 REFERENCE_REQUEST_COLUMNS = ("reference_request_gross_j", "reference_request_idle_subtracted_j",
                              "reference_request_duration_s")
@@ -95,52 +96,167 @@ class _ReferenceInputs:
             if digest is None and equivalent is not None:
                 digest = self.digests.get(Path(os.path.abspath(equivalent)))
             if digest is None and require_digest:
-                raise ValueError("registered absence has no SHA256SUMS proof")
+                raise ValueError("input has no SHA256SUMS proof")
             if digest is not None and hashlib.sha256(raw).hexdigest() != digest:
                 raise ValueError("SHA256SUMS digest mismatch")
             return raw
         except Exception as exc:
             raise StorageStop(f"reference bytes {path}: {type(exc).__name__}: {exc}") from exc
 
-    def listed_bundle(self, run_id: str) -> bool:
-        return any(path.is_relative_to(Path(os.path.abspath(self.root / "sources" / kind / run_id)))
-                   for kind in ("claim-runs", "bound-runs") for path in self.digests)
+    def listed_bundle(self, run_id: str, plan: Mapping) -> bool:
+        return any(path.is_relative_to(Path(os.path.abspath(base / run_id)))
+                   for base in bundle_roots(self.root, plan, archive_only=True) for path in self.digests)
 
-    def harvested_status(self, run_id: str) -> str | None:
+    def bundle(self, run_id: str, plan: Mapping) -> Path:
+        # Collected references belong to the archive. Coexisting external
+        # originals are never candidates, even when the archived copy is gone.
+        candidates = {Path(os.path.abspath(base / run_id))
+                      for base in bundle_roots(self.root, plan, archive_only=True)}
+        listed = [candidate for candidate in sorted(candidates)
+                  if any(path.is_relative_to(candidate) for path in self.digests)]
+        stray = [candidate for candidate in sorted(candidates)
+                 if candidate.is_dir() and candidate not in listed]
+        if stray:
+            raise StorageStop(f"reference bundle {run_id}: unlisted bundle directories: {stray}")
+        if len(listed) != 1:
+            raise StorageStop(f"reference bundle {run_id}: expected one listed bundle, found {len(listed)}: {listed}; "
+                              f"collected bundle directory missing or ambiguous; tried {sorted(candidates)}")
+        bundle = listed[0]
+        if not bundle.is_dir():
+            raise StorageStop(f"reference bundle {bundle}: collected bundle directory missing from archive")
+        return bundle
+
+    def check_membership(self, harvested: Mapping, projected: Mapping, plan: Mapping, pack_id: str,
+                         excluded_ids: frozenset = frozenset()) -> None:
+        # Both archived candidates influence the permissive reader's choice.
+        # Missing/malformed listed control bytes must not change that choice
+        # or erase reference roles through its empty-tree fallback.
+        for path in (self.root / "sources/repo/configs/campaigns" / pack_id / "plan_tree.json",
+                     self.root / "sources/pack/plan_tree.json"):
+            if Path(os.path.abspath(path)) in self.digests:
+                _reference_json(path, self)
+        tree, directory = plan_tree(self.root, plan, pack_id)
+        if directory is not None:
+            tree = _reference_json(directory / "plan_tree.json", self)
+        roles = _stage_roles(tree)[1]
+        # Classify inventory bundles independently of the roster: the archived
+        # plan still names a reference whose roster entry has disappeared.
+        listed_ids = set()
+        for base in bundle_roots(self.root, plan, archive_only=True):
+            base = Path(os.path.abspath(base))
+            listed_ids.update(path.relative_to(base).parts[0] for path in self.digests
+                              if path.is_relative_to(base) and len(path.relative_to(base).parts) > 1)
+        reference_ids = {run for run, role in roles.items() if role in REFERENCE_ROLES}
+        sets = []
+        for name, roster in (("harvest roster", harvested), ("acceptance", projected)):
+            members = [m["run_id"] for m in roster.get("members", [])
+                       if roles.get(m["run_id"], m.get("role")) in REFERENCE_ROLES]
+            if len(members) != len(set(members)):
+                raise StorageStop(f"reference membership {name}: duplicate reference run ids")
+            sets.append((name, set(members)))
+            reference_ids.update(members)
+        inventory = listed_ids & reference_ids
+        for name, members in sets:
+            missing = sorted(inventory - members)
+            # A planned reference that was never collected has a roster row, no
+            # archived directory and no inventory entry. It stays a printed row
+            # only when acceptance records its exclusion, so it cannot vanish
+            # silently either way (#416 FIX-416-F ruling F2H; H's window-end r1-r3).
+            uncollected = {run for run in members - inventory if run in excluded_ids
+                           and not any((Path(os.path.abspath(base)) / run).exists()
+                                       for base in bundle_roots(self.root, plan, archive_only=True))}
+            unlisted = sorted(members - inventory - uncollected)
+            if missing or unlisted:
+                raise StorageStop(f"reference membership {name}: listed bundles missing from member set {missing}; "
+                                  f"members without listed bundles {unlisted}")
+        # Check even an excluded reference or a planned reference whose roster
+        # and inventory entries are both gone: an existing unlisted directory
+        # must not disappear from custody merely because the sets agree.
+        for run_id in sorted(reference_ids):
+            if run_id in listed_ids or any((base / run_id).is_dir()
+                    for base in bundle_roots(self.root, plan, archive_only=True)):
+                self.bundle(run_id, plan)
+
+    def harvested_status(self, run_id: str, plan: Mapping) -> str:
         # Older seam archives lack member assessments. A listed source status
         # or original summary positively distinguishes a failed collection.
-        for kind in ("claim-runs", "bound-runs"):
-            for name in ("status.json", "summary_metrics.json"):
-                path = self.root / "sources" / kind / run_id / name
-                if Path(os.path.abspath(path)) not in self.digests:
-                    continue
-                value = _reference_json(path, self).get("status")
-                if isinstance(value, Mapping):
-                    value = value.get("state")
-                if value is not None:
-                    if not isinstance(value, str) or not value:
-                        raise StorageStop(f"reference bytes {path}: ValueError: status must name a state")
-                    return value
-        return None
+        bundle = self.bundle(run_id, plan)
+        for name in ("status.json", "summary_metrics.json"):
+            path = bundle / name
+            if path not in self.digests and not path.exists() and not Path(str(path) + ".zst").exists():
+                continue
+            value = _reference_json(path, self).get("status")
+            if isinstance(value, Mapping):
+                value = value.get("state")
+            if value is not None:
+                if not isinstance(value, str) or not value:
+                    raise StorageStop(f"reference bytes {path}: ValueError: status must name a state")
+                return value
+        raise StorageStop(f"reference status {bundle}: no verified source status in status.json or summary_metrics.json")
 
     def check_bundle(self, bundle: Path) -> None:
         # Include listed files that have disappeared, including whole subtrees.
         if bundle in self.checked_bundles:
             return
-        for path in self.digests:
-            if path.is_relative_to(Path(os.path.abspath(bundle))):
-                self.read(path)
+        listed = {path for path in self.digests if path.is_relative_to(Path(os.path.abspath(bundle)))}
+        if not listed:
+            raise StorageStop(f"reference bundle {bundle}: no inventory entries")
+        # Verify vanished listed inputs as well as every present logical input.
+        # The latter also covers raw/instrument files read indirectly by the reducer.
+        present = set()
+        for directory, _, names in os.walk(bundle, followlinks=True):
+            resolved = Path(directory).resolve()
+            parents = Path(directory).relative_to(bundle).parents
+            if any((bundle / parent).resolve() == resolved for parent in parents):
+                raise StorageStop(f"reference bundle {bundle}: directory cycle in input tree: {directory}")
+            for name in names:
+                path = Path(directory) / name
+                present.add(Path(str(path)[:-4]) if path.suffix == ".zst" else path)
+        for path in sorted(listed | present):
+            self.read(path, require_digest=True)
         self.checked_bundles.add(bundle)
 
 
 def _reference_json(path: Path, inputs: _ReferenceInputs | None = None, *, equivalent: Path | None = None):
     try:
-        value = json.loads(inputs.read(path, equivalent=equivalent) if inputs is not None else read_bytes(path))
+        value = json.loads(inputs.read(path, require_digest=True, equivalent=equivalent) if inputs is not None else read_bytes(path))
         if not isinstance(value, dict):
             raise ValueError("JSON value must be an object")
         return value
     except Exception as exc:
         raise StorageStop(f"reference bytes {path}: {type(exc).__name__}: {exc}") from exc
+
+
+def _verify_harvest_outputs(root: Path) -> None:
+    """Use recorded harvest digests; acceptance is produced after the receipt."""
+    receipt = root / "harvest.json"
+    try:
+        outputs = json.loads(read_bytes(receipt))["outputs"]
+        if not isinstance(outputs, Mapping):
+            raise ValueError("outputs must be an object")
+        # These derived inputs are read by export or its evidence reader. The
+        # post-harvest acceptance record has no digest; membership/status below
+        # cross-check its decisions, and every exclusion keeps its printed code.
+        for relative in ("derived/roster.json", "derived/flags.jsonl"):
+            path = root / relative
+            if (path.exists() or Path(str(path) + ".zst").exists()) and relative not in outputs:
+                raise ValueError(f"{relative}: input has no harvest.json digest")
+        for relative, digest in outputs.items():
+            path = Path(os.path.abspath(root / relative))
+            if not path.is_relative_to(Path(os.path.abspath(root))):
+                raise ValueError(f"invalid harvest output path: {relative}")
+            if not (relative.startswith("derived/") or relative == "withheld/member-assessments.json"):
+                continue
+            if (not isinstance(digest, str) or len(digest) != 64
+                    or any(c not in "0123456789abcdef" for c in digest)):
+                raise ValueError(f"{relative}: invalid recorded digest")
+            try:
+                if hashlib.sha256(read_bytes(path)).hexdigest() != digest:
+                    raise ValueError("harvest.json digest mismatch")
+            except Exception as exc:
+                raise StorageStop(f"harvest output {path}: {type(exc).__name__}: {exc}") from exc
+    except Exception as exc:
+        raise StorageStop(f"harvest receipt {receipt}: {type(exc).__name__}: {exc}") from exc
 
 
 def _events(bundle: Path | None, *, reference=False, inputs=None) -> list[dict]:
@@ -150,7 +266,7 @@ def _events(bundle: Path | None, *, reference=False, inputs=None) -> list[dict]:
         return []
     path = bundle / "events.jsonl"
     try:
-        lines = (inputs.read(path) if inputs is not None else read_bytes(path)).decode("utf-8").splitlines()
+        lines = (inputs.read(path, require_digest=True) if inputs is not None else read_bytes(path)).decode("utf-8").splitlines()
         events = [json.loads(line) for line in lines if line.strip()]
         if reference and any(not isinstance(event, dict) for event in events):
             raise ValueError("events.jsonl entries must be JSON objects")
@@ -204,7 +320,7 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
         if not isinstance(summary, dict):
             raise ValueError(f"{summary_path}: JSON value must be an object")
         for key in ("idle_baseline", "summary_provenance"):
-            if key in summary and not isinstance(summary[key], dict):
+            if key in summary and not (key == "idle_baseline" and summary[key] is None) and not isinstance(summary[key], dict):
                 raise ValueError(f"{summary_path}: {key} must be an object")
         journal = Path(str(archive_root) + ".desk") / "compression.jsonl"
         with readable_run(bundle, compression_records=journal) as plain:
@@ -243,7 +359,10 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
                 if not context.telemetry_is_powermetrics:
                     covered = start
                     for left, right in sorted((p.support_start_s, p.support_end_s) for p in curve):
-                        if left > covered and covered < end:
+                        # Near epoch 1.79e9 s, one ulp is 2.38e-7 s. Four ulp
+                        # cover edge representation error (< 1% of the smallest
+                        # printed duration precision, 1 ms); no physical gap bar.
+                        if left - covered > 4 * math.ulp(left) and covered < end:
                             raise ValueError(f"power_trace.csv curve support has a gap at {covered}")
                         covered = max(covered, right)
                     support_end = covered
@@ -256,7 +375,7 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
                 raise ValueError(f"power_trace.csv curve support [{support_start}, {support_end}) "
                                  f"does not cover request [{start}, {end})")
             gross = _integrate(curve, start, end)
-        idle = summary.get("idle_baseline", {}).get("power_w_mean")
+        idle = (summary.get("idle_baseline") or {}).get("power_w_mean")
         if type(idle) not in (int, float) or not math.isfinite(idle):
             # Re-reduced summaries are outside sources/. An identical source
             # summary is a valid checksum witness; a changed re-reduction is not.
@@ -277,6 +396,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
            evidence=None, acceptance_record: Mapping | None = None,
            pack_registration: Mapping | None = None) -> ExportResult:
     root = Path(archive_root)
+    _verify_harvest_outputs(root)
     record = acceptance_record or read_json(root / "derived/b6-acceptance.json")
     pack_id = record["pack_id"]
     if pack_registration is None:
@@ -313,7 +433,12 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         if bytes_request:
             raise StorageStop(f"reference archive {root}: {type(exc).__name__}: {exc}") from exc
         raise
-    roster = ordered_roster(read_json(root / "derived/roster.json", {}), evidence)
+    harvested_roster = read_json(root / "derived/roster.json", {})
+    roster = ordered_roster(harvested_roster, evidence)
+    if bytes_request:
+        excluded_members = frozenset(item.get("run_id") for item in record.get("excluding", [])
+                                     if item.get("scope") == "member")
+        reference_inputs.check_membership(harvested_roster, roster, plan, pack_id, excluded_members)
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
@@ -339,31 +464,44 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     reference_physics_cache = {}
     # ordered_roster projects export-time acceptance. Keep the harvest's own
     # success evidence, so missing bytes cannot turn a collected run into failed.
-    harvested_roster = read_json(root / "derived/roster.json", {})
     harvested_members = {m["run_id"]: m for m in harvested_roster.get("members", [])}
     assessments = (read_json(root / "withheld/member-assessments.json", {}) or {}).get("members", {})
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
-        reference_role = member["role"] in ("corpus", "start", "midpoint", "end")
+        reference_role = member["role"] in REFERENCE_ROLES
         harvested_status = (assessments.get(run_id) or {}).get("status", harvested_members.get(run_id, {}).get("status"))
         if isinstance(harvested_status, Mapping):
             harvested_status = harvested_status.get("state")
-        if bytes_request and reference_role and not excluded[run_id] and harvested_status is None:
-            harvested_status = reference_inputs.harvested_status(run_id)
+        if bytes_request and reference_role and reference_inputs.listed_bundle(run_id, plan):
+            source_status = reference_inputs.harvested_status(run_id, plan)
+            for reported in ((assessments.get(run_id) or {}).get("status"),
+                             harvested_members.get(run_id, {}).get("status")):
+                if isinstance(reported, Mapping):
+                    reported = reported.get("state")
+                if reported is not None and (not isinstance(reported, str) or not reported):
+                    raise StorageStop(f"reference status {run_id}: malformed harvested status {reported!r}")
+                if (reported is not None
+                        and (reported == "succeeded") != (source_status == "succeeded")):
+                    raise StorageStop(f"reference status {run_id}: harvested status {reported!r} "
+                                      f"disagrees with verified source status {source_status!r}")
+            if harvested_status is None:
+                harvested_status = source_status
         collected = (harvested_status == "succeeded" or harvested_status is None
                      and (member["status"] == "succeeded"
-                          or reference_inputs is not None and reference_inputs.listed_bundle(run_id)))
+                          or reference_inputs.listed_bundle(run_id, plan)))
         reference = bytes_request and reference_role and collected and not excluded[run_id]
         bundle = None
         try:
-            bundle = bundle_of(root, plan, run_id)
+            bundle = bundle_of(root, plan, run_id, archive_only=bytes_request and reference_role)
             if reference:
+                bundle = reference_inputs.bundle(run_id, plan)
                 if bundle is None or not Path(os.path.abspath(bundle)).is_relative_to(Path(os.path.abspath(root))):
                     candidates = ", ".join(str(base / run_id) for base in bundle_roots(root, plan)
                                            if Path(os.path.abspath(base)).is_relative_to(Path(os.path.abspath(root))))
                     fallback = f"; external fallback refused: {bundle}" if bundle is not None else ""
                     raise FileNotFoundError(f"collected bundle directory missing from archive; tried {candidates}{fallback}")
                 reference_inputs.check_bundle(bundle)
+                reference_inputs.read(bundle / "power_trace.csv", require_digest=True)
                 config = _reference_json(bundle / "config.json", reference_inputs)
                 metadata = _reference_json(bundle / "metadata.json", reference_inputs)
                 status_path = bundle / "status.json"
@@ -406,7 +544,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
             events = _events(bundle, reference=reference, inputs=reference_inputs if reference else None)
             if reference:
                 for name in ("idle_baseline", "summary_provenance", "phase_energy_j", "energy_bound_terms_j", "idle_mean_uncertainty"):
-                    if name in summary and not isinstance(summary[name], Mapping):
+                    if name in summary and not (name == "idle_baseline" and summary[name] is None) and not isinstance(summary[name], Mapping):
                         raise ValueError(f"{summary_path}: {name} must be an object")
             row.update(_event_fields(events))
             row["run_start_utc"] = row.get("run_start_utc") or summary.get("started_at")

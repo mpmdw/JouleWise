@@ -126,6 +126,53 @@ class InstantJudgeTests(unittest.TestCase):
 
 
 class DwellResidualTests(unittest.TestCase):
+    def test_step_gate_needs_150_remaining_anchors_and_otherwise_discloses(self):
+        limits = {**LIMITS, "h_ms": 0}
+        clocks = FakeClocks()
+        clocks.step_at(91.5, 1_100_000)
+        measured = dwell(clocks, 183)
+        for count in (149, 150):
+            with self.subTest(count=count):
+                keep = {round(i * 183 / (count - 1)) for i in range(count)}
+                samples = [dict(item) if i in keep else dict(item, anchor=None, error="skew rejected")
+                           for i, item in enumerate(measured.values["samples"])]
+                changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                                       started=measured.started, finished=measured.finished)
+                verdict = clock.judge(changed, limits)
+                self.assertEqual(verdict.observed["anchored_samples"], count)
+                self.assertEqual(verdict.observed["step_measured"], count >= 150)
+                self.assertEqual(any(f["code"] == "clock.step_unmeasured" for f in verdict.observed["flags"]), count < 150)
+                self.assertEqual(verdict.status, base.PASS if count < 150 else base.REFUSE)
+                self.assertEqual(any("dwell step" in reason for reason in verdict.reasons), count >= 150)
+
+    def test_two_anchors_still_refuse_a_measured_rate_hazard(self):
+        measured = dwell(FakeClocks(drift_word=ppm_word(40)), 183)
+        samples = [dict(item) if i in (0, 183) else dict(item, anchor=None, error="skew rejected")
+                   for i, item in enumerate(measured.values["samples"])]
+        changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                               started=measured.started, finished=measured.finished)
+        verdict = clock.judge(changed, {**LIMITS, "h_ms": 0})
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertTrue(any("measured rate gate" in reason for reason in verdict.reasons))
+        self.assertIn({"code": "clock.step_unmeasured"}, verdict.observed["flags"])
+
+    def test_short_series_keeps_the_residual_gate(self):
+        anchors = [{"anchor": {"anchor_ns": offset, "monotonic_raw_ns": i * 10**9, "read_skew_ns": 1000}}
+                   for i, offset in enumerate((0, 3_000_000, 0))]
+        verdict = clock.judge(clock.series(anchors, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
+                                          started=None, finished=None), {**LIMITS, "h_ms": 0})
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertTrue(any("dwell residual" in reason for reason in verdict.reasons))
+        self.assertFalse(any("dwell step" in reason for reason in verdict.reasons))
+
+    def test_unmeasurable_short_fit_keeps_the_step_disclosure(self):
+        anchor = {"anchor_ns": 0, "monotonic_raw_ns": 0, "read_skew_ns": 1000}
+        measured = clock.series([{"anchor": anchor}, {"anchor": anchor}],
+                                boot_start=BOOT_UUID, boot_end=BOOT_UUID, started=None, finished=None)
+        verdict = clock.judge(measured, LIMITS)
+        self.assertEqual(verdict.status, base.UNMEASURED)
+        self.assertEqual(verdict.observed["flags"], [{"code": "clock.step_unmeasured"}])
+
     def test_skew_rejected_sample_keeps_the_measured_rate_judgment_and_flag(self):
         for ppm, status in ((0, base.PASS), (40, base.REFUSE)):
             measured = dwell(FakeClocks(drift_word=ppm_word(ppm)), 60)
@@ -151,7 +198,9 @@ class DwellResidualTests(unittest.TestCase):
         verdict = clock.judge(changed, LIMITS)
         self.assertEqual(verdict.status, base.PASS)
         self.assertEqual(verdict.observed["anchored_samples"], 2)
-        self.assertEqual(len(verdict.observed["flags"]), 59)
+        self.assertEqual(len(verdict.observed["flags"]), 60)
+        self.assertIn({"code": "clock.step_unmeasured"}, verdict.observed["flags"])
+        self.assertFalse(verdict.observed["step_measured"])
         samples[59] = dict(samples[59], anchor=None)
         changed = clock.series(samples, boot_start=BOOT_UUID, boot_end=BOOT_UUID,
                                started=measured.started, finished=measured.finished)

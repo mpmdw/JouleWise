@@ -340,9 +340,17 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
     unmeasured = [{"code": "clock.unmeasured", "sample_index": index,
                    "error": item.get("error") or "anchor absent"}
                   for index, item in enumerate(samples) if not item.get("anchor")]
+    # A fitted line absorbs about 1.5/N of a step. Keeping that loss <= 1%
+    # of the registered step_ns bar requires N >= 150 remaining anchors.
+    # Two microsecond-precise anchors suffice for the rate; shorter series
+    # retain the residual check and disclose the unmeasured step, never refuse it.
+    step_measured = len(anchored) >= 150
+    step_flags = [] if step_measured else [{"code": "clock.step_unmeasured"}]
+    coverage = {"flags": unmeasured + step_flags, "samples": len(samples),
+                "anchored_samples": len(anchored), "step_measured": step_measured}
     if len(anchored) < 2:
         return Verdict(MODULE, UNMEASURED, ("dwell series needs >= 2 anchored samples",), limits,
-                       {"flags": unmeasured, "samples": len(samples), "anchored_samples": len(anchored)})
+                       coverage)
     reasons = []
     if values.get("boot_session_uuid_start") != values.get("boot_session_uuid_end"):
         reasons.append("boot session changed during the dwell")
@@ -351,7 +359,7 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
     try:
         rate, residuals = fit_anchor_rate([item["anchor"] for item in anchored])
     except (KeyError, TypeError, ValueError) as exc:
-        return Verdict(MODULE, UNMEASURED, (str(exc),), limits)
+        return Verdict(MODULE, UNMEASURED, (str(exc),), limits, coverage)
     gate = measured_rate_bound(rate, limits)
     if not gate["passes"]:
         reasons.append(f"measured rate gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms")
@@ -366,14 +374,14 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
                        f"+-{limits['residual_max_ns'] / 1e6} ms from the fitted line")
     # Residuals retain the order of the remaining anchored samples.
     step = max(abs(b - a) for a, b in zip(residuals, residuals[1:]))
-    if step > limits["step_ns"]:
+    if step_measured and step > limits["step_ns"]:
         reasons.append(f"dwell step {float(step) / 1e6:.4f} ms exceeds {limits['step_ns'] / 1e6} ms")
     raw_span = anchored[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
     observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits) if f0 is not None else None,
-                "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step),
+                "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step), "step_measured": step_measured,
                 "frequency_words": words, "frequency_word_changed": len(set(words)) > 1,
                 "samples": len(samples), "anchored_samples": len(anchored), "raw_span_ns": raw_span,
-                "flags": unmeasured + rate_flags(gate) + ([{"code": "clock.frequency_changed"}]
+                "flags": unmeasured + step_flags + rate_flags(gate) + ([{"code": "clock.frequency_changed"}]
                                               if len(set(words)) > 1 else []),
                 "max_abs_residual_ns": float(abs(worst)), "max_read_skew_ns": worst_skew,
                 "anchor_movement_ns": anchored[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}

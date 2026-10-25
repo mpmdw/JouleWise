@@ -51,6 +51,7 @@ def synthetic_harvest(root):
             bundle = archive / "sources/claim-runs" / rid
             write(bundle / "config.json", cfg)
             write(bundle / "metadata.json", {"device": {"telemetry": "mock", "rail_manifest": ["mock"]}})
+            write(bundle / "status.json", {"status": {"state": "succeeded"}})
             member = members.get(rid, {"model_id": "reference", "purpose": "reference", "end": "middle"})
             mid = member["model_id"]
             long = mid in plan["long_regimes"]

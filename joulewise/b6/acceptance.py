@@ -460,7 +460,8 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
     assessments = _json(root / "withheld/member-assessments.json", {}).get("members", {})
     for member in roster.get("members", []):
         run_id = member["run_id"]
-        bundle = bundle_of(root, plan, run_id)
+        role = roles.get(run_id, member.get("role", "science"))
+        bundle = bundle_of(root, plan, run_id, archive_only=role in ("corpus", "start", "midpoint", "end"))
         spare = run_id not in stages_for and str(member.get("stage_id", "")).endswith(".spares")
         # Sealed block-5 trees retain reserve slots. They are not planned block-6
         # observations, even if stray spare bytes were collected.

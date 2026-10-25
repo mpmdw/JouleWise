@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from joulewise.b6.export_runs import export
+from joulewise.desk_restore import StorageStop
 
 
 def main(argv=None) -> int:
@@ -28,9 +29,11 @@ def main(argv=None) -> int:
                         args.pack_records_root, args.export_dir, non_claim=args.non_claim)
         print(json.dumps(result.structure(), sort_keys=True))
         return 0
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)  # the stop names its own cause code
+        return 5
     except Exception as exc:
-        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
-        print("block-six export program fault: " + detail, file=sys.stderr)
+        print(f"block-six export program fault: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 5
 
 

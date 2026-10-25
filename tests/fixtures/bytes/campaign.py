@@ -33,6 +33,10 @@ def _seal_archive_inputs(archive):
                     else "../" + str(path.relative_to(archive)))
         lines.append(f"{digest}  {relative}\n")
     (sources / "SHA256SUMS").write_text("".join(lines))
+    _write_json(archive / "harvest.json", {"outputs": {
+        str(path.relative_to(archive)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted((archive / "derived").rglob("*"))
+        if path.is_file() and path.name != "b6-acceptance.json"}})
 
 
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
@@ -220,6 +224,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     bundle = builder.write_metadata(rail_manifest=["mock"], workload_observed={"output_token_count": 512},
                         idle={**DEFAULT_IDLE, "power_w_mean": own_idle, "duration_s": 1.0, "sample_count": 4,
                               "telemetry_backend": "mock", "status": "valid"})
+                _write_json(bundle / "status.json", {"status": {"state": "succeeded"}})
                 # Real desk reducer under the repository's mock telemetry path.
                 summary = reduce_bundle(bundle).to_dict()
                 actual = summary["phase_energy_j"]["decode"]

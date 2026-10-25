@@ -46,7 +46,7 @@
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
-  "flag_catalog_sha256": "36971fe0ce0e9bd6b55fc496d10cdf223bdc8e8f4ac3178011226b64c6e854ae",
+  "flag_catalog_sha256": "90ef019ff0e5ff63b6e0c9d77bd449033baca38109dffe32f549f0fadc335ee1",
   "flag_effects": {
     "agent.capture_overlap": "DISCLOSE",
     "agent.pause_marker_stale": "DISCLOSE",
@@ -125,6 +125,7 @@
     "clock.step": "DISCLOSE",
     "clock.step_overlap": "EXCLUDE_MEMBER",
     "clock.step_overlap_calibration": "EXCLUDE_WINDOW",
+    "clock.step_unmeasured": "DISCLOSE",
     "clock.systematic": "DISCLOSE",
     "clock.time_server_offset": "DISCLOSE",
     "clock.unmeasured": "DISCLOSE",

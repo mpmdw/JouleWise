@@ -48,6 +48,7 @@ def _entry(family: str, klass: str, effect: str, note: str) -> dict:
 
 
 NEW_CODES = {
+    "clock.step_unmeasured": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "FIX-416-F: fewer than 150 remaining dwell anchors cannot hold the step bar within 1%; rate and residual checks remain active when at least two anchors remain."),
     "bytes.reference_request_unavailable": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "BYTES section 6: the read reference bundle cannot define a whole request; print the dropped reference and reason in NEG-8 inputs."),
     'bytes.meter_decode_unavailable': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'BYTES section 6: the decode meter value is unavailable; disclose the affected DC-input and rest cells.'),
     'bytes.meter_gap': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'FIX-416 disposition: a dropped device sample in a decode or reference span leaves that run without a DC-input value; rails selection is unchanged.'),

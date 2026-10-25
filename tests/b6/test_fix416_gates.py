@@ -28,6 +28,7 @@ class Fix416Tests(unittest.TestCase):
                 prep = prepared(Path(tmp), tree=tree)
                 self.assertEqual(prep.registration['pack_registration'], reg)
                 self.assertEqual(reg['flag_effects']['cell.below_minimum'], 'DISCLOSE')
+                self.assertEqual(reg['flag_effects']['clock.step_unmeasured'], 'DISCLOSE')
                 self.assertEqual(reg['flag_catalog_sha256'], digest)
 
     def test_below_minimum_is_disclosed_only_for_registered_bytes_packs(self):

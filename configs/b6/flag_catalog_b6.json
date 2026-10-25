@@ -539,6 +539,13 @@
       "klass": "PHYSICS",
       "note": "A clock step falls inside a calibration capture."
     },
+    "clock.step_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "FIX-416-F: fewer than 150 remaining dwell anchors cannot hold the step bar within 1%; rate and residual checks remain active when at least two anchors remain."
+    },
     "clock.systematic": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
