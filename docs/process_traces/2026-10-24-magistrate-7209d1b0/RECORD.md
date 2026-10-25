@@ -100,3 +100,17 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
      - no pass-1 t0 between about 2026-10-31 16:30 PDT and 2026-11-01 02:00 PST (DST, Fable 4);
      - `roster.json` identity_status is stale metadata, never consumed (Fable 2, NIT).
 33. **Disk offload:** H (/Users/edr/night-bytes/h-20261021T185555Z, 33 GiB, non-claim, frozen desk data in JouleWise-data) is going to iCloud Drive JouleWise-archive/2026-10-25-disk3 with per-member SHA-256 verification before removal (`~/night-archive/icloud-offload-2026-10-05/offload.py`; manifest and pointer as on 10-21). BY-H2 follows. Then `brctl evict` once uploaded.
+34. **Offloads verified:** H (35,966 members, tar sha256 8b1344a0…) and BY-H2 (33,798 members, 1ef3e1fe…) are in iCloud Drive JouleWise-archive/2026-10-25-disk3; the local sources are removed; restore pointers are in /Users/edr/night-bytes/. Upload was in progress at 02:1x, so they are not yet evicted. Seat scratch removed: 53 GiB of APFS clones in /private/tmp/fix416g pinned H's blocks. Free disk was 33 GiB pending eviction.
+35. **Hand-off.** This session stops here rather than arming: arming would oblige it to exit anyway, the remaining steps are mechanical, and a fresh activation costs far less context. The exact steps are in the RUN_STATE item 69 pointer.
+
+**Pruning tally (gates that ran this session, and what they caught that touched a number):**
+- #416 triple audit: YES. The NEG-8 reference span made B too small (Fable and Opus; Astra missed it).
+- Cold delta passes, rounds 1-7: YES.
+  - Round 1, Fable REFUSE: a reference dropped silently on a read failure.
+  - Round 2, Opus: the same class on other storage faults; E_ref 37.121 → 37.089 J.
+  - Round 3, Fable: an unauthenticated roster; allowance +16 %.
+  - Later rounds: edge cases, plus one collection-path HIGH (round 6, a smoke stopping for want of a tree witness). No number.
+- Registration cold gate: no number-touching defect (tooling and text corrections only).
+- GitHub CI: test-fixture and harness gaps only.
+- Lead host reruns of the sandbox-limited census tests: nothing.
+- Lead real-archive replays: caught one over-refusal of real data each time a rule changed (H's uncollected references; the zero-run archive). These touch which data count, so they stay.
