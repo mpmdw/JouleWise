@@ -198,17 +198,18 @@ class _ReferenceInputs:
         reference_ids = {run for run, role in roles.items() if role in REFERENCE_ROLES}
         # A non-smoke session that collected nothing (empty harvest roster and no
         # run bundle in the inventory, e.g. a t0 refusal) has no membership to
-        # protect: its planned references are not unioned in, and it exports
-        # its empty table as before (lead ruling on FIX-416-I F1).
-        if not reduction and not harvested.get("members") and not listed_ids:
-            reference_ids = set()
+        # protect: its planned references are not unioned into the roster set,
+        # and it exports its empty table as before (lead ruling on FIX-416-I F1).
+        # The unlisted-directory custody check below still covers them.
+        zero_run = not reduction and not harvested.get("members") and not listed_ids
+        planned_union = set() if zero_run else set(reference_ids)
         sets = []
         for name, roster in (("harvest roster", harvested), ("acceptance", projected)):
             members = [m["run_id"] for m in roster.get("members", [])
                        if roles.get(m["run_id"], m.get("role")) in REFERENCE_ROLES]
             if len(members) != len(set(members)):
                 raise StorageStop(f"reference membership {name}: duplicate reference run ids")
-            sets.append((name, set(members) | reference_ids
+            sets.append((name, set(members) | planned_union
                          if name == "harvest roster" else set(members)))
             reference_ids.update(members)
         inventory = listed_ids & reference_ids
