@@ -75,3 +75,18 @@ It is replayed over every real archive before adoption. The precedent is #574 ro
 | Fable 3: the qwen3-8b-8bit tokenizer revision cannot be compared at harvest (runs do not record it) | Text: the revision is a pin-side record; for this model the tokenizer is bound by its pinned file hashes and the artifact digest |
 | Opus 4, 5; Fable 6: step figure about 1.010 ms; span ratios (BY-H2 window 6.5-6.8, corpus 6.3-6.8; H window 6.6-6.9) | Lead text |
 | Opus 8: the G10 control no longer exercises the clock module | Deferred (G10 is dormant in block 6/BYTES; diagnostic; pruning list) |
+
+## Round-3 cold delta passes on fcc0ac921..81782d6a3 (Fable 5.1 and Opus 5.5 both ADMIT-WITH-CORRECTIONS)
+
+Reports in `~/night-archive/seats-7209/cold416c/`. Neither found over-refusal on real archives (Fable replayed 6, Opus several; 0 stops). The sources/ side of the default-stop is closed.
+
+| finding | disposition (FIX-416-F) |
+|---|---|
+| Fable 2 HIGH: derived/roster.json is unauthenticated; removing a collected reference silently drops it (BY-H2 clone: allowance 0.8726 → 1.0123 J, nothing printed) | Same class via another input. The structural rule extends: every input that decides reference membership or status is authenticated against harvest.json's digests or cross-checked against SHA256SUMS both ways; a mismatch stops |
+| Opus 1 medium: an unlisted stray directory can shadow the listed bundle (not a regression) | The bundle is the directory the inventory lists; a stray, duplicate or unlisted candidate stops; every bundle-internal input requires a digest |
+| Opus 2 medium: the schema's canonical `idle_baseline: null` stops the session export | It is the registered absence (flag); §6 text adds "or null" |
+| Opus 3 low: harvested failed vs verified succeeded is not cross-checked | Stop on disagreement in both directions |
+| Fable 1 medium / Opus 4 low: "≥ 2 anchors" has no derivation; few anchors weaken the step test | Rate judged with ≥ 2; step test only with N ≥ 150 (derivation: absorption 1.5/N ≤ 1 % of step_ns); below that a disclosed `clock.step_unmeasured`, never a refusal |
+| Opus 5 low: exact gap comparison on the non-powermetrics path | Bar 4 × ulp(t) of the edge epoch (the representation limit, 2.4e-7 s near 1.79e9 s, far below the 1 ms printed duration precision) |
+| Fable 3 low: scripts/b6_export_runs.py hides messages and exits 1 on StorageStop | Print class and message; exit 5 |
+| Fable 4 note: bytes-mac-check resolves only via the registration dir | Recorded (production passes that dir) |

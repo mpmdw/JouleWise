@@ -260,17 +260,15 @@ Differences from the brief, added to the eight of the block below:
 
 69. **Magistrate activation 7209d1b0 (Opus 5.5, headless, 2026-10-24 from 08:45 PDT).** Record: `docs/process_traces/2026-10-24-magistrate-7209d1b0/RECORD.md`; dispositions `DISPOSITIONS-416.md` beside it. Relaunched after 786c0858's usage-limit exit (notice acknowledged; Gmail 1a16e9893cc02912). The #416 triple audit at c84bb34c2 was resumed and finished. All three auditors: ARM AFTER LISTED BLOCKERS. The key blocker, found by Fable and Opus: the NEG-8 reference span was the `measured_run` stage (6.5-6.9x the request), so B was too small. Fix seats FIX-416-A (analysis) and FIX-416-B (gates, clock by measured rate, C4 stack identity, blinding, text) were integrated at 24718b166 plus 2ed536739, on branch integrate/2026-10-24-416 (draft PR #579 into work/2026-10-23-by-slots-draft). Cold delta passes: Fable REFUSE (a reference is dropped silently on a read failure; confirmed by the lead and emailed to Ed, Gmail 1a16fa8f5681d1f3), Opus ADMIT-WITH-CORRECTIONS. FIX-416-C is running in jw-wt/int416 (`~/night-archive/seats-7209/fix416c/`).
 
-**Next activation (written 2026-10-24 by activation 7209d1b0; item 69):** Nothing is armed. Next, in order:
-- (a) Read FIX-416-C's report (`~/night-archive/seats-7209/fix416c/report.md`). Verify its evidence, rerun the hazard host-census tests outside the sandbox, and commit in jw-wt/int416. If it stopped for scope, grant or rule and resume.
-- (b) Run the full tests.test_bytes_agreement and tests.test_bytes_analysis on the int416 head (about 40 min and 1.9 h; run each so it can outlast the 2 h background cap). Read CI on PR #579.
-- (c) Apply FIX-416-C's registration sentences. Also: delete §9's stale "377/400" sentence; set §7's edge counts to 0 of 258 (H) and 0 of 244 (BY-H2) including request edges; set the span ratio to 6.3-6.9.
-- (d) Run cold delta passes, Fable and Opus, blind and executing, on 2ed536739..head (brief pattern `~/night-archive/seats-7209/cold416/brief.md`).
-- (e) Add review rows for the integrated head (configs/b6/executing_reviews.json).
-- (f) Merge #579 into the pass-1 lane, then the registration cold gate (Fable 5.1).
-- (g) Offload H and BY-H2 raw roots (59 GiB, non-claim, frozen desk data in JouleWise-data) to iCloud with verified manifests, so free disk reaches the largest P plus smoke share (118.8 GB).
-- (h) Item 68's step (d).
-
-No pass-1 session may span 2026-11-01 01:00-02:00 PDT (DST repeated hour).
+**Next activation (written 2026-10-24 by activation 7209d1b0; item 69):** Nothing is armed. PR #579 (integrate/2026-10-24-416, worktree jw-wt/int416) holds FIX-416-A through E plus registration text (head 81782d6a3). FIX-416-F is running there (`~/night-archive/seats-7209/fix416f/`). Next, in order:
+- (a) Read FIX-416-F's report, verify, rerun the hazard census tests outside the sandbox, and commit. If a launch is refused for a nested git repository, move the seat's scratch campaign outputs out of the worktree.
+- (b) Apply its registration sentences.
+- (c) Run the round-4 cold delta passes (Fable and Opus, blind, executing) on 81782d6a3..head. Brief pattern: `~/night-archive/seats-7209/cold416c/brief.md`; launcher with a 110-minute alarm.
+- (d) Add review rows for the integrated head.
+- (e) CI green, then merge #579 into work/2026-10-23-by-slots-draft.
+- (f) The registration cold gate (Fable).
+- (g) Offload the H and BY-H2 raw roots to iCloud; free disk to 118.8 GB.
+- (h) Item 68's step (d). No pass-1 session may span 2026-11-01 01:00-02:00 PDT.
 
 (History) **Next activation (written 2026-10-24 05:35 by activation 786c0858; item 68):** Nothing is armed. Merged: #576, #567, #565, #577 to main; #574 and #573 into their BYTES lanes. The BYTES pass-1 inputs are integrated at c84bb34c2 on work/2026-10-23-by-slots-draft (PR #578, draft): all lanes and main merged, 19 agreement campaigns 0 above the bar, B2 SHA and coverage filled, pins and generators pass. Next, in order: (a) the laptop whole suite at c84bb34c2 (`~/night-archive/seats-786c/suite-final/`); (b) the #416 triple audit at c84bb34c2: launch per `docs/process_traces/2026-09-24-interactive-4b/30-prearm-audit-kit-416.md` with the briefs in `~/night-archive/seats-786c/audit416/` (worktrees jw-wt/audit416-*); BLOCKERs get a different-family refuter; (c) the registration cold gate (Fable 5.1) on docs/registrations/bytes_pack_v1.md and the integrated evidence; then flip the six pass-1 registrations to registered (status and draft_notes) through scripts/bytes_plan_trees.py and commit; (d) a fresh measurement checkout at that commit, free disk to the largest P plus smoke share (118,843,585,614 B), then each sub-pack's smoke and session through the BYTES loop config configs/b6/loop_bytes.json, all six t0 before 2026-11-02 00:00 PDT. Known-bytes test after collection (ruling 9).
 
