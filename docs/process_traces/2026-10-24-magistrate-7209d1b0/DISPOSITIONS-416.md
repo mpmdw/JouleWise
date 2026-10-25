@@ -115,3 +115,18 @@ Reports in `~/night-archive/seats-7209/cold416e/`. Both found the a_j math exact
 | Opus 1 medium, Fable 2: at sparse layouts (a_j → 1) the corrected bar falls below the anchors' read noise, so the decision is made by noise | Per pair, u_j = recorded read skew of anchors j and j+1 (measured). Testable only when step_ns(1 − a_j) > u_j, else disclosed `clock.step_unmeasured`. Refuse only when \|Δres\| > step_ns(1 − a_j) + u_j |
 | Opus 2: the 10 µs gap bar is in the wrong column (a gap loses P·g joules) | Bound the summed uncovered time: G_total · P_max ≤ 0.13 mJ (1 % of the smallest printed half-width 0.013 J) |
 | Opus 3 text nits; Opus 4 cosmetic `excluded=False` on a partial row | Text fixed; the cosmetic row is left as it is (its status already makes it unusable) |
+
+## Round 6 (6b54a51d6..7a3b585db: Fable ADMIT; Opus ADMIT-WITH-CORRECTIONS) and round 7 (7a3b585db..028f8c50b: Fable ADMIT, Opus ADMIT)
+
+Reports in `~/night-archive/seats-7209/cold416f/` and `cold416g/`.
+
+| finding | disposition |
+|---|---|
+| R6 Opus 1 HIGH: a BYTES smoke depended on the results-clone (origin's default branch) for the pre-reduction tree, so without it the smoke stops and the packs are held | FIX-416-I: `smoke.prepare` archives the pinned tree as a witness; with no witness the export discloses rather than stops; an inconsistent witness stops |
+| R6 Fable 1 LOW: the plain path did not union planned references | FIX-416-I; lead exception for zero-run sessions (the real BY-H2 t0 refusal) |
+| R6 LOW/INFO: guard bands (at most about 1.05 ms against the 5 ms budget), u_j's factor-2 margin covering the fit noise (max W_j/u_j = 0.51 over 17,425 real pairs), P_max as an estimate, the gap-bar floor comment, two index spaces | No fix (stopping rule, item 26); the comment was restored in FIX-416-I |
+| R7 Opus 1 LOW: the zero-run exception also disabled the unlisted-directory custody check | Fixed by the lead: only the roster union is skipped; Opus's probe stops again |
+| R7 Fable 1 / Opus 2 INFO: the witness is bound by reduction equality plus its digest, not by its own pinned digest; the removed-stage rows are the residue | Accepted under D-161 (needs a rewritten SHA256SUMS); `smoke.prepare` writes it from the pin (tested) |
+| R7 Opus 3-6, Fable 2-3 INFO | Wording fixed ("custody-owned" → committed in the pack, archived under sources/repo); the rest needs no change |
+
+The stopping rule is met: round 7 has no finding above LOW. The cold-pass key (Fable and Opus, blind, executing) is satisfied for the #416 fix lane at 028f8c50b, plus the lead's one-line follow-up verified by Opus's own probe.
