@@ -21,6 +21,16 @@ def read(path):
 
 
 class BytesPlanTreesTests(unittest.TestCase):
+    def test_every_loop_pack_tree_authenticates_through_its_sidecar(self):
+        # Members read the committed pack, not the smoke's staged copy, and
+        # refuse when plan_tree.sha256 is absent (r1-bytes-s1-p1: 143 of 143).
+        from joulewise.arm_readiness import _plan_tree
+        refs = sorted({read(path)["plan_tree_ref"] for path in (ROOT / "configs/b6/packs").glob("*/registration.json")})
+        self.assertEqual(len([ref for ref in refs if "/bytes-s" in ref]), 12)
+        for ref in refs:
+            with self.subTest(ref=ref):
+                _plan_tree((ROOT / ref).parent)
+
     def test_production_launch_declaration_and_runtime_roots(self):
         template = read(ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json")["arm_attachments"]["launch"]
         runtime = read(ROOT / "configs/b6/loop_bytes.json")
