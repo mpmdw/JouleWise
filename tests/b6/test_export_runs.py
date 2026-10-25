@@ -286,6 +286,187 @@ class ExportTests(unittest.TestCase):
                     export_runs.export(archive, plan, reg, root / "keys", root / "out",
                                        pack_registration={"blinding_group": "bytes"})
 
+    def test_finder_metadata_is_ignored_but_every_other_unlisted_file_stops(self):
+        bundle = self.archive / "sources/claim-runs/ref"
+        baseline = self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+        for directory in (bundle, bundle / "raw"):
+            directory.mkdir(exist_ok=True)
+            (directory / ".DS_Store").write_bytes(b"Finder metadata")
+        self.assertEqual(self.rows(self.export(pack_registration={"blinding_group": "bytes"})), baseline)
+        (bundle / ".DS_Store").unlink()  # APFS may treat case variants as the same existing name.
+        for name in (".DS_Store.zst", ".ds_store", ".DS_Store.backup", "notes.txt"):
+            with self.subTest(name=name):
+                path = bundle / name
+                path.write_bytes(b"unlisted bytes")
+                with self.assertRaises(export_runs.StorageStop):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+                path.unlink()
+
+    def test_partial_reference_requires_verified_harvest_missing_summary_evidence(self):
+        bundle = self.archive / "sources/claim-runs/ref"
+        (bundle / "status.json").unlink()
+        (self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json").unlink()
+        self.record["excluding"].append({"scope": "member", "run_id": "ref", "code": "member.bytes_missing"})
+        write_json(self.archive / "derived/b6-acceptance.json", self.record)
+        flag_path = self.archive / "derived/flags.jsonl"
+        flag = {"code": "member.bytes_missing", "scope": {"run_id": "ref"}, "interval": None,
+                "flag_id": "partial-ref", "observed": {"files_missing": ["summary_metrics.json"]}}
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "no verified source status"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        flag_path.write_text(json.dumps(flag) + "\n")
+        with self.assertRaisesRegex(export_runs.StorageStop, "flags.jsonl.*digest mismatch"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        seal_reference_inputs(self.archive)
+        # The verified missing-summary outcome also outranks a stale success
+        # assessment: it proves the collection ended without a usable record.
+        write_json(self.archive / "withheld/member-assessments.json", {"members": {"ref": {"status": "succeeded"}}})
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "member.bytes_missing")
+        self.assertIn("member.bytes_missing", row["flag_codes"])
+        self.assertEqual(row["excluded"], "True")
+        self.assertTrue(all(not row[c] for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+        self.record["excluding"] = []
+        write_json(self.archive / "derived/b6-acceptance.json", self.record)
+        write_json(bundle / "status.json", {"status": {"state": "succeeded"}})
+        seal_reference_inputs(self.archive)
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "member.bytes_missing")
+        self.assertEqual(row["excluded"], "False")
+        self.assertTrue(all(not row[c] for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+        # Acceptance alone cannot supply the harvest's missing-summary proof.
+        receipt_path = self.archive / "harvest.json"
+        receipt = json.loads(receipt_path.read_bytes())
+        receipt["outputs"].pop("derived/flags.jsonl")
+        write_json(receipt_path, receipt)
+        with self.assertRaisesRegex(export_runs.StorageStop, "flags.jsonl.*no harvest.json digest"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_lost_listed_summary_is_not_a_partial_collection(self):
+        bundle = self.archive / "sources/claim-runs/ref"
+        (bundle / "status.json").unlink()
+        write_json(bundle / "summary_metrics.json", {"status": "succeeded"})
+        (self.archive / "derived/flags.jsonl").write_text(json.dumps({
+            "code": "member.bytes_missing", "scope": {"run_id": "ref"}, "interval": None,
+            "flag_id": "partial-ref", "observed": {"files_missing": ["summary_metrics.json"]}}) + "\n")
+        seal_reference_inputs(self.archive)
+        (bundle / "summary_metrics.json").unlink()
+        with self.assertRaisesRegex(export_runs.StorageStop, "summary_metrics.json.*FileNotFoundError"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_uncollected_exclusion_cannot_contradict_harvest_success(self):
+        for witness in ("roster", "assessment"):
+            with self.subTest(witness=witness), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                archive, reg, plan, record = archive_fixture(root)
+                shutil.rmtree(archive / "sources/claim-runs/ref")
+                record["excluding"].append({"scope": "member", "run_id": "ref", "code": "member.bytes_missing"})
+                write_json(archive / "derived/b6-acceptance.json", record)
+                if witness == "roster":
+                    path = archive / "derived/roster.json"
+                    roster = json.loads(path.read_bytes())
+                    next(m for m in roster["members"] if m["run_id"] == "ref")["status"] = {"state": "succeeded"}
+                    write_json(path, roster)
+                else:
+                    write_json(archive / "withheld/member-assessments.json", {"members": {"ref": {"status": "succeeded"}}})
+                seal_reference_inputs(archive)
+                with self.assertRaisesRegex(export_runs.StorageStop, "members without listed bundles.*ref"):
+                    export_runs.export(archive, plan, reg, root / "keys", root / "out",
+                                       pack_registration={"blinding_group": "bytes"})
+
+    def test_bytes_s1_p1_smoke_keeps_uncollected_reference_rows(self):
+        from joulewise.b6 import acceptance, smoke
+        tree = json.loads((Path(__file__).resolve().parents[2] /
+                           "configs/campaigns/bytes-s1-p1/plan_tree.json").read_bytes())
+        stages, roles = acceptance._stage_roles(tree)
+        reference_stages = {stages[run] for run in roles if roles[run] in export_runs.REFERENCE_ROLES}
+        keep = {stage["stage_id"]: int(stage["stage_id"] in reference_stages)
+                for stage in tree["stage_graph"] if stage["kind"] == "campaign_collection"}
+        reduced = smoke.reduce_tree(tree, keep)
+        template = self.root / "reference-template"
+        shutil.copytree(self.archive / "sources/claim-runs/ref", template)
+        summary = (self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json").read_bytes()
+        shutil.rmtree(self.archive / "sources/claim-runs")
+        shutil.rmtree(self.archive / "withheld/reductions")
+        members, kept = [], set()
+        for stage in reduced["stage_graph"]:
+            if stage["kind"] != "campaign_collection":
+                continue
+            runs = [run for run in stages if stages[run] == stage["stage_id"]]
+            kept.add(runs[0])
+            for run in runs:
+                members.append({"run_id": run, "stage_id": stage["stage_id"], "units": []})
+            run = runs[0]
+            shutil.copytree(template, self.archive / "sources/claim-runs" / run)
+            path = self.archive / "withheld/reductions" / (run + ".summary_metrics.rereduced.json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(summary)
+        self.record.update(pack_id="bytes-s1-p1", excluding=[])
+        self.plan["pack_id"] = "bytes-s1-p1"
+        write_json(self.archive / "derived/b6-acceptance.json", self.record)
+        write_json(self.archive / "derived/roster.json", {"pack_id": "bytes-s1-p1", "members": list(reversed(members))})
+        tree_path = self.archive / "sources/pack/plan_tree.json"
+        write_json(tree_path, reduced)
+        seal_reference_inputs(self.archive)
+        rows = self.rows(self.export(pack_registration={"pack_id": "bytes-s1-p1", "blinding_group": "bytes"}))
+        self.assertEqual(len(rows), 25)
+        self.assertEqual([r["run_id"] for r in rows], [m["run_id"] for m in members])
+        self.assertEqual(sum(bool(r["reference_request_gross_j"]) for r in rows), 4)
+        for row in rows:
+            if row["run_id"] not in kept:
+                self.assertEqual(row["status"], "uncollected")
+                self.assertEqual(row["excluded"], "False")
+                self.assertTrue(all(not row[c] for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+        dropped = next(m["run_id"] for m in members if m["run_id"] not in kept)
+        for witness in ("roster", "assessment"):
+            with self.subTest(success_witness=witness):
+                roster = {"pack_id": "bytes-s1-p1", "members": [dict(m) for m in members]}
+                if witness == "roster":
+                    next(m for m in roster["members"] if m["run_id"] == dropped)["status"] = "succeeded"
+                else:
+                    write_json(self.archive / "withheld/member-assessments.json", {
+                        "members": {dropped: {"status": {"state": "succeeded"}}}})
+                write_json(self.archive / "derived/roster.json", roster)
+                seal_reference_inputs(self.archive)
+                with self.assertRaisesRegex(export_runs.StorageStop, "members without listed bundles"):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+        (self.archive / "withheld/member-assessments.json").unlink()
+        write_json(self.archive / "derived/roster.json", {"pack_id": "bytes-s1-p1", "members": members})
+        seal_reference_inputs(self.archive)
+        # An edited, unverified smoke keep cannot authorize an absence.
+        reduced["smoke_reduction"]["keep"][members[0]["stage_id"]] = 0
+        write_json(tree_path, reduced)
+        with self.assertRaisesRegex(export_runs.StorageStop, "plan_tree.json.*digest mismatch"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        # An inline plan fallback has no archived checksum witness and cannot
+        # grant the smoke exception even when its keep data have the right shape.
+        tree_path.unlink()
+        inventory = self.archive / "sources/SHA256SUMS"
+        inventory.write_text("".join(line + "\n" for line in inventory.read_text().splitlines()
+                                    if not line.endswith("  pack/plan_tree.json")))
+        reduced["smoke_reduction"]["keep"][members[0]["stage_id"]] = 1
+        self.plan["plan_tree"] = reduced
+        with self.assertRaisesRegex(export_runs.StorageStop, "members without listed bundles"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+
+    def test_acceptance_excluded_uncollected_reference_is_printed_if_projection_omits_it(self):
+        import dataclasses
+        shutil.rmtree(self.archive / "sources/claim-runs/ref")
+        self.record["excluding"].append({"scope": "member", "run_id": "ref", "code": "member.bytes_missing"})
+        write_json(self.archive / "derived/b6-acceptance.json", self.record)
+        seal_reference_inputs(self.archive)
+        evidence = export_runs.evidence_from_archive(self.archive, self.plan, self.reg)
+        evidence = dataclasses.replace(evidence, stages=tuple(dataclasses.replace(stage,
+            members=tuple(m for m in stage.members if m.run_id != "ref")) for stage in evidence.stages))
+        row = next(r for r in self.rows(self.export(evidence=evidence, pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "uncollected")
+        self.assertEqual(row["excluded"], "True")
+        self.assertIn("member.bytes_missing", row["exclusion_codes"])
+        self.assertTrue(all(not row[c] for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+
     def test_bundle_without_inventory_entries_stops(self):
         bundle = self.archive / "sources/claim-runs/ref"
         inputs = export_runs._ReferenceInputs(self.archive)
@@ -541,7 +722,8 @@ class ExportTests(unittest.TestCase):
             row["timestamp_s"] += epoch
         events.write_text("".join(json.dumps(row) + "\n" for row in rows))
         trace = self.archive / "sources/claim-runs/ref/power_trace.csv"
-        for gap, stops in ((math.ulp(epoch), False), (4 * math.ulp(epoch), False), (.001, True)):
+        for gap, stops in ((math.ulp(epoch), False), (5e-6, False), (9e-6, False),
+                           (11e-6, True), (.001, True)):
             with self.subTest(gap=gap):
                 trace.write_text("timestamp_s,power_w,rail,source,interval_start_s,interval_end_s\n"
                                  f"{epoch + 4},10,mock,mock,{epoch},{epoch + 4}\n"

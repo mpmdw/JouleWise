@@ -544,7 +544,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "FIX-416-F: fewer than 150 remaining dwell anchors cannot hold the step bar within 1%; rate and residual checks remain active when at least two anchors remain."
+      "note": "FIX-416-G: two remaining dwell anchors determine the rate but cannot measure a step after fitting; disclose without refusing on count. Rate, skew and boot-session checks act at N=2; N<2 remains UNMEASURED. At every N>=3 the step bar is corrected for exact fit absorption from the RAW positions."
     },
     "clock.systematic": {
       "blinding": "STRUCTURE",

@@ -340,11 +340,9 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
     unmeasured = [{"code": "clock.unmeasured", "sample_index": index,
                    "error": item.get("error") or "anchor absent"}
                   for index, item in enumerate(samples) if not item.get("anchor")]
-    # A fitted line absorbs about 1.5/N of a step. Keeping that loss <= 1%
-    # of the registered step_ns bar requires N >= 150 remaining anchors.
-    # Two microsecond-precise anchors suffice for the rate; shorter series
-    # retain the residual check and disclose the unmeasured step, never refuse it.
-    step_measured = len(anchored) >= 150
+    # Two anchors determine the rate exactly but cannot measure a step after
+    # fitting. At every N >= 3, correct each pair's bar for its fit absorption.
+    step_measured = len(anchored) >= 3
     step_flags = [] if step_measured else [{"code": "clock.step_unmeasured"}]
     coverage = {"flags": unmeasured + step_flags, "samples": len(samples),
                 "anchored_samples": len(anchored), "step_measured": step_measured}
@@ -374,8 +372,25 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
                        f"+-{limits['residual_max_ns'] / 1e6} ms from the fitted line")
     # Residuals retain the order of the remaining anchored samples.
     step = max(abs(b - a) for a, b in zip(residuals, residuals[1:]))
-    if step_measured and step > limits["step_ns"]:
-        reasons.append(f"dwell step {float(step) / 1e6:.4f} ms exceeds {limits['step_ns'] / 1e6} ms")
+    if step_measured:
+        xs = [Fraction(item["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"])
+              for item in anchored]
+        mean = sum(xs) / len(xs)
+        centered = [x - mean for x in xs]
+        squared = sum(x * x for x in centered)
+        suffix = sum(centered)
+        for j, (a, b) in enumerate(zip(residuals, residuals[1:])):
+            suffix -= centered[j]
+            # A step between j and j+1 loses exactly a_j to the fitted slope,
+            # including across rejected anchors: a_j = dx * sum_{i>j}(x_i-xbar)
+            # / sum_i(x_i-xbar)^2. Use the registered step_ns after that same
+            # absorption, with exact arithmetic and no additional numeric bar.
+            absorbed = (xs[j + 1] - xs[j]) * suffix / squared
+            bar = Fraction(str(limits["step_ns"])) * (1 - absorbed)
+            if abs(b - a) > bar:
+                reasons.append(f"dwell step {float(abs(b - a)) / 1e6:.4f} ms exceeds "
+                               f"fit-corrected {float(bar) / 1e6:.6f} ms")
+                break
     raw_span = anchored[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
     observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits) if f0 is not None else None,
                 "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step), "step_measured": step_measured,

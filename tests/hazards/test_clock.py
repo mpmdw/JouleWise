@@ -126,12 +126,12 @@ class InstantJudgeTests(unittest.TestCase):
 
 
 class DwellResidualTests(unittest.TestCase):
-    def test_step_gate_needs_150_remaining_anchors_and_otherwise_discloses(self):
+    def test_step_gate_uses_every_series_with_at_least_three_anchors(self):
         limits = {**LIMITS, "h_ms": 0}
         clocks = FakeClocks()
         clocks.step_at(91.5, 1_100_000)
         measured = dwell(clocks, 183)
-        for count in (149, 150):
+        for count in (3, 50, 100, 120, 149, 150, 184):
             with self.subTest(count=count):
                 keep = {round(i * 183 / (count - 1)) for i in range(count)}
                 samples = [dict(item) if i in keep else dict(item, anchor=None, error="skew rejected")
@@ -140,10 +140,50 @@ class DwellResidualTests(unittest.TestCase):
                                        started=measured.started, finished=measured.finished)
                 verdict = clock.judge(changed, limits)
                 self.assertEqual(verdict.observed["anchored_samples"], count)
-                self.assertEqual(verdict.observed["step_measured"], count >= 150)
-                self.assertEqual(any(f["code"] == "clock.step_unmeasured" for f in verdict.observed["flags"]), count < 150)
-                self.assertEqual(verdict.status, base.PASS if count < 150 else base.REFUSE)
-                self.assertEqual(any("dwell step" in reason for reason in verdict.reasons), count >= 150)
+                self.assertTrue(verdict.observed["step_measured"])
+                self.assertFalse(any(f["code"] == "clock.step_unmeasured" for f in verdict.observed["flags"]))
+                self.assertEqual(verdict.status, base.REFUSE)
+                self.assertTrue(any("dwell step" in reason for reason in verdict.reasons))
+
+    def test_gapped_anchor_step_uses_the_fit_absorption_at_each_pair(self):
+        for gap in (5, 20, 33):
+            for step in (1_050_000, 1_200_000):
+                for sign in (-1, 1):
+                    with self.subTest(gap=gap, step=step, sign=sign):
+                        lo = 91 - gap // 2
+                        samples = [{"anchor": None, "error": "skew rejected"}
+                                   if lo <= i < lo + gap else {"anchor": {
+                                       "monotonic_raw_ns": i * 10**9,
+                                       "anchor_ns": sign * step if i >= lo + gap else 0,
+                                       "read_skew_ns": 1000}} for i in range(183)]
+                        verdict = clock.judge(clock.series(samples, boot_start=BOOT_UUID,
+                            boot_end=BOOT_UUID, started=None, finished=None),
+                            {**LIMITS, "h_ms": 0, "t_stream_max_s": 96.39069404196925})
+                        self.assertEqual(verdict.status, base.REFUSE)
+                        self.assertTrue(any("dwell step" in reason for reason in verdict.reasons))
+
+    def test_registered_step_equality_clears_with_exact_arithmetic(self):
+        for count in (3, 100, 149, 183):
+            for step, expected in ((1_000_000, base.PASS), (1_000_001, base.REFUSE)):
+                for sign in (-1, 1):
+                    with self.subTest(count=count, step=step, sign=sign):
+                        samples = [{"anchor": {"monotonic_raw_ns": 10**18 + i * 10**9,
+                                    "anchor_ns": 10**18 + 17 * i + (sign * step if i >= count // 2 else 0),
+                                    "read_skew_ns": 1000}} for i in range(count)]
+                        verdict = clock.judge(clock.series(samples, boot_start=BOOT_UUID,
+                            boot_end=BOOT_UUID, started=None, finished=None),
+                            {**LIMITS, "h_ms": 0, "t_stream_max_s": 1})
+                        self.assertEqual(verdict.status, expected, verdict.reasons)
+
+    def test_two_anchors_keep_skew_and_boot_session_checks(self):
+        samples = [{"anchor": {"monotonic_raw_ns": i * 10**9, "anchor_ns": 0,
+                               "read_skew_ns": LIMITS["skew_max_ns"] + 1}} for i in range(2)]
+        verdict = clock.judge(clock.series(samples, boot_start=BOOT_UUID,
+            boot_end="another-boot", started=None, finished=None), LIMITS)
+        self.assertEqual(verdict.status, base.REFUSE)
+        self.assertTrue(any("boot session changed" in reason for reason in verdict.reasons))
+        self.assertTrue(any("anchor read skew" in reason for reason in verdict.reasons))
+        self.assertIn({"code": "clock.step_unmeasured"}, verdict.observed["flags"])
 
     def test_two_anchors_still_refuse_a_measured_rate_hazard(self):
         measured = dwell(FakeClocks(drift_word=ppm_word(40)), 183)
@@ -163,7 +203,7 @@ class DwellResidualTests(unittest.TestCase):
                                           started=None, finished=None), {**LIMITS, "h_ms": 0})
         self.assertEqual(verdict.status, base.REFUSE)
         self.assertTrue(any("dwell residual" in reason for reason in verdict.reasons))
-        self.assertFalse(any("dwell step" in reason for reason in verdict.reasons))
+        self.assertTrue(any("dwell step" in reason for reason in verdict.reasons))
 
     def test_unmeasurable_short_fit_keeps_the_step_disclosure(self):
         anchor = {"anchor_ns": 0, "monotonic_raw_ns": 0, "read_skew_ns": 1000}

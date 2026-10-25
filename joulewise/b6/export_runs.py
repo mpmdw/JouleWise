@@ -127,7 +127,7 @@ class _ReferenceInputs:
         return bundle
 
     def check_membership(self, harvested: Mapping, projected: Mapping, plan: Mapping, pack_id: str,
-                         excluded_ids: frozenset = frozenset()) -> None:
+                         excluded_ids: frozenset = frozenset(), assessments: Mapping | None = None) -> list[dict]:
         # Both archived candidates influence the permissive reader's choice.
         # Missing/malformed listed control bytes must not change that choice
         # or erase reference roles through its empty-tree fallback.
@@ -138,7 +138,28 @@ class _ReferenceInputs:
         tree, directory = plan_tree(self.root, plan, pack_id)
         if directory is not None:
             tree = _reference_json(directory / "plan_tree.json", self)
-        roles = _stage_roles(tree)[1]
+        stages, roles = _stage_roles(tree)
+        smoke_dropped = {}
+        reduction = tree.get("smoke_reduction") or {}
+        if directory is not None and reduction.get("schema") == "joulewise.b6_smoke_reduction.v1":
+            for stage in tree.get("stage_graph", []):
+                stage_id = stage["stage_id"]
+                keep = reduction.get("keep", {}).get(stage_id)
+                if (stage.get("kind") == "campaign_collection" and type(keep) is int
+                        and keep >= 0 and keep == stage.get("expected_count")):
+                    runs = [run for run in stages if stages[run] == stage_id]
+                    smoke_dropped.update({run: {"stage_id": stage_id, "role": roles[run]}
+                                          for run in runs[keep:] if roles[run] in REFERENCE_ROLES})
+        succeeded = set()
+        for roster in (harvested, projected):
+            for member in roster.get("members", []):
+                status = member.get("status")
+                if (status.get("state") if isinstance(status, Mapping) else status) == "succeeded":
+                    succeeded.add(member["run_id"])
+        for run, assessment in (assessments or {}).items():
+            status = (assessment or {}).get("status")
+            if (status.get("state") if isinstance(status, Mapping) else status) == "succeeded":
+                succeeded.add(run)
         # Classify inventory bundles independently of the roster: the archived
         # plan still names a reference whose roster entry has disappeared.
         listed_ids = set()
@@ -156,19 +177,23 @@ class _ReferenceInputs:
             sets.append((name, set(members)))
             reference_ids.update(members)
         inventory = listed_ids & reference_ids
+        uncollected_ids = set()
         for name, members in sets:
             missing = sorted(inventory - members)
             # A planned reference that was never collected has a roster row, no
             # archived directory and no inventory entry. It stays a printed row
-            # only when acceptance records its exclusion, so it cannot vanish
-            # silently either way (#416 FIX-416-F ruling F2H; H's window-end r1-r3).
-            uncollected = {run for run in members - inventory if run in excluded_ids
+            # when acceptance excludes it or the verified smoke tree drops it
+            # beyond the stage's kept prefix. Neither exception can contradict
+            # the harvest's own positive success evidence.
+            uncollected = {run for run in members - inventory
+                           if (run in excluded_ids or run in smoke_dropped) and run not in succeeded
                            and not any((Path(os.path.abspath(base)) / run).exists()
                                        for base in bundle_roots(self.root, plan, archive_only=True))}
             unlisted = sorted(members - inventory - uncollected)
             if missing or unlisted:
                 raise StorageStop(f"reference membership {name}: listed bundles missing from member set {missing}; "
                                   f"members without listed bundles {unlisted}")
+            uncollected_ids.update(uncollected)
         # Check even an excluded reference or a planned reference whose roster
         # and inventory entries are both gone: an existing unlisted directory
         # must not disappear from custody merely because the sets agree.
@@ -176,11 +201,49 @@ class _ReferenceInputs:
             if run_id in listed_ids or any((base / run_id).is_dir()
                     for base in bundle_roots(self.root, plan, archive_only=True)):
                 self.bundle(run_id, plan)
+        # Acceptance intentionally projects only the kept smoke prefix. Preserve
+        # omitted uncollected references from either exception as printed rows.
+        projected_ids = {m["run_id"] for m in projected.get("members", [])}
+        rows = [{**member, "stage_id": stages.get(member["run_id"], member.get("stage_id")),
+                 "role": roles.get(member["run_id"], member.get("role")), "status": "uncollected"}
+                for member in harvested.get("members", [])
+                if member["run_id"] in uncollected_ids and member["run_id"] not in projected_ids]
+        order = {run: index for index, run in enumerate(stages)}
+        return sorted(rows, key=lambda member: order.get(member["run_id"], len(order)))
 
     def harvested_status(self, run_id: str, plan: Mapping) -> str:
         # Older seam archives lack member assessments. A listed source status
         # or original summary positively distinguishes a failed collection.
         bundle = self.bundle(run_id, plan)
+        summary = bundle / "summary_metrics.json"
+        if (summary not in self.digests and not summary.exists()
+                and not Path(str(summary) + ".zst").exists()):
+            # A killed collection can leave a listed partial bundle. Only the
+            # harvest's digest-verified missing-summary flag establishes that
+            # outcome; a lost listed summary still stops as a storage fault.
+            receipt = _reference_json(self.root / "harvest.json")
+            flags_path = self.root / "derived/flags.jsonl"
+            digest = receipt.get("outputs", {}).get("derived/flags.jsonl")
+            if digest is not None:
+                try:
+                    raw = read_bytes(flags_path)
+                    if hashlib.sha256(raw).hexdigest() != digest:
+                        raise ValueError("harvest.json digest mismatch")
+                    for line in raw.splitlines():
+                        if not line.strip():
+                            continue
+                        flag = json.loads(line)
+                        if not isinstance(flag, Mapping):
+                            continue
+                        scope, observed = flag.get("scope"), flag.get("observed")
+                        files = observed.get("files_missing") if isinstance(observed, Mapping) else None
+                        if (flag.get("code") == "member.bytes_missing" and isinstance(scope, Mapping)
+                                and scope.get("run_id") == run_id and isinstance(files, list)
+                                and "summary_metrics.json" in files):
+                            self.check_bundle(bundle)
+                            return "member.bytes_missing"
+                except Exception as exc:
+                    raise StorageStop(f"reference flags {flags_path}: {type(exc).__name__}: {exc}") from exc
         for name in ("status.json", "summary_metrics.json"):
             path = bundle / name
             if path not in self.digests and not path.exists() and not Path(str(path) + ".zst").exists():
@@ -198,7 +261,8 @@ class _ReferenceInputs:
         # Include listed files that have disappeared, including whole subtrees.
         if bundle in self.checked_bundles:
             return
-        listed = {path for path in self.digests if path.is_relative_to(Path(os.path.abspath(bundle)))}
+        listed = {path for path in self.digests if path.is_relative_to(Path(os.path.abspath(bundle)))
+                  and path.name != ".DS_Store"}
         if not listed:
             raise StorageStop(f"reference bundle {bundle}: no inventory entries")
         # Verify vanished listed inputs as well as every present logical input.
@@ -210,6 +274,8 @@ class _ReferenceInputs:
             if any((bundle / parent).resolve() == resolved for parent in parents):
                 raise StorageStop(f"reference bundle {bundle}: directory cycle in input tree: {directory}")
             for name in names:
+                if name == ".DS_Store":
+                    continue  # Finder metadata is never an input to a reader.
                 path = Path(directory) / name
                 present.add(Path(str(path)[:-4]) if path.suffix == ".zst" else path)
         for path in sorted(listed | present):
@@ -359,10 +425,13 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
                 if not context.telemetry_is_powermetrics:
                     covered = start
                     for left, right in sorted((p.support_start_s, p.support_end_s) for p in curve):
-                        # Near epoch 1.79e9 s, one ulp is 2.38e-7 s. Four ulp
-                        # cover edge representation error (< 1% of the smallest
-                        # printed duration precision, 1 ms); no physical gap bar.
-                        if left - covered > 4 * math.ulp(left) and covered < end:
+                        # The protective ceiling is 1% of the printed 1 ms
+                        # duration precision (§14): 10 us. Absolute epoch
+                        # arithmetic cannot also meet the rule's noise floor:
+                        # 10^6 * 2.2e-16 * 1.79e9 s ~= 0.39 s > 10 us.
+                        # Use the ceiling, in kind with BundleReader's 1e-6 s
+                        # overlap tolerance, rather than inventing an ulp bar.
+                        if left - covered > 10e-6 and covered < end:
                             raise ValueError(f"power_trace.csv curve support has a gap at {covered}")
                         covered = max(covered, right)
                     support_end = covered
@@ -435,10 +504,16 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         raise
     harvested_roster = read_json(root / "derived/roster.json", {})
     roster = ordered_roster(harvested_roster, evidence)
+    assessments = (read_json(root / "withheld/member-assessments.json", {}) or {}).get("members", {})
     if bytes_request:
         excluded_members = frozenset(item.get("run_id") for item in record.get("excluding", [])
                                      if item.get("scope") == "member")
-        reference_inputs.check_membership(harvested_roster, roster, plan, pack_id, excluded_members)
+        smoke_rows = reference_inputs.check_membership(harvested_roster, roster, plan, pack_id,
+                                                       excluded_members, assessments)
+        for member in smoke_rows:
+            following = [i for i, row in enumerate(roster["members"])
+                         if row["stage_id"] == member["stage_id"]]
+            roster["members"].insert(following[-1] + 1 if following else len(roster["members"]), member)
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
@@ -465,7 +540,6 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     # ordered_roster projects export-time acceptance. Keep the harvest's own
     # success evidence, so missing bytes cannot turn a collected run into failed.
     harvested_members = {m["run_id"]: m for m in harvested_roster.get("members", [])}
-    assessments = (read_json(root / "withheld/member-assessments.json", {}) or {}).get("members", {})
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
         reference_role = member["role"] in REFERENCE_ROLES
@@ -474,18 +548,21 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
             harvested_status = harvested_status.get("state")
         if bytes_request and reference_role and reference_inputs.listed_bundle(run_id, plan):
             source_status = reference_inputs.harvested_status(run_id, plan)
+            partial = source_status == "member.bytes_missing"
             for reported in ((assessments.get(run_id) or {}).get("status"),
                              harvested_members.get(run_id, {}).get("status")):
                 if isinstance(reported, Mapping):
                     reported = reported.get("state")
                 if reported is not None and (not isinstance(reported, str) or not reported):
                     raise StorageStop(f"reference status {run_id}: malformed harvested status {reported!r}")
-                if (reported is not None
+                if (not partial and reported is not None
                         and (reported == "succeeded") != (source_status == "succeeded")):
                     raise StorageStop(f"reference status {run_id}: harvested status {reported!r} "
                                       f"disagrees with verified source status {source_status!r}")
-            if harvested_status is None:
+            if partial or harvested_status is None:
                 harvested_status = source_status
+            if partial:
+                codes[run_id].add("member.bytes_missing")
         collected = (harvested_status == "succeeded" or harvested_status is None
                      and (member["status"] == "succeeded"
                           or reference_inputs.listed_bundle(run_id, plan)))
