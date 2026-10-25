@@ -76,6 +76,8 @@ B6_COLLECTION_CODES = frozenset({
 })
 SEED = ROOT / "tests/fixtures/d117_v2_production/strict_seed_bundle"
 FIXTURES = ROOT / "tests/fixtures/b5_harvest"
+SEALED_BELOW_MINIMUM = json.loads(
+    (ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json").read_bytes())["codes"]["cell.below_minimum"]
 L1_JOURNALS = FIXTURES / "l1_monitor"
 PREFIX = ROOT / "tests/fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
 ACCEPTANCE = "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
@@ -640,6 +642,10 @@ class Window:
         # Six members cannot fill the registered 5-of-10 minimum; one unit per
         # stratum keeps the unit rule observable in a window this small.
         catalog["rules"]["cell_unit_minimum"] = 1
+        # The sealed claim catalog carries cell.below_minimum (EXCLUDE_WINDOW); the exclusion
+        # function reads its effect from the catalog since FIX-416-B, and the fixture lists only
+        # codes the harvest emits.
+        catalog["codes"]["cell.below_minimum"] = SEALED_BELOW_MINIMUM
         for code, effect in overrides.items():
             catalog["codes"][code]["effect"] = effect
         put(self.measurement / "configs/campaigns/v5_claim_25g83/flag_catalog.json", catalog)
@@ -3292,7 +3298,9 @@ class ExclusionSeamTests(unittest.TestCase):
         from joulewise.flags import catalog as l4_catalog
         from joulewise.flags import exclusions
         roster, document, spans = self.inputs(self.ALPHA)
-        catalog = l4_catalog.load_catalog(FIXTURES / "flag_catalog.json")
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
+        fixture["codes"]["cell.below_minimum"] = SEALED_BELOW_MINIMUM  # as in _build_catalog
+        catalog = l4_catalog.catalog_from_bytes(json.dumps(fixture).encode(), path="fixture+sealed-minimum")
         clean = exclusions.compute([], document, spans, catalog)
         self.assertTrue(clean["claim_usable"], clean["reasons"])
         self.assertEqual({cell["cell_id"]: cell["planned"] for cell in clean["cells"]},
