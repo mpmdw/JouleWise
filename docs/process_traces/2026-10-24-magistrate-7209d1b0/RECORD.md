@@ -79,3 +79,9 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
      - the gap-bar comment restores its acknowledgement of the noise floor.
    - Every other round-6 finding is LOW or INFO: guard bands of at most about 1.05 ms against the 5 ms budget, the factor-2 margin of u_j covering the fit noise (max W_j/u_j = 0.51 over 17,425 real pairs), and P_max as an estimate. They are dispositioned with no fix, under the stopping rule of item 26.
    - At 23:2x the Bash permission classifier began failing transiently. FIX-416-I is not yet launched as of this line.
+29. **FIX-416-I done** (028f8c50b), launched 23:3x once the Bash classifier recovered.
+   - Seat: the custody-owned smoke witness, the no-witness disclosure and plain-path membership.
+   - The seat stopped once more: plain-path membership stopped the real zero-run BY-H2 t0 refusal (h2-20261023T051434Z). Lead ruling: a non-smoke session that collected nothing (empty roster, no run bundle) exports its empty table.
+   - Lead replay: 25 real archives, 0 stops, identical columns.
+   - Lead outside the sandbox: tests/hazards 328 OK; export, gates, smoke, restore and gates modules 126 OK; repin and refusal allowlist OK. Text applied.
+   - Round-7 cold passes launched 00:3x on 10-25. This is the last round under item 26's stopping rule.
