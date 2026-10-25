@@ -138,15 +138,37 @@ class _ReferenceInputs:
         tree, directory = plan_tree(self.root, plan, pack_id)
         if directory is not None:
             tree = _reference_json(directory / "plan_tree.json", self)
-        stages, roles = _stage_roles(tree)
+        registered_tree = tree
         smoke_dropped = {}
         reduction = tree.get("smoke_reduction") or {}
-        if directory is not None and reduction.get("schema") == "joulewise.b6_smoke_reduction.v1":
-            for stage in tree.get("stage_graph", []):
+        if reduction.get("schema") == "joulewise.b6_smoke_reduction.v1":
+            if directory is None:
+                raise StorageStop("reference membership smoke: no archived checksum witness for reduced tree")
+            from joulewise.b6.smoke import reduce_tree
+            # The smoke checkout has already deleted keep-0 stages. The
+            # archived original checkout retains the registered stage walk;
+            # authenticate it and reproduce the reduction before using it.
+            suffix = f"/configs/campaigns/{pack_id}/plan_tree.json"
+            originals = [_reference_json(path, self) for path in sorted(self.digests)
+                         if str(path).endswith(suffix) and path != directory / "plan_tree.json"]
+            originals = [candidate for candidate in originals if not candidate.get("smoke_reduction")]
+            try:
+                if (not originals or any(candidate != originals[0] for candidate in originals)
+                        or any(reduce_tree(candidate, reduction.get("keep", {})) != tree
+                               for candidate in originals)):
+                    raise ValueError("missing or inconsistent archived registered tree")
+            except Exception as exc:
+                raise StorageStop(f"reference membership smoke: {type(exc).__name__}: {exc}") from exc
+            registered_tree = originals[0]
+        stages, roles = _stage_roles(registered_tree)
+        if registered_tree is not tree:
+            reduced_stages = {stage["stage_id"]: stage for stage in tree.get("stage_graph", [])}
+            for stage in registered_tree.get("stage_graph", []):
                 stage_id = stage["stage_id"]
-                keep = reduction.get("keep", {}).get(stage_id)
+                keep = reduction.get("keep", {}).get(stage_id, 0)
                 if (stage.get("kind") == "campaign_collection" and type(keep) is int
-                        and keep >= 0 and keep == stage.get("expected_count")):
+                        and keep >= 0 and (keep == 0 or
+                            keep == reduced_stages.get(stage_id, {}).get("expected_count"))):
                     runs = [run for run in stages if stages[run] == stage_id]
                     smoke_dropped.update({run: {"stage_id": stage_id, "role": roles[run]}
                                           for run in runs[keep:] if roles[run] in REFERENCE_ROLES})
@@ -174,14 +196,15 @@ class _ReferenceInputs:
                        if roles.get(m["run_id"], m.get("role")) in REFERENCE_ROLES]
             if len(members) != len(set(members)):
                 raise StorageStop(f"reference membership {name}: duplicate reference run ids")
-            sets.append((name, set(members)))
+            sets.append((name, set(members) | reference_ids
+                         if name == "harvest roster" and registered_tree is not tree else set(members)))
             reference_ids.update(members)
         inventory = listed_ids & reference_ids
         uncollected_ids = set()
         for name, members in sets:
             missing = sorted(inventory - members)
-            # A planned reference that was never collected has a roster row, no
-            # archived directory and no inventory entry. It stays a printed row
+            # A planned reference with no archived directory and no inventory
+            # entry stays a printed row, even if the smoke roster omitted it,
             # when acceptance excludes it or the verified smoke tree drops it
             # beyond the stage's kept prefix. Neither exception can contradict
             # the harvest's own positive success evidence.
@@ -204,12 +227,23 @@ class _ReferenceInputs:
         # Acceptance intentionally projects only the kept smoke prefix. Preserve
         # omitted uncollected references from either exception as printed rows.
         projected_ids = {m["run_id"] for m in projected.get("members", [])}
-        rows = [{**member, "stage_id": stages.get(member["run_id"], member.get("stage_id")),
-                 "role": roles.get(member["run_id"], member.get("role")), "status": "uncollected"}
-                for member in harvested.get("members", [])
-                if member["run_id"] in uncollected_ids and member["run_id"] not in projected_ids]
+        blueprints = {member["run_id"]: member for member in harvested.get("members", [])}
+        rows = [{**blueprints.get(run, {}), "run_id": run,
+                 "stage_id": stages.get(run, blueprints.get(run, {}).get("stage_id")),
+                 "role": roles.get(run, blueprints.get(run, {}).get("role")), "status": "uncollected"}
+                for run in sorted(uncollected_ids - projected_ids)]
+        members = list(projected.get("members", []))
+        if registered_tree is not tree:
+            # Interleave restored stages with kept science in registered order.
+            order = {run: index for index, run in enumerate(
+                run for stage in registered_tree.get("stage_graph", [])
+                for run in stages if stages[run] == stage["stage_id"])}
+            return sorted(members + rows, key=lambda member: order.get(member["run_id"], len(order)))
         order = {run: index for index, run in enumerate(stages)}
-        return sorted(rows, key=lambda member: order.get(member["run_id"], len(order)))
+        for member in sorted(rows, key=lambda member: order.get(member["run_id"], len(order))):
+            following = [i for i, row in enumerate(members) if row["stage_id"] == member["stage_id"]]
+            members.insert(following[-1] + 1 if following else len(members), member)
+        return members
 
     def harvested_status(self, run_id: str, plan: Mapping) -> str:
         # Older seam archives lack member assessments. A listed source status
@@ -424,17 +458,27 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
                 support_start, support_end = curve[0].support_start_s, curve[-1].support_end_s
                 if not context.telemetry_is_powermetrics:
                     covered = start
-                    for left, right in sorted((p.support_start_s, p.support_end_s) for p in curve):
-                        # The protective ceiling is 1% of the printed 1 ms
-                        # duration precision (§14): 10 us. Absolute epoch
-                        # arithmetic cannot also meet the rule's noise floor:
-                        # 10^6 * 2.2e-16 * 1.79e9 s ~= 0.39 s > 10 us.
-                        # Use the ceiling, in kind with BundleReader's 1e-6 s
-                        # overlap tolerance, rather than inventing an ulp bar.
-                        if left - covered > 10e-6 and covered < end:
-                            raise ValueError(f"power_trace.csv curve support has a gap at {covered}")
-                        covered = max(covered, right)
-                    support_end = covered
+                    gaps = []
+                    request_points = [p for p in curve
+                                      if p.support_end_s > start and p.support_start_s < end]
+                    peak_power = max((p.power_w for p in request_points), default=0)
+                    for left, right in sorted((p.support_start_s, p.support_end_s) for p in request_points):
+                        gaps.append(max(0, min(left, end) - covered))
+                        covered = max(covered, min(right, end))
+                    gaps.append(max(0, end - covered))
+                    uncovered = math.fsum(gaps)
+                    # Missing supports remove P*g from reference_request_gross_j.
+                    # FIX-416-H: sum all uncovered request time, then bound its
+                    # lost energy by G_total * P_max <= 0.01 * 0.013 J = 0.13 mJ
+                    # (§12/§14's smallest printed half-width), not each gap's
+                    # duration. P_max is measured on this request's trace.
+                    if uncovered * peak_power > 0.00013:
+                        raise ValueError(f"power_trace.csv curve support has a gap: summed uncovered "
+                                         f"{uncovered} s * request P_max {peak_power} W exceeds 0.13 mJ")
+                    if request_points:
+                        support_start, support_end = start, end
+                    else:
+                        support_end = covered
                 # The reducer constructs native powermetrics intervals from
                 # cumulative durations, so their interior is continuous without
                 # treating epoch-float rounding at shared edges as missing data.
@@ -508,12 +552,8 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     if bytes_request:
         excluded_members = frozenset(item.get("run_id") for item in record.get("excluding", [])
                                      if item.get("scope") == "member")
-        smoke_rows = reference_inputs.check_membership(harvested_roster, roster, plan, pack_id,
-                                                       excluded_members, assessments)
-        for member in smoke_rows:
-            following = [i for i, row in enumerate(roster["members"])
-                         if row["stage_id"] == member["stage_id"]]
-            roster["members"].insert(following[-1] + 1 if following else len(roster["members"]), member)
+        roster["members"] = reference_inputs.check_membership(harvested_roster, roster, plan, pack_id,
+                                                               excluded_members, assessments)
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
@@ -600,7 +640,8 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                         if isinstance(tag, str) and "=" in tag)
             units = member.get("units", [])
             status = member["status"]
-            if bytes_request and reference_role and harvested_status is not None:
+            if (bytes_request and reference_role and harvested_status is not None
+                    and status != "uncollected"):
                 status = harvested_status
             if reference:
                 status = "succeeded"

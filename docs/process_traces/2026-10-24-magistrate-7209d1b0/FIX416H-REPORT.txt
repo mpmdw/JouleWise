@@ -1,0 +1,390 @@
+```json
+{
+ "schema": "claude-codex-report/v1",
+ "genre": "implementation",
+ "status": "findings",
+ "completion": "complete",
+ "summary": "Implemented FIX-416-H; 25 identical real exports, 13 corrected BYTES smokes without stops, 24 unchanged arms; sandbox census failures match baseline.",
+ "workspace": {
+  "base_requested": "6b54a51d6",
+  "base_mode": "exact",
+  "head_start": "6b54a51d67140bc1ce13be94270c5bba62207226",
+  "head_end": "6b54a51d67140bc1ce13be94270c5bba62207226",
+  "upstream_end": null,
+  "branch": "integrate/2026-10-24-416"
+ },
+ "pathspec": [
+  "configs/b6/flag_catalog_b6.json",
+  "configs/b6/packs/bytes-s1-p1/registration.json",
+  "configs/b6/packs/bytes-s1-p2/registration.json",
+  "configs/b6/packs/bytes-s2-p1/registration.json",
+  "configs/b6/packs/bytes-s2-p2/registration.json",
+  "configs/b6/packs/bytes-s3-p1/registration.json",
+  "configs/b6/packs/bytes-s3-p2/registration.json",
+  "configs/b6/packs/bytes-s4-p1/registration.json",
+  "configs/b6/packs/bytes-s4-p2/registration.json",
+  "configs/b6/packs/bytes-s5-p1/registration.json",
+  "configs/b6/packs/bytes-s5-p2/registration.json",
+  "configs/b6/packs/bytes-s6-p1/registration.json",
+  "configs/b6/packs/bytes-s6-p2/registration.json",
+  "configs/gates/hazard_refusals.json",
+  "joulewise/b6/export_runs.py",
+  "joulewise/hazards/clock.py",
+  "scripts/build_b6_flag_catalog.py",
+  "tests/b6/test_export_runs.py",
+  "tests/hazards/test_clock.py"
+ ],
+ "unowned_dirty": [
+  ".scratch-416C/",
+  ".scratch-416E/",
+  ".scratch-416F/",
+  ".scratch-416G/"
+ ],
+ "verdict": {
+  "implementation": "implemented",
+  "acceptance": "ready"
+ },
+ "verification": [
+  {
+   "id": "V1",
+   "kind": "suite",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_export_runs tests.b6.test_fix416_gates tests/b6/test_smoke*.py tests.b6.test_catalog tests.test_bytes_gates tests.test_fix573i_restore tests.test_bytes_plan_trees",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "OK"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "^OK"
+   }
+  },
+  {
+   "id": "V2",
+   "kind": "suite",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_export_runs tests.hazards.test_refusal_allowlist tests.hazards.test_clock",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "OK (skipped=1)"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "^OK"
+   }
+  },
+  {
+   "id": "V3",
+   "kind": "suite",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest discover -s tests/hazards -t .",
+   "cwd": ".",
+   "observed": {
+    "result": "fail",
+    "exit_code": 1,
+    "tail": [
+     "FAILED (failures=28, skipped=9)"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "^OK"
+   }
+  },
+  {
+   "id": "V4",
+   "kind": "inspection",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/fix416h/main/scripts/compare_census.py",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "PASS hazard baseline comparison: identical 28 failed assertions / 22 methods at requested HEAD; no new failures"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "^PASS"
+   }
+  },
+  {
+   "id": "V5",
+   "kind": "other",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/fix416h/main/scripts/agreement_pair_bound.py withheld",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "withheld: 0 differences"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "withheld: 0 differences"
+   }
+  },
+  {
+   "id": "V6",
+   "kind": "other",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/fix416h/main/scripts/probes.py",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "PASS full real dwell 1.2 ms midpoint step: 24/24 REFUSE before and after",
+     "PASS energy-gap before/after: low-power 11 us clears; high-power 5 us and summed 16 us stop; outside-request power ignored"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "^PASS"
+   }
+  },
+  {
+   "id": "V7",
+   "kind": "other",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/fix416h/main/scripts/geom2.py",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "total new clean refusals 0 of 2688 ; old 0"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "total new clean refusals 0 of 2688"
+   }
+  },
+  {
+   "id": "V8",
+   "kind": "other",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/fix416h/main/scripts/replay_handoff_all.py",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "TOTAL 25 REAL STOPS 0 IDENTICAL 25; TOTAL 13 BYTES SMOKES STOPS 0; FINAL SOURCE VERIFIED"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "TOTAL 25 REAL STOPS 0 IDENTICAL 25"
+   }
+  },
+  {
+   "id": "V9",
+   "kind": "inspection",
+   "cmd": "TMPDIR=/private/tmp/fix416h/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/fix416h/main/scripts/audit.py",
+   "cwd": ".",
+   "observed": {
+    "result": "pass",
+    "exit_code": 0,
+    "tail": [
+     "PASS final audit: 25 identical real exports; 13 BYTES smokes clear with 19 added uncollected references each; 24 unchanged arms; 28 baseline-only sandbox failures; scope and source hashes verified"
+    ]
+   },
+   "expected": {
+    "exit_code": 0,
+    "tail_regex": "^PASS"
+   }
+  }
+ ],
+ "flags": [
+  {
+   "id": "F1",
+   "kind": "environment",
+   "level": "nonblocking",
+   "text": "Hazards: 28 failed assertions in 22 methods, reproduced on clean requested HEAD; sandbox process census/termination unavailable. Final clock and refusal allowlist pass.",
+   "needs": "Lead may rerun the listed 22 methods with process enumeration available."
+  },
+  {
+   "id": "F2",
+   "kind": "lead_ruling",
+   "level": "nonblocking",
+   "text": "Ruling 1 adds 19 uncollected references to every forced BYTES smoke and renumbers order_index. Every pre-existing value except order_index is identical; the 25 real-plan CSVs are byte-identical.",
+   "needs": ""
+  }
+ ]
+}
+```
+
+## Change
+
+Changes are uncommitted. All outputs, fixtures and APFS key clones are under `/private/tmp/fix416h/main`; real data were read only. Free space stayed at 69–70 GiB. No live collection, model load or prohibited system command was run.
+
+1. **Removed smoke stages:** `joulewise/b6/export_runs.py:144` authenticates the archived full registered tree and reproduces its reduction exactly. The full stage walk now supplies roles, keep-zero references and order. Success in either roster or assessments still denies an uncollected exception. Fable's adapted registered-keep probe changes from 6 rows / 19 missing references to 25 reference rows / 23 uncollected references. The added fixture covers both success witnesses, a missing roster entry, missing or corrupt original bytes, conflicting originals, and an inline tree with every reference stage removed. Acceptance's collection projection is unchanged.
+2. **Clock noise:** `joulewise/hazards/clock.py:392` uses `u_j = read_skew_j + read_skew_(j+1)`. It discloses `clock.step_unmeasured` with `interval_index: j` when `step_ns*(1-a_j) <= u_j`; otherwise it refuses only above `step_ns*(1-a_j)+u_j`. Opus's `geom2.py` changes from **76/2688 noise refusals to 0/2688**. A 1.2 ms midpoint step still refuses on **24/24** full real dwells. All **24 real arm records / 48 complete verdict objects** are unchanged.
+3. **Energy gap:** `joulewise/b6/export_runs.py:462` clips supports to the request, sums all uncovered time including its edges, and uses the largest overlapping sample power. The comment at line 470 derives the lead's ceiling: `G_total*P_max <= 0.01*0.013 J = 0.13 mJ`. Excess stops desk export with uncovered time, peak power and cause. No per-gap duration bar remains.
+4. **Catalog and census:** `scripts/build_b6_flag_catalog.py:51` and its generated catalog describe the per-pair noise rule. Only the catalog digest changes in the 12 generated BYTES registrations. Counts/effects stay 269 codes: 41 member exclusions, 19 window exclusions, 209 disclosures; BYTES remains 41/18/210. `configs/gates/hazard_refusals.json:3218` and `:3237` carry the changed guards; three full-tree desk proof sites across two census entries are recorded. The imported smoke reduction helper is classified as desk code. All 16 pin families remain current.
+
+**Before/after gap evidence**
+
+| Request trace | Before | After |
+|---|---|---|
+| One 11 us gap, 10 W | STOP | clear |
+| One 5 us gap, 30 W | clear | STOP |
+| Two 8 us gaps, 10 W | clear | STOP |
+| 11 us at 10 W, with 1000 W samples outside request | STOP | clear |
+
+Evidence: `logs/geom-before.log`, `geom-after.log`, `smoke-pair-before.log`, `smoke-pair-after.log`, `probes-final.log`, `gap-probe.json`, `midstep.json`, and `clock-replay.json` under the scratch root. Before module snapshots are byte-identical to the requested HEAD. The Fable fixture was extended with the archived full tree found in every real smoke; its original reduced-only form cannot prove the removed stages' registered walk.
+
+**Decisions made**
+
+- Authenticate the full archived tree and reproduce the reduction; never infer removed stages from their names or the current checkout. Conflicting original trees stop desk export.
+- Preserve every planned smoke reference even if its roster entry is absent, subject to the same success and storage denials. Keep original acceptance-only ordering and existing failure rows; added uncollected rows retain that status even beside a non-success assessment or roster label.
+- Keep the pure 1 ms fit-boundary tests at zero recorded skew; separate assertions cover the exact measured +u boundary.
+- Index intervals in the remaining anchored sequence. `step_measured` is false if any interval is unresolved; per-interval flags identify the missing measurements.
+- Include request-edge gaps in the energy bound and exclude sample supports wholly outside the request from `P_max`. Use only the lead's 0.13 mJ ceiling.
+- Leave registration prose for the lead, as required by the write scope.
+
+**Clause map**
+
+| Production site | Biting assertion | Counterfactual |
+|---|---|---|
+| `joulewise/b6/export_runs.py:146` | `tests/b6/test_export_runs.py:584`, `test_registered_smoke_prints_references_from_removed_stages` | Remove this guard: the inline case loses its required no-archived-checksum-witness cause. |
+| `joulewise/b6/export_runs.py:166` | Same method, `tests/b6/test_export_runs.py:514` | Walk the reduced graph: 19 reference rows disappear. |
+| `joulewise/b6/export_runs.py:211` | Same method, `tests/b6/test_export_runs.py:546` | Remove the success denial: roster/assessment expected stops disappear. |
+| `joulewise/b6/export_runs.py:644` | `tests/b6/test_export_runs.py:473`, `test_acceptance_excluded_uncollected_reference_is_printed_if_projection_omits_it` | Let a failed assessment overwrite an added row: status ceases to be uncollected. |
+| `joulewise/hazards/clock.py:348` | `tests/hazards/test_clock.py:216`, `test_two_anchors_keep_skew_and_boot_session_checks` | Omit the assignment: the N=2 interval loses index 0. |
+| `joulewise/hazards/clock.py:393` | `tests/hazards/test_clock.py:155`, `test_pair_read_uncertainty_boundaries_are_exact` | Change <= to <: equality loses its indexed flags. |
+| `joulewise/hazards/clock.py:394` | `tests/hazards/test_clock.py:135`, `test_sparse_pair_below_its_read_uncertainty_discloses_without_refusing` | Emit interval 0: the interval-1 assertion fails. |
+| `joulewise/hazards/clock.py:396` | `tests/hazards/test_clock.py:148`, boundary test | Omit +u_j: equality falsely refuses. |
+| `joulewise/b6/export_runs.py:469` | `tests/b6/test_export_runs.py:877`, `test_interval_gaps_bound_summed_request_energy_at_its_peak_power` | Check gaps separately: two 8 us gaps incorrectly clear. |
+| `joulewise/b6/export_runs.py:464` | Same method, `tests/b6/test_export_runs.py:880` | Include outside supports in P_max: the clear case stops. |
+
+**Registration sentences for the lead**
+
+§5, replace the fitted-step/count passage:
+
+> For N ≥ 3 remaining usable anchors at RAW positions x_i, with xbar their mean, the fitted line absorbs the exact fraction a_j = (x_(j+1) − x_j) · Σ_(i>j)(x_i − xbar) / Σ_i(x_i − xbar)² of a step between adjacent anchors j and j+1. Let u_j = read_skew_j + read_skew_(j+1), the anchors' recorded read uncertainty. Interval j is step-testable only when step_ns · (1 − a_j) > u_j; otherwise the arm discloses clock.step_unmeasured with interval_index j, without refusing for this reason. A testable pair refuses only when its absolute fitted-residual change exceeds step_ns · (1 − a_j) + u_j, including across rejected-anchor gaps. The absolute fitted-residual check remains. At N = 2 the rate, skew and boot-session checks act, and clock.step_unmeasured is disclosed with interval_index 0 without refusing for the unmeasured interval; N < 2 remains UNMEASURED.
+
+§6, replace the membership sentence to remove the stray clause:
+
+> The reference membership of the roster and of acceptance is cross-checked both ways against the listed reference bundles.
+
+§6, replace the uncollected-reference passage:
+
+> A planned reference with neither an archived directory nor an inventory entry stays a printed row only when acceptance records its exclusion, or when a digest-verified archived tree records smoke_reduction and the reference lies beyond its stage's smoke keep prefix. The exporter authenticates the archived full registered tree before reduction and uses its complete stage walk, including stages removed by keep 0. Both exceptions are denied when archived assessments or the roster report succeeded. References omitted from acceptance's projection under either exception, including references excluded by acceptance, print uncollected in registered stage order with blank request columns.
+
+§6, add the energy-gap sentence:
+
+> On the path without powermetrics, total uncovered request time G_total on an interval trace must satisfy G_total · P_max ≤ 0.13 mJ, where P_max is the largest measured sample power whose support overlaps the request. This bounds lost reference_request_gross_j by 1% of the smallest printed half-width, 0.013 J (§12/§14); excess stops desk export with its cause.
+
+§6, replace the replay sentence:
+
+> Replayed before adoption over all 25 desk archives on disk with their real plans (H, BY-H2 and every block-6 session and smoke): 0 stops, columns identical (FIX-416-D, FIX-416-F, FIX-416-G and FIX-416-H records). The separate 13 block-6 smoke replays through the BYTES branch have 0 stops; FIX-416-H adds 19 uncollected references per smoke, preserving every pre-existing column value apart from the resulting order_index renumbering.
+
+Appendix A catalog SHA-256: `01767fe4e75ed961798f4e6b68cf055a5b3946a474129e93d2b5e7c239a1dd0c`. Counts and effects are unchanged.
+
+**Real-plan replay**
+
+Each archive used its real `custody/night_plan.json`, with the same keys as FIX-416-G. Every CSV is byte-identical; all stops are 0 before and after. Full paths, plan digests, row dictionaries and CSV digests are in `handoff-replay/normal.json` and its per-archive directories.
+
+| Archive | Rows | Populated references | CSV SHA-256 prefix |
+|---|---:|---:|---|
+| H | 123 | 21 | `df05561b166f` |
+| BY-H2 | 73 | 24 | `b675bf831827` |
+| r1-alpha-smoke-0 | 4 | 0 | `9edea7fd3ba2` |
+| r1-beta-smoke-0 | 4 | 0 | `ed48626fc99a` |
+| r1-gamma-smoke-0 | 6 | 0 | `0cb09655e43c` |
+| r2-alpha-smoke-0 | 4 | 0 | `5dd210f3885b` |
+| r2-beta-smoke-0 | 4 | 0 | `558e7ed3f62e` |
+| r2-gamma-smoke-0 | 6 | 0 | `b55548ea0854` |
+| r3-alpha-smoke-0 | 4 | 0 | `de2300dd8dc1` |
+| r3-beta-smoke-0 | 4 | 0 | `a259a885b24e` |
+| r3-gamma-smoke-0 | 6 | 0 | `f3ee577ef175` |
+| r4-alpha-smoke-0 | 4 | 0 | `01b4917418be` |
+| MT-20261016T2114Z smoke | 4 | 0 | `8775c91416d0` |
+| MT-20261017T1735Z smoke | 4 | 0 | `2248aa220065` |
+| MT-20261017T2215Z smoke | 4 | 0 | `569eff4feb73` |
+| r1-alpha | 125 | 0 | `97897825a359` |
+| r1-beta | 125 | 0 | `64f03ab23348` |
+| r1-gamma | 107 | 0 | `9613cc7784d5` |
+| r2-beta | 125 | 0 | `da9be9baf4ba` |
+| r2-gamma | 107 | 0 | `e8b9255f7059` |
+| r3-alpha | 125 | 0 | `28c1baf6a8ec` |
+| r3-beta | 125 | 0 | `e60e3d052579` |
+| r3-gamma | 107 | 0 | `18cb2bec91c1` |
+| r4-alpha | 125 | 0 | `564c6349bd7e` |
+| BY-H2 early (zero-run) | 0 | 0 | `10bf26181ca0` |
+
+**Block-6 smokes through BYTES**
+
+Every existing value is identical except `order_index`, which shifts to insert the 19 previously absent references. Every added row is `uncollected`, has a reference role and blank request columns. All 25 planned references appear in registered order. Stops are 0 before and after.
+
+| Smoke | Rows G → H | Populated references |
+|---|---:|---:|
+| r1-alpha-smoke-0 | 8 → 27 | 2 |
+| r1-beta-smoke-0 | 8 → 27 | 2 |
+| r1-gamma-smoke-0 | 10 → 29 | 2 |
+| r2-alpha-smoke-0 | 8 → 27 | 1 |
+| r2-beta-smoke-0 | 8 → 27 | 2 |
+| r2-gamma-smoke-0 | 10 → 29 | 2 |
+| r3-alpha-smoke-0 | 8 → 27 | 2 |
+| r3-beta-smoke-0 | 8 → 27 | 2 |
+| r3-gamma-smoke-0 | 10 → 29 | 2 |
+| r4-alpha-smoke-0 | 8 → 27 | 2 |
+| MT-20261016T2114Z smoke | 6 → 25 | 0 |
+| MT-20261017T1735Z smoke | 8 → 27 | 0 |
+| MT-20261017T2215Z smoke | 8 → 27 | 1 |
+
+**Other verification**
+
+Required modules: 135 tests pass. Export/clock/refusal checks: 131 tests pass, one skip; the final extended export fixture also passes all 54 export tests. The withheld agreement campaign compares 219,549 values: 214,772 equal, 4,777 under bar, 0 above bar; 68,146 diagnostic comparisons, 698 different. Catalog, generated trees, pin checks and final source/scope audit pass.
+
+**Final SHAs**
+
+HEAD start/end: `6b54a51d67140bc1ce13be94270c5bba62207226`. No commit was made. Full SHA-256 values for all 19 modified files: [final-shas.json](/private/tmp/fix416h/main/final-shas.json).
+
+| File | SHA-256 |
+|---|---|
+| `joulewise/b6/export_runs.py` | `4a7df42bb86a2c5db87b4360f424db263eb4b458610b9e66270bd89ea129bd8d` |
+| `joulewise/hazards/clock.py` | `862a4a09129c76bfad21a341b62b813ba931c273f7d9fee6507eef6c2442500e` |
+| `configs/gates/hazard_refusals.json` | `d5825a406b4008ec49b7727a2acaee215ca60da9af08f0b6b0727b12a6535b7f` |
+| `configs/b6/flag_catalog_b6.json` | `01767fe4e75ed961798f4e6b68cf055a5b3946a474129e93d2b5e7c239a1dd0c` |
+
+## Verification notes
+
+The energy-gap bar is covered by synthetic interval-trace fixtures and direct probes; the real-archive replay alone does not validate that path.
+
+The full hazard suite has 28 failed assertions in 22 methods, with 9 skips. The same 28 failures reproduce in a fresh run of those methods on the clean requested HEAD. They require process census/termination that the sandbox cannot provide; there are no new failures. Cases (class-qualified; all under `tests.hazards`):
+
+- `test_arm.ArmTests.test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read`
+- `test_arm.ArmTests.test_agent_that_starts_during_the_dwell_gets_no_go`
+- `test_arm.ArmTests.test_block6_plan_holds_above_its_registered_rate`
+- `test_arm.ArmTests.test_charging_that_starts_during_the_dwell_refuses_at_the_final_read`
+- `test_arm.ArmTests.test_clock_step_during_the_dwell_refuses`
+- `test_arm.ArmTests.test_contending_daemon_times_the_dwell_out`
+- `test_arm.ArmTests.test_frequency_word_change_at_the_end_of_the_dwell_is_diagnostic`
+- `test_arm.ArmTests.test_go_records_a_clean_census_taken_after_the_final_reads`
+- `test_arm.ArmTests.test_go_records_the_smc_current_beside_the_registry_cross_check`
+- `test_arm.ArmTests.test_network_time_off_output_is_recorded_not_judged`
+- `test_arm.ArmTests.test_quiet_float_mac_arms_go_in_the_registered_order`
+- `test_arm.ArmTests.test_record_only_collectors_never_change_the_decision`
+- `test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument`
+- `test_arm.ArmTests.test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback`
+- `test_arm_identity.ArmIdentityTests.test_empty_epoch_list_never_refuses`
+- `test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses`
+- `test_arm_identity.ArmIdentityTests.test_judged_identity_proceeds_to_go`
+- `test_arm_identity.ArmIdentityTests.test_no_expected_epochs_reads_no_identity`
+- `test_import_graph.ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module`
+- `test_instrument.CadenceProbeTests.test_block3_interactive_capture_at_130_ms_passes`
+- `test_instrument.CadenceProbeTests.test_privilege_prefix_is_prepended_to_the_adapter_command`
+- `test_instrument.ProductionCommandTests.test_timeout_kills_the_capture_group`
+
+Preliminary replays were cancelled or rejected for source drift during final edits. Only `handoff-replay` is used as final replay evidence. No full `tests.test_bytes_analysis`, `tests.test_bytes_agreement` or `tests.test_bytes_coverage_map` suite was run; only the requested withheld campaign used the agreement helpers.
+
+## Residual risk
+
+The lead owns final diff review and commit, the registration text edits above, and any rerun of the sandbox-limited cases with process enumeration available. These are desk replays and synthetic probes, not new hardware validation.

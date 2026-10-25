@@ -46,7 +46,7 @@
     }
   ],
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
-  "flag_catalog_sha256": "3c4b8280495ecf6dc02445f40ae1c0ea45bb4fe6bd8cb925c05151d7c6762138",
+  "flag_catalog_sha256": "01767fe4e75ed961798f4e6b68cf055a5b3946a474129e93d2b5e7c239a1dd0c",
   "flag_effects": {
     "agent.capture_overlap": "DISCLOSE",
     "agent.pause_marker_stale": "DISCLOSE",

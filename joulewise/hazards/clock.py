@@ -341,9 +341,11 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
                    "error": item.get("error") or "anchor absent"}
                   for index, item in enumerate(samples) if not item.get("anchor")]
     # Two anchors determine the rate exactly but cannot measure a step after
-    # fitting. At every N >= 3, correct each pair's bar for its fit absorption.
+    # fitting. At N >= 3, test only pairs resolved by their own read uncertainty.
     step_measured = len(anchored) >= 3
     step_flags = [] if step_measured else [{"code": "clock.step_unmeasured"}]
+    if len(anchored) == 2:
+        step_flags[0]["interval_index"] = 0
     coverage = {"flags": unmeasured + step_flags, "samples": len(samples),
                 "anchored_samples": len(anchored), "step_measured": step_measured}
     if len(anchored) < 2:
@@ -387,10 +389,14 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
             # absorption, with exact arithmetic and no additional numeric bar.
             absorbed = (xs[j + 1] - xs[j]) * suffix / squared
             bar = Fraction(str(limits["step_ns"])) * (1 - absorbed)
-            if abs(b - a) > bar:
+            uncertainty = skews[j] + skews[j + 1]
+            if bar <= uncertainty:
+                step_flags.append({"code": "clock.step_unmeasured", "interval_index": j})
+                continue
+            if abs(b - a) > bar + uncertainty:
                 reasons.append(f"dwell step {float(abs(b - a)) / 1e6:.4f} ms exceeds "
-                               f"fit-corrected {float(bar) / 1e6:.6f} ms")
-                break
+                               f"fit-corrected plus read uncertainty {float(bar + uncertainty) / 1e6:.6f} ms")
+        step_measured = not step_flags
     raw_span = anchored[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
     observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits) if f0 is not None else None,
                 "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step), "step_measured": step_measured,

@@ -409,6 +409,7 @@ class ExportTests(unittest.TestCase):
         write_json(self.archive / "derived/roster.json", {"pack_id": "bytes-s1-p1", "members": list(reversed(members))})
         tree_path = self.archive / "sources/pack/plan_tree.json"
         write_json(tree_path, reduced)
+        write_json(self.archive / "sources/night-custody/results-clone/configs/campaigns/bytes-s1-p1/plan_tree.json", tree)
         seal_reference_inputs(self.archive)
         rows = self.rows(self.export(pack_registration={"pack_id": "bytes-s1-p1", "blinding_group": "bytes"}))
         self.assertEqual(len(rows), 25)
@@ -448,7 +449,7 @@ class ExportTests(unittest.TestCase):
                                     if not line.endswith("  pack/plan_tree.json")))
         reduced["smoke_reduction"]["keep"][members[0]["stage_id"]] = 1
         self.plan["plan_tree"] = reduced
-        with self.assertRaisesRegex(export_runs.StorageStop, "members without listed bundles"):
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke: no archived checksum witness"):
             self.export(pack_registration={"blinding_group": "bytes"})
 
     def test_acceptance_excluded_uncollected_reference_is_printed_if_projection_omits_it(self):
@@ -466,6 +467,122 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(row["excluded"], "True")
         self.assertIn("member.bytes_missing", row["exclusion_codes"])
         self.assertTrue(all(not row[c] for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+        write_json(self.archive / "withheld/member-assessments.json", {"members": {"ref": {"status": "failed"}}})
+        row = next(r for r in self.rows(self.export(evidence=evidence, pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == "ref")
+        self.assertEqual(row["status"], "uncollected")
+
+    def test_registered_smoke_prints_references_from_removed_stages(self):
+        from joulewise.b6 import acceptance, smoke
+        repo = Path(__file__).resolve().parents[2]
+        tree = json.loads((repo / "configs/campaigns/bytes-s1-p1/plan_tree.json").read_bytes())
+        stages, roles = acceptance._stage_roles(tree)
+        keep = json.loads((repo / "configs/b6/smoke_keep.json").read_bytes())["bytes-s1-p1"]
+        reduced = smoke.reduce_tree(tree, keep)
+        template = self.root / "reference-template"
+        shutil.copytree(self.archive / "sources/claim-runs/ref", template)
+        summary = (self.archive / "withheld/reductions/ref.summary_metrics.rereduced.json").read_bytes()
+        shutil.rmtree(self.archive / "sources/claim-runs")
+        shutil.rmtree(self.archive / "withheld/reductions")
+        members, reference_order = [], []
+        for stage in tree["stage_graph"]:
+            if stage["kind"] != "campaign_collection":
+                continue
+            runs = [run for run in stages if stages[run] == stage["stage_id"]]
+            for i, run in enumerate(runs):
+                # Real harvests use input ids here and do not record roles.
+                members.append({"run_id": run, "stage_id": "roster-input", "units": []})
+                if roles[run] in export_runs.REFERENCE_ROLES:
+                    reference_order.append(run)
+                if i < keep.get(stage["stage_id"], 0):
+                    shutil.copytree(template, self.archive / "sources/claim-runs" / run)
+                    path = self.archive / "withheld/reductions" / (run + ".summary_metrics.rereduced.json")
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(summary)
+        self.record.update(pack_id="bytes-s1-p1", excluding=[])
+        self.plan["pack_id"] = "bytes-s1-p1"
+        write_json(self.archive / "derived/b6-acceptance.json", self.record)
+        roster_path = self.archive / "derived/roster.json"
+        write_json(roster_path, {"members": list(reversed(members))})
+        write_json(self.archive / "sources/pack/plan_tree.json", reduced)
+        original = self.archive / "sources/night-custody/results-clone/configs/campaigns/bytes-s1-p1/plan_tree.json"
+        write_json(original, tree)
+        seal_reference_inputs(self.archive)
+        rows = self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+        refs = [row for row in rows if row["role"] in export_runs.REFERENCE_ROLES]
+        self.assertEqual([row["run_id"] for row in refs], reference_order)
+        self.assertEqual(len(refs), 25)
+        self.assertEqual(sum(row["status"] == "uncollected" for row in refs), 23)
+        self.assertEqual([int(row["order_index"]) for row in rows],
+                         sorted({int(row["order_index"]) for row in rows}))
+        for row in refs:
+            if row["status"] == "uncollected":
+                self.assertTrue(all(row[c] == "" for c in export_runs.REFERENCE_REQUEST_COLUMNS))
+        removed = next(run for run in reference_order if stages[run] in reduced["smoke_reduction"]["removed"])
+        for witness in ("roster", "assessment"):
+            with self.subTest(non_success_witness=witness):
+                roster = {"members": [dict(m) for m in members]}
+                if witness == "roster":
+                    next(m for m in roster["members"] if m["run_id"] == removed)["status"] = "failed"
+                else:
+                    write_json(self.archive / "withheld/member-assessments.json",
+                               {"members": {removed: {"status": "failed"}}})
+                write_json(roster_path, roster)
+                seal_reference_inputs(self.archive)
+                row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                           if r["run_id"] == removed)
+                self.assertEqual(row["status"], "uncollected")
+        (self.archive / "withheld/member-assessments.json").unlink()
+        for witness in ("roster", "assessment"):
+            with self.subTest(witness=witness):
+                roster = {"members": [dict(m) for m in members]}
+                if witness == "roster":
+                    next(m for m in roster["members"] if m["run_id"] == removed)["status"] = "succeeded"
+                else:
+                    write_json(self.archive / "withheld/member-assessments.json",
+                               {"members": {removed: {"status": "succeeded"}}})
+                write_json(roster_path, roster)
+                seal_reference_inputs(self.archive)
+                with self.assertRaisesRegex(export_runs.StorageStop, "members without listed bundles.*" + removed):
+                    self.export(pack_registration={"blinding_group": "bytes"})
+        (self.archive / "withheld/member-assessments.json").unlink()
+        # Even a lost roster entry cannot silently erase a planned reference.
+        write_json(roster_path, {"members": [m for m in members if m["run_id"] != removed]})
+        seal_reference_inputs(self.archive)
+        row = next(r for r in self.rows(self.export(pack_registration={"blinding_group": "bytes"}))
+                   if r["run_id"] == removed)
+        self.assertEqual(row["status"], "uncollected")
+        # Two originals must agree even on the stages that reduction deletes.
+        other = self.archive / "sources/other/configs/campaigns/bytes-s1-p1/plan_tree.json"
+        conflicting = json.loads(json.dumps(tree))
+        next(stage for stage in conflicting["stage_graph"]
+             if stage["stage_id"] == stages[removed])["expected_count"] -= 1
+        self.assertEqual(smoke.reduce_tree(conflicting, keep), reduced)
+        write_json(other, conflicting)
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "reference membership smoke.*inconsistent"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        other.unlink()
+        seal_reference_inputs(self.archive)
+        original.write_text("{}")
+        with self.assertRaisesRegex(export_runs.StorageStop, "plan_tree.json.*digest mismatch"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "reference membership smoke: KeyError.*stage_graph"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        original.unlink()
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "reference membership smoke.*archived registered tree"):
+            self.export(pack_registration={"blinding_group": "bytes"})
+        # With every reference stage removed, an inline reduced tree cannot
+        # bypass membership merely because no surviving stage assigns roles.
+        reference_stages = {stages[run] for run in reference_order}
+        self.plan["plan_tree"] = smoke.reduce_tree(tree, {
+            stage: count for stage, count in keep.items() if stage not in reference_stages})
+        (self.archive / "sources/pack/plan_tree.json").unlink()
+        seal_reference_inputs(self.archive)
+        with self.assertRaisesRegex(export_runs.StorageStop, "smoke: no archived checksum witness"):
+            self.export(pack_registration={"blinding_group": "bytes"})
 
     def test_bundle_without_inventory_entries_stops(self):
         bundle = self.archive / "sources/claim-runs/ref"
@@ -723,7 +840,7 @@ class ExportTests(unittest.TestCase):
         events.write_text("".join(json.dumps(row) + "\n" for row in rows))
         trace = self.archive / "sources/claim-runs/ref/power_trace.csv"
         for gap, stops in ((math.ulp(epoch), False), (5e-6, False), (9e-6, False),
-                           (11e-6, True), (.001, True)):
+                           (11e-6, False), (14e-6, True), (.001, True)):
             with self.subTest(gap=gap):
                 trace.write_text("timestamp_s,power_w,rail,source,interval_start_s,interval_end_s\n"
                                  f"{epoch + 4},10,mock,mock,{epoch},{epoch + 4}\n"
@@ -736,6 +853,31 @@ class ExportTests(unittest.TestCase):
                     result = self.export(pack_registration={"blinding_group": "bytes"})
                     ref = next(row for row in self.rows(result) if row["run_id"] == "ref")
                     self.assertEqual(float(ref["reference_request_duration_s"]), 14)
+
+    def test_interval_gaps_bound_summed_request_energy_at_its_peak_power(self):
+        trace = self.archive / "sources/claim-runs/ref/power_trace.csv"
+        cases = (
+            # Each row is (supports with powers, expected stop). The lead's
+            # 0.13 mJ ceiling gives 13 us at 10 W and 4 1/3 us at 30 W.
+            ([(0, 4, 10), (4.000011, 14, 10)], False),
+            ([(0, 4, 30), (4.000005, 14, 30)], True),
+            ([(0, 4, 10), (4.000008, 8, 10), (8.000008, 14, 10)], True),
+            ([(0, 4, 10), (4.000005, 8, 10), (8, 14, 30)], True),
+            ([(-2, -1, 1000), (0, 4, 10), (4.000011, 14, 10), (15, 16, 1000)], False),
+            ([(0.000005, 14 - 0.000005, 10)], False),
+            ([(0.000008, 14 - 0.000008, 10)], True),
+        )
+        for supports, stops in cases:
+            with self.subTest(supports=supports):
+                trace.write_text("timestamp_s,power_w,rail,source,interval_start_s,interval_end_s\n" +
+                                 "".join(f"{right},{power},mock,mock,{left},{right}\n"
+                                         for left, right, power in supports))
+                seal_reference_inputs(self.archive)
+                if stops:
+                    with self.assertRaisesRegex(export_runs.StorageStop, "summed uncovered.*P_max.*0.13 mJ"):
+                        self.export(pack_registration={"blinding_group": "bytes"})
+                else:
+                    self.export(pack_registration={"blinding_group": "bytes"})
 
     def test_standalone_export_prints_exception_type_and_cause_at_exit_five(self):
         args = ["--archive", str(self.archive), "--plan", str(self.root / "plan.json"),

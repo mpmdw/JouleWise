@@ -544,7 +544,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "FIX-416-G: two remaining dwell anchors determine the rate but cannot measure a step after fitting; disclose without refusing on count. Rate, skew and boot-session checks act at N=2; N<2 remains UNMEASURED. At every N>=3 the step bar is corrected for exact fit absorption from the RAW positions."
+      "note": "FIX-416-H: two remaining dwell anchors determine the rate but cannot measure a step after fitting; disclose without refusing on count. At N>=3, each pair j is step-testable only when step_ns*(1-a_j) exceeds u_j = read_skew_j + read_skew_(j+1); otherwise disclose clock.step_unmeasured with interval_index j. A testable pair refuses only above step_ns*(1-a_j)+u_j. Rate, skew and boot-session checks still act; N<2 remains UNMEASURED."
     },
     "clock.systematic": {
       "blinding": "STRUCTURE",
