@@ -24,11 +24,20 @@ Launched with nine pending `yield.stage_zero` notices, all plan r1-bytes-s1-p1. 
 ## Decisions I made
 
 - Smoke code unchanged. The new test makes CI refuse any commit where a loop pack's committed tree does not authenticate, and measurement checkouts are cut from CI-green heads, so a smoke-side guard would duplicate it.
-- The measurement checkout is fast-forwarded to 991358f73 rather than re-cloned: the delta is 12 data files and a test, and the venv and ledger seed stay as verified at 06:2x.
+- The measurement checkout is not re-cloned: it gets the two commits cherry-picked onto its local pin commit (item 10). The delta is 12 data files and tests, and the venv and the ledger (now 412 rows) stay as they are.
 - The controller refusing on a missing sidecar is a records check that, under the 10-05 doctrine, should be a flag. Changing it is claim-path code with full gates; it goes to the pruning list, not to this fix.
 
-9. **CI on 991358f73 (PR #581):** 19 of 20 jobs green while shard 10 ran (it took 153 min on 537180b78).
+9. **CI on 991358f73 (PR #581): success**, 20 of 20 (shard 10 takes about 150 min).
 10. **Measurement checkout:** `git cherry-pick 537180b78 991358f73` onto its local pin commit 786ecd968 (the s1 session's post-calibration pin, ledger sequence 412). HEAD 8e097d020; `git diff 991358f73 HEAD` is the pin file only; tree clean. In the checkout: `tests.test_bytes_plan_trees` and `tests.b6.test_code_check` pass (16 tests), and `_plan_tree` authenticates all six pass-1 packs. The changed paths are not in the registered number-bearing list, so sessions add only `code.changed_since_registration` (DISCLOSE).
+
+11. The loop's own desk ran at 13:48 while packs were held: attempt r1-bytes-s1-p1 recorded `not_counting`, cause `NEG8,ROSTER` (`attempts.jsonl`); its loop_hold mail went to issue #509. The previous-session flags include `pack.identity_mismatch` and `code.executed_differs_from_sealed` (disclosed); watch whether s2 repeats them.
+12. No unread mail from Ed, no new directive, no stand-down request. **Resumed 16:06 PDT:** `b6_loop.py --loop-root /Users/edr/night-b6/loop-bytes resume` rc 0; state NEXT, all six pass-1 packs open, attempts reset. Next selection is s2-p1 (round 1); the loop smokes it and sends its arm notice. Email to Ed: Gmail 1a17551176dc0048 (same thread). Session exits so the pre-check can run.
+
+## Pruning tally (gates that ran this session)
+
+- Yield alerts (`yield.stage_zero`): caught the zero-yield session. Keep.
+- Smoke: did not catch it, because it writes its own sidecar into its staged copy. The catch now sits with the new test. Smoke's other checks are unchanged.
+- Controller sidecar refusal: cost one whole session (265 min of quiet machine time) and protected no number. It is a pruning candidate.
 
 ## Next
 
