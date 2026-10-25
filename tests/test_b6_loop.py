@@ -149,7 +149,11 @@ class LoopTests(unittest.TestCase):
     def test_bytes_drafts_never_enter_live_loop_despite_base_order(self):
         # Exercise the production Git/status gate, not the queue's injectable
         # registration seam. R8 drafts remain unarmable until registration.
-        ids = {f"bytes-s{n}-p{p}" for n in range(1, 7) for p in (1, 2)}
+        # Pass 1 is registered (6731d5249): open_packs opens its six packs, and this
+        # queue's pack_ids filter keeps them out; pass 2 stays draft and is rejected.
+        registered = {f"bytes-s{n}-p1" for n in range(1, 7)}
+        drafts = {f"bytes-s{n}-p2" for n in range(1, 7)}
+        ids = registered | drafts
         self.assertTrue(ids.issubset(self.loop.config["base_order"]))
         self.loop.regs_source = None
 
@@ -164,7 +168,7 @@ class LoopTests(unittest.TestCase):
         opened = dict(self.loop.regs)
         self.assertEqual(set(opened), {"alpha", "beta", "gamma"})
         rejected = self.loop.state["pack_not_open"]
-        self.assertEqual(set(rejected), {f"configs/b6/packs/{p}/registration.json" for p in ids})
+        self.assertEqual(set(rejected), {f"configs/b6/packs/{p}/registration.json" for p in drafts})
         for reasons in rejected.values():
             self.assertIn("draft", reasons)
 
