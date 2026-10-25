@@ -63,4 +63,9 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
    - CI on bc588a964: everything green except the expected review-row test.
 
    Round-5 cold passes launched 21:3x.
-26. **Round-5 cold passes: both ADMIT-WITH-CORRECTIONS**, with edge cases only (sparse-anchor noise, keep-0 smoke stages, gap energy). FIX-416-H (Sol 6.1 high) launched 22:1x. Stopping rule the lead adopts for this lane: if round 6 returns only LOW/INFO findings, those are dispositioned without another fix round, and the PR proceeds to review rows, CI and the registration gate.
+26. **Round-5 cold passes: both ADMIT-WITH-CORRECTIONS**, with edge cases only (sparse-anchor noise, keep-0 smoke stages, gap energy). FIX-416-H (Sol 6.1 high) launched 22:0x. Stopping rule the lead adopts for this lane: if round 6 returns only LOW/INFO findings, those are dispositioned without another fix round, and the PR proceeds to review rows, CI and the registration gate.
+27. **FIX-416-H done** (7a3b585db).
+   - Seat results: sparse-anchor noise refusals went from 76/2688 to 0; a 1.2 ms mid-dwell step still refuses on 24/24 real dwells; the removed-stage references print; the gap bound sits in the energy column; 25 real archives are byte-identical.
+   - Lead checks outside the sandbox: tests/hazards 328 OK; touched modules 109 OK; repin and plan-tree checks pass.
+   - Text applied; catalog 01767fe4.
+   - Round-6 cold passes launched 23:0x, with strict severity guidance.
