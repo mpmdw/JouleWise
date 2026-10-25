@@ -88,3 +88,15 @@ Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exit
 30. **Round-7 cold passes: Fable ADMIT, Opus ADMIT.** The stopping rule is met. Opus's LOW (the zero-run exception also skipped the unlisted-directory custody check) was fixed by the lead in 49884a10a and checked with Opus's probe on a clone of the real zero-run archive (it stops again). Final lead replay: 25 archives, 0 stops, identical. Touched modules 149 OK.
    - Review rows: 13 appended (81c78f79c). Ancestors of c84bb34c2 cite the three #416 reports; each FIX commit cites its cold round. tests.b6.test_audit_record_fixes passes; repin passes. PR #579's ledger is updated; CI runs on 81c78f79c.
 31. **Registration cold gate launched 01:1x** on 81c78f79c: Fable 5.1 judge and Opus 5.5 refuter, blind, executing (raw re-derivation of the sizing rows, estimator SHA, catalog digest, clock holds; text against code; agreement spot campaigns; blinding; doctrine). Brief: `~/night-archive/seats-7209/reggate/brief.md`. A Fable REFUSE goes to Ed. On ADMIT: merge #579 into the pass-1 lane once CI is green, then flip the registrations.
+32. **Registration cold gate: Fable 5.1 SEAL: ADMIT-WITH-CORRECTIONS, Opus 5.5 SEAL: ADMIT-WITH-CORRECTIONS** (both blind, executing; `~/night-archive/seats-7209/reggate/`; copies REGGATE-*.md in the lane records).
+   - Every registered number was re-derived exactly from the raw data and the code: the six sizing rows (168 receipts), the estimator, catalog and manifest digests, the clock holds, coverage, t values and the worked example. The agreement campaigns bytes, withheld, time, resident, defects and minimum are 0 above the bar.
+   - Corrections applied in **6731d5249 (the registration time: the six pass-1 packs flip to `registered`)**:
+     - C1, the generator: `REGISTERED_PASSES = {1}` writes `registered` and drops pass-1 draft notes; trees regenerated; identity hashes re-issued; all 12 registrations validate.
+     - C2, the registration text.
+     - Tests expect `registered` (141 OK).
+   - Opus's condition: the whole suite on the flipped tree. That is CI on 6731d5249.
+   - Recorded for later:
+     - the known-bytes test's reading rule must be written before that test runs (Opus 4);
+     - no pass-1 t0 between about 2026-10-31 16:30 PDT and 2026-11-01 02:00 PST (DST, Fable 4);
+     - `roster.json` identity_status is stale metadata, never consumed (Fable 2, NIT).
+33. **Disk offload:** H (/Users/edr/night-bytes/h-20261021T185555Z, 33 GiB, non-claim, frozen desk data in JouleWise-data) is going to iCloud Drive JouleWise-archive/2026-10-25-disk3 with per-member SHA-256 verification before removal (`~/night-archive/icloud-offload-2026-10-05/offload.py`; manifest and pointer as on 10-21). BY-H2 follows. Then `brctl evict` once uploaded.
