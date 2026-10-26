@@ -1,0 +1,388 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "0e954ed9e0ccc9ed5642a6a381d73b9014e84b1de6b94d2370fb3c1abbe22f66",
+    "sidecar_sha256": "0e954ed9e0ccc9ed5642a6a381d73b9014e84b1de6b94d2370fb3c1abbe22f66",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-32b-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-8b-8bit-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "bytes-s4-p1-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 1023790192562125,
+    "monotonic_raw_ns": 1023790192561916,
+    "wall_s": 1793039453.208779
+  },
+  "faults": {
+    "bound_derivation_failed": "not_run",
+    "post_bracket_failed": false,
+    "reasons": [
+      "yield_low"
+    ]
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output",
+    "yield.stage_low",
+    "yield.stage_low",
+    "yield.stage_low",
+    "yield.stage_low"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 525,
+    "head": "829cf990e19c571a089de2e7126b3f32bfbf94fa",
+    "path": "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/custody/night/executed_inventory.json",
+    "sha256": "3909ac390b09200d12929697d9a494248859d8a305936f43599a33e3da907f81",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 96399,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/measurement/.venv/bin/python-real",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1023789987539416,
+        "monotonic_raw_ns": 1023789987539333,
+        "wall_s": 1793039453.003756
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "ffd77c4087e8f409e18d935e1ccec55d322dca7a75808e97a312a3f48e9d62ad",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/measurement/.venv/bin/python-real",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1023789629006333,
+        "monotonic_raw_ns": 1023789629005875,
+        "wall_s": 1793039452.645223
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 1022411017428666,
+          "monotonic_raw_ns": 1022411017428500,
+          "wall_s": 1793038074.0336452
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.843
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 1023784618842583,
+      "monotonic_raw_ns": 1023784618842166,
+      "wall_s": 1793039447.6350589
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 1023789629006333,
+      "monotonic_raw_ns": 1023789629005875,
+      "wall_s": 1793039452.645223
+    },
+    "released": {
+      "monotonic_ns": 1023789628933041,
+      "monotonic_raw_ns": 1023789628931708,
+      "wall_s": 1793039452.645149
+    },
+    "released_after_chain_s": 5.01
+  },
+  "neg8_corpus": {
+    "collected_manifest": null,
+    "committed_manifest": null,
+    "errors": [
+      "summary: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/custody/night/transcript/neg8-settled-corpus.collected.summary.json'",
+      "collected manifest: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s4-p1-smoke-0/smoke/bytes-s4-p1-20261026T1756Z/custody/night/transcript/neg8-settled-corpus.collected.json'"
+    ],
+    "members_kept": null,
+    "members_listed": null,
+    "pruned": null,
+    "summary": null
+  },
+  "pack_id": "bytes-s4-p1",
+  "plan_id": "SMOKE-bytes-s4-p1-20261026T1756Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": 21,
+    "end": {
+      "monotonic_ns": 1023784618861083,
+      "monotonic_raw_ns": 1023784618857500,
+      "read_skew_ns": 417,
+      "sleep_offset_ns": 84,
+      "uptime_raw_ns": 1023784618857416,
+      "wall_s": 1793039447.635078
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 1022411910217750,
+      "monotonic_raw_ns": 1022411910216250,
+      "read_skew_ns": 458,
+      "sleep_offset_ns": 63,
+      "uptime_raw_ns": 1022411910216187,
+      "wall_s": 1793038074.926434
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 1022177203835916,
+    "monotonic_raw_ns": 1022177203835125,
+    "wall_s": 1793037840.220052
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 4,
+    "failed": 0,
+    "logged": 4,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 3,
+        "present": 1,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-s4-p1-reference-start",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 4,
+        "planned": 10,
+        "present": 1,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-32b-absolute",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 10,
+        "present": 1,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-8b-8bit-absolute",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 3,
+        "present": 1,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-s4-p1-reference-end",
+        "status": "LOW",
+        "succeeded": 1
+      }
+    ],
+    "planned": 26,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 4,
+    "yield_status": "LOW"
+  },
+  "yield_plan": {
+    "planned": 26,
+    "source": [
+      "driver"
+    ],
+    "stages": 4
+  },
+  "yield_tripwire": {
+    "attempted_seen": 4,
+    "counted_in_settle": 3,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 4,
+    "stalled": false
+  }
+}
