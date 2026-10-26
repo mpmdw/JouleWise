@@ -9,7 +9,7 @@ Runs inside the launchd job after t0, in this fixed order:
    doctrine: never start [QUIET-MAC] work while an agent session is alive).
 2. **Instant reads**: battery (state from ioreg, current from SMC B0AC),
    thermal (with ``pmset -g therm`` kept as a diagnostic), disk, and the
-   clock's frequency gate.  When the config names
+   clock's anchor read-skew check (the frequency word is diagnostic).  When the config names
    the acceptance's judged epochs (``expected_epochs``), ``kern.osversion`` and
    ``hw.model`` are read too: an epoch no acceptance judges refuses here,
    before the dwell, instead of at the pre-slot writer's epoch check after it.
@@ -21,9 +21,11 @@ Runs inside the launchd job after t0, in this fixed order:
    a child process with a timeout.  Their result never changes the decision.
 5. **Instrument cadence probe** (about 40 s).
 6. **Dwell** (180-2700 s): contention in 30 s intervals; the clock sampled at
-   1 Hz for its linearity.
-7. **Final reads** of battery, thermal and the frequency word (f must equal
-   its dwell value), then the **agent census again** (an agent that started
+   1 Hz for its linearity. At cap expiry without a qualifying clean run,
+   measured contention refuses; missing evidence alone is UNMEASURED.
+7. **Final reads** of battery and thermal, plus the measured clock rate and
+   fitted-line residuals (the frequency word is diagnostic), then the
+   **agent census again** (an agent that started
    during the dwell must not get GO), then GO.
 
 GO only if no verdict is REFUSE, the instrument verdict is PASS and both

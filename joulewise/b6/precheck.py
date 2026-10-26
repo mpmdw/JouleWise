@@ -330,21 +330,14 @@ def clock_rate(samples, boot_start, boot_end, thresholds):
     if len(usable) < 50 or (usable[-1]["monotonic_raw_ns"] - usable[0]["monotonic_raw_ns"]
                             < Fraction(str(thresholds["series_min_s"])) * 10**9):
         return reading, list(dict.fromkeys([*codes, "clock.unmeasured"]))
-    origin = usable[0]["monotonic_raw_ns"]
-    xs = [Fraction(item["monotonic_raw_ns"] - origin) for item in usable]
-    ys = [Fraction(item["anchor_ns"]) for item in usable]
-    xm, ym = sum(xs) / len(xs), sum(ys) / len(ys)
-    slope = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / sum((x - xm)**2 for x in xs)
-    rate = slope * 10**6
-    residuals = [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
-    # Registration §8.6: 5 ms / T_stream_max - 0.25 ppm, using the
-    # same exact hold arithmetic as hazards.clock.frequency_bound.
-    bound = Fraction(str(thresholds["h_ms"])) + (abs(rate) + Fraction(
-        str(thresholds["frequency_margin_ppm"]))) * Fraction(str(thresholds["t_stream_max_s"])) / 1000
-    if bound > Fraction(str(thresholds["limit_ms"])):
+    try:
+        rate, residuals = clock.fit_anchor_rate(usable)
+    except ValueError:
+        return reading, list(dict.fromkeys([*codes, "clock.unmeasured"]))
+    gate = clock.measured_rate_bound(rate, thresholds)
+    if not gate["passes"]:
         codes.append("clock.rate")
-    elif thresholds["h_ms"] == 0 and (bound + Fraction(str(clock.DEFAULT_THRESHOLDS["h_ms"]))
-                                        > Fraction(str(thresholds["limit_ms"]))):
+    elif gate.get("rate_above_budget"):
         codes.append("clock.rate_above_budget")
     if max(map(abs, residuals)) > thresholds["residual_max_ns"]:
         codes.append("clock.linearity")
@@ -352,7 +345,7 @@ def clock_rate(samples, boot_start, boot_end, thresholds):
         codes.append("clock.step")
     frequency = next((item["frequency"] for item in samples if item.get("frequency")), None)
     f = Fraction(frequency["raw_word"], clock.FREQUENCY_SCALE) if frequency else None
-    reading.update(rate_ppm=float(rate), bound_ms=float(bound), residual_max_ns=float(max(map(abs, residuals))),
+    reading.update(rate_ppm=float(rate), bound_ms=gate["bound_ms"], residual_max_ns=float(max(map(abs, residuals))),
                    kernel_frequency_ppm=float(f) if f is not None else None,
                    rate_minus_frequency_ppm=float(rate - f) if f is not None else None)
     return reading, list(dict.fromkeys(codes))

@@ -19,7 +19,7 @@ Writes, under --out:
 The world: decode energy per step e = S_BYTES x b (b = W + KV, GB), so P_rails = S_BYTES x BW
 exactly; DC input P = DC_BASE + DC_GAIN x P_rails + REST_PER_RESIDENT_W_PER_GB x R; rest = DC - rails.  Run-to-run noise is
 multiplicative and small; every quad carries a slow drift that its ABBA order cancels.
-No model inference and no measurement: every number here is made up and labelled synthetic.
+No model inference and no measurement: energy and timing are synthetic; byte predictors are registered.
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ COLUMNS = (
     "prompt_tokens", "emitted_tokens", "requested_output_tokens",
     "dur_tokenize_s", "dur_generation_setup_s", "dur_prefill_s", "dur_decode_s",
     "idle_baseline_s", "ttft_s", "decode_latency_s", "run_start_utc",
+    "reference_request_gross_j", "reference_request_idle_subtracted_j", "reference_request_duration_s",
 )
 
 # Pilot-shaped roster: W (GB, stored weights read per step), KV (GB), R (GB), decode and prefill tok/s.
@@ -75,6 +76,11 @@ MODELS = {
     "Qwen3-Next-80B-A3B-Instruct-4bit": (2.032, 0.13, 44.844, 64.0, 1082.0),
     "Qwen3.5-122B-A10B-4bit": (5.070, 0.19, 68.691, 42.6, 417.0),
 }
+# The energies and timing are synthetic; the predictors are the registered counts.
+REGISTERED = {m["model"]: m for m in json.loads(
+    (Path(__file__).resolve().parents[3] / "configs/bytes/bytes_manifest.json").read_text())["models"]}
+MODELS = {name: (*(REGISTERED[name][k] / GB for k in ("W_bytes", "KV_bytes", "R_bytes")), *values[3:])
+          for name, values in MODELS.items()}
 SUBPACKS = [("s1", ["Qwen3-1.7B-4bit", "Qwen3-4B-4bit"]), ("s2", ["Qwen3-8B-4bit", "Qwen3-30B-A3B-4bit"]),
             ("s3", ["Qwen3-14B-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit"]),
             ("s4", ["Qwen3-32B-4bit", "Qwen3-8B-8bit"]), ("s5", ["Llama-3.3-70B-Instruct-4bit"]),
@@ -82,9 +88,9 @@ SUBPACKS = [("s1", ["Qwen3-1.7B-4bit", "Qwen3-4B-4bit"]), ("s2", ["Qwen3-8B-4bit
 REFERENCE = {"name": "Qwen2.5-1.5B-Instruct-4bit", "prompt": 1024, "out": 256, "decode_tps": 150.0,
              "prefill_tps": 2500.0, "P_rails": 15.0}
 SAMPLE = struct.Struct("<HHiiHHHH")
-RATE_IDX = 0            # 500 ms device step: small streams for long synthetic sessions
-STEP_MS = 500
-POLL_NS = 2_000_000_000
+RATE_IDX = 2            # Production: 50 SPS and five polls per second.
+STEP_MS = 20
+POLL_NS = 200_000_000
 RAW_MINUS_MONO_NS = 5_000_000_000
 EPOCH0 = 1_791_936_000.0
 MONO0 = 1000.0
@@ -173,12 +179,14 @@ class Session:
             self.advance(0.05, DC_IDLE_W)
             ev("stage_completed", stage, {})
         ev("stage_started", "idle_baseline", {"monotonic_ns": int(self.mono * 1e9)})
-        idle_start, idle_end = self.advance(10.0, DC_IDLE_W + rng.gauss(0, 0.01))
+        idle_dc_w = DC_IDLE_W + rng.gauss(0, 0.01)
+        idle_start, idle_end = self.advance(10.0, idle_dc_w)
         ev("stage_completed", "idle_baseline", {"power_w_mean": RAILS_IDLE_W, "duration_s": idle_end - idle_start})
         ev("stage_started", "warmup", {})
         self.advance(0.5, DC_BASE + DC_GAIN * rails_w + REST_PER_RESIDENT_W_PER_GB * resident_gb)
         ev("stage_completed", "warmup", {"warmup_runs": 1})
         ev("stage_started", "measured_run", {})
+        self.advance(0.35, DC_IDLE_W)  # sampler spawn before runtime phases
         sampling_started = (self.epoch, self.mono)
         ev("sampling_started", "measured_run", {})
         durations = {"tokenize": 0.01, "generation_setup": 0.02, "prefill": prompt / prefill_tps,
@@ -195,6 +203,8 @@ class Session:
             energies[phase] = rails[phase] * durations[phase]
         request_end = self.mono
         ev("sampling_stopped", "measured_run", {})
+        self.advance(1.0, DC_IDLE_W)   # controller post-window dwell
+        self.advance(6.0, DC_IDLE_W)   # sampler stop and parsing wind-down
         ev("stage_completed", "measured_run", {})
         for stage in ("idle_drift_sentinel", "cleanup", "reduce"):
             ev("stage_started", stage, {})
@@ -218,6 +228,7 @@ class Session:
                    "decode_latency_s": durations["decode"], "status": status}
         bundle = {"events": events, "metadata": {
             "run_id": run_id, "status": {"state": status}, "schema": "joulewise.metadata.synthetic.v1",
+            "synthetic_idle_dc_w": idle_dc_w,
             "uncertainty_evidence": {"clock_anchor": {"method": "synthetic", "clock_stamps": {
                 "sampling_started": {"epoch_s": sampling_started[0], "monotonic_before_s": sampling_started[1],
                                      "monotonic_after_s": sampling_started[1] + 1e-6}}}}},
@@ -256,6 +267,10 @@ class Session:
         for phase in PHASES:
             row["dur_" + phase + "_s"] = durations[phase]
         if status == "succeeded":
+            if role in ("corpus", "start", "midpoint", "end"):
+                row.update(reference_request_gross_j=gross,
+                           reference_request_idle_subtracted_j=gross - RAILS_IDLE_W * request_s,
+                           reference_request_duration_s=request_s)
             for phase in PHASES:
                 row["phase_" + phase + "_j"] = energies[phase]
             row.update({k: summary[k] for k in ("gross_energy_j", "idle_subtracted_energy_j", "energy_request_j")})
@@ -439,8 +454,8 @@ def generate(out: Path, *, seed=1, passes=1, defects=True, models=None, refuse_p
     for key, value in world.factors["config"].items():
         write_json(keys / config_filename(key), {"key": key, "factor": value})
     write_json(out / "bytes_manifest.json", {
-        "schema": "joulewise.bytes_manifest.synthetic.v1", "note": "synthetic; every number is made up",
-        "models": {name: {"revision": "synthetic", "W_bytes": w * GB, "KV_bytes": kv * GB, "R_bytes": r * GB,
+        "schema": "joulewise.bytes_manifest.synthetic.v1", "note": "registered predictors; synthetic energy and timing",
+        "models": {name: {"revision": "synthetic", **{k: REGISTERED[name][k] for k in ("W_bytes", "KV_bytes", "R_bytes")},
                           "tokenizer": "synthetic", "tied_embeddings": False,
                           # the public configuration identity of the model's science rows (the key the
                           # export sidecar's withheld digests name; lead ruling 2026-10-20 item 1)

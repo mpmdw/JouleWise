@@ -27,7 +27,472 @@
     "selection": "issued_d116_artifact_only",
     "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
   },
-  "arm_attachments": {},
+  "arm_attachments": {
+    "identity_pin_projection": {
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r01.json",
+              "sha256": "0e88bd4520e9ddf822074fa2ce6898be4bebcf28eed8d91f5ee0925ac94ae7f6"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r02.json",
+              "sha256": "05c00b2e17844694f16d89c2c970268432d0cf6e5948870bf2c530b9d75ccef9"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r03.json",
+              "sha256": "f2c3342df32854102d644b6d2e83088cc538ddb3f7561e37c3254292ef9ebd56"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r04.json",
+              "sha256": "5907d33d0ddff99694154ffddcac0022a60be16407a7e3922f5f7cf8768369d2"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r05.json",
+              "sha256": "1f0cf9aa283d7742d749168b9cd988e7105d2b43478bf64df8315689a5944581"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r06.json",
+              "sha256": "3eeff09d348c88ae459d37bb16e0316ae5eda51c5f601ef650b6d664debbb195"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r07.json",
+              "sha256": "53e987ac7bc57886767d08c58986d412ef4aa58fda3e97dc2fb0822afc0d311d"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r08.json",
+              "sha256": "5cfd0f6c429fda5e35c266f1e94e276f9c504b3685aff1f51cf9396ff2e4ab09"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r09.json",
+              "sha256": "6492298cd1b90bbbab40073719b87947f26466ac6db55be0a4ded18649e414f1"
+            },
+            {
+              "path": "members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r10.json",
+              "sha256": "c3ffe1cd929dab4f575a816a7247b7b39dfa708b1cf4d2fe456017577d3f77a0"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-a1.json",
+              "sha256": "28384358b70f2d45b7cd1874526dbf56231ec4b58380c7a3c9866af24c4ad7ed"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-a2.json",
+              "sha256": "b8ff2cf578b9bff7a9631924d3d4265bd8f8bdeccb2c447432ffe1d3ef711bfc"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-b1.json",
+              "sha256": "1384a2427c0edfce1f4e1c59359c370bc6f8c1da5bf98c476942cb3ed1ba6710"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-b2.json",
+              "sha256": "78478d0a05de7a691ff403b6ba9d7d7d65247027c2d0132a34a6780a4eb6dd03"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-a1.json",
+              "sha256": "44a248e96e8ba336e4fe4e75cc30206b425e63d58c88038d4c9153f1f9d3751c"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-a2.json",
+              "sha256": "c0a219bcc0805c5c6ecc826a2f47d1cfae7c006352e694f296f15b4b952f340d"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-b1.json",
+              "sha256": "af85e677605f0568ee9155125acbbf7ea3f28f1a55c7443d5b2593b83255a7a4"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-b2.json",
+              "sha256": "9c1ebc99f08890774f92a561b062856674d935f1e90061c5e35437125f6977e9"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-a1.json",
+              "sha256": "5c424abc621069b143aeadf3e8bfe44851f139c343a14bce708aa8b68475591d"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-a2.json",
+              "sha256": "6883bbb5e582a688b0211991b449a57c51044cda4f293f9d2ccfe0bf60efa705"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-b1.json",
+              "sha256": "52a5cd3e6ffa6e16e60c5f327499cf72afa69dd7867b0375557b63e52bb89a94"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-b2.json",
+              "sha256": "d88e91786160a03488988b4844713a27c14cc2baffbc8d95a104a128dad8582f"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-a1.json",
+              "sha256": "77dab77f70ed605540bf18aabc01edaccef09acc3083dff3e4af5eea30cca53d"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-a2.json",
+              "sha256": "e06fcb4d769c7e316e0bb9b6d9331082068d6e7ba7b8c7ad1836a2ff5af82190"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-b1.json",
+              "sha256": "b33d6eba487b7a25a7c0f3cb0a94e1226cf28b2926d89f61d4284a06995e1388"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-b2.json",
+              "sha256": "bfcc604865f8e59ebef2975be7de9d52e54e6ccb4dd67e621c4d9c9efb1de02c"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-a1.json",
+              "sha256": "861c2d8ecb1ad300b20ac5c9c2e9b93a903d618ec5adfa1f7759682ce76e871d"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-a2.json",
+              "sha256": "dd39eaddc9a38cffd0b787758fc4c73578a58974b54ff95af7e24e1b134494a6"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-b1.json",
+              "sha256": "5a350ca9f7c0c97b0ba77ce8e205eb3859ec1ab9329e8ce11dd7d1644e74dcf6"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-b2.json",
+              "sha256": "fe5da340393f36980956cce336f6318ee6b81a564779a77393df68887f6f5f31"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-a1.json",
+              "sha256": "d01d3ae0a8e487be642bcc5e8258b7cf0f34061925e6926bf048530fae3e37b7"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-a2.json",
+              "sha256": "b0e42af488a920773a82c12e81eae80c3cf341b585f00a6265f047b97a2f9161"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-b1.json",
+              "sha256": "ddca20bc765432f2c60497728fe223ccb3ffd0019ba973a02d81f5522049d934"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-b2.json",
+              "sha256": "3293018a209f2979a7d65aa82a08c47857e8e24d6d2fa4250ccb9e050597fc72"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-a1.json",
+              "sha256": "07cec86ba23f8fe119758c746ad0bbf225fda17f48829baed5efd86be51f69e2"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-a2.json",
+              "sha256": "58bdeab026a87639c26808b7a27db20424d69e4446a37be673c51dccc65f9948"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-b1.json",
+              "sha256": "df2f387e086c3f7f881b16e750f214399d7d2ee89681673def46d97325af9660"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-b2.json",
+              "sha256": "c2988e2f972ea76878b8c0c7c839d7d89755ad78c5396687af941e236ef041eb"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-a1.json",
+              "sha256": "5addc1532b614493614381d8787605fa40452ba19c5c8c1b9c5a106654233f30"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-a2.json",
+              "sha256": "20f4e1c332ef0d4125c3a46f4b6691c35752ef26ccf4b2456ffbad17efd46bf7"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-b1.json",
+              "sha256": "4a7ee55405fc9da1dd15093d4ef54f5150532d3f8b9a0e10b6b5c81897ce9067"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-b2.json",
+              "sha256": "c3fa3f362774ed4f883b70a5e49310ccfb8002ed1fa17a6578ac10c343e6f88a"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-a1.json",
+              "sha256": "fac1c863872d150d5c7932ba6e1d5a003c516cf487b18c30904439ce2a3d9e96"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-a2.json",
+              "sha256": "b11de8b7bd65ac16e9f0da8fd7331e25e7f1a519f88dadc622cbe108608e35cb"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-b1.json",
+              "sha256": "7d5f65a5189af9ad136ed38191d3e76174062f1728eae4d7da950bb28f4e6440"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-b2.json",
+              "sha256": "3a4db607f9b890aa6fba6304a265f87746d0faf7fdbc5e141486edaa66cb2d6e"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-a1.json",
+              "sha256": "3bca5ad358b594965e48c3e4a79c4d1dc4da011f013bf64ddbc332fb4218ad3d"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-a2.json",
+              "sha256": "268668e469e15165f1415547b607cc7b46c80ccaee1c040c2a4dfc8827856d3c"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-b1.json",
+              "sha256": "ec5d00f2283cdea91273c09d8ed8cd5df055fa6474b813fe0e153b1f22b0403a"
+            },
+            {
+              "path": "members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-b2.json",
+              "sha256": "861be6a8e43b6562d84816c1906e6982b16188df4c9803e51d05fb86bc4c8077"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "llama-70b",
+              "family": "llama-70b",
+              "measurement_arm": "bytes_synthetic_2048_decode_512"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Llama-3.3-70B-Instruct-4bit",
+            "model_revision": "de2dfaf56839b7d0e834157d2401dee02726874d",
+            "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Llama-3.3-70B-Instruct-4bit/snapshots/de2dfaf56839b7d0e834157d2401dee02726874d",
+            "quantization": {
+              "bits": 4,
+              "group_size": 64,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "bytes_synthetic_2048_decode_512",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 2048,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "llama-70b",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s5-p1"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r01.json",
+              "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r02.json",
+              "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r03.json",
+              "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r04.json",
+              "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r05.json",
+              "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r06.json",
+              "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r07.json",
+              "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r08.json",
+              "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r09.json",
+              "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r10.json",
+              "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r11.json",
+              "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r12.json",
+              "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r13.json",
+              "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r14.json",
+              "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r15.json",
+              "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r16.json",
+              "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r17.json",
+              "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa"
+            },
+            {
+              "path": "members/bytes-s5-p1-bound-collection/neg8-refcorpus-r18.json",
+              "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-end/neg8-window-end-r1.json",
+              "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-end/neg8-window-end-r2.json",
+              "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-end/neg8-window-end-r3.json",
+              "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-midpoint/neg8-window-midpoint.json",
+              "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-start/neg8-window-start-r1.json",
+              "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-start/neg8-window-start-r2.json",
+              "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
+            },
+            {
+              "path": "members/bytes-s5-p1-reference-start/neg8-window-start-r3.json",
+              "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "neg8_reference",
+              "family": "neg8_reference",
+              "measurement_arm": "df_rq_mid"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_rq_mid",
+              "output_tokens": 256,
+              "prompt_text": null,
+              "prompt_tokens": 1024,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "neg8_reference",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s5-p1"
+          }
+        }
+      ],
+      "mode": "derive_never_operator_enter",
+      "projection_receipt": null,
+      "required_before_arm": true,
+      "state": "unprojected",
+      "supersedes": [],
+      "work_order": "D117-U11-IDPIN-PROJECTION"
+    },
+    "launch": {
+      "bindings": [
+        {
+          "name": "repo_root",
+          "type": "existing_absolute_directory"
+        },
+        {
+          "name": "ledger_path",
+          "type": "existing_absolute_file"
+        },
+        {
+          "leaf": "runs_bytes-s5-p1",
+          "name": "claim_runs_root",
+          "type": "fresh_absolute_directory"
+        },
+        {
+          "leaf": "runs_bytes-s5-p1_bound",
+          "name": "bound_runs_root",
+          "type": "fresh_absolute_directory"
+        },
+        {
+          "name": "operator_log_root",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "pre_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "post_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "claim_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bound_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bracket_session_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "pre_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "post_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "identity_epoch_json",
+          "type": "authenticated_absolute_file"
+        },
+        {
+          "name": "t1_bindings_json",
+          "type": "authenticated_absolute_file"
+        }
+      ],
+      "derived_path_rules": [
+        "pre_calibration_dir=claim_runs_root/instrument_validation/pre_attempt_id",
+        "post_calibration_dir=claim_runs_root/instrument_validation/post_attempt_id"
+      ],
+      "schema_version": "joulewise.stage_launch_bindings.v1"
+    }
+  },
   "attempt_policy": {
     "authority": "R6; Block-6 catalog unchanged",
     "minimum_kept_units_per_stratum": 5,
@@ -67,25 +532,10 @@
   "downstream_contract": {
     "extraction_spec": {
       "path": "configs/campaigns/bytes-s5-p1/extraction_spec.json",
-      "sha256": "601f8ddc69267bc5f2e7eb5982e223c278225f7892800ff8f71adc66fd0d769e"
+      "sha256": "cc7ff6b00c79d2ddee432b1b6dd744966f3df6217c19602bbd71057afdc08f37"
     }
   },
-  "draft_notes": [
-    "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
-    "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
-    "Lead blinding ruling 2026-10-20 (registration section 11): held-out configuration rows stay out of the analysis export, blinded in a withheld store, until the stage-1 prediction hash is recorded; rows visible before that carry no clock stamps.",
-    "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
-    "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
-    "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
-    "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
-    "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
-    "Model sources include HF cache snapshot directories; C4 identity pins must hash through their symlinks. model.context_window is unused by the runtime; tokenizer and chat-template pins remain C4.",
-    "Qwen3-8B-8bit revision is pending; group_size=64 is assumed and unverified against the eventual checkpoint.",
-    "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
-    "Fixed packs bypass the 265-minute science cap. Sub-pack s4 is planned at 254 minutes, leaving 11 minutes on planning numbers only.",
-    "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints."
-  ],
-  "draft_status": "draft",
+  "draft_status": "registered",
   "external_inputs": {
     "artifacts": [
       {
@@ -106,116 +556,117 @@
         "expected_count": 18,
         "external_input_id": "neg8_bound",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-reference-corpus-order-v2",
-          "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-          "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+          "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/order_manifest.json",
+          "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r01.json",
             "run_id": "neg8-refcorpus-r01",
             "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r02.json",
             "run_id": "neg8-refcorpus-r02",
             "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r03.json",
             "run_id": "neg8-refcorpus-r03",
             "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
           },
           {
             "ordinal": 4,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r04.json",
             "run_id": "neg8-refcorpus-r04",
             "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
           },
           {
             "ordinal": 5,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r05.json",
             "run_id": "neg8-refcorpus-r05",
             "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
           },
           {
             "ordinal": 6,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r06.json",
             "run_id": "neg8-refcorpus-r06",
             "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
           },
           {
             "ordinal": 7,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r07.json",
             "run_id": "neg8-refcorpus-r07",
             "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
           },
           {
             "ordinal": 8,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r08.json",
             "run_id": "neg8-refcorpus-r08",
             "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
           },
           {
             "ordinal": 9,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r09.json",
             "run_id": "neg8-refcorpus-r09",
             "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
           },
           {
             "ordinal": 10,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r10.json",
             "run_id": "neg8-refcorpus-r10",
             "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
           },
           {
             "ordinal": 11,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r11.json",
             "run_id": "neg8-refcorpus-r11",
             "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
           },
           {
             "ordinal": 12,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r12.json",
             "run_id": "neg8-refcorpus-r12",
             "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
           },
           {
             "ordinal": 13,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r13.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r13.json",
             "run_id": "neg8-refcorpus-r13",
             "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e"
           },
           {
             "ordinal": 14,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r14.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r14.json",
             "run_id": "neg8-refcorpus-r14",
             "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b"
           },
           {
             "ordinal": 15,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r15.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r15.json",
             "run_id": "neg8-refcorpus-r15",
             "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd"
           },
           {
             "ordinal": 16,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r16.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r16.json",
             "run_id": "neg8-refcorpus-r16",
             "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e"
           },
           {
             "ordinal": 17,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r17.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r17.json",
             "run_id": "neg8-refcorpus-r17",
             "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa"
           },
           {
             "ordinal": 18,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r18.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/neg8-refcorpus-r18.json",
             "run_id": "neg8-refcorpus-r18",
             "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06"
           }
@@ -225,26 +676,27 @@
         "expected_count": 3,
         "external_input_id": "start_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-start-triplet-v1",
-          "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-          "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+          "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-start/order_manifest.json",
+          "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-start/neg8-window-start-r1.json",
             "run_id": "neg8-window-start-r1",
             "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-start/neg8-window-start-r2.json",
             "run_id": "neg8-window-start-r2",
             "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-start/neg8-window-start-r3.json",
             "run_id": "neg8-window-start-r3",
             "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
           }
@@ -254,14 +706,15 @@
         "expected_count": 1,
         "external_input_id": "midpoint_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-midpoint-v1",
-          "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-          "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+          "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-midpoint/order_manifest.json",
+          "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-midpoint/neg8-window-midpoint.json",
             "run_id": "neg8-window-midpoint",
             "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
           }
@@ -271,26 +724,27 @@
         "expected_count": 3,
         "external_input_id": "end_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-end-triplet-v1",
-          "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-          "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+          "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-end/order_manifest.json",
+          "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-end/neg8-window-end-r1.json",
             "run_id": "neg8-window-end-r1",
             "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-end/neg8-window-end-r2.json",
             "run_id": "neg8-window-end-r2",
             "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
+            "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-end/neg8-window-end-r3.json",
             "run_id": "neg8-window-end-r3",
             "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
           }
@@ -300,14 +754,14 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "697c189e98858e458d6eca8baf02d4b3d6e51ae881a3390d4c0d21f804716ff7"
+    "sha256": "c89d8a5a378152fc7b0615bd8c793cb1b4cc4f32a2affdb6ca3a3fd8e7344f6e"
   },
   "module_order": [
     "bytes-llama-70b"
   ],
   "plan": {
-    "actual_sha256": "4d8f23d2e9edb4400c851ca460515ecb2328adf4f7bed7d850cf7aa3e6c6e78a",
-    "declared_sha256": "4d8f23d2e9edb4400c851ca460515ecb2328adf4f7bed7d850cf7aa3e6c6e78a",
+    "actual_sha256": "d020d254be849ecba256314cfbb4e230a12cc2e1d3a7c9e5b4d2a5e5681c8bf4",
+    "declared_sha256": "d020d254be849ecba256314cfbb4e230a12cc2e1d3a7c9e5b4d2a5e5681c8bf4",
     "path": "collection_plan.json",
     "plan_id": "bytes-s5-p1"
   },
@@ -322,7 +776,7 @@
       "block_id": null,
       "block_index": 1,
       "config": "bytes-llama-70b-abs-r01.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r01.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r01.json",
       "config_sha256": "0e88bd4520e9ddf822074fa2ce6898be4bebcf28eed8d91f5ee0925ac94ae7f6",
       "index": 1,
       "model_tag": "llama-70b-mlx",
@@ -341,7 +795,7 @@
       "block_id": null,
       "block_index": 2,
       "config": "bytes-llama-70b-abs-r02.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r02.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r02.json",
       "config_sha256": "05c00b2e17844694f16d89c2c970268432d0cf6e5948870bf2c530b9d75ccef9",
       "index": 2,
       "model_tag": "llama-70b-mlx",
@@ -360,7 +814,7 @@
       "block_id": null,
       "block_index": 3,
       "config": "bytes-llama-70b-abs-r03.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r03.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r03.json",
       "config_sha256": "f2c3342df32854102d644b6d2e83088cc538ddb3f7561e37c3254292ef9ebd56",
       "index": 3,
       "model_tag": "llama-70b-mlx",
@@ -379,7 +833,7 @@
       "block_id": null,
       "block_index": 4,
       "config": "bytes-llama-70b-abs-r04.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r04.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r04.json",
       "config_sha256": "5907d33d0ddff99694154ffddcac0022a60be16407a7e3922f5f7cf8768369d2",
       "index": 4,
       "model_tag": "llama-70b-mlx",
@@ -398,7 +852,7 @@
       "block_id": null,
       "block_index": 5,
       "config": "bytes-llama-70b-abs-r05.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r05.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r05.json",
       "config_sha256": "1f0cf9aa283d7742d749168b9cd988e7105d2b43478bf64df8315689a5944581",
       "index": 5,
       "model_tag": "llama-70b-mlx",
@@ -417,7 +871,7 @@
       "block_id": null,
       "block_index": 6,
       "config": "bytes-llama-70b-abs-r06.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r06.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r06.json",
       "config_sha256": "3eeff09d348c88ae459d37bb16e0316ae5eda51c5f601ef650b6d664debbb195",
       "index": 6,
       "model_tag": "llama-70b-mlx",
@@ -436,7 +890,7 @@
       "block_id": null,
       "block_index": 7,
       "config": "bytes-llama-70b-abs-r07.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r07.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r07.json",
       "config_sha256": "53e987ac7bc57886767d08c58986d412ef4aa58fda3e97dc2fb0822afc0d311d",
       "index": 7,
       "model_tag": "llama-70b-mlx",
@@ -455,7 +909,7 @@
       "block_id": null,
       "block_index": 8,
       "config": "bytes-llama-70b-abs-r08.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r08.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r08.json",
       "config_sha256": "5cfd0f6c429fda5e35c266f1e94e276f9c504b3685aff1f51cf9396ff2e4ab09",
       "index": 8,
       "model_tag": "llama-70b-mlx",
@@ -474,7 +928,7 @@
       "block_id": null,
       "block_index": 9,
       "config": "bytes-llama-70b-abs-r09.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r09.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r09.json",
       "config_sha256": "6492298cd1b90bbbab40073719b87947f26466ac6db55be0a4ded18649e414f1",
       "index": 9,
       "model_tag": "llama-70b-mlx",
@@ -493,7 +947,7 @@
       "block_id": null,
       "block_index": 10,
       "config": "bytes-llama-70b-abs-r10.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r10.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/bytes-llama-70b-abs-r10.json",
       "config_sha256": "c3ffe1cd929dab4f575a816a7247b7b39dfa708b1cf4d2fe456017577d3f77a0",
       "index": 10,
       "model_tag": "llama-70b-mlx",
@@ -512,7 +966,7 @@
       "block_id": "bytes-llama-70b-null-b01",
       "block_index": 1,
       "config": "bytes-llama-70b-null-b01-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-a1.json",
       "config_sha256": "28384358b70f2d45b7cd1874526dbf56231ec4b58380c7a3c9866af24c4ad7ed",
       "index": 1,
       "model_tag": "llama-70b-mlx",
@@ -531,7 +985,7 @@
       "block_id": "bytes-llama-70b-null-b01",
       "block_index": 1,
       "config": "bytes-llama-70b-null-b01-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-b1.json",
       "config_sha256": "1384a2427c0edfce1f4e1c59359c370bc6f8c1da5bf98c476942cb3ed1ba6710",
       "index": 2,
       "model_tag": "llama-70b-mlx",
@@ -550,7 +1004,7 @@
       "block_id": "bytes-llama-70b-null-b01",
       "block_index": 1,
       "config": "bytes-llama-70b-null-b01-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-b2.json",
       "config_sha256": "78478d0a05de7a691ff403b6ba9d7d7d65247027c2d0132a34a6780a4eb6dd03",
       "index": 3,
       "model_tag": "llama-70b-mlx",
@@ -569,7 +1023,7 @@
       "block_id": "bytes-llama-70b-null-b01",
       "block_index": 1,
       "config": "bytes-llama-70b-null-b01-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b01-a2.json",
       "config_sha256": "b8ff2cf578b9bff7a9631924d3d4265bd8f8bdeccb2c447432ffe1d3ef711bfc",
       "index": 4,
       "model_tag": "llama-70b-mlx",
@@ -588,7 +1042,7 @@
       "block_id": "bytes-llama-70b-null-b02",
       "block_index": 2,
       "config": "bytes-llama-70b-null-b02-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-a1.json",
       "config_sha256": "44a248e96e8ba336e4fe4e75cc30206b425e63d58c88038d4c9153f1f9d3751c",
       "index": 5,
       "model_tag": "llama-70b-mlx",
@@ -607,7 +1061,7 @@
       "block_id": "bytes-llama-70b-null-b02",
       "block_index": 2,
       "config": "bytes-llama-70b-null-b02-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-b1.json",
       "config_sha256": "af85e677605f0568ee9155125acbbf7ea3f28f1a55c7443d5b2593b83255a7a4",
       "index": 6,
       "model_tag": "llama-70b-mlx",
@@ -626,7 +1080,7 @@
       "block_id": "bytes-llama-70b-null-b02",
       "block_index": 2,
       "config": "bytes-llama-70b-null-b02-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-b2.json",
       "config_sha256": "9c1ebc99f08890774f92a561b062856674d935f1e90061c5e35437125f6977e9",
       "index": 7,
       "model_tag": "llama-70b-mlx",
@@ -645,7 +1099,7 @@
       "block_id": "bytes-llama-70b-null-b02",
       "block_index": 2,
       "config": "bytes-llama-70b-null-b02-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b02-a2.json",
       "config_sha256": "c0a219bcc0805c5c6ecc826a2f47d1cfae7c006352e694f296f15b4b952f340d",
       "index": 8,
       "model_tag": "llama-70b-mlx",
@@ -664,7 +1118,7 @@
       "block_id": "bytes-llama-70b-null-b03",
       "block_index": 3,
       "config": "bytes-llama-70b-null-b03-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-a1.json",
       "config_sha256": "5c424abc621069b143aeadf3e8bfe44851f139c343a14bce708aa8b68475591d",
       "index": 9,
       "model_tag": "llama-70b-mlx",
@@ -683,7 +1137,7 @@
       "block_id": "bytes-llama-70b-null-b03",
       "block_index": 3,
       "config": "bytes-llama-70b-null-b03-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-b1.json",
       "config_sha256": "52a5cd3e6ffa6e16e60c5f327499cf72afa69dd7867b0375557b63e52bb89a94",
       "index": 10,
       "model_tag": "llama-70b-mlx",
@@ -702,7 +1156,7 @@
       "block_id": "bytes-llama-70b-null-b03",
       "block_index": 3,
       "config": "bytes-llama-70b-null-b03-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-b2.json",
       "config_sha256": "d88e91786160a03488988b4844713a27c14cc2baffbc8d95a104a128dad8582f",
       "index": 11,
       "model_tag": "llama-70b-mlx",
@@ -721,7 +1175,7 @@
       "block_id": "bytes-llama-70b-null-b03",
       "block_index": 3,
       "config": "bytes-llama-70b-null-b03-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b03-a2.json",
       "config_sha256": "6883bbb5e582a688b0211991b449a57c51044cda4f293f9d2ccfe0bf60efa705",
       "index": 12,
       "model_tag": "llama-70b-mlx",
@@ -740,7 +1194,7 @@
       "block_id": "bytes-llama-70b-null-b04",
       "block_index": 4,
       "config": "bytes-llama-70b-null-b04-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-a1.json",
       "config_sha256": "77dab77f70ed605540bf18aabc01edaccef09acc3083dff3e4af5eea30cca53d",
       "index": 13,
       "model_tag": "llama-70b-mlx",
@@ -759,7 +1213,7 @@
       "block_id": "bytes-llama-70b-null-b04",
       "block_index": 4,
       "config": "bytes-llama-70b-null-b04-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-b1.json",
       "config_sha256": "b33d6eba487b7a25a7c0f3cb0a94e1226cf28b2926d89f61d4284a06995e1388",
       "index": 14,
       "model_tag": "llama-70b-mlx",
@@ -778,7 +1232,7 @@
       "block_id": "bytes-llama-70b-null-b04",
       "block_index": 4,
       "config": "bytes-llama-70b-null-b04-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-b2.json",
       "config_sha256": "bfcc604865f8e59ebef2975be7de9d52e54e6ccb4dd67e621c4d9c9efb1de02c",
       "index": 15,
       "model_tag": "llama-70b-mlx",
@@ -797,7 +1251,7 @@
       "block_id": "bytes-llama-70b-null-b04",
       "block_index": 4,
       "config": "bytes-llama-70b-null-b04-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b04-a2.json",
       "config_sha256": "e06fcb4d769c7e316e0bb9b6d9331082068d6e7ba7b8c7ad1836a2ff5af82190",
       "index": 16,
       "model_tag": "llama-70b-mlx",
@@ -816,7 +1270,7 @@
       "block_id": "bytes-llama-70b-null-b05",
       "block_index": 5,
       "config": "bytes-llama-70b-null-b05-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-a1.json",
       "config_sha256": "861c2d8ecb1ad300b20ac5c9c2e9b93a903d618ec5adfa1f7759682ce76e871d",
       "index": 17,
       "model_tag": "llama-70b-mlx",
@@ -835,7 +1289,7 @@
       "block_id": "bytes-llama-70b-null-b05",
       "block_index": 5,
       "config": "bytes-llama-70b-null-b05-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-b1.json",
       "config_sha256": "5a350ca9f7c0c97b0ba77ce8e205eb3859ec1ab9329e8ce11dd7d1644e74dcf6",
       "index": 18,
       "model_tag": "llama-70b-mlx",
@@ -854,7 +1308,7 @@
       "block_id": "bytes-llama-70b-null-b05",
       "block_index": 5,
       "config": "bytes-llama-70b-null-b05-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-b2.json",
       "config_sha256": "fe5da340393f36980956cce336f6318ee6b81a564779a77393df68887f6f5f31",
       "index": 19,
       "model_tag": "llama-70b-mlx",
@@ -873,7 +1327,7 @@
       "block_id": "bytes-llama-70b-null-b05",
       "block_index": 5,
       "config": "bytes-llama-70b-null-b05-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/bytes-llama-70b-null-b05-a2.json",
       "config_sha256": "dd39eaddc9a38cffd0b787758fc4c73578a58974b54ff95af7e24e1b134494a6",
       "index": 20,
       "model_tag": "llama-70b-mlx",
@@ -892,7 +1346,7 @@
       "block_id": "bytes-llama-70b-null-b06",
       "block_index": 6,
       "config": "bytes-llama-70b-null-b06-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-a1.json",
       "config_sha256": "d01d3ae0a8e487be642bcc5e8258b7cf0f34061925e6926bf048530fae3e37b7",
       "index": 1,
       "model_tag": "llama-70b-mlx",
@@ -911,7 +1365,7 @@
       "block_id": "bytes-llama-70b-null-b06",
       "block_index": 6,
       "config": "bytes-llama-70b-null-b06-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-b1.json",
       "config_sha256": "ddca20bc765432f2c60497728fe223ccb3ffd0019ba973a02d81f5522049d934",
       "index": 2,
       "model_tag": "llama-70b-mlx",
@@ -930,7 +1384,7 @@
       "block_id": "bytes-llama-70b-null-b06",
       "block_index": 6,
       "config": "bytes-llama-70b-null-b06-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-b2.json",
       "config_sha256": "3293018a209f2979a7d65aa82a08c47857e8e24d6d2fa4250ccb9e050597fc72",
       "index": 3,
       "model_tag": "llama-70b-mlx",
@@ -949,7 +1403,7 @@
       "block_id": "bytes-llama-70b-null-b06",
       "block_index": 6,
       "config": "bytes-llama-70b-null-b06-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b06-a2.json",
       "config_sha256": "b0e42af488a920773a82c12e81eae80c3cf341b585f00a6265f047b97a2f9161",
       "index": 4,
       "model_tag": "llama-70b-mlx",
@@ -968,7 +1422,7 @@
       "block_id": "bytes-llama-70b-null-b07",
       "block_index": 7,
       "config": "bytes-llama-70b-null-b07-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-a1.json",
       "config_sha256": "07cec86ba23f8fe119758c746ad0bbf225fda17f48829baed5efd86be51f69e2",
       "index": 5,
       "model_tag": "llama-70b-mlx",
@@ -987,7 +1441,7 @@
       "block_id": "bytes-llama-70b-null-b07",
       "block_index": 7,
       "config": "bytes-llama-70b-null-b07-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-b1.json",
       "config_sha256": "df2f387e086c3f7f881b16e750f214399d7d2ee89681673def46d97325af9660",
       "index": 6,
       "model_tag": "llama-70b-mlx",
@@ -1006,7 +1460,7 @@
       "block_id": "bytes-llama-70b-null-b07",
       "block_index": 7,
       "config": "bytes-llama-70b-null-b07-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-b2.json",
       "config_sha256": "c2988e2f972ea76878b8c0c7c839d7d89755ad78c5396687af941e236ef041eb",
       "index": 7,
       "model_tag": "llama-70b-mlx",
@@ -1025,7 +1479,7 @@
       "block_id": "bytes-llama-70b-null-b07",
       "block_index": 7,
       "config": "bytes-llama-70b-null-b07-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b07-a2.json",
       "config_sha256": "58bdeab026a87639c26808b7a27db20424d69e4446a37be673c51dccc65f9948",
       "index": 8,
       "model_tag": "llama-70b-mlx",
@@ -1044,7 +1498,7 @@
       "block_id": "bytes-llama-70b-null-b08",
       "block_index": 8,
       "config": "bytes-llama-70b-null-b08-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-a1.json",
       "config_sha256": "5addc1532b614493614381d8787605fa40452ba19c5c8c1b9c5a106654233f30",
       "index": 9,
       "model_tag": "llama-70b-mlx",
@@ -1063,7 +1517,7 @@
       "block_id": "bytes-llama-70b-null-b08",
       "block_index": 8,
       "config": "bytes-llama-70b-null-b08-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-b1.json",
       "config_sha256": "4a7ee55405fc9da1dd15093d4ef54f5150532d3f8b9a0e10b6b5c81897ce9067",
       "index": 10,
       "model_tag": "llama-70b-mlx",
@@ -1082,7 +1536,7 @@
       "block_id": "bytes-llama-70b-null-b08",
       "block_index": 8,
       "config": "bytes-llama-70b-null-b08-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-b2.json",
       "config_sha256": "c3fa3f362774ed4f883b70a5e49310ccfb8002ed1fa17a6578ac10c343e6f88a",
       "index": 11,
       "model_tag": "llama-70b-mlx",
@@ -1101,7 +1555,7 @@
       "block_id": "bytes-llama-70b-null-b08",
       "block_index": 8,
       "config": "bytes-llama-70b-null-b08-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b08-a2.json",
       "config_sha256": "20f4e1c332ef0d4125c3a46f4b6691c35752ef26ccf4b2456ffbad17efd46bf7",
       "index": 12,
       "model_tag": "llama-70b-mlx",
@@ -1120,7 +1574,7 @@
       "block_id": "bytes-llama-70b-null-b09",
       "block_index": 9,
       "config": "bytes-llama-70b-null-b09-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-a1.json",
       "config_sha256": "fac1c863872d150d5c7932ba6e1d5a003c516cf487b18c30904439ce2a3d9e96",
       "index": 13,
       "model_tag": "llama-70b-mlx",
@@ -1139,7 +1593,7 @@
       "block_id": "bytes-llama-70b-null-b09",
       "block_index": 9,
       "config": "bytes-llama-70b-null-b09-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-b1.json",
       "config_sha256": "7d5f65a5189af9ad136ed38191d3e76174062f1728eae4d7da950bb28f4e6440",
       "index": 14,
       "model_tag": "llama-70b-mlx",
@@ -1158,7 +1612,7 @@
       "block_id": "bytes-llama-70b-null-b09",
       "block_index": 9,
       "config": "bytes-llama-70b-null-b09-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-b2.json",
       "config_sha256": "3a4db607f9b890aa6fba6304a265f87746d0faf7fdbc5e141486edaa66cb2d6e",
       "index": 15,
       "model_tag": "llama-70b-mlx",
@@ -1177,7 +1631,7 @@
       "block_id": "bytes-llama-70b-null-b09",
       "block_index": 9,
       "config": "bytes-llama-70b-null-b09-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b09-a2.json",
       "config_sha256": "b11de8b7bd65ac16e9f0da8fd7331e25e7f1a519f88dadc622cbe108608e35cb",
       "index": 16,
       "model_tag": "llama-70b-mlx",
@@ -1196,7 +1650,7 @@
       "block_id": "bytes-llama-70b-null-b10",
       "block_index": 10,
       "config": "bytes-llama-70b-null-b10-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-a1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-a1.json",
       "config_sha256": "3bca5ad358b594965e48c3e4a79c4d1dc4da011f013bf64ddbc332fb4218ad3d",
       "index": 17,
       "model_tag": "llama-70b-mlx",
@@ -1215,7 +1669,7 @@
       "block_id": "bytes-llama-70b-null-b10",
       "block_index": 10,
       "config": "bytes-llama-70b-null-b10-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-b1.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-b1.json",
       "config_sha256": "ec5d00f2283cdea91273c09d8ed8cd5df055fa6474b813fe0e153b1f22b0403a",
       "index": 18,
       "model_tag": "llama-70b-mlx",
@@ -1234,7 +1688,7 @@
       "block_id": "bytes-llama-70b-null-b10",
       "block_index": 10,
       "config": "bytes-llama-70b-null-b10-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-b2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-b2.json",
       "config_sha256": "861be6a8e43b6562d84816c1906e6982b16188df4c9803e51d05fb86bc4c8077",
       "index": 19,
       "model_tag": "llama-70b-mlx",
@@ -1253,7 +1707,7 @@
       "block_id": "bytes-llama-70b-null-b10",
       "block_index": 10,
       "config": "bytes-llama-70b-null-b10-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-a2.json",
+      "config_path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/bytes-llama-70b-null-b10-a2.json",
       "config_sha256": "268668e469e15165f1415547b607cc7b46c80ccaee1c040c2a4dfc8827856d3c",
       "index": 20,
       "model_tag": "llama-70b-mlx",
@@ -1514,8 +1968,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-reference-corpus-order-v2",
-        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection/order_manifest.json",
+        "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -1525,7 +1979,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-bound-collection"
                 },
                 {
                   "kind": "literal",
@@ -1675,8 +2129,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-start-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-start/order_manifest.json",
+        "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -1686,7 +2140,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-start"
                 },
                 {
                   "kind": "literal",
@@ -1776,7 +2230,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-llama-70b-01_decode_absolute",
-        "path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/order_manifest.json",
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute/order_manifest.json",
         "sha256": "b09ce2edf45b24b33cafed1da3c6fb73e3557a6ebe743b141521607074d6a16f"
       },
       "kind": "campaign_collection",
@@ -1787,7 +2241,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-absolute"
                 },
                 {
                   "kind": "literal",
@@ -1877,7 +2331,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-llama-70b-02_decode_abba_01_05",
-        "path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/order_manifest.json",
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05/order_manifest.json",
         "sha256": "d00211f77a1d980c1b0beda8a9b419cebe099e7d9c4b8091c71642e4ea827263"
       },
       "kind": "campaign_collection",
@@ -1888,7 +2342,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-01-05"
                 },
                 {
                   "kind": "literal",
@@ -1978,8 +2432,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-midpoint-v1",
-        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-midpoint/order_manifest.json",
+        "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -1989,7 +2443,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-midpoint"
                 },
                 {
                   "kind": "literal",
@@ -2079,7 +2533,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-llama-70b-03_decode_abba_06_10",
-        "path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/order_manifest.json",
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10/order_manifest.json",
         "sha256": "3ec3d1dde2d18cd799fe72dfa0b5ff4ca78196ba765fe9ee85d20df04ab96fd0"
       },
       "kind": "campaign_collection",
@@ -2090,7 +2544,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-llama-70b-quads-06-10"
                 },
                 {
                   "kind": "literal",
@@ -2180,8 +2634,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-end-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+        "path": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-end/order_manifest.json",
+        "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2191,7 +2645,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                  "value": "configs/campaigns/bytes-s5-p1/members/bytes-s5-p1-reference-end"
                 },
                 {
                   "kind": "literal",

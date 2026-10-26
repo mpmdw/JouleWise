@@ -31,7 +31,7 @@ class HazardArmCleanRunTests(unittest.TestCase):
     def test_a_quiet_mac_is_ready_after_180_s_with_the_default_thresholds(self):
         _clocks, _table, ctx = machine()
         thresholds = arm.default_thresholds()["contention"]
-        measurement = contention.run_dwell(ctx, thresholds, tree_roots=[DRIVER])
+        measurement = contention.run_dwell(ctx, thresholds, tree_roots=[DRIVER], host_reader=None)
         verdict = contention.judge(measurement, thresholds)
         self.assertEqual(verdict.status, base.PASS, verdict.reasons)
         self.assertGreaterEqual(measurement.values["clean_run_s"], 180)
@@ -41,7 +41,7 @@ class HazardArmCleanRunTests(unittest.TestCase):
         _clocks, table, ctx = machine()
         table.processes[360].schedule = [(60.0, 90.0, 0.368)]
         thresholds = arm.default_thresholds()["contention"]
-        measurement = contention.run_dwell(ctx, thresholds, tree_roots=[DRIVER])
+        measurement = contention.run_dwell(ctx, thresholds, tree_roots=[DRIVER], host_reader=None)
         self.assertEqual(contention.judge(measurement, thresholds).status, base.PASS)
         intervals = measurement.values["intervals"]
         dirty_end = [item for item in intervals if item["clean"] is False][-1]["interval"]["monotonic_ns"][1]
@@ -51,7 +51,7 @@ class HazardArmCleanRunTests(unittest.TestCase):
         _clocks, table, ctx = machine()
         table.processes[340].cpu_per_s = 0.06
         thresholds = arm.default_thresholds()["contention"]
-        measurement = contention.run_dwell(ctx, thresholds, tree_roots=[DRIVER])
+        measurement = contention.run_dwell(ctx, thresholds, tree_roots=[DRIVER], host_reader=None)
         self.assertEqual(contention.judge(measurement, thresholds).status, base.REFUSE)
         self.assertGreaterEqual(measurement.values["elapsed_s"], 2700)
 

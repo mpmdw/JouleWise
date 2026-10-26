@@ -177,6 +177,8 @@ class SmokeTests(DeskCase):
         claim, state, commit, inputs = self.claim()
         source = claim / plan.DEFAULT_LEDGER_RELATIVE
         original = s._sha256(source)
+        # The witness must come from code_commit, never dirty claim bytes.
+        (claim / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json').write_text('{}')
         with mock.patch('joulewise.b5.plan.ledger_head_status', return_value={'blocking': []}):
             def writer(value):
                 return plan.write_window_plan(value, pack_digest=lambda path: 'e'*64,
@@ -194,6 +196,33 @@ class SmokeTests(DeskCase):
         self.assertIn('CALIBRATION_LEDGER=' + str(target), environment)
         self.assertNotIn(str(source), json.dumps(record))
         self.assertTrue(record['plan_id'].startswith('SMOKE-'))
+        pack = prepared.measurement / 'configs/campaigns' / PACKS['alpha']
+        witness = pack / 'smoke-registered-tree.json'
+        pinned_tree = subprocess.run(['git', '-C', str(claim), 'show',
+            commit + ':configs/campaigns/' + PACKS['alpha'] + '/plan_tree.json'],
+            check=True, capture_output=True).stdout
+        self.assertEqual(witness.read_bytes(), pinned_tree)
+        reduced = json.loads((pack / 'plan_tree.json').read_bytes())
+        self.assertEqual(s.reduce_tree(json.loads(pinned_tree), prepared.keep), reduced)
+        self.assertEqual(s._git(prepared.measurement, 'status', '--porcelain', '--',
+                               str(witness.relative_to(prepared.measurement))), '')
+        # Harvest archives the entire pack at this exact path. Exercise the
+        # exporter's lookup on a copy of the actual prepare output.
+        import shutil
+        from joulewise.b6 import export_runs
+        from tests.b6.test_export_runs import seal_reference_inputs
+        archive = self.root / 'witness-archive'
+        archived_pack = archive / 'sources/repo/configs/campaigns' / PACKS['alpha']
+        shutil.copytree(pack, archived_pack)
+        seal_reference_inputs(archive)
+        reader = export_runs._ReferenceInputs(archive)
+        _, roles = export_runs._stage_roles(json.loads(pinned_tree))
+        rows = reader.check_membership({}, {}, {}, PACKS['alpha'], frozenset(roles))
+        self.assertIsNone(reader.unwitnessed_removed_stages)
+        self.assertTrue(rows)
+        self.assertTrue(all(row['status'] == 'uncollected' for row in rows))
+        removed_stages = set(reduced['smoke_reduction']['removed'])
+        self.assertTrue(any(row['stage_id'] in removed_stages for row in rows))
         self.assertEqual(record['hazard_window']['settle_s'], chain.SETTLE_S)
         self.assertEqual(s._git(prepared.measurement, 'remote'), '')
         self.assertEqual(s.driver_argv(prepared)[2:4], ['run', '--plan'])
@@ -239,7 +268,14 @@ class SmokeTests(DeskCase):
     def test_prepare_authenticates_production_tree_and_controller_pre_slot(self):
         from joulewise import arm_readiness, controller
         prepared = self.production_prepared()
-        self.assertTrue((prepared.measurement / '.venv/bin/python3.13').exists())
+        site, = (prepared.measurement / '.venv/lib').glob('python*/site-packages')
+        self.assertTrue((prepared.measurement / '.venv/bin' / site.parent.name).is_file())
+        # Operational startup bound: the same 5 s scheduling floor used by
+        # the partial-reader probe, with no sampler or workload involved.
+        interpreter = subprocess.run([str(prepared.measurement / '.venv/bin/python'),
+            '-c', 'import sys; print(sys.prefix)'], capture_output=True, text=True, timeout=5)
+        self.assertEqual(interpreter.returncode, 0, interpreter.stderr)
+        self.assertEqual(Path(interpreter.stdout.strip()), prepared.measurement / '.venv')
         pack = prepared.measurement / 'configs/campaigns' / PACKS['alpha']
         reduced, raw = arm_readiness._plan_tree(pack)
         self.assertEqual(sum(r['expected_count'] for r in reduced['stage_graph']

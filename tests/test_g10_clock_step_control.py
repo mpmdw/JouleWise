@@ -953,7 +953,7 @@ def test_main_decides_with_the_clock_module_verdict(tmp_path, monkeypatch):
     assert flat["result"] == g10.NOT_DISCHARGED
 
 
-def test_clock_module_verdict_is_read_on_the_number_not_the_reason_text():
+def test_clock_diagnostic_uses_pair_residual_independently_of_fitted_line():
     params = g10.Params()
     before, after = _pair(10, 0)
 
@@ -963,11 +963,14 @@ def test_clock_module_verdict_is_read_on_the_number_not_the_reason_text():
             before, after, probe(0), probe(0), params)
         return g10.result_from_verdict(verdict)
 
-    assert decide("REFUSE", ["anything at all"], 1_300_000_000.0) == g10.DISCHARGED
-    assert decide("REFUSE", ["frequency word changed"], 500_000.0) == g10.NOT_DISCHARGED
-    assert decide("REFUSE", [g10.REASON_RESIDUAL], 1_000_000.0) == g10.NOT_DISCHARGED
-    assert decide("PASS", [], 0.0) == g10.NOT_DISCHARGED
-    assert decide("UNMEASURED", ["no f"], None) == g10.RESULT_UNMEASURED
+    # A two-point fit can absorb the entire step. The diagnostic computes
+    # its frequency-word residual independently of those fitted residuals.
+    assert decide("REFUSE", ["anything at all"], 1_300_000_000.0) == g10.NOT_DISCHARGED
+    assert decide("REFUSE", [g10.REASON_RESIDUAL], 0.0) == g10.NOT_DISCHARGED
+    before, after = _pair(60, 0, step_ns=10_000_000)
+    assert decide("PASS", [], 0.0) == g10.DISCHARGED
+    before, after = _pair(4000, 0, step_ns=10_000_000)
+    assert decide("PASS", [], 0.0) == g10.DISCHARGED
 
 
 def test_main_without_the_hazard_package_falls_back_and_says_so(tmp_path, monkeypatch):

@@ -7,6 +7,26 @@ from tests.b6.support import IDENTITY, ROOT
 
 
 class ModelFileTests(unittest.TestCase):
+    def test_sampler_comparison_projects_each_registered_setting(self):
+        settings = {"temperature": 0.0, "top_p": 1.0, "top_k": 0, "kind": "greedy"}
+        policy = {"sampler": settings, "output_policy": {"name": "fixed"}}
+        self.pins["units"]["one"]["stack_identity"]["sampler_output_policy"] = policy
+        expected = model_files.expected(self.pins)
+        observed = {**IDENTITY, "sampler_output_policy": copy.deepcopy(policy)}
+        observed["sampler_output_policy"]["sampler"]["provenance_note"] = "new adapter detail"
+        self.assertEqual(model_files.compare(expected, model_files.run_identity(observed)), [])
+        for key, value in (("temperature", 0.7), ("top_p", 0.9), ("top_k", 20), ("kind", "top_p")):
+            with self.subTest(key=key):
+                changed = copy.deepcopy(observed)
+                changed["sampler_output_policy"]["sampler"][key] = value
+                self.assertEqual(model_files.compare(expected, model_files.run_identity(changed)),
+                                 [{"code": "model.stack_differs_from_registered", "fields": ["sampler_output_policy"]}])
+        for value in ([], "garbled", None):
+            changed = copy.deepcopy(observed)
+            changed["sampler_output_policy"]["sampler"] = value
+            self.assertEqual(model_files.compare(expected, changed),
+                             [{"code": "model.stack_differs_from_registered", "fields": ["sampler_output_policy"]}])
+
     def test_malformed_runtime_record_is_unrecorded_identity(self):
         for value in ({'adapters': []}, {'environment': {'python_packages': []}},
                       {'adapters': {'runtime': {'prepare_metadata': ['bad']}}}):
@@ -44,6 +64,33 @@ class ModelFileTests(unittest.TestCase):
     def test_missing_identity_only_discloses(self):
         self.assertEqual(model_files.compare(self.expected, {"status": "missing"}),
                          [{"code": "model.identity_unrecorded", "fields": []}])
+
+    def test_registered_policy_os_hardware_and_telemetry_compare_from_metadata(self):
+        stack = self.pins["units"]["one"]["stack_identity"]
+        policy = {"sampler": {"temperature": 0.0}, "output_policy": {
+            "name": "fixed_budget_exact", "requested_tokens": 512, "stop_condition": "requested_tokens_emitted"}}
+        stack.update(sampler_output_policy=policy, os_version="registered-os",
+                     hardware_unit={"device": "registered-device", "machine": "arm64"}, telemetry_backend="meter")
+        metadata = {"model_artifact_sha256": IDENTITY["model_artifact_sha256"], **IDENTITY,
+                    "sampler_output_policy": copy.deepcopy(policy), "os_version": "registered-os",
+                    "hardware_unit": {"device": "registered-device", "machine": "arm64"}, "telemetry_backend": "meter"}
+        expected = model_files.expected(self.pins)
+        self.assertEqual(model_files.compare(expected, model_files.run_identity(metadata)), [])
+        for field, value in (("sampler_output_policy", {"sampler": {"temperature": 0.7}}),
+                             ("os_version", "changed"), ("hardware_unit", {"machine": "other"}),
+                             ("telemetry_backend", "changed")):
+            with self.subTest(field=field):
+                self.assertEqual(model_files.compare(expected, model_files.run_identity({**metadata, field: value}))[0]["code"],
+                                 "model.stack_differs_from_registered")
+        raw = {"quantization": IDENTITY["quantization"], "adapters": {"runtime": {
+            "name": "mlx", "prepare_metadata": {"model_source": IDENTITY["model_source"],
+            "model_artifact_identity": {"status": "ok", "folded_sha256": IDENTITY["model_artifact_sha256"]}}},
+            "telemetry": {"name": "meter"}}, "platform": "registered-os", "machine": "arm64",
+            "device": {"device": "registered-device"}, "workload_provenance": policy}
+        observed = model_files.run_identity(raw)
+        for field in ("sampler_output_policy", "os_version", "hardware_unit", "telemetry_backend"):
+            self.assertEqual(observed[field], metadata[field])
+        self.assertEqual(model_files.compare(expected, observed), [])
 
     def test_actual_prepare_metadata_shape(self):
         metadata = {"quantization": IDENTITY["quantization"], "adapters": {"runtime": {
@@ -118,7 +165,7 @@ class ModelFileTests(unittest.TestCase):
         metadata["environment"]["python_packages"]["tokenizers"] = {"present": False, "version": None}
         self.assertEqual(model_files.compare(expected, model_files.run_identity(metadata)), [])
 
-    def test_os_sampler_output_policy_not_compared(self):
+    def test_unregistered_stack_fields_do_not_invent_differences(self):
         self.assertEqual(model_files.compare(self.expected, {**IDENTITY, "platform": "other", "sampler": "other",
                                                              "output_policy": "other"}), [])
 

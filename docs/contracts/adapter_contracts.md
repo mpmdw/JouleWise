@@ -37,6 +37,25 @@ Rules:
   paths directly (2026-07-06 status review P3).
 - Adapters must ignore context fields they do not need.
 
+### Durable custody receipts
+
+A raw artifact is written to a temporary file, which is flushed and synced
+before it is renamed into place; then the raw directory is synced, so the
+new name survives a crash as well as the bytes. `acknowledge_durable_custody`
+syncs every named evidence file, writes and syncs its receipt under a
+temporary name, renames it, and syncs each directory from the evidence and
+the receipt up to the bundle's parent, children before parents. On macOS,
+where `fsync` does not flush the drive's cache, it then issues one
+`F_FULLFSYNC` on the receipt (about 5 ms); on other platforms the file and
+directory `fsync` calls are the barrier. On the powermetrics path this occurs
+after sampling has stopped. The vLLM runtime writes its raw artifacts and
+receipt inside the window on the controller host, as before; energy on that
+path comes from `nvidia_smi` on the GPU node. A CUDA host is not Darwin, so
+it does not issue `F_FULLFSYNC`. Any failed sync raises, so no receipt
+authorizes cleanup and the native or remote capture stays available for
+salvage. (Audit F14, 2026-10-22. The
+capture-time digests of gate G6 are a separate proposal.)
+
 ## Measured-Window Markers (D-026, Slice 2N.2)
 
 The controller emits `sampling_started` (stamped only after

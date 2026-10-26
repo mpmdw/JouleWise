@@ -34,7 +34,8 @@ def setUpModule():
     global _temporary, _old_tempdir, _old_env
     _old_tempdir = tempfile.tempdir
     _old_env = {k: os.environ.get(k) for k in ('TMPDIR', 'JW_B5_SYNTHETIC_ONLY')}
-    _temporary = tempfile.TemporaryDirectory(prefix='bytes-h-module-', dir='/private/tmp' if Path('/private/tmp').exists() else None)
+    # Keep the module's isolated tree under the caller's TMPDIR safety root.
+    _temporary = tempfile.TemporaryDirectory(prefix='bytes-h-module-')
     os.environ.update(TMPDIR=_temporary.name, JW_B5_SYNTHETIC_ONLY='1')
     tempfile.tempdir = _temporary.name
 

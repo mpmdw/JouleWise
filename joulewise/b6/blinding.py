@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import secrets
 import time
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -20,16 +22,84 @@ def _draw(bounds: tuple[float, float]) -> float:
     return secrets.SystemRandom().uniform(*bounds)
 
 
+def _bound_key_digest(directory: Path, name: str) -> str | None:
+    digests = set()
+    for sidecar in sorted((directory.parent / "blinding-sessions").glob("*.json")):
+        try:
+            digest = json.loads(sidecar.read_bytes())["key_sha256"].get(name)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ValueError(f"blinding session binding unreadable: {sidecar}") from exc
+        if digest:
+            digests.add(digest)
+    if len(digests) > 1:
+        raise ValueError(f"blinding key has conflicting session bindings: {directory / name}")
+    return next(iter(digests), None)
+
+
+def bind_session_keys(directory: Path, session_id: str, names: set[str]) -> dict[str, str]:
+    """Persist key-byte bindings before publishing a session sidecar."""
+    if Path(session_id).name != session_id or session_id in (".", ".."):
+        raise ValueError("blinding session identity must be one path component")
+    digests = {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
+               for name in sorted(names)}
+    target = directory.parent / "blinding-sessions" / (session_id + ".json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Serialize read/merge/publish, while readers see only complete JSON files.
+    with target.with_suffix(".lock").open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            previous = json.loads(target.read_bytes())
+            if previous["session_id"] != session_id or not isinstance(previous["key_sha256"], dict):
+                raise ValueError("invalid session binding")
+            stored = previous["key_sha256"]
+        except FileNotFoundError:
+            stored = None
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ValueError(f"blinding session binding unreadable: {target}: {exc}") from exc
+        if stored is not None:
+            if any(name in stored and stored[name] != digest for name, digest in digests.items()):
+                raise ValueError(f"blinding session key bytes changed: {target}")
+            digests = {**stored, **digests}
+            if digests == stored:
+                return digests
+        document = {"session_id": session_id, "key_sha256": digests}
+        fd, temporary = tempfile.mkstemp(prefix="." + target.name + ".", dir=target.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(document, stream, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            if stored is None:
+                # An exclusive atomic publication, equivalent to O_EXCL.
+                os.link(temporary, target)
+            else:
+                os.replace(temporary, target)
+            directory_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+    return digests
+
+
 def _stored_or_draw(directory: Path, name: str, bounds: tuple[float, float],
                     identity: Mapping, session_id: str | None) -> float:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
     deadline = time.monotonic() + DECODE_RETRY_TIMEOUT_S
     while True:
+        bound = _bound_key_digest(directory, name)
         try:
-            return json.loads(path.read_text(encoding="utf-8"))["factor"]
+            raw = path.read_bytes()
+            if bound is not None and hashlib.sha256(raw).hexdigest() != bound:
+                raise ValueError(f"blinding key differs from session binding: {path}")
+            return json.loads(raw)["factor"]
         except FileNotFoundError:
-            pass
+            if bound is not None:
+                raise ValueError(f"blinding key missing after session export: {path}") from None
         except json.JSONDecodeError:
             # An exclusive creator has opened the file and is still writing.
             if time.monotonic() >= deadline:
@@ -41,15 +111,26 @@ def _stored_or_draw(directory: Path, name: str, bounds: tuple[float, float],
                     "distribution": {"name": "uniform", "low": bounds[0], "high": bounds[1]},
                     "drawn_utc": datetime.now(timezone.utc).isoformat(),
                     "drawn_by_session": session_id}
+        fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", dir=directory)
         try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            continue
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(document, stream, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(document, stream, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                # Publish complete bytes exclusively; a losing creator reads
+                # the winner on the next iteration instead of replacing it.
+                os.link(temporary, path)
+            except FileExistsError:
+                continue
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
         return value
 
 

@@ -27,7 +27,715 @@
     "selection": "issued_d116_artifact_only",
     "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
   },
-  "arm_attachments": {},
+  "arm_attachments": {
+    "identity_pin_projection": {
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r01.json",
+              "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r02.json",
+              "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r03.json",
+              "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r04.json",
+              "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r05.json",
+              "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r06.json",
+              "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r07.json",
+              "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r08.json",
+              "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r09.json",
+              "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r10.json",
+              "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r11.json",
+              "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r12.json",
+              "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r13.json",
+              "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r14.json",
+              "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r15.json",
+              "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r16.json",
+              "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r17.json",
+              "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa"
+            },
+            {
+              "path": "members/bytes-s4-p1-bound-collection/neg8-refcorpus-r18.json",
+              "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-end/neg8-window-end-r1.json",
+              "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-end/neg8-window-end-r2.json",
+              "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-end/neg8-window-end-r3.json",
+              "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-midpoint/neg8-window-midpoint.json",
+              "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-start/neg8-window-start-r1.json",
+              "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-start/neg8-window-start-r2.json",
+              "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
+            },
+            {
+              "path": "members/bytes-s4-p1-reference-start/neg8-window-start-r3.json",
+              "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "neg8_reference",
+              "family": "neg8_reference",
+              "measurement_arm": "df_rq_mid"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_rq_mid",
+              "output_tokens": 256,
+              "prompt_text": null,
+              "prompt_tokens": 1024,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "neg8_reference",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s4-p1"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r01.json",
+              "sha256": "4aafc94b88fca220ff82e28efffa768fa675c219b0d9ff13130924776410d52e"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r02.json",
+              "sha256": "ef04eaca90b0e205300bd69f3c5510dc9113f781389731dc3cbc9a7ac93d4a5f"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r03.json",
+              "sha256": "a7bb40b0bd4a780d926119bcc421a1c49fb68675c710541873f8e4c18d35b95b"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r04.json",
+              "sha256": "3b1ff82f9de66c1d022b88671ed05b34251bc4eff3b8ce967b0849ba276d6bff"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r05.json",
+              "sha256": "a386d4acda6cd68499302c87a1d2e751330a889d5a0890b44e25dd444c40b67d"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r06.json",
+              "sha256": "baca91160906f402f2edb923582ebfcca4c9d58f39aa7bb2147a4a9f1f269bf6"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r07.json",
+              "sha256": "16b9e6cf9f4ed839cc6635aaeba8ca041ccee27977dfd377cee39f7637ab7197"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r08.json",
+              "sha256": "31e9718e8e28cf839e08b8d7ac0306fae37b04a24e0c322bf2cdc5fb93466d44"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r09.json",
+              "sha256": "a55b3efa1a287bad07f1d2a729a1a9bc29acc6acf6918f252103165124c4da43"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r10.json",
+              "sha256": "79891825d8348de3add5636148f22ecd48168d759c4e294f70e6e979bdb0905c"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-a1.json",
+              "sha256": "083f2324da1922994b656626b30beb6fe6377209e049cf495074da103fc3a120"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-a2.json",
+              "sha256": "59af701d83dd8edb2d0a08269d7cc37d45bbb514e7148321bd92e082a758289b"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-b1.json",
+              "sha256": "6b9f537a13541b6812f4ca9240445f5b450c75b294d6893b048d0b6295c4eebb"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-b2.json",
+              "sha256": "2c70b717b969e40187b3aaa6222fb0724f56b3f48cdbba159647154a3fdea557"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-a1.json",
+              "sha256": "d4686e3a02db53ca5fce9363cd9445a7fa1595be2baa1bf7eaec958659465eb8"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-a2.json",
+              "sha256": "5ff18da37dd3a208f124c9714d8c2bf5607d0b629dbea830829de41d79e06b62"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-b1.json",
+              "sha256": "35a5c3062f8c723146d55a760f59720f03a555cbd936cc180737874dca8b15fa"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-b2.json",
+              "sha256": "b77381563dfd2f25f8a9014fca5bab187ebd0cc619682a8322258c53a1dd8d45"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-a1.json",
+              "sha256": "085d4550c2f56b6818126934b2745a1f972f4b4da39c692a5af71c9b094245d2"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-a2.json",
+              "sha256": "11c61f57f39382d5aa42a1150898f18907728dcb47f6262104972cac78a8cd31"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-b1.json",
+              "sha256": "76182868824f8b177e65b2ef741f8ae84c9eb0133359b6fee6e7636a7c68c100"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-b2.json",
+              "sha256": "902be55b33fc73e50a7c71b098ea071be28b90eb4fdf4c752115a6adfdcbbd19"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-a1.json",
+              "sha256": "3ab12eb3b8d4c2ad92f6d580724478423456bdd90da1ade7be2db3dc04b4a9fc"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-a2.json",
+              "sha256": "cb4d9fdafa1b1824872a595ab3e03bedefc2b6eec4354d199478d73d7f7da117"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-b1.json",
+              "sha256": "e47c1b85d5e36cfec26703f7dde3046fac72d08425637d73cea21bca112a3aba"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-b2.json",
+              "sha256": "91341aeb47c2f42fe556feb2effc68070085e9627d69d821e51851dfe99b38ce"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-a1.json",
+              "sha256": "fa0069defb9a14e3e7ad2b0fa6199bf4852c1935045a67f7d667951004d55d05"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-a2.json",
+              "sha256": "f3b30260a50f836bc3f1a46f8b23a521861027f41cf256729de809fc139455b2"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-b1.json",
+              "sha256": "bf715e73989358cdc1882b07829a2777eed09ee907f6285480f2d521aaa69680"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-b2.json",
+              "sha256": "b1897253897ca1615636aef2a1b977c65d61f1e9fc6622536240a96aee8d948c"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-a1.json",
+              "sha256": "3fd66526cb24716fec0eab039b1880f47d5332ba7f3ae3db491d65402d2da0f1"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-a2.json",
+              "sha256": "f862d8123d939d7ff0a15c91d10396442f6530d3f712935712618d32da30b4e1"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-b1.json",
+              "sha256": "df6d7a04ea5244c843027387dff80969a7bb4df5a01dca4c0244e28940c5a8f6"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-b2.json",
+              "sha256": "4f931df92fbad88c764a30e19c3d12c0c45ac7cbdf4d83a6d13ef33ca2cc4cbf"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-a1.json",
+              "sha256": "c31280f25ae607d9587c59f95f05bd21bfcd9f806b6503e61e6909be3415d5db"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-a2.json",
+              "sha256": "729e4d279e00748b3e3c5645d978f8badd5b60f4770d58657f8b7a9dd9a8e1b9"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-b1.json",
+              "sha256": "70ab5d64081a7b4cedd055014e49e5a7e09b4e4bf218a343d8e4250524493f12"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-b2.json",
+              "sha256": "c06b602f6c3faaefb622acb5f1fffbf017004f507ba55f1d48141d8f6b2b8b6d"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-a1.json",
+              "sha256": "38200c12001548a2dd784d8e9cb0eddf86e8c443da059ce1f2dfb4151fae145f"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-a2.json",
+              "sha256": "682c7510551b7b6c98075f2f757d354394d2267f8d5ad426fe60501eeaf92ea2"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-b1.json",
+              "sha256": "3fbafa39a13ce0ca1c157e686790e39f1e7b1ad9a95b2dca60bce363ba630fb8"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-b2.json",
+              "sha256": "73abeca112e341a0bdc176f3f533eb7b4b3528400c31968de6f11041789a25c2"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-a1.json",
+              "sha256": "c8f545dc981fa9906195b8a7a872c0d7d0b073c3be0cd8504536d7506e03836a"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-a2.json",
+              "sha256": "b9b01028e545fe925cdc1a07be71432e1046f6755d021f50e38d17e619cc2287"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-b1.json",
+              "sha256": "3809c39979a1d9db0a2782772176e448b30dbedaabc6a34dfb681514dc196dda"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-b2.json",
+              "sha256": "202f270ad295dc652d4ffd1a25706c79518f2994ac8f23c78e8084fc7e13d890"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-a1.json",
+              "sha256": "44893da7cd1e9a2061dca0bf205994d99a8b9fd0c8c704ed5829eabf6c85cfbe"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-a2.json",
+              "sha256": "264406562982906b9f0020aaa503a53a9f1b2ae9eef52ac056324fb294ce0a5e"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-b1.json",
+              "sha256": "253379060a96bd9cadd22bff039396c0324f44aa512934e302f6f707579ec2a5"
+            },
+            {
+              "path": "members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-b2.json",
+              "sha256": "e580c86a3fc3d7e44ee1a3ef382fb0ab6096bb5dc8bf5218c44e1dfa16439a7f"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "qwen3-32b",
+              "family": "qwen3-32b",
+              "measurement_arm": "bytes_synthetic_2048_decode_512"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen3-32B-4bit",
+            "model_revision": "bcaaf7f538adf166c1080a2befdb4f6019f66639",
+            "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-32B-4bit/snapshots/bcaaf7f538adf166c1080a2befdb4f6019f66639",
+            "quantization": {
+              "bits": 4,
+              "group_size": 64,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "bytes_synthetic_2048_decode_512",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 2048,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "qwen3-32b",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s4-p1"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r01.json",
+              "sha256": "16b9a9bf88bbf2c8cfd2f25865cbfbb0a155026c1ce09089df2771c1ca605a27"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r02.json",
+              "sha256": "a4d5eaa0628337bfbb025ee88c6b4a9f4bf8041136f89a7bcdad506b208fe909"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r03.json",
+              "sha256": "fdbfa215031bcc44420ed304d33be91eb98afe752fc264c88ecd2b3b6be27155"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r04.json",
+              "sha256": "45bb9bf9ca32e82586b59bb8d68bb31667372d5f9bb093d1360144f42fab4913"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r05.json",
+              "sha256": "db64459015552b6ed5659969271a37d973cbc986a8443116bdc90f3f0bc65932"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r06.json",
+              "sha256": "7fcfe62141e4a696c5ca6fed0276d9b67160e8e3752df745d727fd4f259cda7d"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r07.json",
+              "sha256": "6d9a4fcb43f97d38fe83ca35c2fcd9dc6b3959b2135f2276c0f694ecb97e6381"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r08.json",
+              "sha256": "9382de298e2f4d8865119c7c60b189b19fafee52495d91f872363e99e9f8ac80"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r09.json",
+              "sha256": "beac51ac71d9fc692258f287c08e1e0fb17abd621363186a7726ff9c70fa0cfa"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r10.json",
+              "sha256": "d173c68ff4c75d2026ba1c4c661a6c321176b013323afd158673951da734906f"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-a1.json",
+              "sha256": "27c1923222404316ab86af84d01eb2c10de4082cf5f55a81799cde4a2968027d"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-a2.json",
+              "sha256": "0f3c079ab30d7a3be3f7abe81965de5d1e316b19a57df6be2528bae8c8c42b19"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-b1.json",
+              "sha256": "3e21df0754c55a09bc61c2da0751805717d65c18ca22c454d4fd296011f7eda3"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-b2.json",
+              "sha256": "91f1aefcc1024489d2cf069b5e3b5a7f96fc51e683cd9e69dac4e960e6dc6ada"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-a1.json",
+              "sha256": "667197d51b4a586c3af82b119536d3b0949d1b63124922a9d8f7be99a9b0e444"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-a2.json",
+              "sha256": "56d970d59959bda6f62e1291e785e06af9d835c8bd4985fcd172ea38b9309813"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-b1.json",
+              "sha256": "9c6e58a37cba7a7c971ce742ed4b4729ecff2c8d4eb657c9872dccd62869963b"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-b2.json",
+              "sha256": "175362aea96fe46d841a6586d51183ca6df9dc419065fe9cfca4a86c4a152890"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-a1.json",
+              "sha256": "385278baac7c1edc918339e61e8a648a5b40588206e70ee33be82eb866543538"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-a2.json",
+              "sha256": "9322536d0a32337fce782850913d36e144cf7b9c27606f1c7bf53f9550424867"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-b1.json",
+              "sha256": "abc4dc6198cc035042b541b0583817c1fbd36742feecf2757257e491aba49012"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-b2.json",
+              "sha256": "c4307873c5f3cf1918ef6cfe1efc12a612f6d761edf65bc9f2f546629f1abe4f"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-a1.json",
+              "sha256": "60fbc7e022453790b5d531b65e414518fef817b7502018455755ee7a546962f3"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-a2.json",
+              "sha256": "b3859d6161a01530481cd9178b062fc64a9df86874838083fb2e98310e2b37d3"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-b1.json",
+              "sha256": "96c0b93a59508cbd16bbe1900e61222dd101d250559257591dd5cfff082dbd4a"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-b2.json",
+              "sha256": "3efcc37ded3251e1817d00ee92821dbbc81e537999632670ca334363af1e7aa3"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-a1.json",
+              "sha256": "002b6d1b646ca67f71d1c3f13cd54633fb71b2924cb96a5055d50af419e95371"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-a2.json",
+              "sha256": "c9e75ce87c90cf664df9dc9bea21a03f41e4f21e51cf177fd5ead958fa64234a"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-b1.json",
+              "sha256": "dbb2064840724f6f39deb19e096ccbf379622ceebe905d9e721215fd709d6f34"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-b2.json",
+              "sha256": "5b98314258703c5587b287b1cb70e2f82c12e940f3769eb721b3271f13f3f9e9"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-a1.json",
+              "sha256": "f6244ac4c4b4db910ce5fc71ebe92d538aaaf81af107caaa904a0f2eb27fa826"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-a2.json",
+              "sha256": "f7445252f52be028895333dae4fb6a41075a14ed92ee30b36b38306eed735e38"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-b1.json",
+              "sha256": "64d2bb42d278988b1a87dcd4122e76dcc96d0dc481daf408c37e629012dd243f"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-b2.json",
+              "sha256": "5834ed2ab7f29a469ea8713107980c3581dd5576c91753a4eeafc4ee429a3b51"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-a1.json",
+              "sha256": "3ebbc452bdc6de22cb6b9bca245a50a3fb06e6a6664fe2da203ddf3ee5f6f737"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-a2.json",
+              "sha256": "ac0a91c80a88127f933f4638013d410be7f63a962ac7dbb174fec4d58eff9177"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-b1.json",
+              "sha256": "15eb03245e384b247f251574406cb588b116a5a8a389efbd977fa4b7d639fb2d"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-b2.json",
+              "sha256": "33f4818e8e0a1773cfcc2bd07acd50d9651b234093f060998bb77d77cff12e65"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-a1.json",
+              "sha256": "a8a08bdea521adec61c40eb556f1238b5ac8715765c5792ee6893569883aa525"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-a2.json",
+              "sha256": "b2b6b4b7e5bdf63ae86ccb72fd5b19e3fbdb72b253dbe99a2ab74b39bcc1d469"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-b1.json",
+              "sha256": "ab66d66d6dc34fe5b841344b49349f17c46b8a6bea863f299c1274830c4f93fa"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-b2.json",
+              "sha256": "fa3a4b7e6e67b5478c996d434d8c984af8ba23d386bfdb4cb4f690f5df548115"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-a1.json",
+              "sha256": "f2106c6ccd3708964c17599f7d181239ef75f9225047b50f11029309e24930f7"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-a2.json",
+              "sha256": "e616e8abfe022a445d0b995c4dc4fa374442e28361783ab94f32e5985d74e480"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-b1.json",
+              "sha256": "1b42dca040c629dd7f6ec1f30d7c420c49feec2ac5aa713c7184b3c79afd2dbd"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-b2.json",
+              "sha256": "d5d33be96627566f9d511a41e08be08c5b31e9667ede2cc4fd06774495a3770f"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-a1.json",
+              "sha256": "61c10fd5ca9563116985e2469db4b0cbca4405b3f4e558b81592a818872b1c8c"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-a2.json",
+              "sha256": "8ecd8dad7e1637dd2d75ab8e27d6df9fe3559e8f9737ea3a203a84365a8b4548"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-b1.json",
+              "sha256": "21ab75dbfc33621f0171335bd3ba33a60864b0c5602d225112eb23ae50b6aaa1"
+            },
+            {
+              "path": "members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-b2.json",
+              "sha256": "644b5c379e219159b792d88b4db1edc1624caea636ce500e4cf67c60780ec0ca"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "qwen3-8b-8bit",
+              "family": "qwen3-8b-8bit",
+              "measurement_arm": "bytes_synthetic_2048_decode_512"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen3-8B-8bit",
+            "model_revision": "48a0b75b1ae72503e21e1558d040bc227510ff06",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-8bit",
+            "quantization": {
+              "bits": 8,
+              "group_size": 64,
+              "name": "int8"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "bytes_synthetic_2048_decode_512",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 2048,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "qwen3-8b-8bit",
+          "model_runtime_config": {
+            "config_set_sha256": null,
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null
+          },
+          "producer_plan_reference": {
+            "path": "collection_plan.json",
+            "plan_id": "bytes-s4-p1"
+          }
+        }
+      ],
+      "mode": "derive_never_operator_enter",
+      "projection_receipt": null,
+      "required_before_arm": true,
+      "state": "unprojected",
+      "supersedes": [],
+      "work_order": "D117-U11-IDPIN-PROJECTION"
+    },
+    "launch": {
+      "bindings": [
+        {
+          "name": "repo_root",
+          "type": "existing_absolute_directory"
+        },
+        {
+          "name": "ledger_path",
+          "type": "existing_absolute_file"
+        },
+        {
+          "leaf": "runs_bytes-s4-p1",
+          "name": "claim_runs_root",
+          "type": "fresh_absolute_directory"
+        },
+        {
+          "leaf": "runs_bytes-s4-p1_bound",
+          "name": "bound_runs_root",
+          "type": "fresh_absolute_directory"
+        },
+        {
+          "name": "operator_log_root",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "pre_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "post_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "claim_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bound_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bracket_session_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "pre_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "post_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "identity_epoch_json",
+          "type": "authenticated_absolute_file"
+        },
+        {
+          "name": "t1_bindings_json",
+          "type": "authenticated_absolute_file"
+        }
+      ],
+      "derived_path_rules": [
+        "pre_calibration_dir=claim_runs_root/instrument_validation/pre_attempt_id",
+        "post_calibration_dir=claim_runs_root/instrument_validation/post_attempt_id"
+      ],
+      "schema_version": "joulewise.stage_launch_bindings.v1"
+    }
+  },
   "attempt_policy": {
     "authority": "R6; Block-6 catalog unchanged",
     "minimum_kept_units_per_stratum": 5,
@@ -67,25 +775,10 @@
   "downstream_contract": {
     "extraction_spec": {
       "path": "configs/campaigns/bytes-s4-p1/extraction_spec.json",
-      "sha256": "d68ee0cbd5bd3dd81b6d82a91bc2217b450e857c87dbde6c0c185d24b30fb610"
+      "sha256": "7bb345de569a22dc6fe675704a5b61eea73d6a0806ed614675996782bc8c61c7"
     }
   },
-  "draft_notes": [
-    "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
-    "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
-    "Lead blinding ruling 2026-10-20 (registration section 11): held-out configuration rows stay out of the analysis export, blinded in a withheld store, until the stage-1 prediction hash is recorded; rows visible before that carry no clock stamps.",
-    "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
-    "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
-    "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
-    "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
-    "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
-    "Model sources include HF cache snapshot directories; C4 identity pins must hash through their symlinks. model.context_window is unused by the runtime; tokenizer and chat-template pins remain C4.",
-    "Qwen3-8B-8bit revision is pending; group_size=64 is assumed and unverified against the eventual checkpoint.",
-    "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
-    "Fixed packs bypass the 265-minute science cap. Sub-pack s4 is planned at 254 minutes, leaving 11 minutes on planning numbers only.",
-    "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints."
-  ],
-  "draft_status": "draft",
+  "draft_status": "registered",
   "external_inputs": {
     "artifacts": [
       {
@@ -106,116 +799,117 @@
         "expected_count": 18,
         "external_input_id": "neg8_bound",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-reference-corpus-order-v2",
-          "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-          "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+          "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/order_manifest.json",
+          "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r01.json",
             "run_id": "neg8-refcorpus-r01",
             "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r02.json",
             "run_id": "neg8-refcorpus-r02",
             "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r03.json",
             "run_id": "neg8-refcorpus-r03",
             "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
           },
           {
             "ordinal": 4,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r04.json",
             "run_id": "neg8-refcorpus-r04",
             "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
           },
           {
             "ordinal": 5,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r05.json",
             "run_id": "neg8-refcorpus-r05",
             "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
           },
           {
             "ordinal": 6,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r06.json",
             "run_id": "neg8-refcorpus-r06",
             "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
           },
           {
             "ordinal": 7,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r07.json",
             "run_id": "neg8-refcorpus-r07",
             "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
           },
           {
             "ordinal": 8,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r08.json",
             "run_id": "neg8-refcorpus-r08",
             "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
           },
           {
             "ordinal": 9,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r09.json",
             "run_id": "neg8-refcorpus-r09",
             "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
           },
           {
             "ordinal": 10,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r10.json",
             "run_id": "neg8-refcorpus-r10",
             "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
           },
           {
             "ordinal": 11,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r11.json",
             "run_id": "neg8-refcorpus-r11",
             "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
           },
           {
             "ordinal": 12,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r12.json",
             "run_id": "neg8-refcorpus-r12",
             "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
           },
           {
             "ordinal": 13,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r13.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r13.json",
             "run_id": "neg8-refcorpus-r13",
             "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e"
           },
           {
             "ordinal": 14,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r14.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r14.json",
             "run_id": "neg8-refcorpus-r14",
             "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b"
           },
           {
             "ordinal": 15,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r15.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r15.json",
             "run_id": "neg8-refcorpus-r15",
             "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd"
           },
           {
             "ordinal": 16,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r16.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r16.json",
             "run_id": "neg8-refcorpus-r16",
             "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e"
           },
           {
             "ordinal": 17,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r17.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r17.json",
             "run_id": "neg8-refcorpus-r17",
             "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa"
           },
           {
             "ordinal": 18,
-            "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r18.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/neg8-refcorpus-r18.json",
             "run_id": "neg8-refcorpus-r18",
             "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06"
           }
@@ -225,26 +919,27 @@
         "expected_count": 3,
         "external_input_id": "start_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-start-triplet-v1",
-          "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-          "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+          "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-start/order_manifest.json",
+          "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-start/neg8-window-start-r1.json",
             "run_id": "neg8-window-start-r1",
             "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-start/neg8-window-start-r2.json",
             "run_id": "neg8-window-start-r2",
             "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-start/neg8-window-start-r3.json",
             "run_id": "neg8-window-start-r3",
             "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
           }
@@ -254,14 +949,15 @@
         "expected_count": 1,
         "external_input_id": "midpoint_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-midpoint-v1",
-          "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-          "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+          "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-midpoint/order_manifest.json",
+          "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-midpoint/neg8-window-midpoint.json",
             "run_id": "neg8-window-midpoint",
             "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
           }
@@ -271,26 +967,27 @@
         "expected_count": 3,
         "external_input_id": "end_reference",
         "manifest": {
+          "kind": "manifest",
           "manifest_id": "neg8-window-reference-end-triplet-v1",
-          "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-          "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+          "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-end/order_manifest.json",
+          "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
         },
         "members": [
           {
             "ordinal": 1,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-end/neg8-window-end-r1.json",
             "run_id": "neg8-window-end-r1",
             "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
           },
           {
             "ordinal": 2,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-end/neg8-window-end-r2.json",
             "run_id": "neg8-window-end-r2",
             "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
           },
           {
             "ordinal": 3,
-            "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
+            "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-end/neg8-window-end-r3.json",
             "run_id": "neg8-window-end-r3",
             "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
           }
@@ -300,15 +997,15 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "697c189e98858e458d6eca8baf02d4b3d6e51ae881a3390d4c0d21f804716ff7"
+    "sha256": "c89d8a5a378152fc7b0615bd8c793cb1b4cc4f32a2affdb6ca3a3fd8e7344f6e"
   },
   "module_order": [
     "bytes-qwen3-32b",
     "bytes-qwen3-8b-8bit"
   ],
   "plan": {
-    "actual_sha256": "3de36a4da920e40960f7e8ba9ee905e620a4345b5d933411ac35c02daddad512",
-    "declared_sha256": "3de36a4da920e40960f7e8ba9ee905e620a4345b5d933411ac35c02daddad512",
+    "actual_sha256": "e82d4ef72aa0ce66408b77e9010c12d4a3a813d2dcc90d3894678a0c8bea95dd",
+    "declared_sha256": "e82d4ef72aa0ce66408b77e9010c12d4a3a813d2dcc90d3894678a0c8bea95dd",
     "path": "collection_plan.json",
     "plan_id": "bytes-s4-p1"
   },
@@ -323,7 +1020,7 @@
       "block_id": null,
       "block_index": 1,
       "config": "bytes-qwen3-32b-abs-r01.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r01.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r01.json",
       "config_sha256": "4aafc94b88fca220ff82e28efffa768fa675c219b0d9ff13130924776410d52e",
       "index": 1,
       "model_tag": "qwen3-32b-mlx",
@@ -342,7 +1039,7 @@
       "block_id": null,
       "block_index": 2,
       "config": "bytes-qwen3-32b-abs-r02.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r02.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r02.json",
       "config_sha256": "ef04eaca90b0e205300bd69f3c5510dc9113f781389731dc3cbc9a7ac93d4a5f",
       "index": 2,
       "model_tag": "qwen3-32b-mlx",
@@ -361,7 +1058,7 @@
       "block_id": null,
       "block_index": 3,
       "config": "bytes-qwen3-32b-abs-r03.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r03.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r03.json",
       "config_sha256": "a7bb40b0bd4a780d926119bcc421a1c49fb68675c710541873f8e4c18d35b95b",
       "index": 3,
       "model_tag": "qwen3-32b-mlx",
@@ -380,7 +1077,7 @@
       "block_id": null,
       "block_index": 4,
       "config": "bytes-qwen3-32b-abs-r04.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r04.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r04.json",
       "config_sha256": "3b1ff82f9de66c1d022b88671ed05b34251bc4eff3b8ce967b0849ba276d6bff",
       "index": 4,
       "model_tag": "qwen3-32b-mlx",
@@ -399,7 +1096,7 @@
       "block_id": null,
       "block_index": 5,
       "config": "bytes-qwen3-32b-abs-r05.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r05.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r05.json",
       "config_sha256": "a386d4acda6cd68499302c87a1d2e751330a889d5a0890b44e25dd444c40b67d",
       "index": 5,
       "model_tag": "qwen3-32b-mlx",
@@ -418,7 +1115,7 @@
       "block_id": null,
       "block_index": 6,
       "config": "bytes-qwen3-32b-abs-r06.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r06.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r06.json",
       "config_sha256": "baca91160906f402f2edb923582ebfcca4c9d58f39aa7bb2147a4a9f1f269bf6",
       "index": 6,
       "model_tag": "qwen3-32b-mlx",
@@ -437,7 +1134,7 @@
       "block_id": null,
       "block_index": 7,
       "config": "bytes-qwen3-32b-abs-r07.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r07.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r07.json",
       "config_sha256": "16b9e6cf9f4ed839cc6635aaeba8ca041ccee27977dfd377cee39f7637ab7197",
       "index": 7,
       "model_tag": "qwen3-32b-mlx",
@@ -456,7 +1153,7 @@
       "block_id": null,
       "block_index": 8,
       "config": "bytes-qwen3-32b-abs-r08.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r08.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r08.json",
       "config_sha256": "31e9718e8e28cf839e08b8d7ac0306fae37b04a24e0c322bf2cdc5fb93466d44",
       "index": 8,
       "model_tag": "qwen3-32b-mlx",
@@ -475,7 +1172,7 @@
       "block_id": null,
       "block_index": 9,
       "config": "bytes-qwen3-32b-abs-r09.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r09.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r09.json",
       "config_sha256": "a55b3efa1a287bad07f1d2a729a1a9bc29acc6acf6918f252103165124c4da43",
       "index": 9,
       "model_tag": "qwen3-32b-mlx",
@@ -494,7 +1191,7 @@
       "block_id": null,
       "block_index": 10,
       "config": "bytes-qwen3-32b-abs-r10.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/bytes-qwen3-32b-abs-r10.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/bytes-qwen3-32b-abs-r10.json",
       "config_sha256": "79891825d8348de3add5636148f22ecd48168d759c4e294f70e6e979bdb0905c",
       "index": 10,
       "model_tag": "qwen3-32b-mlx",
@@ -513,7 +1210,7 @@
       "block_id": "bytes-qwen3-32b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-32b-null-b01-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b01-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-a1.json",
       "config_sha256": "083f2324da1922994b656626b30beb6fe6377209e049cf495074da103fc3a120",
       "index": 1,
       "model_tag": "qwen3-32b-mlx",
@@ -532,7 +1229,7 @@
       "block_id": "bytes-qwen3-32b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-32b-null-b01-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b01-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-b1.json",
       "config_sha256": "6b9f537a13541b6812f4ca9240445f5b450c75b294d6893b048d0b6295c4eebb",
       "index": 2,
       "model_tag": "qwen3-32b-mlx",
@@ -551,7 +1248,7 @@
       "block_id": "bytes-qwen3-32b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-32b-null-b01-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b01-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-b2.json",
       "config_sha256": "2c70b717b969e40187b3aaa6222fb0724f56b3f48cdbba159647154a3fdea557",
       "index": 3,
       "model_tag": "qwen3-32b-mlx",
@@ -570,7 +1267,7 @@
       "block_id": "bytes-qwen3-32b-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-32b-null-b01-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b01-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b01-a2.json",
       "config_sha256": "59af701d83dd8edb2d0a08269d7cc37d45bbb514e7148321bd92e082a758289b",
       "index": 4,
       "model_tag": "qwen3-32b-mlx",
@@ -589,7 +1286,7 @@
       "block_id": "bytes-qwen3-32b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-32b-null-b02-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b02-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-a1.json",
       "config_sha256": "d4686e3a02db53ca5fce9363cd9445a7fa1595be2baa1bf7eaec958659465eb8",
       "index": 5,
       "model_tag": "qwen3-32b-mlx",
@@ -608,7 +1305,7 @@
       "block_id": "bytes-qwen3-32b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-32b-null-b02-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b02-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-b1.json",
       "config_sha256": "35a5c3062f8c723146d55a760f59720f03a555cbd936cc180737874dca8b15fa",
       "index": 6,
       "model_tag": "qwen3-32b-mlx",
@@ -627,7 +1324,7 @@
       "block_id": "bytes-qwen3-32b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-32b-null-b02-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b02-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-b2.json",
       "config_sha256": "b77381563dfd2f25f8a9014fca5bab187ebd0cc619682a8322258c53a1dd8d45",
       "index": 7,
       "model_tag": "qwen3-32b-mlx",
@@ -646,7 +1343,7 @@
       "block_id": "bytes-qwen3-32b-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-32b-null-b02-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b02-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b02-a2.json",
       "config_sha256": "5ff18da37dd3a208f124c9714d8c2bf5607d0b629dbea830829de41d79e06b62",
       "index": 8,
       "model_tag": "qwen3-32b-mlx",
@@ -665,7 +1362,7 @@
       "block_id": "bytes-qwen3-32b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-32b-null-b03-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b03-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-a1.json",
       "config_sha256": "085d4550c2f56b6818126934b2745a1f972f4b4da39c692a5af71c9b094245d2",
       "index": 9,
       "model_tag": "qwen3-32b-mlx",
@@ -684,7 +1381,7 @@
       "block_id": "bytes-qwen3-32b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-32b-null-b03-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b03-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-b1.json",
       "config_sha256": "76182868824f8b177e65b2ef741f8ae84c9eb0133359b6fee6e7636a7c68c100",
       "index": 10,
       "model_tag": "qwen3-32b-mlx",
@@ -703,7 +1400,7 @@
       "block_id": "bytes-qwen3-32b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-32b-null-b03-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b03-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-b2.json",
       "config_sha256": "902be55b33fc73e50a7c71b098ea071be28b90eb4fdf4c752115a6adfdcbbd19",
       "index": 11,
       "model_tag": "qwen3-32b-mlx",
@@ -722,7 +1419,7 @@
       "block_id": "bytes-qwen3-32b-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-32b-null-b03-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b03-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b03-a2.json",
       "config_sha256": "11c61f57f39382d5aa42a1150898f18907728dcb47f6262104972cac78a8cd31",
       "index": 12,
       "model_tag": "qwen3-32b-mlx",
@@ -741,7 +1438,7 @@
       "block_id": "bytes-qwen3-32b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-32b-null-b04-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b04-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-a1.json",
       "config_sha256": "3ab12eb3b8d4c2ad92f6d580724478423456bdd90da1ade7be2db3dc04b4a9fc",
       "index": 13,
       "model_tag": "qwen3-32b-mlx",
@@ -760,7 +1457,7 @@
       "block_id": "bytes-qwen3-32b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-32b-null-b04-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b04-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-b1.json",
       "config_sha256": "e47c1b85d5e36cfec26703f7dde3046fac72d08425637d73cea21bca112a3aba",
       "index": 14,
       "model_tag": "qwen3-32b-mlx",
@@ -779,7 +1476,7 @@
       "block_id": "bytes-qwen3-32b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-32b-null-b04-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b04-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-b2.json",
       "config_sha256": "91341aeb47c2f42fe556feb2effc68070085e9627d69d821e51851dfe99b38ce",
       "index": 15,
       "model_tag": "qwen3-32b-mlx",
@@ -798,7 +1495,7 @@
       "block_id": "bytes-qwen3-32b-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-32b-null-b04-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b04-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b04-a2.json",
       "config_sha256": "cb4d9fdafa1b1824872a595ab3e03bedefc2b6eec4354d199478d73d7f7da117",
       "index": 16,
       "model_tag": "qwen3-32b-mlx",
@@ -817,7 +1514,7 @@
       "block_id": "bytes-qwen3-32b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-32b-null-b05-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b05-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-a1.json",
       "config_sha256": "fa0069defb9a14e3e7ad2b0fa6199bf4852c1935045a67f7d667951004d55d05",
       "index": 17,
       "model_tag": "qwen3-32b-mlx",
@@ -836,7 +1533,7 @@
       "block_id": "bytes-qwen3-32b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-32b-null-b05-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b05-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-b1.json",
       "config_sha256": "bf715e73989358cdc1882b07829a2777eed09ee907f6285480f2d521aaa69680",
       "index": 18,
       "model_tag": "qwen3-32b-mlx",
@@ -855,7 +1552,7 @@
       "block_id": "bytes-qwen3-32b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-32b-null-b05-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b05-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-b2.json",
       "config_sha256": "b1897253897ca1615636aef2a1b977c65d61f1e9fc6622536240a96aee8d948c",
       "index": 19,
       "model_tag": "qwen3-32b-mlx",
@@ -874,7 +1571,7 @@
       "block_id": "bytes-qwen3-32b-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-32b-null-b05-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/bytes-qwen3-32b-null-b05-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/bytes-qwen3-32b-null-b05-a2.json",
       "config_sha256": "f3b30260a50f836bc3f1a46f8b23a521861027f41cf256729de809fc139455b2",
       "index": 20,
       "model_tag": "qwen3-32b-mlx",
@@ -893,7 +1590,7 @@
       "block_id": "bytes-qwen3-32b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-32b-null-b06-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b06-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-a1.json",
       "config_sha256": "3fd66526cb24716fec0eab039b1880f47d5332ba7f3ae3db491d65402d2da0f1",
       "index": 1,
       "model_tag": "qwen3-32b-mlx",
@@ -912,7 +1609,7 @@
       "block_id": "bytes-qwen3-32b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-32b-null-b06-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b06-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-b1.json",
       "config_sha256": "df6d7a04ea5244c843027387dff80969a7bb4df5a01dca4c0244e28940c5a8f6",
       "index": 2,
       "model_tag": "qwen3-32b-mlx",
@@ -931,7 +1628,7 @@
       "block_id": "bytes-qwen3-32b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-32b-null-b06-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b06-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-b2.json",
       "config_sha256": "4f931df92fbad88c764a30e19c3d12c0c45ac7cbdf4d83a6d13ef33ca2cc4cbf",
       "index": 3,
       "model_tag": "qwen3-32b-mlx",
@@ -950,7 +1647,7 @@
       "block_id": "bytes-qwen3-32b-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-32b-null-b06-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b06-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b06-a2.json",
       "config_sha256": "f862d8123d939d7ff0a15c91d10396442f6530d3f712935712618d32da30b4e1",
       "index": 4,
       "model_tag": "qwen3-32b-mlx",
@@ -969,7 +1666,7 @@
       "block_id": "bytes-qwen3-32b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-32b-null-b07-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b07-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-a1.json",
       "config_sha256": "c31280f25ae607d9587c59f95f05bd21bfcd9f806b6503e61e6909be3415d5db",
       "index": 5,
       "model_tag": "qwen3-32b-mlx",
@@ -988,7 +1685,7 @@
       "block_id": "bytes-qwen3-32b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-32b-null-b07-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b07-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-b1.json",
       "config_sha256": "70ab5d64081a7b4cedd055014e49e5a7e09b4e4bf218a343d8e4250524493f12",
       "index": 6,
       "model_tag": "qwen3-32b-mlx",
@@ -1007,7 +1704,7 @@
       "block_id": "bytes-qwen3-32b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-32b-null-b07-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b07-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-b2.json",
       "config_sha256": "c06b602f6c3faaefb622acb5f1fffbf017004f507ba55f1d48141d8f6b2b8b6d",
       "index": 7,
       "model_tag": "qwen3-32b-mlx",
@@ -1026,7 +1723,7 @@
       "block_id": "bytes-qwen3-32b-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-32b-null-b07-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b07-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b07-a2.json",
       "config_sha256": "729e4d279e00748b3e3c5645d978f8badd5b60f4770d58657f8b7a9dd9a8e1b9",
       "index": 8,
       "model_tag": "qwen3-32b-mlx",
@@ -1045,7 +1742,7 @@
       "block_id": "bytes-qwen3-32b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-32b-null-b08-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b08-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-a1.json",
       "config_sha256": "38200c12001548a2dd784d8e9cb0eddf86e8c443da059ce1f2dfb4151fae145f",
       "index": 9,
       "model_tag": "qwen3-32b-mlx",
@@ -1064,7 +1761,7 @@
       "block_id": "bytes-qwen3-32b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-32b-null-b08-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b08-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-b1.json",
       "config_sha256": "3fbafa39a13ce0ca1c157e686790e39f1e7b1ad9a95b2dca60bce363ba630fb8",
       "index": 10,
       "model_tag": "qwen3-32b-mlx",
@@ -1083,7 +1780,7 @@
       "block_id": "bytes-qwen3-32b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-32b-null-b08-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b08-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-b2.json",
       "config_sha256": "73abeca112e341a0bdc176f3f533eb7b4b3528400c31968de6f11041789a25c2",
       "index": 11,
       "model_tag": "qwen3-32b-mlx",
@@ -1102,7 +1799,7 @@
       "block_id": "bytes-qwen3-32b-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-32b-null-b08-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b08-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b08-a2.json",
       "config_sha256": "682c7510551b7b6c98075f2f757d354394d2267f8d5ad426fe60501eeaf92ea2",
       "index": 12,
       "model_tag": "qwen3-32b-mlx",
@@ -1121,7 +1818,7 @@
       "block_id": "bytes-qwen3-32b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-32b-null-b09-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b09-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-a1.json",
       "config_sha256": "c8f545dc981fa9906195b8a7a872c0d7d0b073c3be0cd8504536d7506e03836a",
       "index": 13,
       "model_tag": "qwen3-32b-mlx",
@@ -1140,7 +1837,7 @@
       "block_id": "bytes-qwen3-32b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-32b-null-b09-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b09-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-b1.json",
       "config_sha256": "3809c39979a1d9db0a2782772176e448b30dbedaabc6a34dfb681514dc196dda",
       "index": 14,
       "model_tag": "qwen3-32b-mlx",
@@ -1159,7 +1856,7 @@
       "block_id": "bytes-qwen3-32b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-32b-null-b09-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b09-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-b2.json",
       "config_sha256": "202f270ad295dc652d4ffd1a25706c79518f2994ac8f23c78e8084fc7e13d890",
       "index": 15,
       "model_tag": "qwen3-32b-mlx",
@@ -1178,7 +1875,7 @@
       "block_id": "bytes-qwen3-32b-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-32b-null-b09-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b09-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b09-a2.json",
       "config_sha256": "b9b01028e545fe925cdc1a07be71432e1046f6755d021f50e38d17e619cc2287",
       "index": 16,
       "model_tag": "qwen3-32b-mlx",
@@ -1197,7 +1894,7 @@
       "block_id": "bytes-qwen3-32b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-32b-null-b10-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b10-a1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-a1.json",
       "config_sha256": "44893da7cd1e9a2061dca0bf205994d99a8b9fd0c8c704ed5829eabf6c85cfbe",
       "index": 17,
       "model_tag": "qwen3-32b-mlx",
@@ -1216,7 +1913,7 @@
       "block_id": "bytes-qwen3-32b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-32b-null-b10-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b10-b1.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-b1.json",
       "config_sha256": "253379060a96bd9cadd22bff039396c0324f44aa512934e302f6f707579ec2a5",
       "index": 18,
       "model_tag": "qwen3-32b-mlx",
@@ -1235,7 +1932,7 @@
       "block_id": "bytes-qwen3-32b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-32b-null-b10-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b10-b2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-b2.json",
       "config_sha256": "e580c86a3fc3d7e44ee1a3ef382fb0ab6096bb5dc8bf5218c44e1dfa16439a7f",
       "index": 19,
       "model_tag": "qwen3-32b-mlx",
@@ -1254,7 +1951,7 @@
       "block_id": "bytes-qwen3-32b-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-32b-null-b10-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/bytes-qwen3-32b-null-b10-a2.json",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/bytes-qwen3-32b-null-b10-a2.json",
       "config_sha256": "264406562982906b9f0020aaa503a53a9f1b2ae9eef52ac056324fb294ce0a5e",
       "index": 20,
       "model_tag": "qwen3-32b-mlx",
@@ -1273,8 +1970,8 @@
       "block_id": null,
       "block_index": 1,
       "config": "bytes-qwen3-8b-8bit-abs-r01.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r01.json",
-      "config_sha256": "a10b51ea293e9f41368b8c7112e1623de7c16133dc64566d180ac6b1ca50c7cf",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r01.json",
+      "config_sha256": "16b9a9bf88bbf2c8cfd2f25865cbfbb0a155026c1ce09089df2771c1ca605a27",
       "index": 1,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1292,8 +1989,8 @@
       "block_id": null,
       "block_index": 2,
       "config": "bytes-qwen3-8b-8bit-abs-r02.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r02.json",
-      "config_sha256": "9204051b1eba0ad6b8b71d180453034e46704cd3116fdc1cb05b529ca3e3ba91",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r02.json",
+      "config_sha256": "a4d5eaa0628337bfbb025ee88c6b4a9f4bf8041136f89a7bcdad506b208fe909",
       "index": 2,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1311,8 +2008,8 @@
       "block_id": null,
       "block_index": 3,
       "config": "bytes-qwen3-8b-8bit-abs-r03.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r03.json",
-      "config_sha256": "4707da9ec6ede0d403a41376feb7c5b90d6279470e6a790ea51df8d5f528194b",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r03.json",
+      "config_sha256": "fdbfa215031bcc44420ed304d33be91eb98afe752fc264c88ecd2b3b6be27155",
       "index": 3,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1330,8 +2027,8 @@
       "block_id": null,
       "block_index": 4,
       "config": "bytes-qwen3-8b-8bit-abs-r04.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r04.json",
-      "config_sha256": "26caf9b82377f626adb2f18d56a054588f06b374ccaeee41d752cac681cba987",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r04.json",
+      "config_sha256": "45bb9bf9ca32e82586b59bb8d68bb31667372d5f9bb093d1360144f42fab4913",
       "index": 4,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1349,8 +2046,8 @@
       "block_id": null,
       "block_index": 5,
       "config": "bytes-qwen3-8b-8bit-abs-r05.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r05.json",
-      "config_sha256": "8de81acf099bd3c5840dacd61fb304dfaef325243c4945c605e431e2ebff0179",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r05.json",
+      "config_sha256": "db64459015552b6ed5659969271a37d973cbc986a8443116bdc90f3f0bc65932",
       "index": 5,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1368,8 +2065,8 @@
       "block_id": null,
       "block_index": 6,
       "config": "bytes-qwen3-8b-8bit-abs-r06.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r06.json",
-      "config_sha256": "ee5475cf560f4a1af54de1956c3f665142281ad8b4043bedfd7e9ca5cd82df41",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r06.json",
+      "config_sha256": "7fcfe62141e4a696c5ca6fed0276d9b67160e8e3752df745d727fd4f259cda7d",
       "index": 6,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1387,8 +2084,8 @@
       "block_id": null,
       "block_index": 7,
       "config": "bytes-qwen3-8b-8bit-abs-r07.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r07.json",
-      "config_sha256": "c30b3d7cc6bac7cd363c3319647a87ff6454c1a1a678dc1e46d9d8a1f08a92c9",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r07.json",
+      "config_sha256": "6d9a4fcb43f97d38fe83ca35c2fcd9dc6b3959b2135f2276c0f694ecb97e6381",
       "index": 7,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1406,8 +2103,8 @@
       "block_id": null,
       "block_index": 8,
       "config": "bytes-qwen3-8b-8bit-abs-r08.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r08.json",
-      "config_sha256": "3a72cb9e4119edca9f0de10551364de722887d2ef7e52942ae5a1252b1553a39",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r08.json",
+      "config_sha256": "9382de298e2f4d8865119c7c60b189b19fafee52495d91f872363e99e9f8ac80",
       "index": 8,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1425,8 +2122,8 @@
       "block_id": null,
       "block_index": 9,
       "config": "bytes-qwen3-8b-8bit-abs-r09.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r09.json",
-      "config_sha256": "953f0324cea342504be10b1f2ea1021ceacf6be974bea7367150169f58c78307",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r09.json",
+      "config_sha256": "beac51ac71d9fc692258f287c08e1e0fb17abd621363186a7726ff9c70fa0cfa",
       "index": 9,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1444,8 +2141,8 @@
       "block_id": null,
       "block_index": 10,
       "config": "bytes-qwen3-8b-8bit-abs-r10.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/bytes-qwen3-8b-8bit-abs-r10.json",
-      "config_sha256": "1626a62feb0657bba688e57769c9f85980cffe0815330a1c6173b9bc31dc1c66",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/bytes-qwen3-8b-8bit-abs-r10.json",
+      "config_sha256": "d173c68ff4c75d2026ba1c4c661a6c321176b013323afd158673951da734906f",
       "index": 10,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1463,8 +2160,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-8bit-null-b01-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b01-a1.json",
-      "config_sha256": "1d88fefda3b67d099000c78a765eff41d1aefa0735e61ce8dd21fecedf1a9d7d",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-a1.json",
+      "config_sha256": "27c1923222404316ab86af84d01eb2c10de4082cf5f55a81799cde4a2968027d",
       "index": 1,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1482,8 +2179,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-8bit-null-b01-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b01-b1.json",
-      "config_sha256": "fbd8ecba213fa428e3abdfadf9c74541c11f75fbee5a611ee217334113c579b4",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-b1.json",
+      "config_sha256": "3e21df0754c55a09bc61c2da0751805717d65c18ca22c454d4fd296011f7eda3",
       "index": 2,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1501,8 +2198,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-8bit-null-b01-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b01-b2.json",
-      "config_sha256": "978fa3c7688c747b5790c5f6afc3a9c52ee64cd5582f7f1880283aa572b06a0d",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-b2.json",
+      "config_sha256": "91f1aefcc1024489d2cf069b5e3b5a7f96fc51e683cd9e69dac4e960e6dc6ada",
       "index": 3,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1520,8 +2217,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b01",
       "block_index": 1,
       "config": "bytes-qwen3-8b-8bit-null-b01-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b01-a2.json",
-      "config_sha256": "6f91121f065afcdbe91573b953cb7d556929e11d99f907febe7d36c2b7136f8f",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b01-a2.json",
+      "config_sha256": "0f3c079ab30d7a3be3f7abe81965de5d1e316b19a57df6be2528bae8c8c42b19",
       "index": 4,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1539,8 +2236,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-8bit-null-b02-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b02-a1.json",
-      "config_sha256": "d18dd8773669d6e765d087e9ba7b593dd785768dcc8a2fb680a9f1be98348547",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-a1.json",
+      "config_sha256": "667197d51b4a586c3af82b119536d3b0949d1b63124922a9d8f7be99a9b0e444",
       "index": 5,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1558,8 +2255,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-8bit-null-b02-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b02-b1.json",
-      "config_sha256": "c0dc16db7eec1751162d5362a8070b6cbafe8717e52f3359b2b3ac633775f893",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-b1.json",
+      "config_sha256": "9c6e58a37cba7a7c971ce742ed4b4729ecff2c8d4eb657c9872dccd62869963b",
       "index": 6,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1577,8 +2274,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-8bit-null-b02-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b02-b2.json",
-      "config_sha256": "8ccc897ceec61abb65b8b17895c131593bde9bc1be25373e2e51c15c8b2aaa33",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-b2.json",
+      "config_sha256": "175362aea96fe46d841a6586d51183ca6df9dc419065fe9cfca4a86c4a152890",
       "index": 7,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1596,8 +2293,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b02",
       "block_index": 2,
       "config": "bytes-qwen3-8b-8bit-null-b02-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b02-a2.json",
-      "config_sha256": "82efbffb1e684f26b312dacc41ff4053752ca6668eca54f00c67144d90bedbf8",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b02-a2.json",
+      "config_sha256": "56d970d59959bda6f62e1291e785e06af9d835c8bd4985fcd172ea38b9309813",
       "index": 8,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1615,8 +2312,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-8bit-null-b03-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b03-a1.json",
-      "config_sha256": "461a7b61f750f52c22bb78ffe4771807a82859e116a82396d4931258394c87b8",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-a1.json",
+      "config_sha256": "385278baac7c1edc918339e61e8a648a5b40588206e70ee33be82eb866543538",
       "index": 9,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1634,8 +2331,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-8bit-null-b03-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b03-b1.json",
-      "config_sha256": "aebbd867b33849c1acbe23174fd12e763881ce03d9ffb3709bd8d41af0c569a6",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-b1.json",
+      "config_sha256": "abc4dc6198cc035042b541b0583817c1fbd36742feecf2757257e491aba49012",
       "index": 10,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1653,8 +2350,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-8bit-null-b03-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b03-b2.json",
-      "config_sha256": "634c7506ff5470e3a3ecabd74db0b567c9ba7e6de9746748f99fef3f59e83197",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-b2.json",
+      "config_sha256": "c4307873c5f3cf1918ef6cfe1efc12a612f6d761edf65bc9f2f546629f1abe4f",
       "index": 11,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1672,8 +2369,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b03",
       "block_index": 3,
       "config": "bytes-qwen3-8b-8bit-null-b03-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b03-a2.json",
-      "config_sha256": "874fbced13661ccd08aeaf99c528c240ac0dd830c6b759a7442e3bc2a6d88e43",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b03-a2.json",
+      "config_sha256": "9322536d0a32337fce782850913d36e144cf7b9c27606f1c7bf53f9550424867",
       "index": 12,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1691,8 +2388,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-8bit-null-b04-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b04-a1.json",
-      "config_sha256": "5a28514018ae9fd9059dcd2375094c297a426e7419cfb67b6e6bde4f0b38b162",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-a1.json",
+      "config_sha256": "60fbc7e022453790b5d531b65e414518fef817b7502018455755ee7a546962f3",
       "index": 13,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1710,8 +2407,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-8bit-null-b04-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b04-b1.json",
-      "config_sha256": "3a062d08ff3bbc1e5571620548a59b1d84bfe50f12e675d457d6a55766ab6307",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-b1.json",
+      "config_sha256": "96c0b93a59508cbd16bbe1900e61222dd101d250559257591dd5cfff082dbd4a",
       "index": 14,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1729,8 +2426,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-8bit-null-b04-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b04-b2.json",
-      "config_sha256": "78f5dbaf4518371646f52317c2603ab37206f3d7c9b15216cc3f3076199021d9",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-b2.json",
+      "config_sha256": "3efcc37ded3251e1817d00ee92821dbbc81e537999632670ca334363af1e7aa3",
       "index": 15,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1748,8 +2445,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b04",
       "block_index": 4,
       "config": "bytes-qwen3-8b-8bit-null-b04-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b04-a2.json",
-      "config_sha256": "8a607e0fbc495fe397bc077025284292b9ef6c42a24134957f6577e5038197f6",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b04-a2.json",
+      "config_sha256": "b3859d6161a01530481cd9178b062fc64a9df86874838083fb2e98310e2b37d3",
       "index": 16,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1767,8 +2464,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-8bit-null-b05-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b05-a1.json",
-      "config_sha256": "247dae1e9976458d6630571903bd7afe3b616a0e88a2102dab3df72c47606305",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-a1.json",
+      "config_sha256": "002b6d1b646ca67f71d1c3f13cd54633fb71b2924cb96a5055d50af419e95371",
       "index": 17,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1786,8 +2483,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-8bit-null-b05-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b05-b1.json",
-      "config_sha256": "22ee552129525484eb8641147621af8ce13d085905fe44fa272eb92bf8e9822b",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-b1.json",
+      "config_sha256": "dbb2064840724f6f39deb19e096ccbf379622ceebe905d9e721215fd709d6f34",
       "index": 18,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1805,8 +2502,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-8bit-null-b05-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b05-b2.json",
-      "config_sha256": "fd18255f93766542fdc35b6621aa0a53a6d644c2cfed9b94368e22e1c524ba20",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-b2.json",
+      "config_sha256": "5b98314258703c5587b287b1cb70e2f82c12e940f3769eb721b3271f13f3f9e9",
       "index": 19,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1824,8 +2521,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b05",
       "block_index": 5,
       "config": "bytes-qwen3-8b-8bit-null-b05-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/bytes-qwen3-8b-8bit-null-b05-a2.json",
-      "config_sha256": "7fb4ddfbc8bada8ff230acf44f332391883e6d21f9dfa6f3b9ca6c4e81a46693",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/bytes-qwen3-8b-8bit-null-b05-a2.json",
+      "config_sha256": "c9e75ce87c90cf664df9dc9bea21a03f41e4f21e51cf177fd5ead958fa64234a",
       "index": 20,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1843,8 +2540,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-8bit-null-b06-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b06-a1.json",
-      "config_sha256": "0f95d3daca0afd28d2fc37b11b1844a95c8e4f3874acb758c6622141e36a53b2",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-a1.json",
+      "config_sha256": "f6244ac4c4b4db910ce5fc71ebe92d538aaaf81af107caaa904a0f2eb27fa826",
       "index": 1,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1862,8 +2559,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-8bit-null-b06-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b06-b1.json",
-      "config_sha256": "0994aa867992642a05f1b76479fe2832c66b99181922b4d97481783515617243",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-b1.json",
+      "config_sha256": "64d2bb42d278988b1a87dcd4122e76dcc96d0dc481daf408c37e629012dd243f",
       "index": 2,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1881,8 +2578,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-8bit-null-b06-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b06-b2.json",
-      "config_sha256": "f48323f427e0f59ead7e5dc7cf9dcf8dc8cc8d92991d3739fa774f732784e0ad",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-b2.json",
+      "config_sha256": "5834ed2ab7f29a469ea8713107980c3581dd5576c91753a4eeafc4ee429a3b51",
       "index": 3,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1900,8 +2597,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b06",
       "block_index": 6,
       "config": "bytes-qwen3-8b-8bit-null-b06-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b06-a2.json",
-      "config_sha256": "1618ac65788558e40c27c48acd9708d0eb11aa42cdd14934609e1e527347f908",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b06-a2.json",
+      "config_sha256": "f7445252f52be028895333dae4fb6a41075a14ed92ee30b36b38306eed735e38",
       "index": 4,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1919,8 +2616,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-8bit-null-b07-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b07-a1.json",
-      "config_sha256": "ea014e923c3d9acb080a1ee189df20c37c755483800f1e21de86756f2f092f27",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-a1.json",
+      "config_sha256": "3ebbc452bdc6de22cb6b9bca245a50a3fb06e6a6664fe2da203ddf3ee5f6f737",
       "index": 5,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1938,8 +2635,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-8bit-null-b07-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b07-b1.json",
-      "config_sha256": "22f2f5730a17bc2e7c2367b83cfcb4d483d2feb9768a483d0d673e691c5767c6",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-b1.json",
+      "config_sha256": "15eb03245e384b247f251574406cb588b116a5a8a389efbd977fa4b7d639fb2d",
       "index": 6,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1957,8 +2654,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-8bit-null-b07-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b07-b2.json",
-      "config_sha256": "e99c1e711474587125bc7f712b6ef043e866b64c68b73a1be318d3c3aa6c81cd",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-b2.json",
+      "config_sha256": "33f4818e8e0a1773cfcc2bd07acd50d9651b234093f060998bb77d77cff12e65",
       "index": 7,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1976,8 +2673,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b07",
       "block_index": 7,
       "config": "bytes-qwen3-8b-8bit-null-b07-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b07-a2.json",
-      "config_sha256": "d63bce876619c03076d8f9aed879bba659894dd051f44c9ebf22c3aeb81dedd5",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b07-a2.json",
+      "config_sha256": "ac0a91c80a88127f933f4638013d410be7f63a962ac7dbb174fec4d58eff9177",
       "index": 8,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -1995,8 +2692,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-8bit-null-b08-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b08-a1.json",
-      "config_sha256": "7f3a562c5bcc6aec7d9ef984b95230e8be13361c60e44deda1de1a04d0ba7512",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-a1.json",
+      "config_sha256": "a8a08bdea521adec61c40eb556f1238b5ac8715765c5792ee6893569883aa525",
       "index": 9,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2014,8 +2711,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-8bit-null-b08-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b08-b1.json",
-      "config_sha256": "b5ea4965753c0d86dcc2f7ef385d602077863a52b872875cb4dc125b94ab92b0",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-b1.json",
+      "config_sha256": "ab66d66d6dc34fe5b841344b49349f17c46b8a6bea863f299c1274830c4f93fa",
       "index": 10,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2033,8 +2730,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-8bit-null-b08-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b08-b2.json",
-      "config_sha256": "237b6f8d2c829344e13536631fb120ff6b400962d819cbbb2941da4e152493d9",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-b2.json",
+      "config_sha256": "fa3a4b7e6e67b5478c996d434d8c984af8ba23d386bfdb4cb4f690f5df548115",
       "index": 11,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2052,8 +2749,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b08",
       "block_index": 8,
       "config": "bytes-qwen3-8b-8bit-null-b08-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b08-a2.json",
-      "config_sha256": "b00593441a4cc65cea23f9477d8cffeeeaa92fa062135906614bab74522a3d6a",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b08-a2.json",
+      "config_sha256": "b2b6b4b7e5bdf63ae86ccb72fd5b19e3fbdb72b253dbe99a2ab74b39bcc1d469",
       "index": 12,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2071,8 +2768,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-8bit-null-b09-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b09-a1.json",
-      "config_sha256": "d78d97574c59ba280dd55c465f86f43b443d8959f5cc27e5e13917497182bd24",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-a1.json",
+      "config_sha256": "f2106c6ccd3708964c17599f7d181239ef75f9225047b50f11029309e24930f7",
       "index": 13,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2090,8 +2787,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-8bit-null-b09-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b09-b1.json",
-      "config_sha256": "c7be3c492d525ed1f6b99459d692cc07e5e0a59e0ebe6ab91a348988f1d9d802",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-b1.json",
+      "config_sha256": "1b42dca040c629dd7f6ec1f30d7c420c49feec2ac5aa713c7184b3c79afd2dbd",
       "index": 14,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2109,8 +2806,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-8bit-null-b09-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b09-b2.json",
-      "config_sha256": "ea5cfe77df6c900282248aeed24f85acc345f0f36fc9c2d866da2cca237019c9",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-b2.json",
+      "config_sha256": "d5d33be96627566f9d511a41e08be08c5b31e9667ede2cc4fd06774495a3770f",
       "index": 15,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2128,8 +2825,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b09",
       "block_index": 9,
       "config": "bytes-qwen3-8b-8bit-null-b09-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b09-a2.json",
-      "config_sha256": "cffad17c806232ce091fa46a1f05840403acbc56ded2e1422705f49e30fb69d9",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b09-a2.json",
+      "config_sha256": "e616e8abfe022a445d0b995c4dc4fa374442e28361783ab94f32e5985d74e480",
       "index": 16,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2147,8 +2844,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-8bit-null-b10-a1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b10-a1.json",
-      "config_sha256": "caa2acb5b1f0e3ebf7fb27c82cce298f9e1c87b3b575e29fcd87bcc6979038d6",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-a1.json",
+      "config_sha256": "61c10fd5ca9563116985e2469db4b0cbca4405b3f4e558b81592a818872b1c8c",
       "index": 17,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2166,8 +2863,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-8bit-null-b10-b1.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b10-b1.json",
-      "config_sha256": "1a1ae007c124f55c1811159fabfdcc667f56761190d784cbe33c44511346ac28",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-b1.json",
+      "config_sha256": "21ab75dbfc33621f0171335bd3ba33a60864b0c5602d225112eb23ae50b6aaa1",
       "index": 18,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2185,8 +2882,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-8bit-null-b10-b2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b10-b2.json",
-      "config_sha256": "fe0552d0a905faf7f3d5c745b8e5e1205620daebdcd1188610ff2be4b442ac64",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-b2.json",
+      "config_sha256": "644b5c379e219159b792d88b4db1edc1624caea636ce500e4cf67c60780ec0ca",
       "index": 19,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2204,8 +2901,8 @@
       "block_id": "bytes-qwen3-8b-8bit-null-b10",
       "block_index": 10,
       "config": "bytes-qwen3-8b-8bit-null-b10-a2.json",
-      "config_path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/bytes-qwen3-8b-8bit-null-b10-a2.json",
-      "config_sha256": "a55a9e2cfe0a7a91ce591a2d65aef36d2e2c001bc0512ba0b247334566a8579f",
+      "config_path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/bytes-qwen3-8b-8bit-null-b10-a2.json",
+      "config_sha256": "8ecd8dad7e1637dd2d75ab8e27d6df9fe3559e8f9737ea3a203a84365a8b4548",
       "index": 20,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-qwen3-8b-8bit",
@@ -2465,8 +3162,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-reference-corpus-order-v2",
-        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection/order_manifest.json",
+        "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2476,7 +3173,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-bound-collection"
                 },
                 {
                   "kind": "literal",
@@ -2626,8 +3323,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-start-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-start/order_manifest.json",
+        "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2637,7 +3334,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-start"
                 },
                 {
                   "kind": "literal",
@@ -2727,7 +3424,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-32b-01_decode_absolute",
-        "path": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute/order_manifest.json",
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute/order_manifest.json",
         "sha256": "fed5ffe61fe2e1c174d187c4d17354679ed6b63e93ba35ab5b14ea4884e219c1"
       },
       "kind": "campaign_collection",
@@ -2738,7 +3435,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-32b/01_decode_absolute"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-absolute"
                 },
                 {
                   "kind": "literal",
@@ -2828,7 +3525,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-32b-02_decode_abba_01_05",
-        "path": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05/order_manifest.json",
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05/order_manifest.json",
         "sha256": "68fc88bb3ca50d5fffba802eddd44f954b1fa12f303e947c65a5be27734b2cdd"
       },
       "kind": "campaign_collection",
@@ -2839,7 +3536,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-32b/02_decode_abba_01_05"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-01-05"
                 },
                 {
                   "kind": "literal",
@@ -2929,7 +3626,7 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-32b-03_decode_abba_06_10",
-        "path": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10/order_manifest.json",
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10/order_manifest.json",
         "sha256": "fd55afb82fadd8ea8b27b89fae0a5b95af841fab2ff83d550c0b6932fb176129"
       },
       "kind": "campaign_collection",
@@ -2940,7 +3637,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-32b/03_decode_abba_06_10"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-32b-quads-06-10"
                 },
                 {
                   "kind": "literal",
@@ -3030,8 +3727,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-midpoint-v1",
-        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-midpoint/order_manifest.json",
+        "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3041,7 +3738,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-midpoint"
                 },
                 {
                   "kind": "literal",
@@ -3131,8 +3828,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-8b-8bit-01_decode_absolute",
-        "path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute/order_manifest.json",
-        "sha256": "80e768df4d1f50820abe527f50c1b68e1721ef3662c38263b492c2d0d0c5eeb4"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute/order_manifest.json",
+        "sha256": "b4afed98b22da8c10ce53fed4de2baca4fea1fcc69ca6116bdb6b56a30c41c9d"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3142,7 +3839,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-8b-8bit/01_decode_absolute"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-absolute"
                 },
                 {
                   "kind": "literal",
@@ -3232,8 +3929,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-8b-8bit-02_decode_abba_01_05",
-        "path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05/order_manifest.json",
-        "sha256": "7a0992c005e4ccce58a896edd425ee9432f25ec42c2ab42894e2125a441d554c"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05/order_manifest.json",
+        "sha256": "a5c468081c06d92e2601407f4bd1074010b9594c1c5bb01c46e5e0c50e080b27"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3243,7 +3940,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-8b-8bit/02_decode_abba_01_05"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-01-05"
                 },
                 {
                   "kind": "literal",
@@ -3333,8 +4030,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "bytes-qwen3-8b-8bit-03_decode_abba_06_10",
-        "path": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10/order_manifest.json",
-        "sha256": "963f69b4376c690d00e98d0f1bbc49ba456b3357445e6d9854bbb5e2a5d257b7"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10/order_manifest.json",
+        "sha256": "f879cb803f273514f9207f41e111df6de7935146df9298664fb7dec1c15d0425"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3344,7 +4041,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/bytes_v1/qwen3-8b-8bit/03_decode_abba_06_10"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-qwen3-8b-8bit-quads-06-10"
                 },
                 {
                   "kind": "literal",
@@ -3434,8 +4131,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-end-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+        "path": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-end/order_manifest.json",
+        "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3445,7 +4142,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                  "value": "configs/campaigns/bytes-s4-p1/members/bytes-s4-p1-reference-end"
                 },
                 {
                   "kind": "literal",

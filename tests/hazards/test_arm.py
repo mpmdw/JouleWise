@@ -182,7 +182,7 @@ class ArmTests(unittest.TestCase):
             verdict = phase["verdict"]
             self.assertEqual(verdict["status"], base.PASS)
             self.assertEqual([flag["code"] for flag in verdict["observed"]["flags"]],
-                             ["clock.rate_above_budget"])
+                             ["clock.rate_above_budget"] if phase["phase"] != "instant" else [])
 
     def test_block6_plan_holds_above_its_registered_rate(self):
         from joulewise.b6 import plan_inputs
@@ -190,7 +190,7 @@ class ArmTests(unittest.TestCase):
         thresholds = plan_inputs.thresholds(root, root / "configs/b6/registration")
         self.rig.clocks.drift_word = ppm_word(15)
         result = self.rig.run(thresholds=thresholds)
-        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "instant"))
+        self.assertEqual((result.decision, result.refused_at), (arm.NULL, "final"))
 
     def test_agent_present_refuses_at_the_census_before_any_action(self):
         self.rig.census = (0, b"812 /usr/local/bin/claude --resume\n")
@@ -238,7 +238,7 @@ class ArmTests(unittest.TestCase):
             "battery": lambda rig: setattr(rig, "battery_file", "charging-1716ma-synthetic-from-real.ioreg"),
             "thermal": lambda rig: setattr(rig, "thermal_level", 1),
             "disk": lambda rig: setattr(rig, "free_bytes", 30 * GIB),
-            "clock": lambda rig: setattr(rig.clocks, "drift_word", ppm_word(3.7)),
+            "clock": lambda rig: setattr(rig.clocks, "skew_ns", 1_500_000),
         }
         for module, inject in cases.items():
             with self.subTest(module=module):
@@ -272,7 +272,9 @@ class ArmTests(unittest.TestCase):
                     base.Verdict("battery", base.PASS, (), {})]
         self.assertEqual(arm._refusals(verdicts), ["instrument UNMEASURED: powermetrics did not start"])
         phases = {"battery": ["instant", "final"], "thermal": ["instant", "final"], "disk": ["instant"],
-                  "clock": ["instant", "dwell_and_go"], "contention": ["dwell"]}
+                  # A failed frequency-word read leaves the dwell judged from its
+                  # anchors (#416 FIX-416-C: the word is diagnostic only).
+                  "clock": ["instant"], "contention": ["dwell"]}
         for module in ("battery", "thermal", "disk", "clock", "contention"):
             with self.subTest(module=module):
                 rig = Rig(Path(tempfile.mkdtemp(dir=self.tmp.name)))
@@ -358,7 +360,7 @@ class ArmTests(unittest.TestCase):
         self.assertEqual((result.decision, result.refused_at), (arm.NULL, "final"))
         self.assertTrue(any("residual" in reason for reason in result.reasons))
 
-    def test_frequency_word_change_at_the_end_of_the_dwell_refuses(self):
+    def test_frequency_word_change_at_the_end_of_the_dwell_is_diagnostic(self):
         original = self.rig.reader.__call__
         self.rig.battery_after_s = None
 
@@ -370,8 +372,8 @@ class ArmTests(unittest.TestCase):
 
         self.rig.reader = reader
         result = self.rig.run()
-        self.assertEqual(result.decision, arm.NULL)
-        self.assertTrue(any("frequency word changed" in reason for reason in result.reasons))
+        self.assertEqual(result.decision, arm.GO, result.reasons)
+        self.assertTrue(result.document["hazards"]["clock"][-1]["verdict"]["observed"]["frequency_word_changed"])
 
     def test_record_only_collectors_never_change_the_decision(self):
         collectors = [{"name": "pack-tree", "argv": ["/usr/bin/good-collector"], "timeout_s": 5},

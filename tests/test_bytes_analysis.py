@@ -19,6 +19,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.desk_restore_support import compress_member
+from joulewise import desk_restore
 from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_analyze
@@ -36,6 +38,50 @@ class NumericTestCase(unittest.TestCase):
         if delta is None:
             delta = 1e-6 * max(1.0, abs(first), abs(second))
         return super().assertAlmostEqual(first, second, msg=msg, delta=delta)
+
+
+class ReferenceRequestInputTests(unittest.TestCase):
+    def test_missing_legacy_columns_refuse_and_disclosed_drops_are_printed(self):
+        row = {"run_id": "old-reference", "role": "start", "config_key": "neg8_reference",
+               "status": "succeeded", "excluded": False, "flag_codes": ""}
+        with self.assertRaisesRegex(ba.AnalysisError, "old-reference.*re-export required"):
+            ba.neg8_inputs([row])
+        disclosed = {**row, "flag_codes": "bytes.reference_request_unavailable"}
+        failed = {**row, "run_id": "failed-reference", "status": "failed"}
+        excluded = {**row, "run_id": "excluded-reference", "excluded": True, "exclusion_codes": "member.anchor_not_bounded"}
+        result = ba.neg8_inputs([disclosed, failed, excluded])
+        self.assertEqual(result["dropped_reference_count"], 3)
+        self.assertEqual([r["reason"] for r in result["dropped_references"]],
+                         ["bytes.reference_request_unavailable", "status: failed", "excluded: member.anchor_not_bounded"])
+        self.assertEqual(result["references"], [])
+
+
+class MarkerPassReasonTests(unittest.TestCase):
+    def row(self, pass_id, reason):
+        diagnostic = {"status": "not_evaluated", "reason": reason, "mean_j": None,
+                      "h_j": None, "B_j": None, "below_minimum": False}
+        return {"model": "model", "boundary": "rails", "basis": "gross primary", "selection": "primary",
+                "bytes": 1.0, "resident": 1.0, "role": "heldout", "moe": False, "tier": True,
+                "pass_id": pass_id, "status": "computed", "mean_j": 12.0, "h_j": .1, "B_j": .2,
+                "duration_s": 1.0, "meter_phase_edge_mean_j": 0.0, "attribution_floor_j": .1,
+                "meter_attribution_floor_j": None, "without_assisted": diagnostic}
+
+    def test_heldout_mean_carries_each_unevaluated_pass_reason(self):
+        for ids in ((1,), (2,), (1, 2)):
+            with self.subTest(passes=ids):
+                rows = [self.row(i, f"no mapped meter stream has polls in the marker window (run member-{i})") for i in ids]
+                point = ba.combine_passes(list(reversed(rows)))[0]
+                reason = "; ".join(f"pass {r['pass_id']}: {r['without_assisted']['reason']}" for r in rows)
+                self.assertEqual(point["without_assisted"]["reason"], reason)
+                self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
+                self.assertIsNone(point["without_assisted"]["mean_j"])
+                self.assertEqual(point["mean_j"], 12.0)
+
+    def test_blinded_mean_keeps_the_registered_text(self):
+        rows = [self.row(i, "not evaluated at the blinded stage") for i in (1, 2)]
+        diagnostic = ba.combine_passes(rows)[0]["without_assisted"]
+        self.assertEqual(diagnostic["reason"], "not evaluated at the blinded stage")
+        self.assertEqual(diagnostic["label"], "without assisted members; not evaluated at the blinded stage")
 
 
 def assert_d3_exercised(test, records, manifest):
@@ -215,6 +261,96 @@ class H2WorkedExamples(NumericTestCase):
 
 
 class MeterWorkedExamples(NumericTestCase):
+    def test_edge_power_adds_all_samples_within_residual_beyond_adjacent_pair(self):
+        stream = self.stream()
+        stream.watts[38] = 100
+        stream.watts[62] = 200
+        stream.fit.stats["excess_latency_ms_min"] = -250
+        stream.fit.stats["excess_latency_ms_max"] = 100
+        result = ba.meter_decode(stream, [4_000_000_000, 6_000_000_000],
+                                 [1_000_000_000, 3_000_000_000])
+        self.assertEqual(result["edge_powers_w"], [100, 200])
+        self.assertAlmostEqual(result["meter_phase_edge_j"], 300 * (.25 + .1))
+
+    def test_meter_gap_removes_the_whole_dc_and_rest_unit_only(self):
+        spec = ba.read_json(ROOT / "configs/bytes/bytes_manifest.json")["models"][0]
+        refs = {"test7_passed": False, "boundaries": {
+            boundary: {"energy_j": 100, "duration_s": 1, "families": {
+                family: {"allowance_j": 1} for family in ("gross", "idle_subtracted")}}
+            for boundary in ba.BOUNDARIES}}
+        rows = [{"run_id": str(i), "model": spec["model"], "pass_id": 1, "session_id": "s",
+                 "stratum": "repeat" if i < 10 else "quad", "unit_id": str(i if i < 10 else (i - 10) // 4),
+                 "status": "succeeded", "excluded": False, "flags": [], "duration_s": 2,
+                 "rails_j": 10, "rails_secondary_j": 8, "rails_anchor_j": .1, "rails_interpolation_j": 0,
+                 "operative": {}, "neg8_inputs": refs,
+                 "meter": {"gross_j": 16, "secondary_j": 12, "phase_edge_j": .2,
+                           "battery_gross_j": 0, "battery_secondary_j": 0, "battery_phase_edge_j": 0}}
+                for i in range(50)]
+        rows[10].update(meter=None, flags=["bytes.meter_gap"])
+        manifest = {"models": [spec], "sessions": [{"session_id": "s"}]}
+        for inclusive in (False, True):
+            for cell in ba.reduce_models(rows, manifest, inclusive=inclusive):
+                self.assertEqual(cell["n_r"], 10)
+                self.assertEqual(cell["n_b"], 10 if cell["boundary"] == "rails" else 9)
+                kept = set(cell["kept_runs"])
+                self.assertEqual(bool(kept & {str(i) for i in range(10, 14)}), cell["boundary"] == "rails")
+
+    def test_request_span_excludes_controller_overhead_and_includes_phase_gaps(self):
+        metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
+            "sampling_started": {"epoch_s": 0, "monotonic_before_s": 0}}}}}
+        events = [{"phase": phase, "event_type": kind, "timestamp_s": stamp}
+                  for phase, kind, stamp in (
+                      ("measured_run", "stage_started", 0),
+                      ("tokenize", "phase_start", 1), ("tokenize", "phase_end", 1.1),
+                      ("decode", "phase_start", 2), ("decode", "phase_end", 3),
+                      ("measured_run", "stage_completed", 10))]
+        self.assertEqual(ba._request_span(events, metadata), [1_000_000_000, 3_000_000_000])
+
+    def test_dropped_device_sample_removes_meter_value(self):
+        stream = self.stream()
+        for values in (stream.samples.dev_ms, stream.samples.vbus_v, stream.samples.ibus_a,
+                       stream.samples.batch, stream.host_ns, stream.watts):
+            del values[45]
+        with self.assertRaisesRegex(ba.MeterGapError, "dropped device sample"):
+            ba.meter_decode(stream, [4_000_000_000, 6_000_000_000],
+                            [1_000_000_000, 3_000_000_000])
+        # The same stream still supplies a disjoint run's value.
+        result = ba.meter_decode(stream, [7_000_000_000, 9_000_000_000],
+                                 [1_000_000_000, 3_000_000_000])
+        self.assertEqual(result["gross_j"], 20)
+
+    def test_marker_window_uses_integer_nanoseconds_at_both_edges(self):
+        stream = self.stream()
+        gap = 100_000_001
+        stream.poll_ns = [i * gap for i in range(11)]
+        stream.smc = [{"B0AC": -1000, "B0AV": 12000} for _ in stream.poll_ns]
+        tau_ns = 2_000_000_000 + gap
+        edge = stream.poll_ns[-1] - tau_ns
+        self.assertEqual(ba._battery_delay_ns(stream), tau_ns)
+        for window, assisted in (([edge, edge + 1], True), ([edge - 1, edge], None)):
+            with self.subTest(window=window):
+                self.assertIs(ba._decode_battery_marker(stream, window, tau_ns), assisted)
+
+    def test_filtered_stream_uses_native_decoded_voltage_current_and_power(self):
+        # These payload digits distinguish native v*i from the former chained
+        # division/multiplication expression at binary floating-point precision.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stream.jsonl"
+            items = [{"k": "h", "rate_idx": 1, "status": "streaming",
+                      "start_raw_ns": 0, "start_mono_ns": 0}]
+            for i in range(13):
+                word = kp.SAMPLE.pack(i * 100, 0, 28_034_517 + i, 539_131 + i, 0, 0, 0, 0)
+                items.append({"k": "b", "rx": i * 100_000_000, "tx": i * 100_000_000 - 1_000_000,
+                              "n": 1, "p": word.hex(), "smc": {"B0AC": 0, "B0AV": 12000}})
+            items.append({"k": "t", "end_raw_ns": 1_200_000_000, "end_mono_ns": 1_200_000_000})
+            path.write_text("".join(json.dumps(item) + "\n" for item in items))
+            native = kp.parse(path)
+            filtered = ba._filtered_stream(path, [(0, 1_200_000_000)])
+        self.assertEqual(filtered.samples, native.samples)
+        self.assertEqual(filtered.host_ns, native.host_ns)
+        self.assertEqual(filtered.watts, native.watts)
+        self.assertEqual(filtered.fit, native.fit)
+
     def stream(self, watts=None):
         # Exact host/device clock line, with two batches; parse calls clock_fit.
         samples = kp.Samples([i * 100 for i in range(101)], [1] * 101,
@@ -304,7 +440,10 @@ class BatteryRulingWorkedExamples(NumericTestCase):
             stream.fit.stats.update(excess_latency_ms_min=-6.730335482299805,
                                     excess_latency_ms_max=17.762388349609374)
         stream.poll_ns, stream.smc = times, [values[t] for t in times]
-        return ba.meter_decode(stream, [0, duration_ns], [-10_000_000_000, -5_000_000_000])
+        # This battery-only arithmetic oracle has sparse reconstructed powers,
+        # not a device-counter trace. Native counter gaps have separate tests.
+        with patch.object(kp, "span_has_drops", return_value=False):
+            return ba.meter_decode(stream, [0, duration_ns], [-10_000_000_000, -5_000_000_000])
 
     def test_bat2_qwen_check_r01_seven_nonzero_polls(self):
         result = self.example(11_017_812_967, 56, 5_151_255, [
@@ -323,7 +462,8 @@ class BatteryRulingWorkedExamples(NumericTestCase):
         self.assertEqual(result["battery_n"], 56)
         self.assertEqual(result["battery_v_end_j"], 0)
         self.assertFalse(result["decode_battery_assist"])
-        self.assertEqual(result["battery_tau_s"], 2 + .302440875)
+        # No own half-width: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+        self.assertAlmostEqual(result["battery_tau_s"], 2 + .302440875, delta=1e-6 * (2 + .302440875))
         self.assertAlmostEqual(result["gross_j"] - result["meter_gross_j"], .776577, delta=1e-5)
         for key, expected in (("gross_j", 885.276128), ("secondary_j", 857.327851),
                               ("phase_edge_j", 7.163877), ("offset_bound_j", 4.068644)):
@@ -356,6 +496,27 @@ class BatteryRulingWorkedExamples(NumericTestCase):
 
 
 class RegisteredArithmeticTests(NumericTestCase):
+    def test_manifest_predictors_and_test7_are_registered(self):
+        manifest = ba.read_json(ROOT / "configs/bytes/bytes_manifest.json")
+        manifest["sessions"] = [{"session_id": "s", "pass_id": 1}]
+        ba.validate_manifest(manifest)
+        for model in manifest["models"]:
+            for key in ("W_bytes", "KV_bytes", "R_bytes", "b_bytes"):
+                changed = copy.deepcopy(manifest)
+                target = next(m for m in changed["models"] if m["model"] == model["model"])
+                target[key] += 1
+                with self.subTest(model=model["model"], key=key):
+                    with self.assertRaisesRegex(ba.AnalysisError, "predictors differ"):
+                        ba.validate_manifest(changed)
+                    with self.assertRaisesRegex(ba.AnalysisError, "predictors differ"):
+                        ba.reduce_models([], changed)
+        for invalid in (True, 1, 0, None, "false"):
+            changed = copy.deepcopy(manifest)
+            changed["sessions"][0]["test7_passed"] = invalid
+            with self.subTest(test7=invalid):
+                with self.assertRaisesRegex(ba.AnalysisError, "test7_passed must be false"):
+                    ba.validate_manifest(changed)
+
     def estimate(self, repeats, means):
         bounds = dict(zip(ba.BOUND_KINDS, (.01, 0, .05)))
         return ba.estimate_phase_energy(repeats, [[v] * 4 for v in means],
@@ -608,7 +769,7 @@ class ProductionArchiveTests(NumericTestCase):
             with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 manifest = archive_campaign(root, world="resident", seed=3100,
-                    non_claim=False, release="none", sample_phase_ms=50, edge_phase=True,
+                    non_claim=False, release="none", sample_phase_ms=10, edge_phase=True,
                     min_receive_latency_ms=latency)
                 output = cli_stage_chain(root, manifest)
                 records = ba.load_records(root / "export", manifest, stage="all")
@@ -670,8 +831,8 @@ class ProductionArchiveTests(NumericTestCase):
                                  Counter({"corpus": 6, "start": 3, "midpoint": 1, "end": 3}))
                 meter = Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl"
                 with meter.open() as stream:
-                    # Native KM003C rate_idx 1 denotes the required 10 Hz.
-                    self.assertEqual(json.loads(next(stream))["rate_idx"], 1)
+                    # Native KM003C rate_idx 2 denotes production 50 SPS.
+                    self.assertEqual(json.loads(next(stream))["rate_idx"], 2)
             _write_json(root / "manifest.json", manifest)
             args = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
                     "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
@@ -738,7 +899,7 @@ class ProductionArchiveTests(NumericTestCase):
             self.assertEqual(len(heldout), 700)
             self.assertEqual(len({(r["model"], r["pass_id"]) for r in fit + heldout}), 20)
             for row in fit + heldout:
-                # The independent native 10 Hz integration can move each
+                # The independent native 50 SPS integration can move each
                 # edge by r_max + 0.1 s; phase_edge_j is the resulting
                 # (P_start+P_end)*dt envelope. The meter stores integer uW,
                 # adding at most half a uW times the integrated duration.
@@ -1156,6 +1317,64 @@ class Addendum4RegressionTests(NumericTestCase):
             if inclusive:
                 self.assertTrue(all("member.cooldown_cap_hit" in r["flags"] for r in cells))
                 self.assertTrue(all(rid in r["kept_runs"] and bad in r["removed_runs"] for r in cells))
+
+    def test_unbounded_anchor_is_not_restored_by_flagged_inclusive_analysis(self):
+        root, session, rid = self.target()
+        def exclude(value):
+            value['excluding'].append({'scope': 'member', 'run_id': rid,
+                                       'code': 'member.anchor_not_bounded'})
+        # Leave production-shaped bundle bytes and succeeded export intact:
+        # the validity code itself must prevent restoration of this record.
+        with self.changed_json(root / 'derived/b6-acceptance.json', exclude):
+            records = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+        row = next(r for r in records if r['run_id'] == rid)
+        self.assertEqual(row['status'], 'unusable')
+        self.assertTrue(row['invalid_energy_record'])
+        for inclusive in (False, True):
+            cells = [r for r in ba.reduce_models(records, self.manifest, inclusive=inclusive)
+                     if r['model'] == row['model']]
+            self.assertTrue(cells)
+            self.assertTrue(all(rid in r['removed_runs'] and rid not in r['kept_runs'] for r in cells))
+
+    def test_archive_respects_unsucceeded_export_even_with_valid_bundle(self):
+        root, session, rid = self.target()
+        export = root.parent / 'export/bytes' / (session['session_id'] + '.runs.csv')
+        raw = export.read_bytes()
+        rows = ba._export_rows(export)
+        try:
+            for status in ('member.anchor_not_bounded', 'failed', ''):
+                with self.subTest(status=status):
+                    next(r for r in rows if r['run_id'] == rid)['status'] = status
+                    with export.open('w', newline='') as stream:
+                        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+                        writer.writeheader()
+                        writer.writerows(rows)
+                    records = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+                    row = next(r for r in records if r['run_id'] == rid)
+                    self.assertEqual(row['status'], 'unusable')
+                    self.assertTrue(row['invalid_energy_record'])
+                    self.assertEqual(row['unusable_reason'], 'export status not succeeded')
+        finally:
+            export.write_bytes(raw)
+
+    @unittest.skipUnless(shutil.which('zstd') or Path('/opt/homebrew/bin/zstd').is_file(), 'zstd CLI required')
+    def test_archive_reads_compressed_science_and_reference_events(self):
+        root, session, rid = self.target()
+        before = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+        # Exercise both event readers; reference spans also feed NEG-8.
+        paths = [root / 'sources/claim-runs' / run / 'events.jsonl'
+                 for run in (rid, 'neg8-start-0')]
+        saved = {path: path.read_bytes() for path in paths}
+        try:
+            for path in paths:
+                compress_member(path, root)
+            with patch.object(desk_restore.shutil, 'disk_usage', return_value=type('Space', (), {'free': 1024**4})()):
+                after = list(ba.archive_records(root, self.manifest, session, stage='fit'))
+            self.assertEqual(after, before)  # Same parser and exact decompressed bytes.
+        finally:
+            for path, raw in saved.items():
+                path.write_bytes(raw)
+                Path(str(path) + '.zst').unlink(missing_ok=True)
 
     def test_a4_07_neg8_export_inputs_whole_request_and_two_families(self):
         p = next(r for r in self.passes if (r["model"],r["pass_id"],r["boundary"],r["basis"],r["selection"]) ==
@@ -1611,7 +1830,9 @@ class Addendum7RegressionTests(NumericTestCase):
                 meter = record["meter"]
                 extrema = [meter["clock_fit"]["excess_latency_ms_" + suffix] for suffix in ("min", "max")]
                 self.assertEqual(meter["r_max_s"], max(map(abs, extrema)) / 1000)
-                self.assertAlmostEqual(meter["phase_edge_j"], sum(meter["edge_powers_w"]) * (meter["r_max_s"] + .1))
+                self.assertEqual(meter["sample_interval_s"], .02)
+                self.assertAlmostEqual(meter["phase_edge_j"], sum(meter["edge_powers_w"]) *
+                                       (meter["r_max_s"] + meter["sample_interval_s"]))
 
     def test_a7_13_exact_512_decode_denominators_and_printed_label(self):
         self.assertEqual(ba.DECODE_STEPS, 512)
@@ -1802,7 +2023,7 @@ class SubsetReleaseChainTests(unittest.TestCase):
         from joulewise.b6 import blinding
         # Generate full harvest-shaped campaigns in a separate process. The
         # fixture calls the real export boundary; every analysis and release is
-        # another CLI process, with native keys and 10 Hz meter streams.
+        # another CLI process, with native keys and 50 SPS meter streams.
         for world in ("bytes", "resident", "time"):
             with self.subTest(world=world), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -1818,8 +2039,8 @@ root = Path(sys.argv[1])
 original = export_runs.export
 def grouped(*args, **kwargs):
     # Retain an actual pre-change full export using the very same drawn keys.
-    original(*args[:4], root / "legacy-export", **kwargs)
-    return original(*args, **kwargs, pack_registration={"blinding_group": "bytes", "bytes_pass": int(args[0].name[-1])})
+    original(*args[:4], root / "legacy-export", **{**kwargs, "pack_registration": {"pack_id": "bytes"}})
+    return original(*args, **{**kwargs, "pack_registration": {"blinding_group": "bytes", "bytes_pass": int(args[0].name[-1])}})
 with patch.object(export_runs, "export", side_effect=grouped):
     manifest = fixture.archive_campaign(root, world=sys.argv[2], non_claim=False, release="none",
         pass_duration_scales=(1, 2), clock_latency_ms=(-8, 3))
@@ -2108,12 +2329,19 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
             manifest = archive_campaign(root, non_claim=False, release="all")
             _write_json(root / "manifest.json", manifest)
             clean_source = (ROOT / "joulewise/bytes_analysis.py").read_text()
+            self.assertEqual(ba.frozen_predictions([], manifest)["desk_restore_sha256"],
+                hashlib.sha256(Path(desk_restore.__file__).read_bytes()).hexdigest())
             for case in ("comment", "fit-line"):
                 with self.subTest(case=case):
                     tree = root / case
                     shutil.copytree(ROOT / "joulewise", tree / "joulewise")
                     (tree / "scripts").mkdir()
                     shutil.copyfile(ROOT / "scripts/bytes_analyze.py", tree / "scripts/bytes_analyze.py")
+                    # This isolated code checkout must carry the authenticated
+                    # registered predictor input, just as the real checkout does.
+                    (tree / "configs/bytes").mkdir(parents=True)
+                    shutil.copyfile(ROOT / "configs/bytes/bytes_manifest.json",
+                                    tree / "configs/bytes/bytes_manifest.json")
                     source = clean_source + "\n# Q2 comment-only provenance change.\n"
                     if case == "fit-line":
                         # A deliberately defective central line uses the existing upper
@@ -2222,6 +2450,24 @@ class BatteryCampaignTests(NumericTestCase):
     @classmethod
     def tearDownClass(cls):
         cls.directory.cleanup()
+
+    def test_valid_precheck_record_returns_only_on_inclusive_line(self):
+        path = self.archive / "derived/b6-acceptance.json"
+        acceptance = ba.read_json(path)
+        run_id = self.target["run_id"]
+        acceptance["excluding"].append({"scope": "member", "run_id": run_id,
+                                         "code": "member.target_phase_precheck_failed"})
+        original = ba.read_json
+        with patch.object(ba, "read_json", side_effect=lambda p: acceptance if Path(p) == path else original(p)):
+            rows = ba.load_records(self.root / "export", self.manifest, stage="all")
+        target = next(r for r in rows if r["run_id"] == run_id and r["session_id"] == self.session["session_id"])
+        self.assertEqual(target["status"], "succeeded")
+        self.assertTrue(target["excluded"])
+        self.assertFalse(target["invalid_energy_record"])
+        for inclusive in (False, True):
+            cells = ba.reduce_models(rows, self.manifest, inclusive=inclusive, boundaries=("rails",))
+            cell = next(r for r in cells if r["model"] == target["model"] and r["pass_id"] == target["pass_id"])
+            self.assertEqual(run_id in cell["kept_runs"], inclusive)
 
     def spans(self, run_id):
         from joulewise.b6.archive import bundle_of
@@ -2394,9 +2640,9 @@ class BatteryCampaignTests(NumericTestCase):
                     else:
                         peer["without_assisted"]["reason"] = second
                     point = ba.combine_passes([peer, cell])[0]
-                    reason = first if second == first else first + "; " + (
+                    reason = f"pass {cell['pass_id']}: {first}; pass {peer['pass_id']}: " + (
                         second if second is not None else "not evaluated at the blinded stage")
-                    # Exact strings: same pass causes, deduplicated in pass order.
+                    # PR #574 preserves each actual pass's cause, in pass order.
                     self.assertEqual(point["without_assisted"]["reason"], reason)
                     self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
                     self.assertIn(self.target["run_id"], reason)
@@ -2606,10 +2852,13 @@ class BatteryCampaignTests(NumericTestCase):
         finally:
             self.path.write_bytes(self.original)
         self.assertIn(rx, stream.poll_ns)  # Exact integer receive time is retained.
-        self.assertEqual(result["battery_tau_s"], 2 * 1.0 + .6)  # Identical input arithmetic.
+        # No own half-width: 1e-6 relative, absolute 1e-6 s near zero (brief §5).
+        self.assertAlmostEqual(result["battery_tau_s"], 2 * 1.0 + .6, delta=2.6e-6)
 
     def test_neg8_request_battery_correction_reaches_dc_and_rest_references(self):
-        span = self.spans("neg8-start-0")["measured_run"]
+        bundle = self.archive / "sources/claim-runs/neg8-start-0"
+        events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+        span = ba._request_span(events, ba.read_json(bundle / "metadata.json"))
         def change(items):
             next(item for item in items if item.get("k") == "b" and
                  span[0] <= item["rx"] < span[1])["smc"]["B0AC"] = -1000

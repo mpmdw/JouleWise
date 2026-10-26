@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 import math
 import hashlib
@@ -40,12 +40,19 @@ def read(path):
     return json.loads(Path(path).read_text(), parse_float=Decimal)
 
 
+class OperandUnavailable(ValueError):
+    """A numeric receipt is absent or malformed, rather than a bad identity."""
+
+
 def number(value, name, *, positive=False):
     if isinstance(value, bool):
-        raise ValueError(name + " must be a finite measured number")
-    result = Decimal(str(value))
+        raise OperandUnavailable(name + " must be a finite measured number")
+    try:
+        result = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise OperandUnavailable(name + " must be a finite measured number") from exc
     if not result.is_finite() or result < 0 or (positive and result == 0):
-        raise ValueError(name + " must be finite and " + ("positive" if positive else "nonnegative"))
+        raise OperandUnavailable(name + " must be finite and " + ("positive" if positive else "nonnegative"))
     return result
 
 
@@ -56,7 +63,7 @@ def optional(value, name, *, positive=False):
 
 def integer(value, name):
     if type(value) is not int or value < 0:
-        raise ValueError(name + " must be a nonnegative integer byte/count value")
+        raise OperandUnavailable(name + " must be a nonnegative integer byte/count value")
     return value
 
 
@@ -117,6 +124,20 @@ def disk_allowance(receipts, count, margin):
             "member_allowance_s": wall * (1 + margin)}
 
 
+def request_spread(receipts):
+    """Exact C5 check/soak max/min - 1; fewer than two is unavailable."""
+    times = [Fraction(r["request_s"]) for r in receipts]
+    return max(times) / min(times) - 1 if len(times) >= 2 else None
+
+
+def sizing_span(model_wall_sum, reference_count, reference_wall_mean, margin,
+                collection_count, stage_overhead_s, fixed_desk_s):
+    """Disjoint C5 S terms; callers retain Decimal or exact Fraction inputs."""
+    return ((model_wall_sum + reference_count * reference_wall_mean) * (1 + margin)
+            + (collection_count + 1) * SETTLE_S
+            + collection_count * stage_overhead_s + fixed_desk_s)
+
+
 def committed_fixed(path):
     """Committed artifact bytes only; missing provenance never falls back to H's partial desk."""
     source = {"path": str(path), "sha256": None, "json_pointer": FIXED_POINTER}
@@ -130,6 +151,25 @@ def committed_fixed(path):
 
 
 def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing=COMMITTED_SIZING):
+    try:
+        return _calculate(rows, sidecar, measured, plan, repo_root=repo_root, committed_sizing=committed_sizing)
+    except OperandUnavailable as exc:
+        # Mandatory run/disk operands cannot be omitted from maxima or means.
+        # Keep all candidates unavailable rather than silently dropping a run.
+        _, fixed_source, fixed_flag = committed_fixed(committed_sizing)
+        return {"schema_version": "joulewise.bytes_c5.v1", "non_claim": True,
+                "session_id": measured["session_id"], "status": "unavailable", "registration_ready": False,
+                "committed_fixed_source": fixed_source, "measured_margin": None,
+                "models": {}, "spread_groups": [], "cpu_contention_alternative": [],
+                "sessions": {f"bytes-s{n}-p{p}": {"programmed_span_s": None, "T_stream_max_s": None,
+                    "required_free_bytes": None, "disk_derivation": None}
+                    for n in range(1, 7) for p in (1, 2)},
+                "gates": [line("receipts", "unavailable", reason=str(exc))],
+                "flags": [{"code": "receipt.operand_unavailable", "reason": str(exc)}]
+                         + ([fixed_flag] if fixed_flag else [])}
+
+
+def _calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing=COMMITTED_SIZING):
     if (measured.get("schema_version") != "joulewise.bytes_mac_measurements.v1"
             or measured.get("non_claim") is not True or sidecar.get("non_claim") is not True
             or sidecar.get("pack_id") != "bytes-mac-check" or plan.get("non_claim") is not True):
@@ -159,23 +199,49 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
     # Read all scaffold members too: their streams and bytes contribute to
     # the session clock and disk even though they are not roster checks.
     for run_id, receipt in receipts.items():
-        integer(receipt["retained_bytes"], "retained_bytes")
+        integer(receipt.get("retained_bytes"), run_id + ".retained_bytes")
         if run_id not in measured_ids:
             continue
         for field in ("request_s", "member_wall_s", "stream_s"):
-            receipt[field] = number(receipt[field], run_id + "." + field, positive=True)
+            receipt[field] = number(receipt.get(field), run_id + "." + field, positive=True)
         if receipt["member_wall_s"] < receipt["request_s"] or receipt["stream_s"] < receipt["request_s"]:
             raise ValueError("member/stream duration is shorter than its request")
-        integer(receipt["thermal_level"], "thermal_level")
-    cpu = measured["cpu_contention"]
+        integer(receipt.get("thermal_level"), run_id + ".thermal_level")
+    operand_flags = []
+
+    def operand(value, name, *, positive=False, signed=False):
+        """A missing/bad arithmetic operand disables its diagnostic, not C5."""
+        try:
+            if signed:
+                result = Decimal(str(value))
+                if isinstance(value, bool) or not result.is_finite():
+                    raise ValueError("must be finite")
+                return result
+            return number(value, name, positive=positive)
+        except (ValueError, ArithmeticError) as exc:
+            operand_flags.append({"code": "receipt.operand_unavailable", "input": name,
+                                  "reason": "absent" if value is None else str(exc)})
+            return None
+
+    def clock_gate(name, stream):
+        if stream is None or clock_rate is None or clock_word is None:
+            return line("clock:" + name, "unavailable", reason="clock operand or stream observations absent")
+        return clock_line(name, stream, {"rate_ppm": clock_rate, "frequency_word_ppm": clock_word})
+
+    clock = measured.get("clock", {})
+    clock_rate = operand(clock.get("rate_ppm"), "clock.rate_ppm", signed=True)
+    clock_word = operand(clock.get("frequency_word_ppm"), "clock.frequency_word_ppm", signed=True)
+    cpu = measured.get("cpu_contention", {})
     # Optional desk receipts: null means not derived; dependent lines are
     # printed "unavailable" instead of withholding every other line.
-    w = optional(cpu["w_j_per_cpu_s"], "CPU contention w", positive=True)
-    cq = optional(cpu["c_q_cpu_s"], "quiet CPU seconds per quantum")
+    w = operand(cpu.get("w_j_per_cpu_s"), "CPU contention w", positive=True)
+    cq = operand(cpu.get("c_q_cpu_s"), "quiet CPU seconds per quantum")
     groups, checks, spread_groups = {}, {}, []
     for run_id, member in planned.items():
         if member["model_id"] == "reference":
             continue
+        groups.setdefault(member["model_id"], [])
+        checks.setdefault(member["model_id"], [])
         if member["purpose"] in ("check", "soak"):
             groups.setdefault(member["model_id"], []).append(run_id)
             if member["purpose"] == "check":
@@ -200,38 +266,43 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             spread_groups.append({"model_id": model, "purpose": purpose, "runs": len(times),
                                   "complete": len(times) == expected,
                                   "spread": max(times) / min(times) - 1 if len(times) >= 2 else None})
-    margin = max(g["spread"] for g in spread_groups if g["spread"] is not None)
+    margin = max((g["spread"] for g in spread_groups if g["spread"] is not None), default=None)
+    if margin is None:
+        operand_flags.append({"code": "receipt.operand_unavailable", "input": "measured_margin",
+                              "reason": "no succeeded check/soak group has two timed members"})
     margin_complete = all(g["complete"] for g in spread_groups)
     exact_spreads = []
     for ids in groups.values():
         for purpose in ("check", "soak"):
-            times = [Fraction(receipts[r]["request_s"]) for r in ids
+            group_receipts = [receipts[r] for r in ids
                      if planned[r]["purpose"] == purpose and r in measured_ids
                      and exported[r]["status"] == "succeeded"]
-            if len(times) >= 2:
-                exact_spreads.append(max(times) / min(times) - 1)
-    disk_margin = max(exact_spreads)
+            spread = request_spread(group_receipts)
+            if spread is not None:
+                exact_spreads.append(spread)
+    disk_margin = max(exact_spreads, default=None)
     models, cpu_alternative, model_flags = {}, [], []
     reference_ids = (set(exported) - {r for r, m in planned.items() if m["model_id"] != "reference"}) & measured_ids
     if not reference_ids:
-        raise ValueError("reference sizing observations are absent")
-    ref_mean_wall = average([receipts[r]["member_wall_s"] for r in reference_ids])
-    ref_stream = max(receipts[r]["stream_s"] for r in reference_ids)
+        operand_flags.append({"code": "receipt.operand_unavailable", "input": "reference observations",
+                              "reason": "no timed references"})
+    ref_mean_wall = average([receipts[r]["member_wall_s"] for r in reference_ids]) if reference_ids else None
+    ref_stream = max((receipts[r]["stream_s"] for r in reference_ids), default=None)
     # Registration S-7: these are run-level paired clock-stamp spans,
     # never the whole kit/meter stream or a calibration-capture duration.
     ran = [receipts[r] for r in sorted(measured_ids)]
-    all_stream = max(r["stream_s"] for r in ran)
-    gates.append(clock_line("session", all_stream, measured["clock"]))
-    gates.append(line("thermal", "pass" if all(r["thermal_level"] == 0 for r in ran)
+    all_stream = max((r["stream_s"] for r in ran), default=None)
+    gates.append(clock_gate("session", all_stream))
+    gates.append(line("thermal", "unavailable" if not ran else "pass" if all(r["thermal_level"] == 0 for r in ran)
                       and not any(set(row["flag_codes"].split(";")) & {"thermal.os_level_nonzero", "thermal.powermetrics_pressure_elevated"}
                                   for row in rows) else "fail",
-                      maximum_level=max(r["thermal_level"] for r in ran),
+                      maximum_level=max((r["thermal_level"] for r in ran), default=None),
                       rule="block-6 catalog: thermal OS level above zero excludes the run"))
     for model, run_ids in groups.items():
-        regime = measured["regimes"][model]
-        floor = optional(regime["F_min_j"], "F_min_j", positive=True)
-        resolution = optional(regime["census_resolution_w"], "census_resolution_w", positive=True)
-        outside = optional(regime["outside_power_w"], "outside_power_w")
+        regime = measured.get("regimes", {}).get(model, {})
+        floor = operand(regime.get("F_min_j"), model + ".F_min_j", positive=True)
+        resolution = operand(regime.get("census_resolution_w"), model + ".census_resolution_w", positive=True)
+        outside = operand(regime.get("outside_power_w"), model + ".outside_power_w")
         regime_absent = [k for k, v in (("F_min_j", floor), ("census_resolution_w", resolution),
                                         ("outside_power_w", outside)) if v is None]
         run_ids = [r for r in run_ids if r in measured_ids]
@@ -248,14 +319,16 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             for name in ("contention:", "cpu_contention:", "calibration_T10:", "resolvability:", "clock:"):
                 gates.append(line(name + model, "unavailable", reason=reason))
             continue
-        tmax = max(number(exported[r]["dur_decode_s"], "decode duration", positive=True) for r in all_model)
-        if regime_absent:
+        phases = [operand(exported[r].get("dur_decode_s"), r + ".dur_decode_s", positive=True) for r in all_model]
+        tmax = None if None in phases else max(phases)
+        registered_phase = regime.get("registered_T_phase_s")
+        phase = None if registered_phase is None else operand(registered_phase, model + ".registered_T_phase_s", positive=True)
+        if regime_absent or tmax is None or (registered_phase is not None and phase is None):
             gates.append(line("contention:" + model, "unavailable", T_max_s=tmax,
-                              reason="regime receipt absent: " + ",".join(regime_absent)))
+                              reason="regime receipt absent: " + ",".join(regime_absent) if regime_absent else "decode/registered phase operand unavailable"))
         else:
             p_limit = floor / (4 * tmax)  # R6 quarter-floor energy budget, joules/(4 seconds) = watts.
-            registered_phase = regime.get("registered_T_phase_s")
-            registered_p = None if registered_phase is None else floor / (4 * number(registered_phase, "registered T_phase", positive=True))
+            registered_p = None if phase is None else floor / (4 * phase)
             flag_reason = ("registered_T_phase_absent" if registered_p is None else
                            "below_census_resolution" if registered_p < resolution else None)
             gates.append(line("contention:" + model,
@@ -272,8 +345,14 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             alternative = []
             for run_id in all_model:
                 receipt = receipts[run_id]
-                c = number(receipt["outside_cpu_s"], "outside CPU seconds")
-                k = integer(receipt["census_quanta"], "census quanta")
+                c = operand(receipt.get("outside_cpu_s"), run_id + ".outside_cpu_s")
+                try:
+                    k = integer(receipt.get("census_quanta"), run_id + ".census_quanta")
+                except OperandUnavailable as exc:
+                    operand_flags.append({"code": "receipt.operand_unavailable", "input": run_id + ".census_quanta", "reason": str(exc)})
+                    k = None
+                if c is None or k is None:
+                    continue
                 # Registration §8.5 / S-8: subtract quiet CPU time once per
                 # census quantum, clamp negative excess to zero, then multiply w.
                 excess = max(Decimal(0), c - k * cq)
@@ -281,43 +360,46 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
                                     "excess_cpu_s": excess, "added_energy_j": w * excess,
                                     "quarter_floor_j": floor / 4, "would_exclude": w * excess >= floor / 4})
             cpu_alternative.extend(alternative)
-            gates.append(line("cpu_contention:" + model, "flag_only",
+            gates.append(line("cpu_contention:" + model, "flag_only" if len(alternative) == len(all_model) else "unavailable",
                               would_exclude=sum(r["would_exclude"] for r in alternative),
                               rule="w * max(0, C - k*c_q) >= F_min/4",
                               reason="registered round-1 exclusion not adopted; labelled alternative only"))
         t10 = regime.get("registered_T10_s")
-        bound = optional(regime["operative_bound_s"], "operative_bound_s")
+        t10_value = None if t10 is None else operand(t10, model + ".registered_T10_s", positive=True)
+        bound = operand(regime.get("operative_bound_s"), model + ".operative_bound_s")
         gates.append(line("calibration_T10:" + model, "flag_only" if t10 is None else
-                          "unavailable" if bound is None else
-                          "pass" if bound <= number(t10, "registered T10", positive=True) else "fail",
-                          registered_T10_s=t10, operative_bound_s=bound,
+                          "unavailable" if bound is None or t10_value is None else
+                          "pass" if bound <= t10_value else "fail",
+                          registered_T10_s=t10_value, operative_bound_s=bound,
                           reason="registered_T10_absent" if t10 is None else
                           "operative bound absent" if bound is None else None))
-        energies = [number(exported[r]["phase_decode_j"], "decode energy") for r in checks[model] if r in measured_ids]
+        energies = [operand(exported[r].get("phase_decode_j"), r + ".phase_decode_j") for r in checks[model] if r in measured_ids]
+        if not energies:
+            operand_flags.append({"code": "receipt.operand_unavailable", "input": model + ".check_decode_energies", "reason": "no timed checks"})
         # R8.6 is structure only. Do not invent an energy/SNR cut to drop
         # 8B-8bit: report the measured floor ratios for registration review.
-        gates.append(line("resolvability:" + model, "unavailable" if floor is None else "flag_only",
-                          minimum_decode_to_floor=None if floor is None else min(energies) / floor,
+        gates.append(line("resolvability:" + model, "unavailable" if floor is None or not energies or None in energies else "flag_only",
+                          minimum_decode_to_floor=None if floor is None or not energies or None in energies else min(energies) / floor,
                           reason="regime receipt absent: F_min_j" if floor is None else
                           "non-claim diagnostic; roster is frozen only at registration"))
         mean_request = average([receipts[r]["request_s"] for r in run_ids])
         mean_wall = average([receipts[r]["member_wall_s"] for r in run_ids])
-        stream = max(ref_stream, *(receipts[r]["stream_s"] for r in all_model))
+        stream = max([receipts[r]["stream_s"] for r in all_model] + ([ref_stream] if ref_stream is not None else []))
         # Each science module has fifty runs (R6). Member wall time already
         # includes load, warm-up, idle, settle within a run and reduction.
         models[model] = {"request_mean_s": mean_request, "member_wall_mean_s": mean_wall,
-                         "measured_margin": margin, "est_minutes": 50 * mean_wall * (1 + margin) / 60,
+                         "measured_margin": margin, "est_minutes": None if margin is None else 50 * mean_wall * (1 + margin) / 60,
                          "T_stream_max_s": stream,
                          "bytes_per_member_note": "two-copy retained maximum per measured member; disclosure only; no gate reads this value",
                          "bytes_per_member": max(receipts[r]["retained_bytes"] for r in all_model)}
         if not margin_complete:
             models[model].update(measured_margin_complete=False, runs_measured=len(run_ids))
-        gates.append(clock_line(model, stream, measured["clock"]))
+        gates.append(clock_gate(model, stream))
     disk = measured["disk"]
-    measured_fixed = integer(disk["fixed_retained_bytes"], "measured fixed retained bytes")
+    measured_fixed = integer(disk.get("fixed_retained_bytes"), "measured fixed retained bytes")
     fixed_bytes, fixed_source, fixed_flag = committed_fixed(committed_sizing)
     footprint = measured_fixed + sum(r["retained_bytes"] for r in receipts.values())
-    free = integer(disk["pre_arm_free_bytes"], "pre-arm free bytes")
+    free = integer(disk.get("pre_arm_free_bytes"), "pre-arm free bytes")
     raw_missing = sorted(r for r in measured_ids if receipts[r].get("raw_allocated_bytes") is None)
     raw_runs = [receipts[r] for r in sorted(measured_ids) if r not in raw_missing]
     for receipt in raw_runs:
@@ -341,19 +423,23 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
                       committed_fixed_source=fixed_source,
                       measured_fixed_retained_bytes_unused=measured_fixed,
                       **({"required_free_bytes": None, "reason": disk_reason} if kit_terms is None else kit_terms)))
-    sizing = measured["sizing"]
+    sizing = measured.get("sizing", {})
     # Explicitly measured desk/stage overheads, never block-5 pilot proxies.
-    fixed_s = optional(sizing["fixed_desk_s"], "fixed desk seconds")
-    stage_s = optional(sizing["collection_stage_overhead_s"], "collection stage overhead")
+    fixed_s = operand(sizing.get("fixed_desk_s"), "fixed desk seconds")
+    stage_s = operand(sizing.get("collection_stage_overhead_s"), "collection stage overhead")
     sizing_absent = [k for k, v in (("fixed_desk_s", fixed_s), ("collection_stage_overhead_s", stage_s)) if v is None]
-    ref_bytes = max(receipts[r]["retained_bytes"] for r in reference_ids)
+    if margin is None:
+        sizing_absent.append("measured_margin")
+    if not reference_ids:
+        sizing_absent.append("reference observations")
+    ref_bytes = max((receipts[r]["retained_bytes"] for r in reference_ids), default=None)
     sessions = {}
     for n in range(1, 7):
         for pass_id in (1, 2):
             pack_id = f"bytes-s{n}-p{pass_id}"
             tree = read(Path(repo_root) / "configs/campaigns" / pack_id / "plan_tree.json")
             mids = [m.removeprefix("bytes-") for m in tree["module_order"]]
-            missing_models = [m for m in mids if models[m].get("status") == "unavailable"]
+            missing_models = [m for m in mids if m not in models or models[m].get("status") == "unavailable"]
             unavailable_sizing = sizing_absent + ["model:" + m for m in missing_models]
             collections = [s for s in tree["stage_graph"] if s["kind"] == "campaign_collection"]
             science_count = len(tree["science"])
@@ -361,16 +447,16 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             # SETTLE_S is registered by the chain, before pre-calibration
             # and every collection. Fixed desk seconds excludes these and
             # member time; the README defines the disjoint measured terms.
-            seconds = None if unavailable_sizing else (
-                (sum(50 * models[m]["member_wall_mean_s"] for m in mids)
-                 + reference_count * ref_mean_wall) * (1 + margin)
-                + (len(collections) + 1) * SETTLE_S + len(collections) * stage_s + fixed_s)
-            projected_bytes = None if fixed_bytes is None or missing_models else fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
+            seconds = None if unavailable_sizing else sizing_span(
+                sum(50 * models[m]["member_wall_mean_s"] for m in mids),
+                reference_count, ref_mean_wall, margin, len(collections), stage_s, fixed_s)
+            projected_bytes = None if fixed_bytes is None or missing_models or ref_bytes is None else fixed_bytes + reference_count * ref_bytes + sum(50 * models[m]["bytes_per_member"] for m in mids)
             allowances = {m: disk_allowance([receipts[r] for r in groups[m] if r in measured_ids],
                            sum(row["module_id"] == "bytes-" + m for row in tree["science"]), disk_margin)
-                          for m in mids if m not in missing_models}
-            allowances["reference"] = disk_allowance([receipts[r] for r in sorted(reference_ids)], reference_count, disk_margin)
-            terms = None if rates is None or missing_models else disk_terms(*rates, allowances, fixed_bytes,
+                          for m in mids if m not in missing_models and disk_margin is not None}
+            if reference_ids and disk_margin is not None:
+                allowances["reference"] = disk_allowance([receipts[r] for r in sorted(reference_ids)], reference_count, disk_margin)
+            terms = None if rates is None or missing_models or not reference_ids or disk_margin is None else disk_terms(*rates, allowances, fixed_bytes,
                                                           measured_c=disk.get("measured_c"))
             sessions[pack_id] = {"programmed_span_s": seconds, "est_minutes": None if seconds is None else seconds / 60,
                                  "T_stream_max_s": None if missing_models else max(models[m]["T_stream_max_s"] for m in mids),
@@ -378,7 +464,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
                                  "projected_footprint_bytes_note": "committed fixed bytes plus two-copy retained member maxima; disclosure only; no gate reads this value",
                                  "required_free_bytes": None if terms is None else terms["required_free_bytes"],
                                  "disk_derivation": terms,
-                                 "modules": {m: models[m] for m in mids}, "non_claim": True}
+                                 "modules": {m: models.get(m, {"status": "unavailable", "reason": "model not in this session plan"}) for m in mids}, "non_claim": True}
             if not margin_complete:
                 sessions[pack_id]["measured_margin_complete"] = False
             gates.append(line("disk:" + pack_id, "unavailable" if terms is None else
@@ -400,7 +486,7 @@ def calculate(rows, sidecar, measured, plan, *, repo_root=ROOT, committed_sizing
             "committed_fixed_source": fixed_source,
             "measured_fixed_retained_bytes_unused": measured_fixed,
             "measured_margin": margin, "spread_groups": spread_groups,
-            "models": models, "sessions": sessions, "gates": gates, "flags": flags,
+            "models": models, "sessions": sessions, "gates": gates, "flags": flags + operand_flags,
             "cpu_contention_alternative": cpu_alternative,
             "status": "fail" if "fail" in statuses else "unavailable" if "unavailable" in statuses else "pass",
             "unmeasured_members": unmeasured,

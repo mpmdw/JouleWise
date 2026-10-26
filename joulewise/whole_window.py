@@ -18,10 +18,13 @@ import math
 import statistics
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from joulewise.desk_compress import is_file as desk_is_file
+from joulewise.desk_restore import readable_run, StorageStop
 from joulewise.tolerances import CALIBRATION_TIME_ABS_TOL_S, NEG8_ENERGY_ABS_TOL_J
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -580,6 +583,7 @@ class AuthenticatedConsumptionSession:
                     grammar="jsonl",
                     label="whole-window bracket-binding campaign log",
                     encoding="utf-8",
+                    allow_compressed=True,
                 ).splitlines()
                 if line.strip()
             ]
@@ -657,11 +661,25 @@ class AuthenticatedConsumptionSession:
         *,
         bundle_paths: Mapping[str, Path],
         policy: CampaignPolicy,
+        compression_records: Path | None = None,
+    ) -> None:
+        with ExitStack() as stack:
+            plain = {key: stack.enter_context(readable_run(path, compression_records=compression_records))
+                     for key, path in bundle_paths.items()}
+            return self._prepare_plain(bundle_paths=plain, policy=policy,
+                                       original_paths=bundle_paths)
+
+    def _prepare_plain(
+        self,
+        *,
+        bundle_paths: Mapping[str, Path],
+        policy: CampaignPolicy,
+        original_paths: Mapping[str, Path],
     ) -> None:
         identity = tuple(
             sorted(
                 (bundle_id, str(Path(path).resolve()))
-                for bundle_id, path in bundle_paths.items()
+                for bundle_id, path in original_paths.items()
             )
         )
         if self._prepared:
@@ -792,13 +810,14 @@ class AuthenticatedConsumptionSession:
             detail: str | None = "instrument_calibration_invalid"
             if isinstance(calibration, Mapping) and isinstance(metadata, Mapping):
                 try:
-                    authenticated, detail = _verify_instrument_calibration(
-                        BundleReader(path),
-                        dict(metadata),
-                        dict(calibration),
-                        strict_physics=True,
-                        physics_cache=physics_cache,
-                    )
+                    with readable_run(path) as plain:
+                        authenticated, detail = _verify_instrument_calibration(
+                            BundleReader(plain),
+                            dict(metadata),
+                            dict(calibration),
+                            strict_physics=True,
+                            physics_cache=physics_cache,
+                        )
                 except (BundleReadError, OSError, TypeError, ValueError):
                     authenticated = None
                     detail = "instrument_calibration_invalid"
@@ -859,13 +878,16 @@ class AuthenticatedConsumptionSession:
             operative_summary: Mapping[str, Any] = stored_summary
             if dominated:
                 try:
-                    operative_summary = (
-                        _rederive_summary_for_authenticated_fiducial_bound(
-                            path,
-                            authenticated_fiducial_bound_s=operative_bound,
-                            _instrument_calibration_physics_cache=physics_cache,
+                    with readable_run(path) as plain:
+                        operative_summary = (
+                            _rederive_summary_for_authenticated_fiducial_bound(
+                                plain,
+                                authenticated_fiducial_bound_s=operative_bound,
+                                _instrument_calibration_physics_cache=physics_cache,
+                            )
                         )
-                    )
+                except StorageStop:
+                    raise
                 except (
                     BundleReadError,
                     OSError,
@@ -1024,6 +1046,7 @@ def custody_telemetry_identity(
     *,
     summary: Mapping[str, Any] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    compression_records: Path | None = None,
 ) -> CustodyTelemetryIdentity:
     """Derive mockness and config/metadata/summary triangle agreement.
 
@@ -1034,9 +1057,9 @@ def custody_telemetry_identity(
 
     path = Path(bundle_path)
     if metadata is None:
-        metadata = _read_json_object(path / "metadata.json")
+        metadata = _read_json_object(path / "metadata.json", compression_records=compression_records)
     if summary is None:
-        summary = _read_json_object(path / "summary_metrics.json")
+        summary = _read_json_object(path / "summary_metrics.json", compression_records=compression_records)
     quality = (
         summary.get("measurement_quality")
         if isinstance(summary, Mapping)
@@ -1074,11 +1097,12 @@ def custody_telemetry_identity(
         if legacy_mock_class == TelemetryBackend.MOCK.value:
             metadata_class = legacy_mock_class
     try:
-        config_raw = read_authentication_input(
-            path / "config.json",
-            grammar="json",
-            label=f"bundle {path.name} custody config",
-        )
+        with readable_run(path, compression_records=compression_records) as plain:
+            config_raw = read_authentication_input(
+                plain / "config.json",
+                grammar="json",
+                label=f"bundle {path.name} custody config",
+            )
     except OSError:
         config_raw = None
     custody_bound = bool(
@@ -1718,6 +1742,7 @@ def _neg8_corpus_identity_is_authenticated(
             path,
             grammar="json",
             label="registered NEG-8 settled reference corpus",
+            allow_compressed=True,
         )
     except (OSError, UnicodeDecodeError, ValueError):
         return False
@@ -1830,7 +1855,7 @@ def load_neg8_drift_bound_artifact(path: str | Path | None) -> dict[str, Any] | 
     try:
         raw = read_authentication_input(
             path, grammar="json", label="NEG-8 drift-bound artifact"
-        )
+        , allow_compressed=True)
         from joulewise.determinism_gate import (  # noqa: PLC0415
             _reject_duplicate_json_pairs,
         )
@@ -2531,6 +2556,7 @@ def source_manifest_descriptors(
             resolved,
             grammar="json",
             label=f"whole-window source manifest {resolved.name}",
+            allow_compressed=True,
         )
         result.append(
             {
@@ -2760,7 +2786,7 @@ def ordinary_present_bundle_paths(runs_root: Path, bundle_id: str) -> list[Path]
         if path.name == bundle_id:
             result.append(path)
             continue
-        if not (path / "summary_metrics.json").is_file():
+        if not desk_is_file(path / "summary_metrics.json"):
             continue
         config = _read_json_object(path / "config.json")
         run_id = config.get("run_id") if isinstance(config, Mapping) else None
@@ -3018,6 +3044,7 @@ def _calibration_launch_lineages(
                 evidence_path,
                 grammar="json",
                 label=f"whole-window {role} calibration launch lineage",
+                allow_compressed=True,
             )
             evidence = json.loads(raw)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -3181,6 +3208,7 @@ def authenticate_window_launch_lineage(
             grammar="jsonl",
             label="launch-lineage whole-window campaign log",
             encoding="utf-8",
+            allow_compressed=True,
         ).splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         raise LaunchLineageError(
@@ -3285,6 +3313,7 @@ def _occurrence_descriptor_valid(
                 path,
                 grammar="json",
                 label=f"occurrence source manifest for {bundle_id}",
+                allow_compressed=True,
             )
             if path is not None
             else None
@@ -3374,6 +3403,7 @@ def validate_occurrence_supersession_entry(
                 quarantine_path / name,
                 grammar="json",
                 label=f"supersession quarantine {bundle_id} {name}",
+                allow_compressed=True,
             )
         except OSError:
             return False
@@ -3542,6 +3572,7 @@ def supersession_entry_validation_results(
             grammar="jsonl",
             label="supersession campaign log",
             encoding="utf-8",
+            allow_compressed=True,
         ).splitlines()
     except FileNotFoundError:
         return ([], [])
@@ -3640,6 +3671,7 @@ def _evidence_map(path: Path) -> dict[str, bytes]:
             candidate,
             grammar="json",
             label=f"attempt evidence {candidate.name}",
+            allow_compressed=True,
         )
         digest = hashlib.sha256(raw).hexdigest()
         if digest in result:
@@ -3662,10 +3694,10 @@ def validated_attempt_selection(
     try:
         ledger_raw = read_authentication_input(
             ledger, grammar="jsonl", label="attempt ledger"
-        )
+        , allow_compressed=True)
         manifest_raw = read_authentication_input(
             manifest_path, grammar="json", label="attempt analysis manifest"
-        )
+        , allow_compressed=True)
         manifest = json.loads(manifest_raw)
         rows = [
             json.loads(line)
@@ -3802,7 +3834,10 @@ def validated_attempt_selection(
 
 
 def _manifest_members(
-    value: Mapping[str, Any], runs_root: Path
+    value: Mapping[str, Any],
+    runs_root: Path,
+    *,
+    compression_records: Path | None = None,
 ) -> set[str] | None:
     selection = value.get("attempt_ledger_selection")
     if isinstance(selection, Mapping):
@@ -3828,6 +3863,7 @@ def _manifest_members(
                     ledger,
                     grammar="jsonl",
                     label="attempt ledger membership re-read",
+                    allow_compressed=True,
                 )
                 if ledger is not None
                 else None
@@ -3891,8 +3927,12 @@ def _manifest_members(
         result.update(bundle_ids)
     if duplicate_ids and any(
         _current_strict_summary(
-            _read_json_object(runs_root / bundle_id / "summary_metrics.json"),
+            _read_json_object(
+                runs_root / bundle_id / "summary_metrics.json",
+                compression_records=compression_records,
+            ),
             runs_root / bundle_id,
+            **({"compression_records": compression_records} if compression_records is not None else {}),
         )
         for bundle_id in result
     ):
@@ -3922,13 +3962,22 @@ def _neg8_position(role: Any, sentinel_position: Any) -> str | None:
     return None
 
 
-def _read_json_object(path: Path) -> Mapping[str, Any] | None:
+def _read_json_object(
+    path: Path, *, compression_records: Path | None = None
+) -> Mapping[str, Any] | None:
     try:
-        value = json.loads(
-            read_authentication_input(
-                path, grammar="json", label=f"JSON object {path.name}"
-            ).decode("utf-8")
-        )
+        if path.name in {"summary_metrics.json", "metadata.json", "config.json"}:
+            # Primary member bytes can determine eligibility and numbers.
+            with readable_run(path.parent, compression_records=compression_records) as plain:
+                raw = read_authentication_input(
+                    plain / path.name, grammar="json", label=f"JSON object {path.name}"
+                )
+        else:
+            # Non-member manifests, policies and artifacts retain the opt-in.
+            raw = read_authentication_input(
+                path, grammar="json", label=f"JSON object {path.name}", allow_compressed=True
+            )
+        value = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     return value if isinstance(value, Mapping) else None
@@ -3941,7 +3990,10 @@ def _summary_reducer_version(summary: Any) -> str | None:
 
 
 def _current_strict_summary(
-    summary: Any, bundle_path: Path | None = None
+    summary: Any,
+    bundle_path: Path | None = None,
+    *,
+    compression_records: Path | None = None,
 ) -> bool:
     """Identify current-mint, non-mock summaries that can bear strict claims."""
 
@@ -3953,6 +4005,7 @@ def _current_strict_summary(
         identity = custody_telemetry_identity(
             bundle_path,
             summary=summary if isinstance(summary, Mapping) else None,
+            compression_records=compression_records,
         )
         non_mock = (
             identity.triangle_agrees
@@ -3975,6 +4028,8 @@ def _custody_strict_invalid(
     bundle_path: Path,
     summary: Mapping[str, Any] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    *,
+    compression_records: Path | None = None,
 ) -> bool:
     """Identify custody-bound bundles whose telemetry triangle disagrees."""
 
@@ -3982,6 +4037,7 @@ def _custody_strict_invalid(
         bundle_path,
         summary=summary,
         metadata=metadata,
+        compression_records=compression_records,
     )
     return identity.custody_bound_config and not identity.triangle_agrees
 
@@ -4010,6 +4066,12 @@ def _gross_fields(summary: Any) -> dict[str, float] | None:
     ):
         return None
     gross_value, point, lower, upper = (float(value) for value in fields)
+    # Internal agreement of two J-valued representations: 1e-9 relative is
+    # 4.5e6 times double noise (2.2e-16). At the 1e4 J reference scale it is
+    # 1e-5 J, below 1% of the smallest printed half-width (0.013 J -> 1.3e-4 J).
+    # The 1e-12 J absolute floor only dominates below 0.001 J, where it still
+    # exceeds 1e6 times float noise. This is a consistency check, not a gate on
+    # measured energy or on its uncertainty interval.
     if (
         not math.isclose(point, gross_value, rel_tol=1e-9, abs_tol=1e-12)
         or lower <= 0.0
@@ -4023,11 +4085,13 @@ def _reference_energy_evidence(
     bundle_path: Path,
     *,
     require_idle_subtracted: bool = True,
+    compression_records: Path | None = None,
 ) -> tuple[dict[str, float] | None, float | None, str | None]:
     """Re-derive both current NEG-8 claim-family points from primary bytes."""
 
     gross, idle_subtracted, problem, _cause = _reference_energy_evidence_detail(
-        bundle_path, require_idle_subtracted=require_idle_subtracted
+        bundle_path, require_idle_subtracted=require_idle_subtracted,
+        compression_records=compression_records
     )
     return gross, idle_subtracted, problem
 
@@ -4044,6 +4108,7 @@ def _reference_energy_evidence_detail(
     bundle_path: Path,
     *,
     require_idle_subtracted: bool = True,
+    compression_records: Path | None = None,
 ) -> tuple[dict[str, float] | None, float | None, str | None, str | None]:
     """``_reference_energy_evidence`` plus the cause of its problem.
 
@@ -4057,6 +4122,14 @@ def _reference_energy_evidence_detail(
     ``reduction_incomplete``, ``not_current_strict``).
     """
 
+    with readable_run(bundle_path, compression_records=compression_records) as plain:
+        return _plain_reference_energy_evidence_detail(
+            plain, require_idle_subtracted=require_idle_subtracted)
+
+
+def _plain_reference_energy_evidence_detail(
+    bundle_path: Path, *, require_idle_subtracted: bool = True,
+) -> tuple[dict[str, float] | None, float | None, str | None, str | None]:
     stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
     stored_gross = _gross_fields(stored_summary)
     stored_idle = (
@@ -4160,9 +4233,15 @@ def _gross_energy_evidence(
     return gross, problem
 
 
-def _bundle_evidence_sha256(bundle_path: Path) -> str:
-    """Seal the complete regular-file inventory used by a reference member."""
+def _bundle_evidence_sha256(
+    bundle_path: Path, *, compression_records: Path | None = None
+) -> str:
+    """Seal logical primary bytes, never the compressed storage inventory."""
+    with readable_run(bundle_path, compression_records=compression_records) as plain:
+        return _plain_bundle_evidence_sha256(plain)
 
+
+def _plain_bundle_evidence_sha256(bundle_path: Path) -> str:
     inventory: dict[str, str] = {}
     for path in sorted(bundle_path.rglob("*")):
         if path.is_symlink():
@@ -4179,7 +4258,7 @@ def _bundle_evidence_sha256(bundle_path: Path) -> str:
 
 
 def mint_neg8_drift_bound_artifact(
-    runs_root: Path, corpus_manifest_path: Path
+    runs_root: Path, corpus_manifest_path: Path, *, compression_records: Path | None = None
 ) -> dict[str, Any]:
     """Derive a sealed NEG-8 point-drift bound from a settled corpus manifest."""
 
@@ -4189,6 +4268,7 @@ def mint_neg8_drift_bound_artifact(
         manifest_path,
         grammar="json",
         label="NEG-8 reference corpus manifest",
+        allow_compressed=True,
     )
     try:
         from joulewise.determinism_gate import (  # noqa: PLC0415
@@ -4217,7 +4297,7 @@ def mint_neg8_drift_bound_artifact(
             f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
         )
     if _is_hazard_runs_root(root):
-        return _mint_hazard_neg8_drift_bound(root, manifest, raw)
+        return _mint_hazard_neg8_drift_bound(root, manifest, raw, compression_records=compression_records)
 
     evidence_members: list[dict[str, Any]] = []
     freshness_bindings: list[dict[str, str]] = []
@@ -4241,66 +4321,67 @@ def mint_neg8_drift_bound_artifact(
         ):
             raise ValueError("NEG-8 corpus member is invalid, duplicated, or unsafe")
         seen_ids.add(bundle_id)
-        summary = _read_json_object(bundle_path / "summary_metrics.json")
-        metadata = _read_json_object(bundle_path / "metadata.json")
-        config = _read_json_object(bundle_path / "config.json")
-        try:
-            authenticated_launch = authenticate_bundle_launch_lineage(
-                bundle_path,
-                config=config,
-                metadata=metadata,
-                require_completion=False,
-            )
-        except LaunchLineageError as exc:
-            raise ValueError(f"{exc.reason_code}: {bundle_id}: {exc}") from exc
-        if authenticated_launch is not None:
-            extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
-            raw_lineage = (
-                extra.get("launch_lineage")
-                if isinstance(extra, Mapping)
-                else None
-            )
-            if not isinstance(raw_lineage, Mapping):
-                raise ValueError(
-                    f"launch_consumption_invalid: {bundle_id}: lineage vanished"
+        with readable_run(bundle_path, compression_records=compression_records) as bundle_path:
+            summary = _read_json_object(bundle_path / "summary_metrics.json")
+            metadata = _read_json_object(bundle_path / "metadata.json")
+            config = _read_json_object(bundle_path / "config.json")
+            try:
+                authenticated_launch = authenticate_bundle_launch_lineage(
+                    bundle_path,
+                    config=config,
+                    metadata=metadata,
+                    require_completion=False,
                 )
-            launch_lineages.append(raw_lineage)
-        if _custody_strict_invalid(bundle_path, summary, metadata):
-            raise ValueError(
-                f"NEG-8 corpus member {bundle_id} custody telemetry triangle disagrees"
+            except LaunchLineageError as exc:
+                raise ValueError(f"{exc.reason_code}: {bundle_id}: {exc}") from exc
+            if authenticated_launch is not None:
+                extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+                raw_lineage = (
+                    extra.get("launch_lineage")
+                    if isinstance(extra, Mapping)
+                    else None
+                )
+                if not isinstance(raw_lineage, Mapping):
+                    raise ValueError(
+                        f"launch_consumption_invalid: {bundle_id}: lineage vanished"
+                    )
+                launch_lineages.append(raw_lineage)
+            if _custody_strict_invalid(bundle_path, summary, metadata):
+                raise ValueError(
+                    f"NEG-8 corpus member {bundle_id} custody telemetry triangle disagrees"
+                )
+            if not _current_strict_summary(summary, bundle_path):
+                raise ValueError(
+                    f"NEG-8 corpus member {bundle_id} is not a current strict mint"
+                )
+            identity, canonical = _scientific_config_identity(bundle_path)
+            if identity is None or not canonical:
+                raise ValueError(
+                    f"NEG-8 corpus member {bundle_id} is not the canonical condition"
+                )
+            if scientific_identity is None:
+                scientific_identity = identity
+            elif identity != scientific_identity:
+                raise ValueError("NEG-8 reference corpus members are not same-condition")
+            gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
+            if problem is not None or gross is None or idle_subtracted is None:
+                raise ValueError(
+                    f"NEG-8 corpus member {bundle_id} dual-family evidence is invalid"
+                )
+            binding = neg8_freshness_bindings_from_metadata(metadata)
+            if binding is None:
+                raise ValueError(
+                    f"NEG-8 corpus member {bundle_id} freshness bindings are unavailable"
+                )
+            freshness_bindings.append(binding)
+            evidence_members.append(
+                {
+                    "bundle_id": bundle_id,
+                    "point_gross_j": gross["point_j"],
+                    "point_idle_subtracted_j": idle_subtracted,
+                    "bundle_evidence_sha256": _bundle_evidence_sha256(bundle_path, compression_records=compression_records),
+                }
             )
-        if not _current_strict_summary(summary, bundle_path):
-            raise ValueError(
-                f"NEG-8 corpus member {bundle_id} is not a current strict mint"
-            )
-        identity, canonical = _scientific_config_identity(bundle_path)
-        if identity is None or not canonical:
-            raise ValueError(
-                f"NEG-8 corpus member {bundle_id} is not the canonical condition"
-            )
-        if scientific_identity is None:
-            scientific_identity = identity
-        elif identity != scientific_identity:
-            raise ValueError("NEG-8 reference corpus members are not same-condition")
-        gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
-        if problem is not None or gross is None or idle_subtracted is None:
-            raise ValueError(
-                f"NEG-8 corpus member {bundle_id} dual-family evidence is invalid"
-            )
-        binding = neg8_freshness_bindings_from_metadata(metadata)
-        if binding is None:
-            raise ValueError(
-                f"NEG-8 corpus member {bundle_id} freshness bindings are unavailable"
-            )
-        freshness_bindings.append(binding)
-        evidence_members.append(
-            {
-                "bundle_id": bundle_id,
-                "point_gross_j": gross["point_j"],
-                "point_idle_subtracted_j": idle_subtracted,
-                "bundle_evidence_sha256": _bundle_evidence_sha256(bundle_path),
-            }
-        )
     assert scientific_identity is not None
     unique_freshness = {
         canonical_sha256(binding): binding for binding in freshness_bindings
@@ -4426,11 +4507,14 @@ def _neg8_majority(values: Sequence[Any]) -> Any:
     return [value for value in values if counts.get(value) == best][-1]
 
 
-def _measured_window_end_s(bundle_path: Path) -> float | None:
+def _measured_window_end_s(
+    bundle_path: Path, *, compression_records: Path | None = None
+) -> float | None:
     """End of a bundle's measured window (its ``sampling_stopped`` stamp)."""
 
     try:
-        window = BundleReader(bundle_path).measured_window()
+        with readable_run(bundle_path, compression_records=compression_records) as plain:
+            window = BundleReader(plain).measured_window()
     except (BundleReadError, OSError, TypeError, ValueError, KeyError):
         return None
     if window is None or window.end_s < window.start_s:
@@ -4439,7 +4523,7 @@ def _measured_window_end_s(bundle_path: Path) -> float | None:
 
 
 def _hazard_neg8_corpus_selection(
-    root: Path, manifest: Mapping[str, Any]
+    root: Path, manifest: Mapping[str, Any], *, compression_records: Path | None = None
 ) -> dict[str, Any]:
     """Give every corpus member its verdict once.
 
@@ -4480,84 +4564,85 @@ def _hazard_neg8_corpus_selection(
         def refuse(reason: str) -> None:
             refusals.append({"bundle_id": bundle_id, "reason": reason})
 
-        summary = (
-            _read_json_object(bundle_path / "summary_metrics.json")
-            if bundle_path.is_dir()
-            else None
-        )
-        # The registered status rule (the harvest's _corpus_member_status):
-        # an absent bundle or a summary that does not say succeeded.
-        if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
-            drop("status_not_succeeded")
-            continue
-        metadata = _read_json_object(bundle_path / "metadata.json")
-        config = _read_json_object(bundle_path / "config.json")
-        try:
-            authenticated_launch = authenticate_bundle_launch_lineage(
-                bundle_path,
-                config=config,
-                metadata=metadata,
-                require_completion=False,
+        with readable_run(bundle_path, compression_records=compression_records) as bundle_path:
+            summary = (
+                _read_json_object(bundle_path / "summary_metrics.json")
+                if bundle_path.is_dir()
+                else None
             )
-        except LaunchLineageError as exc:
-            refuse(f"launch_lineage:{exc.reason_code}")
-            continue
-        lineage = None
-        if authenticated_launch is not None:
-            extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
-            lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
-            if not isinstance(lineage, Mapping):
-                refuse("launch_lineage:launch_consumption_invalid")
+            # The registered status rule (the harvest's _corpus_member_status):
+            # an absent bundle or a summary that does not say succeeded.
+            if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
+                drop("status_not_succeeded")
                 continue
-        if _custody_strict_invalid(bundle_path, summary, metadata):
-            drop("custody_triangle_disagrees")
-            continue
-        if not _current_strict_summary(summary, bundle_path):
-            drop("not_current_strict_mint")
-            continue
-        identity, canonical = _scientific_config_identity(bundle_path)
-        if identity is None or not canonical:
-            refuse("not_canonical_condition")
-            continue
-        identities.append((bundle_id, identity))
-        gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
-        if problem is not None or gross is None or idle_subtracted is None:
-            # Classify only a failure (rare): the same evaluation again, with
-            # its cause.  A cause it cannot reproduce is not a drop reason.
-            _gross, _idle, _problem, cause = _reference_energy_evidence_detail(
-                bundle_path
-            )
-            if cause in NEG8_MINT_DROP_REASONS:
-                drop(cause)
-            else:
-                indeterminate.append(
-                    {"bundle_id": bundle_id, "reason": cause or "energy_unclassified"}
+            metadata = _read_json_object(bundle_path / "metadata.json")
+            config = _read_json_object(bundle_path / "config.json")
+            try:
+                authenticated_launch = authenticate_bundle_launch_lineage(
+                    bundle_path,
+                    config=config,
+                    metadata=metadata,
+                    require_completion=False,
                 )
-            continue
-        fields = neg8_freshness_binding_fields(metadata) or {}
-        if fields.get("calibration_identity_sha256") is None:
-            refuse("calibration_identity_unrecorded")
-            continue
-        try:
-            evidence_sha = _bundle_evidence_sha256(bundle_path)
-        except (OSError, ValueError):
-            refuse("bundle_inventory_invalid")
-            continue
-        rows.append(
-            {
-                "descriptor": dict(member),
-                "identity": identity,
-                "lineage": lineage,
-                "fields": fields,
-                "span_end_s": _measured_window_end_s(bundle_path),
-                "evidence": {
-                    "bundle_id": bundle_id,
-                    "point_gross_j": gross["point_j"],
-                    "point_idle_subtracted_j": idle_subtracted,
-                    "bundle_evidence_sha256": evidence_sha,
-                },
-            }
-        )
+            except LaunchLineageError as exc:
+                refuse(f"launch_lineage:{exc.reason_code}")
+                continue
+            lineage = None
+            if authenticated_launch is not None:
+                extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+                lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+                if not isinstance(lineage, Mapping):
+                    refuse("launch_lineage:launch_consumption_invalid")
+                    continue
+            if _custody_strict_invalid(bundle_path, summary, metadata):
+                drop("custody_triangle_disagrees")
+                continue
+            if not _current_strict_summary(summary, bundle_path):
+                drop("not_current_strict_mint")
+                continue
+            identity, canonical = _scientific_config_identity(bundle_path)
+            if identity is None or not canonical:
+                refuse("not_canonical_condition")
+                continue
+            identities.append((bundle_id, identity))
+            gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
+            if problem is not None or gross is None or idle_subtracted is None:
+                # Classify only a failure (rare): the same evaluation again, with
+                # its cause.  A cause it cannot reproduce is not a drop reason.
+                _gross, _idle, _problem, cause = _reference_energy_evidence_detail(
+                    bundle_path
+                )
+                if cause in NEG8_MINT_DROP_REASONS:
+                    drop(cause)
+                else:
+                    indeterminate.append(
+                        {"bundle_id": bundle_id, "reason": cause or "energy_unclassified"}
+                    )
+                continue
+            fields = neg8_freshness_binding_fields(metadata) or {}
+            if fields.get("calibration_identity_sha256") is None:
+                refuse("calibration_identity_unrecorded")
+                continue
+            try:
+                evidence_sha = _bundle_evidence_sha256(bundle_path, compression_records=compression_records)
+            except (OSError, ValueError):
+                refuse("bundle_inventory_invalid")
+                continue
+            rows.append(
+                {
+                    "descriptor": dict(member),
+                    "identity": identity,
+                    "lineage": lineage,
+                    "fields": fields,
+                    "span_end_s": _measured_window_end_s(bundle_path, compression_records=compression_records),
+                    "evidence": {
+                        "bundle_id": bundle_id,
+                        "point_gross_j": gross["point_j"],
+                        "point_idle_subtracted_j": idle_subtracted,
+                        "bundle_evidence_sha256": evidence_sha,
+                    },
+                }
+            )
     # Every kept member (verified or indeterminate) must be one condition.
     # There is no majority vote: a corpus of two conditions is not a corpus.
     dropped_ids = {row["bundle_id"] for row in drops}
@@ -4597,7 +4682,7 @@ def _raise_on_refusals(selection: Mapping[str, Any]) -> None:
 
 
 def neg8_corpus_member_verdicts(
-    runs_root: Path, corpus_manifest_path: Path
+    runs_root: Path, corpus_manifest_path: Path, *, compression_records: Path | None = None
 ) -> dict[str, list[dict[str, Any]]]:
     """Every corpus member's HAZARD mint verdict (DESIGN N2, interface I3).
 
@@ -4610,16 +4695,17 @@ def neg8_corpus_member_verdicts(
         Path(corpus_manifest_path),
         grammar="json",
         label="NEG-8 reference corpus manifest",
+        allow_compressed=True,
     )
     manifest = json.loads(raw)
     if not isinstance(manifest, Mapping):
         raise ValueError("NEG-8 reference corpus manifest is not an object")
-    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)
+    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest, compression_records=compression_records)
     return {key: selection[key] for key in ("drops", "indeterminate", "refusals")}
 
 
 def neg8_corpus_mint_drops(
-    runs_root: Path, corpus_manifest_path: Path
+    runs_root: Path, corpus_manifest_path: Path, *, compression_records: Path | None = None
 ) -> list[dict[str, str]]:
     """Members a HAZARD_PACK mint would drop, with the predicate each failed.
 
@@ -4636,11 +4722,12 @@ def neg8_corpus_mint_drops(
         Path(corpus_manifest_path),
         grammar="json",
         label="NEG-8 reference corpus manifest",
+        allow_compressed=True,
     )
     manifest = json.loads(raw)
     if not isinstance(manifest, Mapping):
         raise ValueError("NEG-8 reference corpus manifest is not an object")
-    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)
+    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest, compression_records=compression_records)
     _raise_on_refusals(selection)
     return selection["drops"]
 
@@ -4663,9 +4750,9 @@ def _hazard_bound_derived_at_s(rows: Sequence[Mapping[str, Any]]) -> float:
 
 
 def _mint_hazard_neg8_drift_bound(
-    root: Path, manifest: Mapping[str, Any], raw: bytes
+    root: Path, manifest: Mapping[str, Any], raw: bytes, *, compression_records: Path | None = None
 ) -> dict[str, Any]:
-    selection = _hazard_neg8_corpus_selection(root, manifest)
+    selection = _hazard_neg8_corpus_selection(root, manifest, compression_records=compression_records)
     _raise_on_refusals(selection)
     rows, drops = selection["rows"], selection["drops"]
     if selection["indeterminate"]:
@@ -4753,6 +4840,7 @@ def _registered_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
                 path,
                 grammar="json",
                 label=f"registered campaign policy {path.name}",
+                allow_compressed=True,
             )
         except OSError:
             continue
@@ -4788,17 +4876,20 @@ def _registered_bracket_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
     return bracket if isinstance(bracket, Mapping) else None
 
 
-def _scientific_config_identity(bundle_path: Path) -> tuple[str | None, bool]:
+def _scientific_config_identity(
+    bundle_path: Path, *, compression_records: Path | None = None
+) -> tuple[str | None, bool]:
     """Recompute canonical NEG-8 identity from custody-bound config bytes."""
 
-    config = _read_json_object(bundle_path / "config.json")
-    metadata = _read_json_object(bundle_path / "metadata.json")
+    config = _read_json_object(bundle_path / "config.json", compression_records=compression_records)
+    metadata = _read_json_object(bundle_path / "metadata.json", compression_records=compression_records)
     try:
-        raw = read_authentication_input(
-            bundle_path / "config.json",
-            grammar="json",
-            label=f"bundle {bundle_path.name} scientific config",
-        )
+        with readable_run(bundle_path, compression_records=compression_records) as plain:
+            raw = read_authentication_input(
+                plain / "config.json",
+                grammar="json",
+                label=f"bundle {bundle_path.name} scientific config",
+            )
         normalized = BenchmarkConfig.from_mapping(dict(config or {})).to_dict()
     except (OSError, TypeError, ValueError):
         return None, False
@@ -5130,7 +5221,10 @@ def _derived_neg8_decision(
 
 
 def _manifest_bundle_paths(
-    manifests: Sequence[Mapping[str, Any]], runs_root: Path
+    manifests: Sequence[Mapping[str, Any]],
+    runs_root: Path,
+    *,
+    compression_records: Path | None = None,
 ) -> dict[str, Path] | None:
     """Resolve every invoked occurrence without duplicate/set collapse."""
 
@@ -5171,11 +5265,13 @@ def _manifest_bundle_paths(
                 # the committed occurrence-to-set collapse; a mixed/current
                 # join refuses as soon as either duplicate path is current.
                 if _current_strict_summary(
-                    _read_json_object(path / "summary_metrics.json"),
+                    _read_json_object(path / "summary_metrics.json", compression_records=compression_records),
                     path,
+                    **({"compression_records": compression_records} if compression_records is not None else {}),
                 ) or _current_strict_summary(
-                    _read_json_object(result[bundle_id] / "summary_metrics.json"),
+                    _read_json_object(result[bundle_id] / "summary_metrics.json", compression_records=compression_records),
                     result[bundle_id],
+                    **({"compression_records": compression_records} if compression_records is not None else {}),
                 ):
                     return None
                 continue
@@ -5183,19 +5279,22 @@ def _manifest_bundle_paths(
     return result
 
 
-def _load_idle_records(bundle_path: Path, attempt: int) -> list[dict[str, Any]] | None:
+def _load_idle_records(
+    bundle_path: Path, attempt: int, *, compression_records: Path | None = None
+) -> list[dict[str, Any]] | None:
     name = (
         "rich_telemetry_idle.jsonl"
         if attempt == 1
         else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
     )
     try:
-        lines = read_authentication_text(
-            bundle_path / name,
-            grammar="jsonl",
-            label=f"bundle {bundle_path.name} idle records {name}",
-            encoding="utf-8",
-        ).splitlines()
+        with readable_run(bundle_path, compression_records=compression_records) as plain:
+            lines = read_authentication_text(
+                plain / name,
+                grammar="jsonl",
+                label=f"bundle {bundle_path.name} idle records {name}",
+                encoding="utf-8",
+            ).splitlines()
     except (OSError, UnicodeDecodeError):
         return None
     rows: list[dict[str, Any]] = []
@@ -5260,11 +5359,16 @@ def _current_core_rederivation_reasons(
     runs_root: Path,
     policy_sha256: Any,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    compression_records: Path | None = None,
 ) -> set[str]:
     """Recompute current-mint CPU/environment/adapter labels from members."""
 
     reasons: set[str] = set()
-    paths = _manifest_bundle_paths(manifests, runs_root)
+    restore_kwargs = (
+        {"compression_records": compression_records}
+        if compression_records is not None else {}
+    )
+    paths = _manifest_bundle_paths(manifests, runs_root, compression_records=compression_records)
     # STRUCTURAL frozen gate (delta-review P2): a frozen-only row must exit
     # before ANY current-gate refusal can fire, including registered-policy
     # parse failures and custody-resolution failures.  The currentness probe
@@ -5279,8 +5383,9 @@ def _current_core_rederivation_reasons(
         (path := probe_paths.get(bundle_id)) is not None
         and _custody_strict_invalid(
             path,
-            _read_json_object(path / "summary_metrics.json"),
-            _read_json_object(path / "metadata.json"),
+            _read_json_object(path / "summary_metrics.json", compression_records=compression_records),
+            _read_json_object(path / "metadata.json", compression_records=compression_records),
+            **restore_kwargs,
         )
         for bundle_id in bundle_ids
     ):
@@ -5290,8 +5395,9 @@ def _current_core_rederivation_reasons(
         for bundle_id in bundle_ids
         if (path := probe_paths.get(bundle_id)) is not None
         and _current_strict_summary(
-            _read_json_object(path / "summary_metrics.json"),
+            _read_json_object(path / "summary_metrics.json", compression_records=compression_records),
             path,
+            **restore_kwargs,
         )
     }
     if not strict_current_ids:
@@ -5340,23 +5446,24 @@ def _current_core_rederivation_reasons(
         if path is None:
             reasons.add("whole_window_verdict_provenance_invalid")
             continue
-        metadata = _read_json_object(path / "metadata.json")
+        metadata = _read_json_object(path / "metadata.json", compression_records=compression_records)
         if not isinstance(metadata, Mapping):
             reasons.add("environment_admission_missing")
             continue
         admission = metadata.get("environment_admission")
         if bundle_id in strict_current_ids:
             try:
-                window = BundleReader(path).measured_window()
+                with readable_run(path, compression_records=compression_records) as plain:
+                    window = BundleReader(plain).measured_window()
             except (BundleReadError, OSError, TypeError, ValueError):
                 window = None
             if window is None:
                 reasons.add("environment_admission_missing")
                 continue
-            reasons.update(
-                current_environment_refusals(
+            with readable_run(path, compression_records=compression_records) as plain:
+                environment_reasons = current_environment_refusals(
                     metadata,
-                    bundle_path=path,
+                    bundle_path=plain,
                     measured_window_start_s=window.start_s,
                     measured_window_end_s=window.end_s,
                     # The verdict writer's own setting (run_campaign
@@ -5364,14 +5471,14 @@ def _current_core_rederivation_reasons(
                     # batch 1 item 6): the re-derivation must agree with it.
                     post_run_collector_raised_unmeasured=True,
                 )
-            )
+            reasons.update(environment_reasons)
         else:
             reasons.update(environment_admission_refusals(admission))
         attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
         final = attempts[-1] if isinstance(attempts, list) and attempts else None
         attempt = final.get("attempt") if isinstance(final, Mapping) else None
         records = (
-            _load_idle_records(path, attempt)
+            _load_idle_records(path, attempt, compression_records=compression_records)
             if isinstance(attempt, int) and not isinstance(attempt, bool)
             else None
         )
@@ -5423,6 +5530,7 @@ def _current_core_rederivation_reasons(
                     for bundle_id, path, _metadata, _cpu in derived_members
                 },
                 policy=registered_typed_policy,
+                **restore_kwargs,
             )
             calibration_bracket = (
                 dict(consumption_session.calibration_bracket)
@@ -5433,20 +5541,22 @@ def _current_core_rederivation_reasons(
             )
             calibration_reasons = consumption_session.refusal_reasons
         else:
-            # Frozen/pre-D-109 row-verifier tests retain their historical
-            # pointwise seam. Current D-109 consumers always supply the
-            # session above, which is the sole route that can validate a v2
-            # acceptance record and its recorded ledger head.
-            calibration_bracket, calibration_reasons = (
-                calibration_bracket_for_bundles(
-                    runs_root,
-                    [
-                        path
-                        for _bundle_id, path, _metadata, _cpu in derived_members
-                    ],
-                    registered_typed_policy.calibration_bracketing,
+            # The harvest also uses this pointwise seam without a session.
+            # Keep each authenticated restore alive through bracket replay.
+            with ExitStack() as stack:
+                plain_paths = [
+                    stack.enter_context(
+                        readable_run(path, compression_records=compression_records)
+                    )
+                    for _bundle_id, path, _metadata, _cpu in derived_members
+                ]
+                calibration_bracket, calibration_reasons = (
+                    calibration_bracket_for_bundles(
+                        runs_root,
+                        plain_paths,
+                        registered_typed_policy.calibration_bracketing,
+                    )
                 )
-            )
         stored_calibration_bracket = core.get("instrument_calibration_bracket")
         if (
             not isinstance(stored_calibration_bracket, Mapping)
@@ -5486,13 +5596,14 @@ def _current_core_rederivation_reasons(
                 detail: str | None = "instrument_calibration_invalid"
                 if isinstance(member_calibration, Mapping):
                     try:
-                        authenticated, detail = _verify_instrument_calibration(
-                            BundleReader(_path),
-                            dict(member_metadata),
-                            dict(member_calibration),
-                            strict_physics=True,
-                            physics_cache=physics_cache,
-                        )
+                        with readable_run(_path, compression_records=compression_records) as plain:
+                            authenticated, detail = _verify_instrument_calibration(
+                                BundleReader(plain),
+                                dict(member_metadata),
+                                dict(member_calibration),
+                                strict_physics=True,
+                                physics_cache=physics_cache,
+                            )
                     except (BundleReadError, OSError, TypeError, ValueError):
                         authenticated = None
                         detail = "instrument_calibration_invalid"
@@ -5538,6 +5649,7 @@ def _consumption_provenance_valid(
     *,
     runs_root: Path,
     consumption_session: AuthenticatedConsumptionSession | None,
+    compression_records: Path | None = None,
 ) -> bool:
     semantics_id = basis.get(
         "consumption_semantics_id",
@@ -5769,7 +5881,7 @@ def _consumption_provenance_valid(
             root, occurrences_by_id[bundle_id].get("bundle_path")
         )
         minted_summary = (
-            _read_json_object(occurrence_path / "summary_metrics.json")
+            _read_json_object(occurrence_path / "summary_metrics.json", compression_records=compression_records)
             if occurrence_path is not None
             else None
         )
@@ -5790,6 +5902,7 @@ def _validated_evaluation_basis(
     runs_root: Path,
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    compression_records: Path | None = None,
 ) -> Mapping[str, Any] | None:
     basis = row.get("evaluation_basis")
     if not isinstance(basis, Mapping):
@@ -5820,6 +5933,7 @@ def _validated_evaluation_basis(
             occurrences,
             runs_root=runs_root,
             consumption_session=consumption_session,
+            compression_records=compression_records,
         )
     ):
         return None
@@ -5840,11 +5954,12 @@ def _validated_evaluation_basis(
         ):
             expected = occurrence.get(field)
             try:
-                raw = read_authentication_input(
-                    path / name,
-                    grammar="json",
-                    label=f"evaluation-basis occurrence {path.name} {name}",
-                )
+                with readable_run(path, compression_records=compression_records) as plain:
+                    raw = read_authentication_input(
+                        plain / name,
+                        grammar="json",
+                        label=f"evaluation-basis occurrence {path.name} {name}",
+                    )
             except OSError:
                 return None
             if (
@@ -5970,6 +6085,7 @@ def _supersession_is_logged(
             grammar="jsonl",
             label="supersession campaign-log verification",
             encoding="utf-8",
+            allow_compressed=True,
         ).splitlines()
     except (OSError, UnicodeDecodeError):
         return False
@@ -6215,6 +6331,7 @@ def _validate_row(
     referenced: set[str],
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    compression_records: Path | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     """Authenticate a verdict row once per collection-scoped session."""
 
@@ -6248,6 +6365,7 @@ def _validate_row(
         runs_root,
         referenced,
         consumption_session=consumption_session,
+        compression_records=compression_records,
     )
     if (
         cache_key is not None
@@ -6265,6 +6383,7 @@ def validate_whole_window_verdict_row(
     referenced_bundle_ids: set[str],
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    compression_records: Path | None = None,
 ) -> WholeWindowRowValidation:
     """Replay one row and type authenticity separately from admission.
 
@@ -6278,6 +6397,7 @@ def validate_whole_window_verdict_row(
         Path(runs_root),
         set(referenced_bundle_ids),
         consumption_session=consumption_session,
+        compression_records=compression_records,
     )
     status_value = row.get("status")
     status = status_value if isinstance(status_value, str) else None
@@ -6493,6 +6613,7 @@ def _validate_row_uncached(
     referenced: set[str],
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    compression_records: Path | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     reasons: set[str] = set()
     basis_present = "evaluation_basis" in row
@@ -6500,6 +6621,7 @@ def _validate_row_uncached(
         row,
         runs_root,
         consumption_session=consumption_session,
+        compression_records=compression_records,
     )
     if basis_present and basis is None:
         reasons.add("whole_window_verdict_provenance_invalid")
@@ -6661,7 +6783,7 @@ def _validate_row_uncached(
                 }
             )
             if basis is None:
-                members = _manifest_members(manifest, runs_root)
+                members = _manifest_members(manifest, runs_root, compression_records=compression_records)
                 if members is None:
                     reasons.add("whole_window_verdict_provenance_invalid")
                     continue
@@ -6712,6 +6834,7 @@ def _validate_row_uncached(
             runs_root=runs_root,
             policy_sha256=policy_sha,
             consumption_session=consumption_session,
+            compression_records=compression_records,
         )
         reasons.update(core_reasons)
         # Only dereference calibration lineage after the ordinary ledger and
@@ -6743,6 +6866,7 @@ def _validate_row_uncached(
                     basis.get("member_occurrences", []),
                     runs_root=runs_root,
                     consumption_session=consumption_session,
+                    compression_records=compression_records,
                 )
             )
         )
@@ -7066,6 +7190,7 @@ def whole_window_refusal_reasons(
             grammar="jsonl",
             label="whole-window verdict campaign log",
             encoding="utf-8",
+            allow_compressed=True,
         ).splitlines()
     except (OSError, UnicodeDecodeError):
         return missing
@@ -7228,6 +7353,7 @@ def _archive_bytes(
             archive / expected_path,
             grammar="json",
             label=f"harvest archive {expected_path}",
+            allow_compressed=True,
         )
     except OSError:
         return None
@@ -7278,7 +7404,7 @@ def harvest_neg8_allowance_bracket(
         harvest_record = json.loads(
             read_authentication_input(
                 archive / "harvest.json", grammar="json", label="harvest record"
-            )
+            , allow_compressed=True)
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None, "harvest_record_unreadable"
@@ -7444,6 +7570,7 @@ def whole_window_drift_allowances(
                 grammar="jsonl",
                 label="whole-window drift-allowance campaign log",
                 encoding="utf-8",
+                allow_compressed=True,
             ).splitlines()
             if line.strip()
             and isinstance((value := json.loads(line)), Mapping)

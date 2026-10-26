@@ -12,6 +12,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from joulewise import bytes_analysis as ba
+from joulewise.desk_restore import StorageStop
 
 
 def _write(out, name, payload):
@@ -133,6 +134,9 @@ def main(argv=None):
                 "note": frozen["note"], "synthetic": manifest.get("synthetic", False)})
         print(json.dumps({"stage": args.stage, "predictions_sha256": sha, "out": str(args.out)}))
         return 0
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 1
     except (ba.AnalysisError, OSError, ValueError, KeyError, TypeError) as exc:
         print(f"BYTES analysis refused: {exc}", file=sys.stderr)
         return 1

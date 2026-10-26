@@ -76,6 +76,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.desk_compress import read_bytes
 from joulewise.hazards import battery, clock, contention, disk, smc, thermal
 from joulewise.hazards.base import (
     Context, Stamp, canonical_json, sha256_hex, write_create_once,
@@ -209,9 +210,10 @@ def read_journal(path: Path) -> tuple[list[dict[str, Any]], str | None]:
     """All complete lines, plus a note when the last line is truncated (a death mid-write)."""
 
     path = Path(path)
-    if not path.exists():
+    try:
+        data = read_bytes(path)
+    except FileNotFoundError:
         return [], None
-    data = path.read_bytes()
     lines = data.split(b"\n")
     tail = lines.pop()  # empty when the file ends with a newline
     out = []
@@ -281,6 +283,7 @@ class Monitor:
         self.next_frequency_ns = first.monotonic_ns
         self.last_update_time: int | None = None
         self.previous_snapshot: contention.Snapshot | None = None
+        self.root_identities: dict[int, tuple[int, str]] = {}
         self.previous_over: dict[tuple[int, str], float] = {}
         self.disk_low_written = (self.directory / DISK_LOW_MARKER).exists()
         self.started = first
@@ -580,6 +583,7 @@ class Monitor:
             self._resolve_tree_roots()
         snapshot = contention.take_snapshot(self._raw_context("contention"), compress=True,
                                             host_reader=self.host_reader)
+        contention.pin_roots(snapshot, self.tree_roots, self.root_identities)
         previous, self.previous_snapshot = self.previous_snapshot, snapshot
         if previous is None:
             self._write("contention", "snapshot", started=snapshot.started,
@@ -590,7 +594,8 @@ class Monitor:
         result = contention.interval(previous, snapshot, tree_roots=self.tree_roots,
                                      include_kernel_task=False,
                                      limit=self.config["cpu_limit_s_per_s"],
-                                     previous_over=self.previous_over)
+                                     previous_over=self.previous_over,
+                                     root_identities=self.root_identities)
         self.previous_over = contention.over_limit(result)
         error = result.pop("error")
         self._write("contention", "interval", started=previous.started, finished=snapshot.finished,

@@ -744,8 +744,9 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                     )
 
     @unittest.skipUnless(
-        all(path.is_file() for path in REAL_CAMPAIGN_LOGS),
-        "real campaign-log corpus is unavailable",
+        os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1"
+        and all(path.is_file() for path in REAL_CAMPAIGN_LOGS),
+        "local campaign-log corpus disabled or unavailable",
     )
     def test_r7_real_campaign_log_writer_rows_are_complete(self) -> None:
         for log_path in REAL_CAMPAIGN_LOGS:

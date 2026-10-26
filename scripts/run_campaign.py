@@ -68,6 +68,7 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
     ACTIVE_CAPTURE_ANCHOR_METHOD,
     SCHEMA_FOR_ANCHOR_METHOD,
 )
+from joulewise.desk_restore import StorageStop  # noqa: E402
 from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
@@ -11687,6 +11688,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     except (LaunchLineageError, SupersessionRecorderError) as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
         return 2

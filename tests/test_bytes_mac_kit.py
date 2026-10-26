@@ -21,7 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class MacKitTests(unittest.TestCase):
     def test_generated_tree_and_configs_validate_without_a_pack_registration(self):
-        files = kit.generate(check=True)
+        # The committed kit is the frozen record of the H and BY-H2 sizing
+        # sessions, which ran from it. The generator's inputs have since moved
+        # on by design (the 8B-8bit revision, the pass-1 trees), so the
+        # committed files are validated as they stand, not regenerated.
+        files = {path: (ROOT / path).read_bytes() for path in kit.build_files(ROOT)}
         tree = json.loads(files[kit.KIT / "plan_tree.json"])
         self.assertTrue(tree["non_claim"])
         self.assertEqual(len(chain.stage_plan(tree)), len(tree["stage_graph"]))

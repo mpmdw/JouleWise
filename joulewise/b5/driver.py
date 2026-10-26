@@ -723,9 +723,12 @@ def production_seams(repo_root: Path) -> Seams:
             argv += ["--calibration-plan", str(calibration_plan)]
         # The sealed files, when the measurement checkout holds them. Without the
         # identity pins the model collector records model.identity_unpinned.
+        identity_pins = ("configs/b6/registration/identity_pins.json"
+                         if window["pack"]["pack_id"].startswith("bytes-")
+                         else "configs/campaigns/v5_claim_25g83/identity_pins.json")
         for flag, relative in (("--catalog", "configs/campaigns/v5_claim_25g83/flag_catalog.json"),
                                ("--sealed-inventory", "configs/campaigns/v5_claim_25g83/sealed_inventory.json"),
-                               ("--identity-pins", "configs/campaigns/v5_claim_25g83/identity_pins.json")):
+                               ("--identity-pins", identity_pins)):
             if (measurement / relative).is_file():
                 argv += [flag, str(measurement / relative)]
         return argv

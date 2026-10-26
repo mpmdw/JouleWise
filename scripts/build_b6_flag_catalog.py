@@ -48,6 +48,13 @@ def _entry(family: str, klass: str, effect: str, note: str) -> dict:
 
 
 NEW_CODES = {
+    "clock.step_unmeasured": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "FIX-416-H: two remaining dwell anchors determine the rate but cannot measure a step after fitting; disclose without refusing on count. At N>=3, each pair j is step-testable only when step_ns*(1-a_j) exceeds u_j = read_skew_j + read_skew_(j+1); otherwise disclose clock.step_unmeasured with interval_index j. A testable pair refuses only above step_ns*(1-a_j)+u_j. Rate, skew and boot-session checks still act; N<2 remains UNMEASURED."),
+    "bytes.reference_request_unavailable": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "BYTES section 6: the read reference bundle cannot define a whole request; print the dropped reference and reason in NEG-8 inputs."),
+    'bytes.meter_decode_unavailable': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'BYTES section 6: the decode meter value is unavailable; disclose the affected DC-input and rest cells.'),
+    'bytes.meter_gap': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'FIX-416 disposition: a dropped device sample in a decode or reference span leaves that run without a DC-input value; rails selection is unchanged.'),
+    'catalog.digest_mismatch': _entry('RECORDS', 'REPRESENTATION', 'DISCLOSE', 'FIX-416: the running flag catalog digest differs from the pack registration; record both digests.'),
+    "records.claim_usable_counting_disagreement": _entry("RECORDS", "REPRESENTATION", "DISCLOSE",
+        "Audit F11: harvest usability and block-six acceptance counting disagree; acceptance counting governs; disclose only."),
     "bytes.decode_battery_assist": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "BAT-2 sections 3-4: a negative battery current received in [decode_start + tau, decode_end + tau) marks decode assistance; only the labelled description omits its whole unit; the harvest's battery.assist is counted only."),
     "bytes.withheld_missing": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q1: an expected withheld export file is missing; disclose the pass and sidecar row counts, retain any surviving pass under Addendum 7 D9."),
     "bytes.module_changed_after_commitment": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "B6 Q2: the analysis module evaluating the held-out stage differs from the module that wrote the stage-1 commitment; the second commitment prints beside the registered result as the post-agreement fix."),

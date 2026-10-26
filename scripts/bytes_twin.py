@@ -10,6 +10,8 @@ and of block 5's analysis plan (``analysis_plan_block5.md`` section 4).  Standar
 only; nothing is imported from ``joulewise`` (R8 item 4: the twin shares no code with
 ``joulewise/bytes_analysis.py``; ``tests/test_bytes_agreement.py`` fences it).  The choices
 the ruling left open are recorded in JouleWise-data ``bytes/twin/CHOICES.md``.
+Battery energy, forward edges and the delayed decode diagnostic follow BAT-2
+in ``docs/contracts/bytes_tables.md``; harvest assist flags disclose only.
 
 Pass identity (lead ruling of 2026-10-20, item 2): a model's passes are ordered by the
 registered pass identity, never by a clock.  The identity of a session is read from the
@@ -39,14 +41,29 @@ from __future__ import annotations
 import argparse
 import bisect
 import csv
+import fcntl
+import os
+import tempfile
+from contextlib import contextmanager, ExitStack
 import hashlib
 import json
 import math
 import re
+import shutil
 import statistics
 import struct
+import subprocess
 import sys
 from pathlib import Path
+
+
+class StorageStop(BaseException):
+    """Independent custody stop; ordinary data handlers must not absorb it."""
+
+    def __init__(self, reason):
+        self.reason = str(reason).removeprefix("restore_refused: ")
+        super().__init__(f"restore_refused: {self.reason}")
+
 
 SCHEMA = "joulewise.bytes_twin.v1"
 GB = 1e9                      # the pilot's convention: GB means 10^9 bytes
@@ -66,14 +83,13 @@ DC_KINDS = ("E_meter_edge_bound_j", "E_whole_window_drift_allowance_j")
 REST_KINDS = ("E_clock_anchor_shift_bound_j", "E_meter_edge_bound_j", "E_whole_window_drift_allowance_j")
 # Addendum 7 D5 (Addendum 4 item 6): the flagged-inclusive line restores every catalog exclusion,
 # NUMBER class included, of a run with a valid energy record. Only status, bundle and validity
-# failures stay out: these codes, and every roster / model / records / lineage / code / pack code.
+# failures stay out. Registration section 6 names these seven invalid-record conditions.
 VALIDITY_CODES = frozenset({
     "member.status_not_succeeded", "member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
-    "member.strict_validation_failed", "member.token_count_mismatch", "member.reduction_mismatch",
-    "member.anchor_recompute_mismatch", "member.config_not_in_inventory", "member.timeout",
-    "member.span_unknown", "member.idle_admission_telemetry_missing",
+    "member.strict_validation_failed", "member.token_count_mismatch",
+    # The catalog's unresolved/fallback anchor has no valid phase placement (audit F15).
+    "member.anchor_not_bounded",
 })
-VALIDITY_PREFIXES = ("roster.", "model.", "records.", "lineage.", "code.", "pack.", "cell.")
 # Addendum 7 D8: block 5's tabulated two-sided 95% t (aggregate.student_t_critical_95), reproduced
 # here value by value and never imported.  The table lists df 1 to 30, 40, 60 and 120; a df that is
 # not listed takes the value of the largest listed df below it (block 5's floor rule, conservative).
@@ -119,7 +135,8 @@ def canon(name) -> str:
 # Student t (stdlib only): regularized incomplete beta by continued fraction.
 
 def _betacf(a: float, b: float, x: float) -> float:
-    # Lentz continued-fraction underflow floor (Numerical Recipes FPMIN), not a quantity bar.
+    # Lentz reciprocal underflow guard: 1e-300 stays representable on inversion and is
+    # hundreds of orders below any printed digit; this is not an agreement bar.
     tiny = 1e-300
     qab, qap, qam = a + b, a + 1.0, a - 1.0
     c, d = 1.0, 1.0 - qab * x / qap
@@ -140,6 +157,8 @@ def _betacf(a: float, b: float, x: float) -> float:
         c = c if abs(c) > tiny else tiny
         delta = d * c
         h *= delta
+        # Below binary64 epsilon at 1: effectively require an exactly converged
+        # update, far below the four-decimal printed t digit (not an agreement bar).
         if abs(delta - 1.0) < 1e-16:
             break
     return h
@@ -176,6 +195,7 @@ def t_quantile(p: float, df: int) -> float:
             lo = mid
         else:
             hi = mid
+        # Bisection stops within a few double ulps, eleven orders below printed t precision.
         if hi - lo < 1e-15 * max(1.0, hi):
             break
     return 0.5 * (lo + hi)
@@ -388,7 +408,7 @@ def offset_terms(repeats, quads):
 # ----------------------------------------------------------------------------
 # Estimator: block 5 analysis plan section 4, over kept units.
 
-def phase_estimate(repeats, quads, kinds, *, alpha=ALPHA):
+def phase_estimate(repeats, quads, kinds, *, alpha=ALPHA, minimum_units=UNIT_MINIMUM):
     """Per-phase gross energy over kept repeats and kept quads.
 
     repeats: [{"id", "E", "T", "bounds": {kind: J}}]; quads: [{"id", "members": [4 x member]}].
@@ -397,7 +417,7 @@ def phase_estimate(repeats, quads, kinds, *, alpha=ALPHA):
     n_r, n_b = len(repeats), len(quads)
     result = {"n_r": n_r, "n_b": n_b, "kept_repeat_ids": [m["id"] for m in repeats],
               "kept_quad_ids": [q["id"] for q in quads], "status": "ok"}
-    if n_r < UNIT_MINIMUM or n_b < UNIT_MINIMUM:
+    if n_r < minimum_units or n_b < minimum_units:
         result["status"] = "refused_below_minimum"
         return result
     r = [m["E"] for m in repeats]
@@ -467,7 +487,7 @@ FAMILIES = {("rails", "gross"): "gross", ("rails", "idle"): "idle_subtracted",
 
 def family_energy(row, family, dc=None):
     """A reference row's whole-request energy in one NEG-8 family (Addendum 7 D2, D3, D6), or None."""
-    rails_gross, rails_idle = row.get("gross_energy_j"), row.get("idle_subtracted_energy_j")
+    rails_gross, rails_idle = row.get("reference_request_gross_j"), row.get("reference_request_idle_subtracted_j")
     if family == "gross":
         return rails_gross if is_number(rails_gross) else None
     if family == "idle_subtracted":
@@ -494,16 +514,39 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
     def energy(row):
         return family_energy(row, family, dc_by_run.get(row["run_id"]))
 
-    def kept(row):
-        return row["status"] == "succeeded" and not row["excluded"] and energy(row) is not None
-    by_role = {}
+    by_role, dropped = {}, []
     for row in sorted(session_rows, key=lambda r: r["order_index"]):
-        if row["role"] in ("corpus", "start", "midpoint", "end") and kept(row):
+        if row["role"] not in ("corpus", "start", "midpoint", "end"):
+            continue
+        reason = None
+        if row["status"] != "succeeded":
+            reason = "status: " + str(row["status"])
+        elif row["excluded"]:
+            reason = "excluded: " + str(row.get("exclusion_codes") or "harvest exclusion")
+        elif "bytes.reference_request_unavailable" in str(row.get("flag_codes", "")).split(";"):
+            reason = "bytes.reference_request_unavailable"
+        else:
+            if not (is_number(request_duration(row)) and request_duration(row) > 0
+                    and is_number(row.get("reference_request_gross_j"))
+                    and is_number(row.get("reference_request_idle_subtracted_j"))):
+                raise ValueError(f"NEG-8 reference {row['run_id']}: missing or invalid reference_request columns; re-export required")
+            if energy(row) is None:
+                joined = dc_by_run.get(row["run_id"], {})
+                # Registration section 6: print the registered disclosure code,
+                # not this reader's internal meter-join status or diagnostic prose.
+                reason = ("bytes.meter_gap" if "bytes.meter_gap" in joined.get("flags", [])
+                          else "bytes.meter_decode_unavailable")
+        if reason is not None:
+            dropped.append({"run_id": row["run_id"], "role": row["role"], "reason": reason})
+        else:
             by_role.setdefault(row["role"], []).append(row)
     corpus = by_role.get("corpus", [])[:CORPUS_CAP]
     start, mid, end = by_role.get("start", []), by_role.get("midpoint", []), by_role.get("end", [])
     record = {"family": family, "corpus_n": len(corpus), "n_start": len(start), "n_midpoint": len(mid),
-              "n_end": len(end), "status": "ok"}
+              "n_end": len(end), "status": "ok",
+              "dropped_references": dropped, "dropped_reference_count": len(dropped),
+              "reference_values": [{"run_id": r["run_id"], "role": r["role"], "duration_s": request_duration(r),
+                                    "energy_j": energy(r)} for group in by_role.values() for r in group]}
     if len(corpus) < CORPUS_MINIMUM or len(start) < 2 or len(end) < 2:
         record["status"] = "undefined_references_insufficient"
         return record
@@ -528,7 +571,7 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
 
 
 def request_duration(row):
-    return math.fsum(row.get("dur_" + phase + "_s") or 0.0 for phase in PHASES)
+    return row.get("reference_request_duration_s")
 
 
 # ----------------------------------------------------------------------------
@@ -631,6 +674,18 @@ def _pick(entry, keys):
 
 def read_manifest(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict) and any(s.get("test7_passed", False) is not False
+                                     for s in data.get("sessions", [])):
+        raise ValueError("test7_passed must be false: no regime passed test 7")
+    registered_path = Path(__file__).resolve().parents[1] / "configs/bytes/bytes_manifest.json"
+    if not registered_path.is_file():
+        # Standalone copies (including the agreement mutants) still authenticate
+        # the repository's exact registered bytes before consuming predictors.
+        registered_path = Path.cwd() / "configs/bytes/bytes_manifest.json"
+    registered_bytes = registered_path.read_bytes()
+    if hashlib.sha256(registered_bytes).hexdigest() != "76452108c1a10b1f63b48fc95b306b6c4aa936a0d2e94244be65dc067c356264":
+        raise ValueError("registered manifest digest differs from registration section 4")
+    registered = {canon(m["model"]): m for m in json.loads(registered_bytes)["models"]}
     models = data.get("models", data) if isinstance(data, dict) else data
     entries = []
     if isinstance(models, dict):
@@ -647,8 +702,14 @@ def read_manifest(path):
             raise ValueError("duplicate manifest model")
         w, kv, r = _pick(entry, W_KEYS), _pick(entry, KV_KEYS), _pick(entry, R_KEYS)
         if not name or w is None or r is None:
-            continue
+            raise ValueError("model predictors differ from registered manifest: " + str(name))
         kv = kv if kv is not None else 0.0
+        expected = registered.get(name)
+        if expected is None or (w, kv, r) != tuple(expected[k] for k in ("W_bytes", "KV_bytes", "R_bytes")):
+            raise ValueError("model predictors differ from registered manifest: " + name)
+        for key in ("b_bytes", "W_GB", "KV_GB", "R_GB", "b_GB"):
+            if key in entry and (not is_number(entry[key]) or entry[key] != expected[key]):
+                raise ValueError("model predictors differ from registered manifest: " + name)
         manifest[name] = {"model": entry.get("_name"), "W_bytes": w, "KV_bytes": kv, "R_bytes": r,
                           "b_GB": (w + kv) / GB, "R_GB": r / GB,
                           "revision": entry.get("revision"), "kind": ROSTER.get(name, {}).get("kind"),
@@ -668,6 +729,8 @@ RESPONSE_CAP = 63
 FIT_MAX_RTT_MS = 3.0
 FIT_BIN_MS = 10_000
 FIT_MIN_POINTS = 20
+# These are the pinned KM003C clock-fit selection rules (RTT cut, envelope bin
+# width, and fallback count), reproduced independently; none is an agreement bar.
 
 
 def _linear_fit(xs, ys):
@@ -694,16 +757,9 @@ def parse_meter_stream(path):
     header = trailer = None
     batches = []
     text = Path(path).read_text(encoding="utf-8")
-    lines = text.split("\n")
+    lines = text.splitlines()
     for number, line in enumerate(lines, 1):
-        if not line.strip():
-            continue
-        try:
-            item = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(item, dict):
-            continue
+        item = json.loads(line)
         kind = item.get("k")
         if kind == "h":
             header = item
@@ -711,47 +767,78 @@ def parse_meter_stream(path):
             trailer = item
         elif kind == "b":
             batches.append(item)
-    if header is None or header.get("status", "streaming") != "streaming":
-        return None
     polls = sorted(batches, key=lambda b: b["rx"])
     with_samples = [b for b in polls if b.get("n")]
+    offset = None
+    try:
+        start = header["start_raw_ns"] - header["start_mono_ns"]
+        end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
+        # The raw/monotonic map is independent of the meter clock fit.
+        offset = start if abs(end - start) <= 1_000_000 else None
+    except (KeyError, TypeError):
+        pass
+    # BAT-2 / registration 7: signed SMC power at every poll, including empty meter polls.
+    # A partial current/voltage pair contributes no battery sample.
+    poll_ns = [b["rx"] for b in polls]
+    battery = []
+    for batch in polls:
+        smc = (batch.get("smc") or {}) if offset is not None else {}
+        current, voltage = smc.get("B0AC"), smc.get("B0AV")
+        battery.append(-current * voltage / 1e6 if is_number(current) and is_number(voltage) else None)
+    common = {"header": header, "trailer": trailer, "aligned": False,
+              "poll_ns": poll_ns, "battery_watts": battery,
+              "battery_current_ma": [(b.get("smc") or {}).get("B0AC") if offset is not None else None for b in polls],
+              "battery_voltage_mv": [(b.get("smc") or {}).get("B0AV") if offset is not None else None for b in polls],
+              "battery_tau_ns": 2_000_000_000 + max((b - a for a, b in zip(poll_ns, poll_ns[1:])), default=0),
+              "raw_offset_ns": offset}
+    if header is None or header.get("status", "streaming") != "streaming":
+        return common
+    if not with_samples:
+        return common
     step = STEP_MS[header["rate_idx"]]
     dev_ms, watts, batch_of = [], [], []
     previous_seq, current, running_max, previous_rx = None, 0, None, None
-    for j, batch in enumerate(with_samples):
-        raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
-        for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
-            if previous_seq is None:
-                current = 0
-            else:
-                d = ((seq - previous_seq + WRAP // 2) % WRAP) - WRAP // 2
-                if k == 0 and previous_rx is not None:
-                    host_ms = (batch["rx"] - previous_rx) / 1e6
-                    if host_ms > WRAP // 2:
-                        d += round((host_ms - d) / WRAP) * WRAP
-                current += d
-            previous_seq = seq
-            if running_max is not None and current <= running_max:
-                continue
-            running_max = current
-            dev_ms.append(current)
-            watts.append(v_uv / 1e6 * i_ua / 1e6)
-            batch_of.append(j)
-        if raw:
-            previous_rx = batch["rx"]
+    try:
+        for j, batch in enumerate(with_samples):
+            raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
+            for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
+                if previous_seq is None:
+                    current = 0
+                else:
+                    d = ((seq - previous_seq + WRAP // 2) % WRAP) - WRAP // 2
+                    if k == 0 and previous_rx is not None:
+                        host_ms = (batch["rx"] - previous_rx) / 1e6
+                        if host_ms > WRAP // 2:
+                            d += round((host_ms - d) / WRAP) * WRAP
+                    current += d
+                previous_seq = seq
+                if running_max is not None and current <= running_max:
+                    continue
+                running_max = current
+                dev_ms.append(current)
+                watts.append((v_uv / 1e6) * (i_ua / 1e6))
+                batch_of.append(j)
+            if raw:
+                previous_rx = batch["rx"]
+    except (ValueError, TypeError, struct.error) as exc:
+        # Bad sample words refuse the energy stream, not its battery polls.
+        return {**common, "reason": str(exc)}
     newest = {}
     for dev, j in zip(dev_ms, batch_of):
         newest[j] = dev
     points = [(dev, with_samples[j]["rx"], (with_samples[j]["rx"] - with_samples[j]["tx"]) / 1e6,
                with_samples[j]["n"]) for j, dev in newest.items()]
     if len(points) < 2:
-        return {"header": header, "trailer": trailer, "aligned": False, "reason": "fewer than two batches"}
+        return {**common, "reason": "fewer than two batches"}
     good = [p for p in points if p[3] < RESPONSE_CAP and p[2] < FIT_MAX_RTT_MS]
     used = good if len(good) >= FIT_MIN_POINTS else points
     x0, y0 = used[0][0], used[0][1]
     xs = [p[0] - x0 for p in used]
     ys = [p[1] - y0 for p in used]
-    a0, b0 = _linear_fit(xs, ys)
+    try:
+        a0, b0 = _linear_fit(xs, ys)
+    except ValueError as exc:
+        return {**common, "reason": str(exc)}
     residual = [y - (a0 + b0 * x) for x, y in zip(xs, ys)]
     span = xs[-1] - xs[0]
     bins = max(4, int(span / FIT_BIN_MS))
@@ -768,15 +855,8 @@ def parse_meter_stream(path):
     above = [(y - (a1 + b1 * x)) / 1e6 for x, y in zip(xs, ys)]
     a_ns = y0 + a1 - b1 * x0
     host_ns = [int(round(a_ns + b1 * d)) for d in dev_ms]
-    offset = None
-    try:
-        start = header["start_raw_ns"] - header["start_mono_ns"]
-        end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
-        offset = start if abs(end - start) <= 1_000_000 else None
-    except (KeyError, TypeError):
-        offset = None
-    return {"header": header, "trailer": trailer, "aligned": True, "host_ns": host_ns, "watts": watts,
-            "raw_offset_ns": offset, "step_ms": step,
+    return {**common, "aligned": True, "host_ns": host_ns, "watts": watts, "step_ms": step,
+            "dev_ms": dev_ms,
             "fit": {"a_ns": a_ns, "b_ns_per_ms": b1, "points": len(points), "points_used": len(used),
                     "clock_rate_ppm": (b1 / 1e6 - 1) * 1e6,
                     "excess_latency_ms_p50": percentile(above, 50),
@@ -785,13 +865,32 @@ def parse_meter_stream(path):
                     "excess_latency_ms_absmax": max(abs(v) for v in above)}}
 
 
-def edge_powers(times_ns, watts, window):
-    """Addendum 7 D4: at each edge of window, the larger power of the two samples adjacent to it."""
+def meter_gap(stream, window):
+    """Section 7: missing integer device counters inside the selected energy span."""
+    host, device = stream["host_ns"], stream.get("dev_ms", [])
+    lo = max(0, bisect.bisect_left(host, window[0]) - 1)
+    hi = min(len(host), bisect.bisect_left(host, window[1]) + 1)
+    fit, step = stream["fit"], stream["step_ms"]
+    for left, right in zip(device[lo:hi], device[lo + 1:hi]):
+        count = (right - left - 1) // step
+        if count > 0:
+            first = round(fit["a_ns"] + fit["b_ns_per_ms"] * (left + step))
+            last = round(fit["a_ns"] + fit["b_ns_per_ms"] * (left + count * step))
+            if first < window[1] and last >= window[0]:
+                return True
+    return False
+
+
+def edge_powers(times_ns, watts, window, r_max_s=0.0):
+    """The two adjacent samples, plus all samples at most r_max from each edge."""
     last = len(watts) - 1
-    lo, hi = bisect.bisect_left(times_ns, window[0]), bisect.bisect_left(times_ns, window[1])
-    p_start = max(watts[max(lo - 1, 0)], watts[min(lo, last)])
-    p_end = max(watts[max(hi - 1, 0)], watts[min(hi, last)])
-    return p_start, p_end
+    powers = []
+    for edge in window:
+        neighbour = bisect.bisect_left(times_ns, edge)
+        first = max(0, min(neighbour - 1, bisect.bisect_left(times_ns, edge - r_max_s * 1e9)))
+        stop = min(last + 1, max(neighbour + 1, bisect.bisect_right(times_ns, edge + r_max_s * 1e9)))
+        powers.append(max(watts[first:stop]))
+    return tuple(powers)
 
 
 def before_edge_powers(times_ns, watts, window):
@@ -813,13 +912,84 @@ def integrate(times_ns, watts, t0, t1):
     return math.fsum(watts[lo:hi]) / (hi - lo) * (t1 - t0) / 1e9, hi - lo
 
 
+def _battery_delay_ns(stream):
+    tau_ns = stream.get("battery_tau_ns")
+    times = stream.get("poll_ns", [])
+    return tau_ns if tau_ns is not None else 2_000_000_000 + max(
+        (b - a for a, b in zip(times, times[1:])), default=0)
+
+
+def battery_terms(stream, window, idle):
+    """Registration 6/7, independently from the text: signed mean-times-span energy,
+    forward one-sided publication windows, and the tau-delayed decode marker.
+    Poll timestamps are on the raw host clock, as are the mapped windows.
+    """
+    times, powers = stream.get("poll_ns", []), stream.get("battery_watts", [])
+    duration = (window[1] - window[0]) / 1e9
+    def span_values(span):
+        if not span:
+            return []
+        a, z = bisect.bisect_left(times, span[0]), bisect.bisect_left(times, span[1])
+        return [p for p in powers[a:z] if is_number(p)]
+
+    decode, baseline = span_values(window), span_values(idle)
+    # Two 1 s SMC publication intervals plus the largest poll interval: BAT-2's delay bound.
+    tau_ns = _battery_delay_ns(stream)
+    end_complete = bool(times and times[-1] >= window[1] + tau_ns)
+    lo, hi = bisect.bisect_left(times, window[0] + tau_ns), bisect.bisect_left(times, window[1] + tau_ns)
+    marker_values = [c for c in stream.get("battery_current_ma", [None] * len(times))[lo:hi] if is_number(c)]
+    # BAT-2 defines the marker from current alone. Without a current reading
+    # in the delayed window it is not evaluated; completeness is separate.
+    marker = any(c < 0 for c in marker_values) if marker_values else None
+    result = {"battery_tau_s": tau_ns / 1e9, "battery_end_window_complete": end_complete,
+              "decode_assisted": marker, "battery_marker_polls": hi - lo,
+              "battery_decode_polls": len(decode), "battery_idle_polls": len(baseline)}
+    if not decode or not baseline:
+        return {**result, "status": "battery reading missing"}
+    weight = duration / len(decode)
+    start_v = weight * math.fsum(abs(p) for p in span_values([window[0], window[0] + tau_ns]))
+    end_v = weight * math.fsum(abs(p) for p in span_values([window[1], window[1] + tau_ns]))
+    gross = weight * math.fsum(decode)
+    idle_w = math.fsum(baseline) / len(baseline)
+    return {**result, "status": "ok", "battery_gross_j": gross,
+            "battery_secondary_j": gross - idle_w * duration, "battery_idle_w": idle_w,
+            "battery_v_start_j": start_v, "battery_v_end_j": end_v,
+            "battery_phase_edge_j": start_v + end_v}
+
+
 # ----------------------------------------------------------------------------
 # Harvest archive: member spans in monotonic ns, meter join for the decode phase.
 
+def _read_text(path):
+    """Read a logical UTF-8 file, including a desk-compressed sibling.
+
+    Keep this reader independent of joulewise: the twin's no-shared-code
+    fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH
+    or the desk's literal Homebrew fallback, independently of the analysis.
+    Only an absent sibling follows the caller's missing-file path. An
+    existing unreadable file propagates to main's Addendum 7 D7 refusal.
+    """
+    path = Path(path)
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        compressed = Path(str(path) + ".zst")
+        if not compressed.exists():
+            raise
+    try:
+        result = subprocess.run([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(compressed)],
+                                capture_output=True, check=True)
+        return result.stdout.decode("utf-8")
+    except OSError:
+        raise StorageStop("zstd unavailable: " + str(compressed)) from None
+    except (subprocess.CalledProcessError, UnicodeDecodeError):
+        raise StorageStop("compressed file unreadable: " + str(compressed)) from None
+
+
 def read_json(path, default=None):
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return json.loads(_read_text(path))
+    except FileNotFoundError:
         return default
 
 
@@ -844,8 +1014,8 @@ def member_spans(bundle):
         return int(round((mono + (float(wall) - epoch)) * 1_000_000_000))   # Addendum 7 N1: nearest ns
     spans = {}
     try:
-        lines = (bundle / "events.jsonl").read_text(encoding="utf-8").splitlines()
-    except OSError:
+        lines = _read_text(bundle / "events.jsonl").splitlines()
+    except FileNotFoundError:
         return None
     for line in lines:
         if not line.strip():
@@ -853,7 +1023,7 @@ def member_spans(bundle):
         event = json.loads(line)
         kind, phase = event.get("event_type"), event.get("phase")
         meta = event.get("metadata") or {}
-        if kind == "phase_start" and "request_start" not in spans:
+        if kind == "phase_start" and phase == "tokenize":
             spans["request_start"] = mapped(event["timestamp_s"])
         if phase == "decode" and kind == "phase_start":
             spans["decode_start"] = mapped(event["timestamp_s"])
@@ -864,7 +1034,7 @@ def member_spans(bundle):
                 else mapped(event["timestamp_s"])
         elif phase == "idle_baseline" and kind == "stage_completed":
             spans["idle_end"] = mapped(event["timestamp_s"])
-    if "decode_start" not in spans or "decode_end" not in spans:
+    if "decode_start" not in spans or "decode_end" not in spans or "request_start" not in spans:
         return None
     return {"decode_ns": [spans["decode_start"], spans["decode_end"]],
             "request_ns": [spans["request_start"], spans["decode_end"]],
@@ -875,33 +1045,154 @@ def load_archive(root):
     root = Path(root)
     record = read_json(root / "derived/b6-acceptance.json", {}) or {}
     streams = []
-    for base in (root / "sources/night-custody/hazards/meter", root / "hazards/meter"):
-        if base.is_dir():
-            for path in sorted(base.glob("stream-*.jsonl")):
-                stream = parse_meter_stream(path)
-                if stream is not None:
-                    stream["name"] = path.name
-                    streams.append(stream)
-            break
+    base = root / "sources/night-custody/hazards/meter"
+    for path in sorted(base.glob("stream-*.jsonl")):
+        try:
+            stream = parse_meter_stream(path)
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError, struct.error) as exc:
+            # The primary discards an unreadable transport as a whole stream.
+            stream = {"aligned": False, "poll_ns": [], "raw_offset_ns": None, "reason": str(exc)}
+        stream["name"] = path.name
+        streams.append(stream)
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
             "streams": streams}
 
 
-def dc_join(archive, run_id):
+@contextmanager
+def _readable_bundle(source, journal):
+    """Independent storage gate: verify custody and consume a private plain copy."""
+    source = Path(source)
+    if not any(not p.with_suffix("").is_file() for p in source.rglob("*.zst")):
+        yield source
+        return
+    with ExitStack() as cleanup:
+        try:
+            if not journal.is_file():
+                raise ValueError("compressed run requires compression.jsonl")
+            records = {}
+            for line in journal.read_bytes().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        raise ValueError
+                    if row.get("event") in ("compress", "restore"):
+                        if (not isinstance(row.get("path"), str) or not isinstance(row.get("root"), str)
+                                or type(row.get("size")) is not int or row["size"] < 0
+                                or not isinstance(row.get("sha256"), str)
+                                or not Path(row["path"]).is_absolute()
+                                or not re.fullmatch(r"[0-9a-f]{64}", row["sha256"])):
+                            raise ValueError
+                        records[Path(row["path"]).resolve()] = row
+                except (ValueError, UnicodeError):
+                    raise ValueError("invalid compression journal") from None
+            records = {path: row for path, row in records.items() if row['event'] == 'compress'}
+            entries, targets = [], set()
+            for directory, dirs, files in os.walk(source, followlinks=False,
+                                                   onerror=lambda exc: (_ for _ in ()).throw(exc)):
+                for name in dirs + files:
+                    if (Path(directory) / name).is_symlink():
+                        raise ValueError("symlinks are not supported")
+                for name in files:
+                    path = Path(directory) / name
+                    if not path.is_file():
+                        raise ValueError("nonregular input")
+                    compressed = path.suffix == ".zst"
+                    logical = path.with_suffix("") if compressed else path
+                    relative = logical.relative_to(source)
+                    if relative in targets:
+                        raise ValueError("plain and compressed siblings are ambiguous")
+                    targets.add(relative)
+                    record = records.get(logical.resolve())
+                    if compressed and (record is None or record["event"] != "compress"):
+                        raise ValueError("compressed input has no digest record")
+                    size = record["size"] if record is not None else path.stat().st_size
+                    entries.append((path, relative, compressed, record, size))
+            scratch = Path(tempfile.gettempdir())
+            # Same standing 40 GiB floor as the desk restore tool; no scientific gate.
+            with _scratch_lock(scratch):
+                if shutil.disk_usage(scratch).free < sum(e[4] for e in entries) + 40 * 1024**3:
+                    raise ValueError("insufficient scratch space")
+                plain = Path(cleanup.enter_context(tempfile.TemporaryDirectory(prefix="twin-restored-")))
+                for path, relative, compressed, record, size in entries:
+                    target = plain / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if compressed:
+                        process = subprocess.Popen([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(path)],
+                                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        try:
+                            with process.stdout:
+                                count, digest = _copy_restored_stream(process.stdout, target, size)
+                            if process.wait() != 0:
+                                raise ValueError("compressed file unreadable")
+                        finally:
+                            if process.poll() is None:
+                                process.kill()
+                            process.wait()
+                            process.stderr.close()
+                    else:
+                        with path.open('rb') as stream:
+                            count, digest = _copy_restored_stream(stream, target, size)
+                    if count != size or (record is not None and digest.hexdigest() != record["sha256"]):
+                        raise ValueError("restored size or digest mismatch")
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            raise StorageStop(exc) from exc
+        yield plain
+
+
+def _copy_restored_stream(stream, target, size):
+    digest, count = hashlib.sha256(), 0
+    with target.open('xb') as output:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            count += len(chunk)
+            if count > size:
+                raise ValueError('restored size mismatch')
+            digest.update(chunk)
+            output.write(chunk)
+    return count, digest
+
+
+@contextmanager
+def _scratch_lock(root):
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def dc_join(archive, run_id, *, reference=False):
     """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
     bundle = _bundle(archive["root"], run_id)
     if bundle is None:
-        return {"status": "bundle_missing"}
-    spans = member_spans(bundle)
+        return {"status": "bundle_missing", "decode_assist_evaluated_reason":
+                f"decode marker not evaluated: selected bundle missing (run {run_id})"}
+    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
+        spans = member_spans(plain)
     if spans is None:
-        return {"status": "spans_unreadable"}
+        return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
+                f"decode marker not evaluated: member spans unreadable (run {run_id})"}
+    failure = None
+    markers = []
     for stream in archive["streams"]:
-        if not stream.get("aligned") or stream.get("raw_offset_ns") is None:
+        if stream.get("raw_offset_ns") is None:
             continue
         offset = stream["raw_offset_ns"]
         window = [spans["decode_ns"][0] + offset, spans["decode_ns"][1] + offset]
+        base = [v + offset for v in spans["idle_ns"]] if spans["idle_ns"] else None
+        battery = battery_terms(stream, window, base)
+        if battery["decode_assisted"] is not None:
+            markers.append(battery)
+        if not stream.get("aligned"):
+            continue
         host = stream["host_ns"]
-        if not (host[0] <= window[0] and window[1] <= host[-1]):
+        if not host or not base or any(a < host[0] or z > host[-1] or z <= a for a, z in (window, base)):
+            continue
+        checked = [v + offset for v in spans["request_ns"]] if reference else window
+        if meter_gap(stream, checked):
+            failure = {"status": "meter_gap", "flags": ["bytes.meter_gap"]}
             continue
         energy, n = integrate(host, stream["watts"], window[0], window[1])
         if energy is None:
@@ -912,17 +1203,23 @@ def dc_join(archive, run_id):
         # and P_end the meter power at the phase's two edges (the first and last sample inside the
         # span), r_max the clock fit's largest excess latency and dt_meter one sample period.
         watts = stream["watts"]
-        p_start, p_end = edge_powers(host, watts, window)
         r_max_s = stream["fit"]["excess_latency_ms_absmax"] / 1e3   # Addendum 7 item 12: absolute
+        p_start, p_end = edge_powers(host, watts, window, r_max_s)
         dt_meter_s = stream["step_ms"] / 1e3
         # Addendum 9 item 3: the per-run coherent-offset bound max(P_start, P_end)(r_max + dt_meter) in
         # joules (the time factor is u's own); item 4: the signed sensitivity to delta in watts.
         p_before_start, p_before_end = before_edge_powers(host, watts, window)
-        result = {"status": "ok", "stream": stream["name"], "decode_energy_j": energy, "samples": n,
-                  "decode_span_s": duration, "mean_power_w": mean_power,
-                  "edge_bound_j": (p_start + p_end) * (r_max_s + dt_meter_s),
+        if battery["status"] != "ok":
+            failure = battery
+            continue
+        v_start, v_end = battery["battery_v_start_j"], battery["battery_v_end_j"]
+        result = {**battery, "status": "ok", "stream": stream["name"],
+                  "meter_gross_j": energy, "decode_energy_j": energy + battery["battery_gross_j"], "samples": n,
+                  "decode_span_s": duration, "mean_power_w": (energy + battery["battery_gross_j"]) / duration,
+                  "meter_phase_edge_j": (p_start + p_end) * (r_max_s + dt_meter_s),
+                  "edge_bound_j": (p_start + p_end) * (r_max_s + dt_meter_s) + v_start + v_end,
                   "edge_terms": {"P_start_w": p_start, "P_end_w": p_end, "r_max_s": r_max_s, "dt_meter_s": dt_meter_s},
-                  "offset_bound_j": max(p_start, p_end) * (r_max_s + dt_meter_s),
+                  "offset_bound_j": max(p_start, p_end) * (r_max_s + dt_meter_s) + max(v_start, v_end),
                   "offset_before_edge_powers_w": {"P_before_start_w": p_before_start, "P_before_end_w": p_before_end},
                   "offset_sensitivity_w": p_before_start - p_before_end,
                   "clock_fit": {key: stream["fit"][key] for key in
@@ -933,17 +1230,50 @@ def dc_join(archive, run_id):
         if host[0] <= request[0] and request[1] <= host[-1]:
             request_energy, n_request = integrate(host, watts, request[0], request[1])
             if request_energy is not None:
-                result.update({"request_energy_j": request_energy, "request_span_s": (request[1] - request[0]) / 1e9,
+                request_battery = battery_terms(stream, request, base)
+                if request_battery["status"] != "ok":
+                    failure = request_battery
+                    continue
+                result.update({"request_energy_j": request_energy + request_battery["battery_gross_j"], "request_span_s": (request[1] - request[0]) / 1e9,
                                "request_samples": n_request})
         if spans["idle_ns"]:
             base = [spans["idle_ns"][0] + offset, spans["idle_ns"][1] + offset]
             if base[1] > base[0]:
                 idle_energy, n_idle = integrate(host, stream["watts"], base[0], base[1])
                 if idle_energy is not None:
-                    result["idle_power_w"] = idle_energy / ((base[1] - base[0]) / 1e9)
+                    result["meter_secondary_j"] = energy - idle_energy / ((base[1] - base[0]) / 1e9) * duration
+                    result["idle_power_w"] = idle_energy / ((base[1] - base[0]) / 1e9) + battery["battery_idle_w"]
                     result["idle_samples"] = n_idle
+        if result["idle_power_w"] is None:
+            failure = {**battery, "status": "idle meter samples missing"}
+            continue
+        # Public field names from the tables contract; the arithmetic above was derived separately.
+        result.update(gross_j=result["decode_energy_j"], secondary_j=result["meter_secondary_j"] + result["battery_secondary_j"],
+                      phase_edge_j=result["edge_bound_j"], decode_battery_assist=bool(result["decode_assisted"]),
+                      battery_n=result["battery_decode_polls"], battery_n_idle=result["battery_idle_polls"],
+                      battery_poll_interval_max_s=(_battery_delay_ns(stream) - 2_000_000_000) / 1e9,
+                      battery_idle_power_w=result["battery_idle_w"],
+                      meter_idle_power_w=result["idle_power_w"] - result["battery_idle_w"],
+                      n=n, n_idle=result["idle_samples"], r_max_s=r_max_s, sample_interval_s=dt_meter_s,
+                      edge_powers_w=[p_start, p_end], adjacent_before_edge_powers_w=[p_before_start, p_before_end])
+        if result["decode_assisted"] is None:
+            result["decode_assist_evaluated_reason"] = (
+                "decode marker not evaluated: selected meter stream has no polls carrying B0AC"
+                f" in the marker window (run {run_id})")
         return result
-    return {"status": "no_aligned_stream_covers_span"}
+    result = failure or {"status": "no_aligned_stream_covers_span"}
+    # The marker reads delayed polls even when no stream can supply decode
+    # energy. Missing decode/idle coverage does not make that marker unknown.
+    if markers:
+        result.update(decode_assisted=any(b["decode_assisted"] for b in markers),
+                      battery_end_window_complete=any(b["battery_end_window_complete"] for b in markers))
+    else:
+        result.pop("decode_assisted", None)
+        result["battery_end_window_complete"] = False
+        result["decode_assist_evaluated_reason"] = (
+            "decode marker not evaluated: no mapped meter stream has polls carrying B0AC in the marker window"
+            f" (run {run_id})")
+    return result
 
 
 # ----------------------------------------------------------------------------
@@ -968,13 +1298,13 @@ def restorable(row) -> bool:
     if row["status"] != "succeeded" or not is_number(row.get("phase_decode_j")) or not is_number(row.get("dur_decode_s")):
         return False
     codes = [c for c in (row.get("exclusion_codes") or "").split(";") if c]
-    return bool(codes) and not any(c in VALIDITY_CODES or c.startswith(VALIDITY_PREFIXES) for c in codes)
+    return bool(codes) and not any(c in VALIDITY_CODES for c in codes)
 
 
-def _kept(row, *, restore_load_correlated=False, drop_assist=False):
+def _kept(row, *, restore_load_correlated=False):
     if row["status"] != "succeeded":
         return False
-    if drop_assist and "battery.assist" in (row.get("flag_codes") or "").split(";"):
+    if set((row.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES:
         return False
     if not row["excluded"]:
         return True
@@ -1026,7 +1356,7 @@ def _idle_subtracted(member):
     return out
 
 
-def _assemble(rows, build, *, restore=False, drop_assist=False):
+def _assemble(rows, build, *, restore=False):
     repeats, quads = [], {}
     quad_rows = {}
     for row in rows:
@@ -1034,12 +1364,12 @@ def _assemble(rows, build, *, restore=False, drop_assist=False):
         if stratum == "quad":
             quad_rows.setdefault(unit, []).append(row)
         elif stratum == "repeat":
-            if _kept(row, restore_load_correlated=restore, drop_assist=drop_assist):
+            if _kept(row, restore_load_correlated=restore):
                 member = build(row)
                 if member is not None:
                     repeats.append(member)
     for unit, members in quad_rows.items():
-        if len(members) != 4 or not all(_kept(r, restore_load_correlated=restore, drop_assist=drop_assist) for r in members):
+        if len(members) != 4 or not all(_kept(r, restore_load_correlated=restore) for r in members):
             continue
         built = [build(r) for r in sorted(members, key=lambda r: r["order_index"])]
         if all(b is not None for b in built):
@@ -1047,7 +1377,27 @@ def _assemble(rows, build, *, restore=False, drop_assist=False):
     return repeats, [quads[k] for k in sorted(quads)]
 
 
-def _scaled_allowance(rows, boundary, dc_by_run, allowance, kinds, alpha, *, subtract_idle):
+DC_BOUNDARY_DESCRIPTION = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
+                           "the adapter's AC-to-DC loss is not included")
+
+
+def battery_columns(repeats, quads, dc_by_run, *, secondary=False):
+    """Registration 7/15: fixed .2/.8 stratum weights, signed maximum, and run census."""
+    ids = [m["id"] for m in repeats] + [m["id"] for q in quads for m in q["members"]]
+    key = "battery_secondary_j" if secondary else "battery_gross_j"
+    def value(member):
+        return dc_by_run[member["id"]][key]
+    mean = .2 * statistics.fmean(value(m) for m in repeats) + .8 * statistics.fmean(
+        statistics.fmean(value(m) for m in q["members"]) for q in quads)
+    values = [dc_by_run[r][key] for r in ids]
+    return {"boundary_description": DC_BOUNDARY_DESCRIPTION, "battery_term_mean_j": mean,
+            "battery_term_max_j": max(values), "battery_nonzero_run_count": sum(v != 0 for v in values),
+            "battery_phase_edge_max_j": max(dc_by_run[r]["battery_phase_edge_j"] for r in ids),
+            "meter_run_terms": [{"run_id": r, **dc_by_run[r]} for r in ids]}
+
+
+def _scaled_allowance(rows, boundary, dc_by_run, allowance, kinds, alpha, *, subtract_idle,
+                      minimum_units=UNIT_MINIMUM, restore=False):
     """The family's half allowance x max(1, E/E_ref, T/T_ref), from a first pass without the scale."""
     if allowance.get("status") != "ok":
         return None, {"status": allowance.get("status", "absent"), "family": allowance.get("family")}
@@ -1055,8 +1405,8 @@ def _scaled_allowance(rows, boundary, dc_by_run, allowance, kinds, alpha, *, sub
     def build(row):
         member = _member(row, boundary, dc_by_run.get(row["run_id"]), 0.0)
         return _idle_subtracted(member) if subtract_idle else member
-    repeats, quads = _assemble(rows, build)
-    first = phase_estimate(repeats, quads, kinds, alpha=alpha)
+    repeats, quads = _assemble(rows, build, restore=restore)
+    first = phase_estimate(repeats, quads, kinds, alpha=alpha, minimum_units=minimum_units)
     if first["status"] != "ok":
         return None, {"status": first["status"], "family": allowance["family"]}
     scale = max(1.0, first["mean_j"] / allowance["E_ref_j"], first["duration_s"] / allowance["T_ref_s"])
@@ -1066,7 +1416,7 @@ def _scaled_allowance(rows, boundary, dc_by_run, allowance, kinds, alpha, *, sub
     return record["half_allowance_scaled_j"], record
 
 
-def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
+def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=False):
     """Primary gross estimate plus the labelled secondary lines for one boundary.
 
     allowances: {(boundary, "gross"|"idle"): neg8_allowance record} (Addendum 7 D2, D3, D6: each
@@ -1075,7 +1425,11 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
     kinds = RAILS_KINDS if boundary == "rails" else DC_KINDS if boundary == "dc_input" else REST_KINDS
     gross_allowance = allowances.get((boundary, "gross"), {})
     idle_allowance = allowances.get((boundary, "idle"), {})
-    half_gross, gross_record = _scaled_allowance(rows, boundary, dc_by_run, gross_allowance, kinds, alpha, subtract_idle=False)
+    # Two units/stratum are the smallest sample with an estimable sample variance;
+    # below-minimum without-assisted diagnostics still print down to that limit.
+    minimum = 2 if diagnostic else UNIT_MINIMUM
+    half_gross, gross_record = _scaled_allowance(rows, boundary, dc_by_run, gross_allowance, kinds, alpha,
+                                               subtract_idle=False, minimum_units=minimum)
     # Addendum 3 item 2: the scale is max(1, E/E_ref, T/T_ref) per cell with E the cell's decode-phase
     # m and E_ref the mean *gross* energy of the references, so the idle-subtracted secondary carries
     # the idle family's own allowance (Addendum 7 D6) at the cell's one gross scale (B3 agreement
@@ -1098,15 +1452,37 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
     cell = {"boundary": boundary, "kinds": list(kinds),
             "drift_allowance": gross_record, "drift_allowance_idle_family": idle_record}
 
-    def estimate(repeats, quads):
-        est = phase_estimate(repeats, quads, kinds, alpha=alpha)
+    def estimate(repeats, quads, *, secondary=False):
+        est = phase_estimate(repeats, quads, kinds, alpha=alpha, minimum_units=minimum)
+        est["drift_family"] = "idle_subtracted" if secondary else "gross"
         if est["status"] == "ok" and boundary != "rails":
             est["meter_offset"] = offset_terms(repeats, quads)    # Addendum 9: DC input and rest only
+            est.update(battery_columns(repeats, quads, dc_by_run, secondary=secondary))
+        kept = repeats + [m for q in quads for m in q["members"]]
+        if est["status"] == "ok":
+            anchors = [m["bounds"].get("E_clock_anchor_shift_bound_j", 0.0) for m in kept]
+            meters = [m["bounds"].get("E_meter_edge_bound_j", 0.0) for m in kept]
+            est.update(attribution_floor_j=max(a + u for a, u in zip(anchors, meters)),
+                       rails_attribution_floor_j=max(anchors) if boundary != "dc_input" else None,
+                       meter_attribution_floor_j=max(meters) if boundary != "rails" else None,
+                       meter_phase_edge_mean_j=est["kind_averages_j"].get("E_meter_edge_bound_j", 0.0))
+        kept_ids = {m["id"] for m in kept}
+        kept_rows = [r for r in rows if r["run_id"] in kept_ids]
+        flag_rows = kept_rows if est["status"] == "ok" else rows
+        est["flags"] = sorted({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
+                              {f for r in flag_rows for f in r.get("_meter_flags", [])})
+        est["harvest_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
+            "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept_rows) for s in ("repeat", "quad")}
+        evaluated = all(r.get("_decode_assisted") is not None for r in kept_rows)
+        est["decode_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
+            bool(r.get("_decode_assisted")) for r in kept_rows) for s in ("repeat", "quad")} if evaluated else None
         return est
     primary_rows = [row for row in rows]
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale))
     cell["gross"] = estimate(repeats, quads)
-    removed = [{"run_id": r["run_id"], "status": r["status"], "codes": r.get("exclusion_codes"),
+    removed = [{"run_id": r["run_id"], "status": "unusable" if
+                set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES else r["status"],
+                "codes": r.get("exclusion_codes"),
                 "restorable": restorable(r)} for r in rows if not _kept(r)]
     cell["removed_members"] = removed
     kept_members = repeats + [m for q in quads for m in q["members"]]
@@ -1120,14 +1496,46 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
                 cell[name] = {"kind": kind, "value_j": max(values)[0], "member": max(values)[1],
                               "min_j": min(values)[0], "composed": False}
     repeats, quads = _assemble(primary_rows, lambda r: build(r, scale, True))
-    cell["idle_subtracted"] = estimate(repeats, quads)
-    repeats, quads = _assemble(primary_rows, lambda r: build(r, scale), restore=True)
+    cell["idle_subtracted"] = estimate(repeats, quads, secondary=True)
+    # Each selection is its own cell (registration 7): the inclusive cell's scale
+    # uses its restored gross energy, rather than borrowing the primary scale.
+    inclusive_half, inclusive_record = _scaled_allowance(rows, boundary, dc_by_run, gross_allowance,
+        kinds, alpha, subtract_idle=False, minimum_units=minimum, restore=True)
+    inclusive_idle = idle_allowance["allowance_j"] / 2 * inclusive_record["scale"] if (
+        idle_allowance.get("status") == "ok" and inclusive_record.get("status") == "ok") else None
+    repeats, quads = _assemble(primary_rows, lambda r: _member(r, boundary, dc_by_run.get(r["run_id"]),
+                                                             inclusive_half), restore=True)
     cell["flagged_inclusive"] = estimate(repeats, quads)
-    assist = [r["run_id"] for r in rows if "battery.assist" in (r.get("flag_codes") or "").split(";")]
-    cell["assist_members"] = assist
-    if assist:
-        repeats, quads = _assemble(primary_rows, lambda r: build(r, scale), drop_assist=True)
-        cell["without_assisted"] = estimate(repeats, quads)
+    repeats, quads = _assemble(primary_rows, lambda r: _idle_subtracted(_member(r, boundary,
+        dc_by_run.get(r["run_id"]), inclusive_idle)), restore=True)
+    cell["idle_flagged_inclusive"] = estimate(repeats, quads, secondary=True)
+    for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive"):
+        record = inclusive_record if variant in ("flagged_inclusive", "idle_flagged_inclusive") else gross_record
+        cell[variant]["drift_scale"] = record.get("scale")
+    cell["assist_members"] = [r["run_id"] for r in rows if r.get("_decode_assisted")]
+    if not diagnostic:
+        for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive"):
+            est = cell[variant]
+            if est["status"] != "ok":
+                continue
+            if est["decode_assisted_member_counts"] is None:
+                kept_ids = set(est["members"]["repeats"]) | {m for q in est["members"]["quads"].values() for m in q}
+                reasons = sorted({r.get("_decode_assist_reason", "decode marker unavailable") for r in rows
+                                  if r["run_id"] in kept_ids and r.get("_decode_assisted") is None})
+                reason = "; ".join(reasons)
+                est["decode_assisted_member_counts_reason"] = reason
+                est["without_assisted"] = {"status": "not_evaluated", "reason": reason}
+            elif any(est["decode_assisted_member_counts"].values()):
+                kept_ids = set(est["members"]["repeats"]) | {m for q in est["members"]["quads"].values() for m in q}
+                units = {_units_of(r)[:2] for r in rows if r["run_id"] in kept_ids and r.get("_decode_assisted")}
+                without = [dict(r, excluded=False) for r in rows
+                           if r["run_id"] in kept_ids and _units_of(r)[:2] not in units]
+                # Rerun the same estimator, recomputing the without set's gross drift scale.
+                result = compute_cell(without, boundary, dc_by_run, allowances, alpha, diagnostic=True)
+                est["without_assisted"] = result["idle_subtracted" if variant in ("idle_subtracted", "idle_flagged_inclusive") else "gross"]
+                est["without_assisted"]["below_minimum"] = min(result["gross"]["n_r"], result["gross"]["n_b"]) < UNIT_MINIMUM
+        if "without_assisted" in cell["gross"]:
+            cell["without_assisted"] = cell["gross"]["without_assisted"]
     return cell
 
 
@@ -1239,10 +1647,12 @@ def load_withheld(export_path, sidecar, manifest):
 def quantities(cell_block, manifest_entry):
     """e, tau, b, R, P, BW with intervals, from a computed cell (all three variants)."""
     out = {}
-    for variant in ("gross", "idle_subtracted", "flagged_inclusive", "without_assisted"):
+    for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive", "without_assisted"):
         est = cell_block.get(variant)
         if not est or est.get("status") != "ok":
             out[variant] = {"status": (est or {}).get("status", "absent")}
+            if est and "reason" in est:
+                out[variant]["reason"] = est["reason"]
             continue
         m, lo, hi = est["mean_j"], est["lower_j"], est["upper_j"]
         t = est["duration_s"]
@@ -1264,6 +1674,13 @@ def quantities(cell_block, manifest_entry):
             q.update({"meter_offset_bound_j": offset["bound_j"], "meter_offset_sensitivity_w": offset["sensitivity_w"],
                       "meter_offset_bound_flag": offset["bound_flag"],
                       "meter_offset_sensitivity_flag": offset["sensitivity_flag"]})
+        for key in ("below_minimum", "attribution_floor_j", "meter_attribution_floor_j", "meter_phase_edge_mean_j",
+                    "boundary_description", "battery_term_mean_j", "battery_term_max_j",
+                    "battery_nonzero_run_count", "battery_phase_edge_max_j"):
+            if key in est:
+                q[key] = est[key]
+        if "without_assisted" in est:
+            q["without_assisted"] = quantities({"gross": est["without_assisted"]}, manifest_entry)["gross"]
         out[variant] = q
     return out
 
@@ -1276,10 +1693,10 @@ def missing_pass_quantities(record):
     with the flag and the sidecar's withheld row counts, on every boundary and variant."""
     item = {"status": "missing", "flags": [WITHHELD_MISSING], "withheld_row_count": record.get("row_count"),
             "withheld_config_row_count": record.get("config_row_count"), "withheld_path": record.get("path")}
-    return {variant: dict(item) for variant in ("gross", "idle_subtracted", "flagged_inclusive", "without_assisted")}
+    return {variant: dict(item) for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive", "without_assisted")}
 
 
-def mean_of_passes(per_pass):
+def mean_of_passes(per_pass, *, pass_ids=None):
     """Each pass's value, their mean and difference (R6); half-width the mean of the passes' (h + B).
 
     Addendum 7 item 12: P of the pass mean is mean E / mean T with half-width (mean h + mean B) / mean T.
@@ -1288,6 +1705,8 @@ def mean_of_passes(per_pass):
     flag is carried on the point.  Both passes missing: the model prints `missing` and has no point.
     """
     passes = [p for p in per_pass if p.get("status") == "ok"]
+    identities = list(range(1, len(per_pass) + 1)) if pass_ids is None else pass_ids
+    kept_ids = [identity for identity, p in zip(identities, per_pass) if p.get("status") == "ok"]
     collected = len(per_pass)
     flags = sorted({f for p in per_pass for f in (p.get("flags") or [])})
     statuses = [p.get("status") for p in per_pass]
@@ -1300,13 +1719,40 @@ def mean_of_passes(per_pass):
     keys = ("E_dec_j", "T_dec_s", "e_j_per_step", "tau_s_per_step", "e_half_width_j_per_step",
             "e_printed_j_per_token")
     out = {"status": "ok", "n_passes": len(passes), "passes_collected": collected, "passes_computed": len(passes),
-           "label": "one_pass" if len(passes) == 1 else "pass_mean", "flags": flags,
+           "label": "one_pass" if len(passes) == 1 else "pass_mean", "flags": flags, "printed_label": PER_TOKEN_LABEL,
            # D9 (a): a point that rests on one pass because the other refused or its withheld file is
            # missing; a model collected once (R6's one-pass minimum) is labelled one_pass too.
            "one_pass_after_refusal": collected >= 2 and len(passes) == 1,
            "pass_statuses": statuses}
     for key in keys:
         out[key] = statistics.fmean(p[key] for p in passes)
+    for key in ("h_j", "B_j"):
+        if all(key in p for p in passes):
+            out[key] = statistics.fmean(p[key] for p in passes)
+    for key in ("attribution_floor_j", "meter_attribution_floor_j"):
+        if all(key in p for p in passes):
+            values = [p[key] for p in passes if p[key] is not None]
+            out[key] = max(values) if values else None
+    if all("meter_phase_edge_mean_j" in p for p in passes):
+        out["meter_phase_edge_mean_j"] = statistics.fmean(p["meter_phase_edge_mean_j"] for p in passes)
+    if any("without_assisted" in p for p in passes):
+        diagnostics = [p.get("without_assisted", p) for p in passes]
+        if any(p.get("status") == "not_evaluated" for p in diagnostics):
+            reasons = [(identity, d.get("reason", "not evaluated at the blinded stage"))
+                       for identity, d in zip(kept_ids, diagnostics) if d.get("status") == "not_evaluated"]
+            reason = ("not evaluated at the blinded stage" if all(
+                text == "not evaluated at the blinded stage" for _, text in reasons) else
+                "; ".join(f"pass {identity}: {text}" for identity, text in reasons))
+            out["without_assisted"] = {"status": "not_evaluated", "reason": reason}
+        else:
+            out["without_assisted"] = mean_of_passes(diagnostics)
+        out["without_assisted"]["below_minimum"] = any(p.get("without_assisted", p).get("below_minimum", False) for p in passes)
+    if all("battery_term_mean_j" in p for p in passes):
+        out.update(boundary_description=DC_BOUNDARY_DESCRIPTION,
+                   battery_term_mean_j=statistics.fmean(p["battery_term_mean_j"] for p in passes),
+                   battery_term_max_j=max(p["battery_term_max_j"] for p in passes),
+                   battery_nonzero_run_count=sum(p["battery_nonzero_run_count"] for p in passes),
+                   battery_phase_edge_max_j=max(p["battery_phase_edge_max_j"] for p in passes))
     # Addendum 9 (cold disposition M1): the bound is carried in joules, averaged over the available
     # passes as B is, and divided by the point's mean decode time; the sensitivity likewise in watts.
     if any("meter_offset_bound_j" in p for p in passes):
@@ -1449,17 +1895,28 @@ def h2_fits(points, alpha, *, rails_power=None, offset_terms_apply=False):
         if offset_terms_apply:
             iv["offset"] = offset_alternative(fit, index, iv, [points[n]["offset"] for n in fit_names], unit)
         return iv
+    def details(fit, fit_names):
+        # Intermediate fit outputs let the agreement suite audit the entire printed fit,
+        # including covariances and labelled OLS errors, not only selected coefficients.
+        return {"n": fit["n"], "p": fit["p"], "df": fit["df"], "se_method": "HC3",
+                "coefficients": fit["coef"], "covariance": fit["cov_hc3"], "ols_covariance": fit["cov"],
+                "standard_errors": [math.sqrt(max(0, fit["cov_hc3"][i][i])) for i in range(fit["p"])],
+                "ols_standard_errors": [math.sqrt(max(0, fit["cov"][i][i])) for i in range(fit["p"])],
+                "mse": fit["s2"], "critical": t_two_sided(alpha, fit["df"]),
+                "family_size": round(ALPHA / alpha), "models": fit_names}
     y = [points[n]["P"] for n in names]
     bw = [points[n]["BW"] for n in names]
     rt = [points[n]["R_over_tau"] for n in names]
     simple = ols([[b] for b in bw], y)
     out["simple"] = {"P0_w": simple["coef"][0], "P0": interval(simple, 0, names, "W"),
+                     "details": details(simple, names),
                      "epsilon_j_per_GB": interval(simple, 1, names, "J/GB"),
                      "df": simple["df"], "s2": simple["s2"], "residuals": dict(zip(names, simple["residuals"]))}
     if len(names) >= 5:
         ext = ols([[b, r] for b, r in zip(bw, rt)], y)
         rho = interval(ext, 2, names, "J/GB")
         out["resident_extended"] = {"P0_w": ext["coef"][0], "P0": interval(ext, 0, names, "W"),
+                                    "details": details(ext, names),
                                     "epsilon_j_per_GB": interval(ext, 1, names, "J/GB"),
                                     "rho_j_per_GB": rho, "df": ext["df"], "s2": ext["s2"],
                                     "resident_adds_nothing": resident_adds_nothing(rho["lower"], rho["upper"], rho["value"])}
@@ -1488,6 +1945,7 @@ def h2_fits(points, alpha, *, rails_power=None, offset_terms_apply=False):
                              "measured_half_width_w": points[n]["P_half_width"],
                              "sign": "+" if dev > 0 else "-" if dev < 0 else "0"}
         out["tier"] = {"models": tier, "P0_w": tfit["coef"][0], "P0": interval(tfit, 0, tier, "W"),
+                       "details": details(tfit, tier),
                        "epsilon_j_per_GB": interval(tfit, 1, tier, "J/GB"),
                        "rho_j_per_GB": interval(tfit, 2, tier, "J/GB"), "df": tfit["df"], "s2": tfit["s2"],
                        "deviations": deviations}
@@ -1505,6 +1963,7 @@ def h2_fits(points, alpha, *, rails_power=None, offset_terms_apply=False):
         if all(is_number(v) for v in pr):
             lam = ols([[b, p] for b, p in zip(bw, pr)], y)
             out["rest_model"] = {"c_w": lam["coef"][0], "c": interval(lam, 0, names, "W"),
+                                 "details": details(lam, names), "correlation_r": statistics.correlation(bw, pr),
                                  "epsilon_rest_j_per_GB": interval(lam, 1, names, "J/GB"),
                                  "lambda": interval(lam, 2, names, ""), "df": lam["df"], "s2": lam["s2"],
                                  "vif_BW_and_P_rails": vif(bw, pr), "word_drawn": None}
@@ -1607,7 +2066,9 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         archive = archive_by_session.get(session_id)
         references = [r for r in srows if r["role"] in ("corpus", "start", "midpoint", "end")]
         if archive is not None and references and all(r["_unblinded"] for r in references):
-            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"]) for r in references}
+            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True) for r in references}
+            flags.extend({"flag": "bytes.meter_gap", "session_id": session_id, "run_id": run_id}
+                         for run_id, joined in reference_dc[session_id].items() if joined["status"] == "meter_gap")
             for (boundary, variant), family in FAMILIES.items():
                 if boundary != "rails":
                     record[(boundary, variant)] = neg8_allowance(srows, family, reference_dc[session_id])
@@ -1638,6 +2099,17 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     dc_by_run[r["run_id"]] = dc_join(archive, r["run_id"])
             elif archive is not None:
                 notes.append(f"{model} {session_id}: DC-input skipped, rows still blinded (raw meter cannot be blinded)")
+            for r in srows:
+                r["_decode_assisted"] = dc_by_run.get(r["run_id"], {}).get("decode_assisted")
+                r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
+                    dc_by_run.get(r["run_id"], {}).get("decode_assist_evaluated_reason",
+                        f"decode marker not evaluated: archive unavailable (run {r['run_id']})"))
+                valid = r["status"] == "succeeded" and not (
+                    set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
+                r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
+                if valid and unblinded and dc_by_run.get(r["run_id"], {}).get("status") != "ok":
+                    r["_meter_flags"].append("bytes.meter_gap" if
+                        dc_by_run.get(r["run_id"], {}).get("status") == "meter_gap" else "bytes.meter_decode_unavailable")
             per_boundary = {}
             for boundary in BOUNDARIES:
                 if boundary != "rails" and not dc_by_run:
@@ -1658,8 +2130,9 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         for boundary in BOUNDARIES:
             merged["boundaries"][boundary] = {"quantities": {
                 variant: mean_of_passes([block[k]["boundaries"][boundary].get("quantities", {}).get(variant, {})
-                                         for k in sorted(block) if k.startswith("pass")]) or {"status": "absent"}
-                for variant in ("gross", "idle_subtracted")}}
+                                         for k in sorted(block) if k.startswith("pass")],
+                                       pass_ids=[int(k[4:]) for k in sorted(block) if k.startswith("pass")]) or {"status": "absent"}
+                for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive")}}
         block["passes_mean"] = merged
     pass_keys.append("passes_mean")
     primary_pass_key = "passes_mean"
@@ -1842,9 +2315,16 @@ def main(argv=None):
                     rows += store["rows"]
                 for session_id in session_ids:
                     withheld[session_id] = store
-        archives = [load_archive(root) for root in args.archive]
+        # Registration 6/11: the blinded stage does not open a raw meter stream;
+        # its decode-assist counts and without-assisted numbers remain unevaluated.
+        archives = [load_archive(root) for root in args.archive] if args.stage != "blinded" else []
         result = analyse(rows, manifest, archives, stage=args.stage, key_dir=args.key_dir,
                          sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld)
+        if args.stage == "blinded" and args.archive:
+            result["notes"].append("DC-input skipped at the blinded stage; raw meter streams were not opened")
+    except StorageStop as exc:
+        print(f"refused: {exc}")
+        return 1
     except Exception as exc:  # noqa: BLE001 - every failure is a refusal line
         print("refused: " + (str(exc) or type(exc).__name__))
         return 1

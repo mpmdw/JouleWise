@@ -137,6 +137,7 @@ _MEMBER_CODES = {
 
 # Plan section 3.5, DISCLOSE only.
 _DISCLOSE_CODES = {
+    "records.claim_usable_counting_disagreement": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.receipt": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.lineage_formality": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.attempt_history": _code("RECORDS", "REPRESENTATION", DISCLOSE),

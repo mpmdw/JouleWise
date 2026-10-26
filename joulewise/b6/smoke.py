@@ -204,7 +204,14 @@ def write_wrapper(measurement, claim_measurement_root, smoke_dir, keep, *, run=s
     runner = Path(smoke_dir) / "run_campaign_reduced.py"
     runner.write_text(REDUCED_RUNNER)
     # Preserve the clone's own venv interpreter so sys.prefix and .pth apply.
-    real_python = venv / "bin/python3.13"
+    # On Linux the venv's python3 and python3.X are symlinks to bin/python
+    # (when the creating interpreter is itself named python), so bin/python
+    # becoming the wrapper would make them resolve to the wrapper and the
+    # wrapper exec itself forever. Point a new in-venv link at the real
+    # interpreter before replacing bin/python; Python finds pyvenv.cfg from
+    # the link's directory, so sys.prefix stays the venv.
+    real_python = venv / "bin/python-real"
+    real_python.symlink_to(os.path.realpath(venv / "bin/python"))
     wrapper = venv / "bin/python"
     wrapper.unlink()
     wrapper.write_text(wrapper_text(real_python, runner, keep, Path(smoke_dir) / "reduction.jsonl"))
@@ -262,9 +269,13 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
          "commit", "--quiet", "--allow-empty", "-m", "SMOKE ledger pin copy", run=run)
     keep = dict(keep) if keep is not None else compose.registered_smoke_keep(pack_id, path=KEEP_PATH)
     pack_root = measurement / "configs/campaigns" / pack_id
-    tree = json.loads((pack_root / "plan_tree.json").read_text())
+    tree_bytes = (pack_root / "plan_tree.json").read_bytes()
+    tree = json.loads(tree_bytes)
     keeps = config_keeps(tree, keep)
     reduced = reduce_tree(tree, keep)
+    # Preserve the pinned checkout's exact pre-reduction bytes in the archived
+    # pack, independent of the best-effort results clone of origin's default.
+    (pack_root / "smoke-registered-tree.json").write_bytes(tree_bytes)
     (pack_root / "plan_tree.json").write_text(json.dumps(reduced, indent=2) + "\n")
     # Readiness authenticates exact bytes, not the parsed tree. Commit its
     # authenticator in the same clone commit before the plan writer binds both
@@ -272,7 +283,7 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     (pack_root / "plan_tree.sha256").write_text(_sha256(pack_root / "plan_tree.json")
                                                + "  plan_tree.json\n")
     _git(measurement, "add", *(str(pack_root.relative_to(measurement) / name)
-                              for name in ("plan_tree.json", "plan_tree.sha256")), run=run)
+                              for name in ("plan_tree.json", "plan_tree.sha256", "smoke-registered-tree.json")), run=run)
     _git(measurement, "-c", "user.name=B6 Smoke", "-c", "user.email=smoke@invalid",
          "commit", "--quiet", "-m", "SMOKE reduced stage tree", run=run)
     wrapper_writer(measurement, claim, smoke_dir, keeps, run=run)
