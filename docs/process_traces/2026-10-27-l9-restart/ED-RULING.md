@@ -72,6 +72,12 @@ blinding, the independent recompute and its agreement bars, and the release reco
    BYTES's registered end (no t0 after 2026-11-02 00:00 PDT) still binds. If the dry run would push s1-p1 past it,
    the lead tells Ed before holding the loop, so he can choose between the fit set and the date, or amend the end
    date prospectively while BYTES is still blinded.
+6b. **Permission to move the block-5 dry run to the analysis laptop (Ed, 2026-10-27):** "yes you have my ok for both
+   moving the block 5 dry run here, and yes, orchestrator should be allowed to package and upload the archives between
+   sessions", then: "i was giving you permission not a mandate". This is a permission, **not active** until the
+   conditions in `BLOCK5-TRANSFER.md` beside this file hold and that file ends with `B5-TRANSFER: GO`. If it becomes
+   active, the dry run runs on Ed's MacBook Air from hash-verified compressed copies, and BYTES never needs to hold
+   for it. Until then items 6 and 6a stand unchanged.
 7. **Block 6** follows the same principle wherever its registration allows. Where the block-6 registration itself
    requires a synthetic stage chain before its blind run, that requirement stands until amended by a dated entry
    under its §17 rules.
