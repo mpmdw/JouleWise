@@ -166,7 +166,10 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
         bundles = sorted({str(Path(name).parent) for name in inventory
                           if name.endswith("/metadata.json")
                           and str(Path(name).parent) in registered_ids})
-        selected, selected_paths, cache = set(), [], {}
+        from joulewise.whole_window import shared_physics_cache
+        # The analysis run's shared calibration cache when there is one (J2).
+        cache = shared_physics_cache()
+        selected, selected_paths, cache = set(), [], ({} if cache is None else cache)
         for relative in bundles:
             target = directory / relative
             target.mkdir()

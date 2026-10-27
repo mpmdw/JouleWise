@@ -7181,6 +7181,8 @@ def strict_validate_bundles(
                         results[index] = None
         except Exception:  # noqa: BLE001 - a pool that cannot start: in process
             pass
+    # Spawned pool workers keep their own per-process cache; only the
+    # in-process fallback below shares the run's cache.
     cache: dict[Any, Any] = _physics_cache_for_call()
     return [
         result
