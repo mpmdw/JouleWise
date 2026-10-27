@@ -153,6 +153,20 @@ class DeadlineTripwireTests(unittest.TestCase):
         for output in new[0]['outputs']:
             self.assertEqual((new_root / output['name']).read_bytes(), (old_root / output['name']).read_bytes())
 
+    def test_failed_reduce_leaves_no_unregistered_output(self):
+        # NIT-5: a non-zero reduce exit that still wrote its output is a refusal with no file left.
+        class FailingRunner(DeadlineRunner):
+            def run(self, main, argv, **kwargs):
+                result = super().run(main, argv, **kwargs)
+                return replace(result, exit_status=2) if self.calls == 2 else result
+        from dataclasses import replace
+        restricted = self.custody()
+        state = StepState(restricted, [('alpha', 'first', self.member), ('alpha', 'second', self.member)])
+        records = [r.as_dict() for r in d.step_2(state, FailingRunner(restricted))]
+        self.assertEqual((records[0]['step'], records[0]['window'], records[0]['exit_status']), ('2', 'alpha', 2))
+        self.assertEqual(list(state.outputs), ['rereduced_alpha_first'])
+        self.assertEqual(sorted(p.name for p in (restricted / 'rereduced/alpha').iterdir()), ['first.rereduced.json'])
+
     def test_driver_stops_at_the_refused_step(self):
         ran = []
 

@@ -711,6 +711,9 @@ def step_2(s,r):
     for pack,run_id,bundle in s.kept_bundles():
         output=s.path('rereduced/'+pack+'/'+run_id+'.rereduced.json')
         result,_,code,exit_status=s.invoke(r,main,['reduce',bundle,'--output',output],step='2',window=pack)
+        if exit_status and Path(output).is_file():
+            # As at a refusal below: a failed re-reduction leaves no unregistered output.
+            Path(output).unlink()
         if exit_status==0 and not Path(output).is_file():
             code,exit_status=None,2
         elif exit_status==0:
