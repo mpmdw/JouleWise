@@ -56,6 +56,14 @@ path to Paper A. **No one has worked on it since 2026-10-23 07:00 UTC.** Why:
 
 ## 2. Before starting
 
+- **Branch.** Work on `lane/2026-10-27-l9-2`, cut from `lane/2026-10-20-l9-ruling-build` at BASE_HEAD; push only
+  there. The lead merges it into the ruling-build lane after review. The report path in §7 is on this branch.
+- **Seat setup (Claude cloud session).** Clone `mpmdw/JouleWise-data` and run
+  `bash tools/cloud/seat_setup.sh <your JouleWise checkout>` then `source /tmp/jw-seat.env` (it installs the
+  cached `/bin/zsh`, links `/opt/homebrew/bin/python3.13`, sets TMPDIR). Add `JW_B5_S10_REAL_PROGRAMS=1`
+  yourself. Read the l9-joined report from that clone (`git fetch origin codex/l9-joined`).
+- **Stay alive.** Long modules run 6-13 h. Start each as a detached background process with durable log, exit and
+  result files, and keep working or waiting with bounded checks; a container left idle is reclaimed.
 - Confirm the execution environment actually runs commands (a trivial `python3.13 -c 'print(1)'` round trip).
   If Codex Cloud still reports `gateway_unavailable`, stop and return that. Do not run on a degraded VM.
 - **Run one long module at a time.** The dry-run module took 20,950-24,782 s and J6 47,231 s on the 5-vCPU VM.
@@ -123,11 +131,17 @@ of them separately. Fix within WRITE_SCOPE only, each fix with a test that fails
 
 ## 7. Report
 
-`.codex-report/L9-2.md` on the lane, pushed after every completed module (so an outage loses nothing):
+`.codex-report/L9-2.md` on `lane/2026-10-27-l9-2`, pushed after every completed module (so an outage loses nothing):
 SUMMARY (one paragraph: the 9b classification and the module table status), the §4 evidence, the module table
 (A2), FILES CHANGED, DECISIONS I MADE, OPEN ISSUES, NEEDS_RULING.
 
 ## 8. For the lead (not the seat)
+
+- **Ed's decision (2026-10-27, this session): "analysis of collected data should happen as soon as a noteworthy
+  block of measurements is completed"; "i want analysis asap".** As soon as L9 passes acceptance and one review,
+  hold the BYTES loop and run the block-5 blind dry run on the Mac, even with BYTES sessions left. If L9 is ready
+  before the s1-p1 retry has run, run the dry run first only if the s1 retry can still start before 2026-11-02
+  00:00 PDT afterwards; otherwise s1 first. Binding text: the directive issue of 2026-10-27.
 
 - Put L9 back into RUN_STATE's "Next activation" pointer as a standing item beside the BYTES steps.
 - Give each cloud seat a heartbeat the activations read (last push time on its report branch); a seat silent for
