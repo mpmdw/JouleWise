@@ -1,0 +1,367 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "e446a7617f94569329be5b40aa29107caf2c4a9456816ac082503fa50787faf3",
+    "sidecar_sha256": "e446a7617f94569329be5b40aa29107caf2c4a9456816ac082503fa50787faf3",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen35-122b-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "bytes-s6-p1-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 1119168048204541,
+    "monotonic_raw_ns": 1119168048204166,
+    "wall_s": 1793134831.0644212
+  },
+  "faults": {
+    "bound_derivation_failed": "not_run",
+    "post_bracket_failed": false,
+    "reasons": [
+      "yield_low"
+    ]
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output",
+    "yield.stage_low",
+    "yield.stage_low",
+    "yield.stage_low"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 472,
+    "head": "82af33623ab0d6197b8d6e98422e78c8dcd9653f",
+    "path": "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/night/executed_inventory.json",
+    "sha256": "d3897334b7a8d6027d6f31d4681547560019627d61c18446a29b28ec4c9c9375",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 61600,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/measurement/.venv/bin/python-real",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1119167908724250,
+        "monotonic_raw_ns": 1119167908723916,
+        "wall_s": 1793134830.924941
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "22ab60cecfa6dce571090736025a4ead1d72b186162302c66d1b728f53a4d08f",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/measurement/.venv/bin/python-real",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1119167531314750,
+        "monotonic_raw_ns": 1119167531314125,
+        "wall_s": 1793134830.547531
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 1118009103608833,
+          "monotonic_raw_ns": 1118009103608666,
+          "wall_s": 1793133672.119825
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.844
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 1119162521157916,
+      "monotonic_raw_ns": 1119162521157458,
+      "wall_s": 1793134825.537374
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 1119167531314750,
+      "monotonic_raw_ns": 1119167531314125,
+      "wall_s": 1793134830.547531
+    },
+    "released": {
+      "monotonic_ns": 1119167531236916,
+      "monotonic_raw_ns": 1119167531235583,
+      "wall_s": 1793134830.547453
+    },
+    "released_after_chain_s": 5.01
+  },
+  "neg8_corpus": {
+    "collected_manifest": null,
+    "committed_manifest": null,
+    "errors": [
+      "summary: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/night/transcript/neg8-settled-corpus.collected.summary.json'",
+      "collected manifest: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/night/transcript/neg8-settled-corpus.collected.json'"
+    ],
+    "members_kept": null,
+    "members_listed": null,
+    "pruned": null,
+    "summary": null
+  },
+  "pack_id": "bytes-s6-p1",
+  "plan_id": "SMOKE-bytes-s6-p1-20261027T2029Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": 21,
+    "end": {
+      "monotonic_ns": 1119162521177000,
+      "monotonic_raw_ns": 1119162521172708,
+      "read_skew_ns": 333,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 1119162521172666,
+      "wall_s": 1793134825.5373938
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 1118009981390708,
+      "monotonic_raw_ns": 1118009981388250,
+      "read_skew_ns": 458,
+      "sleep_offset_ns": 21,
+      "uptime_raw_ns": 1118009981388229,
+      "wall_s": 1793133672.997607
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 1117760281684833,
+    "monotonic_raw_ns": 1117760281684166,
+    "wall_s": 1793133423.2979012
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 3,
+    "failed": 0,
+    "logged": 3,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 3,
+        "present": 1,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-s6-p1-reference-start",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 4,
+        "planned": 10,
+        "present": 1,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen35-122b-absolute",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 1,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-s6-p1-reference-end",
+        "status": "LOW",
+        "succeeded": 1
+      }
+    ],
+    "planned": 16,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 3,
+    "yield_status": "LOW"
+  },
+  "yield_plan": {
+    "planned": 16,
+    "source": [
+      "driver"
+    ],
+    "stages": 3
+  },
+  "yield_tripwire": {
+    "attempted_seen": 3,
+    "counted_in_settle": 2,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 3,
+    "stalled": false
+  }
+}

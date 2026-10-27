@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1793136720.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-b6/loop-bytes/staging/r2-bytes-s6-p1-smoke-0/smoke/bytes-s6-p1-20261027T2029Z/custody/hazards/arm.json",
+    "sha256": "6cc0bd25f4fbb986ffd720792395496d618c37b0922109823c3895f8c1bac1d9"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 1117760259780583,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 1118008719963708,
+    "monotonic_raw_ns": 1118008719963000,
+    "wall_s": 1793133671.73618
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "SMOKE-bytes-s6-p1-20261027T2029Z",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 1117760295000583,
+    "monotonic_raw_ns": 1117760295000333,
+    "wall_s": 1793133423.3112168
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
