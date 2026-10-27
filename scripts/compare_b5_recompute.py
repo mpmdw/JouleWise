@@ -333,6 +333,10 @@ def compare_brackets(c, custody, ours):
     c.numeric("count", "block/T", get(block, "T"), line.get("T"))
 
 
+def compare_reported(c, custody, ours):
+    """Step 10 reported cells: mapped once the projection shape is read from the full-size run."""
+
+
 def compare_exclusions(c, ours):
     for pack in sorted(PACKS.values()):
         # L9 consumes derived/exclusions.json; the recompute re-derives it from the flags (AN-18 partial).
