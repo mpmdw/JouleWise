@@ -1,0 +1,35 @@
+{
+ "NEG8_MINT_DROP_REASONS": [
+  "custody_triangle_disagrees",
+  "not_current_strict_mint",
+  "precheck_ineligible",
+  "reduction_mismatch",
+  "status_not_succeeded"
+ ],
+ "control": [
+  {
+   "point_j": 222.55862677978757,
+   "lower_j": 222.22533126070473,
+   "upper_j": 222.8919222988704
+  },
+  207.39312673496488,
+  null,
+  null
+ ],
+ "forced_uncached": [
+  null,
+  null,
+  "provenance",
+  "precheck_ineligible"
+ ],
+ "forced_warm_cache": [
+  {
+   "point_j": 222.55862677978757,
+   "lower_j": 222.22533126070473,
+   "upper_j": 222.8919222988704
+  },
+  207.39312673496488,
+  null,
+  null
+ ]
+}

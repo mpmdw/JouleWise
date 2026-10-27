@@ -149,6 +149,66 @@ Other refit paths. The seat report lists three other refit sites (`L9-2.md:257-2
 every non-pass raises `window_bracket_not_passed`, and the shipped class table lists it under `tooling_refusal`
 (executed lookup). That consumer fails closed. I did not trace the two `whole_window` consumers to a step outcome.
 
+## 6. Lead's follow-up questions (message of 2026-10-27 20:01 UTC)
+
+Repository unshallowed first: `git fetch --unshallow`. Probes ran on a worktree at `c20fa72`.
+
+### (a) Can a legitimate run hit the tripwire spuriously? No, as far as can be checked here.
+
+- **Who wrote the stored summary.** The harvest never writes `summary_metrics.json`. The measurement run wrote it,
+  and the harvest reads it (`b5/harvest.py:2460`). At both block-5 harvest pins, `224a264c5` and `b039c0257`, the
+  harvest re-reduces each member with its pinned code and records `identical_to_stored = raw == summary_raw`, a
+  byte comparison (`harvest.py:2404` at `224a264c5`, `:2493` at `b039c0257`). A mismatch flags
+  `member.reduction_mismatch`. `registration_block5.md:3684-3692` removes such a member from every cell. So every
+  kept bundle's stored summary was byte-reproduced by the reducer at its harvest pin.
+- **Reducer drift from the pins to the lane: none.** I ran a real strict reduction and listed every `joulewise`
+  module it loads (31 modules, including the lazily imported `powermetrics_fiducial`).
+  `git diff --stat 224a264c5 c20fa72 -- <those 31 files>` is empty, and so is the same diff from `b039c0257`.
+- **Serialization cannot trip it.** The tripwire compares parsed JSON values per key
+  (`require_rereduction_matches_stored`), not bytes. A whitespace or key-order difference between harvest and
+  dry-run serialization cannot fire it.
+- **Executed:** the false-refusal sweep (§5) admits 104/104 succeeded ALPHA members.
+- **Residual risk.** Host numerics are the one remaining source: a different numpy, Python or libm build on the
+  Mac between harvest and dry run could change a float. That would be a fail-closed tooling refusal, not a wrong
+  number. Check `python3.13 -c 'import numpy,sys;print(sys.version,numpy.__version__)'` against the harvest host
+  record before the dry run.
+
+### (b) Are the other refit sites refusal-terminal?
+
+There is one refit function, `powermetrics_fiducial.rederive_detection_from_artifacts`. It has two callers:
+`reduce.py:1547` (this goes through the shared cache) and
+`powermetrics_fiducial.verify_stored_evidence_physics` (not cached; reached from `calibration_bracketing.py:1765`).
+Command: `grep -rn "rederive_detection_from_artifacts(\|verify_stored_evidence_physics(" joulewise --include=*.py`.
+Each site's behaviour under a forced firing (pf clock +1000 s per read):
+
+| site | firing with no cache | firing with a warm run cache | terminal? |
+|---|---|---|---|
+| step 1 `validate-bundle --strict` | exit 2, `kept_bundle_strict_validation_failed` (tooling) | no refit | **yes, executed** |
+| step 2 `reduce` | tripwire: tooling refusal | no refit, outputs identical | **yes, executed** (§5) |
+| `b5_analysis/bracket.py:257` → `calibration_bracketing` | any non-pass gives `window_bracket_not_passed` (tooling) | not cached (always refits) | yes, by reading plus a class-table lookup |
+| `whole_window.py:1207`, `:6127` → `calibration_bracketing` | — | — | **not reached on the dry-run path.** `dry_run.py:1006-1008` always passes a consumption session and `archive_context`, so the bracket comes from the archived assessment (`whole_window.py:1195-1202`). The `:6127` pointwise path is the no-session fallback. |
+| consumption session (`whole_window.py:1326-1345`) | member reason, `_fail_global`, session not ready, `whole_window_verdict_provenance_invalid` (`:7534-7560`), then the step-5 mint raises `MintError("<label>: authenticated whole-window consumption refused: …")` | no refit | stops, by reading only. **The record may show `unclassified_refusal`**, because `refusal_token` takes the text before the first `:`, and that is a label, not a classified code. |
+| NEG-8 energy re-derivation (`_reference_energy_evidence_detail`, `:4617`) | **executed:** returns `precheck_ineligible`. The control returns the energies (`neg8_probe.json`). | executed: unchanged energies | see the next row |
+| NEG-8 replay (`b5_analysis/sources_replay.py:246` → `_derived_neg8_decision`) | **executed:** the replay's `strict_invalid` callback on reference `runs_bound/neg8-refcorpus-r01` returns invalid (control: valid; `ref_strict_probe.json`). The replay passes no `stored_strict_losses`, so every reference counts as listed (`whole_window.py:5600-5612`): **the firing turns a reference into a `strict_invalid` LOSS, not a refusal.** An energy `precheck_ineligible` returns a problem code (`provenance`), which is a refusal. | executed: valid, no refit | **only through a later comparison, by reading.** The derived bracket must still match the archived one in `_neg8_reproduces` (`whole_window.py:245-252`), which compares every claim-family field except the bound-dependent ones, including `abs_delta_j` over the survivors. A changed loss set almost surely changes them, giving `whole_window_verdict_conflict` (tooling). If a loss breaks endpoint replication, the code is `sources_replay_screen_not_passed` or `provenance`. **Neither of those is in the class table, so they print `unclassified_refusal`.** |
+
+So the author's three sites do end in a stop before any output. But two of them stop only as **unclassified**
+refusals, and the NEG-8 replay's terminality rests on the endpoint comparison, not on the site itself. With the
+shared cache, none of these later sites refits a calibration that step 1 verified. In ALPHA that is every one:
+107 of 109 claim-side evidence files and all 18 references share `a638eed8…`. A firing there becomes impossible
+after step 1. Whether that also holds for block 5's real references is a property of the archives, and I could not
+check it here.
+
+**Feasible fix, all in non-governed code** (`observer_probe.py`, `observer_probe.json`). The return value of
+`rederive_detection_from_artifacts` carries `projection_budget_trigger`. It reads `null` on the control and
+`"wall_deadline"` on the forced call. Both callers look the function up through the module, so a wrapper scoped to
+one driver run can see every firing in the process. The wrapper sits in `dry_run.run`, alongside the cache
+context, and must not mutate anything. If it records any firing, the step that saw it ends with one tooling code
+(for example `calibration_wall_deadline_fired`). That would replace the four-key inference with a direct signal,
+and it would cover the bracket, session and NEG-8 paths.
+
+The consumption-session site could not be executed: its only executable harness (`chain_fixture()`) restores the
+roughly 8 GB S10 chain and runs for hours. I stopped it after 25 min and deleted its temp tree.
+
 ## FINDINGS
 
 ### BLOCKER
@@ -177,14 +237,21 @@ None.
   dict to the same governed reducer, so the risk is low. Command:
   `grep -n "AuthenticatedConsumption\|_reference_energy\|_current_core" tests/b5_analysis/test_shared_physics_cache.py`
   returns no match.
-- **MINOR-4: the "firing anywhere on the dry-run path refuses" evidence omits one refit path.**
-  `calibration_bracketing.py:1765` refits through `powermetrics_fiducial.verify_stored_evidence_physics`, under
-  the same wall deadline. It takes no `physics_cache`, so the shared cache does not cover it, and the step-2
-  tripwire does not either. Callers: `b5_analysis/bracket.py:257` (fails closed: `window_bracket_not_passed` is
-  `tooling_refusal` in the class table) and `whole_window.py:1207,6135` (not traced). The seat report's site list
-  (`L9-2.md:257-263`) should add this path and trace the two `whole_window` callers to their step outcomes before
-  the ED-RULING item 6 condition is called confirmed. Command:
-  `grep -rn "verify_stored_evidence_physics(\|rederive_detection_from_artifacts(" joulewise --include=*.py`.
+- **MINOR-4: the fail-closed evidence omits the uncached bracket refit path** (`calibration_bracketing.py:1765` →
+  `powermetrics_fiducial.verify_stored_evidence_physics`). Narrowed by §6(b): on the dry-run path only
+  `b5_analysis/bracket.py:257` reaches it, and that caller fails closed with the tooling code
+  `window_bracket_not_passed`. The `whole_window.py:1207,6127` callers are bypassed because the driver always
+  supplies a session and `archive_context`. The seat report's site list (`L9-2.md:257-263`) should add this path.
+- **MINOR-5: two later refit sites stop only as `unclassified_refusal`, and the NEG-8 replay turns a firing into a
+  lost reference before anything refuses** (§6(b)). Executed: under a forced firing with no cache, the replay's
+  `strict_invalid` callback marks a real reference invalid (`ref_strict_probe.json`). The energy re-derivation
+  returns `precheck_ineligible` (`neg8_probe.json`). Terminality then rests on `_neg8_reproduces`
+  (`whole_window.py:245`), by reading. The codes it can end in, `sources_replay_screen_not_passed` and
+  `provenance`, and the step-5 mint's `<label>: authenticated whole-window consumption refused`, are not in the
+  class table. A blind operator would see "unclassified refusal at step N" and could not tell it was a deadline
+  firing. With the shared cache this cannot happen for any calibration step 1 verified. Fix (non-governed,
+  feasibility executed in `observer_probe.json`): a driver-run observer on `rederive_detection_from_artifacts`'s
+  `projection_budget_trigger` that turns any firing into one tooling code.
 
 ### NIT
 
@@ -211,7 +278,11 @@ None.
 - Any full driver run (`test_dry_run`, full or reduced size) with the cache and tripwire on. It was not run, per
   instruction. The driver was checked with stubbed steps (author tests, T7), with the real `step_2`/`StepRunner`
   (§5), and with the step-1/step-2 programs directly.
-- The `whole_window.py:1207,6135` calibration-bracketing consumers under a forced firing (MINOR-4).
+- The consumption-session site under a forced firing (§6(b)): its harness is the multi-hour, ~8 GB S10 chain. It
+  was stopped after 25 min.
+- Whether block 5's real references share the kept members' calibration evidence. That needs the archives.
+- The NEG-8 replay end to end under a forced firing. Only the site and the callback were executed; the
+  `_neg8_reproduces` backstop is by reading.
 - Real wall-time savings: only refit counts were measured (1 refit for 104 members).
 - macOS, zsh, and the `/opt/homebrew` interpreter path (setup refused; see the header).
 
@@ -222,7 +293,8 @@ VERDICT: ACCEPT_WITH_FIXES
 - MINOR-1 `.codex-report/L9-2.md:98,287,78`: seat report still says no code change, "Not in WRITE_SCOPE", and the module table predates both runtime commits
 - MINOR-2 `joulewise/whole_window.py:7075`, `joulewise/cli.py:1949`: byte-identity holds only when no deadline fires; qualify the claim (the tripwire now refuses the uncached step-2 case)
 - MINOR-3 `joulewise/whole_window.py:1293,4661,6168`: no executed test of these sites under the shared cache
-- MINOR-4 `joulewise/calibration_bracketing.py:1765`: uncached bracket refit path missing from the fail-closed evidence; `bracket.py` consumer fails closed, `whole_window.py:1207,6135` consumers untraced
+- MINOR-4 `joulewise/calibration_bracketing.py:1765`: uncached bracket refit path missing from the seat report's site list; on the dry-run path only `bracket.py` reaches it, and it fails closed (tooling)
+- MINOR-5 `joulewise/b5_analysis/sources_replay.py:246`, `joulewise/whole_window.py:5600`: an uncached firing becomes a lost NEG-8 reference, with terminality resting on `_neg8_reproduces`; session and replay stops surface as `unclassified_refusal`. Fix: a run-scoped observer on `projection_budget_trigger`
 - NIT-1 `joulewise/reduce.py:1526`: cached value under the right key is trusted (existing reducer contract)
 - NIT-2 `joulewise/whole_window.py:7184`: spawn pool and threads get no sharing (correct, but uncommented)
 - NIT-3 `joulewise/cli.py:1949`: `reduce` ignores the V2 session cache while strict validation prefers it
