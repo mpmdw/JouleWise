@@ -59,9 +59,10 @@ class ArchiveTests(unittest.TestCase):
     def test_S13_full_three_pack_closed_form(self):
         archives={p:full_pack(self.root,p) for p in ("ALPHA","BETA","GAMMA")}
         _,out,_=run_cli(archives,self.root/"all.json",("--member-detail",))
-        # This rail-only fixture has no meter; each absent machine line is disclosed.
+        # This rail-only fixture has no meter and no harvest exclusion inputs; each absence is disclosed.
         self.assertEqual([(f["pack"], f["code"]) for f in out["flags"]],
-                         [(p, "meter_absent") for p in ("ALPHA", "BETA", "GAMMA")])
+                         [(p, c) for c in ("exclusions_rederivation_unavailable", "meter_absent")
+                          for p in ("ALPHA", "BETA", "GAMMA")])
         for pack,model_tag,model,extra in (("ALPHA","qwen3-1p7b",r.MODELS["ALPHA"],0.),
                                          ("BETA","qwen3-8b",r.MODELS["BETA"],2.)):
             for arm,phase in (("decode","decode"),("prefill-p2048","prefill")):

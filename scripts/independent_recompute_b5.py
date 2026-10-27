@@ -25,10 +25,12 @@ import itertools
 import json
 import math
 from pathlib import Path
+import platform
 import plistlib
 import re
 import statistics
 import struct
+import sys
 from xml.parsers.expat import ExpatError
 
 SCHEMA = "joulewise.independent_recompute_b5.v1"
@@ -51,13 +53,21 @@ reference_slot_disagrees roster_pack_not_archived roster_plan_tree_not_sealed
 loo_kept_n_equals_minimum sensitivity_inputs_unavailable meter_stream_malformed
 meter_no_fit meter_span_uncovered meter_offset_from_journal meter_offset_unavailable
 meter_battery_unavailable meter_request_mismatch meter_baseline_unavailable
-member_pre_bound_missing meter_battery_activity meter_absent""".split())
+member_pre_bound_missing meter_battery_activity meter_absent
+exclusions_rederivation_mismatch exclusions_rederivation_unavailable""".split())
 TRACE_STOP_FLAG_CODES = frozenset({"trace_plist_missing", "trace_plist_unreadable"})
 STOP_FLAG_CODES = TRACE_STOP_FLAG_CODES | frozenset({"excluded_reference_in_screen", "kept_member_outside_verdict_membership",
                             "neg8_source_not_rescreen", "harvest_checkout_not_clean",
                             "reference_slot_disagrees", "roster_pack_not_archived",
-                            "roster_plan_tree_not_sealed", "kept_units_disagree"})
-STRUCTURE_FLAG_CODES = STOP_FLAG_CODES | {"loo_kept_n_equals_minimum", "calibration_capture_name_fallback"}
+                            "roster_plan_tree_not_sealed", "kept_units_disagree",
+                            "exclusions_rederivation_mismatch"})
+# Only these codes reach stdout/stderr; every other code, and every value, stays in the restricted output file.
+STRUCTURE_FLAG_CODES = STOP_FLAG_CODES | {"loo_kept_n_equals_minimum", "calibration_capture_name_fallback",
+                                          "exclusions_rederivation_unavailable"}
+CATALOG_PATH = Path(__file__).resolve().parents[1] / "configs/campaigns/v5_claim_25g83/flag_catalog.json"
+# Orchestrator ruling Q11 (2026-10-07): on GAMMA only, this DISCLOSE code also removes the window.
+GAMMA_PACK_ID = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+GAMMA_WINDOW_REASONS = {"neg8.midpoint_lost": "neg8.midpoint_lost_primary"}
 MACHINE_BOUNDARY = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
                     "the adapter's AC-to-DC loss is not included.")
 PHASE_MACHINE_LABEL = "descriptive: gross meter energy per phase; battery assist flagged at request level"
@@ -508,6 +518,144 @@ class Member:
                 "m_s": self.m, "s_s": self.s, "tokens": self.tokens}
 
 
+def catalog_effect(catalog, code):
+    entry = mapping(get(catalog, "codes", code))
+    return entry.get("effect", "UNCLASSIFIED"), entry.get("family")
+
+
+def interval_pair(value):
+    if (isinstance(value, (list, tuple)) and len(value) == 2 and value[0] <= value[1]
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in value)):
+        return int(value[0]), int(value[1])
+    return None
+
+
+def rederive_exclusions(flags, roster, spans, catalog, catalog_sha256):
+    """AN-18 (partial): plan section 3.3's exclusion rule, re-derived from the flag
+    rows, the harvest's roster and spans, and the registered catalog's effects.
+    Reads only code, scope, interval and flag_id of a flag; never a value."""
+    unknown = lambda a, b: a is None or b is None or str(a) == str(b)
+    plan_id, attempt = roster.get("plan_id"), roster.get("attempt")
+    window_only = GAMMA_WINDOW_REASONS if roster.get("pack_id") == GAMMA_PACK_ID else {}
+    position = {m["run_id"]: i for i, m in enumerate(roster["members"])}
+    if len(position) != len(roster["members"]):
+        raise ValueError("duplicate roster run id")
+    by_stage = {}
+    for m in roster["members"]:
+        if m.get("stage_id") is not None:
+            by_stage.setdefault(m["stage_id"], []).append(m["run_id"])
+    run_of_bundle = {}
+    for b in roster.get("bundles") or ():
+        if b["run_id"] in position:
+            run_of_bundle.setdefault(str(b["bundle_id"]), b["run_id"])
+    excluded, reasons, unclassified, seen, foreign, unmatched, unplaced = {}, set(), set(), set(), set(), set(), set()
+    counts = {"by_code": {}, "by_family": {}, "by_effect": {}}
+    bump = lambda table, key: counts[table].__setitem__(key, counts[table].get(key, 0) + 1)
+    for flag in flags:
+        if flag["flag_id"] in seen:
+            continue
+        seen.add(flag["flag_id"])
+        code, scope = flag["code"], flag["scope"]
+        if not (unknown(plan_id, scope["plan_id"]) and unknown(attempt, scope["attempt"])):
+            foreign.add(flag["flag_id"])
+            continue
+        effect, family = catalog_effect(catalog, code)
+        bump("by_code", code), bump("by_family", family or "UNCLASSIFIED"), bump("by_effect", effect)
+        if effect == "DISCLOSE":
+            if code in window_only:
+                reasons.add(window_only[code])
+            continue
+        if effect == "EXCLUDE_WINDOW":
+            reasons.add(code)
+            continue
+        if effect != "EXCLUDE_MEMBER":
+            unclassified.add(code)
+            continue
+        level = scope["level"]
+        if level == "member" or (level == "quad" and scope["run_id"] is not None):
+            rid = scope["run_id"]
+            if rid not in position:
+                rid = run_of_bundle.get(str(scope.get("bundle_id"))) or run_of_bundle.get(str(rid)) or rid
+            if rid in position:
+                excluded.setdefault(rid, set()).add(code)
+            else:
+                unmatched.add(flag["flag_id"])
+            continue
+        targets = list(position)
+        if level == "stage" and by_stage.get(scope["stage_id"]):
+            targets = by_stage[scope["stage_id"]]
+        elif level in ("stage", "quad"):
+            unmatched.add(flag["flag_id"])
+        interval = interval_pair(flag["interval"]["monotonic_ns"])
+        for rid in targets:
+            span = interval_pair(get(spans, rid, "monotonic_ns"))
+            if interval is not None and span is None:
+                unplaced.add(rid)
+            if interval is None or span is None or (span[0] <= interval[1] and interval[0] <= span[1]):
+                excluded.setdefault(rid, set()).add(code)
+    ignored, ambiguous = [], []
+    if roster.get("bundles") is not None:
+        admitted, started = {}, roster.get("chain_started_monotonic_ns")
+        for b in roster["bundles"]:
+            created = b.get("created_monotonic_ns")
+            why = ("roster.not_in_plan" if b["run_id"] not in position else
+                   "roster.foreign_attempt" if not unknown(attempt, b.get("attempt")) else
+                   "roster.creation_unplaced" if started is not None and created is None else
+                   "roster.before_chain_started" if started is not None and created < started else None)
+            if why:
+                ignored.append({"bundle_id": str(b["bundle_id"]), "run_id": b["run_id"], "code": why})
+            else:
+                admitted.setdefault(b["run_id"], []).append(str(b["bundle_id"]))
+        for rid in position:
+            if len(admitted.get(rid, ())) != 1:
+                excluded.setdefault(rid, set()).add("member.bytes_ambiguous" if admitted.get(rid) else "member.bytes_missing")
+                if admitted.get(rid):
+                    ambiguous.append(rid)
+    units = {}
+    for m in roster["members"]:
+        for u in m.get("units") or ():
+            units.setdefault((u["cell_id"], u["stratum"], str(u["unit_id"])), []).append(m["run_id"])
+    specs = {c["cell_id"]: c for c in roster.get("cells") or ()}
+    floor_n = get(catalog, "rules", "cell_unit_minimum", default=8)
+    cells, unresolvable = [], False
+    for cid in sorted(set(specs) | {k[0] for k in units}):
+        spec = specs.get(cid, {})
+        strata = sorted({k[1] for k in units if k[0] == cid} | set(spec.get("strata", ["quad"])))
+        minimum = {s: max(int(spec["minimum"][s]), floor_n) if s in spec.get("minimum", {}) else floor_n for s in strata}
+        planned, kept, dropped = {}, {}, []
+        for s in strata:
+            keys = sorted(k for k in units if k[0] == cid and k[1] == s)
+            planned[s], kept[s] = len(keys), []
+            for k in keys:
+                codes = sorted(set().union(*(excluded.get(rid, set()) for rid in units[k])))
+                if codes:
+                    dropped.append({"stratum": s, "unit_id": k[2], "codes": codes, "run_ids": sorted(units[k]),
+                                    "positions": sorted(position[rid] for rid in units[k])})
+                else:
+                    kept[s].append(k[2])
+        resolvable = bool(strata) and all(len(kept[s]) >= minimum[s] for s in strata)
+        target = bool(spec.get("target", True))
+        unresolvable |= target and not resolvable
+        cells.append({"cell_id": cid, "target": target, "planned": planned, "minimum": minimum,
+                      "n_repeats": len(kept.get("repeat", [])), "n_quads": len(kept.get("quad", [])),
+                      "n_kept": {s: len(kept[s]) for s in strata}, "kept_units": kept,
+                      "dropped_units": sorted(dropped, key=lambda d: (d["stratum"], d["unit_id"])),
+                      "resolvable": resolvable})
+    if unresolvable:
+        reasons.add("cell.below_minimum")
+    members = sorted(({"run_id": rid, "position": position[rid], "codes": sorted(codes),
+                       "families": sorted({catalog_effect(catalog, c)[1] or "UNCLASSIFIED" for c in codes})}
+                      for rid, codes in excluded.items() if codes), key=lambda m: (m["position"], m["run_id"]))
+    return {"schema_version": "joulewise.exclusions.v1", "catalog_sha256": catalog_sha256,
+            "plan_id": plan_id, "attempt": attempt, "members_excluded": members,
+            "bundles_ignored": sorted(ignored, key=lambda b: (b["bundle_id"], b["code"])),
+            "duplicate_bundles": sorted(ambiguous), "cells": cells, "claim_usable": not reasons,
+            "reasons": sorted(reasons), "unclassified": sorted(unclassified), "release_blocked": bool(unclassified),
+            "flag_counts": {**{k: dict(sorted(v.items())) for k, v in counts.items()},
+                            "foreign_scope": len(foreign), "unmatched_member": len(unmatched)},
+            "span_unknown": sorted(unplaced)}
+
+
 def neg8_bound(corpus, n_start, n_end):
     n = len(corpus)
     if n < 2 or not 0 < n_start <= n or not 0 < n_end <= n:
@@ -582,6 +730,33 @@ class Window:
                 self.units.setdefault(key, []).append(m["run_id"])
         self.b = self.calibration()
         self.neg8 = self.compute_neg8()
+        self.exclusion_check = self.check_exclusions()
+
+    def check_exclusions(self):
+        """AN-18 (partial): derived/exclusions.json must equal the registered rule applied to
+        derived/flags.jsonl and the harvest's withheld roster and spans."""
+        r = self.reader
+        inputs = r.json(self.archive / "withheld/exclusion-inputs.json", "withheld/exclusion-inputs.json", False)
+        catalog_bytes = r.raw(CATALOG_PATH, "flag_catalog", False)
+        if not inputs or catalog_bytes is None:
+            reason = "exclusion_inputs_missing" if not inputs else "catalog_missing"
+            r.flag("exclusions_rederivation_unavailable", "derived/exclusions.json", reason)
+            return {"status": "not_computed", "reason": reason}
+        try:
+            catalog = json.loads(catalog_bytes)
+            derived = rederive_exclusions(self.flag_rows, inputs["roster"], mapping(inputs.get("spans")), catalog,
+                                          hashlib.sha256(catalog_bytes).hexdigest())
+        except (KeyError, TypeError, ValueError, AttributeError):
+            r.flag("exclusions_rederivation_unavailable", "derived/exclusions.json", "inputs_malformed")
+            return {"status": "not_computed", "reason": "inputs_malformed"}
+        differing = sorted(k for k in derived if self.exclusions.get(k) != derived[k])
+        if differing:
+            r.flag("exclusions_rederivation_mismatch", "derived/exclusions.json", {"keys": differing})
+        stored = {m.get("run_id") for m in objects(self.exclusions.get("members_excluded"))}
+        ours = {m["run_id"] for m in derived["members_excluded"]}
+        return {"status": "disagrees" if differing else "agrees", "differing_keys": differing,
+                "members_only_stored": sorted(map(str, stored - ours)), "members_only_rederived": sorted(ours - stored),
+                "catalog_sha256": derived["catalog_sha256"], "rederived": derived}
 
     def read_reference_slots(self):
         """ROS(ii): independently parse the archived tree; never rebuild via repo code."""
@@ -2381,6 +2556,8 @@ def add_beta_inclusive(output, registered, extras):
 def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=None):
     output = {"schema": SCHEMA, "mode": "DIAGNOSTIC_NOT_REGISTERED" if diagnostic else "REGISTERED",
               "program_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              "interpreter": {"implementation": platform.python_implementation(), "version": platform.python_version()},
+              "exclusions_rederivation": {pack: window.exclusion_check for pack, window in windows.items()},
               "inputs": {}, "windows": {}, "reported_cells": {}, "p42": {}, "floors": {},
               "floor_gate": {}, "floor_cells": {}, "floor_gate_unguarded": {}, "dominance": {}, "contrasts": {},
               "descriptive": {}, "disclosures": {"load_sensitivity": {}, "battery_assist": {},
@@ -2646,10 +2823,15 @@ def main(argv=None) -> int:
         Path(args.out).write_bytes(data)
     except OSError as exc:
         parser.error("output cannot be written: " + exc.strerror)
+    # Public streams carry STRUCTURE codes only (registration section 8); other codes stay in --out.
     counts = {}
     for flag in clean["flags"]:
-        counts[flag["code"]] = counts.get(flag["code"], 0) + 1
-    print("sha256=" + hashlib.sha256(data).hexdigest() + " flags=" + json.dumps(counts, sort_keys=True, separators=(",", ":"))
+        if flag["blinding"] == "STRUCTURE":
+            counts[flag["code"]] = counts.get(flag["code"], 0) + 1
+    rederived = {pack: check["status"] for pack, check in sorted(clean["exclusions_rederivation"].items())}
+    print("sha256=" + hashlib.sha256(data).hexdigest() + " python=" + platform.python_version()
+          + " flags=" + json.dumps(counts, sort_keys=True, separators=(",", ":"))
+          + " exclusions_rederivation=" + json.dumps(rederived, sort_keys=True, separators=(",", ":"))
           + " comparison=" + json.dumps(clean["comparison"]["summary"], sort_keys=True, separators=(",", ":"))
           + " comparison_stopped=" + json.dumps(clean["comparison_stopped"])
           + (" extra_beta_comparison=" + json.dumps({key: clean["comparison"]["extra_beta"][key]
@@ -2658,5 +2840,14 @@ def main(argv=None) -> int:
     return 0
 
 
+def guarded_main(argv=None) -> int:
+    # An uncaught exception's text can carry a value; stderr names only its type.
+    try:
+        return main(argv)
+    except Exception as exc:
+        print("error: internal " + type(exc).__name__, file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(guarded_main())
