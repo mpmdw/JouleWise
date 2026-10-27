@@ -24,8 +24,9 @@ Per child the condition is checked against the clean parent record:
     claim verdicts and step-11 numbers cannot differ.
 
 usage: fault_injection.py <out-dir> [plan.json]
-plan.json: {"<step>": {"cached_k": <refits in the clean cached run>, "uncached": true|false}}; steps
-absent from the plan get no children. Without a plan every step gets both variants.
+plan.json: {"<step>": {"cached_k": <children with the run cache>, "uncached_k": <children with it emptied>}};
+steps absent from the plan get no children. A child whose step has no k-th refit reports no_site and ends the
+step's sequence. Without a plan every step gets both variants for every refit.
 """
 import hashlib
 import json
@@ -139,12 +140,10 @@ def wrap(step, ordinal, function):
 def fork_children(step, ordinal):
     custody = HARNESS.root / 'first'
     backup = HARNESS.root / 'first.snapshot'
-    plan = (PLAN or {}).get(step, {'cached_k': 10**6, 'uncached': True})
+    plan = (PLAN or {}).get(step, {'cached_k': 10**6, 'uncached_k': 10**6})
     for uncached in (False, True):
-        if uncached and not plan.get('uncached'):
-            continue
         k = 0
-        while uncached or k < plan.get('cached_k', 0):
+        while k < plan.get('uncached_k' if uncached else 'cached_k', 0):
             name = f'{ordinal:02d}-{step}-{"uncached" if uncached else "cached"}-k{k:02d}'
             if backup.exists():
                 shutil.rmtree(backup)
