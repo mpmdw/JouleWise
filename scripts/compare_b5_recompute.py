@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare L9's block-5 dry-run restricted outputs with the independent recompute.
 
-Standard library only; imports no repository code (never joulewise.b5_analysis).
+Standard library only; imports no repository code, in particular none of L9's analysis package.
 Inputs: L9's dry-run custody root (its record and restricted folder), the
 recompute's --member-detail output, and a bar-set config. No bar is coded here:
 every numeric family's bar comes from the config, and a family the config does
