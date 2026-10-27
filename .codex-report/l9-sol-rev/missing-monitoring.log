@@ -1,0 +1,3 @@
+0576a734d {"record_exists": true, "return": 0}
+f059286bc {"exception": "AttributeError", "message": "module 'sys' has no attribute 'monitoring'", "record_exists": false}
+f059286bc tool-id race {"competing_tool_preserved": true, "exception": "ValueError", "message": "tool 0 is already in use", "record_exists": false}

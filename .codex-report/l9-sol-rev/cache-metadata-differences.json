@@ -1,0 +1,376 @@
+{
+  "energy_anchor_shift_envelopes": {
+    "plain": {
+      "/energy_output_token_j": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 0.8087387497158336,
+        "max_abs_delta_j": 0.0013906515926229712,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 0.8101294013084566,
+        "upper_j": 0.8115200529010795,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/energy_request_j": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 207.0371199272534,
+        "max_abs_delta_j": 0.35600680771148063,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 207.39312673496488,
+        "upper_j": 207.74913354267636,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/energy_token_j": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 0.16174774994316674,
+        "max_abs_delta_j": 0.0002781303185246109,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 0.16202588026169132,
+        "upper_j": 0.16230401058021593,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/gross_energy_j": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 222.22533126070473,
+        "max_abs_delta_j": 0.3332955190828386,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 222.55862677978757,
+        "upper_j": 222.8919222988704,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/idle_subtracted_energy_j": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 207.0371199272534,
+        "max_abs_delta_j": 0.35600680771148063,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 207.39312673496488,
+        "upper_j": 207.74913354267636,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/phase_energy_j/decode": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 32.22175748641033,
+        "max_abs_delta_j": 0.3332955190828386,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 32.555053005493164,
+        "upper_j": 32.888348524576,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/phase_energy_j/prefill": {
+        "anchor_bound_s": 0.023220637521852706,
+        "independent_edge_shift_bound_j": 0.3332955190828386,
+        "lower_j": 32.20882391384001,
+        "max_abs_delta_j": 0.3332955190828386,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 32.542119432922846,
+        "upper_j": 32.875414952005684,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      }
+    },
+    "shared": {
+      "/energy_output_token_j": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.333295519090143,
+        "lower_j": 0.8087387497158031,
+        "max_abs_delta_j": 0.0013906515926535024,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 0.8101294013084566,
+        "upper_j": 0.81152005290111,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/energy_request_j": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.333295519090143,
+        "lower_j": 207.03711992724558,
+        "max_abs_delta_j": 0.3560068077192966,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 207.39312673496488,
+        "upper_j": 207.74913354268415,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/energy_token_j": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.333295519090143,
+        "lower_j": 0.16174774994316063,
+        "max_abs_delta_j": 0.00027813031853068937,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 0.16202588026169132,
+        "upper_j": 0.162304010580222,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/gross_energy_j": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.333295519090143,
+        "lower_j": 222.22533126069743,
+        "max_abs_delta_j": 0.333295519090143,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 222.55862677978757,
+        "upper_j": 222.8919222988777,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/idle_subtracted_energy_j": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.333295519090143,
+        "lower_j": 207.03711992724558,
+        "max_abs_delta_j": 0.3560068077192966,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 207.39312673496488,
+        "upper_j": 207.74913354268415,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/phase_energy_j/decode": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.333295519090143,
+        "lower_j": 32.22175748640303,
+        "max_abs_delta_j": 0.333295519090143,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 32.555053005493164,
+        "upper_j": 32.88834852458331,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      },
+      "/phase_energy_j/prefill": {
+        "anchor_bound_s": 0.023220637522352705,
+        "independent_edge_shift_bound_j": 0.3332955190901359,
+        "lower_j": 32.20882391383271,
+        "max_abs_delta_j": 0.3332955190901359,
+        "method": "common_trace_shift_plus_independent_edge_corners_v3",
+        "point_j": 32.542119432922846,
+        "upper_j": 32.87541495201298,
+        "wall_minus_monotonic_independent_edge_span_s": 2.384185791015625e-06
+      }
+    }
+  },
+  "energy_bound_terms_j": {
+    "plain": {
+      "E_clock_anchor_shift_bound_j": 0.3332955190828386,
+      "E_drift_bound_j": 0.0,
+      "E_interpolation_edge_bound_j": 0.0,
+      "E_interpolation_joint_edge_bound_j": 0.0
+    },
+    "shared": {
+      "E_clock_anchor_shift_bound_j": 0.333295519090143,
+      "E_drift_bound_j": 0.0,
+      "E_interpolation_edge_bound_j": 0.0,
+      "E_interpolation_joint_edge_bound_j": 0.0
+    }
+  },
+  "window_evidence_precheck": {
+    "plain": {
+      "gross_request": {
+        "cadence_ratio": 30.331000089645386,
+        "cadence_ratio_min": 4.0,
+        "clock_anchor_bound_s": 0.023220637521852706,
+        "eligible": true,
+        "in_window_sample_count": 32,
+        "interpolation_edge_bound_j": 0.0,
+        "interpolation_joint_edge_bound_j": 0.0,
+        "metric_name": "gross_energy_j",
+        "observed_bracketing_max_sample_gap_s": 1.0,
+        "observed_window_p95_sample_gap_s": 1.0,
+        "reasons": [],
+        "window_class": "gross_request",
+        "window_duration_s": 30.331000089645386
+      },
+      "idle_subtracted_request": {
+        "cadence_ratio": 30.331000089645386,
+        "cadence_ratio_min": 4.0,
+        "clock_anchor_bound_s": 0.023220637521852706,
+        "eligible": true,
+        "in_window_sample_count": 32,
+        "interpolation_edge_bound_j": 0.0,
+        "interpolation_joint_edge_bound_j": 0.0,
+        "metric_name": "idle_subtracted_energy_j",
+        "observed_bracketing_max_sample_gap_s": 1.0,
+        "observed_window_p95_sample_gap_s": 1.0,
+        "reasons": [],
+        "window_class": "idle_subtracted_request",
+        "window_duration_s": 30.331000089645386
+      },
+      "phase": {
+        "decode": {
+          "eligible": true,
+          "reasons": [],
+          "window_count": 1,
+          "windows": [
+            {
+              "cadence_ratio": 4.43670654296875,
+              "cadence_ratio_min": 2.0,
+              "clock_anchor_bound_s": 0.023220637521852706,
+              "eligible": true,
+              "in_window_sample_count": 5,
+              "interpolation_edge_bound_j": 0.0,
+              "interpolation_joint_edge_bound_j": 0.0,
+              "observed_bracketing_max_sample_gap_s": 1.0,
+              "observed_window_p95_sample_gap_s": 1.0,
+              "reasons": [],
+              "window_duration_s": 4.43670654296875
+            }
+          ]
+        },
+        "prefill": {
+          "eligible": true,
+          "reasons": [],
+          "window_count": 1,
+          "windows": [
+            {
+              "cadence_ratio": 4.434943914413452,
+              "cadence_ratio_min": 2.0,
+              "clock_anchor_bound_s": 0.023220637521852706,
+              "eligible": true,
+              "in_window_sample_count": 6,
+              "interpolation_edge_bound_j": 0.0,
+              "interpolation_joint_edge_bound_j": 0.0,
+              "observed_bracketing_max_sample_gap_s": 1.0,
+              "observed_window_p95_sample_gap_s": 1.0,
+              "reasons": [],
+              "window_duration_s": 4.434943914413452
+            }
+          ]
+        },
+        "tokenize": {
+          "eligible": false,
+          "reasons": [
+            "anchor_energy_envelope_unrecorded",
+            "cadence_ratio_unrecorded",
+            "clock_bound_exceeds_quarter_window",
+            "interpolation_bound_unrecorded",
+            "nonpositive_window_duration"
+          ],
+          "window_count": 1,
+          "windows": [
+            {
+              "cadence_ratio": null,
+              "cadence_ratio_min": 2.0,
+              "clock_anchor_bound_s": 0.023220637521852706,
+              "eligible": false,
+              "in_window_sample_count": 0,
+              "interpolation_edge_bound_j": 0.0,
+              "interpolation_joint_edge_bound_j": null,
+              "observed_bracketing_max_sample_gap_s": 1.0,
+              "observed_window_p95_sample_gap_s": null,
+              "reasons": [
+                "anchor_energy_envelope_unrecorded",
+                "cadence_ratio_unrecorded",
+                "clock_bound_exceeds_quarter_window",
+                "interpolation_bound_unrecorded",
+                "nonpositive_window_duration"
+              ],
+              "window_duration_s": 0.0
+            }
+          ]
+        }
+      }
+    },
+    "shared": {
+      "gross_request": {
+        "cadence_ratio": 30.331000089645386,
+        "cadence_ratio_min": 4.0,
+        "clock_anchor_bound_s": 0.023220637522352705,
+        "eligible": true,
+        "in_window_sample_count": 32,
+        "interpolation_edge_bound_j": 0.0,
+        "interpolation_joint_edge_bound_j": 0.0,
+        "metric_name": "gross_energy_j",
+        "observed_bracketing_max_sample_gap_s": 1.0,
+        "observed_window_p95_sample_gap_s": 1.0,
+        "reasons": [],
+        "window_class": "gross_request",
+        "window_duration_s": 30.331000089645386
+      },
+      "idle_subtracted_request": {
+        "cadence_ratio": 30.331000089645386,
+        "cadence_ratio_min": 4.0,
+        "clock_anchor_bound_s": 0.023220637522352705,
+        "eligible": true,
+        "in_window_sample_count": 32,
+        "interpolation_edge_bound_j": 0.0,
+        "interpolation_joint_edge_bound_j": 0.0,
+        "metric_name": "idle_subtracted_energy_j",
+        "observed_bracketing_max_sample_gap_s": 1.0,
+        "observed_window_p95_sample_gap_s": 1.0,
+        "reasons": [],
+        "window_class": "idle_subtracted_request",
+        "window_duration_s": 30.331000089645386
+      },
+      "phase": {
+        "decode": {
+          "eligible": true,
+          "reasons": [],
+          "window_count": 1,
+          "windows": [
+            {
+              "cadence_ratio": 4.43670654296875,
+              "cadence_ratio_min": 2.0,
+              "clock_anchor_bound_s": 0.023220637522352705,
+              "eligible": true,
+              "in_window_sample_count": 5,
+              "interpolation_edge_bound_j": 0.0,
+              "interpolation_joint_edge_bound_j": 0.0,
+              "observed_bracketing_max_sample_gap_s": 1.0,
+              "observed_window_p95_sample_gap_s": 1.0,
+              "reasons": [],
+              "window_duration_s": 4.43670654296875
+            }
+          ]
+        },
+        "prefill": {
+          "eligible": true,
+          "reasons": [],
+          "window_count": 1,
+          "windows": [
+            {
+              "cadence_ratio": 4.434943914413452,
+              "cadence_ratio_min": 2.0,
+              "clock_anchor_bound_s": 0.023220637522352705,
+              "eligible": true,
+              "in_window_sample_count": 6,
+              "interpolation_edge_bound_j": 0.0,
+              "interpolation_joint_edge_bound_j": 0.0,
+              "observed_bracketing_max_sample_gap_s": 1.0,
+              "observed_window_p95_sample_gap_s": 1.0,
+              "reasons": [],
+              "window_duration_s": 4.434943914413452
+            }
+          ]
+        },
+        "tokenize": {
+          "eligible": false,
+          "reasons": [
+            "anchor_energy_envelope_unrecorded",
+            "cadence_ratio_unrecorded",
+            "clock_bound_exceeds_quarter_window",
+            "interpolation_bound_unrecorded",
+            "nonpositive_window_duration"
+          ],
+          "window_count": 1,
+          "windows": [
+            {
+              "cadence_ratio": null,
+              "cadence_ratio_min": 2.0,
+              "clock_anchor_bound_s": 0.023220637522352705,
+              "eligible": false,
+              "in_window_sample_count": 0,
+              "interpolation_edge_bound_j": 0.0,
+              "interpolation_joint_edge_bound_j": null,
+              "observed_bracketing_max_sample_gap_s": 1.0,
+              "observed_window_p95_sample_gap_s": null,
+              "reasons": [
+                "anchor_energy_envelope_unrecorded",
+                "cadence_ratio_unrecorded",
+                "clock_bound_exceeds_quarter_window",
+                "interpolation_bound_unrecorded",
+                "nonpositive_window_duration"
+              ],
+              "window_duration_s": 0.0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

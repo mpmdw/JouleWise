@@ -1,0 +1,25 @@
+test_actual_tool_exhaustion_is_a_classified_refusal (__main__.DispatchProbes.test_actual_tool_exhaustion_is_a_classified_refusal) ... ok
+test_every_step_refuses_a_real_firing_even_when_the_caller_returns_ok (__main__.DispatchProbes.test_every_step_refuses_a_real_firing_even_when_the_caller_returns_ok) ... ok
+test_existing_tool_and_nested_observer_are_preserved (__main__.DispatchProbes.test_existing_tool_and_nested_observer_are_preserved) ... ok
+test_mutation_removing_observation_accepts_a_changed_number (__main__.DispatchProbes.test_mutation_removing_observation_accepts_a_changed_number) ... ok
+test_real_thread_firing_is_observed (__main__.DispatchProbes.test_real_thread_firing_is_observed) ... ok
+test_swallowed_exception_cannot_hide_the_firing (__main__.DispatchProbes.test_swallowed_exception_cannot_hide_the_firing) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 44.886s
+
+OK
+STEP 0 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 1 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 2 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 3 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 3b wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 4 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 5 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 8 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 6 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 9 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 9b wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 10 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+STEP 11 wall_deadline -> tooling_refusal; later=not_run; earlier=identical; public=closed-record
+MUTATION observer removed: step 5 ok with changed number; discriminating probe confirmed

@@ -1,0 +1,200 @@
+joulewise/powermetrics_fiducial.py:912: def detect_pulses(
+joulewise/powermetrics_fiducial.py:913:     intervals: Sequence[TraceInterval],
+joulewise/powermetrics_fiducial.py:914:     pulses: Sequence[CommandedPulse],
+joulewise/powermetrics_fiducial.py:915:     *,
+joulewise/powermetrics_fiducial.py:916:     trace_anchor_bound_s: float = 0.0,
+joulewise/powermetrics_fiducial.py:1259:             power_w=record.rail_power_w[PRIMARY_RAIL],
+joulewise/powermetrics_fiducial.py:1260:         )
+joulewise/powermetrics_fiducial.py:1261:         for record in anchored
+joulewise/powermetrics_fiducial.py:1262:     ]
+joulewise/powermetrics_fiducial.py:1263:     protocol_intervals = trim_trace_after_pulses(intervals, pairs["warmup"])
+joulewise/powermetrics_fiducial.py:1264:     if strict_protocol:
+joulewise/powermetrics_fiducial.py:1265:         authenticate_protocol_schedule(pairs["pulse"], protocol_intervals)
+joulewise/powermetrics_fiducial.py:1266:     return replace(
+joulewise/powermetrics_fiducial.py:1267:         detect_pulses(
+joulewise/powermetrics_fiducial.py:1268:             protocol_intervals,
+joulewise/powermetrics_fiducial.py:1269:             pairs["pulse"],
+joulewise/powermetrics_fiducial.py:1270:             trace_anchor_bound_s=float(
+joulewise/powermetrics_fiducial.py:1271:                 derived_anchor["effective_clock_anchor_bound_s"]
+joulewise/powermetrics_fiducial.py:1272:             ),
+joulewise/powermetrics_fiducial.py:1273:         ),
+joulewise/powermetrics_fiducial.py:1274:         anchor_method=selected_anchor_method,
+joulewise/powermetrics_fiducial.py:1275:         derivation_role=derivation_role,
+joulewise/powermetrics_fiducial.py:1276:     )
+joulewise/powermetrics_fiducial.py:1277: 
+joulewise/powermetrics_fiducial.py:1297:     if any(not diagnostic_reason_registered(reason) for reason in reasons):
+joulewise/powermetrics_fiducial.py:1298:         raise ValueError("instrument evidence has an unknown reason")
+joulewise/powermetrics_fiducial.py:1299:     pulses = evidence.get("pulses")
+joulewise/powermetrics_fiducial.py:1300:     if not isinstance(pulses, list) or len(pulses) != expected_pulse_count:
+joulewise/powermetrics_fiducial.py:1301:         raise ValueError("instrument pulse rows are incomplete")
+joulewise/powermetrics_fiducial.py:1302:     fresh = rederive_detection_from_artifacts(
+joulewise/powermetrics_fiducial.py:1303:         raw_powermetrics,
+joulewise/powermetrics_fiducial.py:1304:         events_jsonl,
+joulewise/powermetrics_fiducial.py:1305:         evidence.get("clock_anchor"),
+joulewise/powermetrics_fiducial.py:1306:         protocol_id=str(evidence_protocol_id),
+joulewise/powermetrics_fiducial.py:1307:     )
+joulewise/powermetrics_fiducial.py:1308:     if (
+joulewise/powermetrics_fiducial.py:1309:         fresh.b_fiducial_s is None
+joulewise/powermetrics_fiducial.py:1310:         or not fresh.all_pulses_detected
+joulewise/b5_analysis/dry_run.py:674: def step_1(s,r):
+joulewise/b5_analysis/dry_run.py:675:     from joulewise.cli import main
+joulewise/b5_analysis/dry_run.py:676:     prepared=_internal_step(s,r,'1',s.prepare_kept)
+joulewise/b5_analysis/dry_run.py:677:     if prepared[0].status!='ok': return prepared
+joulewise/b5_analysis/dry_run.py:678:     for pack,run_id,bundle in s.kept_bundles():
+joulewise/b5_analysis/dry_run.py:679:         result,_,_,exit_status=s.invoke(r,main,['validate-bundle','--strict',bundle],step='1',window=pack)
+joulewise/b5_analysis/dry_run.py:680:         if exit_status:
+joulewise/b5_analysis/dry_run.py:681:             return [s.record('1',window=pack,exit_status=2,code='kept_bundle_strict_validation_failed')]
+joulewise/b5_analysis/dry_run.py:682:     return [s.record('1')]
+joulewise/b5_analysis/dry_run.py:683: 
+joulewise/b5_analysis/dry_run.py:684: 
+joulewise/b5_analysis/dry_run.py:1257:                         traceback.print_exc();return 2
+joulewise/b5_analysis/dry_run.py:1258:                     runner.run(fail,[],step=step)
+joulewise/b5_analysis/dry_run.py:1259:                     records=[s.record(step,exit_status=2,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+joulewise/b5_analysis/dry_run.py:1260:                 if deadline is None or deadline.firings!=firings:
+joulewise/b5_analysis/dry_run.py:1261:                     records=[s.record(step,exit_status=2,
+joulewise/b5_analysis/dry_run.py:1262:                         code=OBSERVER_UNAVAILABLE if deadline is None else CALIBRATION_WALL_DEADLINE,
+joulewise/b5_analysis/dry_run.py:1263:                         outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+joulewise/b5_analysis/dry_run.py:1264:             for record in records:
+joulewise/b5_analysis/dry_run.py:1265:                 s.step_records.append(record)
+joulewise/b5_analysis/dry_run.py:1266:                 if record.step!='11':
+joulewise/b5_analysis/dry_run.py:1267:                     print('step '+record.step+' '+(record.window or '-')+' '+record.status,file=sys.stderr)
+joulewise/b5_analysis/dry_run.py:1268:             if any(record.status!='ok' for record in records):stopped=True
+joulewise/b5_analysis/dry_run.py:1269:         attempts,windows,census=_record_parts(s)
+joulewise/b5_analysis/dry_run.py:1270:         sealed={key:s.pins.sealed[{'flag_catalog_sha256':'catalog_sha256'}.get(key,key)] for key in SEAL_KEYS}
+joulewise/b5_analysis/dry_run.py:1271:         record=build_dry_run_record(mode=mode,analysis_commit=commit,window_index_sha256=s.index.sha256 if s.index else _index_digest(index),
+joulewise/b5_analysis/dry_run.py:1272:             sealed=sealed,attempts=attempts,windows=windows,input_census=census,steps=s.step_records,difference=difference)
+joulewise/b5_analysis/dry_run.py:1273:         if mode=='release' and previous is not None and difference is None:
+joulewise/b5_analysis/dry_run.py:1274:             difference=release_difference(previous,record)
+joulewise/b5_analysis/dry_run.py:1275:             if difference is None and (previous['analysis_commit']!=commit or previous['window_index_sha256']!=record['window_index_sha256']):
+joulewise/whole_window.py:409: def _archive_reference_strict_invalid(_bundle_id: str, path: Path) -> bool:
+joulewise/whole_window.py:410:     # Lazy import: neither frozen collection entry point imports this module.
+joulewise/whole_window.py:411:     from joulewise.neg8_survivors import neg8_reference_strict_invalid
+joulewise/whole_window.py:412:     return neg8_reference_strict_invalid(path,
+joulewise/whole_window.py:413:         strict_problems=strict_validate_bundles([path], workers=1)[0]).invalid
+joulewise/whole_window.py:414: 
+joulewise/whole_window.py:4656:         # Deliberately output-free: reduce_bundle is pure over the bundle and
+joulewise/whole_window.py:4657:         # returns an in-memory summary.  Minutes-scale claim verification cost
+joulewise/whole_window.py:4658:         # is accepted for primary-evidence NEG-8 re-derivation.
+joulewise/whole_window.py:4659:         from joulewise.reduce import reduce_bundle
+joulewise/whole_window.py:4660: 
+joulewise/whole_window.py:4661:         reduced = reduce_bundle(
+joulewise/whole_window.py:4662:             bundle_path,
+joulewise/whole_window.py:4663:             reducer_version=reducer_version,
+joulewise/whole_window.py:4664:             _instrument_calibration_physics_cache=shared_physics_cache(),
+joulewise/whole_window.py:4665:         ).to_dict()
+joulewise/whole_window.py:4666:     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
+joulewise/whole_window.py:4667:         return None, None, "provenance", "reduction_unavailable"
+joulewise/whole_window.py:4668:     fresh_gross = _gross_fields(reduced)
+joulewise/whole_window.py:4669:     fresh_idle = _finite_number(reduced.get("idle_subtracted_energy_j"))
+joulewise/whole_window.py:4670:     prechecks = reduced.get("window_evidence_precheck")
+joulewise/whole_window.py:7145: def strict_validate_bundles(
+joulewise/whole_window.py:7146:     paths: Sequence[Path],
+joulewise/whole_window.py:7147:     *,
+joulewise/whole_window.py:7148:     workers: int,
+joulewise/whole_window.py:7149:     validator: Any = None,
+joulewise/whole_window.py:7150: ) -> list[list[str]]:
+joulewise/whole_window.py:7151:     """Strict-validation problems for each path, in input order.
+joulewise/whole_window.py:7152: 
+joulewise/whole_window.py:7153:     ``validator`` defaults to ``cli.validate_bundle``.  With ``workers`` > 1
+joulewise/whole_window.py:7154:     and the real validator the paths are validated in a spawned process pool;
+joulewise/whole_window.py:7155:     a substituted validator (a test double) cannot cross a process boundary,
+joulewise/whole_window.py:7156:     so it runs in process.  A worker that dies leaves its paths to be
+joulewise/whole_window.py:7157:     validated in process, so every path gets a result.
+joulewise/whole_window.py:7158:     """
+joulewise/whole_window.py:7159: 
+joulewise/whole_window.py:7160:     from joulewise.cli import validate_bundle as real_validator  # noqa: PLC0415
+joulewise/whole_window.py:7161: 
+joulewise/whole_window.py:7162:     validator = real_validator if validator is None else validator
+joulewise/whole_window.py:7163:     results: list[list[str] | None] = [None] * len(paths)
+joulewise/whole_window.py:7164:     if workers > 1 and len(paths) > 1 and validator is real_validator:
+joulewise/whole_window.py:7165:         import multiprocessing  # noqa: PLC0415
+joulewise/whole_window.py:7166:         from concurrent.futures import ProcessPoolExecutor  # noqa: PLC0415
+joulewise/whole_window.py:7167: 
+joulewise/whole_window.py:7168:         try:
+joulewise/whole_window.py:7169:             with ProcessPoolExecutor(
+joulewise/whole_window.py:7170:                 max_workers=min(workers, len(paths)),
+joulewise/whole_window.py:7171:                 mp_context=multiprocessing.get_context("spawn"),
+joulewise/whole_window.py:7172:             ) as pool:
+joulewise/whole_window.py:7173:                 futures = [
+joulewise/whole_window.py:7174:                     pool.submit(_strict_validation_worker, str(path))
+joulewise/whole_window.py:7175:                     for path in paths
+joulewise/whole_window.py:7176:                 ]
+joulewise/whole_window.py:7177:                 for index, future in enumerate(futures):
+joulewise/whole_window.py:7178:                     try:
+joulewise/whole_window.py:7179:                         results[index] = list(future.result())
+joulewise/whole_window.py:7180:                     except Exception:  # noqa: BLE001 - redo it in process
+joulewise/whole_window.py:7181:                         results[index] = None
+joulewise/whole_window.py:7182:         except Exception:  # noqa: BLE001 - a pool that cannot start: in process
+joulewise/whole_window.py:7183:             pass
+joulewise/whole_window.py:7184:     # Spawned pool workers keep their own per-process cache; only the
+joulewise/whole_window.py:7185:     # in-process fallback below shares the run's cache.
+joulewise/whole_window.py:7186:     cache: dict[Any, Any] = _physics_cache_for_call()
+joulewise/whole_window.py:7187:     return [
+joulewise/whole_window.py:7188:         result
+joulewise/whole_window.py:7189:         if result is not None
+joulewise/whole_window.py:7190:         else _strict_validation_problems(Path(path), validator, cache)
+joulewise/whole_window.py:7191:         for path, result in zip(paths, results)
+scripts/run_campaign.py:7506:     sources: Sequence[WholeWindowMemberSource],
+scripts/run_campaign.py:7507:     waivers: WaiverMap,
+scripts/run_campaign.py:7508:     *,
+scripts/run_campaign.py:7509:     runs_dir: Path,
+scripts/run_campaign.py:7510: ) -> list[MemberEvaluation]:
+scripts/run_campaign.py:7511:     """Every member's whole-window evaluation, in membership order.
+scripts/run_campaign.py:7512: 
+scripts/run_campaign.py:7513:     A HAZARD_PACK runs root (PLAN2 row 1) validates its members strictly in a
+scripts/run_campaign.py:7514:     process pool (``whole_window.strict_validate_bundles``); the validation
+scripts/run_campaign.py:7515:     itself is unchanged.  Every other root keeps the serial loop.
+scripts/run_campaign.py:7516:     """
+scripts/run_campaign.py:7517: 
+scripts/run_campaign.py:7518:     if len(sources) < 2 or not _window_lineage.is_hazard_runs_root(runs_dir):
+scripts/run_campaign.py:7519:         return [_whole_window_member(source, waivers) for source in sources]
+scripts/run_campaign.py:7520:     problems = strict_validate_bundles(
+scripts/run_campaign.py:7521:         [source.path for source in sources],
+scripts/run_campaign.py:7522:         workers=whole_window_strict_workers(len(sources)),
+scripts/run_campaign.py:7523:         validator=validate_bundle,
+scripts/run_campaign.py:7524:     )
+scripts/run_campaign.py:7525:     return [
+joulewise/calibration_ledger.py:5476: def probe_custody(
+joulewise/calibration_ledger.py:5477:     path: Path,
+joulewise/calibration_ledger.py:5478:     inspect: Callable[[Path], _CustodyResult],
+joulewise/calibration_ledger.py:5479:     absent: Callable[[], _CustodyResult],
+joulewise/calibration_ledger.py:5480:     *,
+joulewise/calibration_ledger.py:5481:     not_directory: Callable[[], _CustodyResult] | None = None,
+joulewise/calibration_ledger.py:5482:     mode: Literal["read_replay", "issuing"] = "issuing",
+joulewise/calibration_ledger.py:5483:     metadata_only: bool = False,
+joulewise/calibration_ledger.py:5484: ) -> _CustodyResult:
+joulewise/calibration_ledger.py:5485:     """Bound only a pure path probe; inspect synchronously on the caller.
+joulewise/calibration_ledger.py:5486: 
+joulewise/calibration_ledger.py:5487:     The daemon performs only exists/is_dir filesystem calls, without entering
+joulewise/calibration_ledger.py:5488:     an authentication session, inheriting its context, or acquiring its locks.
+joulewise/calibration_ledger.py:5489:     Timeout or any probe exception has the same decision as absence, with a
+joulewise/calibration_ledger.py:5564:             file=sys.stderr,
+joulewise/calibration_ledger.py:5565:         )
+joulewise/calibration_ledger.py:5566:         return absent()
+joulewise/calibration_ledger.py:5567:     if not result:
+joulewise/calibration_ledger.py:5568:         return absent()
+joulewise/calibration_ledger.py:5569:     selected, is_directory = result[0]
+joulewise/calibration_ledger.py:5570:     if not is_directory and not_directory is not None:
+joulewise/calibration_ledger.py:5571:         return not_directory()
+joulewise/calibration_ledger.py:5572:     return inspect(selected)
+joulewise/calibration_ledger.py:5573: 
+joulewise/calibration_ledger.py:5574: 
+joulewise/calibration_ledger.py:5575: def _missing_custody(path: Path) -> Any:
+joulewise/calibration_ledger.py:5576:     raise CalibrationLedgerError(f"custody locator is missing: {path}")
+joulewise/calibration_ledger.py:5577: 
+joulewise/calibration_ledger.py:5578: 
+joulewise/calibration_ledger.py:5579: def _custody_state(
+joulewise/calibration_ledger.py:5580:     path: Path, *, custody_deadline: CustodyDeadline | None = None, mode: Literal["read_replay", "issuing"] = "issuing",
+joulewise/calibration_ledger.py:5581: ) -> str:
+joulewise/calibration_ledger.py:5582:     if custody_deadline is None:
+pyproject.toml:4: 
+pyproject.toml:5: [project]
+pyproject.toml:6: name = "joulewise"
+pyproject.toml:7: version = "0.1.0"
+pyproject.toml:8: description = "Extensible energy-wise benchmark for LLM inference."
+pyproject.toml:9: requires-python = ">=3.11"
+pyproject.toml:10: dependencies = []
+pyproject.toml:11: 
+pyproject.toml:12: # Optional extras (D-009): the core package is stdlib-only; heavy dependencies
+pyproject.toml:13: # live behind extras and adapters import them lazily. CI installs no extras, so
+pyproject.toml:14: # every command that needs one degrades to a structured failure without it.

@@ -1,0 +1,10 @@
+test_exact_cli_streams_and_summary_bytes_with_and_without_cache (__main__.RealSiteProbes.test_exact_cli_streams_and_summary_bytes_with_and_without_cache) ... ok
+test_real_bracket_candidate_loader_observes_forced_firing (__main__.RealSiteProbes.test_real_bracket_candidate_loader_observes_forced_firing) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 37.179s
+
+OK
+CACHE exact CLI stdout/stderr/status + summary bytes identical; uncached refits=2; shared cold+warm=1; keys= 1
+CACHE summary SHA256 3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc
+BRACKET real load_calibration_candidate: candidate refused; observed wall firings=1

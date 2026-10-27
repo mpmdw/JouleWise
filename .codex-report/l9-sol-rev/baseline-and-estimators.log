@@ -1,0 +1,31 @@
+baseline digest: sha256:aa0eb6954c10a6c72818de45ab6c48b8cf7df12d83cead6dd378ba22d2b9c83c matches expected: True
+baseline HEAD: f059286bc4d411008002bac62c5cc76cc8c50026
+current HEAD: f059286bc4d411008002bac62c5cc76cc8c50026
+authority main: 64ceaa4f74e1e7914a89c01b15d6a5677cca3853
+joulewise/powermetrics_fiducial.py bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c baseline==reviewed==worktree: True
+joulewise/reduce.py 7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc baseline==reviewed==worktree: True
+joulewise/uncertainty_evidence.py b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8 baseline==reviewed==worktree: True
+joulewise/adapters/powermetrics.py 70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4 baseline==reviewed==worktree: True
+ .codex-report/L9-2.md                            | 287 +++++++++++++++++++++++
+ .codex-report/l9-2/deadline_failclosed.py        |  76 ++++++
+ .codex-report/l9-2/fault_injection.py            | 196 ++++++++++++++++
+ .codex-report/l9-2/fault_injection_check.py      |  73 ++++++
+ .codex-report/l9-2/host_sampler.sh               |  11 +
+ .codex-report/l9-2/observed_unittest.py          | 154 ++++++++++++
+ .codex-report/l9-2/projection_bench.py           |  78 ++++++
+ .codex-report/l9-2/projection_split.py           |  27 +++
+ .codex-report/l9-2/run_acceptance.sh             |   8 +
+ .codex-report/l9-2/run_module.sh                 |  38 +++
+ .codex-report/l9-2/run_short.sh                  |   9 +
+ configs/analysis/b5/dry_run_refusal_classes.json |   4 +
+ joulewise/b5_analysis/bracket.py                 |   5 +-
+ joulewise/b5_analysis/deadline_observer.py       |  59 +++++
+ joulewise/b5_analysis/dry_run.py                 |  76 +++++-
+ joulewise/cli.py                                 |  12 +-
+ joulewise/whole_window.py                        |  52 +++-
+ tests/b5_analysis/test_deadline_observer.py      | 250 ++++++++++++++++++++
+ tests/b5_analysis/test_deadline_tripwire.py      | 197 ++++++++++++++++
+ tests/b5_analysis/test_dry_run.py                |   8 +-
+ tests/b5_analysis/test_shared_physics_cache.py   | 188 +++++++++++++++
+ 21 files changed, 1796 insertions(+), 12 deletions(-)
+
