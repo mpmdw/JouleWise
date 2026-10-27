@@ -184,3 +184,316 @@ Split, or disaggregated, inference runs prefill and decode on different devices.
 or GPU-only energy for such deployments [17] [9] [8], and SplitZip makes no energy claim [18]. A phase-resolved
 energy measurement with named boundaries is a prerequisite for evaluating such designs, which are outside this
 paper's scope.
+
+## 3. Method
+
+This section defines every quantity the results print. Numbers in it are design constants or labelled
+synthetic examples; none is a measurement.
+
+### 3.1 The machine, the sampler and the measurement boundary
+
+All measurements use one Apple M3 Max laptop (model identifier Mac15,9, 128 GB of unified memory) on its 140 W
+mains adapter, dedicated to this work, with displays asleep and no other user workload. Models run in Apple's
+MLX framework on the GPU. The operating-system build is recorded with every session
+({{FILL: P1-ID-OS | operating-system build(s) of the primary-block sessions and of each replication session, from the identity pins and per-session records}}).
+
+The power sampler is macOS `powermetrics`, asked for one record every 100 ms. Each **power record** states the
+average power of three on-chip rails, the CPU cores, the GPU and the neural engine (ANE), over the record's own
+time span, its **support**. The sampler never samples faster than requested, and in practice records arrive
+somewhat more slowly ({{FILL: P1-M-RECORD-WIDTH | median record width and its range in the pre-collection probe sessions, from the registration's instrument description}}). Within a record the power is known
+only as that average.
+
+The **measurement boundary** of Part 1 is therefore the *processor package rails*: CPU plus GPU plus ANE as the
+sampler reports them. It excludes memory chips, storage, fans, power conversion and the display. We never call
+this quantity "wall power" or "system energy". A second, wider boundary, the power entering the laptop at its
+USB-C input, is measured by an independent meter and used as a cross-check in Part 1 and as a primary boundary in
+Part 2 (Section 3.9).
+
+### 3.2 A run and its phases
+
+A **run** is one inference request executed in its own process. Its steps are: an idle baseline, in which the
+sampler records the quiet machine for a fixed number of records (576, about 75 s); **idle admission**, a set of
+tests that the baseline was quiet; one untimed warm-up generation of the same request, so that the measured
+request does not pay first-call costs; the **measured request**; and clean-up. One continuous sampler process,
+the **sampler stream**, runs from the start of the baseline to the end of the measured request. Between runs a
+**cooldown** waits until a short power reading is at most twice the previous run's baseline power with the
+operating system's thermal state nominal, or until 300 s have passed.
+
+The runtime stamps each phase edge. Prefill ends, and decode begins, at the first streamed output token. Decode
+ends with the last output token.
+
+**Phase energy by overlap.** Each power record contributes its average power multiplied by the length of the
+overlap between its support and the phase. Records wholly inside the phase count in full, a record that
+straddles an edge counts in proportion to its overlap, and records outside count zero. No idle power is
+subtracted: the energy is **gross**. *Synthetic example:* a phase runs from 10.00 s to 10.25 s; record 1 covers
+9.90–10.03 s at 20 W (overlap 0.03 s, 0.60 J); record 2 covers 10.03–10.16 s at 30 W (0.13 s, 3.90 J); record 3
+covers 10.16–10.29 s at 30 W (0.09 s, 2.70 J); the phase energy is 7.20 J. Figure 1 illustrates the rule and the
+effect of moving an edge.
+
+![Figure 1. Phase split by overlap, and the energy moved when an edge moves (schematic).](figures/fig_p1_phase_split.svg)
+
+*Figure 1. Schematic, no measured data. Three power records (grey) straddle a prefill-to-decode edge. Each
+record's energy is shared between the phases in proportion to its time overlap with each. Moving the edge by a
+timing bound g reassigns a slice of one record's energy (hatched) from one phase to the other; the request total
+does not change. Values and widths are illustrative and not to scale.*
+
+This rule, which we call the **held-average reconstruction**, assumes power is constant within each record. It
+yields an *assigned* phase energy. It does not bound the physical energy of the phase under arbitrary power
+variation inside a record; a record that straddles an edge could, physically, have spent all or none of its
+energy on either side.
+
+**Minimum record support.** A phase needs at least three records with positive overlap or the reduction refuses
+it. Three allows a phase to cross two boundary records and contain one whole middle record. This is a fixed
+cutoff, not a proof of adequate precision. The 42-token prefill of the decode workload lasts a few tens of
+milliseconds, shorter than one record, and is registered in advance as not resolvable; it is never reported.
+Historical captures on the same laptop showed the cutoff biting on short phases
+({{FILL: DG-067 | historical count of short prefill phases that crossed only two records}} of
+{{FILL: DG-068 | historical population size}} for a 1.5-billion-parameter model; {{FILL: DG-136 | historical count of identifiable phases for a 7-billion-parameter model}} of
+{{FILL: DG-135 | its population size}} passed), which is why the prefill workload uses a 2,048-token prompt.
+
+### 3.3 Where the edges are: calibration, clock mapping and the timing bound
+
+Power records are stamped by the sampler; phase edges are stamped by the program that runs the model. To give
+each phase its records, the two time bases must be laid on one timeline. Three bounds limit how well this is
+done.
+
+**The fiducial bound b (calibration with commanded pulses).** Before the first run of each session and after
+the last, a **calibration capture** drives the GPU through 59 commanded one-second matrix-multiplication pulses
+on a fixed schedule of varied gaps, chosen so that pulse edges do not repeatedly align with the sampler's
+cadence. For each pulse, an estimator fits the power records with a baseline plus a rectangle whose onset and
+offset may be displaced from the commanded times, and returns every displacement consistent with the records
+within a fixed loss tolerance. A capture's **fiducial bound** is the largest absolute displacement over all
+pulses, plus the uncertainty in placing that capture's trace on the wall clock. If the displacements of the 59
+pulses were independent draws from one distribution, their maximum would exceed that distribution's 95th
+percentile with probability at least 0.95 (since 1 − 0.95⁵⁹ ≥ 0.95); pulses of one capture are not independent,
+so this is a design rationale, not a demonstrated coverage. The two captures form a **bracket**. A pre-registered
+**calibration acceptance**, derived from earlier captures, refuses a session whose opening capture exceeds a
+screen or whose two captures differ by more than an allowed drift
+({{FILL: P1-M-ACCEPT | the registered acceptance constants for each block: pre-capture screen, bracket screen and drift limit, from the acceptance files named in the registrations}}). The session's **operative
+timing bound** is
+
+  b = max(opening, closing) + max(|closing − opening|, s_bracket),
+
+where s_bracket is a fixed minimum allowance for movement between the two captures, taken from the acceptance.
+*Synthetic example:* opening 40.0 ms, closing 30.0 ms, s_bracket 14.531 ms gives b = 40.0 + 14.531 =
+54.531 ms.
+
+**The clock bounds m and s.** Each run's sampler records carry whole-second wall-clock labels; the run's own
+events are stamped on both the wall clock and the machine's monotonic clock (a counter that is never corrected to
+civil time). A rate-aware fit retains every straight-line mapping between the clocks consistent with the
+bracketed readings and the record labels. Its spread gives the run's **effective clock bound** m. The change in
+wall-minus-monotonic time over the run's sampler stream is s. Automatic network time correction is disabled
+during collection, and a clock step is a physical hazard that refuses the affected data (Section 4.3).
+
+**The edge bound g and the first-kind timing bound.** Each phase edge is uncertain by up to g = b + s, and the
+whole trace may shift by up to ±m. A run's **first-kind timing bound** is the largest change in its assigned
+phase energy over every independent displacement of the two edges within ±g and every common shift of the trace
+within ±m. Because power is never negative, assigned energy cannot rise as the start edge moves later or fall as
+the end edge moves later, so the extremes lie at the four edge corners, each evaluated over the trace shift.
+*Synthetic example:* b = 45.6 ms and s = 0.4 ms give g = 46 ms; with m = 2 ms, a start-edge record averaging 40 W
+and an end-edge record averaging 10 W, moving the start 46 ms early and the end 46 ms late adds
+0.046 × (40 + 10) = 2.30 J, and shifting both a further 2 ms early adds 0.002 × (40 − 10) = 0.06 J: the bound is
+2.36 J. When a displaced edge crosses into a neighbouring record this closed form is only an approximation; the
+registered quantity is the exact maximum.
+
+The pulse calibration measures how the sampler places the edges of long, square GPU work. Inference has a
+different sequence of work at the prefill-to-decode transition. Applying the pulse-derived bound to inference
+edges is an assumption that this study did not test (Section 8).
+
+### 3.4 Reported phase energy and its interval
+
+A **reported cell** is one energy per model and phase, from that model's runs of one workload in one session:
+10 **absolute repeats** (single runs) and 10 **null quads**. A **quad** is four consecutive runs in the order A,
+B, B, A; in a null quad A and B are the same model and workload, so any difference between the sides comes only
+from the instrument and the machine. A **unit** is what the statistics treat as one independent draw: one repeat
+or one whole quad. The repeats and the quads are the two **strata**. Removing any run of a quad removes the whole
+quad, so its drift cancellation is never broken. A cell needs at least five kept units in each stratum.
+
+For a cell with n_r kept repeats (energies r) and n_b kept quads (quad means q):
+
+1. **Mean.** m = 0.2 × mean(r) + 0.8 × mean(q). The weights are fixed by design, because 10 of the 50 runs are
+   repeats and 40 are quad members; with all units kept this equals the plain mean of the 50 runs.
+2. **Variance.** V = 0.04 × s_r² / n_r + 0.64 × s_q² / n_b, with sample standard deviations (divisor n − 1).
+3. **Half-width.** h = t(0.975, min(n_r, n_b) − 1) × √V, using the smaller stratum's degrees of freedom.
+4. **Recorded bounds.** B is the sum of three stratified averages (0.2 × repeat mean + 0.8 × quad-member mean) of
+   per-run bounds: the first-kind timing bound (Section 3.3); an interpolation bound, which is identically zero
+   for these interval-support records; and half the session's drift allowance (Section 3.8).
+5. **Interval.** [m − h − B, m + h + B], not clamped at zero.
+6. **Per-token value.** For decode, m divided by the 512 runtime-observed output tokens ("decode-phase energy per
+   output token; 512 output tokens, 511 of them generated in the decode phase"); for prefill, m divided by the
+   2,048 prompt tokens.
+
+The interval covers run-to-run and quad-to-quad variation inside one session over the kept units, plus the
+recorded bounds. It does not cover variation between sessions or days, nor any bias from which units were
+removed. Treating consecutive units as independent is a modelling assumption, since they share slow drifts.
+*Synthetic example (all units kept):* repeats with mean 10.0 J and s_r = 0.2 J, quad means with mean 10.2 J and
+s_q = 0.18257 J give m = 10.16 J, √V = 0.047889 J, h = 2.262157 × 0.047889 = 0.10833 J; with B = 0.060 J the
+interval is [9.9917, 10.3283] J.
+
+### 3.5 The attribution floor
+
+The first-kind timing bound enters each interval only through its average over the cell's runs. But every run of
+a session is reduced under the same operative timing bound: if the sampler's edges sit late, they sit late in
+every run, so this part of the uncertainty does not shrink when runs are averaged. We therefore print beside
+each cell its **attribution floor**: the largest first-kind bound over the cell's kept runs, with the run that
+attains it. It is printed and not added to the interval. Each cell carries a fixed sentence: *"Phase-edge timing
+alone could move the energy assigned to this phase of a single request by up to X J. The average of that bound
+over the kept runs is already inside the interval; X itself is not added. The bound says how far the assigned
+energy moves when power is taken as constant within each sampler record; it is not a bound on the physical
+energy of the phase."*
+
+### 3.6 The detection floor
+
+The **detection floor** of a model and phase is the largest difference the registered estimator allows between
+runs that do the same thing; hence the smallest real difference the instrument can resolve. It has two forms.
+
+- **Absolute form**, from the kept repeats v₁ … v_n: deviations are vᵢ − mean(v); the prediction term is
+  t × s × √(1 + 1/n), with s the sample standard deviation of the deviations and t the two-sided 95% Student-t
+  value at n − 1 degrees of freedom.
+- **Comparative form**, from the kept null-quad differences d = (B₁ + B₂ − A₁ − A₂)/2: deviations are the d
+  themselves, not re-centred; the prediction term is |mean(d)| + t × s × √(1 + 1/n).
+
+In both, the **point floor** is max(largest |deviation|, prediction): the first term keeps the largest
+displacement already observed, the second is, under an independent-normal model, a two-sided 95% prediction
+amount for one further value. It is not a deterministic bound on future errors.
+
+**Corner widening.** Each value may lie anywhere within ± its timing half-width wᵢ. For the absolute form, wᵢ is
+the largest distance of the run's phase energy from its unshifted value over the timing movements of Section
+3.3. For the comparative form, each phase edge is treated as shared by the quad's four runs and moved by one
+common amount within ±b, and each run's remaining local clock uncertainty is added. The **corner-widened floor**
+is the largest point floor over every corner of the box of values (2ⁿ corners, enumerated exactly; the program
+refuses above 16 units rather than approximate). The point floor is a convex function of the values, so its
+maximum over the box lies at a corner. The **operative floor** is max(point floor, corner-widened floor).
+
+**Small-sample guard.** For fewer than ten kept units the operative floor is multiplied by
+g(n) = √(9/(n − 1)) (for example 1.0607 at n = 9 and 1.5 at n = 5); the factor is undefined below five, which is
+why each stratum needs five kept units.
+
+*Synthetic example:* ten repeats with s = 0.2 J and largest deviation 0.4 J give a prediction of
+2.262 × 0.2 × √1.1 = 0.4745 J, the point floor; with wᵢ = 0.05 J on every run the operative floor is 0.5730 J.
+Ten null-quad differences with mean 0.04 J and s = 0.0966 J give a point floor of 0.2692 J; with a shared-edge
+width of 0.30 J on every quad the operative floor is 1.0349 J.
+
+A **model contrast** (Section 3.10) is judged against a **floor gate**: for each side, the worse of that model's
+absolute and comparative operative floors for the phase, and then the larger of the two sides.
+
+### 3.7 The dominance ratio
+
+For each model, phase and floor form we print
+
+  R = (corner-widened floor, unguarded) ÷ (point floor, unguarded).
+
+R ≥ 2 (equality passes) means that letting each value move within its timing box at least doubles the floor:
+timing attribution, not run-to-run repeatability, is what limits the measurement. A threshold merely above 1
+would let any positive timing width decide the answer, so the registered threshold is a doubling. In the
+synthetic examples above, the absolute R is 0.5730 / 0.4745 = 1.21 (fails) and the comparative R is
+1.0349 / 0.2692 = 3.84 (passes).
+
+For the comparative form we also print R_cm, a sensitivity replay in which a block-level energy allowance
+derived from shared edge movements is applied with *one* sign across all quads, and each quad's own local
+uncertainty with its own sign, over every sign combination. R_cm retains one shared sign for scalar energy
+allowances; it does not replay one physical time shift in every quad, and passing it licenses no claim of
+robustness to a common physical timing error.
+
+Two models, two phases and two forms give eight R values and four R_cm values. They share runs and are
+correlated; "independent" in the registered name of R refers to the independent-corner box, not to statistical
+independence. **Branch A** holds when every one of the twelve is at least 2, and licenses the sentence that timing
+attribution dominates the detection floor and the paper's contingent subtitle. Otherwise **branch B** reports each
+ratio that failed. A zero denominator refuses; no infinity is ever printed. Every ratio is printed with its
+numerator, denominator and n, and labelled "point diagnostic; no interval".
+
+### 3.8 Drift: reference requests, the drift screen and the scaled sensitivity line
+
+The instrument may read differently at the end of a session than at its start. Each session runs a fixed
+**reference workload** (Qwen2.5-1.5B, a 1,024-token prompt, 256 output tokens) at fixed places: a **corpus** of
+18 reference runs at the start, then a **start triplet** of three, one **midpoint reference** between the decode
+and prefill halves, and an **end triplet** of three. The reference energies are never science measurements.
+
+**Drift bound.** From the clean corpus energies (the first twelve valid corpus runs in committed order; at least
+six required), with n_s surviving start references and n_e surviving end references, U_j the mean of the
+corpus's j largest values and L_j the mean of its j smallest,
+
+  bound(n_s, n_e) = max( max(U_{n_s} − L_{n_e}, U_{n_e} − L_{n_s}), t × s × √(1/n_s + 1/n_e) ).
+
+The first term is the widest gap two means of those sizes could show if drawn from the corpus itself; the
+second is a 95% repeatability bound for a difference of two means when nothing drifts.
+
+**Drift screen.** The session passes when the absolute difference between the end-triplet and start-triplet
+means is at most the bound, on gross energies and again on idle-subtracted energies. A session that fails is
+excluded; one that cannot compute the screen (too few survivors) cannot count.
+
+**Drift allowance.** A = max(bound, spread), where the spread is the largest minus the smallest of the start
+mean, the midpoint energy and the end mean. Each run carries ½A into its cell's B, so a contrast, which differs
+two sides, carries it once. A lost midpoint reference leaves the allowance on the start and end references only,
+which cannot see an excursion that reverted before the end; this is disclosed with a fixed sentence.
+
+**The scaled sensitivity line.** The allowance is measured on reference requests of a few tens of joules and
+added, unscaled, to phases that may be much larger and longer. Whether drift transfers in proportion to energy
+or duration is unmeasured. Each replication cell therefore also prints a labelled line with the allowance term
+multiplied by max(1, E/E_ref, T/T_ref), where E and T are the cell's mean energy and mean phase duration and
+E_ref and T_ref those of the surviving references (for a contrast, the maximum of this factor over both sides).
+*Synthetic example:* an allowance term of 0.49 J, E_ref = 37.0 J, T_ref = 4.0 s and a cell of 300 J over 9.0 s
+give a factor of max(1, 8.108, 2.25) = 8.108 and a scaled term of 3.97 J. The line changes no registered number.
+In Part 2 the same scale is part of the registered estimator (Section 6.3), because no drift-transfer test passed
+before BYTES collection.
+
+### 3.9 The whole-machine boundary
+
+An inline USB-C power meter (POWER-Z KM003C) sits in the cable between the 140 W adapter and the laptop and reports
+bus voltage and current 50 times a second. It measures the **DC input**: what enters the laptop after the
+adapter. The adapter's AC-to-DC conversion loss is not measured, so this is not wall energy. When the laptop
+draws more than the adapter supplies, the battery helps; the meter cannot see that energy, so in Part 2 it is
+added from the laptop's own battery current and voltage readings (Section 6.3). The meter's clock is mapped to
+the laptop's monotonic clock by a fitted envelope, and its sample timing contributes its own edge term.
+
+In Part 1 the meter is a **descriptive cross-check** that never enters a claim: for each run, the rail energy
+above the run's idle baseline (ΔE_rail), the machine energy above the same baseline (ΔE_machine) and their ratio
+ρ = ΔE_rail / ΔE_machine. A run is physically plausible when 0 < ρ ≤ 1 and ΔE_machine − ΔE_rail ≥ 0, since the
+rails are part of the machine. Implausible runs are listed, never removed. The replication block additionally
+prints whole-machine energy per phase, gross, with the rails' share per phase. In Part 2 the DC input, and the
+**rest** (DC input minus rails, which includes memory, conversion losses, storage and fans), are primary
+boundaries.
+
+### 3.10 Model contrasts, outcome words and the claims ladder
+
+A **contrast** compares two models on the same workload in **contrast quads** ordered 1.7B, 8B, 8B, 1.7B. Each
+kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side. Over n kept quads (at least five of ten):
+
+1. d̄ = mean(d_k); se = s_d / √n.
+2. **Metrology interval**: d̄ ± t* × se, with t* the 0.975 Student-t value at n − 1 degrees of freedom rounded to
+   three places. No extra error term is added for phase energies, because each run's random error is already in
+   s_d.
+3. **Deterministic bound D**: for each recorded bound kind, a quad's bound is the A-side mean of its two runs'
+   bounds plus the B-side mean; D sums, over kinds, the mean over kept quads. The **decision interval** is the
+   metrology interval widened by D on both sides. Errors common to every run (a timing bias, a drift) are carried
+   by D and the attribution floor, never by the statistical interval.
+4. **Test**: t = d̄ / se, two-sided. The two primary contrasts (decode and prefill) form one family corrected by
+   Holm's method at α = 0.05 [26]; a contrast that cannot be estimated keeps the family size at two.
+5. **Floor gate** (Section 3.6).
+
+The outcome is one of four registered words, decided in this order of precedence:
+
+- **not estimable**: a required input is missing or invalid;
+- **not resolvable**: there is no floor, or |d̄| does not exceed the floor gate, or the decision interval
+  contains zero while the metrology interval does not;
+- **unresolved**: the metrology interval contains zero, or Holm's correction does not reject;
+- **direction supported**: otherwise; the direction is the sign of d̄.
+
+A **leave-one-quad-out** check recomputes the contrast without each kept quad in turn. If dropping some quad
+changes the sign, the floor status, the Holm decision or the outcome, the contrast is *verdict-influential*. If it
+moves d̄ by more than a quarter of the floor gate, that is reported.
+
+Beside each contrast two **registered descriptive estimates** are printed and decide nothing: the 8B-to-1.7B
+ratio of phase energies, exp(mean of ln(B-side mean / A-side mean)) with its t interval and without the recorded
+bounds; and d̄ per token (÷ 512 output tokens for decode, ÷ 2,048 prompt tokens for prefill). Phase energy is
+gross, and the 8B phase lasts longer, so part of any difference is baseline power times the extra duration.
+
+**The claims ladder** caps how strong a sentence may be. **L1** (instrument result): on this exact stack and
+boundary, this quantity was observed, with its interval. **L2** (comparative result): one condition differed
+from another within one boundary, with intervals reported, interleaved order and the effect above the detection
+floor. A contrast reaches L2 only when its outcome is *direction supported*, its direction is the registered one
+(8B uses more phase energy than 1.7B), it is not verdict-influential under leave-one-quad-out, and it remained
+confirmatory (no replacement or extra run was added after the fact). Otherwise it is reported in L1 wording.
+Higher levels (a model checked on held-out cells, replication on other machines) are out of reach in Part 1.
+The two floor packs' reported cells, collected in separate sessions in a fixed order, are printed side by side
+at L1 and are never differenced into a comparison.
