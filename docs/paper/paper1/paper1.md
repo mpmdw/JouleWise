@@ -1202,3 +1202,184 @@ outcome is printed beside every claim line of the boundary concerned. **[END BRA
 
 **[BRANCH 6.6.3 — the test did not run]** The test did not run in its slot; the split of memory energy between rails
 and rest is reported as not measured, and every rails and rest statement carries that caveat. **[END BRANCH 6.6.3]**
+
+## 7. Research automation: an agent-driven pipeline and its controls
+
+### 7.1 How the work was done
+
+This study was designed, implemented, collected, reviewed and written by AI agents working under one human
+researcher. The researcher set the research direction, the methodological requirements (raw evidence kept for
+every run, gross energy as the headline basis, a named measurement boundary on every number, no claim that cannot
+be audited) and the process policy, and decided every question that changed what was measured or claimed. One
+**lead** agent session decomposed the work, assigned it, adjudicated design questions, checked every change before
+it merged and kept the project's record. **Worker** sessions, drawn from two model families from different vendors
+({{FILL: P1-AUTO-MODELS | the model families and versions used for lead, implementation, review and judgment roles over the study period}}), implemented code against written specifications, reviewed each other's work, wrote
+tests and drafted text. An **independent judge** session, one with no prior involvement in the work, checked each
+registration before it bound, and a **refuter** session was asked to show the judge wrong.
+
+The work ran on three kinds of machine (Figure 5). The **measurement laptop** ran only the collection loop: plain
+scheduled programs that ran each session, its pre-session checks and its desk steps, with no agent process alive.
+A second laptop held the restricted data for analysis under an account no agent used. Cloud machines ran all code
+development, reviews, synthetic tests and continuous integration, and never held real or blinded data.
+
+![Figure 5. The research pipeline (schematic).](figures/fig_p1_pipeline.svg)
+
+*Figure 5. Schematic of the pipeline. Agents work only in the cloud zone and on documents; the measurement laptop
+runs scheduled programs only; restricted data move only from the measurement laptop to the analysis host, by
+hash-verified transfer. Arrows show the order from registration through collection, blind processing, release,
+independent recomputation and printing.*
+
+### 7.2 Integrity controls
+
+An agent can change a result in ways a human might not notice: by editing an analysis after seeing its output, by
+choosing which runs to keep, or by perturbing the machine it measures. The controls below were designed against
+these failure modes; each is mechanical, recorded, or both.
+
+1. **Registration before data, by hash.** Every registration, analysis plan and flag catalog was committed, and
+   for the primary block every code and configuration file a session reads was listed with its SHA-256 digest in
+   a sealed inventory, before the first session. A session refuses to start, and the harvest faults, if any file it
+   reads differs from the sealed bytes. Changes after registration go only through a dated erratum, a registered
+   deviation or a disclosed repair (Section 4.5).
+2. **Blinding enforced by custody.** Energies and every derived quantity were written to restricted paths listed
+   in a custody map; everything released during collection was structure only, and analysis code was written and
+   repaired by sessions that had read no restricted value (Section 4.6). BYTES added hidden multiplicative offsets
+   and withheld held-out rows until its predictions were committed (Section 6.3).
+3. **Physics refuses; everything else is recorded.** Only a directly measured physical hazard can stop collection
+   or remove data, and the presence of an AI agent process on the measurement laptop is one of those hazards: the
+   arm refuses and a running session pauses while one is alive. Every other condition is a flag with one
+   registered effect. This removes the discretion through which an agent could select data.
+4. **Executing review of number-bearing code.** Code that can compute, select or exclude a published number is
+   reviewed by two sessions from different model families, launched together and instructed to run and mutate the
+   code on production-shaped inputs rather than only read it, together with a regression test and a demonstration
+   that the test fails without the change.
+5. **Independent recomputation and a twin.** Every headline number is computed a second time by code that shares
+   nothing with the analysis (Sections 4.7, 6.3), against a tolerance fixed in advance.
+6. **Fail-closed refusals with reasons.** A missing fingerprint, a malformed record or an undefined estimator
+   input produces a named refusal, never a default value; a refused cell is printed as unavailable with its reason,
+   never as zero.
+7. **Pre-written outcome text.** Every sentence the paper may print under each outcome is fixed in the
+   registrations, and the claims ladder caps the strength of each (Section 3.10). This draft was written with every
+   result as a placeholder before any result was released.
+
+### 7.3 Failures and lessons
+
+The controls did not prevent every failure. We report those that cost data or time, or could have affected a
+number, with what each taught.
+
+- **Agents perturbed the instrument they were studying.** An AI agent process is not idle: it draws several watts
+  even when waiting. During collection, agent processes on the measurement laptop (interactive sessions, a
+  headless supervisory session, and a daemon left behind by a software update) were caught by the agent census, and
+  each catch cost a session or held the loop ({{FILL: P1-AUTO-LOST | estimated quiet-machine hours lost to agent presence during collection, and the sessions affected, from the pipeline audit's outcomes ledger}}). Every catch was a real contaminant; none corrupted a kept number,
+  because the census refused or paused. The remedy was structural: no agent ever runs on the measurement laptop, the
+  agent applications were removed from it, and a shell guard refuses agent commands while a session is active.
+- **Reviews that executed code caught the defects that mattered.** Over the study period, the defects that could
+  have changed a number were found by reviewers that ran the code on realistic inputs, or by running the pipeline
+  itself: a reference run silently dropped when a file failed to read; a reference request's energy integrated over
+  the wrong span; the twin implementation diverging from the analysis on compressed input. Reviews of documents and
+  bookkeeping, serial re-reviews and multi-model councils on process questions added days and caught little
+  ({{FILL: P1-AUTO-CATCHES | counts of review catches by review type (executing, reading-only, council) and by severity, from the gate-policy evidence and the outcomes ledger}}). Late review rounds mostly found defects in the previous round's fixes, but some
+  were real, so a hard cap on rounds would have been unsafe. The project therefore kept two parallel executing
+  reviews from different model families for number-bearing code and reduced everything else to continuous
+  integration and the change's own tests.
+- **Rules must be replayed on real non-claim data before they bind.** Several registered lines, written from first
+  principles, proved wrong when replayed on rehearsal sessions: a drift bar that every session failed by
+  construction, because its widened difference is always at least the mean width of its two ranges; and an
+  exclusion for outside processor work that would have removed a large fraction of quiet rehearsal runs
+  ({{FILL: P1-AUTO-REPLAY | the replay counts for these two rules, from the replication registration's derivations}}). Both were changed, before any claim data existed, to disclosures with the registered
+  rule's result printed beside the registered value.
+- **An instrument assumption can be silently false.** An early clock mapping assumed that the wall clock and the
+  monotonic clock advance at the same rate; that assumption could move every fitted edge in the same direction. It
+  was replaced by the rate-aware mapping of Section 3.3, and the energies of captures reduced under the old mapping
+  were voided for claim use.
+- **A leaked test process changes the machine.** An orphaned monitoring process left running by a test raised the
+  quiet machine's measured background processor load. Each session now ends with a census of orphaned processes.
+- **Process overhead was the critical path.** Collection rarely limited progress; serial review and gating did.
+  The project's gate policy was rewritten during the study, before any result was seen, to fit the depth of review
+  to whether a change can alter a number (Section 7.2, item 4).
+
+{{FILL: P1-AUTO-BLINDCHECK | result of the check whether any held-out BYTES model's per-request duration or other timing was read before the stage-1 commitment (a process audit ran harvest readers on a held-out model's session); either "no held-out duration was read" with its evidence, or a disclosure of what was read, when, and that it could not change the committed lines}}
+
+The lesson we draw is that agents can run a measurement study with the rigour such a study needs only if the
+rigour is mechanical. Digests, custody maps, physical refusals and independent recomputation held whatever an
+individual agent believed; reviews and judgments helped most when they ran the code.
+
+## 8. Limitations
+
+**Phase attribution was not checked by an independent instrument.** Every phase energy rests on the sampler's own
+records and on the held-average reconstruction. No external instrument measured where energy falls within a
+record or at a phase edge. The attribution floor bounds how far the *assigned* energy moves under the registered
+timing domain; it is not a bound on the physical energy of a phase.
+
+**Pulse-to-inference transfer is untested.** The timing bound comes from long, square GPU pulses. Inference has a
+different sequence of work at the prefill-to-decode transition, which could make the bound too narrow or
+unnecessarily wide. A registered inserted-gap experiment, which would pause between prefill and decode and compare
+independently stamped edges with the power record, was not run.
+
+**Calibration coverage is a design rationale.** The 59-pulse maximum is a 95/95 bound only if pulse displacements
+are independent and identically distributed; pulses of one capture are not, and empirical coverage was not
+established.
+
+**One machine, one stack, one boundary.** All results come from one Apple M3 Max laptop, its recorded operating
+system build(s), one MLX runtime and one sampler configuration. A different chip, firmware, operating system,
+runtime or sampler could change the edge response, the power scale or both, by an unquantified amount. The
+replication is across sessions and days on the same machine, not across machines.
+
+**Counter gain.** The rail energies are on the sampler's own scale, whose gain was not checked against an external
+instrument at the rail boundary. The whole-machine meter checks plausibility at a wider boundary; it neither
+validates the rail gain nor the phase split, and it excludes the adapter's conversion loss.
+
+**Workload.** One fixed decode prompt, one prefill length of 2,048 tokens and greedy generation of exactly 512
+tokens. No claim is made about other prompts, lengths, sampling settings, batch sizes or concurrent requests.
+
+**Statistical model.** Repeats and quads are modelled as independent units; consecutive units share slow drifts,
+so independence is an assumption. Each Part 1 interval covers variation within one session; the replication
+reports between-session variation descriptively and pools nothing. Contrast quads ran in a fixed, unrandomized
+order; a curved drift does not cancel within a quad.
+
+**Floor transfer.** Contrasts are judged against floors measured in separate sessions, under the registered
+assumption that "the shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the
+consuming contrast at the same block timescale"; the historical evidence for it records bounds, not realized
+run-level boundary errors.
+
+**Drift transfer.** The drift allowance is measured on reference requests of a few tens of joules. The scaled
+sensitivity line (Section 3.8) shows how the replication results would change if drift scaled with energy or
+duration; which is right was not measured.
+
+**Gross energy.** Phase energies include the machine's baseline power over the phase. A longer phase therefore
+carries more baseline energy, and part of any model difference is duration times baseline power.
+
+**Excluded units.** The intervals do not cover bias from which units were removed. Labelled lines show the effect
+of the load-correlated and battery-assist rules; no line can show the effect of physical-hazard removals, which are
+required.
+
+**BYTES.** Bytes per token are format-derived counts, not measured memory traffic. Dense held-out models cannot
+discriminate between the hypotheses. The split of memory energy between rails and rest depends on whether the GPU
+rail includes the memory controller (Section 6.6). The meter's label offset was not measured; DC-input and rest
+statements are printed under both the registered and the alternative interval. No drift-transfer test passed, so
+the drift allowance is scaled by a registered rule rather than measured transfer. The extension models were added
+after the first pass had begun. The KV cache size is averaged over the 512 decode passes of one prompt length.
+
+**Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 7.2 constrain
+what an agent could change in the data and the analysis; they do not make the prose neutral, which is why every
+outcome sentence was fixed in the registrations before the data existed.
+
+## 9. Conclusion
+
+A laptop's own power sampler can divide inference energy between prefill and decode, but only within limits that
+the measurement must report: an attribution floor from phase-edge timing, a detection floor from false
+differences between identical runs, and the dominance ratio that says which of the two limits the result. We
+measured these quantities for two models on one Apple M3 Max laptop under pre-registration, blinding and
+independent recomputation, and repeated the measurement in further sessions.
+
+**[BRANCH 9.D — dominance branch]** {{FILL: CP-X02-conclusion | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others ({{list}}), so neither timing nor repeatability alone limits these measurements."}} **[END BRANCH 9.D]**
+
+**[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 5.5 branch), with the replication word (Section 5.7)}} A contrast that
+is not resolvable is a finding about the resolution of a software power sampler at the phase boundary, and the
+pre-registration is what makes it a finding rather than a failed comparison. **[END BRANCH 9.C]**
+
+**[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
+
+The methods (timing bounds carried into every phase energy, floors that refuse rather than average away missing
+evidence, and outcome text fixed before data) transfer to any software power counter with interval-average
+records. So does the lesson of the automation: agents could run this study because the rules that protected it
+were mechanical.
