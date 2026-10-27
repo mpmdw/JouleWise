@@ -64,6 +64,8 @@ class DiskBudgetTests(unittest.TestCase):
             reg = Path(directory)
             sized = json.loads((ROOT / "configs/b6/registration/sizing_b5.json").read_text())
             for path in sorted((ROOT / "configs/b6/packs").glob("bytes-s*/registration.json")):
+                if "bytes_extension" in json.loads(path.read_text()):
+                    continue  # extension packs get their tree and sizing row at the desk
                 pack = path.parent.name
                 b, wait, fixed = 1000001, 7200, 19
                 required = 2 * (b + wait) + fixed

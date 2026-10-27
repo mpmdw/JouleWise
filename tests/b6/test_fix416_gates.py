@@ -24,6 +24,8 @@ class Fix416Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             for path in sorted((ROOT / 'configs/b6/packs').glob('bytes-s*-p*/registration.json')):
                 reg = json.loads(path.read_bytes())
+                if 'bytes_extension' in reg:
+                    continue  # extension packs get their tree at the desk (test_bytes_extension)
                 tree = json.loads((ROOT / reg['plan_tree_ref']).read_bytes())
                 prep = prepared(Path(tmp), tree=tree)
                 self.assertEqual(prep.registration['pack_registration'], reg)

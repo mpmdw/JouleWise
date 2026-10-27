@@ -93,6 +93,13 @@ class ReleaseSubsetTests(unittest.TestCase):
 
     def test_current_twelve_registrations_resolve_ten_science_keys_plus_neg8(self):
         keys = blinding.registered_keys(ROOT / "configs/b6/packs", "bytes", ROOT)
+        # The BYTES extension pack (bytes_extension_models_2026-10-27.md) shares
+        # the group: its configuration is withheld as held-out, never fit, and
+        # is released only at the held-out stage, after the predictions commit.
+        extension = {key for key in keys if key.startswith("Qwen3.8-27B-8bit|")}
+        self.assertEqual(len(extension), 1)
+        self.assertEqual({keys[key] for key in extension}, {"heldout"})
+        keys = {key: stage for key, stage in keys.items() if key not in extension}
         # R1: ten configurations; R5: three fit models; A3.1: NEG-8 joins fit.
         self.assertEqual(len(keys), 11)
         self.assertEqual(sum(stage == "fit" for stage in keys.values()), 4)

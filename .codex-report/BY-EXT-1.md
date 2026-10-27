@@ -195,7 +195,20 @@ github.com and apt are unreachable from this host. Tests that need `/bin/zsh` ar
 - byte identity: `git diff 991358f73` is empty over all twelve registered packs and trees, the registered roster, order,
   generators, manifest script, analysis, `configs/bytes`, loop, smoke keep and registration directory.
 
-Affected existing suites, run on this branch and on the untouched base at `991358f73`: RESULTS_PLACEHOLDER
+Affected existing suites (14 modules, 132 tests: bytes plan trees, bytes packs, b6 registration, bytes manifest,
+roster drop, blinding, release subset, plan inputs, mac kit, bytes launch, plan render, lane adapters, cold-pass fixes,
+fix416 gates), run on this branch and on an untouched worktree at `991358f73`:
+- base: 14 failures and 16 errors, all environmental (`/bin/zsh` missing; full-round fixtures; the scratch path contains
+  an agent-census substring). Same set on the branch.
+- branch only: 4 failures/errors. Each came from an existing test that enumerates every `configs/b6/packs/*` or
+  `bytes-s*` registration and expects the registered twelve: `test_every_loop_pack_tree_authenticates_through_its_sidecar`,
+  `test_precheck_all_twelve_p_and_retained_smoke_boundaries`, `test_preparation_reads_the_bytes_pack_effect_and_catalog_pin`
+  (they need the desk-built tree), and `test_current_twelve_registrations_resolve_ten_science_keys_plus_neg8` (the
+  extension's key joins the `bytes` group as held-out). Fixed in `tests/test_bytes_plan_trees.py`,
+  `tests/b6/test_plan_inputs.py`, `tests/b6/test_fix416_gates.py` (skip registrations carrying `bytes_extension`) and
+  `tests/b6/test_release_subset.py` (it asserts the extension key is exactly one and `heldout`, then the registered ten
+  plus NEG-8 as before). All four now pass. These are test-only edits for the new packs; no production code changed.
+- The full repository suite was not run here. The Mac whole suite remains the merge gate.
 
 ## 7. For the gate-policy refuter
 

@@ -25,7 +25,11 @@ class BytesPlanTreesTests(unittest.TestCase):
         # Members read the committed pack, not the smoke's staged copy, and
         # refuse when plan_tree.sha256 is absent (r1-bytes-s1-p1: 143 of 143).
         from joulewise.arm_readiness import _plan_tree
-        refs = sorted({read(path)["plan_tree_ref"] for path in (ROOT / "configs/b6/packs").glob("*/registration.json")})
+        # Extension packs (bytes_extension in the registration) get their tree at
+        # the desk once their MAC-PENDING slots are filled; tests/test_bytes_extension.py
+        # covers them. Every registered-roster pack tree must exist here.
+        refs = sorted({reg["plan_tree_ref"] for path in (ROOT / "configs/b6/packs").glob("*/registration.json")
+                       if "bytes_extension" not in (reg := read(path))})
         self.assertEqual(len([ref for ref in refs if "/bytes-s" in ref]), 12)
         for ref in refs:
             with self.subTest(ref=ref):
