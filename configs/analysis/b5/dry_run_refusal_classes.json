@@ -129,6 +129,7 @@
     "reported_energy_output_exists",
     "reported_energy_parent_differs_from_archive",
     "reported_energy_projection_replay_mismatch",
+    "rereduction_calibration_dependent_fields_differ",
     "results_fill_contrast_census_mismatch",
     "results_fill_exclusions_mismatch",
     "results_fill_floor_mismatch",

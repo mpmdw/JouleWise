@@ -682,14 +682,45 @@ def step_1(s,r):
     return [s.record('1')]
 
 
+# Summary fields a re-reduction derives from the instrument-calibration refit.
+# A refit that hits the governed projection's host-safety wall deadline does not
+# stop `reduce`: it returns a succeeded summary whose uncertainty is
+# not_estimable and whose anchor-shift envelopes are absent. Steps 1 and 2 read
+# the same verified kept bundle, so these fields must equal the harvest's stored
+# summary; any difference is a tooling refusal, never a new output.
+REFIT_DEPENDENT_SUMMARY_KEYS=('energy_anchor_shift_envelopes','energy_bound_terms_j',
+                              'energy_uncertainty_status','window_evidence_precheck')
+REREDUCTION_REFIT_DIFFERS='rereduction_calibration_dependent_fields_differ'
+
+
+def require_rereduction_matches_stored(bundle, output):
+    absent=object()
+    try:
+        stored=json.loads((Path(bundle)/'summary_metrics.json').read_bytes())
+        fresh=json.loads(Path(output).read_bytes())
+    except (OSError,ValueError):
+        raise AnalysisRefusal(REREDUCTION_REFIT_DIFFERS) from None
+    if (type(stored) is not dict or type(fresh) is not dict
+            or any(stored.get(key,absent)!=fresh.get(key,absent) for key in REFIT_DEPENDENT_SUMMARY_KEYS)):
+        raise AnalysisRefusal(REREDUCTION_REFIT_DIFFERS)
+
+
 def step_2(s,r):
     from joulewise.cli import main
     outputs=[]
     for pack,run_id,bundle in s.kept_bundles():
         output=s.path('rereduced/'+pack+'/'+run_id+'.rereduced.json')
-        result,found,code,exit_status=s.invoke(r,main,['reduce',bundle,'--output',output],step='2',window=pack,
-                                             outputs=[('rereduced_'+pack+'_'+run_id,output)])
-        outputs.extend(found)
+        result,_,code,exit_status=s.invoke(r,main,['reduce',bundle,'--output',output],step='2',window=pack)
+        if exit_status==0 and not Path(output).is_file():
+            code,exit_status=None,2
+        elif exit_status==0:
+            try:
+                require_rereduction_matches_stored(bundle,output)
+            except AnalysisRefusal as exc:
+                # Never registered: the refused re-reduction leaves no output.
+                Path(output).unlink()
+                return [s.record('2',window=pack,exit_status=2,code=exc.code,outputs=outputs)]
+            outputs.append(s.register('rereduced_'+pack+'_'+run_id,output))
         if exit_status: return [s.record('2',window=pack,exit_status=exit_status,code=code,outputs=outputs)]
     return [s.record('2',outputs=outputs)]
 

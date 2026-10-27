@@ -376,7 +376,12 @@ class DriverDouble(d.StepRunner):
             binding={'exclusions_sha256':'e'*64,'harvest_pin':'a'*40}
             value={'marker':12.3457331}
             module=getattr(main,'__module__','')
-            if step=='2':write(option('--output'),{'schema_version':'joulewise.summary_metrics.v1',**value})
+            if step=='2':
+                # A correct reducer reproduces the bundle's stored refit-dependent
+                # fields (dry_run.require_rereduction_matches_stored).
+                stored=json.loads((Path(argv[1])/'summary_metrics.json').read_bytes())
+                write(option('--output'),{'schema_version':'joulewise.summary_metrics.v1',**value,
+                    **{key:stored[key] for key in d.REFIT_DEPENDENT_SUMMARY_KEYS if key in stored}})
             elif step=='4':
                 value.update(schema_version='joulewise.detection_floor_extraction.v1',kept_units_binding=binding,
                     spec_membership_refusals=[],cells=[{'cell_id':window+'-target','extractable':not self.target_refusal},
@@ -434,6 +439,7 @@ class DriverAcceptanceTests(unittest.TestCase):
             record={'outputs':{'derived/exclusions.json':_hash(archive/'derived/exclusions.json')}}
             (archive/'harvest.json').write_bytes(d._canonical(record))
             runs=root/'runs';runs.mkdir();(runs/'kept').mkdir();(runs/'removed').mkdir()
+            (runs/'kept/summary_metrics.json').write_bytes(d._canonical({'schema_version':'joulewise.summary_metrics.v1','status':'succeeded'}))
             measurement=root/'measurement';(measurement/'runs').mkdir(parents=True)
             (measurement/'runs/calibration_observation_ledger.jsonl').write_bytes(b'ledger\n')
             entries.append({'pack':pack,'pack_id':'s10-'+pack,'attempt':1,'plan_id':'s10-'+pack+'-a1-window',
