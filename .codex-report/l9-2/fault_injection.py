@@ -105,6 +105,9 @@ def detect(*args, **kwargs):
     return result
 
 
+detect.__wrapped__ = ORIGINAL_DETECT  # the run's deadline observer watches the real projection
+
+
 def child_exit(payload):
     path = OUT / 'children' / (STATE['child']['name'] + '.json')
     path.parent.mkdir(exist_ok=True)

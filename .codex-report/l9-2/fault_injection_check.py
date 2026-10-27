@@ -54,15 +54,16 @@ for path in sorted((OUT / 'children').glob('*.json')):
         result = 'ABSORBED_NO_REFUSAL'
     else:
         result = 'OTHER_STOP'
-    verdict.update(result=result, stop=None if stop is None else f"{stop['step']}/{stop['window']}/{stop['status']}/{stop['refusal']}",
+    single = stop is not None and stop['refusal'] == 'calibration_wall_deadline_in_analysis'
+    verdict.update(single_code=single, result=result, stop=None if stop is None else f"{stop['step']}/{stop['window']}/{stop['status']}/{stop['refusal']}",
                    changed=changed, ok=result in ('refused',), code=child.get('code'))
     verdicts.append(verdict)
 
 (OUT / 'verdicts.json').write_text(json.dumps(verdicts, indent=1))
-print('| child | first firing site | trigger | stop (step/window/status/refusal) | changed ok-step outputs | result |')
-print('|---|---|---|---|---|---|')
+print('| child | first firing site | trigger | stop (step/window/status/refusal) | single code | changed ok-step outputs | result |')
+print('|---|---|---|---|---|---|---|')
 for v in verdicts:
-    print(f"| {v['name']} | `{v['site']}` | {v.get('trigger')} | {v.get('stop')} | {len(v.get('changed') or [])} | **{v['result']}** |")
+    print(f"| {v['name']} | `{v['site']}` | {v.get('trigger')} | {v.get('stop')} | {v.get('single_code')} | {len(v.get('changed') or [])} | **{v['result']}** |")
 print()
 print('children with a firing:', len(verdicts), ' refused:', sum(v['result'] == 'refused' for v in verdicts),
       ' findings:', [v['name'] for v in verdicts if v['result'] not in ('refused',)])
