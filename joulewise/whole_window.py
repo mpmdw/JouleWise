@@ -12,6 +12,8 @@ the separate all-or-nothing policy from the same provenance module.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import hashlib
 import json
 import math
@@ -1288,7 +1290,7 @@ class AuthenticatedConsumptionSession:
                 for reason in sorted(member_reasons)
             )
 
-        physics_cache: dict[str, float] = {}
+        physics_cache: dict[str, float] = _physics_cache_for_call()
         pending: list[
             tuple[
                 str,
@@ -4656,7 +4658,11 @@ def _reference_energy_evidence_detail(
         # is accepted for primary-evidence NEG-8 re-derivation.
         from joulewise.reduce import reduce_bundle
 
-        reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
+        reduced = reduce_bundle(
+            bundle_path,
+            reducer_version=reducer_version,
+            _instrument_calibration_physics_cache=shared_physics_cache(),
+        ).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)
@@ -6159,7 +6165,7 @@ def _current_core_rederivation_reasons(
             and not isinstance(bracket_bound, bool)
             and isinstance(bracket_bound, int | float)
         ):
-            physics_cache: dict[str, float] = {}
+            physics_cache: dict[str, float] = _physics_cache_for_call()
             for _bundle_id, _path, member_metadata, _cpu in derived_members:
                 member_calibration = (
                     member_metadata.get("instrument_calibration")
@@ -7065,6 +7071,42 @@ def whole_window_strict_workers(member_count: int) -> int:
     return max(1, min(workers, member_count))
 
 
+# One caller-owned instrument-calibration physics cache for a whole analysis
+# run (J2).  Unset, every site keeps its own per-call dict as before.  The
+# reducer keys entries by the calibration evidence artifact's SHA-256, reads
+# them only after its own artifact/raw/events hash checks, and stores only
+# verified fits, so a failed or deadline-hit fit is never reused.
+_SHARED_PHYSICS_CACHE: contextvars.ContextVar[dict[str, float] | None] = (
+    contextvars.ContextVar(
+        "joulewise_shared_instrument_calibration_physics_cache", default=None
+    )
+)
+
+
+@contextlib.contextmanager
+def shared_instrument_calibration_physics_cache(cache: dict[str, float]):
+    """Share ``cache`` with every physics-cache site in this context."""
+
+    if not isinstance(cache, dict):
+        raise TypeError("shared physics cache must be a dict")
+    token = _SHARED_PHYSICS_CACHE.set(cache)
+    try:
+        yield cache
+    finally:
+        _SHARED_PHYSICS_CACHE.reset(token)
+
+
+def shared_physics_cache() -> dict[str, float] | None:
+    """The run's shared physics cache, or ``None`` outside one."""
+
+    return _SHARED_PHYSICS_CACHE.get()
+
+
+def _physics_cache_for_call() -> dict[str, float]:
+    shared = _SHARED_PHYSICS_CACHE.get()
+    return shared if shared is not None else {}
+
+
 def _accepts_physics_cache(validator: Any) -> bool:
     import inspect  # noqa: PLC0415
 
@@ -7139,7 +7181,7 @@ def strict_validate_bundles(
                         results[index] = None
         except Exception:  # noqa: BLE001 - a pool that cannot start: in process
             pass
-    cache: dict[Any, Any] = {}
+    cache: dict[Any, Any] = _physics_cache_for_call()
     return [
         result
         if result is not None

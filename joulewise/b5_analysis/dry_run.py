@@ -1149,7 +1149,11 @@ def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_re
     runner=_runner(restricted) if _runner is not None else StepRunner(restricted)
     s=RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
     stopped=False;difference=None;previous=None
-    with without_backup_roots() as ignored:
+    from joulewise.whole_window import shared_instrument_calibration_physics_cache
+    # One instrument-calibration physics cache per driver run, as the harvest
+    # shares one per window: a verified fit of the same calibration bytes is not
+    # refitted per member. Failed fits are never cached.
+    with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache({}):
         s.ignored_backup=ignored
         if mode=='release':
             from .windows import load_window_index

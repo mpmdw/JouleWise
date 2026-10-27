@@ -501,6 +501,10 @@ def _strict_problems(
             if authentication_session is not None
             else None
         )
+        if physics_cache is None:
+            from joulewise.whole_window import shared_physics_cache
+
+            physics_cache = shared_physics_cache()
     axi_selected = (
         isinstance(raw_config, dict)
         and raw_config.get("schema_extensions")
@@ -1942,7 +1946,13 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     requested_version = args.reducer_version
     if requested_version is None and stored_path.is_file():
         requested_version = recorded_version
-    summary = reduce_bundle(bundle_path, reducer_version=requested_version)
+    from joulewise.whole_window import shared_physics_cache
+
+    summary = reduce_bundle(
+        bundle_path,
+        reducer_version=requested_version,
+        _instrument_calibration_physics_cache=shared_physics_cache(),
+    )
     try:
         payload = summary.to_dict()
     except SchemaError as exc:
