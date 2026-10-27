@@ -96,3 +96,18 @@ the text waits on a number except the results paragraphs.
 1. Keep the measurement Mac free of interactive AI sessions and software updates until 30 November.
 2. Read the draft on about 22 November.
 3. Nothing else is needed from him for this plan; the checkpoints are the lead's to call.
+
+## 7. DIFFICULTY collection overlaps Paper 1 writing (Ed, 2026-10-27)
+
+Ed: "cant the difficulty measurements be takin WHILE im writing the paper 1??" Yes. Writing uses no measurement
+time, so DIFFICULTY (Paper 2, `docs/registrations/difficulty_pack_v2.md`) collects on the measurement Mac from
+about 6-10 November, while Paper 1 is written. Three things decide the start:
+1. BYTES collection closes (5 Nov).
+2. The DIFFICULTY v2 registration is sealed and its code merged, and the collection-code freeze audit is done. This
+   prep runs in the cloud now.
+3. Any block-5 or BYTES analysis step still assigned to the Mac (the dry run if `B5-TRANSFER: GO` is not given,
+   and the BYTES stages) takes the Mac first, in the gaps reserved at 3 Nov and 8 Nov. DIFFICULTY sessions fill the
+   rest.
+
+Paper 1 never waits on DIFFICULTY. If a DIFFICULTY problem needs the lead's attention during the 15-22 Nov writing
+window, Paper 1 goes first.
