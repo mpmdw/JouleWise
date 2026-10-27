@@ -90,6 +90,15 @@ blinding, the independent recompute and its agreement bars, and the release reco
    conditions in `BLOCK5-TRANSFER.md` beside this file hold and that file ends with `B5-TRANSFER: GO`. If it becomes
    active, the dry run runs on Ed's MacBook Air from hash-verified compressed copies, and BYTES never needs to hold
    for it. Until then items 6 and 6a stand unchanged.
+8. **Review stage amended (Ed, 2026-10-27, gate policy `docs/process/gate_policy.md` rule 3).** For L9, the
+   "one independent executing review" of item 1 and the cold Fable and Opus passes of item 3 become one stage: two
+   executing reviews launched together, Sol 6.1 xhigh fast and Opus 5.5, each told to probe and mutate. Fix rounds:
+   both check only the fix diff until nothing above LOW remains. Item 4's reduced-fixture release test is infeasible
+   (L9-2 report); release equality is checked by the real release-mode rerun.
+9. **Ruling 6b stays on hold (Ed, 2026-10-27: "hold on 2").** The audit's critique showed plain iCloud tars break
+   custody on the laptop (they land where any agent running as `edr` can read them), the laptop's disk was never
+   sized, and iCloud uploads on the measurement Mac run on into sessions. Until a transfer design closes those, block
+   5's dry run is on the measurement Mac at a BYTES session boundary (items 6 and 6a).
 7. **Block 6** follows the same principle wherever its registration allows. Where the block-6 registration itself
    requires a synthetic stage chain before its blind run, that requirement stands until amended by a dated entry
    under its §17 rules.
