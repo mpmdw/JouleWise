@@ -44,6 +44,22 @@ blinding, the independent recompute and its agreement bars, and the release reco
    the ruling: (a) the analysis replay keeps the refit and the cell budget but does not inherit the wall deadline;
    (b) the replay checks the harvest-recorded fit by hash binding and leaves arithmetic verification to the
    independent recompute; (c) keep it as is, with the reason it cannot make the release irreproducible.
+   **Decided by Ed, 2026-10-27: (c)** ("yes, sure, record c as my ruling"). Reason: (a), and also the per-member
+   refit cache seat L9-2 proposed, would edit `joulewise/powermetrics_fiducial.py` or `joulewise/reduce.py`. Those
+   are governed estimator-source pins (`ESTIMATOR_CODE_PATHS`, `joulewise/calibration_bracketing.py`), and the last
+   change to the first one forced a calibration-acceptance reissue (`_r2`). So for block 5's first dry run:
+   - The wall deadline stays. The dry run runs on the quiet Mac, where the same calibration completed at harvest.
+   - A deadline firing is treated as a tooling refusal: cured blind, rerun in a fresh custody root (scout report §3).
+   - **Condition:** seat L9-2 confirms, with executed evidence, that a firing anywhere on the dry-run path stops
+     with a refusal and cannot change a kept unit, a lost-reference list or a printed number. If it cannot confirm
+     that, this choice returns to Ed before the dry run.
+   - (a) and the refit cache follow later as one governed change with its reissue, unless the cache can live
+     entirely in non-governed code with byte-identical outputs (then it is an ordinary L9 change).
+6a. **The Mac goes to analysis first (Ed, 2026-10-27):** "bytes and that work can pause until this is done if you
+   need the quiet mac for analysis". The block-5 blind dry run takes precedence over BYTES sessions, s1-p1 included.
+   BYTES's registered end (no t0 after 2026-11-02 00:00 PDT) still binds. If the dry run would push s1-p1 past it,
+   the lead tells Ed before holding the loop, so he can choose between the fit set and the date, or amend the end
+   date prospectively while BYTES is still blinded.
 7. **Block 6** follows the same principle wherever its registration allows. Where the block-6 registration itself
    requires a synthetic stage chain before its blind run, that requirement stands until amended by a dated entry
    under its §17 rules.
