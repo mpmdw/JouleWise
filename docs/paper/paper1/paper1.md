@@ -232,7 +232,7 @@ effect of moving an edge.
 
 ![Figure 1. Phase split by overlap, and the energy moved when an edge moves (schematic).](figures/fig_p1_phase_split.svg)
 
-*Figure 1. Schematic, no measured data. Three power records (grey) straddle a prefill-to-decode edge. Each
+*Figure 1. Schematic, no measured data. Five power records (grey); record 3 straddles the prefill-to-decode edge. Each
 record's energy is shared between the phases in proportion to its time overlap with each. Moving the edge by a
 timing bound g reassigns a slice of one record's energy (hatched) from one phase to the other; the request total
 does not change. Values and widths are illustrative and not to scale.*
@@ -1470,7 +1470,9 @@ transfer to inference nor future coverage.*
 
 ## Appendix C. Fixed disclosure sentences
 
-These sentences are registered and printed verbatim where they apply.
+These sentences are registered and printed verbatim where they apply. The replication block prints "session" for
+"window". Where a registered sentence names the drift screen by its internal label, this draft writes "drift
+screen"; the wording to print is an open question for the author (see the draft summary).
 
 - *Conditionality:* "These numbers are conditional on a window that passed the registered physical-hazard checks
   at arm and kept at least 5 of 10 units per stratum after the registered exclusions; the kept units of each cell

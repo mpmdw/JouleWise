@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="340" viewBox="0 0 900 340" role="img" aria-label="Session shape, schematic">
+<title>Session shape, schematic</title>
+<style>
+text{font-family:Helvetica,Arial,sans-serif;fill:#1a1a1a}
+.t{font-size:15px;font-weight:bold}.s{font-size:12px}.xs{font-size:10.5px}.note{font-size:10.5px;font-style:italic;fill:#555}
+.box{fill:#f2f4f7;stroke:#4a5568;stroke-width:1.2}.blue{fill:#dbe8f7;stroke:#2b6cb0;stroke-width:1.2}
+.orange{fill:#fdebd3;stroke:#c05621;stroke-width:1.2}.green{fill:#dcf2e3;stroke:#2f855a;stroke-width:1.2}
+.grey{fill:#e2e8f0;stroke:#4a5568;stroke-width:1}.red{fill:#fde2e2;stroke:#c53030;stroke-width:1.2}
+.line{stroke:#1a1a1a;stroke-width:1.2;fill:none}.dash{stroke:#1a1a1a;stroke-width:1.2;stroke-dasharray:5 4;fill:none}
+.arrow{stroke:#333;stroke-width:1.3;fill:none;marker-end:url(#ah)}
+</style>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker>
+<pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#2b6cb0" stroke-width="2"/></pattern></defs>
+<rect width="900" height="340" fill="#ffffff"/>
+<text x="20" y="26" class="t" text-anchor="start">Shape of one measurement session (identical in every pack)</text>
+<rect x="20" y="60" width="40" height="60" class="box" rx="2"/>
+<text x="40.0" y="86" class="xs" text-anchor="middle">settle</text>
+<rect x="64" y="60" width="70" height="60" class="orange" rx="2"/>
+<text x="99.0" y="86" class="xs" text-anchor="middle">opening</text>
+<text x="99.0" y="100" class="xs" text-anchor="middle">capture</text>
+<rect x="138" y="60" width="110" height="60" class="green" rx="2"/>
+<text x="193.0" y="86" class="xs" text-anchor="middle">reference</text>
+<text x="193.0" y="100" class="xs" text-anchor="middle">corpus (18)</text>
+<rect x="252" y="60" width="60" height="60" class="green" rx="2"/>
+<text x="282.0" y="86" class="xs" text-anchor="middle">start</text>
+<text x="282.0" y="100" class="xs" text-anchor="middle">triplet</text>
+<rect x="316" y="60" width="190" height="60" class="blue" rx="2"/>
+<text x="411.0" y="86" class="xs" text-anchor="middle">DECODE HALF</text>
+<rect x="510" y="60" width="45" height="60" class="green" rx="2"/>
+<text x="532.5" y="86" class="xs" text-anchor="middle">mid-</text>
+<text x="532.5" y="100" class="xs" text-anchor="middle">point</text>
+<rect x="559" y="60" width="190" height="60" class="blue" rx="2"/>
+<text x="654.0" y="86" class="xs" text-anchor="middle">PREFILL HALF</text>
+<rect x="753" y="60" width="60" height="60" class="green" rx="2"/>
+<text x="783.0" y="86" class="xs" text-anchor="middle">end</text>
+<text x="783.0" y="100" class="xs" text-anchor="middle">triplet</text>
+<rect x="817" y="60" width="70" height="60" class="orange" rx="2"/>
+<text x="852.0" y="86" class="xs" text-anchor="middle">closing</text>
+<text x="852.0" y="100" class="xs" text-anchor="middle">capture</text>
+<path d="M20 140 L887 140" class="arrow"/>
+<text x="887" y="156" class="xs" text-anchor="end">time (about six hours)</text>
+<text x="20" y="190" class="s" text-anchor="start">Floor pack, each half:</text>
+<rect x="180" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="196" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="212" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="228" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="244" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="260" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="276" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="292" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="308" y="176" width="13" height="18" class="blue" rx="1"/>
+<rect x="324" y="176" width="13" height="18" class="blue" rx="1"/>
+<text x="346" y="190" class="xs" text-anchor="start">10 repeats</text>
+<rect x="418" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="427" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="436" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="445" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="458" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="467" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="476" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="485" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="498" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="507" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="516" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="525" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="538" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="547" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="556" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="565" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="578" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="587" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="596" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="605" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="618" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="627" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="636" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="645" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="658" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="667" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="676" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="685" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="698" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="707" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="716" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="725" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="738" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="747" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="756" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="765" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="778" y="176" width="8" height="18" class="blue" rx="1"/>
+<rect x="787" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="796" y="176" width="8" height="18" class="orange" rx="1"/>
+<rect x="805" y="176" width="8" height="18" class="blue" rx="1"/>
+<text x="820" y="190" class="xs" text-anchor="start">10 null quads</text>
+<text x="20" y="230" class="s" text-anchor="start">Contrast pack, each half:</text>
+<rect x="180" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="190" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="200" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="210" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="224" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="234" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="244" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="254" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="268" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="278" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="288" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="298" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="312" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="322" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="332" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="342" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="356" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="366" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="376" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="386" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="402" y="216" width="12" height="18" class="green" rx="1"/>
+<rect x="420" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="430" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="440" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="450" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="464" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="474" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="484" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="494" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="508" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="518" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="528" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="538" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="552" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="562" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="572" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="582" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="596" y="216" width="9" height="18" class="blue" rx="1"/>
+<rect x="606" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="616" y="216" width="9" height="18" class="orange" rx="1"/>
+<rect x="626" y="216" width="9" height="18" class="blue" rx="1"/>
+<text x="646" y="230" class="xs" text-anchor="start">5 + 5 contrast quads, one reference between</text>
+<rect x="20" y="260" width="860" height="52" class="box" rx="4"/>
+<text x="30" y="280" class="xs" text-anchor="start">Calibration captures (orange) bound edge timing; reference runs (green) set the drift screen and allowance;</text>
+<text x="30" y="296" class="xs" text-anchor="start">blue/orange squares are science runs (blue = side A, orange = side B). The midpoint reference separates the halves.</text>
+<text x="890" y="332" text-anchor="end" class="note">Schematic. No measured data; all values and widths illustrative, not to scale.</text>
+</svg>

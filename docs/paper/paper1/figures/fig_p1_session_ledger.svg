@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="380" viewBox="0 0 900 380" role="img" aria-label="Session ledger, schematic">
+<title>Session ledger, schematic</title>
+<style>
+text{font-family:Helvetica,Arial,sans-serif;fill:#1a1a1a}
+.t{font-size:15px;font-weight:bold}.s{font-size:12px}.xs{font-size:10.5px}.note{font-size:10.5px;font-style:italic;fill:#555}
+.box{fill:#f2f4f7;stroke:#4a5568;stroke-width:1.2}.blue{fill:#dbe8f7;stroke:#2b6cb0;stroke-width:1.2}
+.orange{fill:#fdebd3;stroke:#c05621;stroke-width:1.2}.green{fill:#dcf2e3;stroke:#2f855a;stroke-width:1.2}
+.grey{fill:#e2e8f0;stroke:#4a5568;stroke-width:1}.red{fill:#fde2e2;stroke:#c53030;stroke-width:1.2}
+.line{stroke:#1a1a1a;stroke-width:1.2;fill:none}.dash{stroke:#1a1a1a;stroke-width:1.2;stroke-dasharray:5 4;fill:none}
+.arrow{stroke:#333;stroke-width:1.3;fill:none;marker-end:url(#ah)}
+</style>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker>
+<pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#2b6cb0" stroke-width="2"/></pattern></defs>
+<rect width="900" height="380" fill="#ffffff"/>
+<text x="20" y="26" class="t" text-anchor="start">Order of collection (registered rotation; outcomes are filled from harvest records)</text>
+<text x="20" y="60" class="s" text-anchor="start">round</text>
+<text x="140" y="60" class="s" text-anchor="start">1st</text>
+<text x="320" y="60" class="s" text-anchor="start">2nd</text>
+<text x="500" y="60" class="s" text-anchor="start">3rd</text>
+<text x="680" y="60" class="s" text-anchor="start">then</text>
+<text x="20" y="102" class="s" text-anchor="start">Primary block</text>
+<rect x="140" y="80" width="170" height="32" class="blue" rx="4"/>
+<text x="148" y="95" class="xs" text-anchor="start">1.7B floor</text>
+<text x="148" y="108" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="320" y="80" width="170" height="32" class="blue" rx="4"/>
+<text x="328" y="95" class="xs" text-anchor="start">8B floor</text>
+<text x="328" y="108" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="500" y="80" width="170" height="32" class="orange" rx="4"/>
+<text x="508" y="95" class="xs" text-anchor="start">contrast</text>
+<text x="508" y="108" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="680" y="80" width="190" height="32" class="box" rx="4"/>
+<text x="688" y="95" class="xs" text-anchor="start">re-arm a pack until claim-usable</text>
+<text x="20" y="146" class="s" text-anchor="start">Replication 1</text>
+<rect x="140" y="124" width="170" height="32" class="blue" rx="4"/>
+<text x="148" y="139" class="xs" text-anchor="start">1.7B floor</text>
+<text x="148" y="152" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="320" y="124" width="170" height="32" class="blue" rx="4"/>
+<text x="328" y="139" class="xs" text-anchor="start">8B floor</text>
+<text x="328" y="152" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="500" y="124" width="170" height="32" class="orange" rx="4"/>
+<text x="508" y="139" class="xs" text-anchor="start">contrast</text>
+<text x="508" y="152" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="680" y="124" width="190" height="32" class="green" rx="4"/>
+<text x="688" y="139" class="xs" text-anchor="start">BYTES sub-packs</text>
+<text x="20" y="190" class="s" text-anchor="start">Replication 2</text>
+<rect x="140" y="168" width="170" height="32" class="blue" rx="4"/>
+<text x="148" y="183" class="xs" text-anchor="start">8B floor</text>
+<text x="148" y="196" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="320" y="168" width="170" height="32" class="orange" rx="4"/>
+<text x="328" y="183" class="xs" text-anchor="start">contrast</text>
+<text x="328" y="196" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="500" y="168" width="170" height="32" class="blue" rx="4"/>
+<text x="508" y="183" class="xs" text-anchor="start">1.7B floor</text>
+<text x="508" y="196" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="680" y="168" width="190" height="32" class="green" rx="4"/>
+<text x="688" y="183" class="xs" text-anchor="start">BYTES sub-packs</text>
+<text x="20" y="234" class="s" text-anchor="start">Replication 3</text>
+<rect x="140" y="212" width="170" height="32" class="orange" rx="4"/>
+<text x="148" y="227" class="xs" text-anchor="start">contrast</text>
+<text x="148" y="240" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="320" y="212" width="170" height="32" class="blue" rx="4"/>
+<text x="328" y="227" class="xs" text-anchor="start">1.7B floor</text>
+<text x="328" y="240" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="500" y="212" width="170" height="32" class="blue" rx="4"/>
+<text x="508" y="227" class="xs" text-anchor="start">8B floor</text>
+<text x="508" y="240" class="xs" text-anchor="start">outcome: filled at release</text>
+<rect x="680" y="212" width="190" height="32" class="green" rx="4"/>
+<text x="688" y="227" class="xs" text-anchor="start">BYTES sub-packs</text>
+<text x="20" y="278" class="s" text-anchor="start">Replication 4+</text>
+<rect x="140" y="256" width="530" height="32" class="box" rx="4"/>
+<text x="148" y="271" class="xs" text-anchor="start">rotation continues, skipping packs at target</text>
+<rect x="20" y="310" width="860" height="48" class="box" rx="4"/>
+<text x="30" y="328" class="xs" text-anchor="start">Each replication contrast session takes floors from the same round's counting floor sessions, else the next, else the previous,</text>
+<text x="30" y="344" class="xs" text-anchor="start">else the primary block's. The replication block closes at 3 counting sessions per pack or at the end of 1 November 2026 (Pacific).</text>
+<text x="890" y="372" text-anchor="end" class="note">Schematic. No measured data; all values and widths illustrative, not to scale.</text>
+</svg>
