@@ -1,0 +1,68 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/.venv/bin/python-real",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/custody",
+        "--repo",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement",
+        "--pack",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/configs/campaigns/bytes-s5-p1",
+        "--plan-id",
+        "SMOKE-bytes-s5-p1-20261027T0402Z",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "2dd2475cf64f27a66af7ce3dc2c217b41387265f",
+        "--chain",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "SMOKE-bytes-s5-p1-20261027T0402Z-calibration",
+        "--expected-pack-tree-sha256",
+        "3f5f3d872ffb9ca0fe8bb40e87f2dfc100121cebaa84055f4316fcc4746a99f0",
+        "--catalog",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-b6/loop-bytes/staging/r1-bytes-s5-p1-smoke-0/smoke/bytes-s5-p1-20261027T0402Z/measurement/configs/b6/registration/identity_pins.json"
+      ],
+      "elapsed_s": 16.291084958,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 1058553962194708,
+        "monotonic_raw_ns": 1058553962194416,
+        "wall_ns": 1793074216978411000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 1058537671109750,
+        "monotonic_raw_ns": 1058537671109541,
+        "wall_ns": 1793074200687326000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "323fa8d2f9b22091c5dde5e39c5bae437d60a8c34aac77a642bf1549b02a3c5b",
+        "size": 445
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
