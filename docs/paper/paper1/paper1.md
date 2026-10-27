@@ -1371,7 +1371,7 @@ differences between identical runs, and the dominance ratio that says which of t
 measured these quantities for two models on one Apple M3 Max laptop under pre-registration, blinding and
 independent recomputation, and repeated the measurement in further sessions.
 
-**[BRANCH 9.D — dominance branch]** {{FILL: CP-X02-conclusion | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others ({{list}}), so neither timing nor repeatability alone limits these measurements."}} **[END BRANCH 9.D]**
+**[BRANCH 9.D — dominance branch]** {{FILL: CP-X02-conclusion | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others (the failing components named), so neither timing nor repeatability alone limits these measurements."}} **[END BRANCH 9.D]**
 
 **[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 5.5 branch), with the replication word (Section 5.7)}} A contrast that
 is not resolvable is a finding about the resolution of a software power sampler at the phase boundary, and the
@@ -1383,3 +1383,120 @@ The methods (timing bounds carried into every phase energy, floors that refuse r
 evidence, and outcome text fixed before data) transfer to any software power counter with interval-average
 records. So does the lesson of the automation: agents could run this study because the rules that protected it
 were mechanical.
+
+## Evidence and code availability
+
+{{FILL: P1-AVAIL | the public release: repository revision, archive locator and its SHA-256 manifest of registrations, sealed inventories, flag catalogs, analysis and recomputation code, harvest records, released energies and figure sources; and the statement of which raw captures are and are not released}}
+
+## References
+
+1. A. Tschand et al. "MLPerf Power: Benchmarking the Energy Efficiency of Machine Learning Systems from μWatts to MWatts for Sustainable AI." *IEEE HPCA*, 2025, pp. 1201–1216. DOI:10.1109/HPCA61900.2025.00092.
+2. Standard Performance Evaluation Corporation. *Power and Performance Benchmark Methodology*, V2.3. https://www.spec.org/power/docs/SPEC-Power_and_Performance_Methodology.pdf.
+3. S. Rivoire, M. A. Shah, P. Ranganathan, and C. Kozyrakis. "JouleSort: A Balanced Energy-Efficiency Benchmark." *ACM SIGMOD*, 2007, pp. 365–376. DOI:10.1145/1247480.1247522.
+4. K. N. Khan, M. Hirki, T. Niemi, J. K. Nurminen, and Z. Ou. "RAPL in Action: Experiences in Using RAPL for Power Measurements." *ACM TOMPECS* 3(2), 2018, Article 9. DOI:10.1145/3177754.
+5. M. Jay, V. Ostapenco, L. Lefèvre, D. Trystram, A.-C. Orgerie, and B. Fichel. "An Experimental Comparison of Software-Based Power Meters: Focus on CPU and GPU." *IEEE/ACM CCGrid*, 2023, pp. 106–118. DOI:10.1109/CCGrid57682.2023.00020.
+6. C. Niu, W. Zhang, J. Li, Y. Zhao, T. Wang, X. Wang, and Y. Chen. "TokenPowerBench: Benchmarking the Power Consumption of LLM Inference." *AAAI* 40(38), 2026, pp. 32582–32590. arXiv:2512.03024.
+7. J.-W. Chung et al. "The ML.ENERGY Benchmark: Toward Automated Inference Energy Measurement and Optimization." *NeurIPS Datasets and Benchmarks Track*, 2025. arXiv:2505.06371.
+8. Z. Li et al. "Prima.cpp: Fast 30-70B LLM Inference on Heterogeneous and Low-Resource Home Clusters." *ICLR*, 2026. arXiv:2504.08791.
+9. O. Basit, Y. Liu, Z. J. Kong, and Y. C. Hu. "DualScale: Energy-Efficient Disaggregated LLM Serving via Phase-Aware Placement and DVFS." arXiv:2602.18755, 2026.
+10. A. Benazir and F. X. Lin. "Benchmarking and Characterization of Large Language Model Inference on Apple Silicon." *POMACS* 9(3), 2025, pp. 1–26. DOI:10.1145/3771563.
+11. K.-D. Lange. "Identifying Shades of Green: The SPECpower Benchmarks." *IEEE Computer* 42(3), 2009, pp. 95–97. DOI:10.1109/MC.2009.84.
+12. B. Ruf and M. Detyniecki. "The Cost of Context: Profiling the Energy Footprint of Input Tokens in Large Language Models." *HotCarbon '26*, 2026.
+13. B. Ma, A. Afzal, J. Eitzinger, and G. Wellein. "The Illusion of Power Capping in LLM Decode: A Phase-Aware Energy Characterisation Across Attention Architectures." arXiv:2605.11999, 2026.
+14. J. Saad-Falcon, A. Narayan, et al. "Intelligence per Watt: Measuring Intelligence Efficiency of Local AI." arXiv:2511.07885, 2025.
+15. M. Dauner, M. Steinberg, A. Brunnert, B. Schicker, and B. Zönnchen. "Evaluating the Influence of Measurement Frequency on Energy Readings Using Intel RAPL and NVIDIA NVML." *HotCarbon '26*, 2026.
+16. Z. Zhuang, Y. Li, and Z. Fan. "Pre-Registering the Detectable Effect: A Paired-MDE Budget for 4-bit Quantization Benchmarks, with a Pilot Audit." arXiv:2605.28873, 2026.
+17. J. Li, Y. Zhu, B. Chen, E. K. Lee, and K. Nahrstedt. "Revisiting Disaggregated Large Language Model Serving for Performance and Energy Implications." *EuroMLSys '26*, 2026, pp. 397–406. DOI:10.1145/3805621.3807662.
+18. Y. Guo and S. Joshi. "SplitZip: Ultra Fast Lossless KV Compression for Disaggregated LLM Serving." arXiv:2605.01708, 2026.
+19. M. Hähnel, B. Döbel, M. Völp, and H. Härtig. "Measuring energy consumption for short code paths using RAPL." *ACM SIGMETRICS Performance Evaluation Review* 40(3), 2012, pp. 13–17. DOI:10.1145/2425248.2425252.
+20. A. Georges, D. Buytaert, and L. Eeckhout. "Statistically Rigorous Java Performance Evaluation." *OOPSLA '07*, 2007, pp. 57–76. DOI:10.1145/1297027.1297033.
+21. T. Mytkowicz, A. Diwan, M. Hauswirth, and P. F. Sweeney. "Producing Wrong Data Without Doing Anything Obviously Wrong!" *ASPLOS XIV*, 2009, pp. 265–276. DOI:10.1145/1508244.1508275.
+22. J. R. Klein and A. Roodman. "Blind Analysis in Nuclear and Particle Physics." *Annual Review of Nuclear and Particle Science* 55, 2005, pp. 141–163. <!-- ADDED IN THIS DRAFT: cited by the BYTES registration; full locator to be verified in the bibliography audit. -->
+23. S. Williams, A. Waterman, and D. Patterson. "Roofline: An Insightful Visual Performance Model for Multicore Architectures." *Communications of the ACM* 52(4), 2009, pp. 65–76. <!-- ADDED IN THIS DRAFT; verify. -->
+24. R. Pope et al. "Efficiently Scaling Transformer Inference." *Proceedings of Machine Learning and Systems (MLSys)*, 2023. <!-- ADDED IN THIS DRAFT; verify. -->
+25. B. A. Nosek, C. R. Ebersole, A. C. DeHaven, and D. T. Mellor. "The Preregistration Revolution." *PNAS* 115(11), 2018, pp. 2600–2606. <!-- ADDED IN THIS DRAFT; verify. -->
+26. S. Holm. "A Simple Sequentially Rejective Multiple Test Procedure." *Scandinavian Journal of Statistics* 6(2), 1979, pp. 65–70. <!-- ADDED IN THIS DRAFT; verify. -->
+27. J. G. MacKinnon and H. White. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29(3), 1985, pp. 305–325. <!-- ADDED IN THIS DRAFT; verify. -->
+
+## Appendix A. Terms
+
+| Term | Meaning (section of first use) |
+|---|---|
+| Prefill, decode | The phase that reads the prompt and computes the first output token; the phase that writes the remaining tokens (1.1) |
+| Power record; support | One sampler output: average rail power over its own time span, the support (3.1) |
+| Processor rails | CPU + GPU + neural engine power as reported by `powermetrics`; the Part 1 boundary (3.1) |
+| DC input; rest | Energy entering the laptop after its adapter, with the battery term; DC input minus rails (3.9, 6.2) |
+| Run; measured request; sampler stream | One request in its own process; the request whose energy is reported; the continuous sampler process of one run (3.2) |
+| Gross energy | Energy with no idle power subtracted (3.2) |
+| Held-average reconstruction | Treating power as constant within each record when sharing it between phases (3.2) |
+| Fiducial bound; bracket; operative timing bound b | Largest pulse-edge displacement in one calibration capture; the opening and closing captures of a session; the session's timing bound (3.3) |
+| Effective clock bound m; s; edge bound g | Clock-mapping uncertainty of a run; change in wall-minus-monotonic time over its stream; g = b + s (3.3) |
+| First-kind timing bound | Largest change in a run's assigned phase energy over the registered edge and trace movements (3.3) |
+| Repeat; quad; null quad; contrast quad | Single run; four runs ordered A, B, B, A; a quad whose sides are identical; a quad whose sides are the two models (3.4, 3.10) |
+| Unit; stratum; kept unit | One repeat or one quad; all units of one kind; a unit none of whose runs was excluded (3.4) |
+| Reported cell; target cell | One energy per model and phase from one session; the four cells the paper reports (3.4, 4.1) |
+| Attribution floor | Largest first-kind timing bound over a cell's kept runs (3.5) |
+| Detection floor (absolute, comparative, operative) | Largest false difference the estimator allows between identical runs (3.6) |
+| Floor gate | The larger of the two models' worse floors for a phase (3.6) |
+| Dominance ratio R; R_cm; branch A, B | Corner-widened over point floor; the shared-sign replay; all twelve ratios at least 2, or not (3.7) |
+| Reference workload; corpus; triplets; midpoint | Fixed drift-tracking requests and their placement in a session (3.8) |
+| Drift screen; drift allowance; scaled sensitivity line | Start-versus-end reference test; the allowance added to B; the allowance scaled by energy or duration (3.8) |
+| Metrology interval; decision interval | Statistical interval of d̄; the same widened by the deterministic bounds D (3.10) |
+| Outcome words | Not estimable; not resolvable; unresolved; direction supported (3.10) |
+| L1, L2 | Instrument result; comparative result (3.10) |
+| Pack; session; attempt | Frozen plan for one session; one unattended collection; one try at a session (4.2, 4.3) |
+| Flag; physical hazard | Recorded code with one registered effect; a measured machine state that refuses collection (4.3) |
+| Counting session; replicated | A replication session with no stop and no session-excluding condition; same outcome word and sign in every counting session (4.4) |
+| Blind dry run; release event | End-to-end run writing only structure; the recorded moment after which numbers may be read (4.6) |
+| Independent recomputation; twin | Second computation of headline numbers by code sharing nothing with the analysis (4.7, 6.3) |
+| Format-derived bytes b; resident size R; decode time τ | BYTES regressors (6.1) |
+| Fit set; held-out; word; active or resident | Models the lines are drawn through; models predicted from them; the H1 verdict per model; the MoE answer (6.2, 6.3) |
+
+## Appendix B. Historical timing diagnostics
+
+The method was developed on captures from the same laptop collected before the registered blocks, under an earlier
+clock mapping that voids their energies for claim use. Re-derived under the current rate-aware mapping, one retained
+pulse capture places all {{FILL: DX-012 | count of fitted onsets later than their commands}} of 59 fitted onsets after
+their commands and {{FILL: DX-013 | count of fitted offsets earlier than their commands}} of 59 fitted offsets before
+them, with medians of {{FILL: DX-010 | median onset lag}} and {{FILL: DX-011 | median offset lag}}. The pulses of one
+capture are dependent; these statistics characterise that capture only, and the one-directional pattern has no
+tested explanation, so no correction is applied and the symmetric timing domain includes it.
+
+![Figure B1. Historical capture re-derived with the current clock method.](../figures/fig4_edge_excursions.svg)
+
+*Figure B1. Fitted edge excursions of one historical GPU pulse capture under the current clock mapping (retained
+figure of the methods draft). Historical, diagnostic only; it establishes neither phase-energy dominance nor
+transfer to inference nor future coverage.*
+
+## Appendix C. Fixed disclosure sentences
+
+These sentences are registered and printed verbatim where they apply.
+
+- *Conditionality:* "These numbers are conditional on a window that passed the registered physical-hazard checks
+  at arm and kept at least 5 of 10 units per stratum after the registered exclusions; the kept units of each cell
+  are printed beside it."
+- *A hazard not read at arm:* "At this window's arm the [clock, battery, thermal, contention, disk] check returned
+  no reading and did not refuse; the monitor measured it during the window."
+- *Single window:* "The units of this cell were measured in one window; the interval covers variation within that
+  window, not between days or windows. The repeats and quads are modelled as independent units; that is an
+  assumption."
+- *Lost midpoint:* "The midpoint reference was lost, so drift inside this window that reverted by its end was not
+  measured; the drift allowance uses the start and end references only."
+- *Battery temperature:* "Stage S warmed by X K without levelling off; the window's drift screen [passed/failed],
+  and the reported numbers rest on that screen, not on this reading."
+- *Short prefill:* "The 42-token prefill of the decode workload is shorter than one power record and could not be
+  resolved; as registered, no value is reported."
+- *Separate windows:* "The 1.7B and 8B reported cells were collected in separate windows in a fixed order; their
+  difference is not a comparison."
+- *Dominance:* "R is a point diagnostic with no interval; 'independent' names the independent-corner component."
+- *Phase attribution:* "Phase attribution is reported without a measured instrument phase-accounting check."
+- *Fixed prompt:* "The decode contrast uses one fixed prompt; no prompt-population generality is claimed."
+- *Order:* "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order; the order was not randomized, and the p-value
+  assumes the quad differences are independent."
+- *Gross energy:* "Phase energy is gross: it includes the machine's baseline power over the phase, and the 8B phase
+  lasts longer, so part of the difference is baseline power times the extra duration."
+- *Whole-machine boundary:* "Whole-machine DC input plus the battery term, measured at the USB-C input; the
+  adapter's AC-to-DC loss is not included."
+- *BYTES dense models:* "Dense held-out models test linearity over the format-derived bytes range; their small
+  rival splits do not identify the hypothesis."
+- *BYTES per-token label:* "512 decode forward passes, one of which yields no returned token."
