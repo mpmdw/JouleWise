@@ -32,6 +32,18 @@ blinding, the independent recompute and its agreement bars, and the release reco
    `tests.b5_analysis.test_s10_chain_defects`, `tests.test_r4_acceptance_oracle`); one independent executing review
    finds no blocker (or its blockers are fixed); CI is green. No assertion is weakened to get there; a reduced fixture
    changes sizes, not checks.
+   **Amended the same day (lead, under Ed's instruction "the only real rule is good science at a speedy cadence").**
+   Seat L9-2 showed reduced fixtures cannot keep every check: L9's own `kept_units.py` refuses
+   (`exclusions_plan_mismatch`) unless each floor cell has its registered 10 repeats and 10 quads. It also measured
+   that 63 % of the joined run's wall time is 82 refits of one calibration's bytes, because the existing
+   caller-owned `physics_cache` (`joulewise/cli.py` `validate_bundle`, already used by `joulewise/b5/harvest.py`) is
+   not shared across the dry-run path. So item 1 becomes:
+   - the six short modules;
+   - one shared `physics_cache` per driver run, keyed by the calibration artifact's content hash, with failures never
+     cached. The wiring stays in non-governed code (`joulewise/whole_window.py`, `joulewise/cli.py`,
+     `joulewise/b5_analysis/`), with a test that cached and uncached outputs are byte-identical;
+   - one full-size `test_dry_run` run with the cache on;
+   - one executing review; CI.
 2. **The full-size end-to-end test is the real block-5 blind dry run on the Mac**, scheduled as directive #587 says.
 3. **The cold Fable and Opus passes** on L9 move from "at merge" to "before the release event". They may run in
    parallel with the dry run. The release still needs them.
