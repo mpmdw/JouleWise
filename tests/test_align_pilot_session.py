@@ -326,6 +326,74 @@ class SessionPrepareTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout=json.dumps({k: payload for k in h.desk_identity.EXPECTED}), stderr='')
         return SimpleNamespace(returncode=0, stdout='a'*40 if 'rev-parse' in argv else '', stderr='')
 
+    def prepared(self):
+        with patch.object(plan, 'ledger_head_status', return_value={'blocking': []}), redirect_stdout(io.StringIO()):
+            return s.prepare(self.measurement, self.session, run=self.producer, now=lambda: 1700000000,
+                             statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1), capacity=lambda _: None)
+
+    def seed_collection(self, state, align_bundle):
+        """Scaffold members from the strict seed bundle, episodes from a real mock align bundle.
+
+        Mirrors tests/test_bytes_h_session.py seed_collection; no model or collector runs.
+        """
+        clock, journal = [], []
+        tree = h.read(self.measurement / s.KIT / 'plan_tree.json')
+        seed = ROOT / 'tests/fixtures/d117_v2_production/strict_seed_bundle'
+        order = 0
+        for stage in tree['stage_graph']:
+            start = 1000 + order * 20
+            if stage['kind'] == 'campaign_collection':
+                manifest = h.read(self.measurement / stage['input']['path'])
+                for row in manifest['executed_order']:
+                    rid = row['run_id']
+                    key = 'bound' if 'bound-collection' in stage['stage_id'] else 'claim'
+                    bundle = Path(state['runs_roots'][key]) / rid
+                    shutil.copytree(align_bundle if 'episodes-' in stage['stage_id'] else seed, bundle)
+                    config = h.read((self.measurement / stage['input']['path']).parent / row['config'])
+                    h.write(bundle / 'config.json', config)
+                    for name in ('metadata.json', 'summary_metrics.json'):
+                        value = h.read(bundle / name); value['run_id'] = rid; h.write(bundle / name, value)
+                    a = (1000 + order * 20) * 10**9; b = a + 15 * 10**9
+                    for event, stamp in [('start', a), ('end', b)]:
+                        clock.append({'run_id': rid, 'event': event, 'clock': {'wall_s': stamp / 1e9,
+                            'monotonic_ns': stamp, 'monotonic_raw_ns': stamp}})
+                    order += 1
+                end = 1000 + order * 20
+            else:
+                end = start + 1
+            journal.append({'stage_id': stage['stage_id'], 'kind': stage['kind'], 'rc': 0,
+                            'started_epoch_s': start, 'ended_epoch_s': end})
+        custody = self.session / 'custody'
+        def jsonl(path, values):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(''.join(json.dumps(v) + '\n' for v in values))
+        jsonl(custody / 'collection/run_clock.jsonl', clock)
+        jsonl(custody / 'night/chain-stages.jsonl', journal)
+        h.write(custody / 'night/chain.started', {'pgid': None})
+        h.write(custody / 'night/chain.exited', {'exit_code': 0})
+        h.write(custody / 'night/result.json', {'chain_exit_code': 0})
+
+    def test_prepared_session_desk_reads_episodes_then_runs_the_real_harvest(self):
+        import subprocess
+        state = self.prepared()
+        self.assertEqual(state['preparation_status'], 'STAGED')
+        with tempfile.TemporaryDirectory() as directory, fixture_source() as source:
+            runs = Path(directory)
+            bundle = SyntheticDeskTests.run_member(self, runs, fixture_spec(source, 'sabotage', 1), 'align-seed')
+            self.seed_collection(state, bundle)
+        with redirect_stdout(io.StringIO()):
+            status = s.desk(self.session, run=subprocess.run)
+        result = h.read(self.session / 'PILOT.json')
+        self.assertEqual(len(result['members']), 12)
+        # Every episode bundle read back; repeats are byte-identical seeds here.
+        self.assertTrue(result['checks']['I1_all_bundles_readable'], result['members'][0])
+        self.assertTrue(result['checks']['I2_energy_on_every_episode'])
+        self.assertTrue(result['checks']['I3_attribution_tiles_episode'])
+        # The real non-claim harvest over 25 scaffold and 12 align bundles.
+        stderr = (self.session / 'staging/harvest.stderr').read_text()
+        self.assertIn(status['harvest_exit'], (0, 6), stderr[-3000:])
+        self.assertIn('--non-claim', status['harvest_argv'])
+
     def test_prepare_stages_the_align_kit_without_install_or_loop_registration(self):
         with patch.object(plan, 'ledger_head_status', return_value={'blocking': []}), redirect_stdout(io.StringIO()) as out:
             state = s.prepare(self.measurement, self.session, run=self.producer, now=lambda: 1700000000,
