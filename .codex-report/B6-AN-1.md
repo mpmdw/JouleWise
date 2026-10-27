@@ -64,6 +64,19 @@ existing remote branch I checked carries both heads. The L9 side adds 11 files u
   `scripts/digest_pin_census.py`, `scripts/repin.py`, `scripts/extract_detection_floors.py`,
   `configs/gates/hazard_refusals.json`, `configs/pins/registry.json`,
   `tests/test_harvest_b5_window.py` and the block-5 SEAL_RECORD.
+- Design requirements that arrived after the stop, from `docs/design/analysis_cadence_plan.md` §2.3 and §4
+  (main at 3382de4d, row "DAG scheduling in the block-6 driver (2.3) | B6-AN-1"). They are carried here for
+  when work resumes:
+  - Schedule the analysis as a two-level DAG. The six ALPHA/BETA counting sessions run their per-session
+    block-5 steps in parallel (a process pool with configurable workers; serial when workers=1). Each GAMMA
+    session waits only on its paired floor sessions (G r1 -> A r1/B r1; G r2 -> A r3/B r2; G r3 -> A r3/B r3).
+    The §10 summary and side-by-side table run last.
+  - Serial and parallel scheduling give byte-identical outputs, with records assembled in registered order.
+    A test proves it.
+  - A single newly harvested session can be analysed blind on its own the day it lands (§12.2), with
+    structure-only output.
+  - Call L9's `dry_run.py` and `steps.py` entry points rather than copying their loops, so the driver
+    inherits L9-2's shared calibration cache and parallel steps 1-2.
 - Still owed after the merge: all of A1 to A7, §13's full-size synthetic run, and the two cold passes.
 
 ## NEEDS_SCOPE
