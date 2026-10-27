@@ -1,0 +1,23 @@
+{
+ "neg8-window-end-r1": {
+  "reduce_exit": 0,
+  "reduce_stdout": "a1a664763e2ee32a605fe7be85e301d191275b4ea7579159ecb7230d35622793",
+  "reduced_json": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+  "validate_exit": 0,
+  "validate_stdout": "16502e552ce83a5ae42e76f8e31b3681a832d5e34b7349d2edba8b855954486d"
+ },
+ "neg8-window-midpoint": {
+  "reduce_exit": 0,
+  "reduce_stdout": "087511a149c62998d8a0ca2e006971b4a586d0e26ad3f9c1346f4ca235abcff0",
+  "reduced_json": "78e31230efc0fc36c659206d395ba68976a0f536ced85aedf1ceef38a1b55005",
+  "validate_exit": 0,
+  "validate_stdout": "1781a2d1f46e12a61d40f811ef52258adc5c939686a5cd523773040e89c3427c"
+ },
+ "neg8-window-start-r1": {
+  "reduce_exit": 2,
+  "reduce_stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "reduced_json": null,
+  "validate_exit": 2,
+  "validate_stdout": "4e53e318403b42e03264b0da12f4999e28b85a9f8f3513453729f0515b9fa584"
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "cold_forced_call1": {
+  "records": [
+   [
+    "tooling_refusal",
+    "rereduction_calibration_dependent_fields_differ"
+   ]
+  ],
+  "outputs": [],
+  "cache": 0
+ },
+ "warm_forced_call2": {
+  "records": [
+   [
+    "ok",
+    null
+   ]
+  ],
+  "outputs": [
+   "rereduced_alpha_first",
+   "rereduced_alpha_second"
+  ],
+  "cache": 1
+ },
+ "warm_forced_equals_unforced": true
+}

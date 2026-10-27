@@ -1,0 +1,16 @@
+{
+ "pool_wall_s": 14.7,
+ "shared_cache_after_pool": [],
+ "inproc_with_ctx": [
+  [],
+  []
+ ],
+ "shared_cache_after_inproc": [
+  "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b"
+ ],
+ "pool_results": [
+  [],
+  []
+ ],
+ "pool_eq_serial_eq_ctx": true
+}

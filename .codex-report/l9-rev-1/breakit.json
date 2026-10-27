@@ -1,0 +1,77 @@
+{
+ "T1_cache_keys": [
+  "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b"
+ ],
+ "T1_cached_A": {
+  "reduce_exit": 0,
+  "reduce_stdout": "3d02ded08596b75265c12728c8a3b6b41a520d40f582666b1f890a920890475e",
+  "reduced_json": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+  "validate_exit": 0,
+  "validate_stdout": "16502e552ce83a5ae42e76f8e31b3681a832d5e34b7349d2edba8b855954486d"
+ },
+ "T1_cached_B": {
+  "reduce_exit": 0,
+  "reduce_stdout": "158bc26c808edb940eb807549254407578a5bd4a20dad037c6ec10189707a277",
+  "reduced_json": "78e31230efc0fc36c659206d395ba68976a0f536ced85aedf1ceef38a1b55005",
+  "validate_exit": 0,
+  "validate_stdout": "1781a2d1f46e12a61d40f811ef52258adc5c939686a5cd523773040e89c3427c"
+ },
+ "T1_key_is_evidence_sha": true,
+ "T1_refits": 1,
+ "T2_cached_forced_reduce": {
+  "exit": 0,
+  "reduced_json": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+  "uncertainty": "bounded"
+ },
+ "T2_refits": 2,
+ "T2_uncached_forced_reduce": {
+  "exit": 0,
+  "reduced_json": "5ab0c4baeed511eadedba8177756cb729638e14104415877b33ad036680b4657",
+  "uncertainty": "not_estimable"
+ },
+ "T3_cache_after_failure": {},
+ "T3_cache_after_success": [
+  "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b"
+ ],
+ "T3_forced_validate_exit": 2,
+ "T3_normal_validate_exit": 0,
+ "T3_refits": 2,
+ "T4_inproc_with_ctx": "VOID: spawn children re-executed this unguarded script; see pool.json",
+ "T4_pool_cache_after": "VOID: spawn children re-executed this unguarded script; see pool.json",
+ "T4_pool_equals_serial": "VOID: spawn children re-executed this unguarded script; see pool.json",
+ "T4_pool_results": "VOID: spawn children re-executed this unguarded script; see pool.json",
+ "T5_harvest_own_after": [
+  "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b"
+ ],
+ "T5_harvest_problems": [],
+ "T5_refits": 1,
+ "T5_shared_after": [],
+ "T6_thread_sees": {
+  "pool_thread": null,
+  "thread": null
+ },
+ "T7_distinct_dicts": true,
+ "T7_each_run_starts_empty": [
+  {},
+  {},
+  {}
+ ],
+ "T7_outcomes": [
+  "AnalysisRefusal",
+  [
+   "after",
+   null
+  ],
+  "AnalysisRefusal",
+  [
+   "after",
+   null
+  ],
+  "AnalysisRefusal",
+  [
+   "after",
+   null
+  ]
+ ],
+ "_note": "last of 3 JSON objects in stdout (parent process); the others were printed by spawn children"
+}
