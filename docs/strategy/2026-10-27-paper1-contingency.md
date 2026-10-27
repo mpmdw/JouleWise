@@ -111,3 +111,14 @@ about 6-10 November, while Paper 1 is written. Three things decide the start:
 
 Paper 1 never waits on DIFFICULTY. If a DIFFICULTY problem needs the lead's attention during the 15-22 Nov writing
 window, Paper 1 goes first.
+
+**Amended the same day (Ed):** "after bytes, i think agent-monitoring pilots ... is the highest prio research
+candidate, even above difficulty if nothing in it relies on difficulty finishing". Nothing does. The alignment pipeline
+(`lane/2026-10-21-align-integration`, `docs/align/PIPELINE.md` there) names no DIFFICULTY input. So the order on the
+measurement Mac after BYTES closes is:
+1. agent-monitoring pilots (local models, from about 6-10 Nov, during Paper 1 writing);
+2. then DIFFICULTY.
+
+Points 1-3 above apply to the pilots in place of DIFFICULTY. The prep seat ALIGN-READY-1 does the same readiness work
+for the pilots that DIF-READY-1 does for DIFFICULTY. DIF-READY-1 continues at lower priority, since it is cloud-only
+work.
