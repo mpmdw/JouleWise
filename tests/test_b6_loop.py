@@ -168,7 +168,9 @@ class LoopTests(unittest.TestCase):
         opened = dict(self.loop.regs)
         self.assertEqual(set(opened), {"alpha", "beta", "gamma"})
         rejected = self.loop.state["pack_not_open"]
-        self.assertEqual(set(rejected), {f"configs/b6/packs/{p}/registration.json" for p in drafts})
+        # The draft BYTES extension pack (bytes_extension_models_2026-10-27.md) is
+        # rejected by the same gate until it is registered.
+        self.assertEqual(set(rejected), {f"configs/b6/packs/{p}/registration.json" for p in drafts | {"bytes-s7-p1"}})
         for reasons in rejected.values():
             self.assertIn("draft", reasons)
 

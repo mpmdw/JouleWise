@@ -208,6 +208,10 @@ fix416 gates), run on this branch and on an untouched worktree at `991358f73`:
   `tests/b6/test_plan_inputs.py`, `tests/b6/test_fix416_gates.py` (skip registrations carrying `bytes_extension`) and
   `tests/b6/test_release_subset.py` (it asserts the extension key is exactly one and `heldout`, then the registered ten
   plus NEG-8 as before). All four now pass. These are test-only edits for the new packs; no production code changed.
+- `tests.test_b6_loop`, `tests.test_bytes_gates`: one more branch-only failure,
+  `test_bytes_drafts_never_enter_live_loop_despite_base_order`. The real git/status gate rejects the draft
+  `bytes-s7-p1` (the intended behavior), so its expected rejected set now includes it. The 2 remaining errors there are
+  `/bin/zsh` (environmental).
 - The full repository suite was not run here. The Mac whole suite remains the merge gate.
 
 ## 7. For the gate-policy refuter
