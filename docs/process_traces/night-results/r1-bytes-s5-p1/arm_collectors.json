@@ -1,0 +1,68 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/.venv/bin/python",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-b6/sessions/r1-bytes-s5-p1/custody",
+        "--repo",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes",
+        "--pack",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/campaigns/bytes-s5-p1",
+        "--plan-id",
+        "r1-bytes-s5-p1",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "10ffc5b9e2d153458c50cc9ce8cba4b121f0103b",
+        "--chain",
+        "/Users/edr/night-b6/sessions/r1-bytes-s5-p1/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-b6/sessions/r1-bytes-s5-p1/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "r1-bytes-s5-p1-calibration",
+        "--expected-pack-tree-sha256",
+        "08b2033026071baef42f6aeec78cca0839c43a43b44e60a02b4577a716bf82b3",
+        "--catalog",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/b6/registration/identity_pins.json"
+      ],
+      "elapsed_s": 16.286579792,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 1062518037992333,
+        "monotonic_raw_ns": 1062518037992125,
+        "wall_ns": 1793078181054209000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 1062501751412541,
+        "monotonic_raw_ns": 1062501751412333,
+        "wall_ns": 1793078164767629000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "2188e0d820d7d410260312d40fe5af57eacc2c73c2563596b5d41bbb1e461e75",
+        "size": 394
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
