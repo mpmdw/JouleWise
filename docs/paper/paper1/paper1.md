@@ -497,3 +497,166 @@ confirmatory (no replacement or extra run was added after the fact). Otherwise i
 Higher levels (a model checked on held-out cells, replication on other machines) are out of reach in Part 1.
 The two floor packs' reported cells, collected in separate sessions in a fixed order, are printed side by side
 at L1 and are never differenced into a comparison.
+
+## 4. Experimental design
+
+### 4.1 Models, workloads and stack
+
+Part 1 uses two models from the same family, Qwen3-1.7B and Qwen3-8B, both quantized to 4 bits (each weight
+stored in 4 bits with a scale and offset per group of weights) and published as MLX checkpoints. Model files,
+tokenizer, runtime packages, kernel library, sampler and output policy are pinned by hash for every run
+({{FILL: CP-X01-identity | model identities and revisions, runtime and library versions, tokenizer and chat-template digests, from the identity pins and prompt pin}}). Two workloads are registered:
+
+- **Decode workload.** One fixed prompt of 42 tokens, rendered through the model family's chat template with
+  its "thinking" mode off. Generation is greedy (the most probable token each time) and forced to exactly 512
+  output tokens by suppressing the end-of-sequence token. Its decode phase is reported. Its 42-token prefill is
+  registered as not resolvable and never printed.
+- **Prefill workload.** One fixed prompt of exactly 2,048 tokens, with 512 output tokens. Its prefill phase is
+  reported. The length was chosen in a pre-collection probe as the shortest of 512, 1,024, 2,048 and 4,096 tokens
+  at which every probe run of the smaller model overlapped at least five sampler records
+  ({{FILL: CP-X01-length | the selection record that fixed the 2,048-token length, with its digest}}).
+
+The four **target cells** are decode and 2,048-token prefill for each model. The results support no statement
+about other prompts, other prompt lengths, other models, other machines or another measurement boundary.
+
+### 4.2 Packs and the shape of a session
+
+A **pack** is a frozen, hash-pinned plan for one measurement session. Three packs are registered:
+
+- the **1.7B floor pack** measures Qwen3-1.7B's reported cells and detection floors;
+- the **8B floor pack** does the same for Qwen3-8B;
+- the **contrast pack** measures the two contrasts, decode and prefill, in contrast quads.
+
+A **session** is one unattended collection of a whole pack on the laptop, of roughly six hours, with no other
+workload and no AI agent process on the machine. Its shape is fixed (Figure 2): a 60 s settle; the opening
+calibration capture; the 18-run reference corpus; the start triplet; the decode half; the midpoint reference;
+the prefill half; the end triplet; and the closing calibration capture. In each floor pack each half holds 10
+absolute repeats followed by 10 null quads (50 runs); in the contrast pack each half holds 10 contrast quads (40
+runs), with one diagnostic reference run in the middle that enters neither the drift screen nor the allowance.
+Quad order in the contrast pack is fixed, 1.7B, 8B, 8B, 1.7B, and not randomized: a linear drift cancels inside
+each quad, a curved drift does not.
+
+![Figure 2. Shape of one measurement session (schematic).](figures/fig_p1_session_shape.svg)
+
+*Figure 2. Schematic, no measured data. One session, left to right: settle, opening calibration capture,
+reference corpus, start triplet, decode half, midpoint reference, prefill half, end triplet, closing capture.
+The floor packs fill each half with 10 repeats and 10 null quads; the contrast pack with 10 contrast quads around
+one diagnostic reference. Widths are not to scale.*
+
+### 4.3 The primary block
+
+The primary block (registered internally as measurement block 5) collected one analysed session of each pack.
+Its registration, analysis plan, flag catalog and an inventory of the SHA-256 digest of every code and
+configuration file a session reads were committed together and sealed by an independent judgment before the
+first session armed. Every session ran from a separate checkout of the repository at the sealed commit.
+
+**What refuses, and what is only recorded.** A session is *armed*, that is allowed to start, only after direct
+measurements show none of the registered physical hazards: a clock step or drift beyond budget, running on battery
+or charging, thermal pressure, an outside process drawing power, too little free disk, a sampler that is not
+sampling, and an AI agent process alive on the machine (agent processes draw 8 to 47 W while nominally idle).
+During the session a monitor measures the same hazards. Only a directly measured physical hazard refuses
+collection or removes data. Every other condition is written as a **flag**, a recorded code beside the data, and
+a registered catalog gives each code exactly one effect: exclude the run, exclude the session, or disclose only.
+Battery assist (the battery helping the adapter at peak load) is disclosed, not excluded, because excluding it
+would select runs by load; each affected cell also prints a labelled line without the assisted units. Removals
+by three load-correlated codes (two thermal-pressure codes and outside-process overlap with a request) are
+likewise accompanied by a labelled line computed as if those codes had not applied.
+
+**Attempts.** An *attempt* is one try at a session. An attempt that a physical hazard stopped, or that the drift
+screen or another session-level rule excluded, is kept, listed and never analysed; the pack is re-armed. Re-arming
+may depend only on structure (verdicts, flag counts, unit counts), never on an energy. The attempt history of every
+pack is printed with the results (Section 5.1).
+
+### 4.4 The replication block
+
+A single session says how much a number moves from run to run on one afternoon, and nothing about whether it
+holds on another day. The replication block (registered internally as block 6) was designed before any
+primary-block number was seen, so that it would be collected whatever the primary block showed. Its rules are:
+
+- **Same experiment.** The same three packs and session shape, with no change inside a run: same models,
+  workloads, prompts, token counts, idle baseline, cooldown rule and stage order. The four estimator source files
+  are byte-identical to the primary block's.
+- **What counts.** A session **counts** when no physical hazard stopped it and it carries no session-excluding
+  condition. Those conditions are physical (a power-path change or clock step during calibration, an operative
+  timing bound above a pre-set stop line, a stop for sampler loss, disk, heat, deadline or agent pauses); a
+  number that would be undefined (missing calibration, too few clean references, fewer than five kept units in a
+  target stratum, no science runs); wrong data (model files, runtime stack or number-bearing code differing from
+  the registered ones); the drift screen; and structural failure of the collection code. Twenty-five of the
+  primary block's 32 session-removing codes became flags only.
+- **How many, and when it closes.** The target is 3 counting sessions per pack and the minimum 2. Sessions run in
+  rotating rounds (floor packs and contrast pack in the orders 1.7B, 8B, contrast; then 8B, contrast, 1.7B; then
+  contrast, 1.7B, 8B), so that slow changes of the machine spread over all packs and each pack's start time moves
+  through the day. The block **closes** when every pack has 3 counting sessions or at the end of 1 November 2026,
+  Pacific time, whichever is first; a pack with fewer than 3 is printed as **short**.
+- **Floor pairing.** Each contrast session is judged against floors from a 1.7B and an 8B floor session: the same
+  round's counting session if it exists, otherwise the next counting one, otherwise the previous one, and failing
+  all of these the primary block's, labelled "floor from the primary block". Pairing depends only on which sessions
+  count, never on an energy.
+- **Estimators.** The primary block's four estimators, applied to each counting session separately; nothing is
+  pooled across sessions.
+- **The one new estimator**, a **between-session summary**: for each printed quantity, each session's value
+  (the primary block's analysed session and every counting replication session), their mean and their sample
+  standard deviation. No pooled interval, no test, and no claim rests on it.
+- **The replication word.** A contrast is **replicated** when every counting replication session gives the same
+  outcome word as the primary block's analysed session *and* the same sign of d̄; otherwise it is **not
+  replicated**, and each session's word and sign are printed. If the primary contrast is not estimable, the word is
+  not used. This definition was fixed before any data and is a description of agreement, not a new test.
+- **The flagged-inclusive line.** Beside every registered result, a labelled line adds back the non-counting
+  sessions that ran the registered experiment and can be computed, ignoring session-level exclusions. It never
+  replaces the registered value and shows what the session-level rules cost.
+
+Figure 3 shows the order of sessions in the collection period.
+
+![Figure 3. Order of measurement sessions (schematic ledger).](figures/fig_p1_session_ledger.svg)
+
+*Figure 3. Schematic of the registered ordering, with no outcomes. Rows are rounds of the replication block;
+cells are the attempts of each pack in the registered rotation, with BYTES sessions interleaved between rounds
+(Section 6.2). Which attempts counted is filled from the harvest records
+({{FILL: P1-LEDGER | per-attempt verdicts (counting or not, with cause family) for every primary, replication and BYTES attempt, from the harvest verdicts and attempt histories}}).*
+
+### 4.5 Pre-registration and changes after registration
+
+Each registration fixes, before its first session, which data count, every estimator, every printed sentence for
+each outcome, and the sizing. The primary block's files were sealed by recording their SHA-256 digests in a seal
+record; a session refuses to start if any file it reads differs from the sealed bytes. The replication block's
+registration passed an independent judgment and was committed before its first round began; the BYTES
+registration likewise before its first session.
+
+Errors found after registration were handled in three ways, each recorded with its date and reason. A
+**prospective erratum** changes a rule before any data it governs exist. A **registered deviation** records where
+the executed procedure departed from the text. A **disclosed repair** corrects analysis code found, after release,
+to differ from the registered arithmetic; the repair restores the registered arithmetic and is reported with the
+result. No registered arithmetic was changed after data existed
+({{FILL: P1-DEV-LIST | list of every erratum, deviation and disclosed repair with its date and whether it preceded or followed the data it governs, from the seal record, the replication registration's change log and the BYTES addenda}}).
+
+### 4.6 Blinding and release
+
+From each block's first session until its release, no person or AI agent read a measured energy, power, phase
+duration, floor, ratio, contrast, outcome word or calibration value. The collection and analysis programs wrote
+these into restricted files listed in a custody map; everything released during collection was **structure**
+only: verdicts, whether a session counted, flag counts by code, kept-unit counts, hazard measurements, and timing
+that is not a phase duration. A unit removed by a restricted code was reported only as "removed (restricted
+code)".
+
+Before release, the analysis programs ran end to end over the real archives in a **blind dry run** that wrote out
+only structure (exit codes, schema checks, refusal codes). A **release event** then tied the digests of the sealed
+documents and the final harvest records together; the registered analysis ran after it, and any analysis not
+registered is labelled exploratory. The replication block's numbers were released only after the replication
+block had closed *and* the primary block had been released, because replication values estimate the same
+quantities and reading them first would have unblinded the primary analysis in all but name. BYTES used a
+stronger, two-stage blinding with hidden multiplicative offsets (Section 6.3).
+
+{{FILL: P1-RELEASE | dates of the primary-block release event, the replication-block release and the BYTES stage-1 commitment and stage-2 release, with the digests each record ties, from the seal-record "Release event" section and the release records}}
+
+### 4.7 Independent recomputation
+
+Before a result was printed, the headline numbers were computed a second time from the raw power records by an
+**independent recomputation**: code written to the registered definitions that shares no code with the analysis
+programs. The registered agreement tolerance is that each run's phase energy agrees within 1 mJ and every printed
+quantity, compared unrounded, agrees within half a unit of its last printed digit. The tolerance was set from a
+non-claim rehearsal in which an independent overlap sum reproduced every phase energy far inside it, while the
+defects it must catch are far larger (a 1 ms edge shift at the powers involved is tens of millijoules; a dropped
+record is joules). The observed agreement is printed beside the tolerance and is never used as one. Part 2 uses
+an independent **twin** implementation in the same way (Section 6.3).
+
+{{FILL: P1-RECOMPUTE | the comparison table of the independent recomputation against the analysis for every printed Part 1 quantity: tolerance, observed largest difference, and agreement word, per block; checked by one executing reader before printing}}
