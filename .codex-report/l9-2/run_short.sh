@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Six short modules, sequential, one process each, fresh TMPDIR each.
+run=$1
+for m in tests.test_authentication_io tests.test_docs_freshness tests.b5_analysis.test_sensitivity_guard \
+         tests.b5_analysis.test_mint_kept_units tests.b5_analysis.test_s10_chain_defects tests.test_r4_acceptance_oracle; do
+  "$(dirname "$0")/run_module.sh" "$run" "$m"
+done
+touch "$run/ALL_DONE"
