@@ -433,8 +433,9 @@ def main(argv=None):
     # Public line: per-family pass/fail counts and structure only, never a value or a difference.
     print("bar_set=" + str(result["bar_set"]) + " families=" + json.dumps(counts, sort_keys=True, separators=(",", ":"))
           + " step11_unmapped=" + str(len(cover["unmapped"])) + " step11_absent=" + ",".join(cover["absent_sources"] or ["none"]))
-    if cover["unmapped"]:
-        print("refused=step11_unmapped_fill", file=sys.stderr)
+    if cover["unmapped"] or cover["absent_sources"]:
+        # Coverage of step 11 cannot be shown without every step-11 output.
+        print("refused=" + ("step11_unmapped_fill" if cover["unmapped"] else "step11_outputs_absent"), file=sys.stderr)
         return 2
     return 0 if all(v["fail"] == 0 for v in counts.values()) else 1
 

@@ -66,6 +66,7 @@ def l9_files():
     files[f"outputs/{SHA}-claim-verdicts.json"] = {"contrasts": rows}
     files[f"outputs/{SHA}-results-fill-input.json"] = {"gamma": {"contrasts": [
         {"contrast_id": DECODE, "estimate": -1.25, "n": 9}, {"contrast_id": PREFILL, "estimate": -1.25, "n": 9}]}}
+    files["disclosures/record.json"] = {"note": "synthetic"}
     return files
 
 
@@ -98,7 +99,8 @@ def recompute_output():
 
 
 RULES = ((r"fill:gamma/contrasts/\*/estimate", "contrast_j"), (r"fill:gamma/contrasts/\*/n", "count"),
-         (r"fill:gamma/contrasts/\*/contrast_id", "uncovered:identifier, compared by key"))
+         (r"fill:gamma/contrasts/\*/contrast_id", "uncovered:identifier, compared by key"),
+         (r"disclosure:note", "uncovered:synthetic fixture text"))
 
 
 class ComparatorTests(unittest.TestCase):
@@ -237,6 +239,17 @@ class ComparatorTests(unittest.TestCase):
         # Counterfactual: a catch-all rule (no exhaustiveness) maps it silently.
         result = self.run_compare(rules=RULES + ((r".*", "uncovered:catch-all"),))
         self.assertEqual(result["coverage"]["unmapped"], [])
+
+    def test_absent_step11_output_refuses(self):
+        del self.files[f"outputs/{SHA}-results-fill-input.json"]
+        ours = self.root / "o.json"
+        ours.write_text(json.dumps(self.ours))
+        err = io.StringIO()
+        with mock.patch.object(cmp, "COVERAGE", RULES), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(err):
+            code = cmp.main(["--l9-custody", str(self.custody()), "--recompute", str(ours),
+                             "--bars", str(BARS["s13_block6"]), "--restricted-out", str(self.root / "r.json")])
+        self.assertEqual((code, err.getvalue()), (2, "refused=step11_outputs_absent\n"))
 
     def test_mapping_to_a_family_with_no_comparison_is_not_coverage(self):
         rules = ((r"fill:gamma/contrasts/\*/estimate", "reported_cell_j"),) + RULES[1:]
