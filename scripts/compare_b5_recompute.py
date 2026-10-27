@@ -158,3 +158,55 @@ class Custody:
         if len(names) > 1:
             raise Refusal("l9_output_ambiguous")
         return self.read(names[0]) if names else None
+
+
+def compare_runs(c, custody, ours):
+    """S-13's per-run term: each kept run's phase energies (and gross request energy)."""
+    members = ours.get("members")
+    if not isinstance(members, dict):
+        raise Refusal("recompute_member_detail_missing")
+    for name in custody.names(r"rereduced/(alpha|beta|gamma)/[^/]+\.rereduced\.json"):
+        pack, file = name.split("/")[1:]
+        rid = file[:-len(".rereduced.json")]
+        l9 = custody.read(name)
+        mine = get(members, PACKS[pack], rid, "E_j", default={})
+        for phase in ("prefill", "decode"):
+            c.numeric("run_phase_energy_j", pack + "/" + rid + "/" + phase,
+                      get(l9, "phase_energy_j", phase), get(mine, phase))
+        c.numeric("run_phase_energy_j", pack + "/" + rid + "/request", l9.get("gross_energy_j"), get(mine, "request"))
+
+
+FLOOR_FIELDS = ("corner_widened_guarded_floor_j", "corner_widened_unguarded_floor_j", "drift_widened_guarded_floor_j",
+                "drift_widened_unguarded_floor_j", "guarded_floor_j", "unguarded_floor_j", "mean_j",
+                "sample_stddev_j", "prediction_component_j", "max_abs_deviation_j")
+
+
+def cell_phase(cell_id):
+    return "decode" if "decode" in cell_id else "prefill"
+
+
+def compare_floors(c, custody, ours):
+    for pack in ("alpha", "beta"):
+        report = custody.one(r"mint/[0-9a-f]{64}-extraction-" + pack + r"\.json")
+        cells = get(report, "cells", default=[]) if report is not None else []
+        if report is None:
+            c.exact("p42_status", pack + "/extraction", None, "expected_unresolvable")
+            continue
+        for cell in cells:
+            cid, kind = cell.get("cell_id"), cell.get("kind")
+            if "p42" in cid:
+                # Registered p42 exit: the floor cell is not extractable (step 4 p42_floor_cells_only).
+                l9 = "expected_unresolvable" if cell.get("extractable") is False else "extractable"
+                tag = "qwen3-1p7b" if pack == "alpha" else "qwen3-8b"
+                mine = get(ours, "p42", "df-ph-prefill-p42-" + tag, "status")
+                c.exact("p42_status", pack + "/" + cid, l9, mine)
+                continue
+            key = MODELS[pack] + "/" + cell_phase(cid) + "/" + kind
+            mine = get(ours, "floors", key, default={})
+            floor = cell.get("floor") or {}
+            for field in FLOOR_FIELDS:
+                c.numeric("floor_j", key + "/" + field, floor.get(field), mine.get(field))
+            c.numeric("floor_j", key + "/operative_floor_j", cell.get("operative_floor_j"),
+                      mine.get("drift_widened_guarded_floor_j"))
+            c.numeric("floor_j", key + "/allowance_j", floor.get("whole_window_drift_allowance_j"), mine.get("allowance_j"))
+            c.numeric("count", key + "/n", floor.get("n"), mine.get("n"))
