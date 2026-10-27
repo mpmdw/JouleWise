@@ -286,7 +286,7 @@ None.
 - Real wall-time savings: only refit counts were measured (1 refit for 104 members).
 - macOS, zsh, and the `/opt/homebrew` interpreter path (setup refused; see the header).
 
-VERDICT: ACCEPT_WITH_FIXES
+VERDICT at `c20fa72` (superseded by §7): ACCEPT_WITH_FIXES
 
 - BLOCKER: none
 - MAJOR: none
@@ -300,3 +300,100 @@ VERDICT: ACCEPT_WITH_FIXES
 - NIT-3 `joulewise/cli.py:1949`: `reduce` ignores the V2 session cache while strict validation prefers it
 - NIT-4 `configs/analysis/b5/dry_run_refusal_classes.json`: edit outside the named paths; disclosed, unpinned
 - NIT-5 `joulewise/b5_analysis/dry_run.py` `step_2`: non-zero exit with output leaves an unregistered file
+
+
+## 7. Addendum: fix round `5107713f5..f059286bc` (report at `35e0519e2`)
+
+This reviews the fix round as one delta, `c20fa72..f059286bc`, with MINOR-5 as the focus. Executed on a worktree
+at `f059286bc`.
+
+**Scope.** No governed file changed: `git diff --stat c20fa72 origin/lane/2026-10-27-l9-2` on
+`powermetrics_fiducial.py`, `uncertainty_evidence.py`, `adapters/powermetrics.py` and `reduce.py` is empty. The
+code paths changed are:
+
+- `b5_analysis/deadline_observer.py` (new), `b5_analysis/dry_run.py`, `b5_analysis/bracket.py`;
+- a comment in `whole_window.py`;
+- three new tooling codes in `dry_run_refusal_classes.json`;
+- tests.
+
+The seat report no longer carries the stale lines from MINOR-1.
+
+**Mechanism.** `observe_wall_deadline()` takes a free `sys.monitoring` tool id and sets a local PY_RETURN event on
+`powermetrics_fiducial.detect_pulses.__code__`. It counts returned detections whose `projection_budget_trigger` is
+`"wall_deadline"`. It replaces no callable. `dry_run.run` opens it next to the cache. For each step it compares
+the count before and after the step function. That covers ok, `AnalysisRefusal` and generic-exception exits: the
+generic path no longer returns early (`dry_run.py:1240-1263`). On any change, the step's records become one record
+with `calibration_wall_deadline_fired`, and every later step is `not_run`. If no tool id is free, every step
+refuses with `calibration_deadline_observer_unavailable`. Both codes are tooling refusals in the class table.
+`detect_pulses` is the only constructor of the wall budget (`powermetrics_fiducial.py:978`). It catches the
+budget exception internally and returns the trigger (`:1011`), so every in-process firing reaches the observer.
+
+Executed:
+
+- **Lane tests:** `python3.13 -m unittest -v tests.b5_analysis.test_deadline_observer tests.b5_analysis.test_deadline_tripwire tests.b5_analysis.test_shared_physics_cache`:
+  **28/28 OK, 353.2 s** (`l9-rev-1/fix_tests_f059286bc.txt`). The observer tests force a firing at each site:
+  step-2 reduce, the bracket refit, the NEG-8 replay callback and the NEG-8 energy re-derivation. Each is counted.
+  The driver tests show the single code and `not_run` afterwards, unforced records equal to a run without the
+  observer, a counterfactual where an ok step passes without the observer, an unavailable observer, and the mint
+  code mapping.
+- **Break probes** (`l9-rev-1/observer_break.py`, `observer_break.json`):
+  - **P1 unforced byte-identity.** `validate-bundle --strict` and `reduce` on A and B, plain and then under cache
+    plus observer as `dry_run.run` opens them: identical exits, stdout and reduction bytes (`3a867f60…`,
+    `78e31230…`), 0 firings.
+  - **P2 threads.** A forced firing on a `threading.Thread` and on a `ThreadPoolExecutor` worker inside the
+    observed scope is counted (2 of 2). `sys.monitoring` is interpreter-wide.
+  - **P4 a competing tool.** Another tool with a PY_RETURN callback on the same code object that returns
+    `DISABLE` does not blind the observer (1 of 1 counted). The observer took tool id 0 (see NIT-6).
+  - **P3 a spawned worker (blind spot).** I forced the clock in every process via `forcedsite/sitecustomize.py`
+    and called `strict_validate_bundles([A,B], workers=2)` inside the observed scope. The workers return one
+    strict problem each, and the observer counts **0**. No dry-run caller passes `workers>1`
+    (`whole_window.py:413,7658`). The only other process pool, `b5/harvest.py:2552`, is not on the dry-run path:
+    the driver uses only harvest's roster and source functions, which do no refits. See NIT-7.
+- **Six short modules at `f059286bc`:** all OK (`l9-rev-1/short_summary_f059286bc.txt`):
+  - `test_authentication_io` 2.3 s;
+  - `test_docs_freshness` 1.1 s;
+  - `test_sensitivity_guard` 89.5 s;
+  - `test_s10_chain_defects` 10.3 s;
+  - `test_r4_acceptance_oracle` 5.5 s;
+  - `test_mint_kept_units` 897.8 s (1 declared skip).
+
+**Dispositions checked.**
+
+| finding | status at `f059286bc` |
+|---|---|
+| MINOR-1 stale seat report | **closed.** The rewrite at `35e0519e2` drops the stale lines and states the ruling basis. |
+| MINOR-2 byte-identity wording | **closed.** "Byte-identical when no deadline fires" (`L9-2.md:59`). |
+| MINOR-3 untested wired sites | **partly closed.** `_reference_energy_evidence_detail` is now tested (`SharedCacheSiteTests`). The session (`whole_window.py:1293`) and core re-derivation (`:6168`) sites are deferred to the author's N3 fault-injection run. The observer makes a firing there a tooling refusal either way, so this is now test coverage only. **Carried open until N3 runs.** |
+| MINOR-4 bracket refit | **closed.** `bracket.py`'s strict validation shares the run cache (`bracket.py:169-172,199`). The governed `verify_stored_evidence_physics` refit stays uncached, but a firing there is observed (`test_bracket_refit_firing_is_observed`). |
+| MINOR-5 lost reference, unclassified stops | **closed for in-process firings.** Each firing site is observed and becomes `calibration_wall_deadline_fired` before any later step. The NEG-8 lost-reference path no longer relies on `_neg8_reproduces`. The mint's consumption refusal is the tooling code `mint_consumption_session_refused` (`dry_run.py:771-791`). |
+| NIT-1, NIT-3 | kept by the author with reasons; I agree. |
+| NIT-2 | comment added (`whole_window.py:7184`). |
+| NIT-4 | the lead accepted the class-table edit. The fix round adds three more codes to the same table, disclosed in `L9-2.md:42-45`. |
+| NIT-5 | **closed** (`dry_run.py:714-716`, `test_failed_reduce_leaves_no_unregistered_output`). |
+
+**New findings in the delta.** Both are NITs.
+
+- **NIT-6: the observer claims the first free tool id, which is usually 0 (`sys.monitoring.DEBUGGER_ID`)**
+  (`deadline_observer.py:38`). A debugger that claims id 0 later in the run (for example a future `pdb` built on
+  `sys.monitoring`) would fail to start. If a debugger already holds 0, the observer just takes the next id. It
+  never fails open. Searching from 5 down to 0, or preferring 3-4, would avoid the reserved slots.
+- **NIT-7: spawned worker processes are invisible to the observer** (P3). Today nothing on the dry-run path
+  refits in a worker. A future `workers>1` caller would let a worker-side firing surface as an ordinary strict
+  problem, not as `calibration_wall_deadline_fired`. Add a one-line note to the observer's docstring, or make
+  `strict_validate_bundles` refuse `workers>1` inside an observed run.
+
+**Not checked in this round.**
+
+- The N3 end-to-end fault-injection run (`be5277e1f`, `4c5256ce7`) on the real driver.
+- The full-size cached acceptance run (the author's).
+- Whether block 5's real references share the kept members' calibration. This no longer matters for safety, only
+  for run time.
+
+FRESH VERDICT at `f059286bc` (report `35e0519e2`): ACCEPT
+
+- BLOCKER: none
+- MAJOR: none
+- MINOR-3 `joulewise/whole_window.py:1293,6168` (carried, coverage only): the session and core re-derivation sites have no direct test under the shared cache; deferred to N3
+- NIT-6 `joulewise/b5_analysis/deadline_observer.py:38`: the observer takes the first free tool id, usually 0 (`DEBUGGER_ID`)
+- NIT-7 `joulewise/b5_analysis/deadline_observer.py`: a firing in a spawned worker is not observed; no dry-run caller spawns refit workers today
+- NIT-1 `joulewise/reduce.py:1526`, NIT-3 `joulewise/cli.py:1949`: kept as dispositioned

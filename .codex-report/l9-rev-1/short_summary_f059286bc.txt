@@ -1,0 +1,6 @@
+tests.test_authentication_io rc=0 wall=2.344344400 OK sha=48339db52bc61356
+tests.test_docs_freshness rc=0 wall=1.050275027 OK sha=66fa067ede4b72a5
+tests.b5_analysis.test_sensitivity_guard rc=0 wall=89.459238695 OK sha=66c15e9638b122f8
+tests.b5_analysis.test_s10_chain_defects rc=0 wall=10.259836719 OK sha=90bf30e9b4f70241
+tests.test_r4_acceptance_oracle rc=0 wall=5.473108586 OK sha=d221efd2f2a3ff83
+tests.b5_analysis.test_mint_kept_units rc=0 wall=897.829969130 OK (skipped=1) sha=57cc9214a80c178d

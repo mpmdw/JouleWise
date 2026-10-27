@@ -1,0 +1,40 @@
+{
+ "P1_plain": {
+  "neg8-window-end-r1": [
+   0,
+   "16502e552ce83a5ae42e76f8e31b3681a832d5e34b7349d2edba8b855954486d",
+   0,
+   "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc"
+  ],
+  "neg8-window-midpoint": [
+   0,
+   "1781a2d1f46e12a61d40f811ef52258adc5c939686a5cd523773040e89c3427c",
+   0,
+   "78e31230efc0fc36c659206d395ba68976a0f536ced85aedf1ceef38a1b55005"
+  ]
+ },
+ "P1_observed": {
+  "neg8-window-end-r1": [
+   0,
+   "16502e552ce83a5ae42e76f8e31b3681a832d5e34b7349d2edba8b855954486d",
+   0,
+   "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc"
+  ],
+  "neg8-window-midpoint": [
+   0,
+   "1781a2d1f46e12a61d40f811ef52258adc5c939686a5cd523773040e89c3427c",
+   0,
+   "78e31230efc0fc36c659206d395ba68976a0f536ced85aedf1ceef38a1b55005"
+  ]
+ },
+ "P1_firings": 0,
+ "P1_identical": true,
+ "P2_thread_firings": 2,
+ "P4_firings_with_disabling_tool": 1,
+ "P4_observer_tool_id": 0,
+ "P3_pool_problem_counts": [
+  1,
+  1
+ ],
+ "P3_pool_firings_seen": 0
+}
