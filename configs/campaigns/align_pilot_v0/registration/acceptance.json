@@ -1,0 +1,79 @@
+{
+  "calibration": {
+    "acceptance_corpus": [
+      "0.027380174613889405",
+      "0.033910693678179143",
+      "0.02900623414538194",
+      "0.030720770811194707",
+      "0.032539639820968184",
+      "0.029631997189164698",
+      "0.037054941476587284",
+      "0.027431653073935625",
+      "0.029334925465137784",
+      "0.02869756276031305",
+      "0.033540017047583894",
+      "0.03029629235882682",
+      "0.02983438929393353"
+    ],
+    "alignment_reference_s": "0.037054941476587",
+    "bracket_screen_s": "0.010818",
+    "max_budgetable_drift_s": "0.01550217418713139",
+    "operative_bound_stop_s": null
+  },
+  "catalog": "configs/b6/flag_catalog_b6.json",
+  "cell_unit_minimum": 5,
+  "derivation": {
+    "alignment_reference_s": "maximum of the corpus, quantized to 1e-15 s ROUND_HALF_EVEN (block 5: preflight_level_screen_s)",
+    "bracket_screen_s": "max(range of the corpus quantized to 1e-6 s ROUND_HALF_EVEN, D-125 floor 0.010818 s); range 0.009674766862697879 s -> 0.009675 s, so the floor binds",
+    "corpus": "every quiet-condition capture of the quiet-machine kit (M1 capture-000, 001, 003, 005, 007, 009, 011, 013, 015, 017; M13 capture-000, 001, 002), each its own stored b_fiducial_s lexeme, each refit valid by joulewise.b6.calibration.read_own_capture, clock anchor bounded, 59 of 59 pulses; n = 13 meets revision six's corpus minimum of 12",
+    "max_budgetable_drift_s": "max(predecessor ceiling 0.01550217418713139 s (block 5's acceptance), Q99 two-draw 0.012131079260684415 s, bracket screen 0.010818 s, Q99 within-test 0.01281606527393005 s); the predecessor ceiling binds",
+    "non_claim": "Calibration values retained verbatim from the current block-6 non-claim acceptance input; no new calibration issued. T10 stop remains null.",
+    "operative_bound_stop_s": "null here: the three replication packs read their stop line from joulewise.b6.capture_screen.REGISTERED_T10_STOP_S (registration S-5); this field applies only to a pack outside that table",
+    "pack_id": "bytes-mac-check is the b6_layout pack id in this kit; campaign directory is bytes_mac_check",
+    "registered_commit": "main 3bb305d7a, the base of configs/b6/executing_reviews.json (machine-test page open issue 8); revisit at the pin (S-1)",
+    "rule": "block 5's acceptance derivation (registration_block5.md section 0.11; configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json decimal_derivation, revision six), applied to the quiet-machine captures",
+    "source_acceptance": {
+      "path": "configs/b6/registration/acceptance.json",
+      "sha256": "ea130c87ece4e8b557a6357f1f75df045b5a0a738db18fe5ee990a7b539ce2a8"
+    },
+    "sources": {
+      "kit_commit": "1c1bc3204c8ba8fa6d880b9b9a920362bd01fa4c",
+      "m13_result_sha256": "46e28a94c8c2267993bf14d774cd5c09dde5f0c674a51d08b56fbb59c7b9a8d1",
+      "m1_result_sha256": "9884d444d023bb3c3fbb7e9fbc2158a2b18634abe899e7e8c3d51012a9900421",
+      "note": "/Users/edr/night-archive/b6-acceptance/DERIVATION.md"
+    }
+  },
+  "neg8": {
+    "corpus_cap": 12,
+    "corpus_minimum": 6,
+    "planned": {
+      "end": 3,
+      "midpoint": 1,
+      "start": 3
+    }
+  },
+  "non_claim": true,
+  "number_bearing_paths": [
+    "joulewise/adapters/mlx_runtime.py",
+    "joulewise/adapters/powermetrics.py",
+    "joulewise/reduce.py",
+    "joulewise/powermetrics_fiducial.py",
+    "joulewise/controller.py",
+    "joulewise/clock.py",
+    "joulewise/kernel_clock.py",
+    "joulewise/idle_admission.py",
+    "joulewise/bundle.py",
+    "joulewise/suite.py",
+    "scripts/run_campaign.py",
+    "joulewise/b5/driver.py",
+    "joulewise/b5/chain.py",
+    "joulewise/b6/idle_wait.py",
+    "joulewise/b6/agent_pause.py",
+    "joulewise/b6/sleep_guard.py"
+  ],
+  "pack_id": "align-pilot-v0",
+  "registered_commit": "3bb305d7a62eaec772f04ddb67aaf51f8de526a0",
+  "reviewed_commits_path": "configs/b6/executing_reviews.json",
+  "schema": "joulewise.b6_acceptance_registration.v1",
+  "status": "NON_CLAIM_KIT_ONLY_NOT_C4_OR_C5"
+}

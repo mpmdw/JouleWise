@@ -1,0 +1,36 @@
+{
+  "derivation": "PLANNING BOUND, not measured: episode = max_turns*(context_max/prefill + max_tokens/decode + tool); member = episode + overhead; span = members*member + scaffold*flat + captures*flat. Re-derive at the Mac before arming.",
+  "non_claim": true,
+  "packs": {
+    "align-pilot-v0": {
+      "T_stream_max_s": 1780.8400000000001,
+      "align_members": 12,
+      "disk_derivation": {
+        "B_bytes": 7400000000,
+        "extra_wait_peak_bytes": 0,
+        "fixed_retained_bytes": 0,
+        "peak_copies": 2
+      },
+      "episode_upper_s": 1302.2400000000002,
+      "estimated_footprint_bytes": 14800000000,
+      "flags": [
+        "sizing.planning_bound_unmeasured"
+      ],
+      "member_count": 37,
+      "pack_id": "align-pilot-v0",
+      "planning_parameters": {
+        "bytes_per_member": 200000000,
+        "calibration_capture_s": 900,
+        "context_tokens_max": 32768,
+        "decode_tok_s": 60,
+        "member_overhead_s": 478.6,
+        "prefill_tok_s": 400,
+        "scaffold_member_s": 300,
+        "tool_s_per_turn": 1
+      },
+      "programmed_span_s": 30670.08,
+      "scaffold_members": 25
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1"
+}

@@ -1,0 +1,1448 @@
+{
+  "acceptance_policy": {
+    "arming_prerequisites": [
+      {
+        "id": "D117-U2",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "D117-POSTCOLLECTION-TRUST-01",
+        "status": "required_before_mint"
+      },
+      {
+        "id": "D117-U11-IDPIN-PROJECTION",
+        "status": "required_before_arm"
+      }
+    ],
+    "issued_acceptance": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+      "artifact_sha256": "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
+      "derivation_sha256": "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0",
+      "path": "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+    },
+    "issued_ledger_head": {
+      "head_sha256": "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014",
+      "path": "configs/calibration/calibration_ledger_head.json"
+    },
+    "selection": "issued_d116_artifact_only",
+    "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
+  },
+  "arm_attachments": {},
+  "attempt_policy": {
+    "authority": "R6; Block-6 catalog unchanged",
+    "minimum_kept_units_per_stratum": 5,
+    "outcome_dependent_top_up": "forbidden",
+    "science_member_replacements": 0
+  },
+  "b6_layout": {
+    "corpus": {
+      "planned": 18,
+      "stop_after_valid": 12
+    },
+    "packs": [
+      "align-pilot-v0"
+    ],
+    "schema_version": "joulewise.b6_session_layout.v1"
+  },
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
+  },
+  "closeout_attachments": {
+    "backup_requirements": {
+      "bound_root_verified": true,
+      "claim_root_verified": true,
+      "required_successful_backups": 2
+    },
+    "bracket_binding_sha256": null,
+    "evaluation_basis_sha256": null,
+    "extraction_report_sha256": null,
+    "postcollection_receipt_digests": [],
+    "terminal_ledger_head": null,
+    "todo": "TODO(postcollection): leave receipt-derived closeout fields empty until a completed claim window supplies authenticated evidence.",
+    "whole_window_verdict_sha256": null
+  },
+  "draft_status": "non-claim",
+  "external_inputs": [
+    "artifacts",
+    "manifests"
+  ],
+  "generator": {
+    "path": "scripts/align_pilot_kit.py",
+    "sha256": "5afaef06772d90e01d89d97c5a85a49ed59f4246ec3d506e0b22238e0306dfb5"
+  },
+  "module_order": [
+    "bytes-qwen3-1p7b",
+    "bytes-qwen3-4b"
+  ],
+  "non_claim": true,
+  "plan": {
+    "actual_sha256": "bffff042c418c0eadd83228361d85efb8a399673a288b0b74504e2d176090e4d",
+    "declared_sha256": "bffff042c418c0eadd83228361d85efb8a399673a288b0b74504e2d176090e4d",
+    "path": "collection_plan.json",
+    "plan_id": "align-pilot-v0"
+  },
+  "roots": {
+    "bound_root_leaf": "runs_align_pilot_v0_bound",
+    "claim_root_leaf": "runs_align_pilot_v0"
+  },
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "science": [
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "align-pilot-v0-episodes-a-e01.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e01.json",
+      "config_sha256": "90374b9217f4bb52bc14ccee450957974c8ed5263570f94c45849aeae4fd1d0c",
+      "index": 1,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "align-pilot-v0-episodes-a-e02.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e02.json",
+      "config_sha256": "63d6c22b9f3be769f138ba868d66651c775cf2e60d099b103469d550a97cd429",
+      "index": 2,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-a-e02",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "align-pilot-v0-episodes-a-e03.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e03.json",
+      "config_sha256": "36d689720858e19d38109113f3895fc3c9e527bb0196595ec936351533ec4e7d",
+      "index": 3,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-a-e03",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 4,
+      "config": "align-pilot-v0-episodes-a-e04.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e04.json",
+      "config_sha256": "78f4ad0f78e70b567c3147ac1760b1059c85da2aef07840d036f49d856981ace",
+      "index": 4,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 4,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-a-e04",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 5,
+      "config": "align-pilot-v0-episodes-a-e05.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e05.json",
+      "config_sha256": "4f2e2f5fd8de1804bb12b32090d8305bd4fc53e0fa38fb9383d2d0a240fadf01",
+      "index": 5,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 5,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 6,
+      "config": "align-pilot-v0-episodes-a-e06.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e06.json",
+      "config_sha256": "0de4ef9c4ca2d51806a90722701a49b30eb8fa74d8ef74cafcd58010a534d297",
+      "index": 6,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 6,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-a-e06",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "align-pilot-v0-episodes-b-e07.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e07.json",
+      "config_sha256": "b0c379db6bfbc04d6ae7c1ccc30f4fdb6f453cd754e838ab2bb7b6b8946c987e",
+      "index": 1,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-b-e07",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "align-pilot-v0-episodes-b-e08.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e08.json",
+      "config_sha256": "ba64a63b5407752202cdfdb0d6befa08b9eb4cdd1d905f67af9b9adca2722432",
+      "index": 2,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-b-e08",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "align-pilot-v0-episodes-b-e09.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e09.json",
+      "config_sha256": "60854f9a62a8e90ffa2b493e9cb6850544cbdcc907acc8c88f6dee24c466e51b",
+      "index": 3,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 4,
+      "config": "align-pilot-v0-episodes-b-e10.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e10.json",
+      "config_sha256": "b33ddd750accc31753d9d5edfb88adfba8e313e461199d022cdf121038a8369d",
+      "index": 4,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 4,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-b-e10",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 5,
+      "config": "align-pilot-v0-episodes-b-e11.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e11.json",
+      "config_sha256": "4915f50b96f5c36eb0c1652c6104917cffd248db2011d33ae5c22e42cf3ab8d5",
+      "index": 5,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 5,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-b-e11",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 6,
+      "config": "align-pilot-v0-episodes-b-e12.json",
+      "config_path": "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e12.json",
+      "config_sha256": "ce8212db34cf45a353889f771e68cd41fbc90414379bfd463e28f1443f5b6e4b",
+      "index": 6,
+      "model_tag": "qwen3-8b-mlx",
+      "module_id": "align-pilot-v0-qwen3-8b",
+      "pack_id": "align-pilot-v0",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 6,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v0-episodes-b-e12",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "workload": "align_episode"
+    }
+  ],
+  "stage_graph": [
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings"
+      },
+      "kind": "bracket_reservation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/collection_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ],
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "tool_id": "bracket_reserver"
+            },
+            "command_id": "align-pilot-v0-bracket-reservation.bracket_reservation",
+            "command_kind": "bracket_reservation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 1,
+      "predecessor": null,
+      "stage_id": "align-pilot-v0-bracket-reservation",
+      "successor": "align-pilot-v0-pre-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "pre"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "align-pilot-v0-pre-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 2,
+      "predecessor": "align-pilot-v0-bracket-reservation",
+      "stage_id": "align-pilot-v0-pre-calibration",
+      "successor": "align-pilot-v0-bound-collection"
+    },
+    {
+      "corpus": {
+        "planned": 18,
+        "stop_after_valid": 12
+      },
+      "expected_count": 18,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-reference-corpus-order-v2",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
+        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-bound-collection.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 3,
+      "predecessor": "align-pilot-v0-pre-calibration",
+      "stage_id": "align-pilot-v0-bound-collection",
+      "successor": "align-pilot-v0-bound-derivation"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "external_artifact",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+      },
+      "kind": "bound_derivation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-bound-derivation.bound_derivation",
+            "command_kind": "bound_derivation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 4,
+      "predecessor": "align-pilot-v0-bound-collection",
+      "stage_id": "align-pilot-v0-bound-derivation",
+      "successor": "align-pilot-v0-reference-start"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-start-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
+        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-reference-start.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 5,
+      "predecessor": "align-pilot-v0-bound-derivation",
+      "stage_id": "align-pilot-v0-reference-start",
+      "successor": "align-pilot-v0-episodes-a"
+    },
+    {
+      "expected_count": 6,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "align-pilot-v0-episodes-a",
+        "path": "configs/campaigns/align_pilot_v0/stages/episodes-a/order_manifest.json",
+        "sha256": "61ae9e6a020966e672fb7f863aae5dc61f0c1e364ab5353e6646df711008e965"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/align_pilot_v0/stages/episodes-a"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-episodes-a.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 6,
+      "predecessor": "align-pilot-v0-reference-start",
+      "stage_id": "align-pilot-v0-episodes-a",
+      "successor": "align-pilot-v0-reference-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-midpoint-v1",
+        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
+        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-reference-midpoint.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 7,
+      "predecessor": "align-pilot-v0-episodes-a",
+      "stage_id": "align-pilot-v0-reference-midpoint",
+      "successor": "align-pilot-v0-episodes-b"
+    },
+    {
+      "expected_count": 6,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "align-pilot-v0-episodes-b",
+        "path": "configs/campaigns/align_pilot_v0/stages/episodes-b/order_manifest.json",
+        "sha256": "2563e5f6604207c0c7b8d9b78be3c2b888d71b43b526545ae9454195f2799173"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/align_pilot_v0/stages/episodes-b"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-episodes-b.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 8,
+      "predecessor": "align-pilot-v0-reference-midpoint",
+      "stage_id": "align-pilot-v0-episodes-b",
+      "successor": "align-pilot-v0-reference-end"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-end-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
+        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-reference-end.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 9,
+      "predecessor": "align-pilot-v0-episodes-b",
+      "stage_id": "align-pilot-v0-reference-end",
+      "successor": "align-pilot-v0-post-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "post"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "align-pilot-v0-post-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 10,
+      "predecessor": "align-pilot-v0-reference-end",
+      "stage_id": "align-pilot-v0-post-calibration",
+      "successor": "align-pilot-v0-whole-window-verdict"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "whole_window_verdict",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-pilot-v0-whole-window-verdict.whole_window_verdict",
+            "command_kind": "whole_window_verdict",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 11,
+      "predecessor": "align-pilot-v0-post-calibration",
+      "stage_id": "align-pilot-v0-whole-window-verdict",
+      "successor": "align-pilot-v0-backup"
+    },
+    {
+      "expected_count": 2,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "backup",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "align-pilot-v0-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "align-pilot-v0-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 12,
+      "predecessor": "align-pilot-v0-whole-window-verdict",
+      "stage_id": "align-pilot-v0-backup",
+      "successor": null
+    }
+  ],
+  "window_identity": {
+    "evidence_root_id": "evidence-align-pilot-v0",
+    "window_id": "align-pilot-v0"
+  }
+}

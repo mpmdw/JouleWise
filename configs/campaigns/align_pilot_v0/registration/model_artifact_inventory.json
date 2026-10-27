@@ -1,0 +1,252 @@
+{
+  "artifacts": {
+    "neg8_reference": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717"
+      },
+      "folded_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/model.safetensors",
+          "sha256": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+          "size_bytes": 868628559,
+          "symlink": false
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e01": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e02": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e03": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e04": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e05": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e06": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e07": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e08": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e09": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e10": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e11": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e12": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8"
+      },
+      "folded_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/blobs/f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "sha256": "f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8",
+          "size_bytes": 4607835174,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "status": "ok"
+    }
+  },
+  "non_claim": true
+}
