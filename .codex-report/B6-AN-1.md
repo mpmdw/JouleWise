@@ -28,7 +28,7 @@ item 19; gate policy). The driver is the block-6 "pure layer" (audit N9), and it
   (audit B6-5).
 
 **Tests:** 108 synthetic tests pass. Sessions are desk-compressed by the real `joulewise.desk_compress`, using a
-gzip-backed `zstd` stand-in, because this seat has no zstd. Eight counterfactual mutations each make their regression
+gzip-backed `zstd` stand-in, because this seat has no zstd. Nine counterfactual mutations each make their regression
 test fail, as gate-policy rule 3 asks.
 
 ## COMPARISON CONTRACT (lead task, 2026-10-27, evening)
