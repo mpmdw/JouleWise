@@ -553,7 +553,7 @@ first session armed. Every session ran from a separate checkout of the repositor
 **What refuses, and what is only recorded.** A session is *armed*, that is allowed to start, only after direct
 measurements show none of the registered physical hazards: a clock step or drift beyond budget, running on battery
 or charging, thermal pressure, an outside process drawing power, too little free disk, a sampler that is not
-sampling, and an AI agent process alive on the machine (agent processes draw 8 to 47 W while nominally idle).
+sampling, and an AI agent process alive on the machine (an agent process draws {{FILL: P1-AUTO-AGENTPOWER | range of processor power drawn by an idle AI agent process, from the replication registration's hazard definition}} while nominally idle).
 During the session a monitor measures the same hazards. Only a directly measured physical hazard refuses
 collection or removes data. Every other condition is written as a **flag**, a recorded code beside the data, and
 a registered catalog gives each code exactly one effect: exclude the run, exclude the session, or disclose only.
@@ -660,3 +660,236 @@ record is joules). The observed agreement is printed beside the tolerance and is
 an independent **twin** implementation in the same way (Section 6.3).
 
 {{FILL: P1-RECOMPUTE | the comparison table of the independent recomputation against the analysis for every printed Part 1 quantity: tolerance, observed largest difference, and agreement word, per block; checked by one executing reader before printing}}
+
+## 5. Results, Part 1: phase energy, floors and contrasts
+
+<!-- TEMPLATE. Every value below is a placeholder. Fill only from the issued artifacts named in
+fill_index.md, after the release event of the block concerned. Keep one branch of each group. -->
+
+Every phase energy in this section rests on sampler timing; phase attribution was not checked by an independent
+measuring instrument (Section 8). Every number is conditional on sessions that passed the registered
+physical-hazard checks at arm and kept at least five of ten units per stratum after the registered exclusions;
+the kept units of each cell are printed beside it.
+
+### 5.1 What was collected
+
+{{FILL: P1-B5-ATTEMPTS | attempt history of each primary-block pack: number of attempts, each with its verdict and cause family, and "collected X of Y planned runs"; the three superseded first-seal attempts listed separately as inputs to no number; from the harvest records and analysis-plan disclosure producer}}
+
+The analysed sessions were {{FILL: P1-B5-ANALYSED | identifiers and dates of the analysed attempt of each pack}}.
+Table 1 lists, for each target cell, the kept units and the removed units with the catalog family of the codes
+that removed them and their positions in the session, so that a reader can see whether removals clustered.
+
+| Cell | Kept repeats n_r | Kept quads n_b | Removed units (family, position) |
+|---|---|---|---|
+| 1.7B decode | {{FILL: P1-B5-NR-1p7B-decode \| kept repeats}} | {{FILL: P1-B5-NB-1p7B-decode \| kept null quads}} | {{FILL: P1-B5-RM-1p7B-decode \| removed units}} |
+| 1.7B prefill (2,048) | {{FILL: P1-B5-NR-1p7B-prefill \| kept repeats}} | {{FILL: P1-B5-NB-1p7B-prefill \| kept null quads}} | {{FILL: P1-B5-RM-1p7B-prefill \| removed units}} |
+| 8B decode | {{FILL: P1-B5-NR-8B-decode \| kept repeats}} | {{FILL: P1-B5-NB-8B-decode \| kept null quads}} | {{FILL: P1-B5-RM-8B-decode \| removed units}} |
+| 8B prefill (2,048) | {{FILL: P1-B5-NR-8B-prefill \| kept repeats}} | {{FILL: P1-B5-NB-8B-prefill \| kept null quads}} | {{FILL: P1-B5-RM-8B-prefill \| removed units}} |
+| Contrast, decode | — | {{FILL: P1-B5-NQ-decode \| kept contrast quads}} | {{FILL: P1-B5-RM-ctr-decode \| removed quads}} |
+| Contrast, prefill (2,048) | — | {{FILL: P1-B5-NQ-prefill \| kept contrast quads}} | {{FILL: P1-B5-RM-ctr-prefill \| removed quads}} |
+
+*Table 1. Kept and removed units per target cell in the primary block.*
+
+**[BRANCH 5.1.a — a pack ended without a claim-usable session]** The {{FILL: P1-B5-NOPACK | name of each pack with no claim-usable session}} pack ended with no session that the registered rules allow to be analysed;
+its cells and any contrast that depends on it are printed as unavailable with the reason
+{{FILL: P1-B5-NOPACK-REASON | registered refusal or end-state reason}}. **[END BRANCH 5.1]**
+
+{{FILL: P1-B5-HAZARDS | per session: hazard measurements at arm (naming any hazard whose probe returned no reading), counts of each physics-in-span code, battery-assist counts, and the battery-temperature rise per stage, from the disclosure producer}}
+
+### 5.2 Reported phase energies
+
+| Model | Phase | Mean energy (J) | Interval (J) | Per token (J/token) | Attribution floor (J) |
+|---|---|---|---|---|---|
+| Qwen3-1.7B | decode | {{FILL: E_1p7B_decode_J_per_request \| mean}} | [{{FILL: E_1p7B_decode_lower_J \| lower}}, {{FILL: E_1p7B_decode_upper_J \| upper}}] | {{FILL: E_1p7B_decode_J_per_token \| per output token}} | {{FILL: P1-B5-AF-1p7B-decode \| attribution floor}} |
+| Qwen3-1.7B | prefill (2,048) | {{FILL: E_1p7B_prefill_p2048_J_per_request \| mean}} | [{{FILL: E_1p7B_prefill_p2048_lower_J \| lower}}, {{FILL: E_1p7B_prefill_p2048_upper_J \| upper}}] | {{FILL: E_1p7B_prefill_p2048_J_per_token \| per prompt token}} | {{FILL: P1-B5-AF-1p7B-prefill \| attribution floor}} |
+| Qwen3-8B | decode | {{FILL: E_8B_decode_J_per_request \| mean}} | [{{FILL: E_8B_decode_lower_J \| lower}}, {{FILL: E_8B_decode_upper_J \| upper}}] | {{FILL: E_8B_decode_J_per_token \| per output token}} | {{FILL: P1-B5-AF-8B-decode \| attribution floor}} |
+| Qwen3-8B | prefill (2,048) | {{FILL: E_8B_prefill_p2048_J_per_request \| mean}} | [{{FILL: E_8B_prefill_p2048_lower_J \| lower}}, {{FILL: E_8B_prefill_p2048_upper_J \| upper}}] | {{FILL: E_8B_prefill_p2048_J_per_token \| per prompt token}} | {{FILL: P1-B5-AF-8B-prefill \| attribution floor}} |
+
+*Table 2. Reported gross phase energy per request on the processor-rail boundary (CPU + GPU + ANE as reported by
+`powermetrics`), primary block. Interval = m ± (h + B) (Section 3.4). The attribution floor is printed beside the
+cell and is not added to the interval. Decode per-token values divide by the 512 runtime-observed output tokens,
+511 of them generated in the decode phase. The two models were measured in separate sessions in a fixed order;
+their difference is not a comparison. The 42-token prefill of the decode workload is shorter than one power record
+and, as registered, is not reported.*
+
+Each row of Table 2 carries the fixed attribution-floor sentence of Section 3.5 with its own value of X, and the
+interval's three components: h, and the average first-kind timing bound, interpolation bound and drift term that
+make up B ({{FILL: P1-B5-INTERVAL-PARTS | per cell: h, B and its three kind averages, and the run attaining the attribution floor with the smallest first-kind bound over kept runs}}). The share of each interval taken by B rather
+than h is {{FILL: P1-B5-B-SHARE | per cell, B ÷ (h + B), derived from the same record}}.
+
+Labelled lines printed beside each cell, none of which replaces it:
+
+- *Without battery-assisted units:* {{FILL: P1-B5-BATT-LINE | per cell: mean and interval over units with no assisted run, with n_r, n_b and the count of assisted runs per stratum; "below the registered minimum of 5 units" where applicable}}
+- *Load-correlated exclusions not applied:* {{FILL: P1-B5-LOAD-LINE | per cell where any unit was removed by a thermal-pressure or outside-process code: the same estimator with those units restored, with n_r and n_b; or "no such removal"}}
+
+**[BRANCH 5.2.a — a target cell could not be computed]** The {{FILL: P1-B5-CELL-REFUSED | model and phase of each refused cell}} cell was not computed: {{FILL: P1-B5-CELL-REFUSED-REASON | registered refusal code and its plain-language reason}}. It is printed as unavailable; it is neither zero nor evidence about the phase's energy. **[END BRANCH 5.2]**
+
+### 5.3 Detection floors
+
+| Model | Phase | Absolute floor (J) | Comparative floor (J) | Operative floor (J) | n (abs / cmp) |
+|---|---|---|---|---|---|
+| Qwen3-1.7B | decode | {{FILL: F_1p7B_decode_abs_J \| absolute operative floor}} | {{FILL: F_1p7B_decode_cmp_J \| comparative operative floor}} | {{FILL: F_1p7B_decode_operative_J \| larger of the two}} | {{FILL: P1-B5-FN-1p7B-decode \| n of each form}} |
+| Qwen3-1.7B | prefill (2,048) | {{FILL: F_1p7B_prefill_p2048_abs_J \| absolute}} | {{FILL: F_1p7B_prefill_p2048_cmp_J \| comparative}} | {{FILL: F_1p7B_prefill_p2048_operative_J \| operative}} | {{FILL: P1-B5-FN-1p7B-prefill \| n}} |
+| Qwen3-8B | decode | {{FILL: F_8B_decode_abs_J \| absolute}} | {{FILL: F_8B_decode_cmp_J \| comparative}} | {{FILL: F_8B_decode_operative_J \| operative}} | {{FILL: P1-B5-FN-8B-decode \| n}} |
+| Qwen3-8B | prefill (2,048) | {{FILL: F_8B_prefill_p2048_abs_J \| absolute}} | {{FILL: F_8B_prefill_p2048_cmp_J \| comparative}} | {{FILL: F_8B_prefill_p2048_operative_J \| operative}} | {{FILL: P1-B5-FN-8B-prefill \| n}} |
+
+*Table 3. Detection floors, primary block, guarded where n < 10 (Section 3.6). The operative floor is the larger
+component, never their sum. A floor is a property of this machine, stack, boundary and session; it does not rank
+hardware or validate absolute scale.*
+
+### 5.4 Is the floor limited by timing attribution?
+
+| Model | Phase | R, absolute (corner ÷ point, J) | R, comparative (corner ÷ point, J) | R_cm, comparative |
+|---|---|---|---|---|
+| Qwen3-1.7B | decode | {{FILL: R_1p7B_decode_abs \| ratio}} ({{FILL: TERM_B_1p7B_decode_abs_J \| corner}} ÷ {{FILL: TERM_A_1p7B_decode_abs_J \| point}}) | {{FILL: R_1p7B_decode_cmp \| ratio}} ({{FILL: TERM_B_1p7B_decode_cmp_J \| corner}} ÷ {{FILL: TERM_A_1p7B_decode_cmp_J \| point}}) | {{FILL: R_cm_1p7B_decode_cmp \| shared-sign ratio}} |
+| Qwen3-1.7B | prefill (2,048) | {{FILL: R_1p7B_prefill_p2048_abs \| ratio}} ({{FILL: TERM_B_1p7B_prefill_p2048_abs_J \| corner}} ÷ {{FILL: TERM_A_1p7B_prefill_p2048_abs_J \| point}}) | {{FILL: R_1p7B_prefill_p2048_cmp \| ratio}} ({{FILL: TERM_B_1p7B_prefill_p2048_cmp_J \| corner}} ÷ {{FILL: TERM_A_1p7B_prefill_p2048_cmp_J \| point}}) | {{FILL: R_cm_1p7B_prefill_p2048_cmp \| shared-sign ratio}} |
+| Qwen3-8B | decode | {{FILL: R_8B_decode_abs \| ratio}} ({{FILL: TERM_B_8B_decode_abs_J \| corner}} ÷ {{FILL: TERM_A_8B_decode_abs_J \| point}}) | {{FILL: R_8B_decode_cmp \| ratio}} ({{FILL: TERM_B_8B_decode_cmp_J \| corner}} ÷ {{FILL: TERM_A_8B_decode_cmp_J \| point}}) | {{FILL: R_cm_8B_decode_cmp \| shared-sign ratio}} |
+| Qwen3-8B | prefill (2,048) | {{FILL: R_8B_prefill_p2048_abs \| ratio}} ({{FILL: TERM_B_8B_prefill_p2048_abs_J \| corner}} ÷ {{FILL: TERM_A_8B_prefill_p2048_abs_J \| point}}) | {{FILL: R_8B_prefill_p2048_cmp \| ratio}} ({{FILL: TERM_B_8B_prefill_p2048_cmp_J \| corner}} ÷ {{FILL: TERM_A_8B_prefill_p2048_cmp_J \| point}}) | {{FILL: R_cm_8B_prefill_p2048_cmp \| shared-sign ratio}} |
+
+*Table 4. Dominance ratios, primary block, each over the kept units (n as in Table 3). Point diagnostic; no
+interval. "Independent" in the registered name refers to the independent-corner box, not to statistical
+independence; the twelve values share runs and are correlated. An absolute R_cm is not defined by the registered
+replay.*
+
+**[BRANCH 5.4.A — every one of the eight R and four R_cm is at least 2]** On this stack and boundary, allowing
+each value to move within its registered timing uncertainty at least doubles every detection floor, in both forms,
+for both models and both phases, and the shared-sign replay does not withdraw that statement. Timing attribution,
+not run-to-run repeatability, is what limits these phase-energy measurements. This is a statement about the
+registered timing domain under the held-average reconstruction; it does not say that physical phase energy is
+uncertain by that amount, and the shared-sign replay does not establish robustness to one common physical timing
+error. **[END BRANCH 5.4.A]**
+
+**[BRANCH 5.4.B — at least one of the twelve ratios is below 2]** Timing attribution did not at least double every
+detection floor. The components where it did not are {{FILL: P1-B5-DOM-FAILED | list of each ratio below 2, with model, phase, form, value, numerator and denominator}}. For these, repeatability
+contributes at least as much to the floor as the registered timing movement does; the paper therefore makes no
+claim that the measurement as a whole is attribution-limited, and prints no contingent subtitle. Where a ratio is
+at least 2, it is reported as that component's diagnostic only. **[END BRANCH 5.4.B]**
+
+**[BRANCH 5.4.R — a ratio refused (zero denominator or missing input)]** The ratio for {{FILL: P1-B5-DOM-REFUSED | component and refusal code}} was refused and is not printed as a number; branch A therefore does not hold. **[END BRANCH 5.4.R]**
+
+### 5.5 The two model contrasts
+
+| Contrast (8B − 1.7B) | n quads | d̄ (J) | Metrology interval (J) | Decision interval (J) | Floor gate (J) | Holm-adjusted p | Outcome | Claim level |
+|---|---|---|---|---|---|---|---|---|
+| decode | {{FILL: P1-B5-NQ-decode \| kept contrast quads}} | {{FILL: E_decode_contrast_signed_J_per_request \| signed estimate}} | {{FILL: P1-B5-CTR-decode-METRO \| metrology interval}} | [{{FILL: E_decode_contrast_lower_J \| lower}}, {{FILL: E_decode_contrast_upper_J \| upper}}] | {{FILL: F_claim_decode_armwise_max_J \| floor gate}} | {{FILL: P1-B5-CTR-decode-PADJ \| adjusted p}} | {{FILL: P1-B5-CTR-decode-OUTCOME \| outcome word}} | {{FILL: P1-B5-CTR-decode-LEVEL \| L1 or L2}} |
+| prefill (2,048) | {{FILL: P1-B5-NQ-prefill \| kept contrast quads}} | {{FILL: E_prefill_p2048_contrast_signed_J_per_request \| signed estimate}} | {{FILL: P1-B5-CTR-prefill-METRO \| metrology interval}} | [{{FILL: E_prefill_p2048_contrast_lower_J \| lower}}, {{FILL: E_prefill_p2048_contrast_upper_J \| upper}}] | {{FILL: F_claim_prefill_p2048_armwise_max_J \| floor gate}} | {{FILL: P1-B5-CTR-prefill-PADJ \| adjusted p}} | {{FILL: P1-B5-CTR-prefill-OUTCOME \| outcome word}} | {{FILL: P1-B5-CTR-prefill-LEVEL \| L1 or L2}} |
+
+*Table 5. Primary contrasts, Qwen3-8B minus Qwen3-1.7B gross phase energy per request, processor-rail boundary,
+one Holm family of two at α = 0.05. Quads ran in the fixed, unrandomized order 1.7B, 8B, 8B, 1.7B; the p-values
+assume the quad differences are independent once linear drift has cancelled. The floor gate comes from the
+floor packs' sessions, collected separately; its transfer to the contrast session rests on the registered
+assumption, quoted in Section 8, that the shared-edge treatment calibrated on floor quads applies unchanged at the
+same quad timescale.*
+
+Each contrast is reported in exactly one of the following branches. The decode and prefill contrasts select
+their branches independently; write the paragraph once per contrast, substituting its phase.
+
+**[BRANCH 5.5.1 — outcome "direction supported", direction positive (8B uses more), claim gate at L2]** On this
+stack and boundary, the 8B model's {{FILL: P1-B5-CTR-PHASE | "decode" or "2,048-token prefill"}} phase used more
+gross processor-rail energy per request than the 1.7B model's, by {{FILL: P1-B5-CTR-DBAR | d̄ for this contrast}} J
+(decision interval {{FILL: P1-B5-CTR-DI | decision interval for this contrast}} J). The estimate exceeds the floor
+gate of {{FILL: P1-B5-CTR-GATE | floor gate for this contrast}} J, both intervals exclude zero, Holm's correction
+rejects, and leaving out any one quad changes none of these. This is a comparative (L2) result for this one prompt,
+this prompt length and this machine. **[END BRANCH 5.5.1]**
+
+**[BRANCH 5.5.2 — outcome "direction supported", but the claim gate stays at L1]** The contrast's outcome is
+*direction supported* with d̄ = {{FILL: P1-B5-CTR-DBAR | d̄}} J, but the claim gate does not license a comparative
+statement because {{FILL: P1-B5-CTR-L1-REASON | the failing L2 condition: leave-one-quad-out verdict-influential (name the quad), direction opposite to the registered one, or demotion from confirmatory}}. We
+therefore report it at L1: the interval {{FILL: P1-B5-CTR-DI | decision interval}} J was observed on this stack; we
+do not state that one model uses more energy in this phase than the other. **[END BRANCH 5.5.2]**
+
+**[BRANCH 5.5.3 — outcome "unresolved"]** The estimate d̄ = {{FILL: P1-B5-CTR-DBAR | d̄}} J exceeds the floor gate,
+but {{FILL: P1-B5-CTR-UNRES-REASON | "its metrology interval contains zero" or "Holm's correction does not reject (adjusted p = …)"}}. The direction of the difference is not supported at the registered error rate. This
+is not evidence that the two models use equal energy in this phase. **[END BRANCH 5.5.3]**
+
+**[BRANCH 5.5.4 — outcome "not resolvable"]** The instrument cannot resolve this contrast:
+{{FILL: P1-B5-CTR-NR-REASON | "|d̄| = … J does not exceed the floor gate of … J", or "the decision interval contains zero while the metrology interval does not, so the recorded timing and drift bounds obscure the direction", or "no floor could be issued"}}. A contrast that is not resolvable is a statement about the
+measurement's resolution on this boundary, not about the models: the difference, if any, is smaller than what
+these sensors can separate from their own false differences. The registered descriptive estimates below are
+printed for completeness and support no comparison. **[END BRANCH 5.5.4]**
+
+**[BRANCH 5.5.5 — outcome "not estimable"]** The contrast could not be estimated:
+{{FILL: P1-B5-CTR-NE-REASON | registered not-estimable code and its plain-language reason}}. No estimate is printed.
+The Holm family keeps its size of two. **[END BRANCH 5.5.5]**
+
+**Leave-one-quad-out.** {{FILL: P1-B5-CTR-LOO | per contrast: "no single quad changes the verdict", or the verdict-influential quad; and, if raised, the fixed sentence "Leaving out quad k moves the estimate by X J, more than a quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged"}}
+
+**Decision interval against the floor.** {{FILL: P1-B5-CTR-DIFLOOR | per contrast: whether the decision interval's near end lies beyond the floor gate; if not, the fixed sentence "The estimate exceeds the floor, but its decision interval reaches below the floor"}}
+
+**Registered descriptive estimates** (decide nothing). The 8B-to-1.7B ratio of phase energies was
+{{FILL: P1-B5-RATIO-decode | decode energy ratio with its t interval, without recorded bounds}} for decode and
+{{FILL: P1-B5-RATIO-prefill | prefill energy ratio with its t interval}} for 2,048-token prefill. Per token, the
+difference was {{FILL: P1-B5-PERTOK-decode | d̄ ÷ 512 with both intervals ÷ 512}} J per output token and
+{{FILL: P1-B5-PERTOK-prefill | d̄ ÷ 2,048 with both intervals ÷ 2,048}} J per prompt token. Phase energy is gross:
+it includes the machine's baseline power over the phase, and the 8B phase lasts longer, so part of the difference
+is baseline power times the extra duration. *Without quads holding battery-assisted runs:*
+{{FILL: P1-B5-CTR-BATT | per contrast: d̄ and metrology interval without such quads, with n and the count of such quads}}.
+
+### 5.6 Consistency checks beside the claims
+
+**Across sessions within the primary block.** For each model and phase, the mean of that model's side over the
+contrast session's kept quads is compared with the model's reported cell from its floor session, within their
+statistical half-widths (recorded bounds not included). {{FILL: P1-B5-XWIN | per model and phase: "agree within their within-session intervals (difference Δ J)" or "differ by Δ J, more than their within-session intervals cover; the reported intervals understate between-session variation, which includes different interleaving and thermal history"}}
+
+**Reference drift.** {{FILL: P1-B5-NEG8 | per session: drift-screen verdict on both energy families, the corpus size the deciding bound rested on and the corpus runs left out by reason, realised reference counts against the planned (3, 1, 3), each lost reference, each spare used, any lost midpoint with its fixed sentence, and the allowance; the bound's two terms printed with the other energies}}
+
+**Whole-machine cross-check.** {{FILL: P1-B5-METER | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band"}} The boundary of this
+cross-check is the DC input at the laptop's USB-C port plus the battery term; the adapter's AC-to-DC loss is not
+included. It is never a claim number and removed nothing.
+
+**Monitor cost.** The hazard monitor ran on efficiency cores at background priority during collection and the
+whole-machine meter's reader at ordinary priority; their processor time is disclosed and was not subtracted
+({{FILL: P1-B5-MONITOR | per session: monitor and meter-reader CPU time, and the number of monitor probes that fell inside target phases}}).
+
+### 5.7 Replication
+
+Table 6 places the primary block's value of every Part 1 quantity beside each counting replication session's
+value, under the same estimators, with each session's interval, kept units and flags.
+
+{{FILL: P1-B6-SIDEBYSIDE | Table 6: for each pack and each quantity of Sections 5.2-5.5 (reported means, per-token values, attribution floors, operative floors, dominance ratios, d̄ and energy ratios): the primary value; each counting replication session's value with interval, kept units, flags and its floor pairing (including any "floor from the primary block"); the difference Δ = (mean over counting replication sessions) − (primary value) and each session's own difference; and the between-session summary "between-session summary (n sessions): mean, standard deviation"}}
+
+The rules for which runs and sessions enter differ between the blocks (the replication block turned most record
+conditions into flags), and each block's calibration acceptance sets its own operative timing bound; both facts
+are printed with the table, and for each replication session the primary block's session-removing codes it would
+have triggered are listed ({{FILL: P1-B6-CARRIED | per replication session, the primary-block session-removing codes it carries as flags}}).
+
+**Sessions collected.** {{FILL: P1-B6-COUNT | per pack: counting sessions of the 3 targeted, attempts made, and each non-counting attempt with its cause family; the word "short" for any pack with fewer than 3, and "below the commitment of 2" for any with fewer than 2}}
+
+**The replication word.** For each contrast:
+
+**[BRANCH 5.7.1 — "replicated"]** The {{FILL: P1-B6-REP-PHASE | "decode" or "2,048-token prefill"}} contrast
+**replicated**: every one of the {{FILL: P1-B6-REP-N | number of counting replication contrast sessions}}
+counting replication sessions gave the same outcome word as the primary block,
+*{{FILL: P1-B6-REPWORD-WORD | the shared outcome word}}*, and the same sign of d̄. "Replicated" describes agreement
+of outcome words and signs across sessions; it is not a new test and carries no new interval. Any claim level is
+still that reached in each session separately. **[END BRANCH 5.7.1]**
+
+**[BRANCH 5.7.2 — "not replicated"]** The {{FILL: P1-B6-REP-PHASE | phase}} contrast was **not replicated**. Its
+sessions gave: {{FILL: P1-B6-REP-LIST | primary word and sign, then each counting replication session's word and sign (for example "supported +, supported +, unresolved +")}}. Agreement of signs alone does not make
+a contrast replicated under the registered definition. **[END BRANCH 5.7.2]**
+
+**[BRANCH 5.7.3 — the primary contrast was not estimable]** The primary contrast was not estimable, so the word
+"replicated" is not used; the replication sessions gave {{FILL: P1-B6-REP-LIST | each session's word and sign}}. **[END BRANCH 5.7.3]**
+
+**[BRANCH 5.7.4 — the contrast pack closed short]** The sentence reads "short: {{FILL: P1-B6-REP-N | k}} counting
+replication sessions of the 3 targeted", and the word, whichever it is, rests on that many sessions.
+**[END BRANCH 5.7.4]**
+
+The replication words were {{FILL: P1-B6-REPWORD-decode | replication word for decode}} for decode and
+{{FILL: P1-B6-REPWORD-prefill | replication word for prefill}} for prefill. Including the sessions that did not
+count, the words would have been {{FILL: P1-B6-FLAGINC-WORDS | flagged-inclusive words per contrast, with the added sessions and their flags}}; these do not enter the registered word.
+
+**Dominance across sessions.** {{FILL: P1-B6-DOM | per floor session: the four R per model; per contrast pairing: the branch sentence (A or B) once}}
+
+**Labelled lines in the replication block** (none changes a registered number):
+
+- *Scaled drift allowance* (Section 3.8): {{FILL: P1-B6-SCALED | per cell and contrast: the scaling factor and the interval or decision interval with the scaled allowance term; and, for each contrast, whether its outcome word would differ under the scaled term}}.
+- *Single-step reconstruction diagnostic*: where a record straddles a phase edge, power inside it is taken to step once between neighbouring plateau levels at the time that reproduces the record's average, instead of being shared by time; printed as m ± h with no B, computed by the independent recomputation: {{FILL: P1-B6-STEP | per cell: m ± h under single-step reconstruction, beside the overlap value}}.
+- *Whole-machine energy per phase*: {{FILL: P1-B6-WM | per floor-pack model and phase: DC-input gross energy per phase with estimator-1 arithmetic and the rails' share; flagged phases where the battery assisted; not given for the contrast pack}}, boundary "DC input at the USB-C port; the adapter's AC-to-DC loss is not included". Its exact definition is {{FILL: P1-B6-WM-DEF | the committed definition of per-phase whole-machine energy, including how the meter's clock-fit residual and alignment bound enter, from the replication registration's open slot for it}}.
+- *Contention rule as registered*: the registered exclusion for outside processor work was not applied in the first round because it would have removed a large share of quiet rehearsal runs; its result is printed beside each cell: {{FILL: P1-B6-CONTENTION | per cell: estimate with the registered contention exclusion applied}}.
+- *Waited runs*: {{FILL: P1-B6-WAITED | per cell: estimate without runs whose idle admission waited}}.
+- *Cross-session consistency*: {{FILL: P1-B6-XSESS | per contrast session, model and phase: "agree within the statistical half-widths; timing bounds B not included" or the printed difference}}.
+
+### 5.8 Agreement of the independent recomputation
+
+{{FILL: P1-RECOMPUTE-SUMMARY | one paragraph: for each block, the number of run phase energies compared, the largest absolute difference against the 1 mJ tolerance, the number of printed quantities compared and the largest difference in units of the last printed digit; and any disclosed repair with its date and effect}}
