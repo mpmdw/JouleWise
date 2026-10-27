@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Short modules at this head, then the N3 per-site fault injection alone.
 here=$(cd "$(dirname "$0")" && pwd); src=$(cd "$here/../.." && pwd); out=$1
-"$here/run_short.sh" "$out/short"
-mkdir -p "$out/n3/tmp"
+# Resumable: short modules run once; N3 keeps reported children and restarts its parent.
+[ -f "$out/short/ALL_DONE" ] || "$here/run_short.sh" "$out/short"
+rm -rf "${out:?}/n3/tmp"; mkdir -p "$out/n3/tmp"
 cd "$src"
 echo "head=$(git rev-parse HEAD) start=$(date -u +%FT%TZ)" > "$out/n3/meta"
 "$here/host_sampler.sh" "$out/n3/host.log" 60 & sampler=$!

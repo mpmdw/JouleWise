@@ -145,6 +145,15 @@ def fork_children(step, ordinal):
         k = 0
         while k < plan.get('uncached_k' if uncached else 'cached_k', 0):
             name = f'{ordinal:02d}-{step}-{"uncached" if uncached else "cached"}-k{k:02d}'
+            done = OUT / 'children' / (name + '.json')
+            if done.exists():
+                # Resumed after a restart: this child already reported.
+                outcome = json.loads(done.read_text())['outcome']
+                log(name, outcome, 'resumed')
+                if outcome != 'ran':
+                    break
+                k += 1
+                continue
             if backup.exists():
                 shutil.rmtree(backup)
             shutil.copytree(custody, backup, symlinks=True)
