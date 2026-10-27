@@ -19,7 +19,7 @@ BRIDGE_TASK_V1
  "BASELINE_DIGEST": "FILL_AT_LAUNCH",
  "ACCEPTANCE": [
    "A1: the 9b classification in section 4 is answered from executed evidence (rate per evaluated cell, host load, RSS/swap, thread counts at step 9b), not inferred",
-   "A2: the four long modules and the six short modules of section 5 each have a completed row (tests, failures, errors, skips, exit, wall, log SHA-256) at ONE source head named in the report",
+   "A2 (amended by ED-RULING.md, 2026-10-27): at ONE source head named in the report, the six short modules and reduced-size synthetic fixtures driving every registered step 0-11 (incl. 3b, 9b, the p42 exits) through the real programs, with the J1-J6 and C5-C9 predicates, each have a completed row (tests, failures, errors, skips, exit, wall, log SHA-256). Full-size synthetic module runs are optional diagnostics, not acceptance",
    "A3: no file outside WRITE_SCOPE changed; joulewise/powermetrics_fiducial.py, reduce.py and whole_window.py byte-identical to BASE_HEAD",
    "A4: every failure remaining at report time is classified harness / L9 code / production / host, each with its leaf condition"],
  "VERIFICATION": [
@@ -110,6 +110,13 @@ step 9b's projection. Then run the full dry-run module **alone** on an otherwise
 established; say so with the numbers. If it fails alone, work down (b) to (e).
 
 ## 5. Then carry L9 to merge-ready
+
+**Amended 2026-10-27 by `ED-RULING.md` beside this brief, which governs over this section.** Merge-readiness is
+reduced-size fixtures plus the six short modules, then one executing review. Build the reduced fixtures inside
+`tests/b5_analysis/` (sizes only; every check and assertion kept). The real block-5 blind dry run on the Mac is the
+full-size test. Bring step 9b to a NEEDS_RULING with options (a)-(c) of the ruling's item 6 and your evidence; do not
+wait on a 6 h full-size run to do so unless the reduced fixture cannot reproduce the deadline path.
+
 
 Modules, all at one head: `tests.b5_analysis.test_dry_run` (J1-J5), `test_release_equality` (J6),
 `test_joined_probes`, `test_chain_fixture` (C5/C8/C9); and `tests.test_authentication_io`,
