@@ -1,0 +1,53 @@
+{
+  "authority": "docs/registrations/bytes_extension_models_2026-10-27.md",
+  "dropped": [
+    {
+      "evidence": ".codex-report/BY-EXT-1.md section 1",
+      "hf_repo": null,
+      "kind": "moe_hybrid_mamba",
+      "model": {
+        "family": "nemotron_h",
+        "name": "Nemotron-3.5-Super-120B-A12B-4bit"
+      },
+      "model_id": "nemotron35-super-120b-a12b",
+      "pack_id": "bytes-s8-p1",
+      "registered_roster_member": false,
+      "role": "extension_held_out",
+      "status": "dropped_not_feasible"
+    }
+  ],
+  "minimum_kept_units_per_stratum": 5,
+  "models": [
+    {
+      "hf_repo": "mlx-community/Qwen3.8-27B-8bit",
+      "identity_status": "draft_pending_C4",
+      "kind": "dense",
+      "model": {
+        "family": "qwen3.8",
+        "name": "Qwen3.8-27B-8bit",
+        "revision": null,
+        "source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen38-27b-8bit",
+      "pack_id": "bytes-s7-p1",
+      "registered_roster_member": false,
+      "revision_status": "MAC-PENDING",
+      "role": "extension_held_out",
+      "status": "prepared"
+    }
+  ],
+  "note": "Extension models only. Never merged into the registered roster, fit set, H1 family or H2 fits.",
+  "registered_roster": "configs/campaigns/bytes_v1/roster.json",
+  "status": "draft",
+  "workload": {
+    "decode_forward_passes": 512,
+    "eos_suppressed": true,
+    "output_tokens": 512,
+    "phase_boundary_method": "first_token",
+    "prompt_tokens": 2048,
+    "settle_seconds": 5.0,
+    "temperature": 0,
+    "warmup_tokens": 4
+  }
+}

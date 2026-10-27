@@ -1,0 +1,89 @@
+{
+  "authority": "docs/registrations/bytes_extension_models_2026-10-27.md",
+  "how_to_fill": "At a SESSION_DESK or while the loop is held, by the orchestrator, from Mac receipts only (step list: .codex-report/BY-EXT-1.md section 4). Replace each \"MAC-PENDING\" with the observed value and set each slot's status to \"filled\" with its receipt path. Never guess a slot. Then run generate_extension.py, then generate_extension.py --tree.",
+  "models": {
+    "qwen38-27b-8bit": {
+      "config_model_type": {
+        "note": "config.json model_type (text_config merged). scripts/bytes_manifest.py FAMILIES must contain it, or the headers step refuses and a separately authorized manifest change is needed.",
+        "receipt": null,
+        "status": "MAC-PENDING",
+        "value": "MAC-PENDING"
+      },
+      "download": {
+        "destination": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
+        "free_disk_after_bytes": "MAC-PENDING",
+        "free_disk_before_bytes": "MAC-PENDING",
+        "receipt": null,
+        "size_bytes": "MAC-PENDING",
+        "status": "MAC-PENDING"
+      },
+      "group_size": {
+        "note": "64 is the mlx-lm convert default and is what the configs carry; verify quantization.group_size and bits=8 in the downloaded config.json (as for Qwen3-8B-8bit). If it differs, fill the observed value and regenerate.",
+        "receipt": null,
+        "status": "MAC-PENDING",
+        "value": 64
+      },
+      "hf_repo": {
+        "note": "Search (2026-10-27) finds the official mlx-community/Qwen3.8-27B-8bit; RUN_STATE item 66 does not name the organisation. Confirm against ~/night-archive/seats-f18a/models-removed.txt, which holds the revision of the copy deleted on 2026-10-25.",
+        "receipt": null,
+        "status": "MAC-PENDING",
+        "value": "mlx-community/Qwen3.8-27B-8bit"
+      },
+      "manifest": {
+        "KV_allocated_bytes": "MAC-PENDING",
+        "KV_occupied_bytes": "MAC-PENDING",
+        "R_bytes": "MAC-PENDING",
+        "W_bytes": "MAC-PENDING",
+        "b_bytes": "MAC-PENDING",
+        "extension_manifest_path": "MAC-PENDING",
+        "headers_record": "MAC-PENDING",
+        "kv_record": "MAC-PENDING",
+        "not_loaded_bytes": "MAC-PENDING",
+        "status": "MAC-PENDING"
+      },
+      "resolvability": {
+        "decode_phase_s_range": "MAC-PENDING",
+        "note": "3-5 run check that the decode phase is resolvable (block-6 design section 14), as for Qwen3-8B-8bit. Fail drops the model (recorded, no substitute).",
+        "receipt": "MAC-PENDING",
+        "runs_checked": "MAC-PENDING",
+        "status": "MAC-PENDING",
+        "verdict": "MAC-PENDING"
+      },
+      "revision": "MAC-PENDING"
+    }
+  },
+  "packs": {
+    "bytes-s7-p1": {
+      "clock_hold_ppm": {
+        "note": "H = 5000 / T_stream_max - 0.25 ppm, from this pack's T_stream_max_s.",
+        "status": "MAC-PENDING",
+        "value": "MAC-PENDING"
+      },
+      "disk": {
+        "B_bytes": "MAC-PENDING",
+        "P_bytes": "MAC-PENDING",
+        "P_plus_smoke_bytes": "MAC-PENDING",
+        "smoke_share_bytes": "MAC-PENDING",
+        "status": "MAC-PENDING"
+      },
+      "est_minutes": {
+        "source": {
+          "formula": "count * member_allowance_s / 60; no additional margin",
+          "path": "configs/b6/registration/sizing_b5.json",
+          "sha256": "MAC-PENDING",
+          "source_pointer": "/packs/bytes-s7-p1/disk_derivation/allowances_by_model/qwen38-27b-8bit",
+          "status": "MAC-PENDING"
+        },
+        "value": "MAC-PENDING"
+      },
+      "registration_status": "draft",
+      "sizing_row": {
+        "T_stream_max_s": "MAC-PENDING",
+        "programmed_span_s": "MAC-PENDING",
+        "sizing_b5_row": "/packs/bytes-s7-p1",
+        "status": "MAC-PENDING"
+      }
+    }
+  },
+  "status": "draft"
+}
