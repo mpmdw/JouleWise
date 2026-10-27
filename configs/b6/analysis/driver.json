@@ -15,12 +15,6 @@
       "S1": ["structure.chain_crashed", "structure.missing_stage_bundles",
              "structure.no_capture_records", "structure.no_roster"]
     },
-    "not_computable": {
-      "N1": ["calibration.bracket_incomplete"],
-      "N2": ["neg8.survivor_screen_undefined"],
-      "N3": ["cell.below_minimum"],
-      "N4": ["roster.no_science_bundles"]
-    },
     "minimum_kept_units_per_stratum": 5
   },
   "slots": {

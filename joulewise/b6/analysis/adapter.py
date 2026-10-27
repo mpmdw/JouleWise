@@ -83,7 +83,8 @@ class SessionAnalysis:
     ``b_op_defined``, ``drift_screen``, ``outputs``.  Restricted:
     ``quantities`` (each printed quantity of §9 by a stable key, None when not
     estimable) and ``contrasts`` (per contrast id: ``outcome`` word and
-    ``dbar``).  For a tooling refusal, ``code`` is the refusal token; an
+    ``dbar``), with ``reasons`` naming why a quantity is None (for example
+``not_estimable``).  For a tooling refusal, ``code`` is the refusal token; an
     outcome-class stop keeps its token restricted (``code`` None).
     """
     session_id: str
@@ -97,6 +98,7 @@ class SessionAnalysis:
     outputs: Mapping = field(default_factory=dict)      # role -> sha256 of an L9 restricted output
     quantities: Mapping = field(default_factory=dict)   # RESTRICTED
     contrasts: Mapping = field(default_factory=dict)    # RESTRICTED
+    reasons: Mapping = field(default_factory=dict)      # RESTRICTED: quantity key -> why it is None
 
     def __post_init__(self):
         if self.status not in STATUSES or self.drift_screen not in DRIFT_WORDS:
@@ -118,9 +120,9 @@ class L9ProgramAdapter:
     """Production adapter over L9's programs (see module docstring)."""
 
     def __init__(self, session_index: Path | None = None, block5_custody: Path | None = None):
-        # The authenticated block-6 session index (per session: archive root,
-        # claim-runs root, harvest record digest) is owed with S-14; block 5's
-        # index cannot name block-6 sessions (joulewise.b5_window_index.v1).
+        # The block-6 session index (joulewise.b6.analysis.session_index):
+        # per session its archive root, claim-runs root and harvest record
+        # digest; block 5's window index cannot name block-6 sessions.
         self.session_index = session_index
         self.block5_custody = block5_custody
 
@@ -141,8 +143,15 @@ class L9ProgramAdapter:
         # driver; until it exists the adapter refuses rather than reach into
         # RunState internals.
         function = getattr(module, name, None)
-        if function is None or self.session_index is None:
+        if function is None:
             raise AdapterRefusal("l9_session_seam_absent")
+        if self.session_index is None:
+            raise AdapterRefusal("session_index_absent")
+        from joulewise.b6.analysis.session_index import IndexRefusal, load_session_index
+        try:
+            load_session_index(self.session_index)
+        except IndexRefusal as exc:
+            raise AdapterRefusal(exc.code) from None
         return function
 
     def analyse_floor_session(self, request, custody):

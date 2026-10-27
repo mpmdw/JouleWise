@@ -105,6 +105,11 @@ def plan(census, config, *, only: str | None = None):
     return tuple(nodes), pairings, pre
 
 
+def _session_node(config, entry) -> str:
+    kind = schedule.FLOOR if entry.pack in config["floor_packs"] else schedule.GAMMA
+    return schedule.node_id(kind, entry.pack, entry.session_id)
+
+
 def _session_record(analysis: SessionAnalysis) -> dict:
     return asdict(analysis) | {"steps": [list(step) for step in analysis.steps]}
 
@@ -216,9 +221,8 @@ def _finish(adapter, nodes, store, census, config, config_sha, pairings, pre, *,
         if only is not None:
             admissions[(entry.pack, entry.session_id)] = pre[(entry.pack, entry.session_id)]
             continue
-        kind = schedule.FLOOR if entry.pack in config["floor_packs"] else schedule.GAMMA
         admissions[(entry.pack, entry.session_id)] = inclusive.admission(
-            entry, results.get(schedule.node_id(kind, entry.pack, entry.session_id)), config["section_11_4"])
+            entry, results.get(_session_node(config, entry)), config["section_11_4"])
 
     store.put("sessions", [_session_record(results[n.id]) for n in nodes])
     store.put("pairings", [pairings[g].as_record() for g in sorted(pairings, key=lambda g: census.get(g, "gamma").round)])
@@ -233,11 +237,19 @@ def _finish(adapter, nodes, store, census, config, config_sha, pairings, pre, *,
               "counting": e.counting, "admission": admissions[(e.pack, e.session_id)][0],
               "reasons": admissions[(e.pack, e.session_id)][1], "flags": _codes_public(e.codes, catalog)}
              for e in census.entries]
-    completed = all(row["status"] in COMPLETED for row in node_rows) and not line_refusals
+    # §12.3 item 3 (lead ruling of 2026-10-27): every collected session is
+    # analysed without a tooling refusal, or recorded with its registered
+    # structural reason (§11.4 (i)).  An undecided session is neither.
+    unaccounted = [] if only is not None else [
+        e.session_id for e in census.entries
+        if admissions[(e.pack, e.session_id)][0] != inclusive.NOT_REGISTERED
+        and getattr(results.get(_session_node(config, e)), "status", None) not in COMPLETED]
+    completed = all(row["status"] in COMPLETED for row in node_rows) and not line_refusals and not unaccounted
     record = {"schema_version": RECORD_SCHEMA, "mode": mode, "only": only, "analysis_commit": commit,
               "config_sha256": config_sha, "adapter": adapter.describe(),
               "census": census_module.structure_record(census), "pairings": store.get(store.roles["pairings"]),
               "session_index": index, "nodes": node_rows, "line_refusals": line_refusals,
+              "sessions_unaccounted": unaccounted,
               "restricted": dict(sorted(store.roles.items())),
               "completed_without_tooling_refusal": completed}
     if previous is not None:
@@ -265,7 +277,7 @@ def _previous_record(custody: Path) -> dict:
 def _release_difference(previous: dict, record: dict) -> dict | None:
     """The first binding or output digest the release run does not reproduce."""
     for key in ("analysis_commit", "config_sha256", "census", "pairings", "session_index", "nodes",
-                "line_refusals", "restricted"):
+                "line_refusals", "sessions_unaccounted", "restricted"):
         if previous.get(key) != record.get(key):
             return {"differs": key}
     return None

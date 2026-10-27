@@ -21,14 +21,19 @@ PHASES = ("decode", "prefill-p2048")
 FORMS = ("absolute", "comparative")
 CONTRASTS = ("decode", "prefill-p2048")
 
-# Block 6 as closed (RUN_STATE item 59): counting A r1/r3/r4, B r1/r2/r3,
-# G r1/r2/r3; ALPHA's round-2 attempt did not count.
+# Block 6 as closed (RUN_STATE item 59): nine collected sessions, all counting
+# (A r1/r3/r4, B r1/r2/r3, G r1/r2/r3).  ALPHA's round-2 attempt was a smoke
+# hold, not a collected session, so it has no attempt line here.
 CLOSED_BLOCK6 = (
     ("r1-alpha", "alpha", 1, "counting"), ("r1-beta", "beta", 1, "counting"), ("r1-gamma", "gamma", 1, "counting"),
-    ("r2-beta", "beta", 2, "counting"), ("r2-gamma", "gamma", 2, "counting"), ("r2-alpha", "alpha", 2, "physics_stopped"),
+    ("r2-beta", "beta", 2, "counting"), ("r2-gamma", "gamma", 2, "counting"),
     ("r3-gamma", "gamma", 3, "counting"), ("r3-alpha", "alpha", 3, "counting"), ("r3-beta", "beta", 3, "counting"),
     ("r4-alpha", "alpha", 4, "counting"),
 )
+# A synthetic collected ALPHA session that did not count (a physics stop), to
+# exercise §11.4.  It describes no real session.
+NONCOUNTING_ALPHA = ("r5-alpha", "alpha", 5, "physics_stopped")
+WITH_NONCOUNTING = CLOSED_BLOCK6 + (NONCOUNTING_ALPHA,)
 
 
 def unit(session_id: str, key: str, low: float, high: float) -> float:

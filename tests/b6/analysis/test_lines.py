@@ -15,8 +15,6 @@ RULES = {"not_registered_experiment": {"W1": ["model.files_differ_from_registere
                                        "W2": ["model.stack_differs_from_registered"],
                                        "W3": ["code.number_bearing_unreviewed"],
                                        "S1": ["structure.chain_crashed"]},
-         "not_computable": {"N1": ["calibration.bracket_incomplete"], "N2": ["neg8.survivor_screen_undefined"],
-                            "N3": ["cell.below_minimum"], "N4": ["roster.no_science_bundles"]},
          "minimum_kept_units_per_stratum": 5}
 
 
@@ -62,14 +60,43 @@ class BetweenSessionSummary(unittest.TestCase):
                          {"s1": 0.21, "s2": -0.13, "s3": 0.12})
 
     def test_only_mean_and_sd_no_ratio_no_interval(self):
-        row = summary.describe([("a", 1.0), ("b", 3.0)])
-        self.assertEqual(set(row), {"n", "sessions", "mean", "sd", "undefined_in"})
+        row = summary.describe([("a", 1.0, None), ("b", 3.0, None)])
+        self.assertEqual(set(row), {"n", "sessions", "missing", "mean", "sd", "note"})
         self.assertEqual((row["mean"], row["sd"]), (2.0, 2.0 ** 0.5))
 
-    def test_a_value_undefined_in_any_session_gives_no_summary(self):
-        row = summary.describe([("block5", 1.0), ("s1", None), ("s2", 2.0)])
-        self.assertEqual((row["mean"], row["sd"], row["undefined_in"]), (None, None, ["s1"]))
-        self.assertEqual(summary.describe([("block5", float("nan"))])["undefined_in"], ["block5"])
+    def test_a_missing_value_is_left_out_and_named_with_its_reason(self):
+        """Lead ruling of 2026-10-27 (report decision AD-1)."""
+        row = summary.describe([("block5", 1.0, None), ("s1", None, "not_estimable"), ("s2", 2.0, None),
+                                ("s3", float("nan"), "value_undefined")])
+        self.assertEqual((row["n"], row["sessions"], row["mean"]), (2, ["block5", "s2"], 1.5))
+        self.assertEqual(row["missing"], [{"session": "s1", "reason": "not_estimable"},
+                                          {"session": "s3", "reason": "value_undefined"}])
+        self.assertIsNone(row["note"])
+
+    def test_fewer_than_two_values_is_not_computable(self):
+        for rows in ([("block5", 1.0, None), ("s1", None, "not_estimable")], [("block5", None, "not_estimable")]):
+            row = summary.describe(rows)
+            self.assertEqual((row["mean"], row["sd"], row["note"]), (None, None, "not computable (n < 2)"))
+
+    def test_the_reason_comes_from_the_session(self):
+        b5 = gamma("block5", "direction_supported", 3.0)
+        s1 = gamma("s1", "not_estimable", None)
+        s2 = gamma("s2", "direction_supported", 2.0)
+        s3 = SessionAnalysis("s3", "gamma", "ok", contrasts={"decode": {"outcome": "x", "dbar": 1.0}},
+                             quantities={"q": None}, reasons={"q": "cell_below_minimum"})
+        row = summary.pack_summary(b5, [s1, s2, s3])["quantities"]["contrast/decode/dbar_j"]
+        self.assertEqual((row["n"], row["missing"]), (3, [{"session": "s1", "reason": "not_estimable"}]))
+        q = summary.pack_summary(b5, [s1, s2, s3])["quantities"]["q"]
+        self.assertEqual(q["missing"][-1], {"session": "s3", "reason": "cell_below_minimum"})
+        self.assertEqual(q["missing"][0], {"session": "block5", "reason": "quantity_absent"})
+
+    def test_side_by_side_over_the_sessions_with_a_value(self):
+        b5 = session("block5", **{self.Q: 26.10})
+        b6 = [session("s1", **{self.Q: 26.31}), session("s2", **{self.Q: None}), session("s3", **{self.Q: 26.21})]
+        row = summary.side_by_side(b5, b6)["quantities"][self.Q]
+        self.assertEqual(row["block6_n"], 2)
+        self.assertAlmostEqual(row["block6_mean"], 26.26, places=12)
+        self.assertEqual(row["block6_missing"], [{"session": "s2", "reason": "value_undefined"}])
 
     def test_contrast_dbar_is_a_summarised_quantity(self):
         b5, s1 = gamma("block5", "direction_supported", 3.0), gamma("s1", "direction_supported", 2.0)
@@ -155,9 +182,10 @@ class FlaggedInclusiveAdmission(unittest.TestCase):
                          ("not_registered_experiment", ["W1"]))
         self.assertEqual(inclusive.pre_admission(entry(structure_ok=False), RULES), ("not_registered_experiment", ["S1"]))
 
-    def test_not_computable(self):
+    def test_not_computable_is_decided_from_the_analysis(self):
+        # An N code does not stop the analysis: (ii) is read from its results.
         self.assertEqual(inclusive.pre_admission(entry(codes=("neg8.survivor_screen_undefined",)), RULES),
-                         ("not_computable", ["N2"]))
+                         ("candidate", []))
         self.assertEqual(inclusive.admission(entry(), analysed(n=4), RULES), ("not_computable", ["N3"]))
         self.assertEqual(inclusive.admission(entry(), analysed(b_op=False), RULES), ("not_computable", ["b_op_undefined"]))
         self.assertEqual(inclusive.admission(entry(), analysed(drift="undefined"), RULES),

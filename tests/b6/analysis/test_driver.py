@@ -20,7 +20,8 @@ from pathlib import Path
 
 from joulewise.b6.analysis import driver, public, schedule
 from joulewise.b6.analysis.adapter import L9ProgramAdapter
-from tests.b6.analysis.fakes import FakeL9, tree_digest, write_loop_root, write_r2_gamma_exclusions
+from tests.b6.analysis.fakes import (WITH_NONCOUNTING, FakeL9, tree_digest, write_loop_root,
+                                     write_r2_gamma_exclusions)
 
 ROOT = Path(__file__).resolve().parents[3]
 CLEAN = lambda repo_root: "0" * 40  # noqa: E731  a synthetic analysis commit
@@ -71,12 +72,14 @@ class EndToEnd(Harness):
         adapter = Recording()
         self.assertEqual(self.run_driver(adapter), 0)
         floors = sorted(c[1] for c in adapter.calls if c[0] == "floor")
-        self.assertEqual(floors, ["r1-alpha", "r1-beta", "r2-alpha", "r2-beta", "r3-alpha", "r3-beta", "r4-alpha"])
+        self.assertEqual(floors, ["r1-alpha", "r1-beta", "r2-beta", "r3-alpha", "r3-beta", "r4-alpha"])
         gammas = {c[1]: c[2] for c in adapter.calls if c[0] == "gamma"}
         self.assertEqual(gammas, {"r1-gamma": ("r1-alpha", "r1-beta"), "r2-gamma": ("r3-alpha", "r2-beta"),
                                   "r3-gamma": ("r3-alpha", "r3-beta")})
         record = record_of(self.tmp / "custody")
         self.assertTrue(record["completed_without_tooling_refusal"])
+        self.assertEqual(record["sessions_unaccounted"], [])
+        self.assertEqual(len(record["session_index"]), 9)
         self.assertEqual([row["node"] for row in record["nodes"]][:3],
                          ["block5:alpha:block5", "block5:beta:block5", "block5:gamma:block5"])
 
@@ -96,41 +99,70 @@ class EndToEnd(Harness):
                          ["block5", "r1-gamma", "r2-gamma", "r3-gamma"])
 
     def test_summary_is_block5_plus_the_three_counting_sessions(self):
+        write_loop_root(self.tmp / "loop", WITH_NONCOUNTING)
         self.run_driver(FakeL9(noisy=False))
         record = record_of(self.tmp / "custody")
         summary = restricted(self.tmp / "custody", record, "summary")
         for pack, sessions in (("alpha", ["block5", "r1-alpha", "r3-alpha", "r4-alpha"]),
                                ("beta", ["block5", "r1-beta", "r2-beta", "r3-beta"])):
-            for row in summary[pack]["quantities"].values():
-                self.assertEqual(row["sessions"], sessions)
+            for key, row in summary[pack]["quantities"].items():
+                if "prefill-p42" in key:
+                    # Not extractable in any session: every session listed as missing.
+                    self.assertEqual((row["n"], row["note"]), (0, "not computable (n < 2)"))
+                    self.assertEqual([m["session"] for m in row["missing"]], sessions)
+                else:
+                    self.assertEqual(row["sessions"], sessions)
         self.assertEqual(summary["alpha"]["label"], "between-session summary (n sessions): mean, standard deviation")
         flagged = restricted(self.tmp / "custody", record, "flagged_inclusive")
-        self.assertEqual(flagged["alpha"]["added_sessions"], ["r2-alpha"])
+        self.assertEqual(flagged["alpha"]["added_sessions"], ["r5-alpha"])
         self.assertEqual(flagged["alpha"]["label"], "including sessions that did not count (n = 5)")
         self.assertEqual(next(iter(flagged["alpha"]["summary"]["quantities"].values()))["sessions"],
-                         ["block5", "r1-alpha", "r2-alpha", "r3-alpha", "r4-alpha"])
+                         ["block5", "r1-alpha", "r3-alpha", "r4-alpha", "r5-alpha"])
         self.assertEqual(flagged["beta"]["added_sessions"], [])
 
     def test_every_collected_session_is_indexed(self):
         sessions = [("r1-alpha", "alpha", 1, "counting"), ("r2-alpha", "alpha", 2, "not_counting"),
-                    ("r3-alpha", "alpha", 3, "pending_harvest"), ("r4-alpha", "alpha", 4, "not_counting"),
+                    ("r4-alpha", "alpha", 4, "not_counting"), ("r5-alpha", "alpha", 5, "not_counting"),
+                    ("r6-alpha", "alpha", 6, "not_counting"),
                     ("r1-beta", "beta", 1, "counting"), ("r1-gamma", "gamma", 1, "counting")]
         write_loop_root(self.tmp / "loop", sessions, overrides={
             "r2-alpha": {"codes": ("model.stack_differs_from_registered",)},
-            "r4-alpha": {"codes": ("neg8.survivor_screen_failed",)}})
-        adapter = Recording()
-        self.run_driver(adapter)
-        index = {row["session_id"]: (row["admission"], row["reasons"]) for row in record_of(self.tmp / "custody")["session_index"]}
+            "r4-alpha": {"codes": ("neg8.survivor_screen_failed",)},
+            "r5-alpha": {"codes": ("neg8.survivor_screen_undefined",)},
+            "r6-alpha": {"structure_ok": False}})
+        adapter = Recording(drift={"r5-alpha": "undefined"})
+        self.assertEqual(self.run_driver(adapter), 0)
+        record = record_of(self.tmp / "custody")
+        index = {row["session_id"]: (row["admission"], row["reasons"]) for row in record["session_index"]}
         self.assertEqual(index, {"r1-alpha": ("counting", []), "r2-alpha": ("not_registered_experiment", ["W2"]),
-                                 "r3-alpha": ("not_harvested", []), "r4-alpha": ("added", []),
+                                 "r4-alpha": ("added", []), "r5-alpha": ("not_computable", ["drift_screen_undefined"]),
+                                 "r6-alpha": ("not_registered_experiment", ["S1"]),
                                  "r1-beta": ("counting", []), "r1-gamma": ("counting", [])})
-        self.assertNotIn("r2-alpha", [c[1] for c in adapter.calls])
-        self.assertNotIn("r3-alpha", [c[1] for c in adapter.calls])
+        analysed = [c[1] for c in adapter.calls]
+        # (i) decides what is analysed; (ii) is read from the analysis.
+        self.assertIn("r5-alpha", analysed)
+        self.assertNotIn("r2-alpha", analysed)
+        self.assertNotIn("r6-alpha", analysed)
+        self.assertEqual(record["sessions_unaccounted"], [])
+        self.assertTrue(record["completed_without_tooling_refusal"])
+
+    def test_an_undecided_or_refused_session_leaves_the_dry_run_incomplete(self):
+        write_loop_root(self.tmp / "loop", [("r1-alpha", "alpha", 1, "counting"), ("r2-alpha", "alpha", 2, "pending_harvest"),
+                                            ("r1-beta", "beta", 1, "counting"), ("r1-gamma", "gamma", 1, "counting")])
+        self.assertEqual(self.run_driver(FakeL9(noisy=False)), 2)
+        record = record_of(self.tmp / "custody")
+        self.assertEqual(record["sessions_unaccounted"], ["r2-alpha"])
+        self.assertFalse(record["completed_without_tooling_refusal"])
+        write_loop_root(self.tmp / "loop", WITH_NONCOUNTING)
+        self.assertEqual(self.run_driver(FakeL9(noisy=False, refuse={"r5-alpha": "kept_bundle_strict_validation_failed"}),
+                                         name="second"), 2)
+        self.assertEqual(record_of(self.tmp / "second")["sessions_unaccounted"], ["r5-alpha"])
 
     def test_a_noncounting_session_below_five_kept_units_is_not_added(self):
-        self.run_driver(FakeL9(noisy=False, kept={"r2-alpha": 4}))
+        write_loop_root(self.tmp / "loop", WITH_NONCOUNTING)
+        self.run_driver(FakeL9(noisy=False, kept={"r5-alpha": 4}))
         index = {r["session_id"]: r for r in record_of(self.tmp / "custody")["session_index"]}
-        self.assertEqual((index["r2-alpha"]["admission"], index["r2-alpha"]["reasons"]), ("not_computable", ["N3"]))
+        self.assertEqual((index["r5-alpha"]["admission"], index["r5-alpha"]["reasons"]), ("not_computable", ["N3"]))
         flagged = restricted(self.tmp / "custody", record_of(self.tmp / "custody"), "flagged_inclusive")
         self.assertEqual(flagged["alpha"]["added_sessions"], [])
 

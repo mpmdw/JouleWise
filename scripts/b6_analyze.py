@@ -21,9 +21,13 @@ What it prints: on standard error one line per analysed session, "node <kind>:<p
 <status>"; on standard output the record's path and SHA-256.  Exit 0: complete; 3: complete with a
 registered outcome-class stop; 2: a tooling refusal or anything else.
 
-The slot subcommands write restricted outputs for automation and print only their path and digest:
+The other subcommands print only their output's path and digest:
 
+    python3.13 -B scripts/b6_analyze.py index --loop-root <loop root> --measurement <measurement checkout> \
+        --out <file outside the repository>
     python3.13 -B scripts/b6_analyze.py slots --smoke-rows <rows.json> --out <file outside the repository>
+
+index writes the block-6 session index (structure: paths and digests); slots writes S-11 and S-9 (restricted).
 """
 from __future__ import annotations
 
@@ -35,7 +39,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from joulewise.b6.analysis import driver, slots  # noqa: E402
+from joulewise.b6.analysis import driver, session_index, slots  # noqa: E402
 from joulewise.b6.analysis.adapter import L9ProgramAdapter  # noqa: E402
 from joulewise.b6.analysis.public import canonical, sha256  # noqa: E402
 
@@ -53,10 +57,29 @@ def _slots(args) -> int:
     except (OSError, ValueError, TypeError, AttributeError, slots.SlotRefusal):
         print("slots - tooling_refusal", file=sys.stderr)
         return 2
+    return _write_outside(out, raw)
+
+
+def _write_outside(out: Path, raw: bytes) -> int:
     with out.open("xb") as stream:
         stream.write(raw)
     print(f"{out} {sha256(raw)}")
     return 0
+
+
+def _index(args) -> int:
+    out = Path(args.out).absolute()
+    if out.is_relative_to(ROOT) or out.exists():
+        print("index - tooling_refusal", file=sys.stderr)
+        return 2
+    try:
+        raw = canonical(session_index.build_session_index(
+            Path(args.loop_root), measurement=Path(args.measurement),
+            block_root=Path(args.block_root) if args.block_root else None))
+    except (session_index.IndexRefusal, driver.census_module.CensusRefusal) as exc:
+        print(f"index - tooling_refusal {exc.code}", file=sys.stderr)
+        return 2
+    return _write_outside(out, raw)
 
 
 def main(argv=None) -> int:
@@ -70,12 +93,19 @@ def main(argv=None) -> int:
     run.add_argument("--block5-custody")
     run.add_argument("--session")
     run.add_argument("--workers", type=int, default=1)
+    index = commands.add_parser("index")
+    index.add_argument("--loop-root", required=True)
+    index.add_argument("--measurement", required=True)
+    index.add_argument("--block-root")
+    index.add_argument("--out", required=True)
     slot = commands.add_parser("slots")
     slot.add_argument("--smoke-rows", required=True)
     slot.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     if args.command == "slots":
         return _slots(args)
+    if args.command == "index":
+        return _index(args)
     adapter = L9ProgramAdapter(Path(args.session_index) if args.session_index else None,
                                Path(args.block5_custody) if args.block5_custody else None)
     return driver.analyse(Path(args.loop_root), Path(args.custody), adapter, mode=args.mode,

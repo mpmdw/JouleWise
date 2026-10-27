@@ -8,9 +8,11 @@ defined drift screen).  Session-level excluding flags P1 to P4 and D1 are
 ignored for it; run exclusions still apply (they are inside the per-session
 analysis).  Admission reads structure only: codes, counts and verdict words.
 
-Two passes: :func:`pre_admission` decides from the loop's record before any
-analysis (so an inadmissible session is never analysed for this line), and
-:func:`admission` finishes from the session's structure results.
+Two passes (lead ruling of 2026-10-27 on §12.3 item 3): :func:`pre_admission`
+applies (i) from the loop's record, and every session that meets (i), counting
+or not, is analysed, because (ii) needs its computed kept units, b_op and drift
+screen; :func:`admission` then applies (ii) to those results.  A session
+failing (i) is recorded with its structural reason and not analysed.
 """
 from __future__ import annotations
 
@@ -37,9 +39,6 @@ def pre_admission(entry: SessionEntry, rules: dict) -> tuple[str, list[str]]:
         wrong = sorted(wrong + ["S1"])
     if wrong:
         return NOT_REGISTERED, wrong
-    undefined = _groups(entry.codes, rules["not_computable"])
-    if undefined:
-        return NOT_COMPUTABLE, undefined
     return CANDIDATE, []
 
 

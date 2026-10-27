@@ -12,7 +12,8 @@ from unittest import mock
 from joulewise.b6.analysis import census as census_module
 from joulewise.b6.analysis import pairing
 from joulewise.b6.analysis.census import CensusRefusal, census_from_state, load_census
-from tests.b6.analysis.fakes import CLOSED_BLOCK6, attempt_line, write_loop_root, write_r2_gamma_exclusions
+from tests.b6.analysis.fakes import (CLOSED_BLOCK6, WITH_NONCOUNTING, attempt_line, write_loop_root,
+                                     write_r2_gamma_exclusions)
 
 
 class OpenTripwire:
@@ -52,8 +53,14 @@ class CountingFromLoopAcceptance(unittest.TestCase):
                                     "beta": ["r1-beta", "r2-beta", "r3-beta"],
                                     "gamma": ["r1-gamma", "r2-gamma", "r3-gamma"]})
         self.assertTrue(census.closed)
-        self.assertEqual([e.session_id for e in census.pack("alpha")], ["r1-alpha", "r2-alpha", "r3-alpha", "r4-alpha"])
-        self.assertFalse(census.get("r2-alpha").counting)
+        self.assertEqual(len(census.entries), 9)
+
+    def test_a_collected_session_that_did_not_count_is_in_the_census(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            census = load_census(write_loop_root(Path(tmp), WITH_NONCOUNTING))
+        self.assertEqual([e.session_id for e in census.pack("alpha")], ["r1-alpha", "r3-alpha", "r4-alpha", "r5-alpha"])
+        self.assertFalse(census.get("r5-alpha").counting)
+        self.assertEqual(census.get("r5-alpha").status, "physics_stopped")
 
     def test_r2_gamma_counts_although_its_exclusions_say_claim_usable_false(self):
         """RUN_STATE item 53: block 5's neg8.midpoint_lost_primary must not decide counting."""
@@ -69,9 +76,10 @@ class CountingFromLoopAcceptance(unittest.TestCase):
 
     def test_reharvest_correction_in_state_decides(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = write_loop_root(Path(tmp), reharvested={"r2-alpha": {"alpha": {"status": "counting", "cause": None}}})
+            root = write_loop_root(Path(tmp), WITH_NONCOUNTING,
+                                   reharvested={"r5-alpha": {"alpha": {"status": "counting", "cause": None}}})
             census = load_census(root)
-        self.assertTrue(census.get("r2-alpha").counting)
+        self.assertTrue(census.get("r5-alpha").counting)
 
     def test_codes_are_read_from_the_attempt_line(self):
         state = {"attempts": [attempt_line("r1-alpha", "alpha", 1, "not_counting",
