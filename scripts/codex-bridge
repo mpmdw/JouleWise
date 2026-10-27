@@ -163,8 +163,8 @@ case "$codex_service_tier" in
     exit 64
     ;;
 esac
-fresh_model_args=(-m "$codex_model" -c "model_reasoning_effort=$codex_effort" -c "service_tier=$codex_service_tier" -c "mcp_servers.claude.enabled=false")
-resume_model_args=(-c "model=$codex_model" -c "model_reasoning_effort=$codex_effort" -c "service_tier=$codex_service_tier" -c "mcp_servers.claude.enabled=false")
+fresh_model_args=(-m "$codex_model" -c "model_reasoning_effort=$codex_effort" -c "service_tier=$codex_service_tier" -c "mcp_servers.claude.enabled=false" -c 'mcp_servers.claude.command="/usr/bin/false"')
+resume_model_args=(-c "model=$codex_model" -c "model_reasoning_effort=$codex_effort" -c "service_tier=$codex_service_tier" -c "mcp_servers.claude.enabled=false" -c 'mcp_servers.claude.command="/usr/bin/false"')
 last_message="$bridge_dir/last-message.md"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 manifest_file="$bridge_dir/invocation_manifest.jsonl"
