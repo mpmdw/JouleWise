@@ -1,0 +1,114 @@
+{
+  "schema_version": "difficulty_config.v2",
+  "version": "difficulty-v2",
+  "seed": "joulewise.packs.difficulty.v2",
+  "n_per_level": 200,
+  "sizes": {
+    "off": {
+      "bench": {
+        "1": 200,
+        "2": 200,
+        "3": 200,
+        "4": 200,
+        "5": 200
+      },
+      "energy": {
+        "1": 20,
+        "2": 20,
+        "3": 40,
+        "4": 40,
+        "5": 40
+      }
+    },
+    "on": {
+      "bench": {
+        "1": 64,
+        "2": 64,
+        "3": 64,
+        "4": 64,
+        "5": 64
+      },
+      "energy": {
+        "1": 20,
+        "2": 20,
+        "3": 20,
+        "4": 20,
+        "5": 20
+      }
+    }
+  },
+  "exclude_importer_sets": true,
+  "exclude_item_id_files": [
+    "/Users/edr/night-archive/pilots/difficulty/pilot_item_ids.txt"
+  ],
+  "boundaries": [
+    "rails",
+    "wall"
+  ],
+  "configurations": [
+    {
+      "model": "qwen3-1.7b",
+      "repo": "mlx-community/Qwen3-1.7B-4bit",
+      "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+      "mode": "off",
+      "output_cap": 4096,
+      "status": "measured"
+    },
+    {
+      "model": "qwen3-4b",
+      "repo": "mlx-community/Qwen3-4B-4bit",
+      "revision": "<panel pin>",
+      "mode": "off",
+      "output_cap": 4096,
+      "status": "measured"
+    },
+    {
+      "model": "qwen3-8b",
+      "repo": "mlx-community/Qwen3-8B-4bit",
+      "revision": "<panel pin>",
+      "mode": "off",
+      "output_cap": 4096,
+      "status": "measured"
+    },
+    {
+      "model": "qwen3-4b",
+      "repo": "mlx-community/Qwen3-4B-4bit",
+      "revision": "<panel pin>",
+      "mode": "on",
+      "output_cap": 16384,
+      "status": "measured"
+    },
+    {
+      "model": "qwen3-8b",
+      "repo": "mlx-community/Qwen3-8B-4bit",
+      "revision": "<panel pin>",
+      "mode": "on",
+      "output_cap": 16384,
+      "status": "optional"
+    }
+  ],
+  "primary_comparison": {
+    "a": "qwen3-1.7b/off",
+    "b": "qwen3-4b/off"
+  },
+  "descriptive_confidence": 0.95,
+  "decision_confidence": 0.99,
+  "bootstrap": {
+    "replicates": 4000,
+    "seed": "joulewise.packs.difficulty.v2.bootstrap"
+  },
+  "exclude_flags": [
+    "runtime_failed"
+  ],
+  "physical_exclude_flags": [
+    "agent_overlap",
+    "sleep",
+    "contention_above_level",
+    "idle_wait_cap"
+  ],
+  "loop_detector": {
+    "tail_fraction": 0.25,
+    "min_span": 20,
+    "min_repeats": 3
+  }
+}
