@@ -137,6 +137,7 @@ _MEMBER_CODES = {
 
 # Plan section 3.5, DISCLOSE only.
 _DISCLOSE_CODES = {
+    "records.claim_usable_counting_disagreement": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.receipt": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.lineage_formality": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "records.attempt_history": _code("RECORDS", "REPRESENTATION", DISCLOSE),
@@ -347,6 +348,24 @@ _AUDFIX2_CODES = {
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
+    # Block-6 collection spec; proposed effects, pending registration.
+    "agent.pause_marker_stale": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "sleep.in_run": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
+    "sleep.between_runs": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "sleep.reading_unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.waited": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_cap_skip": _code("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "idle.wait_budget_skip": _code("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "idle.wait_budget_exhausted": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_budget_unreadable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_ledger_unwritable": _code("RECORDS", "REPRESENTATION", DISCLOSE),
+    "idle.busy_fraction_exceeded": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "agent.presence": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
+    "agent.presence_overlap": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
+    "agent.capture_overlap": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "sleep.in_chain": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "sleep.assertion_lost": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "sleep.assertion_unverified": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     **_WINDOW_CODES,
     **_MEMBER_CODES,
     **_DISCLOSE_CODES,

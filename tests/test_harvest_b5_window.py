@@ -61,8 +61,23 @@ from joulewise.schemas import BenchmarkConfig
 from joulewise.uncertainty_evidence import resolve_clock_evidence_deriver, stamp_from_mapping
 
 ROOT = Path(__file__).resolve().parents[1]
+# Proposed block-6 collection vocabulary belongs to its future pack catalog,
+# never to the immutable block-5 seal. Shared block-5 entries still match exactly.
+B6_COLLECTION_CODES = frozenset({
+    # F11 is a block-six desk disclosure, outside block five's sealed vocabulary.
+    "records.claim_usable_counting_disagreement",
+    "clock.rate_above_budget", "instrument.single_interval_above_screen",
+    "agent.presence", "agent.presence_overlap", "agent.capture_overlap", "agent.pause_marker_stale",
+    "sleep.in_run", "sleep.between_runs", "sleep.in_chain", "sleep.reading_unmeasured",
+    "sleep.assertion_lost", "sleep.assertion_unverified", "idle.waited", "idle.wait_cap_skip",
+    "idle.wait_budget_skip", "idle.wait_budget_exhausted", "idle.wait_budget_unreadable",
+    "idle.busy_fraction_exceeded",
+    "idle.wait_ledger_unwritable",
+})
 SEED = ROOT / "tests/fixtures/d117_v2_production/strict_seed_bundle"
 FIXTURES = ROOT / "tests/fixtures/b5_harvest"
+SEALED_BELOW_MINIMUM = json.loads(
+    (ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json").read_bytes())["codes"]["cell.below_minimum"]
 L1_JOURNALS = FIXTURES / "l1_monitor"
 PREFIX = ROOT / "tests/fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
 ACCEPTANCE = "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
@@ -627,6 +642,10 @@ class Window:
         # Six members cannot fill the registered 5-of-10 minimum; one unit per
         # stratum keeps the unit rule observable in a window this small.
         catalog["rules"]["cell_unit_minimum"] = 1
+        # The sealed claim catalog carries cell.below_minimum (EXCLUDE_WINDOW); the exclusion
+        # function reads its effect from the catalog since FIX-416-B, and the fixture lists only
+        # codes the harvest emits.
+        catalog["codes"]["cell.below_minimum"] = SEALED_BELOW_MINIMUM
         for code, effect in overrides.items():
             catalog["codes"][code]["effect"] = effect
         put(self.measurement / "configs/campaigns/v5_claim_25g83/flag_catalog.json", catalog)
@@ -1869,8 +1888,8 @@ def neg8_reference_gates(points: dict[str, float]):
     def strict_invalid(path, *args, **kwargs):
         return False if ours(path) else real["_custody_strict_invalid"](path, *args, **kwargs)
 
-    def current(summary, bundle_path=None):
-        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path)
+    def current(summary, bundle_path=None, **kwargs):
+        return True if ours(bundle_path) else real["_current_strict_summary"](summary, bundle_path, **kwargs)
 
     def identity(path):
         return ("d" * 64, True) if ours(path) else real["_scientific_config_identity"](path)
@@ -2303,7 +2322,10 @@ class EmittedCodeTests(unittest.TestCase):
         not_codes = {"g3.txt", "roster.json",  # file names
                      "chain.started", "monitor.capture_battery",  # a night record and a collector name
                      "yield.json"}  # a file name
-        self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
+        # The two block-6 arm diagnostics use explicit specs and the block-6 catalog, rather than extending block 5's
+        # immutable catalog vocabulary. Name only them, so any other new literal still needs a catalog entry.
+        b6_arm_diagnostics = {"clock.rate_above_budget", "instrument.single_interval_above_screen"}
+        self.assertEqual((literals | built) - not_codes - set(h.CODES) - b6_arm_diagnostics, set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
         from joulewise import window_lineage
@@ -2321,7 +2343,7 @@ class EmittedCodeTests(unittest.TestCase):
         # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
         self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.AUDFIX1_CODES - h.AUDFIX2_CODES
-                         - h.NEG8_SURVIVOR_CODES,
+                         - h.NEG8_SURVIVOR_CODES - B6_COLLECTION_CODES,
                          set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
@@ -2334,10 +2356,11 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.catalog import DRAFT_CODES
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
-        emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
+        # Block-6 core codes are classified in configs/b6/flag_catalog_b6.json, not the sealed catalog.
+        emitted = (set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)) - {"calibration.acceptance_preflight_unverified"}
         # Audit-fix batches 1 and 2's codes and the NEG-8 survivors codes (ruling
         # 2026-10-07) reach the design catalog through REG before the seal.
-        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES - h.NEG8_SURVIVOR_CODES,
+        self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES - h.NEG8_SURVIVOR_CODES - B6_COLLECTION_CODES,
                          set(h.NEVER_CLASSIFIED_CODES))
         self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
                           if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
@@ -3275,7 +3298,9 @@ class ExclusionSeamTests(unittest.TestCase):
         from joulewise.flags import catalog as l4_catalog
         from joulewise.flags import exclusions
         roster, document, spans = self.inputs(self.ALPHA)
-        catalog = l4_catalog.load_catalog(FIXTURES / "flag_catalog.json")
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
+        fixture["codes"]["cell.below_minimum"] = SEALED_BELOW_MINIMUM  # as in _build_catalog
+        catalog = l4_catalog.catalog_from_bytes(json.dumps(fixture).encode(), path="fixture+sealed-minimum")
         clean = exclusions.compute([], document, spans, catalog)
         self.assertTrue(clean["claim_usable"], clean["reasons"])
         self.assertEqual({cell["cell_id"]: cell["planned"] for cell in clean["cells"]},
@@ -3650,7 +3675,8 @@ class IdentityReplayTests(WindowTestCase):
                 self.assertNotIn("code.identity_unmeasured", window.codes())
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1" and (B3W1 / "harvest.json").is_file(),
+                     "local block-3 archives are disabled in synthetic-only runs or unavailable")
 class RehearsalRound1Tests(WindowTestCase):
     """The breaks the block-5 end-to-end rehearsal (round 1, 2026-10-06) found, each through the real harvest."""
 
@@ -4124,12 +4150,12 @@ class FixtureCatalogTests(WindowTestCase):
             self.skipTest("the block-5 catalog is not in this tree")
         catalog = json.loads(block5.read_bytes())
         fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
-        self.assertEqual(set(fixture["codes"]) - set(catalog["codes"]), set())
+        self.assertEqual(set(fixture["codes"]) - set(catalog["codes"]) - B6_COLLECTION_CODES, set())
         keys = ("family", "klass", "effect", "blinding")
         self.assertEqual({code: (tuple(entry.get(key) for key in keys),
                                  tuple(catalog["codes"][code].get(key) for key in keys))
                           for code, entry in fixture["codes"].items()
-                          if any(entry.get(key) != catalog["codes"][code].get(key) for key in keys)}, {})
+                          if code in catalog["codes"] and any(entry.get(key) != catalog["codes"][code].get(key) for key in keys)}, {})
         self.assertEqual(fixture["codes"]["g3.recompute_failed"]["effect"], "DISCLOSE")
         # The cell unit minimum, the one rule either file carries (seal gate SG-1: 5).
         self.assertEqual(fixture["rules"], catalog["rules"])
@@ -4471,7 +4497,7 @@ def hazard_member_gates(omitted: str | None = None):
 
 def mint_drops_patch(drops: object, asked: list | None = None):
     """The core's ``neg8_corpus_mint_drops`` replaced: ``drops`` (rows, an exception to raise, or ABSENT)."""
-    def function(runs_root, manifest_path):
+    def function(runs_root, manifest_path, *, compression_records=None):
         if asked is not None:
             listed = json.loads(Path(manifest_path).read_bytes())["members"]
             asked.append((Path(runs_root), [member["bundle_id"] for member in listed]))
@@ -5056,7 +5082,8 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
             self.assertEqual("DISCLOSE", DRAFT_CODES[code]["effect"])
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1" and (B3W1 / "harvest.json").is_file(),
+                     "local block-3 archives are disabled in synthetic-only runs or unavailable")
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 

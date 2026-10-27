@@ -41,6 +41,17 @@ PLAN_ID = "plan-core-flags"
 
 # DESIGN.md section 5: code -> (family, klass, effect).
 SECTION_5 = {
+    "agent.pause_marker_stale": ("RECORDS", "REPRESENTATION", DISCLOSE),
+    "sleep.in_run": ("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
+    "sleep.between_runs": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "sleep.reading_unmeasured": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.waited": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_cap_skip": ("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "idle.wait_budget_skip": ("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "idle.wait_budget_exhausted": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_budget_unreadable": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_ledger_unwritable": ("RECORDS", "REPRESENTATION", DISCLOSE),
+    "idle.busy_fraction_exceeded": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "calibration.capture_battery_pair_unverified": ("CALIBRATION", "PHYSICS", DISCLOSE),
     "records.pin_ledger": ("RECORDS", "REPRESENTATION", DISCLOSE),
     "calibration.power_policy_unverified": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
@@ -68,12 +79,18 @@ SECTION_5 = {
     "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
     "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION", DISCLOSE),
 }
+B6_CODES = frozenset(code for code in SECTION_5 if code.startswith(("agent.", "sleep.", "idle.")))
 # Core codes whose consumer tables (DRAFT_CODES, the harvest's CODES and
 # CORE_WRITER_CODES, the fixture catalog) were still to be filled by lane
 # P2-HARV.  Empty since integration int3: every core code is cross-checked in full.
 PRUNE2_CONSUMER_PENDING = frozenset()
 HARVEST_NONCORE_CODES = ("neg8.corpus_member_dropped", "calibration.capture_battery_span",
                          "calibration.capture_battery_unmeasured", "calibration.capture_invalid")
+# Block-six additions are classified in their own catalog; the block-five
+# consumer tables and sealed catalog retain their original vocabulary.
+BLOCK6_CORE_CODES = {
+    "calibration.acceptance_preflight_unverified": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
+}
 # The protected-core files whose literal codes must be in CORE_FLAG_CODES.
 CORE_WRITER_FILES = ("joulewise/controller.py", "scripts/run_campaign.py",
                      "scripts/validate_powermetrics_fiducial.py", "scripts/reserve_calibration_window_bracket.py")
@@ -322,13 +339,15 @@ class HarvestFoldTests(unittest.TestCase):
 
 
 class VocabularyTests(unittest.TestCase):
-    """Interface I5: CORE_FLAG_CODES = fixture catalog = DRAFT_CODES = harvest CODES (= sealed draft)."""
+    """Core codes match their owning catalog and the block-five consumer tables."""
 
-    def test_every_core_code_has_its_section_5_classification_everywhere(self):
+    def test_every_block_five_core_code_has_its_section_5_classification_everywhere(self):
         from joulewise.b5 import harvest as h
 
         fixture = json.loads(FIXTURE_CATALOG.read_bytes())["codes"]
         for code, (family, klass) in flags_core.CORE_FLAG_CODES.items():
+            if code in BLOCK6_CORE_CODES:
+                continue
             with self.subTest(code):
                 expected = SECTION_5[code]
                 self.assertEqual((family, klass), expected[:2])
@@ -340,10 +359,19 @@ class VocabularyTests(unittest.TestCase):
                                  expected)
                 self.assertEqual((h.CODES[code].family, h.CODES[code].klass), expected[:2])
         pending = {code for code in PRUNE2_CONSUMER_PENDING if code not in h.CORE_WRITER_CODES}
-        self.assertEqual(set(flags_core.CORE_FLAG_CODES) - {"code.executed_differs_from_sealed"} - pending,
+        self.assertEqual(set(flags_core.CORE_FLAG_CODES) - set(BLOCK6_CORE_CODES)
+                         - {"code.executed_differs_from_sealed"} - pending,
                          set(h.CORE_WRITER_CODES))
         self.assertEqual(set(flags_core.WRITERS),
                          {"core-controller", "core-run_campaign", "core-fiducial", "core-reservation"})
+
+    def test_block_six_core_codes_match_the_block_six_catalog(self):
+        catalog = load_catalog(REPO / "configs/b6/flag_catalog_b6.json")
+        for code, expected in BLOCK6_CORE_CODES.items():
+            with self.subTest(code):
+                self.assertEqual(flags_core.CORE_FLAG_CODES[code], expected[:2])
+                entry = catalog.codes[code]
+                self.assertEqual((entry["family"], entry["klass"], entry["effect"]), expected)
 
     def test_the_harvest_codes_of_this_lane_are_classified(self):
         from joulewise.b5 import harvest as h
@@ -369,6 +397,8 @@ class VocabularyTests(unittest.TestCase):
             self.skipTest("the sealed catalog is not in this tree (the orchestrator adds these codes to the draft)")
         catalog = load_catalog(sealed)
         for code, expected in SECTION_5.items():
+            if code in B6_CODES:
+                continue  # Proposed block-6 codes do not rewrite block 5's seal.
             entry = catalog.codes.get(code)
             self.assertIsNotNone(entry, code)
             self.assertEqual((entry["family"], entry["klass"], entry["effect"]), expected, code)

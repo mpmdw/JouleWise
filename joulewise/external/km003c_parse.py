@@ -66,6 +66,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.desk_compress import read_bytes
 
 STEP_MS = {0: 500, 1: 100, 2: 20, 3: 1}
 SAMPLE = struct.Struct("<HHiiHHHH")
@@ -116,8 +117,7 @@ def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[d
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
-    with open(path) as handle:
-        lines = handle.read().split("\n")
+    lines = read_bytes(Path(path)).decode("utf-8").split("\n")
     for number, line in enumerate(lines, 1):
         if not line.strip():
             continue
@@ -379,6 +379,28 @@ def raw_offset_ns(stream: Stream) -> int | None:
 
 # --------------------------------------------------------------------------
 # Energy
+
+
+def span_has_drops(stream: Stream, t0: int, t1: int) -> bool:
+    """Whether a missing device-counter sample maps into [t0, t1).
+
+    The counter is integer device milliseconds, independent of host arrival
+    jitter. Inspect neighbouring samples too: a missing first or last sample
+    need not have both surviving neighbours inside the requested span.
+    """
+    if stream.samples is None or stream.fit is None:
+        return False
+    lo = max(0, bisect.bisect_left(stream.host_ns, t0) - 1)
+    hi = min(len(stream.host_ns), bisect.bisect_left(stream.host_ns, t1) + 1)
+    device = stream.samples.dev_ms
+    step = stream.samples.step_ms
+    for i in range(lo + 1, hi):
+        previous, following = device[i - 1], device[i]
+        missing = (following - previous - 1) // step
+        if missing > 0 and (stream.fit.host_ns(previous + step) < t1 and
+                            stream.fit.host_ns(previous + missing * step) >= t0):
+            return True
+    return False
 
 
 def integrate(times_ns: Sequence[int], watts: Sequence[float], t0: int, t1: int

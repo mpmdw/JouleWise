@@ -10,7 +10,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 from joulewise import arm_readiness as readiness, battery_float, v5_qualification as q
 from scripts import harvest_v5_g2b_window as h
@@ -68,6 +68,26 @@ class G2bStructureTests(unittest.TestCase):
         self.assertEqual(ids, self.ids)
         self.assertEqual(sha, q.sha(self.order_path))
         self.assertEqual(causes, [])
+
+    def test_full_harvest_refuses_compressed_inputs_before_physical_census(self):
+        inputs = {"schema": h.INPUT_SCHEMA, "occurrence": "s1", "plan": {"path": "plan"},
+                  "custody_root": str(self.custody), "bound_runs_root": str(self.base / "bound"),
+                  "policy": {"path": "policy"}, "acceptance": {"path": "acceptance"}}
+        input_path = self.base / "inputs.json"
+        put(input_path, inputs)
+        metadata = self.runs / self.ids[0] / "metadata.json"
+        metadata.rename(metadata.with_suffix(".json.zst"))
+        plan = SimpleNamespace(custody_root=str(self.custody), chain_path=str(self.log),
+            chain_sha256_path=str(self.base / "chain.sha256"),
+            pack_night={"pack_root": str(self.pack), "pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"})
+        args = SimpleNamespace(inputs=input_path, inputs_sha256="a" * 64)
+        with mock.patch.object(q, "authenticated_reference", side_effect=lambda ref: Path(ref["path"])), \
+             mock.patch.object(q, "load_plan", return_value=plan), \
+             mock.patch.object(h.night_gate, "chain_literal", return_value="s1"), \
+             mock.patch.object(q, "native_admission_abort") as census:
+            with self.assertRaisesRegex(h.RestoreRefused, "restore_refused: compressed_bundle_requires_restore"):
+                h.harvest(args)
+        census.assert_not_called()
 
     def test_swapped_or_missing_manifest_member_kills_acceptance(self):
         original = q.read(self.campaign_path)
@@ -383,6 +403,15 @@ class G2bStructureTests(unittest.TestCase):
         self.assertEqual(mixed["recovery_classification"], "admission_abort_with_other_recover_cause")
         with self.assertRaisesRegex(q.HarvestRefusal, "named_tooling_recover"):
             q.tooling_s2_predecessor(mixed)
+        # A restore refusal must cross the collector fence instead of becoming
+        # another recovery/member cause or a published refused harvest row.
+        shutil.rmtree(destination)
+        with mock.patch.object(q, "load_plan", return_value=plan), \
+             mock.patch.object(h, "member_assessment", side_effect=h.RestoreRefused("fixture storage")), \
+             mock.patch.object(q, "publish") as publish:
+            with self.assertRaisesRegex(h.RestoreRefused, "restore_refused: fixture storage"):
+                h.harvest(args, clear=lambda *a, **k: True)
+        publish.assert_not_called()
 
 
 class BatteryBoundaryTests(unittest.TestCase):
@@ -437,6 +466,150 @@ class FoldedL10Tests(unittest.TestCase):
     def expected_runner(self, *args, **kwargs):
         return subprocess.CompletedProcess(args[0], 0,
             f"PASS FINALIZE-REFUSAL observed={{{h.FINALIZER_REASON}}} expected={{{h.FINALIZER_REASON}}}\nSUMMARY pass=1 skip=0 fail=0\n", "")
+
+    def test_compressed_science_and_external_bound_bundle_restore_before_l10_reads(self):
+        from joulewise import desk_restore
+        from tests.desk_restore_support import compress_member
+        from tests.test_p2038_production_path import P2038ProductionPathTests
+
+        source, _ = P2038ProductionPathTests().run_mode(self.base / "primary", "normal")
+        bound = self.base / "external-bound-runs/bound"
+        shutil.copytree(source, bound)
+        originals = {rid: self.custody / "runs" / rid for rid in self.ids}
+        originals["bound"] = bound
+        expected = h.reduce_bundle(bound).to_dict()
+        seen = []
+        finalizer_inputs = []
+
+        def validator(path, strict):
+            self.assertFalse(list(path.rglob("*.zst")))
+            seen.append(path)
+            return h.validate_bundle(path, strict=strict) if path.name == "bound" else []
+
+        def reducer(path):
+            self.assertFalse(list(path.rglob("*.zst")))
+            return h.reduce_bundle(path) if path.name == "bound" else q.read(path / "summary_metrics.json")
+
+        def invoke(destination):
+            def runner(argv, **kwargs):
+                finalizer_root = Path(argv[argv.index("--custody-root") + 1])
+                self.assertFalse(list(finalizer_root.rglob("*.zst")))
+                finalizer_inputs.append(finalizer_root)
+                return subprocess.run(argv, **kwargs)
+            with mock.patch.object(h, "anchor_status", return_value="bounded"):
+                return h.l10_a(self.custody, destination, self.ids, "a" * 40,
+                    runner=runner, additional_bundles={"bound": bound},
+                    validator=validator, reducer=reducer)
+
+        plain_members, plain_causes = invoke(self.dest)
+        plain_record = q.read(self.dest / "l10-a/record.json")
+        self.dest = self.base / "compressed-harvest"
+        for path in (self.custody, bound):
+            for member in sorted(path.rglob("*")):
+                if member.is_file():
+                    compress_member(member, self.dest)
+        before = {p: p.read_bytes() for p in self.custody.rglob("*") if p.is_file()}
+        journal = Path(str(self.dest) + ".desk") / "compression.jsonl"
+        journal_before = journal.read_bytes()
+        seen.clear()
+        with mock.patch.object(desk_restore.shutil, "disk_usage", return_value=SimpleNamespace(free=1024**4)):
+            members, causes = invoke(self.dest)
+        self.assertEqual((members, causes), (plain_members, plain_causes))
+        compressed_record = q.read(self.dest / "l10-a/record.json")
+        for name in ("status", "observed_reason_codes", "input_hashes", "transcript_sha256"):
+            self.assertEqual(compressed_record[name], plain_record[name])
+        self.assertFalse(finalizer_inputs[-1].exists())
+        rows = q.read(self.dest / "withheld/s1-reductions.json")["members"]
+        self.assertEqual(next(row["metrics"] for row in rows if row["run_id"] == "bound"), expected)
+        for row in rows:
+            self.assertEqual(row["source"], str(originals[row["run_id"]]))
+            self.assertEqual(row["source_tree_sha256"], q.tree_hash(originals[row["run_id"]]))
+        self.assertEqual(len(seen), len(originals))
+        self.assertTrue(all(not path.exists() for path in seen))
+        self.assertEqual(before, {p: p.read_bytes() for p in self.custody.rglob("*") if p.is_file()})
+        self.assertEqual(journal.read_bytes(), journal_before)
+
+    def test_l10_storage_refusals_stop_before_member_classification_or_reduction(self):
+        from joulewise import desk_restore
+        from tests.desk_restore_support import compress_member
+
+        run_id = sorted(self.ids)[0]
+        bundle = self.custody / "runs" / run_id
+        journal = compress_member(bundle / "metadata.json", self.dest)
+        journal_bytes = journal.read_bytes()
+        for reason, free in (("compression.jsonl", 1024**4), ("insufficient scratch space", 0)):
+            with self.subTest(reason=reason):
+                if free:
+                    journal.unlink()
+                else:
+                    journal.write_bytes(journal_bytes)
+                validator, reducer = mock.Mock(), mock.Mock()
+                with mock.patch.object(desk_restore.shutil, "disk_usage", return_value=SimpleNamespace(free=free)):
+                    with self.assertRaisesRegex(desk_restore.RestoreRefused, "restore_refused:.*" + reason):
+                        h.l10_a(self.custody, self.dest, self.ids, "a" * 40,
+                            runner=self.expected_runner, validator=validator, reducer=reducer)
+                validator.assert_not_called()
+                reducer.assert_not_called()
+                self.assertFalse((self.dest / "withheld/s1-reductions.json").exists())
+                self.assertFalse((self.dest / "l10-a/record.json").exists())
+                shutil.rmtree(self.dest / "withheld/l10-a")
+
+    def test_member_assessment_uses_explicit_archive_journal_for_external_run(self):
+        from joulewise import desk_restore
+        from tests.desk_restore_support import compress_member
+
+        run_id = self.ids[0]
+        bundle = self.custody / "runs" / run_id
+        seen = []
+        def validator(path, strict):
+            self.assertFalse(list(path.rglob("*.zst")))
+            seen.append(path)
+            return []
+
+        expected = h.member_assessment(run_id, bundle, self.base / "plain-strict.txt", validator=validator)
+        for name in ("metadata.json", "summary_metrics.json"):
+            journal = compress_member(bundle / name, self.base / "previous-harvest")
+        with mock.patch.object(desk_restore.shutil, "disk_usage", return_value=SimpleNamespace(free=1024**4)):
+            actual = h.member_assessment(run_id, bundle, self.base / "compressed-strict.txt",
+                                         validator=validator, compression_records=journal)
+        self.assertEqual(actual, expected)
+        self.assertNotEqual(seen[-1], bundle)
+        self.assertFalse(seen[-1].exists())
+
+    def test_cli_reports_restore_refusal_with_nonzero_exit(self):
+        error = h.RestoreRefused("compressed run requires compression.jsonl")
+        output, errors = io.StringIO(), io.StringIO()
+        with mock.patch.object(h, "harvest", side_effect=error), \
+             redirect_stdout(output), redirect_stderr(errors):
+            code = h.main(["--inputs", str(self.base / "inputs.json"), "--inputs-sha256", "a" * 64,
+                           "--archive-root", str(self.dest), "--scratch-root", str(self.base / "scratch")])
+        self.assertEqual(code, 3)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(errors.getvalue(), "refused: restore_refused: compressed run requires compression.jsonl\n")
+
+    def test_compressed_finalizer_preserves_floor_and_tree_immutability_checks(self):
+        from joulewise import desk_restore
+        from tests.desk_restore_support import compress_member
+
+        journal = compress_member(self.custody / "runs" / self.ids[0] / "metadata.json", self.dest)
+        for defect, reason in (("floor", "l10_floors_not_empty"), ("tree", "source_tree_mutated")):
+            with self.subTest(defect=defect):
+                destination = self.base / ("compressed-" + defect)
+                def mutate(argv, **kwargs):
+                    finalizer = Path(argv[argv.index("--custody-root") + 1])
+                    self.assertNotEqual(finalizer, destination / "withheld/l10-a/staging")
+                    if defect == "floor":
+                        put(finalizer / "floors/forbidden.json", {})
+                    else:
+                        with (finalizer / "g2b/whole-window-verdict.json").open("ab") as stream:
+                            stream.write(b"\n")
+                    return self.expected_runner(argv)
+                with mock.patch.object(desk_restore.shutil, "disk_usage", return_value=SimpleNamespace(free=1024**4)):
+                    with self.assertRaisesRegex(q.HarvestRefusal, reason):
+                        h.l10_a(self.custody, destination, self.ids, "a" * 40, runner=mutate,
+                            compression_records=journal, validator=lambda *a, **k: [],
+                            reducer=lambda path: q.read(path / "summary_metrics.json"))
+                self.assertFalse((destination / "l10-a/record.json").exists())
 
     def test_old_output_dir_is_noncanonical_and_recorded_as_fail(self):
         def old_command(argv, **kwargs):

@@ -1,0 +1,99 @@
+{
+ "repo": "mlx-community/Qwen3-4B-4bit",
+ "mlx_version": "0.31.2",
+ "ok": true,
+ "errors": [],
+ "snapshot": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-4B-4bit/snapshots/4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25",
+ "on_disk_bytes": 2278998016,
+ "config_excerpt": {
+  "model_type": "qwen3",
+  "num_hidden_layers": 36,
+  "hidden_size": 2560,
+  "num_attention_heads": 32,
+  "num_key_value_heads": 8,
+  "head_dim": 128,
+  "vocab_size": 151936,
+  "num_experts": null,
+  "num_local_experts": null,
+  "num_experts_per_tok": null,
+  "experts_per_token": null,
+  "moe_intermediate_size": null,
+  "intermediate_size": 9728,
+  "shared_expert_intermediate_size": null,
+  "full_attention_interval": null,
+  "sliding_window": null,
+  "layer_types": null,
+  "tie_word_embeddings": true,
+  "quantization": {
+   "group_size": 64,
+   "bits": 4
+  }
+ },
+ "rss_before_load": 92700672,
+ "load_s": 0.4404192910005804,
+ "mlx_active_after_load": 2264693768,
+ "rss_after_load": 2577612800,
+ "accounting": {
+  "categories": {
+   "embed": {
+    "logical_params": 388956160,
+    "stored_bytes": 218787840
+   },
+   "always_active": {
+    "logical_params": 3633511936,
+    "stored_bytes": 2044132352
+   }
+  },
+  "quant_mix_logical_params": {
+   "4b/64g/affine": 4022272000
+  },
+  "num_experts": null,
+  "experts_per_tok": null,
+  "tied_embeddings": true,
+  "total_params": 4022468096,
+  "active_params": 4022468096.0,
+  "resident_weight_bytes": 2262920192,
+  "bytes_read_per_token_measured": 2262921632.0,
+  "bytes_read_per_token_formula_4bit": 2011234048.0
+ },
+ "runs": [
+  {
+   "rep": 0,
+   "prefill_s": 1.5179897499911021,
+   "prefill_tps": 1349.1527199126374,
+   "decode_tokens": 511,
+   "decode_s": 4.490344624995487,
+   "decode_tps": 113.79972867906851,
+   "total_s": 6.008334374986589,
+   "mlx_peak_bytes": 3296697408,
+   "kv_cache_bytes_end": 377487360,
+   "distinct_tokens_out": 37,
+   "output_head": " unattended night now has a *watchdog* that checks the progress of the capture and the state of the laptop. The watchdog is a separate process that runs in the background, and the unattended-night code is now a single file. The watchdog is a *state machine* that tracks the progress"
+  },
+  {
+   "rep": 1,
+   "prefill_s": 1.5266639170004055,
+   "prefill_tps": 1341.4871322981926,
+   "decode_tokens": 511,
+   "decode_s": 4.483539250009926,
+   "decode_tps": 113.9724604839511,
+   "total_s": 6.0102031670103315,
+   "mlx_peak_bytes": 3296681024,
+   "kv_cache_bytes_end": 377487360,
+   "distinct_tokens_out": 37
+  },
+  {
+   "rep": 2,
+   "prefill_s": 1.5154700840066653,
+   "prefill_tps": 1351.395861662547,
+   "decode_tokens": 511,
+   "decode_s": 4.477588624984492,
+   "decode_tps": 114.12392758652987,
+   "total_s": 5.993058708991157,
+   "mlx_peak_bytes": 3296681024,
+   "kv_cache_bytes_end": 377487360,
+   "distinct_tokens_out": 37
+  }
+ ],
+ "peak_rss_bytes": 2623471616
+}

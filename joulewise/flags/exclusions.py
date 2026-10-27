@@ -144,13 +144,15 @@ def compute(
     roster: Mapping[str, Any],
     spans: Mapping[str, Mapping[str, Any]],
     catalog: Catalog,
+    *,
+    pack_scoped: bool = True,
 ) -> dict[str, Any]:
     """Apply the sealed catalog to ``flags`` over ``roster``; pure and blind."""
 
     plan_id = roster["plan_id"] if "plan_id" in roster else None
     attempt = roster["attempt"] if "attempt" in roster else None
     pack_id = roster["pack_id"] if "pack_id" in roster else None
-    pack_reasons = PACK_SCOPED_WINDOW_REASONS.get(pack_id, {}) if isinstance(pack_id, str) else {}
+    pack_reasons = PACK_SCOPED_WINDOW_REASONS.get(pack_id, {}) if pack_scoped and isinstance(pack_id, str) else {}
     chain_started = (
         roster["chain_started_monotonic_ns"] if "chain_started_monotonic_ns" in roster else None
     )
@@ -364,7 +366,7 @@ def compute(
             }
         )
 
-    if any_target_unresolvable:
+    if any_target_unresolvable and catalog.entry("cell.below_minimum")["effect"] == EXCLUDE_WINDOW:
         window_reasons.add("cell.below_minimum")
 
     members_excluded = [

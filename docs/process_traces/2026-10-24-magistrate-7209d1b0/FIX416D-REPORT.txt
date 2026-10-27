@@ -1,0 +1,321 @@
+## Change
+
+FIX-416-D, uncommitted implementation on branch fix/2026-10-24-416-d, base and final HEAD fcc0ac9218483815025883ecebb2077a7c6ffb02. The initial tree was clean. All repository writes are in the authoritative allowlist; no commit, push or merge was made. Real archives and arm records were read only; clone mutations and exports used scratch. These are offline replays, not live hardware validation.
+
+1. Reference requests now default to StorageStop. `joulewise/b6/export_runs.py:68` authenticates listed inputs, including missing listed files and compressed logical inputs. Every desk export, including non-BYTES and zero-run archives, requires a nonempty SHA256SUMS. The dedicated non-BYTES regression first exposed an initially too-narrow gate (logs/global-sha-before.log); the universal gate was adopted only after another 25/25 archive replay. `:188` has exactly two empty-result paths: authenticated missing request markers and authenticated missing/nonfinite idle power in a well-typed idle object. All other reader/reducer exceptions are wrapped with path, exception type and message; unresolved native contexts, absent native curves, malformed JSON objects, duplicate/invalid markers and incomplete curve support stop. Native powermetrics interval continuity follows the reducer's cumulative-duration construction; arbitrary interval traces also receive an exact gap check. Non-powermetrics use the BundleReader curve, because their anchor context intentionally has no native curve.
+
+`export_runs.py:275` uses archived member assessments, then an explicit roster status, then checksum-verified original status/summary bytes for legacy layouts. A vanished listed bundle is a storage condition, not a newly inferred failed run. A collected reference must resolve lexically inside the archive; a full plan cannot substitute its original runs directory after the archived bundle vanishes. The new regression reproduced that caller bypass before the guard (logs/external-fallback-before.log), and the final guard passed 101 candidate tests and another 25/25 real archive replay before adoption. A positive historical failure is preserved in the CSV, even if the export-time bundle reports success. `joulewise/b6/acceptance.py:470` keeps malformed non-object previews from raising before the strict export boundary can identify the actual file. The supplied acceptance exclusions remain authoritative.
+
+Re-reduced summaries live outside sources/. Where no direct summary checksum exists, the listed source summary_metrics.json digest is the witness. The summary census found byte-identical available source/re-reduced summaries in all 24 populated archives; the additional NO_COLLECTION archive has no summaries. All 25 exportable archives carry SHA256SUMS. Nine archive.desk directories are compression journals, not export archives. No known-good archive lacks the inventory.
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/run_probes.py before`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/run_probes_after.py after`.
+
+Before (`before-fail-one.log`):
+```text
+missing_raw_powermetrics         OK status=succeeded excl=False gross='' unavail=True neg8 kept=23 dropped=[('r01', 'bytes.reference_request_unavailable'), ('r15', 'status: member.anchor_not_bounded')]  (72s)
+truncated_raw_powermetrics       OK status=succeeded excl=False gross='' unavail=True neg8 kept=23 dropped=[('r01', 'bytes.reference_request_unavailable'), ('r15', 'status: member.anchor_not_bounded')]  (73s)
+unreadable_raw_powermetrics      OK status=succeeded excl=False gross='' unavail=True neg8 kept=23 dropped=[('r01', 'bytes.reference_request_unavailable'), ('r15', 'status: member.anchor_not_bounded')]  (74s)
+missing_bundle_dir               OK status=succeeded excl=False gross='' unavail=True neg8 kept=23 dropped=[('r01', 'bytes.reference_request_unavailable'), ('r15', 'status: member.anchor_not_bounded')]  (68s)
+missing_instrument_calibration   OK status=succeeded excl=False gross='' unavail=True neg8 kept=23 dropped=[('r01', 'bytes.reference_request_unavailable'), ('r15', 'status: member.anchor_not_bounded')]  (74s)
+```
+After (`after-fail-one.log`):
+```text
+missing_raw_powermetrics         STOP StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/missing_raw_powermetrics/archive/sources/bound-runs/neg8-refcorpus-r01/raw/powermetrics.plist: FileNotFoundError: [Errno 2] file not found: '/Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/missing_raw_powermetrics/archive/sources/bound-runs/neg8-refcorpus-r01/raw/powermetrics.plist.zst'  (1s)
+truncated_raw_powermetrics       STOP StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/truncated_raw_powermetrics/archive/sources/bound-runs/neg8-refcorpus-r01/raw/powermetrics.plist: ValueError: SHA256SUMS digest mismatch  (1s)
+unreadable_raw_powermetrics      STOP StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/unreadable_raw_powermetrics/archive/sources/bound-runs/neg8-refcorpus-r01/raw/powermetrics.plist: PermissionError: [Errno 13] Permission denied: '/Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/unreadable_raw_powermetrics/archive/sources/bound-runs/neg8-refcorpus-r01/raw/powermetrics.plist'  (1s)
+missing_bundle_dir               STOP StorageStop: restore_refused: reference request /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/missing_bundle_dir/archive/sources/neg8-refcorpus-r01: FileNotFoundError: collected bundle directory missing: /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/missing_bundle_dir/archive/sources / neg8-refcorpus-r01  (0s)
+missing_instrument_calibration   STOP StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/missing_instrument_calibration/archive/sources/bound-runs/neg8-refcorpus-r01/instrument_calibration/events.jsonl: FileNotFoundError: [Errno 2] file not found: '/Users/edr/code/jw-wt/fix416d/.scratch-416D/after/matrix/missing_instrument_calibration/archive/sources/bound-runs/neg8-refcorpus-r01/instrument_calibration/events.jsonl.zst'  (1s)
+```
+
+The after matrix has 28/28 StorageStops with cause. The original fail_one mutations named “no idle” and “missing marker” alter authenticated bytes without changing the harvest inventory, so they correctly STOP. The separate positive-absence probe seals those contents as original harvested data: its five cases are variants of only the two registered absences, and all five FLAG. Fable's a*, and Opus's five compressed classes were also executed before and after. The scratch adaptations change worktree/output paths, retain full cause text, check disk reserve before clones and skip symlinks during chmod cleanup. The original before probe's chmod attempts outside scratch were constrained by the workspace sandbox.
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/registered_absence_probe.py`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/registered_absence_probe.py`.
+
+Before (`before-registered-absences.log`):
+```text
+no_tokenize_start FLAG bytes.reference_request_unavailable authenticated=True
+no_decode_end FLAG bytes.reference_request_unavailable authenticated=True
+no_idle_baseline FLAG bytes.reference_request_unavailable authenticated=True
+no_finite_idle FLAG bytes.reference_request_unavailable authenticated=True
+idle_string FLAG bytes.reference_request_unavailable authenticated=True
+```
+After (`after-registered-absences.log`):
+```text
+no_tokenize_start FLAG bytes.reference_request_unavailable authenticated=True
+no_decode_end FLAG bytes.reference_request_unavailable authenticated=True
+no_idle_baseline FLAG bytes.reference_request_unavailable authenticated=True
+no_finite_idle FLAG bytes.reference_request_unavailable authenticated=True
+idle_string FLAG bytes.reference_request_unavailable authenticated=True
+```
+
+Curve support and parseable-but-invalid records are tested with matching inventories, so checksum failure does not mask those semantic checks. The final missing-bundle diagnostic lists every actual claim/bound bundle search path; its real failure case was rerun in logs/final-missing-bundle.log after that wording change. A dedicated regression first reproduced the legacy roster-failure override bug (`logs/roster-status-before.log`), then the final focused module passed with the historical failure preserved.
+
+Archive replay commands: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/replay_archives.py before` and `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/replay_archives.py after`. The zero-run archive was appended after the directory census found it; its before command is `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/replay_zero_baseline.py`, which checks all five loaded production snapshots against HEAD before executing the original exporter. The final universal-gate command was `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/replay_candidate.py`. The exact candidate was replayed before adoption (`logs/archive-only-adoption-replay.log`), with all six source hashes checked against candidate-shas.json at the actual copy; the final exact-source candidate replay is `logs/archive-only-adoption-replay.log`. The final result is 25 archives, zero stops, 25 identical reference-column comparisons. “Populated request references” counts rows with a nonempty gross request column; block-6 replication exports have no such columns, as before.
+
+| Archive | Stops | Populated request references | Reference columns versus baseline |
+|---|---:|---:|---|
+| BYTES/h-20261021T185555Z/archive | 0 | 21 | identical |
+| BYTES/h2-20261023T144711Z/archive | 0 | 24 | identical |
+| B6/loop/staging/r1-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261018T0252Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r1-beta-smoke-0/smoke/d117_floor_qwen3-8b_v5-20261018T1122Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r1-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261018T2018Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r2-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261019T2126Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r2-beta-smoke-0/smoke/d117_floor_qwen3-8b_v5-20261019T0421Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r2-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T1311Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r3-beta-smoke-0/smoke/d117_floor_qwen3-8b_v5-20261020T1541Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/archive | 0 | 0 | identical |
+| B6/loop/staging/r4-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261021T0049Z/archive | 0 | 0 | identical |
+| B6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/archive | 0 | 0 | identical |
+| B6/machine-test/MT-20261017T1735Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T1735Z/archive | 0 | 0 | identical |
+| B6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/archive | 0 | 0 | identical |
+| B6/sessions/r1-alpha/archive | 0 | 0 | identical |
+| B6/sessions/r1-beta/archive | 0 | 0 | identical |
+| B6/sessions/r1-gamma/archive | 0 | 0 | identical |
+| B6/sessions/r2-beta/archive | 0 | 0 | identical |
+| B6/sessions/r2-gamma/archive | 0 | 0 | identical |
+| B6/sessions/r3-alpha/archive | 0 | 0 | identical |
+| B6/sessions/r3-beta/archive | 0 | 0 | identical |
+| B6/sessions/r3-gamma/archive | 0 | 0 | identical |
+| B6/sessions/r4-alpha/archive | 0 | 0 | identical |
+| BYTES/h2-20261023T051434Z/archive | 0 | 0 | identical |
+
+BYTES/ means /Users/edr/night-bytes/; B6/ means /Users/edr/night-b6/. The early h2-20261023T051434Z archive is the recorded t0 census refusal with zero runs, and still exports zero rows. Full paths and every compared value are in before-replay.json and after-replay.json.
+
+BY-H2's rails E_ref remains exactly 37.121008004357314 J and T_ref 1.3108093057359969 s; 24 references are kept and the same single anchor exclusion is disclosed. `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/neg8_replay.py` compares the full rails-boundary objects exactly. Its separate controlled omission of neg8-window-start-r1 reproduces 37.08910554240348 J, establishing the reported consequence of a dropped reference without changing any archive.
+
+2. `scripts/harvest_b6_session.py:64` prints type(exc).__name__ and str(exc) in both exception branches, including StorageStop. The export wraps reducer errors, while the direct entry-point unit seam also exercises raw _ReduceError and AttributeError.
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/cold416b-opus/scripts/harvest_probe.py /Users/edr/code/jw-wt/fix416d /Users/edr/night-bytes/h2-20261023T144711Z/archive /Users/edr/code/jw-wt/fix416d/.scratch-416D/before/harvest`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/harvest_probe.py /Users/edr/code/jw-wt/fix416d /Users/edr/night-bytes/h2-20261023T144711Z/archive /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/harvest`.
+
+Before (`before-harvest_probe.log`):
+```text
+intact                 rc=0 stderr='' stdout_has_export=True
+corrupt_trace          rc=5 stderr="refused: restore_refused: reference request /Users/edr/code/jw-wt/fix416d/.scratch-416D/before/harvest/corrupt_trace/archive/sources/bound-runs/neg8-refcorpus-r01: power_trace.csv row 2 power_w must be a finite number: 'x.143286'" stdout_has_export=False
+empty_trace            rc=5 stderr='block-six session program fault: _ReduceError' stdout_has_export=False
+garbled_summary        rc=5 stderr='refused: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/before/harvest/garbled_summary/archive/withheld/reductions/neg8-refcorpus-r01.summary_metrics.rereduced.json: Expecting property name enclosed in double quotes: line 1 column' stdout_has_export=False
+null_summary           rc=5 stderr='block-six session program fault: AttributeError' stdout_has_export=False
+```
+After (`after-harvest_probe.log`):
+```text
+intact                 rc=0 stderr='' stdout_has_export=True
+corrupt_trace          rc=5 stderr='refused: StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/harvest/corrupt_trace/archive/sources/bound-runs/neg8-refcorpus-r01/power_trace.csv: ValueError: SHA256SUMS digest mismatch' stdout_has_export=False
+empty_trace            rc=5 stderr='refused: StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/harvest/empty_trace/archive/sources/bound-runs/neg8-refcorpus-r01/power_trace.csv: ValueError: SHA256SUMS digest mismatch' stdout_has_export=False
+garbled_summary        rc=5 stderr='refused: StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/harvest/garbled_summary/archive/withheld/reductions/neg8-refcorpus-r01.summary_metrics.rereduced.json: ValueError: SHA256SUMS digest mismatch' stdout_has_export=False
+null_summary           rc=5 stderr='refused: StorageStop: restore_refused: reference bytes /Users/edr/code/jw-wt/fix416d/.scratch-416D/after/harvest/null_summary/archive/withheld/reductions/neg8-refcorpus-r01.summary_metrics.rereduced.json: ValueError: SHA256SUMS digest mismatch' stdout_has_export=False
+```
+
+The actual full commands are the child commands in run_probes.py and run_probes_after.py, with ROOT=/Users/edr/code/jw-wt/fix416d, BY-H2-ARCHIVE=/Users/edr/night-bytes/h2-20261023T144711Z/archive, and SCRATCH=.scratch-416D/{before,after}/harvest. Intact input succeeds; all four damaged inputs now name their file and reason at exit 5.
+
+3. `joulewise/hazards/clock.py:230,337` judges the remaining anchored samples when at least two remain. Omitted anchors carry clock.unmeasured, their original index and their error in observed.flags. Rate/residual/step arithmetic uses the remaining ordered anchors; “adjacent” means adjacent in that remaining sequence, including across an omitted read. No threshold changed. `configs/gates/hazard_refusals.json:1727` records the reviewed guard change for the existing two UNMEASURED sites.
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/cold416b-opus/scripts/anchor_gap_probe.py /Users/edr/code/jw-wt/fix416d`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/cold416b-opus/scripts/anchor_gap_probe.py /Users/edr/code/jw-wt/fix416d`.
+
+Before (`before-anchor_gap_probe.log`):
+```text
+intact                                        + 0 ppm -> PASS ()
+intact                                        +40 ppm -> REFUSE ('measured rate gate: 7.6866 ms > 5.0 ms',)
+freq read failed at sample 50 (anchor kept)   + 0 ppm -> PASS ()
+freq read failed at sample 50 (anchor kept)   +40 ppm -> REFUSE ('measured rate gate: 7.6866 ms > 5.0 ms',)
+anchor skew-rejected at sample 50             + 0 ppm -> UNMEASURED ('1 sample(s) failed; first: clock.unmeasured: anchor read skew above 1000000 ns on all 5 reads',)
+anchor skew-rejected at sample 50             +40 ppm -> UNMEASURED ('1 sample(s) failed; first: clock.unmeasured: anchor read skew above 1000000 ns on all 5 reads',)
+```
+After (`after-anchor_gap_probe.log`):
+```text
+intact                                        + 0 ppm -> PASS ()
+intact                                        +40 ppm -> REFUSE ('measured rate gate: 7.6866 ms > 5.0 ms',)
+freq read failed at sample 50 (anchor kept)   + 0 ppm -> PASS ()
+freq read failed at sample 50 (anchor kept)   +40 ppm -> REFUSE ('measured rate gate: 7.6866 ms > 5.0 ms',)
+anchor skew-rejected at sample 50             + 0 ppm -> PASS ()
+anchor skew-rejected at sample 50             +40 ppm -> REFUSE ('measured rate gate: 7.6865 ms > 5.0 ms',)
+```
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/replay_clock.py before`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/replay_clock.py after`.
+
+Before (`before-clock.log`):
+```text
+TOTAL 24 UNCHANGED 24
+```
+After (`after-clock.log`):
+```text
+TOTAL 24 UNCHANGED 24
+```
+
+4. `joulewise/b6/blinding.py:114` writes and fsyncs a private temporary key, publishes it exclusively with os.link, fsyncs the directory, and removes its own temporary file. A competing creator reads the winner rather than replacing it. Existing bound-key custody behavior remains.
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/cold416b-opus/scripts/blind_kill_probe.py /Users/edr/code/jw-wt/fix416d`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /private/tmp/cold416b-opus/scripts/blind_kill_probe.py /Users/edr/code/jw-wt/fix416d`.
+
+Before (`before-blind_kill_probe.log`):
+```text
+key draw crash: files {'pack.json': 0} ; later export: RAISE ValueError: blinding key unreadable: /private/tmp/fix416d/main/tmpxb5sk4ta/bytes/blinding/pack.json
+concurrent first-draw exports of two sessions: rounds with differing factors or errors: 0 of 20
+```
+After (`after-blind_kill_probe.log`):
+```text
+key draw crash: files {'.pack.json.sdvdefmq': 0} ; later export: OK
+concurrent first-draw exports of two sessions: rounds with differing factors or errors: 0 of 20
+```
+
+A process crash can leave an unpublished hidden temporary file; it leaves no zero-byte pack.json. Retry succeeds. All 20 two-process first-draw rounds agree.
+
+5. `joulewise/b6/model_files.py:124` compares only registered sampler/output-policy keys. It preserves detection of changed registered values while ignoring unregistered provenance keys. Malformed observed policy sections still differ rather than crashing.
+
+Before command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/sampler_probe.py`. After command: `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/sampler_probe.py`.
+
+Before (`before-sampler.log`):
+```text
+RUNS 168
+{"baseline_flagged": 0, "extra_key_flagged": 168, "registered_top_p_changed_flagged": 168, "registered_top_p_equal_flagged": 0}
+REGISTERED {'api': 168, 'kind': 168, 'parameter': 168, 'pinned': 168, 'temperature': 168} CHANGED_FLAGGED {'api': 168, 'kind': 168, 'parameter': 168, 'pinned': 168, 'temperature': 168}
+```
+After (`after-sampler.log`):
+```text
+RUNS 168
+{"baseline_flagged": 0, "extra_key_flagged": 0, "registered_top_p_changed_flagged": 168, "registered_top_p_equal_flagged": 0}
+REGISTERED {'api': 168, 'kind': 168, 'parameter': 168, 'pinned': 168, 'temperature': 168} CHANGED_FLAGGED {'api': 168, 'kind': 168, 'parameter': 168, 'pinned': 168, 'temperature': 168}
+```
+
+The five sampler keys actually registered in current greedy stacks are api, kind, parameter, pinned and temperature; each mutation flags 168/168. top_p is not a key in those real pins. The probe additionally registers top_p in a read-only expected/observed seam: equality flags 0/168 and a changed registered value flags 168/168. Both cold seats' C4 probes were rerun; Fable's known tokenizer-revision limitation remains lead-owned, unchanged by this task.
+
+6. Neither joulewise/bytes_analysis.py nor scripts/bytes_twin.py changed; both match HEAD byte for byte. No estimator re-bind or nineteen-campaign rerun is required. bytes_plan_trees.py, identity pins, flag catalog and generated campaign/pack files are unchanged. The required withheld and compressed campaigns were rerun after the synthetic archive builder correction.
+
+7. docs/registrations/bytes_pack_v1.md is unchanged. Exact proposed sentences for the lead follow.
+
+For §6:
+
+“Each reference recorded as succeeded by the harvest and not excluded by acceptance has exactly one export outcome: the three reference-request columns; bytes.reference_request_unavailable for one of the two authenticated absences below; or a desk-side StorageStop naming the path, exception class and cause.”
+
+“An events absence qualifies only when the present events.jsonl parses in full, matches its archived sources/SHA256SUMS digest, and contains no tokenize phase_start or no decode phase_end.”
+
+“An idle-baseline absence qualifies only when the present summary is a JSON object, matches its archived sources/SHA256SUMS digest, and lacks idle_baseline or has no finite numeric power_w_mean in an object-valued idle_baseline.”
+
+“If a re-reduced summary has no separate inventory entry, its bytes must match the listed source summary_metrics.json digest.”
+
+“All listed reference inputs are authenticated before use; a missing or empty SHA256SUMS file, a missing listed input, any digest mismatch, a missing collected bundle, malformed status, config or summary, an unresolved required anchor or missing native curve, incomplete request support, or any reader or reducer exception stops the desk export with its cause.”
+
+“A missing archived reference bundle cannot be replaced by an original-runs directory or another external fallback.”
+
+“Harvested status comes from archived member assessments or an explicit roster status; legacy source status is accepted only after checksum verification, and a vanished listed bundle is a storage stop rather than an inferred failed run.”
+
+For §5 clock:
+
+“A dwell with at least two usable anchors is judged from those anchors even when other samples have no usable anchor; each omitted sample is recorded as clock.unmeasured with its index and cause.”
+
+“The step test differences fitted residuals of adjacent anchors in the remaining ordered sequence, and the registered rate, residual and step thresholds are unchanged.”
+
+For §5 C4:
+
+“C4 projects sampler and output-policy comparisons onto keys present in the registered stack; added unregistered provenance keys do not exclude a session, while changes to registered values still do.”
+
+For §11 blinding:
+
+“A first key is written and fsynced as a private temporary file and published exclusively by hard link, so an interrupted first draw cannot publish partial pack.json bytes; a competing creator reads the published winner.”
+
+For the desk-fault description:
+
+“Every exception reaching the harvest entry point prints its class and message while retaining the phase-specific exit code.”
+
+The lead also owns the separately assigned qwen3-8b-8bit tokenizer statement, about-1.010-ms figure and span-ratio prose.
+
+Final file SHA-256 values:
+
+| File | SHA-256 |
+|---|---|
+| configs/gates/hazard_refusals.json | 3f0890b61df4b997bbdcc94186b2bc2ee8ec78a7154cb80a9f1dfd49bafeee68 |
+| joulewise/b6/acceptance.py | e7698108eb8d63f82f2c496db422642d4afea6651de83e66ca32ca969f982bb5 |
+| joulewise/b6/blinding.py | 3d27277ef11753652b63d32423d157366fed8785456d4a908712ada03e53afb5 |
+| joulewise/b6/export_runs.py | ef1fde738de583babb66f434a8bb3ae50e7f3ae22e8d4a10973bce1d9e41f418 |
+| joulewise/b6/model_files.py | b4cdc7f3678afe7a6920550ad393e7d86f72097be038a28a5677321eca324dc8 |
+| joulewise/hazards/clock.py | 13c1966404b295fe5c341f7a7c9495f48c8defc7b5d7f1c3150c65d54750af5c |
+| scripts/harvest_b6_session.py | 64563d0332edf2d83ad71b8b3c10075458a22f624ef24c5eeb3499b95de53c34 |
+| tests/b6/test_blinding.py | 72c31db7a4551a892e172aea1bdb624737fcda64e5f424f682186747c8a86527 |
+| tests/b6/test_export_runs.py | 4b53862f400bad8d65a73c9fbd886f47fd50e3e801d30c6e7fd11ed016585c79 |
+| tests/b6/test_fix416_gates.py | 2638ebe3a41b695dadeec417c710e2873253968c5670a3762d57e3b2174a1671 |
+| tests/b6/test_model_files.py | 666bcf8b250dc7206daf101a95e111b6439ee5c928b89f2d9de32e34100c479b |
+| tests/fixtures/bytes/campaign.py | 0cfea367c5909817878bdaff9d0950c93a3ab334600df065308a038e3d34d8dc |
+| tests/hazards/test_clock.py | a1309acdd8868b6721a6d1a14be5f67e44339b45053867bc0d49e621c054c264 |
+| joulewise/bytes_analysis.py | 18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71 |
+| scripts/bytes_twin.py | 307689f28f87a82b97f24e404d62fdf582f0a42f89b97b21cfb6afe8db0918c5 |
+| scripts/bytes_plan_trees.py | c1bfedde1c25cd6ea840434d485d98cdf1901dced986dece1941177353faa829 |
+| configs/bytes/identity_pins.json | ddd0001bf3c1c0c2d05422b57847267c6ead7c1ece8d425ab1c21e30c8630643 |
+| configs/b6/registration/identity_pins.json | 55197f44872a8e0ae46c6f3720d18330b888a1c600c2c1e2ad8d88a84d43ea06 |
+| configs/b6/flag_catalog_b6.json | 36971fe0ce0e9bd6b55fc496d10cdf223bdc8e8f4ac3178011226b64c6e854ae |
+| docs/registrations/bytes_pack_v1.md | fccfaa02452d261cbf86b780608aacdccf01022351f7e08405b0c810394c28ac |
+
+## Verification notes
+
+The final focused export/gate/wrapper suite, component suite, release-chain/twin/tree suite and the two agreement campaigns were executed with the mandated environment and Python 3.13 -B. Commands and completion tails:
+
+`env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.b6.test_blinding tests.b6.test_model_files tests.b6.test_acceptance tests.hazards.test_clock tests.hazards.test_refusal_allowlist`
+```text
+Ran 135 tests in 13.521s
+OK (skipped=1)
+```
+
+`env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.b6.test_export_runs tests.b6.test_fix416_gates tests.b6.test_session_wrapper`
+```text
+Ran 44 tests in 17.933s
+OK
+```
+
+`env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_analysis.SubsetReleaseChainTests tests.test_bytes_analysis.ProductionArchiveTests tests.test_bytes_twin tests.test_bytes_plan_trees`
+```text
+Ran 114 tests in 397.339s
+OK
+```
+
+`env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_agreement.AgreementTests.test_withheld_campaign_missing_files_and_uncollected_pass tests.test_bytes_agreement.AgreementTests.test_compressed_bundle_campaign`
+```text
+Ran 2 tests in 69.830s
+OK
+```
+
+`env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest discover -s tests/hazards -t . -v`
+```text
+Ran 319 tests in 124.994s
+FAILED (failures=28, skipped=9)
+```
+
+agreement withheld: compared 218400, equal 213561, under the bar 4839, above the bar 0; diagnostics 68146, different 689
+agreement compressed: compared 262323, equal 256732, under the bar 5591, above the bar 0; diagnostics 84106, different 585
+
+The first final-tree release-chain attempt stopped because tests/fixtures/bytes/campaign.py generated synthetic archives without SHA256SUMS (3 failures, 3 errors; logs/after-final-readers-and-release.log). `tests/fixtures/bytes/campaign.py:23` now seals the existing source and derived-summary bytes before export; it changes no run geometry, energy, draw or estimator arithmetic. This keeps the required refusal active and makes the fixture conform to it. The corrected final replay is logs/after-corrected-readers.log.
+
+The hazards discovery has 319 tests, 28 failures and 9 skips. Its 28 failure occurrences are exactly the previous FIX416C sandbox-limited set (22 unique methods), as asserted by `env TMPDIR=/private/tmp/fix416d/main JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416D/hazard_report.py`. Host census reports “sysmond service not found” / “pgrep: Cannot get process list”; downstream arm expectations consequently stop at the instrument/census lane. The allowlist and clock component tests pass. No new hazard failure was introduced. The lead's outside-sandbox rerun list follows; hazard-census-rerun-methods.txt gives the deduplicated runnable names.
+
+```text
+FAIL: test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read (tests.hazards.test_arm.ArmTests.test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read)
+FAIL: test_agent_that_starts_during_the_dwell_gets_no_go (tests.hazards.test_arm.ArmTests.test_agent_that_starts_during_the_dwell_gets_no_go)
+FAIL: test_block6_plan_holds_above_its_registered_rate (tests.hazards.test_arm.ArmTests.test_block6_plan_holds_above_its_registered_rate)
+FAIL: test_charging_that_starts_during_the_dwell_refuses_at_the_final_read (tests.hazards.test_arm.ArmTests.test_charging_that_starts_during_the_dwell_refuses_at_the_final_read)
+FAIL: test_clock_step_during_the_dwell_refuses (tests.hazards.test_arm.ArmTests.test_clock_step_during_the_dwell_refuses)
+FAIL: test_contending_daemon_times_the_dwell_out (tests.hazards.test_arm.ArmTests.test_contending_daemon_times_the_dwell_out)
+FAIL: test_frequency_word_change_at_the_end_of_the_dwell_is_diagnostic (tests.hazards.test_arm.ArmTests.test_frequency_word_change_at_the_end_of_the_dwell_is_diagnostic)
+FAIL: test_go_records_a_clean_census_taken_after_the_final_reads (tests.hazards.test_arm.ArmTests.test_go_records_a_clean_census_taken_after_the_final_reads)
+FAIL: test_go_records_the_smc_current_beside_the_registry_cross_check (tests.hazards.test_arm.ArmTests.test_go_records_the_smc_current_beside_the_registry_cross_check)
+FAIL: test_network_time_off_output_is_recorded_not_judged (tests.hazards.test_arm.ArmTests.test_network_time_off_output_is_recorded_not_judged)
+FAIL: test_quiet_float_mac_arms_go_in_the_registered_order (tests.hazards.test_arm.ArmTests.test_quiet_float_mac_arms_go_in_the_registered_order)
+FAIL: test_record_only_collectors_never_change_the_decision (tests.hazards.test_arm.ArmTests.test_record_only_collectors_never_change_the_decision)
+FAIL: test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='battery')
+FAIL: test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='thermal')
+FAIL: test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='disk')
+FAIL: test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='clock')
+FAIL: test_unmeasured_refuses_at_arm_only_for_the_instrument (tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument) (module='contention')
+FAIL: test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback (tests.hazards.test_arm.ArmTests.test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback)
+FAIL: test_empty_epoch_list_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_empty_epoch_list_never_refuses)
+FAIL: test_failed_read_is_recorded_and_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses) [spawn error]
+FAIL: test_failed_read_is_recorded_and_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses) [nonzero exit]
+FAIL: test_failed_read_is_recorded_and_never_refuses (tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses) [empty output]
+FAIL: test_judged_identity_proceeds_to_go (tests.hazards.test_arm_identity.ArmIdentityTests.test_judged_identity_proceeds_to_go)
+FAIL: test_no_expected_epochs_reads_no_identity (tests.hazards.test_arm_identity.ArmIdentityTests.test_no_expected_epochs_reads_no_identity)
+FAIL: test_a_complete_arm_and_monitor_run_load_no_retired_module (tests.hazards.test_import_graph.ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module)
+FAIL: test_block3_interactive_capture_at_130_ms_passes (tests.hazards.test_instrument.CadenceProbeTests.test_block3_interactive_capture_at_130_ms_passes)
+FAIL: test_privilege_prefix_is_prepended_to_the_adapter_command (tests.hazards.test_instrument.CadenceProbeTests.test_privilege_prefix_is_prepended_to_the_adapter_command)
+FAIL: test_timeout_kills_the_capture_group (tests.hazards.test_instrument.ProductionCommandTests.test_timeout_kills_the_capture_group)
+```
+
+The complete tests.test_bytes_analysis module, canonical all-tests discovery and live hardware gates were not run, as directed. The selected SubsetReleaseChainTests and ProductionArchiveTests are the analysis coverage for this run. The report, patch, hashes, full matrix, archive comparisons and probe logs remain under .scratch-416D/. No state/queue/registration files outside the write scope were modified.
+
+## Residual risk
+
+The lead must rerun the listed 22 methods outside the sandbox, review the uncommitted diff, apply the supplied registration sentences plus the separately assigned prose corrections, and perform final verification before committing. No live hardware validation is claimed or substituted by synthetic evidence.

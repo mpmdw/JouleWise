@@ -4270,7 +4270,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
 
             with mock.patch.object(
                 Path,
-                "read_bytes",
+                "open",
                 side_effect=PermissionError("fixture unreadable"),
             ):
                 self.assertIs(

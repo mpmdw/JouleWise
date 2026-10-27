@@ -1,0 +1,23 @@
+{
+  "blinding_group": "bytes",
+  "interleaving": "After replication round 1, then next BYTES slots after each replication round; replication and GAMMA order unchanged; lost attempts retry in the next BYTES slot.",
+  "passes": {
+    "1": [
+      "bytes-s1-p1",
+      "bytes-s2-p1",
+      "bytes-s3-p1",
+      "bytes-s4-p1",
+      "bytes-s5-p1",
+      "bytes-s6-p1"
+    ],
+    "2": [
+      "bytes-s6-p2",
+      "bytes-s5-p2",
+      "bytes-s4-p2",
+      "bytes-s3-p2",
+      "bytes-s2-p2",
+      "bytes-s1-p2"
+    ]
+  },
+  "status": "draft"
+}
