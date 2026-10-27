@@ -67,6 +67,18 @@ blinding, the independent recompute and its agreement bars, and the release reco
      that, this choice returns to Ed before the dry run.
    - (a) and the refit cache follow later as one governed change with its reissue, unless the cache can live
      entirely in non-governed code with byte-identical outputs (then it is an ordinary L9 change).
+   - **Status, same day.**
+     - The cache landed in non-governed code (`lane/2026-10-27-l9-2` b5df45a): an ordinary L9 change.
+     - The condition first failed. Step 2's `reduce` exited 0 on a forced firing, with 4 calibration-dependent
+       summary keys changed.
+     - Driver tripwire 96f1f1fe6 now refuses at step 2 (`rereduction_calibration_dependent_fields_differ`) when
+       any of those keys differs from the kept bundle's stored summary. Later steps are not run.
+       `tests/b5_analysis/test_deadline_tripwire.py` holds the forced-firing case, the mutation proof and byte
+       identity of the unforced path.
+     - The other refit sites already end in refusals (L9-2 report). The condition is met, subject to the executing
+       review (session L9-REV-1).
+     - Margin: one detection of the 59-pulse calibration took 10.29 s on an idle 4-vCPU VM against the 120 s
+       deadline. The Mac is not yet measured.
 6a. **The Mac goes to analysis first (Ed, 2026-10-27):** "bytes and that work can pause until this is done if you
    need the quiet mac for analysis". The block-5 blind dry run takes precedence over BYTES sessions, s1-p1 included.
    BYTES's registered end (no t0 after 2026-11-02 00:00 PDT) still binds. If the dry run would push s1-p1 past it,
