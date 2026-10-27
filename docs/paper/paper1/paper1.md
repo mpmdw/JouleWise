@@ -893,3 +893,312 @@ count, the words would have been {{FILL: P1-B6-FLAGINC-WORDS | flagged-inclusive
 ### 5.8 Agreement of the independent recomputation
 
 {{FILL: P1-RECOMPUTE-SUMMARY | one paragraph: for each block, the number of run phase energies compared, the largest absolute difference against the 1 mJ tolerance, the number of printed quantities compared and the largest difference in units of the last printed digit; and any disclosed repair with its date and effect}}
+
+## 6. Part 2, BYTES: what drives decode energy per token?
+
+### 6.1 The question
+
+During decode, each forward pass reads the weights it uses and the KV cache of earlier tokens from memory. On the
+laptop of Part 1, energy per decode pass might follow (i) the **format-derived bytes read per pass**, b: the
+stored sizes, including quantization scales and offsets, of every weight used per token plus the KV cache, computed
+from the model files; (ii) the **resident size**, R: the bytes of all weights the model holds in memory; or (iii)
+the **decode time** per pass, τ. The question, registered before any BYTES energy existed, is: *Does decode energy
+per token follow the format-derived bytes the model reads per token, the resident model size, or decode time?*
+
+The hypotheses barely differ on dense models, which read nearly every weight they hold, so their predictions on
+dense models differ by only a few per cent. Mixture-of-experts models separate them: such a model uses only k of
+its E expert blocks for each token and so reads far fewer bytes per token than it holds. Dense held-out models
+therefore test whether a line stays straight over the range of bytes; the MoE models test which hypothesis is
+right. This is said wherever dense results are printed.
+
+"Bytes read" here is a count from the model format, never a reading of a memory-controller counter. Whether the
+memory system actually moves those bytes, and whether the GPU rail includes the memory controller's energy, are
+separate questions (Section 6.6).
+
+### 6.2 Design
+
+**Boundaries.** Each energy is measured at three boundaries: the **processor rails** of Part 1; the **DC input**,
+the energy entering the laptop through its USB-C cable after the adapter, from the inline meter, plus the energy
+the battery supplies when the laptop draws more than the adapter delivers; and the **rest**, DC input minus rails,
+which includes the memory chips, conversion losses, storage and fans. The sampler reports no memory (DRAM) rail,
+so the energy of reading memory is split: the chip's share appears in the rails, the memory chips' share only in
+the rest.
+
+**Models.** Ten 4-bit or 8-bit MLX checkpoints, pinned by revision (Table 7). The **fit set** is three dense
+models, Qwen3-1.7B, Qwen3-4B and Qwen3-8B, through which the rival lines are drawn. The seven **held-out** models
+are predicted from those lines: four dense (Qwen3-14B, Qwen3-32B, Llama-3.3-70B-Instruct and Qwen3-8B at 8 bits,
+which has the fit-set 8B's architecture and about twice its bytes per token) and three MoE (Qwen3-30B-A3B,
+Qwen3-Next-80B-A3B-Instruct and Qwen3.5-122B-A10B). Llama-3.3-70B was chosen to set the upper end of the range of
+bytes per token.
+
+| Role | Model | Experts used per token (k of E) | b (GB) | R (GB) |
+|---|---|---|---|---|
+| fit | Qwen3-1.7B, 4-bit | dense | 1.232 | 0.968 |
+| fit | Qwen3-4B, 4-bit | dense | 2.603 | 2.263 |
+| fit | Qwen3-8B, 4-bit | dense | 4.597 | 4.608 |
+| held out, dense | Qwen3-14B, 4-bit | dense | 8.248 | 8.308 |
+| held out, dense | Qwen3-32B, 4-bit | dense | 18.596 | 18.430 |
+| held out, dense | Llama-3.3-70B-Instruct, 4-bit | dense | 39.852 | 39.688 |
+| held out, dense | Qwen3-8B, 8-bit | dense | 8.381 | 8.703 |
+| held out, MoE | Qwen3-30B-A3B, 4-bit | 8 of 128 | 1.938 | 17.175 |
+| held out, MoE | Qwen3-Next-80B-A3B-Instruct, 4-bit | 10 of 512, plus shared experts | 2.166 | 44.844 |
+| held out, MoE | Qwen3.5-122B-A10B, 4-bit | 8 of 256, plus shared experts | 5.281 | 68.691 |
+
+*Table 7. BYTES roster. b = W + KV, the format-derived bytes per decode pass (weights used per pass, including
+one embedding row, the whole output layer, k/E of the routed expert weights and any shared experts, plus the KV
+cache averaged over the positions after prefill and after the last decode pass); R = all loaded weight storage.
+Both are counted, not estimated, from the model files by a manifest script frozen before the first session
+({{FILL: P1-BY-MANIFEST | SHA-256 of the frozen bytes manifest, from the registration}}); 1 GB = 10⁹ bytes. Layers of recurrent or state-space type
+have a constant-size state. The roster spans a 32-fold range of b and a 71-fold range of R.*
+
+**Workload.** Every run is the same request: a prompt of exactly 2,048 token ids, then exactly 512 output tokens
+chosen greedily with the end-of-sequence token suppressed, after a 4-token warm-up. The runtime dispatches 512
+decode forward passes in the measured request, one of which computes a token that is never returned, so all
+per-pass arithmetic divides by 512 and every per-token value is labelled "512 decode forward passes, one of which
+yields no returned token". Prefill energies are recorded and not analysed.
+
+**Collection.** Each model is measured in a **floor module** of the Part 1 kind: 10 absolute repeats and 10 null
+quads (50 runs). The ten models are grouped into six **sub-packs**, one session each: 1.7B with 4B; 8B with
+30B-A3B (the cleanest dense and MoE pair share a session); 14B with Next-80B; 32B with 8B-8-bit; Llama-70B; and
+Qwen3.5-122B. Each session also runs the shared reference workload of Section 3.8. A **pass** is one session of
+every sub-pack. The target is two passes, the minimum one; pass 2 reverses the module order within each sub-pack
+and the order of sub-packs. BYTES sessions were interleaved with the replication rounds (Figure 3), never
+displacing them. No session could start after {{FILL: P1-BY-END | the registered BYTES collection end (no session start after this time), from the BYTES registration as last amended}}.
+
+**What counts.** BYTES uses the replication block's flag catalog with a few disclose-only additions; any thermal
+pressure above zero excludes the run. A run that is excluded, or has no usable record, removes its whole unit, and
+a stratum with fewer than five kept units makes that cell unavailable. A run whose DC-input value is unavailable
+leaves its rail record eligible. Battery assist during decode is disclosed, not excluded, and each affected cell
+prints a labelled line without the assisted units. Beside every primary line a flagged-inclusive line restores
+every unit excluded by a catalog code whose runs have a valid energy record.
+
+![Figure 4. BYTES design: fit set, frozen rival lines, held-out predictions, two-stage unblinding (schematic).](figures/fig_p1_bytes_design.svg)
+
+*Figure 4. Schematic, no measured data. Left: three fit-set models give three points per hypothesis, through
+which a line in b, a line in R and a line in τ are drawn and committed. Right: each held-out model's measured
+interval is compared with each line's prediction interval; the word is the single hypothesis whose prediction
+interval overlaps, or "unresolved" (two or more) or "neither" (none). Bottom: the stages of unblinding.*
+
+### 6.3 Analysis
+
+**Cell estimate.** For one model, pass and boundary, over the kept units, the Part 1 estimator of Section 3.4 is
+used unchanged except that the statistical half-width uses the Student-t quantile at 1 − 0.05/(2 × 21), the
+Bonferroni level of the 21 primary consistency checks (Section 6.3, "Multiplicity"). The bound B combines, by
+boundary:
+
+| Term | Rails | DC input | Rest |
+|---|---|---|---|
+| Phase-edge timing | the run's first-kind rail timing bound | u + v | rail bound + u + v |
+| Interpolation | 0 (required) | 0 | 0 |
+| Drift | ½ A_rails × scale | ½ A_DC × scale | ½ A_rest × scale |
+
+- **u, the meter edge term:** u = (P_start + P_end) × (r_max + Δt), where P_edge is the largest meter power among
+  the samples adjacent to that decode edge (and any within ±r_max of it), r_max is the largest recorded excess
+  latency of the meter's clock fit, and Δt is the meter's 20 ms sample interval.
+- **The battery term and v.** At each meter poll (five a second) the laptop's latest published battery current
+  and voltage give the battery's power into the machine, positive while discharging. Battery energy over a span is
+  the mean of the polls in it times the span's length, and DC-input energy is the meter's energy plus this term.
+  The laptop publishes battery readings about once a second, each averaging the second before, and a poll sees
+  them up to one poll interval later, so battery energy is reported up to τ_b = 2 s plus the largest poll interval
+  late, never early. The edge term v sums, at each decode edge, the absolute battery energy in the polls received
+  in the following τ_b.
+- **Drift and its scale.** A_β is the session's drift allowance on boundary β (Section 3.8), computed from the
+  reference requests' whole-request energies on that boundary. Because the allowance is measured on reference
+  requests far smaller and shorter than many BYTES decode phases, and the registered drift-transfer test did not
+  establish a pass for any regime before collection, the allowance is multiplied by
+  scale = max(1, E/E_ref, T/T_ref) on every boundary.
+
+The largest u + v over a cell's kept runs is printed as its **meter attribution floor**, alongside the rail
+attribution floor. A labelled secondary basis subtracts each run's own idle power times its decode duration.
+
+**Per model.** With two computed passes, the model's energy E is the mean of the passes' m, with half-width the
+mean of the passes' (h + B); h is not pooled, because B dominates and does not shrink with passes. Each pass's
+value, their mean and their difference are printed. A **one-pass fallback**, fixed before any data, uses the
+surviving pass, labelled *one pass*, when one pass of a model refuses or its withheld file is missing; a model with
+neither pass has no point and no word. From E and the model's mean decode duration T: e = E/512 per decode pass,
+τ = T/512, mean decode power P̄ = E/T and effective bandwidth BW = b × 512/T.
+
+**H1: frozen rival lines.** For each hypothesis x ∈ {b, R, τ}, an ordinary least-squares line e = a + s·x is drawn
+through the three fit-set points. Its **prediction interval** at a held-out model is the range of the predictions
+of the 2³ = 8 lines through every combination of the fit points' interval endpoints. Hypothesis x is
+**consistent** for a held-out model when the model's measured interval for e and x's prediction interval overlap.
+The **word** per held-out model and boundary is `bytes`, `resident` or `time` when exactly one hypothesis is
+consistent, `unresolved` when two or more are, and `neither` when none is. For every model and hypothesis,
+ln(e_measured/e_predicted) is printed whatever the word. Over the three MoE models, the answer is **active** if the
+resident line is inconsistent on all three with its prediction interval above the measurement each time,
+**resident** if the bytes line is inconsistent on all three with its prediction interval below the measurement
+each time, and **mixed** otherwise, with each model's misses printed. *Synthetic example (invented energies, not
+measurements):* with fit-set energies of 0.030, 0.045 and 0.066 J per pass, ±0.001 J, the bytes line is
+e = 0.016966 + 0.010685·b; a held-out model with b = 1.9378 GB and an invented measured e of 0.038 ± 0.001 J gets
+prediction intervals of [0.036672, 0.038672] J (bytes), [0.181187, 0.197589] J (resident) and
+[0.050714, 0.052714] J (time); only bytes overlaps, so the word is `bytes`.
+
+**H2: power against bandwidth.** Over models, on each boundary and basis, ordinary least-squares fits of
+P̄ = P₀ + ε·BW (simple), and P̄ = P₀ + ε·BW + ρ·(R/τ) (resident-extended, whose ε is primary); "resident adds
+nothing" when ρ's interval contains zero or ρ ≤ 0. A **tier fit** uses only the six Qwen3 4-bit models, and each
+other model (Llama-70B, Next-80B, Qwen3.5-122B, 8B-8-bit) is printed as a signed deviation from the tier line with
+an interval that combines the fit's uncertainty and the model's own. On the rest boundary a fit adds P̄_rails as a
+regressor; its variance inflation factor is printed, and no conclusion is drawn from its intercept or from λ,
+which are not identified. Because errors in P̄ scale with P̄, primary intervals use HC3 heteroscedasticity-robust
+standard errors [27] with Student t at n − p degrees of freedom; the ordinary errors are printed beside them. A
+fit with fewer than two residual degrees of freedom is refused. In synthetic campaigns of 400 draws per simulated
+world, the HC3 intervals' plain 95% coverage was at least 0.9475 in every world and fit, above a pre-set floor of
+0.93.
+
+**Meter label-offset alternative.** The meter's clock mapping labels each sample no earlier than it was
+digitized, so an unmeasured constant label offset would move every model's DC-input decode window in the same
+direction, a coherent error that the per-run term u budgets inside each cell but that H2's coefficient intervals do
+not carry. Beside every H2 coefficient at DC input and rest a labelled alternative interval adds a term that
+propagates the edge powers and battery edge terms through the fit, and every zero or sign statement at those
+boundaries is printed under both intervals.
+
+**Multiplicity.** The family is the H1 consistency checks plus the H2 intervals printed as primary, protected
+familywise at 0.05 by Bonferroni within the pack: for H1, 7 held-out models × 3 hypotheses = 21 checks per
+boundary; for H2, 9 primary intervals at rails and DC input and 11 at rest. The systematic term B is never widened.
+
+**Blinding in two stages.** At harvest every science energy and power was multiplied by a secret pack factor drawn
+once, uniform on [0.8, 1.25], and each model configuration's by a secret factor uniform on [0.97, 1.03], following
+the hidden-offset practice of blind analysis [22]. A common factor leaves every H1 word unchanged, but the
+configuration factors hide ratios only to about ±6%, while the MoE hypotheses differ by much larger factors; so,
+in addition, **held-out models' rows were withheld** from every analysis export until stage 1 was committed, and
+rows visible before then carried no clock times, because gaps between reference runs could reveal a withheld
+module's duration. The stages were:
+
+1. **Blinded:** rails only, fit set and references, used to check that the analysis and its twin agree.
+2. **Stage 1 (fit):** the fit set's and the references' factors are released; the fit points, the rival lines,
+   their corner lines and the family sizes are computed and written to a predictions file whose SHA-256 is
+   committed to the repository *before any held-out row enters the export*.
+3. **Held-out agreement:** both implementations run on the real held-out rows, still blinded. A difference above
+   the agreement bar is attributed before any held-out factor is released; a defect fix may restore the registered
+   arithmetic but may not change it, and the committed predictions are never edited. If such a fix was needed, a
+   second commitment is written and both results are printed, the first as registered.
+4. **Stage 2 (held-out):** every held-out factor is released, the predictions file's hash is checked, and the H1
+   words, the active-or-resident answer and every H2 fit are computed.
+
+The paper says the predictions were committed before the held-out energies were *unblinded*, not before they were
+measured.
+
+**Two implementations.** The analysis and an independent twin, written from the registration alone and sharing no
+code with it, compute the same tables. They agree when every word, count, degree of freedom, refusal, label and
+exit code matches exactly and every number matches within 1% of its cell's half-width (energies within 1% of
+h + B; durations within 1 ms).
+
+### 6.4 Extension models
+
+Two current open-weights models that did not exist when the roster was registered were added on 27 October 2026,
+after the first pass had begun and before any BYTES energy had been seen: Qwen3.8-27B (dense, 8-bit), which fills
+the gap in bytes per token between Qwen3-32B and Llama-70B, and NVIDIA Nemotron 3.5 Super 120B-A12B (a hybrid
+Mamba-Transformer MoE at about 4 bits), added only if a compatible MLX build existed and passed a short
+resolvability check. They are predicted by the *committed* registered lines, unchanged, reported in their own
+labelled section, never mixed into the registered results or the H2 fits, and protected by their own Bonferroni
+family of six checks per boundary (three if Nemotron is dropped). Each has one pass, scheduled after the registered
+pass-1 sub-packs, and was the first to be dropped if time ran short.
+({{FILL: P1-BYX-STATUS | for each extension model: collected, dropped for time, or (Nemotron) dropped for no compatible build or a failed resolvability check; its b and R from the registered manifest script}})
+
+### 6.5 Results
+
+<!-- TEMPLATE. Fill only from the stage-2 records of the registered analysis (and the extension's own
+records) after release. Keep one branch of each group. -->
+
+**Collection.** {{FILL: P1-BY-SESSIONS | per sub-pack and pass: counting or not with cause; per model: pass status (two passes, one pass, no pass) and kept units per stratum and boundary}}
+
+**Per-model quantities.** {{FILL: P1-BY-TABLE | Table 8, per model and boundary (rails, DC input, rest), primary selection, gross basis: each pass's m with interval, the pass mean and difference, e with interval, τ, P̄ with half-width, BW, b, R, the drift scale, the rail and meter attribution floors, the battery term's stratified mean and largest value and count of nonzero runs, the largest v; with the flagged-inclusive and idle-subtracted lines and, where applicable, the without-assisted line}}
+
+**The committed lines.** {{FILL: P1-BY-LINES | the predictions file's SHA-256 and commit, the commitment date relative to the stage-2 release, and for each boundary the three fit lines (intercept, slope) with their corner-line ranges; and, if a second commitment exists, both, labelled}}
+
+**H1 words.** Table 9 gives, for each held-out model and boundary, the word, the three prediction intervals, the
+measured interval and the three log ratios.
+
+{{FILL: P1-BY-H1-TABLE | Table 9: per held-out model and boundary: word, measured interval for e, prediction interval for each of b, R, τ, consistency, ln(e_measured/e_predicted) for each; per-pass words as description}}
+
+The words at the processor rails were {{FILL: P1-BY-H1-WORDS-rails | list of held-out model: word, rails}}, at the
+DC input {{FILL: P1-BY-H1-WORDS-dc | list, DC input}} and for the rest {{FILL: P1-BY-H1-WORDS-rest | list, rest}}. For each held-out
+model and boundary, the word is interpreted by exactly one of the following:
+
+**[BRANCH 6.5.W1 — word `bytes`]** Only the line in bytes read per pass predicts this model's decode energy per
+pass within the registered uncertainty; the lines in resident size and in decode time do not. For an MoE model this
+is direct evidence, on this machine and boundary, that energy follows the weights a token uses, not those the
+model holds. **[END BRANCH 6.5.W1]**
+
+**[BRANCH 6.5.W2 — word `resident`]** Only the line in resident size predicts this model's energy per pass; the
+bytes and time lines do not. For an MoE model this indicates that holding unused experts in memory costs decode
+energy on this machine, or that more of the model is read per token than the format-derived count implies.
+**[END BRANCH 6.5.W2]**
+
+**[BRANCH 6.5.W3 — word `time`]** Only the line in decode time predicts this model's energy per pass. Energy per
+pass then tracks how long each pass takes, consistent with a roughly constant power draw across models, more
+closely than it tracks either byte count. **[END BRANCH 6.5.W3]**
+
+**[BRANCH 6.5.W4 — word `unresolved`]** Two or more lines predict this model within the registered uncertainty,
+so the test cannot tell them apart for this model. For a dense model this is the expected result: dense held-out
+models test linearity over the format-derived bytes range; their small rival splits do not identify the
+hypothesis. **[END BRANCH 6.5.W4]**
+
+**[BRANCH 6.5.W5 — word `neither`]** No registered line predicts this model's energy per pass. The log ratios
+({{FILL: P1-BY-LOGR | for this model and boundary, ln(measured/predicted) under each line}}) say by how much and in which
+direction each line misses. A `neither` is informative: it says that something other than the three registered
+quantities, for example a model-specific kernel efficiency, quantization format or architecture, moves energy per
+pass for this model, and the paper does not name which. **[END BRANCH 6.5.W5]**
+
+**[BRANCH 6.5.W6 — no word: the model has no point]** The model has no word because {{FILL: P1-BY-NOWORD | both passes refused or were missing, with the reason}}. **[END BRANCH 6.5.W6]**
+
+**Active or resident.** {{FILL: P1-BY-AR-rails | the active-or-resident answer at the rails, with each MoE model's misses}} at the rails;
+{{FILL: P1-BY-AR-dc | the answer at DC input, with misses}} at the DC input.
+
+**[BRANCH 6.5.A1 — `active`]** On all three MoE models, the resident-size line overpredicts the measured energy
+per pass beyond the registered uncertainty: decode energy on this machine follows the experts a token activates,
+not the experts held. **[END BRANCH 6.5.A1]**
+
+**[BRANCH 6.5.A2 — `resident`]** On all three MoE models, the bytes line underpredicts the measured energy per pass
+beyond the registered uncertainty: holding a model's full set of experts raises decode energy beyond what the
+active bytes alone predict. **[END BRANCH 6.5.A2]**
+
+**[BRANCH 6.5.A3 — `mixed`]** The three MoE models do not agree on either pattern; each model's misses are
+printed, and no general statement about active versus resident bytes is made. **[END BRANCH 6.5.A3]**
+
+**H2.** {{FILL: P1-BY-H2-TABLE | Table 10, per boundary and basis: each fit's n, p, df, status and k; ε (simple), ε and ρ (resident-extended), tier ε and ρ, with HC3 primary intervals and OLS errors; tier deviations of each non-tier model with both parts of their intervals; the rest fit with λ, ε_rest, VIF and r; leave-one-out predictions as description; at DC input and rest the label-offset alternative interval and dβ/dδ in J/GB per ms}}
+
+The primary energy per byte of bandwidth was ε = {{FILL: P1-BY-H2-EPS-rails | resident-extended ε at rails with HC3 interval, J/GB}} at
+the rails and {{FILL: P1-BY-H2-EPS-dc | resident-extended ε at DC input with HC3 interval and the label-offset alternative}} at the DC input.
+
+**[BRANCH 6.5.H1 — "resident adds nothing" on a boundary]** On the {{FILL: P1-BY-H2-BOUNDARY | boundary or boundaries}}
+boundary, ρ's interval contains zero or ρ ≤ 0: once bandwidth is accounted for, resident bytes per second add
+nothing measurable to decode power. **[END BRANCH 6.5.H1]**
+
+**[BRANCH 6.5.H2 — ρ positive and its interval excludes zero]** On the {{FILL: P1-BY-H2-BOUNDARY | boundary}} boundary,
+resident bytes per second add to decode power beyond bandwidth, by ρ = {{FILL: P1-BY-H2-RHO | ρ with interval}}. **[END BRANCH 6.5.H2]**
+
+**[BRANCH 6.5.H3 — the two intervals disagree at DC input or rest]** Under the registered interval the statement
+is {{FILL: P1-BY-H2-REG | decision under the registered interval}}; under the label-offset alternative it is
+{{FILL: P1-BY-H2-ALT | decision under the alternative}}. The meter's label offset has not been measured, so we
+report both and choose neither. **[END BRANCH 6.5.H3]**
+
+**[BRANCH 6.5.H4 — a fit refused]** The {{FILL: P1-BY-H2-REFUSED | fit and boundary}} fit was refused because it had
+fewer than two residual degrees of freedom; it has no primary interval, and a refused tier fit refuses its
+deviations. **[END BRANCH 6.5.H4]**
+
+**One pass.** **[BRANCH 6.5.P1 — the one-pass fallback applied to any model]** {{FILL: P1-BY-ONEPASS | models labelled one pass and why}} carry the label *one pass*; H2 is also printed over the
+models with two passes as a labelled sensitivity line ({{FILL: P1-BY-H2-TWOPASS | that line}}). **[END BRANCH 6.5.P1]**
+
+**Commitment record.** {{FILL: P1-BY-COMMIT | the stage-2 record's commitment SHA-256, committed and evaluating module digests, any module-changed or not-rebuilt flags with field names; and, if a post-agreement fix produced a second commitment, both results with every differing word reported}}
+
+**Agreement of the two implementations.** {{FILL: P1-BY-TWIN | per stage: counts of printed fields compared and of differences under and above the bar; attribution and ruling of any difference above the bar}}
+
+**Extension models.** {{FILL: P1-BYX-RESULTS | for each extension model and boundary: the word under the committed registered lines, ln(measured/predicted) for each line, with the extension's own Bonferroni family; printed in a separate labelled table and never in the registered family}} These models were added after the roster was
+registered and after pass 1 began, but before any BYTES energy was seen; their results are a separately labelled
+addition to the registered test.
+
+### 6.6 The known-bytes stream test
+
+Whether the GPU rail includes the energy of the memory controller decides how the rails-versus-rest split of
+memory energy should be read. A registered **known-bytes stream test**, a GPU workload streaming a known number of
+bytes, was scheduled after pass-1 collection and before stage-1 unblinding, from its own non-claim checkout.
+
+**[BRANCH 6.6.1 — the test ran and the rail responded as registered]** {{FILL: P1-BY-KB | outcome of the known-bytes stream test with its record}} The rail and rest boundaries are read as registered.
+**[END BRANCH 6.6.1]**
+
+**[BRANCH 6.6.2 — the test ran and a boundary did not respond as registered]** {{FILL: P1-BY-KB | outcome}} That
+outcome is printed beside every claim line of the boundary concerned. **[END BRANCH 6.6.2]**
+
+**[BRANCH 6.6.3 — the test did not run]** The test did not run in its slot; the split of memory energy between rails
+and rest is reported as not measured, and every rails and rest statement carries that caveat. **[END BRANCH 6.6.3]**
