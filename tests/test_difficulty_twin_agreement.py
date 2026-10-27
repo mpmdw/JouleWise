@@ -23,7 +23,9 @@ ROOT = Path(__file__).resolve().parent.parent
 TWIN = ROOT / "scripts" / "difficulty_twin.py"
 REFERENCE = ROOT / "scripts" / "difficulty_estimate.py"
 
-# §10, kept independently of the twin's constants.
+# Registration revision 2.3: one bar for all floats, 1e-6 relative or absolute
+# in the column's unit near zero. It exceeds 1e6 * double-precision noise
+# (2.2e-16 * 1e6 = 2.2e-10 relative). Kept independent of the twin's constants.
 AGREEMENT_TOL = 1e-6
 
 SCHEMAS = {
@@ -313,11 +315,6 @@ class TwinAgreementTests(unittest.TestCase):
             t = {self.row_key(name, row): row for row in twin[name]}
             if set(r) != set(t):
                 differences.append(f"{name} row keys: main-only={sorted(set(r)-set(t))}, twin-only={sorted(set(t)-set(r))}")
-            # Registration revision 2.3 (orchestrator, 2026-10-15): one bar for every float, 1e-6 relative
-            # or absolute in the column's own unit. It sits about 1e9 above the float differences two
-            # independent programs leave (1.8e-15 seen) and far below any printed digit; words, verdicts,
-            # integers and strings stay exact.
-            tolerance = AGREEMENT_TOL
             for key in sorted(set(r) & set(t)):
                 for column in schema:
                     actual, expected = t[key][column], r[key][column]
@@ -325,7 +322,9 @@ class TwinAgreementTests(unittest.TestCase):
                         matches = actual == expected
                     else:
                         x, y = float(actual), float(expected)
-                        matches = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=tolerance, abs_tol=tolerance)
+                        # Revision 2.3's 1e-6 bar (derivation at AGREEMENT_TOL);
+                        # infinities are signed non-estimability sentinels, exact.
+                        matches = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=AGREEMENT_TOL, abs_tol=AGREEMENT_TOL)
                     if not matches:
                         differences.append(f"{name} {key} {column}: twin={actual!r}, main={expected!r}")
         # §11: identical summary.json apart from method_note. Orchestrator ruling (2026-10-14): every
@@ -343,6 +342,7 @@ class TwinAgreementTests(unittest.TestCase):
                 for i, (a, b) in enumerate(zip(x, y)):
                     walk(a, b, f"{path}[{i}]")
             elif isinstance(x, float) and isinstance(y, float) and type(x) is type(y):
+                # Same revision 2.3 float bar as CSVs; signed infinity is a sentinel.
                 same = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=AGREEMENT_TOL, abs_tol=AGREEMENT_TOL)
                 if not same:
                     differences.append(f"{path}: twin={y!r}, main={x!r}")
@@ -365,10 +365,14 @@ class TwinAgreementTests(unittest.TestCase):
     def cell(tables, model, level=1, variant="primary", boundary="rails", mode="off"):
         return next(r for r in tables["cells.csv"] if (r["model"],int(r["level"]),r["variant"],r["boundary"],r["mode"]) == (model,level,variant,boundary,mode))
 
-    def pins(self, row, values, digits=6):
+    def pins(self, row, values):
         for key, value in values.items():
             with self.subTest(field=key):
-                self.assertAlmostEqual(float(row[key]), value, delta=0.5*10**(-digits))
+                # Use revision 2.3's re-derivation bar, derived at AGREEMENT_TOL;
+                # rounded acceptance pins must retain enough digits for this bar.
+                actual = float(row[key])
+                self.assertTrue(math.isclose(actual, value, rel_tol=AGREEMENT_TOL, abs_tol=AGREEMENT_TOL),
+                                f"{actual!r} != {value!r}")
 
     def test_cli_acceptance_agreement(self):
         start = time.monotonic()
@@ -381,6 +385,7 @@ class TwinAgreementTests(unittest.TestCase):
                 self.agreement(fixture, tag)
         elapsed = time.monotonic()-start
         print(f"CLI acceptance agreement runtime: {elapsed:.3f}s", flush=True)
+        # Registered §11 CLI budget: 60 s is a runtime requirement, not a float agreement bar.
         self.assertLess(elapsed,60,"§11 runtime budget")
 
     def test_seeded_synthetic_agreement(self):
@@ -390,6 +395,7 @@ class TwinAgreementTests(unittest.TestCase):
         finally:
             elapsed = time.monotonic()-start
             print(f"Seeded synthetic agreement runtime: {elapsed:.3f}s", flush=True)
+            # Registered §11 CLI budget: 60 s, independent of numerical agreement precision.
             self.assertLess(elapsed, 60, "§11 runtime budget")
 
     def test_twin_pinned_a_to_f_and_fprime(self):
@@ -397,16 +403,18 @@ class TwinAgreementTests(unittest.TestCase):
         for k, lo, hi in ((15,0.531299,0.888138), (20,0.838875,1), (0,0,0.161125)):
             p, actual_lo, actual_hi = w(k,20,0.95)
             self.pins(dict(lo=actual_lo, hi=actual_hi), dict(lo=lo,hi=hi))
-            self.assertEqual(p, k/20)
+            self.pins(dict(p=p), dict(p=k/20))
         energies = [100,120,140,160,180]
         mean, elo, ehi = self.twin["mean_interval"](energies,0.95)
-        self.pins(dict(mean=mean,lo=elo,hi=ehi), dict(mean=140,lo=100.7351,hi=179.2649),4)
-        for k, point, lo, hi in ((15,186.6667,128.934,285.303), (20,140,100.735,189.604)):
+        self.pins(dict(mean=mean,lo=elo,hi=ehi), dict(mean=140,lo=100.7351,hi=179.2649))
+        # §6 MOVER pins re-derived with t(.975,4)=2.7764451051977987 and
+        # Wilson(.95); retain six decimals so rounding cannot exceed the bar.
+        for k, point, lo, hi in ((15,186.6667,128.934010,285.303377), (20,140,100.735137,189.603682)):
             p, pl, ph = w(k,20,0.95)
             point0, lo0, hi0, status = self.twin["energy_per_correct"](mean,elo,ehi,p,pl,ph,k,5)
             self.assertEqual(status,"ok")
-            self.pins(dict(point=point0),dict(point=point),4)
-            self.pins(dict(lo=lo0,hi=hi0),dict(lo=lo,hi=hi),3)
+            self.pins(dict(point=point0),dict(point=point))
+            self.pins(dict(lo=lo0,hi=hi0),dict(lo=lo,hi=hi))
         self.assertEqual(self.twin["energy_per_correct"](mean,elo,ehi,0,0,1,0,5)[3], "not_estimable_zero_correct")
         self.assertEqual(self.twin["energy_per_correct"](None,None,None,.75,.5,.9,15,1)[3], "not_estimable_few_attempts")
         point, lo, hi = self.twin["joules_per_token"](energies,[50,70,80,90,110],0.95)
@@ -428,21 +436,21 @@ class TwinAgreementTests(unittest.TestCase):
                                    b_gen_lo=1.396896,b_gen_hi=1.597673))
                 rss = math.fsum((r["energy_j"]-self.twin["predict"](fit,r["prompt_tokens"],r["generated_tokens"]))**2 for r in rows)
                 self.pins(dict(rss=rss),dict(rss=6.060703))
-                self.pins(dict(tss=fit["_tss"]),dict(tss=7250.833),3)
+                self.pins(dict(tss=fit["_tss"]),dict(tss=7250.833))
 
     def test_twin_case_h(self):
         t = self.twin["student_t_quantile"]
         for df, expected in ((3,3.182446305),(4,2.776445105),(9,2.262157163),(19,2.093024054),(29,2.045229642)):
             with self.subTest(df=df):
-                self.assertAlmostEqual(t(.975,df),expected,delta=1e-9)
-                self.assertAlmostEqual(t(.025,df),-expected,delta=1e-9)
-        self.assertEqual(t(.5,19),0)
+                self.pins(dict(t=t(.975,df)), dict(t=expected))
+                self.pins(dict(t=t(.025,df)), dict(t=-expected))
+        self.pins(dict(t=t(.5,19)), dict(t=0))
 
     def test_twin_case_i(self):
         row = self.cell(self.twin_only(case_i(),"I-pins"),"I")
         self.assertEqual((row["n_bench"],row["k_correct"],row["n_holdout"],row["k_holdout"]),("25","16","20","15"))
-        self.pins(row,dict(accuracy=.64,epc_direct_j=186.6667),4)
-        self.pins(row,dict(epc_direct_lo_j=128.934,epc_direct_hi_j=285.303),3)
+        self.pins(row,dict(accuracy=.64,epc_direct_j=186.6667))
+        self.pins(row,dict(epc_direct_lo_j=128.934010,epc_direct_hi_j=285.303377))
 
     def test_twin_case_l_points(self):
         coords = [(100,50,135),(120,70,175),(80,80,170),(150,90,220),(110,110,230),(90,60,145)]
@@ -455,7 +463,7 @@ class TwinAgreementTests(unittest.TestCase):
             bench.extend(bench_row("L",l,f"h{l}-{i}",k,p,g) for i,(p,g,k) in enumerate(values))
         tables = self.twin_only(single_fixture("L",bench,energy),"L-pins")
         for l, mu, epc, direct in ((1,165,220,213.3333),(2,245,490,396.6667)):
-            self.pins(self.cell(tables,"L",l),dict(model_energy_j=mu,epc_model_j=epc,epc_direct_j=direct),4)
+            self.pins(self.cell(tables,"L",l),dict(model_energy_j=mu,epc_model_j=epc,epc_direct_j=direct))
 
     def test_twin_case_m(self):
         tables = self.twin_only(case_m(),"M-pins")
@@ -473,7 +481,7 @@ class TwinAgreementTests(unittest.TestCase):
             self.assertEqual(cell["primary_source"],"direct" if l==3 else "model")
             if l==3:
                 self.assertEqual(cell["primary_reason"],"misfit")
-                self.pins(cell,dict(epc_j=210.9,epc_lo_j=162.25,epc_hi_j=518.25),2)
+                self.pins(cell,dict(epc_j=210.9,epc_lo_j=162.25,epc_hi_j=518.25))
             else:
                 self.pins(cell,dict(epc_j=211.030519))
         self.assertEqual(tables["summary.json"]["variants"]["primary"]["rails"]["misfit_cells"],["m/off:3"])
@@ -499,9 +507,10 @@ class TwinAgreementTests(unittest.TestCase):
     def test_twin_case_o(self):
         percentile = self.twin["percentile"]
         values = [b/100-.03 for b in range(1,201)]
-        self.pins(dict(zip(("lo","hi"),percentile(values,.95))),dict(lo=.02,hi=1.93),2)
-        self.pins(dict(zip(("lo","hi"),percentile(values,.99))),dict(lo=-.02,hi=1.97),2)
+        self.pins(dict(zip(("lo","hi"),percentile(values,.95))),dict(lo=.02,hi=1.93))
+        self.pins(dict(zip(("lo","hi"),percentile(values,.99))),dict(lo=-.02,hi=1.97))
         lo,hi = percentile(values,.99)
+        # Registered decision edge: zero log-ratio is equal cost, inside the interval.
         self.assertTrue(lo <= 0 <= hi)
         self.assertEqual(percentile(list(range(1,41)),.95),(1,40))
         self.assertEqual(percentile(list(range(1,41)),.5),(10,31))
@@ -509,6 +518,7 @@ class TwinAgreementTests(unittest.TestCase):
         verdict = self.twin["primary_verdict"]
         self.assertEqual(verdict(rows),"no_resolved_change")
         lo,hi = percentile([x+1 for x in values],.99)
+        # Adding one moves the entire registered decision interval above equal cost.
         self.assertGreater(lo,0)
         rows[1] = dict(status="resolved",cheaper="b")
         self.assertEqual(verdict(rows),"cheaper_size_changes_with_level")
@@ -537,6 +547,7 @@ class TwinAgreementTests(unittest.TestCase):
         for l in range(1,6):
             self.assertEqual(self.cell(present,"qwen3-8b",l,mode="on")["cell_status"],"short" if l==1 else "missing")
         self.assertTrue(all(r["status"]=="unresolved_incomplete" for r in present["crossover.csv"]))
+        # Identical code and seeded inputs for existing parties require identical bytes.
         self.assertEqual(absent["primary.csv"],present["primary.csv"])
 
     def test_twin_case_q(self):
@@ -546,7 +557,7 @@ class TwinAgreementTests(unittest.TestCase):
                 with self.subTest(state=state,variant=variant):
                     r = self.cell(tables,"Q",variant=variant)
                     mean = 208 if variant=="flagged_inclusive" or state=="contention" else 10.4 if state=="retry" else 10
-                    self.pins(r,dict(mean_energy_j=mean),1)
+                    self.pins(r,dict(mean_energy_j=mean))
                     self.assertEqual(r["m_energy"],"4" if state=="flag" and variant=="primary" else "5")
                     self.assertEqual(r["cell_status"],"short" if state=="flag" and variant=="primary" else "complete")
                     self.assertEqual(r["replaced_rows"],"1" if state=="retry" else "0")
