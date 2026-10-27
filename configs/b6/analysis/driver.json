@@ -16,8 +16,5 @@
              "structure.no_capture_records", "structure.no_roster"]
     },
     "minimum_kept_units_per_stratum": 5
-  },
-  "slots": {
-    "S-10_F_min_J": 1.9
   }
 }

@@ -11,10 +11,18 @@ import hashlib
 import json
 import os
 import sys
-from dataclasses import replace
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from joulewise import desk_compress
 from joulewise.b6.analysis.adapter import AdapterRefusal, SessionAnalysis
+from joulewise.b6.analysis.session_index import build_session_index
+
+FAKE_ZSTD_DIR = Path(__file__).resolve().parent / "bin"
+# 1.5 MiB and 1.25 MiB: above desk_compress's 1 MiB threshold, so the desk
+# compresses them, as it does every raw sampler file of a real session.
+RAW_BYTES, SOURCE_BYTES = 3 * 512 * 1024, 5 * 256 * 1024
 
 MODELS = {"alpha": "qwen3-1p7b", "beta": "qwen3-8b"}
 PHASES = ("decode", "prefill-p2048")
@@ -70,11 +78,87 @@ def write_loop_root(root: Path, sessions=CLOSED_BLOCK6, *, closed=True, override
     return root
 
 
+@contextmanager
+def fake_zstd():
+    """Put the gzip-backed zstd stand-in first on PATH for this process."""
+    saved = os.environ.get("PATH", "")
+    os.environ["PATH"] = str(FAKE_ZSTD_DIR) + os.pathsep + saved
+    try:
+        yield
+    finally:
+        os.environ["PATH"] = saved
+
+
+def _payload(session_id: str, name: str, size: int) -> bytes:
+    """Deterministic, compressible synthetic bytes (no measurement)."""
+    seed = hashlib.sha256(f"{session_id}|{name}".encode()).digest()
+    return (seed * (size // len(seed) + 1))[:size]
+
+
+@dataclass(frozen=True)
+class Block6:
+    root: Path
+    loop: Path
+    measurement: Path
+    index: Path
+
+    def session_dir(self, session_id: str) -> Path:
+        return self.root / "b6/sessions" / session_id
+
+    def raw_file(self, session_id: str) -> Path:
+        return self.session_dir(session_id) / f"runs-parent/claim-runs/{session_id}-run1/raw/powermetrics.plist"
+
+    def source_file(self, session_id: str) -> Path:
+        return self.session_dir(session_id) / f"archive/sources/claim-runs/{session_id}-run1/raw/powermetrics.plist"
+
+
+def build_block6(root: Path, sessions=CLOSED_BLOCK6, *, compressed=True, closed=True, overrides=None,
+                 acceptance=None, reharvested=None, decided=None) -> Block6:
+    """A synthetic block-6 tree in the loop's layout (S-2, design §1): loop
+    record, session records, archives with harvest and acceptance records,
+    runs roots and custody, desk-compressed by the real ``desk_compress``."""
+    root = Path(root)
+    loop = write_loop_root(root / "b6/loop", sessions, closed=closed, overrides=overrides, reharvested=reharvested)
+    measurement = root / "measurement"
+    (measurement / "runs").mkdir(parents=True, exist_ok=True)
+    acceptance = acceptance or {}
+    for session_id, pack, _, status in sessions:
+        base = root / "b6/sessions" / session_id
+        archive, custody, runs = base / "archive", base / "custody", base / "runs-parent/claim-runs"
+        for directory in (archive / "derived", custody / "night", runs):
+            directory.mkdir(parents=True, exist_ok=True)
+        (base / "session.json").write_text(json.dumps({"paths": {"archive": str(archive), "custody": str(custody)},
+                                                       "runs_roots": [str(runs)]}))
+        if decided is not None and session_id not in decided:
+            continue
+        (archive / "harvest.json").write_text(json.dumps({"verdict": "COLLECTED", "synthetic": True}))
+        counting = acceptance.get(session_id, status == "counting")
+        (archive / "derived/b6-acceptance.json").write_text(json.dumps(
+            {"schema": "joulewise.b6_acceptance.v1", "session_id": session_id, "pack_id": pack,
+             "verdict": "ACCEPT" if counting else "EXCLUDE", "counting": counting, "cells": {}}))
+        (custody / "night/chain.exited").write_text("0\n")
+        raw = runs / f"{session_id}-run1/raw/powermetrics.plist"
+        raw.parent.mkdir(parents=True)
+        raw.write_bytes(_payload(session_id, "raw", RAW_BYTES))
+        (runs / f"{session_id}-run1/summary.json").write_text(json.dumps({"run_id": f"{session_id}-run1"}))
+        source = archive / f"sources/claim-runs/{session_id}-run1/raw/powermetrics.plist"
+        source.parent.mkdir(parents=True)
+        source.write_bytes(_payload(session_id, "source", SOURCE_BYTES))
+        if compressed:
+            with fake_zstd():
+                code, _ = desk_compress.compress(archive=archive, custody=custody, runs_roots=[runs])
+            if code != 0:
+                raise RuntimeError(f"fixture compression failed: {code}")
+    index = root / "index.json"
+    index.write_text(json.dumps(build_session_index(loop, measurement=measurement)))
+    return Block6(root, loop, measurement, index)
+
+
 def write_r2_gamma_exclusions(root: Path) -> Path:
     """A synthetic r2-gamma harvest whose exclusions say claim_usable: false
     from block 5's retired neg8.midpoint_lost_primary (RUN_STATE item 53)."""
     path = root / "sessions/r2-gamma/archive/derived/exclusions.json"
-    path.parent.mkdir(parents=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"claim_usable": False, "window_exclusions": ["neg8.midpoint_lost_primary"]}))
     return path
 
@@ -89,7 +173,9 @@ class FakeL9:
     """
 
     def __init__(self, *, refuse=None, contrasts=None, kept=None, drift=None, noisy=True, whole_machine_on_gamma=False,
-                 outcome_class=()):
+                 outcome_class=(), index=None, analysis_counting=None):
+        self.index = str(index) if index is not None else None
+        self.analysis_counting = dict(analysis_counting or {})
         self.refuse = dict(refuse or {})
         self.outcome_class = frozenset(outcome_class)
         self.contrasts = dict(contrasts or {})
@@ -109,6 +195,35 @@ class FakeL9:
             print(f"floor {unit(session_id, 'noise2', 1, 2):.6f} J direction_supported", file=sys.stderr)
             os.write(1, b"fd-level 12.5 J\n")
             os.write(2, b"fd-level 0.25 J replicated\n")
+
+    def _counting(self, session_id):
+        """The binding's analysis counting: as given, else the loop's counting
+        from the index (no desk exclusion changes it, as B6-2's replay found)."""
+        if session_id in self.analysis_counting:
+            return self.analysis_counting[session_id]
+        if self.index is None:
+            return None
+        rows = {row["session_id"]: row for row in json.loads(Path(self.index).read_text())["sessions"]}
+        return rows[session_id]["counting"]
+
+    def _session_bytes(self, session_ids) -> dict:
+        """Read each session's raw files at their plain paths, as L9 does.
+
+        A file still compressed is absent at its plain path: the read refuses,
+        which is what L9 does on desk-compressed bytes (design §4.1)."""
+        if self.index is None:
+            return {}
+        rows = {row["session_id"]: row for row in json.loads(Path(self.index).read_text())["sessions"]}
+        digests = {}
+        for session_id in session_ids:
+            row = rows[session_id]
+            paths = [Path(row["archive_root"]) / f"sources/claim-runs/{session_id}-run1/raw/powermetrics.plist",
+                     *(Path(r) / f"{session_id}-run1/raw/powermetrics.plist" for r in row["runs_roots"])]
+            try:
+                digests[session_id] = hashlib.sha256(b"".join(p.read_bytes() for p in paths)).hexdigest()
+            except FileNotFoundError:
+                raise AdapterRefusal("session_bytes_not_plain") from None
+        return {"session_bytes": hashlib.sha256(json.dumps(digests, sort_keys=True).encode()).hexdigest()}
 
     def _write(self, custody: Path, name: str, value) -> str:
         raw = json.dumps(value, sort_keys=True).encode()
@@ -136,9 +251,13 @@ class FakeL9:
         quantities[f"floor/{model}/prefill-p42/absolute/operative_j"] = None   # expected not extractable
         kept = {f"{model}/{phase}": {"repeat": n, "null_quad": n} for phase in PHASES}
         digest = self._write(custody, "floor-result.json", quantities)
+        outputs = {"floor_result": digest}
+        if not session_id.startswith("block5"):
+            outputs.update(self._session_bytes([session_id]))
         return SessionAnalysis(session_id, pack, "ok", steps=(("1", "ok"), ("2", "ok"), ("3", "ok"), ("3b", "ok"),
                                ("4", "ok"), ("10", "ok"), ("11", "ok")), kept_units=kept, b_op_defined=True,
-                               drift_screen=drift, outputs={"floor_result": digest}, quantities=quantities)
+                               drift_screen=drift, outputs=outputs, quantities=quantities,
+                               analysis_counting=None if session_id.startswith("block5") else self._counting(session_id))
 
     def _gamma_values(self, session_id):
         values = self.contrasts.get(session_id, {})
@@ -163,10 +282,13 @@ class FakeL9:
         contrasts, quantities = self._gamma_values(request.session_id)
         kept = {f"contrast/{c}": {"contrast_quad": n} for c in CONTRASTS}
         digest = self._write(Path(custody), "claim-result.json", {"contrasts": contrasts, "quantities": quantities})
+        reads = [request.session_id] + [f.session_id for f in (alpha, beta) if f.session_id != "block5"]
         return self._status(SessionAnalysis(request.session_id, request.pack, "ok",
                                steps=(("1", "ok"), ("5", "ok"), ("8", "ok"), ("6", "ok"), ("9", "ok"), ("9b", "ok"), ("11", "ok")),
                                kept_units=kept, b_op_defined=True, drift_screen=drift,
-                               outputs={"claim_result": digest}, quantities=quantities, contrasts=contrasts))
+                               outputs={"claim_result": digest, **self._session_bytes(reads)},
+                               quantities=quantities, contrasts=contrasts,
+                               analysis_counting=self._counting(request.session_id)))
 
     def block5_session(self, pack, custody):
         if "block5" in self.refuse:

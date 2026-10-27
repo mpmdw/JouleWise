@@ -1,173 +1,229 @@
-# B6-AN-1 report: block-6 analysis driver
+# B6-AN-1 report: block-6 analysis driver (the pure layer)
 
-bridge-report/v1 · status: **DONE on synthetic data**. Built under the lead's rulings of 2026-10-27 (option 3, then
-rulings 1 to 4). The run through the real L9 programs is owed at integration, once L9 adds its per-session seams.
+bridge-report/v1 · status: **READY FOR THE TWO EXECUTING REVIEWS** on synthetic data. The run through the real L9
+programs is owed at integration, once L9 adds its per-session seams.
 
 ## SUMMARY
 
-The block-6 analysis driver is built in new files on `work/2026-10-23-by-slots-draft` (991358f73). There is no base
-merge, and L9 is called through one adapter module only.
+This round follows the lead's brief corrections of 2026-10-27 (pipeline audit N9, L3 to L5, B6-1 to B6-7, CRITIQUE
+item 19; gate policy). The driver is the block-6 "pure layer" (audit N9), and it is built in new files only, on
+`work/2026-10-23-by-slots-draft` (991358f73). This round adds:
 
-- **Counting** is read from the session loop's acceptance (`attempts.jsonl` and `state.json`), never from a harvest's
-  `exclusions.json`. Every collected session is indexed.
-- **Pairing:** GAMMA is paired with its floor sessions by round (§6.2).
-- **Per-session steps:** block 5's steps run once per session through the adapter, as a two-level DAG. ALPHA and BETA
-  run in parallel, each GAMMA waits only on its paired floors, and the block-6 lines run last. Serial and parallel
-  scheduling give the same bytes.
-- **Block-6 lines:** §10's between-session summary, §11.1's side-by-side table, §11.2's replication word and §11.4's
-  flagged-inclusive line, plus the S-15 carry. All go to content-addressed restricted objects, and the public record
-  is structure only.
-- **Session index:** the block-6 session index (archive root, claim-runs root and harvest-record digest per session)
-  is built from the loop's records and re-checked on load.
-- **Modes:** a single-session mode (§12.2) and a release replay (§13).
-- **Slots:** S-9, S-11 and S-16 are code only. S-15 is plumbing only, because block 5's per-phase definition does not
-  exist yet.
-- **Tests:** 82 tests on synthetic fixtures pass (`tests/b6/analysis`).
-- **`analysis_lane.py`:** reverted to the bytes of 991358f73 (ruling 3).
-- **Production adapter:** it refuses with structure tokens until L9's per-session seams exist (ruling 4).
+- **Counting from loop acceptance, checked mechanically (audit L5).** Every session in the census is compared, loop
+  counting against its `derived/b6-acceptance.json`. Any disagreement refuses before a unit runs
+  (`b6_counting_records_disagree`). After the units run, every analysed session's analysis counting must be reported
+  and must equal its acceptance counting (`analysis_counting_not_reported`,
+  `analysis_counting_differs_from_acceptance`). Counting is never read from `claim_usable`.
+- **Restore once per run (lead item 4).** Each session's desk-compressed bytes are restored before its first unit and
+  compressed again after its last, by design §4.1's per-row procedure. ALPHA r3, which serves GAMMA r2 and r3, is
+  restored once. An inventory after-check proves the end state.
+- **Two phases, each run twice (audit B6-4).** The per-session phase runs any time. The cross-block phase runs after
+  block 5's release and the close. The second run of each phase must reproduce the first, digest for digest.
+- **Pairing per design §5.** Rule words `same_round`, `later_round`, `earlier_round` and `block5`; ties go to the
+  earlier t0; pairings carry `final`. A GAMMA unit that needs block 5's floor is deferred to the cross-block phase.
+- **Session index from session records (design §4.4).** It handles re-harvested archives and binds each session's
+  harvest and acceptance records by digest.
+- **Synthetic root guard (design §17).**
+- **S-9 and S-11 removed from scope (lead item 2).** S-16 prints "not evaluated" for a rule its host cannot evaluate
+  (audit B6-5).
 
-## ACCEPTANCE
+**Tests:** 99 synthetic tests pass. Sessions are desk-compressed by the real `joulewise.desk_compress`, using a
+gzip-backed `zstd` stand-in, because this seat has no zstd. Eight counterfactual mutations each make their regression
+test fail, as gate-policy rule 3 asks.
+
+## LEAD ITEMS OF 2026-10-27
+
+| # | Item | Done |
+|---|---|---|
+| 1 | Follow `b6_analysis_additions.md` §4–§14 and §17; explain differences | See DIFFERENCES FROM THE DESIGN |
+| 2 | Drop S-9 and S-11 (filled on `lane/2026-10-22-b6-s9-s11` c37614f71) | `slots.s11_phase_lengths`, `s9_power_lines` and the `slots` CLI are removed. I read the fill's registration diff with digits masked and recompute nothing. A test asserts the functions are gone. Their consumer, the desk exclusion (§4.6), is binding work (below). |
+| 3 | Counting from loop acceptance; refuse unless it equals acceptance for all 9 sessions | `acceptance_counting.require_loop_equals_acceptance` (every census session, before any unit) and `analysis_counting_problems` (every analysed session, after its unit). Tests: `CountingAgainstAcceptance` (4), and r2-gamma with a synthetic `claim_usable: false` still counts. |
+| 4 | Second full per-session blind run, digest-compared; restore each session once per run | `--mode per-session --run 2` compares every bound field, node row and restricted-object digest with run 1, and refuses on any difference (`comparison.differs`). The cross-block phase needs both per-session runs complete and equal, and is itself run twice. `restore.Lifecycle` reference-counts each session over its units: 9 restore cycles per full run (6 floor sessions + 3 GAMMA sessions), against design §4.1's 15. |
+| 5 | Nothing of block 6 merges into main before block 5's release | This lane was never aimed at main; no PR. The integration (L3) and the S-14 pin stay on an integration branch (CRITIQUE item 19). |
+| 6 | The independent recompute adaptation is a separate seat | Not built. Its interface is below. |
+| 7 | Say when ready for reviews | Ready: lane head as pushed with this report. Review guide below. |
+
+## ACCEPTANCE (brief rows A1 to A8)
 
 | Row | Status | Evidence |
 |---|---|---|
-| A1 counting from the loop's acceptance | **pass** | `census.py` reads only `attempts.jsonl` and `state.json`. Counting is `joulewise.b6.queue.counting_ids`, the loop's own reading, including re-harvest corrections. `test_r2_gamma_counts_although_its_exclusions_say_claim_usable_false`: a synthetic r2-gamma whose `exclusions.json` says `claim_usable: false` from `neg8.midpoint_lost_primary` counts, and an open-tripwire shows the census never opens that file. End to end, r2-gamma enters the summary and the replication word (`test_r2_gamma_counts_and_enters_the_registered_lines`). |
-| A2 GAMMA pairing by round | **pass** | `pairing.py`: §6.2 rules 1 to 3, the S-17 "floor from block 5" label, and provisional pairing before the close. On the closed block, G r1 → A r1/B r1, G r2 → A r3/B r2 and G r3 → A r3/B r3. This holds unit-tested, end to end in serial, and through 3 worker processes. §6.2's worked example passes too. |
-| A3 per-session steps, no pooling; §10 | **pass on the fake adapter** | The adapter takes one session (GAMMA also takes its two paired floor results). A recording fake shows exactly one call per session. §10, per quantity and pack: block 5 plus the counting sessions, their mean and sample SD (n − 1), with no ratio and no pooled interval. A session without a value is left out and listed with its reason, and fewer than two values print "not computable (n < 2)" (decision AD-1). Worked examples reproduced: 26.15 / 0.148 J, flagged-inclusive 26.216 / 0.195 J, and §11.1's Δ +0.0667 J with own differences +0.21, −0.13 and +0.12 J. |
-| A4 replication word | **pass** | "replicated" only when every counting GAMMA session's outcome word and dbar sign match block 5's. Block 5 `not_estimable` (or no dbar) gives no word. A short pack prints its sentence. Flagged-inclusive words are printed beside and never enter the word. Tests cover §11.2's worked example, a sign change, not_estimable, short and floor-from-block-5. |
-| A5 flagged-inclusive index | **pass** | Every collected session appears in the public `session_index` with its admission. Under ruling 2, every session that meets §11.4 (i) (no W1/W2/W3/S1), counting or not, is analysed, and (ii) (at least 5 kept units per stratum, defined b_op, defined drift screen) is read from its results. A session failing (i) is recorded with its structural reason and is not analysed. P1 to P4 and D1 are ignored. Ruling 2 also reports that r2-alpha was a smoke hold and never collected, so the fixture of the closed block has the nine sessions. A synthetic non-counting `r5-alpha` exercises the rule: it is **added**, "including sessions that did not count (n = 5)". `test_every_collected_session_is_indexed` covers added, not_computable from the analysis (an N2-flagged session is analysed and judged by its drift word), W2 and S1. |
-| A6 structure-only public bytes | **pass** | The public bytes are stdout (record path and digest), stderr (`node <kind>:<pack>:<session> <status>`) and `B6-ANALYSIS-RECORD.json`. `require_structure_only` refuses any float, any decimal-looking token and any outcome or replication word before writing. Restricted flag codes appear only as a count, and outcome-word refusal tokens become `restricted_token`. Adapter calls run with Python- and descriptor-level streams sent to restricted logs. An unexpected driver exception's text goes to restricted custody. Restricted outputs are canonical JSON at `restricted/objects/<sha256>.json`, named in the record by digest. A subprocess test with a fake that prints numbers and outcome words on every stream finds only structure in the public bytes, at 1 and 3 workers. |
-| A7 end-to-end run | **partial: synthetic through the fake; real L9 owed** | The nine counting sessions, plus a synthetic non-counting session where a test needs one, run end to end through census, pairing, DAG, lines, custody and record. This works in serial, parallel, session and release modes. Serial and 4-worker custody trees are byte-identical. The run through the real L9 programs waits for L9's per-session seams (ruling 4). §13's full-size synthetic run through the real stage chain is owed, not skipped. |
-| A8 only WRITE_SCOPE changed | **pass** | `git diff --stat 991358f73..HEAD` lists only `joulewise/b6/analysis/**`, `scripts/b6_analyze.py`, `tests/b6/analysis/**`, `configs/b6/analysis/**` and `.codex-report/B6-AN-1.md`. `joulewise/b6/analysis_lane.py` equals 991358f73, and a test checks it. |
+| A1 counting from loop acceptance | **pass** | `census.py` reads only `attempts.jsonl` and `state.json` (`joulewise.b6.queue.counting_ids`), and `acceptance_counting.py` checks each session against its acceptance record (schema, session id and `counting` only). Tests: a synthetic r2-gamma whose `exclusions.json` says `claim_usable: false` counts, and an open-tripwire shows the census never opens that file. A loop/acceptance disagreement refuses before any unit runs; an analysis counting that is absent or different refuses. Counterfactuals M1, M2 and M5. |
+| A2 GAMMA pairing by round | **pass** | Design §5 rules, ties and `final`. The closed block pairs G r1→A r1/B r1, G r2→A r3/B r2 and G r3→A r3/B r3, both unit-tested and end to end in serial and with 3 workers. Design §5 examples 1 and 2 and the registration's §6.2 example pass. Counterfactual M6. |
+| A3 per-session steps, no pooling; §10 | **pass on the fake adapter** | One floor unit per ALPHA/BETA session and one GAMMA unit over {g, A(g), B(g)} (design §4.3). A recording fake shows one call per unit. §10 gives n, mean and sample SD (n − 1) with no ratio and no interval. A session without a value is listed with its reason (lead ruling, AD-1). Worked examples reproduced: registration §10, §11.1 and §11.2. |
+| A4 replication word | **pass** | §11.2 and design §11.2 items 1 to 6, now including "below the commitment of 2". |
+| A5 flagged-inclusive index | **pass** | Every collected session is indexed. Under ruling 2, every session meeting §11.4 (i) is analysed, (ii) is read from the analysis, and a session failing (i) is recorded with W1/W2/W3/S1. The run is incomplete (`sessions_unaccounted`) while any session is undecided or refused. The label reads "including sessions that did not count: none" when none is added. |
+| A6 structure-only public bytes | **pass** | The record `B6-BLIND-DRY-RUN-RECORD.json`, stdout and stderr are guarded: no float, no decimal-looking token, no outcome or replication word, and restricted codes appear only as counts. Unit streams go to restricted logs. Restricted objects are content-addressed. Subprocess tests at 1 and 3 workers. Counterfactual M7. |
+| A7 end-to-end run | **partial: synthetic through the fake; real L9 owed** | All nine counting sessions (plus a synthetic non-counting one) run as desk-compressed archives: index, counting check, restore, units, re-compression, after-check, both phases twice, session mode. Outputs are byte-identical on compressed and never-compressed trees (design §4.1 item 4). The real L9 seams and §13's full-size synthetic run (audit B6-1: registered member counts, raw files of at least 1 MiB, one known-answer full-size run) are owed. |
+| A8 only WRITE_SCOPE changed | **pass** | `git diff --stat 991358f73..HEAD` lists only `joulewise/b6/analysis/**`, `scripts/b6_analyze.py`, `tests/b6/analysis/**`, `configs/b6/analysis/**` and this report. `joulewise/b6/analysis_lane.py` equals 991358f73, and a test checks it. |
 
-Verification run (Linux, Python 3.13.17):
-`JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b6/analysis -t .`, which
-ran 82 tests, all OK. `tests.b6.test_lane_adapters` has 2 environmental failures (`/bin/zsh` and
-`/opt/homebrew/bin/python3.13` are absent here), and they are identical on 991358f73.
+## DIFFERENCES FROM THE DESIGN (`b6_analysis_additions.md` at 578685ec3) AND WHY
 
-## FILES CHANGED
+1. **Place and scope.**
+   - **Where it lives:** the driver is in `joulewise/b6/analysis/` and `configs/b6/analysis/`, not
+     `joulewise/b6_analysis/` and `configs/analysis/b6/`. This seat's WRITE_SCOPE names the former.
+   - **What is mine:** audit N9 scopes this seat to the "pure layer": counting consumer, pairing, §10/§11, the
+     structure-only record and the driver around them.
+   - **What I did not build, and why:** the design's binding work. Lead ruling 4 put the per-session seams on L9's
+     side, and most of this work edits L9 files or reads bundles through L9:
+     - the `AnalysisBlock` seam (§4.2, stage B1);
+     - the block-6 exclusions document (§4.5);
+     - the desk exclusion P* (§4.6);
+     - the allowance (§4.7), b_op (§4.8) and verdict admission (§4.9);
+     - the §6 lines (items 3, 7 and 8, and the outside-processor alternative);
+     - `machine.py` (§8) and the battery lines (§7);
+     - `compare.py` (§12.3 item 4).
 
-- `joulewise/b6/analysis/__init__.py`: package statement.
-- `joulewise/b6/analysis/census.py`: A1. The loop-acceptance census, its structure record and registered order.
-- `joulewise/b6/analysis/session_index.py`: the block-6 session index (`joulewise.b6_session_index.v1`). It is built
-  from the census and `session_paths.for_session` (S-2). It binds the harvest-record digests and the two loop files,
-  and refuses a stale or changed index.
-- `joulewise/b6/analysis/pairing.py`: A2. §6.2 with S-17 and provisional pairing.
-- `joulewise/b6/analysis/adapter.py`: the **only** L9 call site. It holds the `SessionAnalysis` contract (with
-  restricted `reasons` for missing values), `L9ProgramAdapter` (which validates the session index), and `L9_TARGETS`.
-- `joulewise/b6/analysis/schedule.py`: the DAG executor (process pool, serial at 1 worker) with per-node stream
-  capture.
-- `joulewise/b6/analysis/summary.py`: §10 and §11.1, with AD-1.
-- `joulewise/b6/analysis/replication.py`: §11.2.
-- `joulewise/b6/analysis/inclusive.py`: §11.4 (i) before analysis and (ii) from the analysis.
-- `joulewise/b6/analysis/public.py`: custody preflight, content-addressed restricted objects and the structure guard.
-- `joulewise/b6/analysis/slots.py`: S-11, S-9, S-15 (the carry and the GAMMA refusal) and S-16.
-- `joulewise/b6/analysis/driver.py`: orchestration, the blind-dry-run, session and release modes, and the completeness
-  rule (`sessions_unaccounted`).
-- `scripts/b6_analyze.py`: the command line, with `analyse`, `index` and `slots`.
-- `configs/b6/analysis/driver.json`: packs, contrasts, target, §11.4 (i)'s code groups (from §8.2) and F_min.
-- `tests/b6/analysis/{__init__,fakes,test_census_pairing,test_lines,test_driver,test_slots_cli}.py`.
+     The adapter contract carries their results: `quantities`, `reasons`, `kept_units`, `b_op_defined`,
+     `drift_screen` and `analysis_counting`. Who builds them is in OPEN ISSUES.
+2. **Units call per-session seams.** They do not call L9's step functions through a `RunState` subclass, per ruling 4.
+   The unit shapes (§4.3) and the order (floors, then GAMMA, then cross-block) are the design's.
+3. **Restore once per session per run, not per unit** (lead item 4). A session's restore spans every unit that reads
+   it. The per-row procedure, the 20 GiB reserve, the re-compression through the desk's `compress` and the exact
+   after-check are §4.1's.
+   - One addition: a session with no compression record is neither restored nor compressed (`after_check:
+     not_compressed`), so the analysis never compresses bytes the desk did not.
+   - `ditto --hfsCompression` runs where `/usr/bin/ditto` exists. Elsewhere the copy is plain and the row says
+     `apfs_compressed: false`.
+4. **Phases.** Design §14 has one full dry run plus a release re-run. Audit B6-4 replaces that with two per-session
+   runs before the release and two cross-block runs after it. That is what is built (`--mode per-session|cross-block
+   --run 1|2`). There is no separate `--mode release`; cross-block run 2 is the digest replay. NEEDS_RULING 2 asks
+   whether §13's "after the release the analysis re-runs from identical bytes" needs a third run.
+5. **Pairing.** Pairing uses loop counting, which equals acceptance counting by the L5 check. Design §4.6 pairs on
+   analysis counting. Any difference between those is a refusal here (L5), so on any completed run they are the same
+   sessions.
+6. **§10 when n < 2.** Design §10 prints Q̄ = Q₁ with "not defined (n = 1)". The lead's later ruling (AD-1) prints
+   "not computable (n < 2)" with no mean. I followed the lead (NEEDS_RULING 1).
+7. **Not built, rendering:** §11.3's closed template table and its test, and §11's printed precision. These are
+   rendering of restricted values for the paper. The lines carry the registered labels and the two §11.1 facts as
+   data.
+8. **Record fields.** The record carries a subset of §14's fields:
+   - **Carried:** mode and run, the analysis commit, digests (registration, catalog, session index, loop files, every
+     `harvest.json` and acceptance record, block 5's release record, the first run's record), and per session t0,
+     loop status, loop / acceptance / analysis counting, `analysed`, admission and flags.
+   - **Also carried:** pairings with `final`, node step records and kept units, restore cycles (files, logical and
+     on-disk bytes, seconds, after-check word), `cross_block`, and the comparison.
+   - **Owed by the binding:** the harvest commit, `harvest_bracket_block5_acceptance`, the `b5_*` exclusion fields,
+     desk-exclusion counts and peak `$TMPDIR` bytes.
+
+## FILES CHANGED (since 991358f73)
+
+- `joulewise/b6/analysis/`:
+  - `census.py`: loop-acceptance census, with t0.
+  - `acceptance_counting.py` (new): the L5 checks.
+  - `session_index.py`: session records, acceptance digests.
+  - `pairing.py`: design §5.
+  - `restore.py` (new): restore once per run, re-compress, after-check.
+  - `schedule.py`: DAG with the restore lifecycle and earlier-phase results.
+  - `adapter.py`: `analysis_counting`, `deferred`.
+  - `driver.py`: phases, runs, checks, record.
+  - `summary.py`, `replication.py`, `inclusive.py`, `public.py`.
+  - `slots.py`: S-15 carry, S-16 "not evaluated"; S-9/S-11 removed.
+  - `__init__.py`.
+- `scripts/b6_analyze.py`: `index` and `analyse --mode per-session|cross-block|session --run 1|2`.
+- `configs/b6/analysis/driver.json`.
+- `tests/b6/analysis/`:
+  - `fakes.py`: the synthetic tree builder and fake adapter.
+  - `bin/zstd`: a gzip-backed stand-in, for tests only.
+  - `test_census_pairing.py`, `test_lines.py`, `test_driver.py`, `test_slots_cli.py`.
 - `.codex-report/B6-AN-1.md`: this report.
+
+## EVIDENCE
+
+- `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b6/analysis -t .`, Linux,
+  Python 3.13.17: **99 tests, OK** (178 s), on the pushed tree.
+- Counterfactuals (gate policy, rule 3). Each mutation was applied to a scratch copy, then the named regression test
+  was run; all fail:
+
+  | Mutation | Test(s) | Result |
+  |---|---|---|
+  | M1: drop the loop/acceptance check | `test_a_loop_acceptance_disagreement_refuses_before_anything_runs` | FAILED |
+  | M2: drop the analysis-counting check | two `CountingAgainstAcceptance` tests | FAILED (2) |
+  | M3: re-compress after every unit (per-unit lifecycle) | `test_each_session_is_restored_once_and_compressed_again` | FAILED |
+  | M4: no second-run comparison | `test_the_second_per_session_run_must_reproduce_the_first` | FAILED |
+  | M5: counting that excludes r2-gamma (the item-53 defect) | `test_r2_gamma_counts_although_its_exclusions_say_claim_usable_false` | FAILED |
+  | M6: pairing ignores rounds | `test_closed_block6_pairing` | FAILED |
+  | M7: guard lets floats through | `test_guard_refuses_numbers_and_words` | FAILED |
+  | M8: no after-check | `test_a_write_into_a_session_during_the_run_is_caught` | FAILED |
+- `tests.b6.test_lane_adapters` keeps its 2 environmental failures (`/bin/zsh`, `/opt/homebrew/bin/python3.13`
+  absent). They are identical on 991358f73.
 
 ## L9 INTERFACE TARGETED
 
-- `lane/2026-10-27-l9-2` at **8ad47455ce55203949ea77a3ee330432d5a48101**, read with `git show` only; nothing is
-  imported from this tree. The functions targeted are in `adapter.L9_TARGETS`, all in `joulewise/b5_analysis/dry_run.py`:
-  - **Floor session:** `step_1`, `step_2`, `step_3` (`kept_units.load_kept_units`), `step_3b`, `step_4`
-    (`scripts.extract_detection_floors.main` with `steps.classify_step4_exit`), `step_10`
-    (`scripts.issue_reported_energy.main` with `require_step10_admission`) and `step_11`.
-  - **GAMMA session:** steps 1 to 3b, `step_5` from the paired floor sessions' step-4 reports, then `step_8`, `step_6`,
-    `step_9`, `step_9b` and `step_11`.
-  - **Block 5:** its release record and outputs.
-- **Seams L9 will add (ruling 4):** `run_floor_session(request, custody, index=)`,
+- `lane/2026-10-27-l9-2` at 8ad47455c, read only. The adapter (`joulewise/b6/analysis/adapter.py`) is the only L9
+  call site; `L9_TARGETS` maps each method to L9's step functions.
+- The seams L9 adds (ruling 4) are `run_floor_session(request, custody, index=)`,
   `run_gamma_session(request, alpha, beta, custody, index=)` and `released_block5_session(pack, block5_custody)`.
-  Each returns a `SessionAnalysis`. Until they exist the adapter refuses with `l9_absent_from_checkout` or
-  `l9_session_seam_absent`. Once they exist, it refuses without a valid session index (`session_index_absent`,
-  `session_index_digest_mismatch`, `session_index_malformed`). Calling L9 per session inherits L9-2's calibration
-  cache and parallel steps 1–2.
+  Each returns a `SessionAnalysis` and should fill `analysis_counting` from the binding's desk exclusion; the driver
+  refuses an analysed session without it.
+- The index they take is `joulewise.b6_session_index.v1` from `scripts/b6_analyze.py index`. It is per session, not
+  design §4.4's per-unit L9 `IndexEntry` file. The binding derives that from it.
 
-## DECISIONS I MADE
+## INDEPENDENT RECOMPUTE: THE INTERFACE IT NEEDS (separate seat; shares no code)
 
-**AD-1 (§15 style; lead ruling of 2026-10-27; for the next dated §17 entry). §10 when a session lacks a quantity.**
-*Text:* For a printed quantity Q, a session in which Q is undefined (for example a contrast whose outcome is
-`not_estimable`, or a cell whose estimator does not exist) is left out of Q's between-session summary. The summary
-prints n as the number of sessions with a value. Each session left out is listed with its reason. When fewer than two
-sessions have a value, the summary prints "not computable (n < 2)" and no mean or deviation.
-*Rests on:* §10 ("no claim rests on it"; the summary is descriptive) and §11.3 ("Between-session statements use the
-summary of §10 and say how many sessions it rests on"). The registration is silent on a missing value. Withholding the
-summary would hide information, and an unlabelled smaller n would misstate what it rests on.
-*Effect:* changes no registered number or counting decision. The §11.1 table uses the same rule for the block-6 mean.
-
-Other decisions:
-
-1. **Analysis set and completeness (ruling 2).**
-   - The driver analyses every collected session that meets §11.4 (i), counting or not.
-   - It records sessions failing (i) with their structural group (W1, W2, W3 or S1), unanalysed.
-   - §12.3 item 3 counts as met when every session is analysed without tooling refusal or recorded with its
-     structural reason. A pending-harvest session, or an analysed session with a tooling refusal, is listed in
-     `sessions_unaccounted`, and the run exits 2.
-2. **A non-counting GAMMA session** analysed for §11.4 is paired by the same §6.2 rule over counting floor sessions.
-3. **An outcome-class stop is a completed result.** Its values feed the lines and its dependents run, with exit 3, as
-   in L9.
-4. **Public flag codes:** a code shows only when its catalog `blinding` is STRUCTURE. Any other code is counted as
-   `restricted_codes_removed`.
-5. **The public record carries no worker count, time or host**, so serial, parallel and release runs byte-compare.
-   Release compares the commit, config digest, census, pairings, index, node structure, line refusals, unaccounted
-   sessions and every restricted object digest.
-6. **S-15 defines no arithmetic.** The per-phase definition is block 5's S-15 commit, which is absent at the L9 target.
-   The driver carries `whole_machine/` values from the adapter, summarises them, prints the boundary sentence and
-   refuses them on GAMMA.
-7. **S-11 input:** automation-supplied non-claim smoke rows. Claim rows and non-target phases are refused, and a
-   missing T_phase never defaults. S-9 = 1.9 / (4 × T_phase), which reproduces the registration's 0.238 W and 0.0720 W
-   comparison values.
-8. **Session index location:** the session index locates sessions with the loop's registered layout (S-2,
-   `session_paths.for_session`). It hashes each archive's `harvest.json` without reading a field.
-9. **The seat setup from `JouleWise-data` was not run.** The work needs only the standard library and in-tree modules,
-   and no real data.
+- **Inputs:**
+  - The session index (`joulewise.b6_session_index.v1`) for archive, custody and runs roots.
+  - The public record's `sessions` (counting and admission) and `pairings` (rule words, `final`). Counting comes from
+    loop acceptance; it must not re-derive counting from `claim_usable`.
+  - Desk-compressed bytes, read through `desk_compress.read_bytes` (design §4.1, "Not chosen": that reader stays the
+    recompute's).
+- **Outputs to compare (S-13):**
+  - Per session, a map with the same keys as the restricted `sessions` object's `quantities` and `contrasts`:
+    `reported/<model>/<phase>/mean_j`, `…/attribution_floor_j`, `floor/<model>/<phase>/<form>/operative_j`,
+    `dominance/<model>/<phase>/<form>/R`, `contrast/<c>/energy_ratio`, contrasts' `dbar` and `outcome`, and
+    `whole_machine/…` (S-15).
+  - Per run, the phase energies, compared at 1 mJ.
+  - The comparator (`compare.py`, design §15 step 10) joins the two by key under S-13's bars, and needs the per-run
+    phase energies from L9's re-reduced outputs, which the binding must expose by digest.
 
 ## OPEN ISSUES
 
-- **Owed at integration (A7):** L9's three per-session seams (ruling 4), then the run through the real L9 programs on
-  reduced-size synthetic sessions, with the session index from `scripts/b6_analyze.py index`.
-- **Owed before the blind dry run (§13, S-14):**
-  - The full-size production-shaped synthetic run through the real stage chain.
-  - One independent executing review.
-  - The two blind executing cold passes of §13.
-  - The pin of the analysis commit.
-- **Independent recompute, block-6 adaptation (another seat; it shares no code with L9 or this driver).** The
-  interface it needs:
-  - The census and admissions from the public record's `census` and `session_index`.
-  - The pairings from `pairings`.
-  - The session locations from the session index.
-  - Per session, the restricted `sessions` object's quantity keys (`reported/<model>/<phase>/mean_j`,
-    `floor/…/operative_j`, `dominance/…/R`, `contrast/<c>/energy_ratio`, contrasts' `dbar` and `outcome`) to compare
-    unrounded under S-13.
-  - Per run, phase energies from L9's re-reduced outputs, at 1 mJ.
-  - It should emit the same keys, so the comparison is a key-by-key join.
-- **Integration of the block-6 line with L9 (lead task).** The base merge (0576a734d into 991358f73) conflicts in 9
-  files:
-  - `joulewise/b5/harvest.py` (4 hunks)
-  - `joulewise/whole_window.py` (12)
-  - `scripts/digest_pin_census.py` (3)
-  - `scripts/repin.py` (1)
-  - `scripts/extract_detection_floors.py` (2)
-  - `tests/test_harvest_b5_window.py` (2)
-  - `configs/gates/hazard_refusals.json` (2)
-  - `configs/pins/registry.json` (717)
-  - `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md` (1)
+- **Binding work (design §4.2 and §4.5 to §4.9, §6 to §8, `compare.py`).** Owner per the lead: the L9 side or an
+  integration seat. These pieces live in L9 files or need bundle reads. The desk-exclusion count test of audit L4 ("0
+  of 840") belongs with that consumer.
+- **Integration base (audit L3):** main + L9 + 1706257c + #573's readers (903b5a2f, db9e8ab3, `desk_restore.py`,
+  `restore_run_to_scratch.py`), with `registry.json` and `hazard_refusals.json` regenerated by their tools. The nine
+  conflict files of the first round still apply.
+  - **Harvest-program-list reading:** the union, i.e. L9's four-file `HARVEST_PROGRAM_FILES` with
+    `calibration_bracketing.py`, plus the b6 list and the `block_six` argument.
+- **Mac-only paths, owed on the analysis host:** real `zstd`, `ditto --hfsCompression`, and the APFS on-disk sizes.
+  This seat has neither tool. The restore code calls them exactly as `desk_compress` does, but its tests ran on the
+  gzip stand-in with plain copies.
+- **Before the blind dry run:**
+  - §13's full-size synthetic run (audit B6-1);
+  - S-15's fill (B6-7);
+  - S-14's pin (B6-3);
+  - custody roots at identical paths on the analysis host (B6-6);
+  - S-16 run where block 5's raw bytes are (B6-5), before the release.
+- **Speed:** each `test_driver` class builds desk-compressed trees, so the package takes about 3 minutes.
 
-  Regenerate the pins registry and hazard refusals with the tooling, not by hand.
-- **My reading of the harvest-program-list conflict.**
-  - The b6 line keeps `HARVEST_PROGRAM_FILES = (harvest.py, whole_window.py, scripts/harvest_b5_window.py)` and adds
-    `B6_HARVEST_PROGRAM_FILES` plus `harvest_checkout(block_six=...)`.
-  - L9 inserts `joulewise/calibration_bracketing.py` into `HARVEST_PROGRAM_FILES`.
-  - Both lines' `harvest.py` and `whole_window.py` import `calibration_bracketing`, so it is harvest program on both.
-    The resolution is the union: L9's four files, plus the b6 list and the `block_six` argument.
-  - Consequence: new K-7 records list one more file. Old records keep their pins. Nothing gates, because the record is
-    "a record, never a flag".
-- **Command line `analyse`:** with the production adapter, it can only refuse until L9's seams exist. It refuses
-  `analysis_checkout_not_clean` on a dirty checkout, otherwise it gives a refusal token per node.
+## REVIEW GUIDE (for the two executing reviews)
+
+Probe and mutate in this order:
+1. `acceptance_counting.py` and `driver.analyse` / `_finish` (the L5 refusals and completeness).
+2. `restore.py` (per-row restore, reserve, after-check, once-per-run reference counting under parallel workers).
+3. `pairing.py`.
+4. `driver._difference` / `COMPARED` (what the second runs must reproduce).
+5. `public.py` (the guard).
+6. `summary.py` / `replication.py` / `inclusive.py` against registration §10 to §11.4.
 
 ## NEEDS_RULING
 
-None open. The lead's rulings of 2026-10-27 settled both earlier items (AD-1 and decision 1). The earlier
-model-naming trailer on this lane stays, with no force push (lead).
+1. **§10 with one value:** design §10 (Q̄ = Q₁, SD "not defined (n = 1)") or the lead's AD-1 ("not computable (n <
+   2)", no mean)? AD-1 is applied.
+2. **The release replay:** is cross-block run 2 (after block 5's release, same bytes, digests equal) §13's "after the
+   release the analysis re-runs from identical bytes", or does the release need a third, separately recorded run?
+
+## DECISIONS I MADE
+
+1. **AD-1 (§15 style; lead ruling of 2026-10-27; for the next dated §17 entry). §10 with a missing value.**
+   - **Text:** a session in which a quantity Q is undefined is left out of Q's summary. n is the number of sessions
+     with a value, and each session left out is listed with its reason. With fewer than two values the summary prints
+     "not computable (n < 2)".
+   - **Rests on:** §10 ("no claim rests on it") and §11.3 (state n).
+   - **Effect:** changes no registered number or counting decision.
+2. **A never-compressed session is left untouched** by the restore lifecycle (DIFFERENCES item 3).
+3. **An analysed session must report analysis counting.** A missing value is a refusal, not a pass (L5, "requires
+   equality").
+4. **A GAMMA unit that needs block 5's floor is `deferred`** in the per-session phase and accounted as such. The
+   cross-block phase runs it.
+5. **The record carries no worker count or host.** Restore seconds are recorded but excluded from the comparison.

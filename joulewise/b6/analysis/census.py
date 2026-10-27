@@ -42,6 +42,7 @@ class SessionEntry:
     structure_ok: bool
     physics_stop: str | None
     codes: tuple[str, ...]
+    t0: int = 0                # integer epoch seconds (structure); orders ties in pairing
 
     @property
     def decided(self) -> bool:
@@ -67,8 +68,8 @@ class Census:
 
 
 def order_key(entry: SessionEntry) -> tuple:
-    """Registered order: pack order of the registration, then round."""
-    return (REPLICATION_PACKS.index(entry.pack), entry.round, entry.session_id)
+    """Registered order: pack order of the registration, then round, then t0."""
+    return (REPLICATION_PACKS.index(entry.pack), entry.round, entry.t0, entry.session_id)
 
 
 def _strings(value) -> tuple[str, ...]:
@@ -91,12 +92,14 @@ def census_from_state(state: dict, *, packs=REPLICATION_PACKS) -> Census:
     entries = []
     for attempt in attempts:
         try:
+            t0 = attempt.get("t0", 0)
             session_id, round_number = attempt["session_id"], attempt["round"]
             attempt_packs, outcomes, line = attempt["packs"], attempt["outcomes"], attempt["line"]
             structure_ok = attempt["structure_ok"]
         except (TypeError, KeyError):
             raise CensusRefusal("attempt_line_malformed") from None
         if (not isinstance(session_id, str) or not session_id or type(round_number) is not int
+                or type(t0) not in (int, float) or isinstance(t0, bool)
                 or round_number < 1 or type(structure_ok) is not bool or not isinstance(line, dict)
                 or not isinstance(outcomes, dict)):
             raise CensusRefusal("attempt_line_malformed")
@@ -123,11 +126,7 @@ def census_from_state(state: dict, *, packs=REPLICATION_PACKS) -> Census:
                 cause=outcome.get("cause"),
                 # The loop's own reading of its acceptance decides counting.
                 counting=session_id in queue.counting_ids(state, pack),
-                structure_ok=structure_ok, physics_stop=physics_stop, codes=tuple(sorted(codes))))
-    for pack in packs:
-        rounds = [e.round for e in entries if e.pack == pack and e.counting]
-        if len(rounds) != len(set(rounds)):
-            raise CensusRefusal("two_counting_sessions_in_one_round")
+                structure_ok=structure_ok, physics_stop=physics_stop, codes=tuple(sorted(codes)), t0=int(t0)))
     return Census(tuple(sorted(entries, key=order_key)), closed=state.get("state") == "DONE")
 
 
@@ -149,5 +148,6 @@ def load_census(loop_root: Path, *, packs=REPLICATION_PACKS) -> Census:
 def structure_record(census: Census) -> dict:
     """The census as structure: identities, rounds, status words, counting."""
     return {"schema_version": CENSUS_SCHEMA, "closed": census.closed,
-            "sessions": [{"session_id": e.session_id, "pack": e.pack, "round": e.round, "status": e.status,
-                          "counting": e.counting, "structure_ok": e.structure_ok} for e in census.entries]}
+            "sessions": [{"session_id": e.session_id, "pack": e.pack, "round": e.round, "t0": e.t0,
+                          "status": e.status, "counting": e.counting, "structure_ok": e.structure_ok}
+                         for e in census.entries]}

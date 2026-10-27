@@ -20,8 +20,7 @@ import json
 import re
 from pathlib import Path
 
-PUBLIC_RECORD = "B6-ANALYSIS-RECORD.json"
-MODE_DIRECTORIES = {"blind-dry-run": "dry-run", "session": "session", "release": "release"}
+PUBLIC_RECORD = "B6-BLIND-DRY-RUN-RECORD.json"     # design §14
 # Outcome and replication words (B5-PLAN §7.2, registration §11.2) are restricted.
 RESTRICTED_WORDS = ("direction_supported", "not_resolvable", "unresolved", "not_estimable", "replicated")
 _DECIMAL = re.compile(r"(?<![A-Za-z0-9])[+-]?(?:\d+\.\d*|\.\d+|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")
@@ -87,9 +86,9 @@ def public_token(code: str | None) -> str | None:
     return code if re.fullmatch(r"[a-z][a-z0-9_.]*", code) and _text_is_structure(code) else "restricted_token"
 
 
-def preflight(custody: Path, mode: str, repo_root: Path) -> Path:
+def preflight(custody: Path, run_directory: str, repo_root: Path) -> Path:
     """Refuse aliases, a custody root inside the repository and a used run directory."""
-    if mode not in MODE_DIRECTORIES:
+    if re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", run_directory) is None:
         raise CustodyRefusal("analysis_mode_invalid")
     root = Path(custody).absolute()
     if (any(char.isspace() for char in str(root)) or ".." in root.parts or root.resolve() != root
@@ -97,7 +96,7 @@ def preflight(custody: Path, mode: str, repo_root: Path) -> Path:
         raise CustodyRefusal("custody_path_invalid")
     if root.is_relative_to(Path(repo_root).resolve()):
         raise CustodyRefusal("custody_inside_repository")
-    target = root / MODE_DIRECTORIES[mode]
+    target = root / run_directory
     if target.exists():
         raise CustodyRefusal("custody_run_directory_exists")
     return target

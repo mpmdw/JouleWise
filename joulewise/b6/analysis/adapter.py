@@ -53,10 +53,13 @@ L9_TARGETS = {
     ),
 }
 
-STATUSES = ("ok", "tooling_refusal", "outcome_class", "not_run")
+STATUSES = ("ok", "tooling_refusal", "outcome_class", "not_run", "deferred")
 # An outcome-class stop is a registered result (B5-PLAN §3.1 "Refusals"), so
 # its session's results feed the later lines like a completed one.
 COMPLETED = ("ok", "outcome_class")
+# A GAMMA unit whose pairing needs block 5's floor waits for the cross-block
+# phase (design §5 rule 4); in the per-session phase it is deferred, not refused.
+DEFERRED = "deferred"
 DRIFT_WORDS = ("passed", "failed", "undefined")
 
 
@@ -99,6 +102,9 @@ class SessionAnalysis:
     quantities: Mapping = field(default_factory=dict)   # RESTRICTED
     contrasts: Mapping = field(default_factory=dict)    # RESTRICTED
     reasons: Mapping = field(default_factory=dict)      # RESTRICTED: quantity key -> why it is None
+    # Structure: the binding's counting after the desk exclusion (design §4.6),
+    # None when the binding does not report it.
+    analysis_counting: bool | None = None
 
     def __post_init__(self):
         if self.status not in STATUSES or self.drift_screen not in DRIFT_WORDS:

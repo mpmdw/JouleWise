@@ -16,6 +16,7 @@ from joulewise.b6.analysis.adapter import SessionAnalysis
 
 REPLICATED, NOT_REPLICATED = "replicated", "not replicated"
 NOT_ESTIMABLE = "not_estimable"
+COMMITMENT = 2      # registration §5.1: minimum 2 counting sessions per pack
 
 
 def sign(value) -> int | None:
@@ -43,6 +44,8 @@ def contrast_word(contrast_id: str, block5: SessionAnalysis, counting: list[Sess
               "floor_from_block_5": any(row["floor_from_block_5"] for row in rows)}
     if len(counting) < target:
         record["short"] = f"short: {len(counting)} counting block-6 sessions of the {target} targeted"
+        if len(counting) < COMMITMENT:
+            record["short"] += "; below the commitment of 2"
     if b5_outcome is None or b5_outcome == NOT_ESTIMABLE or b5_sign is None:
         record["reason"] = "block5_not_estimable"
     elif not rows:

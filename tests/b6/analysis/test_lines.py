@@ -141,7 +141,9 @@ class ReplicationWord(unittest.TestCase):
     def test_short_pack_says_so(self):
         b5 = gamma("block5", "direction_supported", 3.0)
         record = self.word(b5, [gamma("s1", "direction_supported", 2.0)])
-        self.assertEqual(record["short"], "short: 1 counting block-6 sessions of the 3 targeted")
+        self.assertEqual(record["short"], "short: 1 counting block-6 sessions of the 3 targeted; below the commitment of 2")
+        two = self.word(b5, [gamma("s1", "direction_supported", 2.0), gamma("s2", "direction_supported", 2.5)])
+        self.assertEqual(two["short"], "short: 2 counting block-6 sessions of the 3 targeted")
         self.assertEqual(record["word"], "replicated")
         self.assertIsNone(self.word(b5, [])["word"])
 

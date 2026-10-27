@@ -101,9 +101,6 @@ class CountingFromLoopAcceptance(unittest.TestCase):
         with self.assertRaises(CensusRefusal) as caught:
             census_from_state({"attempts": [good, good]})
         self.assertEqual(caught.exception.code, "attempt_session_duplicated")
-        with self.assertRaises(CensusRefusal) as caught:
-            census_from_state({"attempts": [good, attempt_line("r1-alpha-b", "alpha", 1, "counting")]})
-        self.assertEqual(caught.exception.code, "two_counting_sessions_in_one_round")
 
     def test_unreadable_loop_root_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -114,7 +111,9 @@ class CountingFromLoopAcceptance(unittest.TestCase):
     def test_structure_record_has_no_number_but_rounds(self):
         with tempfile.TemporaryDirectory() as tmp:
             record = census_module.structure_record(load_census(write_loop_root(Path(tmp))))
-        self.assertEqual(set(record["sessions"][0]), {"session_id", "pack", "round", "status", "counting", "structure_ok"})
+        self.assertEqual(set(record["sessions"][0]),
+                         {"session_id", "pack", "round", "t0", "status", "counting", "structure_ok"})
+        self.assertEqual(record["sessions"][0]["t0"], 1760000001)
 
 
 def census_of(rows, closed=True):
@@ -129,8 +128,8 @@ class PairingByRound(unittest.TestCase):
         self.assertEqual(pairs, {"r1-gamma": ("r1-alpha", "r1-beta"), "r2-gamma": ("r3-alpha", "r2-beta"),
                                  "r3-gamma": ("r3-alpha", "r3-beta")})
         rules = {p.gamma: (p.alpha.rule, p.beta.rule) for p in pairing.pair_all(census)}
-        self.assertEqual(rules["r2-gamma"], ("next_counting", "same_round"))
-        self.assertFalse(any(p.provisional or p.floor_from_block5 for p in pairing.pair_all(census)))
+        self.assertEqual(rules["r2-gamma"], ("later_round", "same_round"))
+        self.assertTrue(all(p.final and not p.floor_from_block5 for p in pairing.pair_all(census)))
 
     def test_registration_worked_example(self):
         """§6.2: BETA_1 stopped; BETA_4 counts; GAMMA_1 takes BETA_2 (rule 2)."""
@@ -152,16 +151,31 @@ class PairingByRound(unittest.TestCase):
     def test_rule_three_and_floor_from_block5(self):
         rows = [("A1", "alpha", 1, "counting"), ("G3", "gamma", 3, "counting")]
         (only,) = pairing.pair_all(census_of(rows))
-        self.assertEqual((only.alpha.session_id, only.alpha.rule), ("A1", "last_earlier"))
-        self.assertEqual((only.beta.session_id, only.beta.rule), (pairing.BLOCK5, "floor_from_block_5"))
+        self.assertEqual((only.alpha.session_id, only.alpha.rule), ("A1", "earlier_round"))
+        self.assertEqual((only.beta.session_id, only.beta.rule), (pairing.BLOCK5, "block5"))
         self.assertTrue(only.floor_from_block5)
 
-    def test_before_the_close_a_non_same_round_pairing_is_provisional(self):
+    def test_design_worked_example_two(self):
+        """Design §5 example 2: BETA r3 does not count; GAMMA r3 pairs BETA r2 (rule 3)."""
+        rows = [r if r[0] != "r3-beta" else ("r3-beta", "beta", 3, "physics_stopped") for r in CLOSED_BLOCK6]
+        pairs = {p.gamma: (p.beta.session_id, p.beta.rule) for p in pairing.pair_all(census_of(rows))}
+        self.assertEqual(pairs["r3-gamma"], ("r2-beta", "earlier_round"))
+        self.assertEqual(pairs["r2-gamma"], ("r2-beta", "same_round"))
+
+    def test_two_counting_sessions_in_one_round_take_the_earlier_t0(self):
+        state = {"state": "DONE", "attempts": [
+            {**attempt_line("A1-late", "alpha", 1, "counting"), "t0": 1760000500},
+            {**attempt_line("A1-early", "alpha", 1, "counting"), "t0": 1760000100},
+            attempt_line("B1", "beta", 1, "counting"), attempt_line("G1", "gamma", 1, "counting")]}
+        (only,) = pairing.pair_all(census_from_state(state))
+        self.assertEqual(only.alpha.session_id, "A1-early")
+
+    def test_a_pairing_is_final_only_after_the_close(self):
         rows = [("A2", "alpha", 2, "counting"), ("B1", "beta", 1, "counting"), ("G1", "gamma", 1, "counting")]
         (only,) = pairing.pair_all(census_of(rows, closed=False))
-        self.assertTrue(only.provisional)
+        self.assertFalse(only.final)
         (closed,) = pairing.pair_all(census_of(rows, closed=True))
-        self.assertFalse(closed.provisional)
+        self.assertTrue(closed.final)
 
     def test_a_gamma_session_s_own_counting_does_not_change_its_pairing(self):
         census = census_of(CLOSED_BLOCK6 + (("r4-gamma", "gamma", 4, "physics_stopped"),))

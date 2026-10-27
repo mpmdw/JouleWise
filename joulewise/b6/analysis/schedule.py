@@ -31,6 +31,7 @@ class Node:
     kind: str                        # FLOOR, GAMMA or BLOCK5
     request: SessionRequest
     depends: tuple[str, ...] = ()    # node ids: for GAMMA, (alpha floor, beta floor)
+    sessions: tuple[str, ...] = ()   # block-6 sessions whose bytes the node reads (restored around it)
 
     @property
     def id(self) -> str:
@@ -102,15 +103,26 @@ def _ready(node: Node, results: dict) -> tuple[bool, SessionAnalysis | None]:
     return True, None
 
 
-def execute(adapter, nodes: tuple[Node, ...], custody: Path, *, workers: int = 1) -> dict[str, SessionAnalysis]:
-    """Run every node once its dependencies finish; return results by node id."""
+def execute(adapter, nodes: tuple[Node, ...], custody: Path, *, workers: int = 1,
+            lifecycle=None, initial: dict | None = None) -> dict[str, SessionAnalysis]:
+    """Run every node once its dependencies finish; return results by node id.
+
+    ``lifecycle`` (``restore.Lifecycle``) restores a node's sessions before it
+    runs and re-compresses each session after its last node, in this process.
+    """
     ids = [n.id for n in nodes]
-    if len(ids) != len(set(ids)) or any(d not in ids for n in nodes for d in n.depends):
+    known = set(ids) | set(initial or {})
+    if len(ids) != len(set(ids)) or set(ids) & set(initial or {}) or any(d not in known for n in nodes for d in n.depends):
         raise ValueError("analysis graph malformed")
     if type(workers) is not int or workers < 1:
         raise ValueError("workers must be a positive integer")
     pending = list(nodes)
-    results: dict[str, SessionAnalysis] = {}
+    results: dict[str, SessionAnalysis] = dict(initial or {})
+
+    def finish(node, result):
+        results[node.id] = result
+        if lifecycle is not None:
+            lifecycle.release(node.sessions)
 
     def take_ready():
         ready = []
@@ -119,8 +131,12 @@ def execute(adapter, nodes: tuple[Node, ...], custody: Path, *, workers: int = 1
             if not runnable:
                 continue
             pending.remove(node)
+            if stand_in is None and lifecycle is not None:
+                code = lifecycle.acquire(node.sessions)
+                if code is not None:
+                    stand_in = _refused(node, code)
             if stand_in is not None:
-                results[node.id] = stand_in
+                finish(node, stand_in)
             else:
                 ready.append(node)
         return ready
@@ -132,7 +148,7 @@ def execute(adapter, nodes: tuple[Node, ...], custody: Path, *, workers: int = 1
             if not ready and len(results) == settled:
                 raise ValueError("analysis graph has a cycle")
             for node in ready:
-                results[node.id] = run_node(adapter, node, tuple(results[d] for d in node.depends), custody)
+                finish(node, run_node(adapter, node, tuple(results[d] for d in node.depends), custody))
         return results
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -151,8 +167,9 @@ def execute(adapter, nodes: tuple[Node, ...], custody: Path, *, workers: int = 1
             for future in done:
                 node = running.pop(future)
                 try:
-                    results[node.id] = future.result()
+                    result = future.result()
                 except Exception:
                     # A worker that died cannot report; its node is a refusal.
-                    results[node.id] = _refused(node, "worker_failed")
+                    result = _refused(node, "worker_failed")
+                finish(node, result)
     return results

@@ -25,6 +25,7 @@ from joulewise.b6.analysis.adapter import SessionAnalysis
 
 LABEL = "between-session summary (n sessions): mean, standard deviation"
 INCLUSIVE_LABEL = "including sessions that did not count (n = {n})"
+INCLUSIVE_NONE = "including sessions that did not count: none"
 NOT_COMPUTABLE = "not computable (n < 2)"
 
 

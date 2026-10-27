@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""A test stand-in for the zstd command line, backed by gzip.
+
+It implements exactly the four invocations joulewise.desk_compress and
+joulewise.b6.analysis.restore make, so their real code runs in a seat with no
+zstd installed: --version; -3 -q -T0 SRC -o DST; -d -q -c SRC; -d -q SRC -o DST.
+Its ".zst" files are gzip streams; nothing outside these tests reads them.
+"""
+import gzip
+import shutil
+import sys
+
+args = sys.argv[1:]
+if args == ["--version"]:
+    print("*** zstd test stand-in (gzip) ***")
+    sys.exit(0)
+flags = [a for a in args if a.startswith("-") and a != "-o"]
+paths = [a for a in args if not a.startswith("-")]
+try:
+    if "-d" in flags and "-c" in flags:
+        with gzip.open(paths[0], "rb") as source:
+            shutil.copyfileobj(source, sys.stdout.buffer)
+    elif "-d" in flags:
+        source, target = paths
+        with gzip.open(source, "rb") as reader, open(target, "wb") as writer:
+            shutil.copyfileobj(reader, writer)
+    else:
+        source, target = paths
+        with open(source, "rb") as reader, gzip.open(target, "wb", compresslevel=1) as writer:
+            shutil.copyfileobj(reader, writer)
+except (OSError, EOFError, ValueError):
+    sys.exit(1)
