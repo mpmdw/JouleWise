@@ -12,5 +12,11 @@ class HarvestLane:
 
 class AnalysisLane:
     def precision_reached(self, pack_id, reg, counting_ids):
-        # No registered-estimator precision entry point exists in stage 1.
+        # The replication packs register no precision stopping (registration
+        # §5.3), and no registered-estimator precision entry point exists.
         return None
+
+    def analyse(self, loop_root, custody, adapter, **options):
+        """Block-6 analysis of registration §9 to §13 (joulewise.b6.analysis.driver)."""
+        from joulewise.b6.analysis.driver import analyse
+        return analyse(loop_root, custody, adapter, **options)

@@ -1,0 +1,29 @@
+{
+  "schema_version": "joulewise.b6_analysis_driver_config.v1",
+  "registration": "docs/registrations/block6_replication_DRAFT.md",
+  "flag_catalog": "configs/b6/flag_catalog_b6.json",
+  "packs": ["alpha", "beta", "gamma"],
+  "floor_packs": ["alpha", "beta"],
+  "contrast_pack": "gamma",
+  "target_counting_sessions": 3,
+  "contrasts": ["decode", "prefill-p2048"],
+  "section_11_4": {
+    "not_registered_experiment": {
+      "W1": ["model.files_differ_from_registered"],
+      "W2": ["model.stack_differs_from_registered"],
+      "W3": ["code.number_bearing_unreviewed"],
+      "S1": ["structure.chain_crashed", "structure.missing_stage_bundles",
+             "structure.no_capture_records", "structure.no_roster"]
+    },
+    "not_computable": {
+      "N1": ["calibration.bracket_incomplete"],
+      "N2": ["neg8.survivor_screen_undefined"],
+      "N3": ["cell.below_minimum"],
+      "N4": ["roster.no_science_bundles"]
+    },
+    "minimum_kept_units_per_stratum": 5
+  },
+  "slots": {
+    "S-10_F_min_J": 1.9
+  }
+}
