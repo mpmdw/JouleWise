@@ -24,6 +24,8 @@
     "b_override_s_unsupported",
     "block5_producer_registry_already_active",
     "block_incomplete",
+    "calibration_deadline_observer_unavailable",
+    "calibration_wall_deadline_in_analysis",
     "cell_not_common_mode",
     "closeout_input_malformed",
     "closeout_input_malformed: closeout.comparative_common_mode_ratios",

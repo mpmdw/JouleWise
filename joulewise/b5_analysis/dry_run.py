@@ -1181,10 +1181,13 @@ def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_re
     s=RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
     stopped=False;difference=None;previous=None
     from joulewise.whole_window import shared_instrument_calibration_physics_cache
+    from .deadline_observer import CALIBRATION_WALL_DEADLINE, OBSERVER_UNAVAILABLE, observe_wall_deadline
     # One instrument-calibration physics cache per driver run, as the harvest
     # shares one per window: a verified fit of the same calibration bytes is not
-    # refitted per member. Failed fits are never cached.
-    with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache({}):
+    # refitted per member. Failed fits are never cached. A wall-deadline firing
+    # in any refit is a tooling refusal of the step it happened in.
+    with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache({}), \
+            observe_wall_deadline() as deadline:
         s.ignored_backup=ignored
         if mode=='release':
             from .windows import load_window_index
@@ -1217,8 +1220,9 @@ def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_re
             elif mode=='release' and step=='0' and (previous is None or difference is not None):
                 records=[s.record('0',exit_status=2,code='release_digest_differs_from_dry_run' if difference else 'dry_run_record_missing_or_incomplete')]
             else:
+                before=set(s.outputs)
+                firings=deadline.firings if deadline is not None else None
                 try:
-                    before=set(s.outputs)
                     s.rehash()
                     records=function(s,runner)
                 except AnalysisRefusal as exc:
@@ -1230,6 +1234,10 @@ def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_re
                         traceback.print_exc();return 2
                     runner.run(fail,[],step=step)
                     records=[s.record(step,exit_status=2,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+                if deadline is None or deadline.firings!=firings:
+                    records=[s.record(step,exit_status=2,
+                        code=OBSERVER_UNAVAILABLE if deadline is None else CALIBRATION_WALL_DEADLINE,
+                        outputs=[s.outputs[k] for k in s.outputs if k not in before])]
             for record in records:
                 s.step_records.append(record)
                 if record.step!='11':
