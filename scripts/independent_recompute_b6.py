@@ -40,6 +40,7 @@ import statistics
 import sys
 
 _B5_PATH = Path(__file__).resolve().with_name("independent_recompute_b5.py")
+ROOT_DIR = _B5_PATH.parents[1]
 _spec = importlib.util.spec_from_file_location("independent_recompute_b5_for_b6", _B5_PATH)
 B5 = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(B5)
@@ -422,8 +423,12 @@ class Session:
 
 
 def idle_subtracted(member):
-    """Gross request energy less the run's idle-baseline power over its request (section 1.8)."""
-    power = get(member.metadata, "idle_baseline", "power_w_mean")
+    """Gross request energy less the run's idle-baseline power over its request (section 1.8).
+
+    Lead decision 3: the idle power is the block-5 recompute's REG 5.8 source (elapsed_ns-weighted
+    rich idle telemetry), for consistency between the blocks.
+    """
+    power = B5.rail_idle_power(member)
     if not finite(power) or "request" not in member.edges:
         return None
     onset, offset = member.edges["request"]
@@ -487,13 +492,13 @@ def labelled_lines(session, cid, selected):
     dropped = unit_codes(session, cid)
     restorable = {key for key, codes in dropped.items() if codes and codes <= LOAD_CODES}
     triggered = {key for key, codes in dropped.items() if codes & LOAD_CODES}
-    if triggered:
-        restored = {s: session.select(cid, s, [u for u, _ in units] + [u for (st, u) in restorable if st == s], False)
-                    for s, units in selected.items()}
-        row = subset_estimate(session, cid, restored, gamma=gamma)
-        row["restored_by_stratum"] = {s: len(restored[s]) - len(selected[s]) for s in selected}
-        row["codes"] = sorted({c for key in triggered for c in dropped[key] & LOAD_CODES})
-        lines["load_sensitivity"] = row
+    # The line is always printed (so its keys are fixed), restoring nothing when no unit was triggered.
+    restored = {s: session.select(cid, s, [u for u, _ in units] + [u for (st, u) in restorable if st == s], False)
+                for s, units in selected.items()}
+    row = subset_estimate(session, cid, restored, gamma=gamma)
+    row["restored_by_stratum"] = {s: len(restored[s]) - len(selected[s]) for s in selected}
+    row["codes"] = sorted({c for key in triggered for c in dropped[key] & LOAD_CODES})
+    lines["load_sensitivity"] = row
     for name, runs in (("battery_assist", session.assist), ("waited_runs", session.waited)):
         kept = {s: [(u, ms) for u, ms in units if not any(m.run_id in runs for m in ms)] for s, units in selected.items()}
         row = subset_estimate(session, cid, kept, gamma=gamma)
@@ -757,12 +762,33 @@ def session_quantities(result):
     return q
 
 
+def compared_runs(session):
+    """The runs whose phase energies are compared (lead decision 2's contract): every run of a kept
+    unit, the surviving screen references and the clean corpus."""
+    kept = {(cid, stratum, uid) for cid, cell in session.exclusion_cells.items()
+            for stratum, uids in cell["kept_units"].items() for uid in uids}
+    ids = {rid for key, rids in session.units.items() if key in kept for rid in rids}
+    return ids | set(session.neg8["survivor_ids"]) | set(session.neg8["corpus_ids"])
+
+
 def run_energies(session):
     rows = {}
+    wanted = compared_runs(session)
     for run_id, m in sorted(session.members.items()):
-        if m.energies:
+        if m.energies and run_id in wanted:
             rows[run_id] = {phase: value for phase, value in sorted(m.energies.items())}
     return rows
+
+
+# Lead decision 5: a same-day single-session GAMMA run compares run energies and floor-free
+# statistics only; these keys are decided by the closed block run.
+SINGLE_GAMMA_DEFERRED = ("contrast/*/outcome", "contrast/*/ceiling", "contrast/*/floor_gate_j",
+                         "dominance/branch", "cross_session/*", "lines/scaled_allowance/*/outcome")
+
+
+def single_gamma_view(quantities):
+    return {k: v for k, v in quantities.items()
+            if not any(fnmatch.fnmatchcase(k, p) for p in SINGLE_GAMMA_DEFERRED)}
 
 
 # ---------------------------------------------------------------- sections 10 and 11
@@ -942,8 +968,9 @@ def attach_gamma(result, session, floor_results, b5_view, closed):
             session.reader.flag("pairing_floor_from_block5", pack, "no counting block-6 floor session")
             for phase in ("decode", "prefill"):
                 floor_cells[model + "/" + phase] = b5_view["floor_cells"].get(model + "/" + phase, {})
-                # Block 5 prints no scaled-allowance floor beside a block-6 contrast; the registered one stands in.
-                scaled_cells[model + "/" + phase] = b5_view["floor_cells"].get(model + "/" + phase, {})
+                # Lead decision 6: block 5 prints no scaled-allowance floor; its registered floor stands in, labelled.
+                scaled_cells[model + "/" + phase] = {**b5_view["floor_cells"].get(model + "/" + phase, {}),
+                                                     "label": "registered block-5 floor stands in (lead decision 6)"}
             for cell in b5_view["reported_cells"].values():
                 if isinstance(cell, dict) and cell.get("model") == model:
                     reported[cell["model"] + "/" + cell["phase"]] = cell
@@ -1092,10 +1119,12 @@ def finish_recompute(mode, sessions, results, lines, flags, extra=None):
 
 # ---------------------------------------------------------------- comparator (S-13)
 
-# Proposed print precision (decimal places) per key pattern; first match wins. S-13's bar
-# is half a unit of the last printed digit, and the paper's print format is not yet
-# registered: these places are a proposal (NEEDS_RULING), never set from observed differences.
-PROPOSED_PRINT_DECIMALS = (
+# Comparison precision (decimal places) per key pattern; first match wins. Lead decision 1
+# (2026-10-27, made blind): ratified as the S-13 comparison precision. It is at least as fine
+# as anything the paper prints, so it only makes "half a unit of the last printed digit"
+# stricter; the paper may print fewer digits, which never loosens the comparison. Never set
+# from observed differences. Ed may override before the release.
+RATIFIED_COMPARISON_DECIMALS = (
     ("calibration/b_op_s", 6),
     ("*/per_token_j", 6),
     ("*/R", 2), ("*/R_cm", 2), ("*/factor", 3),
@@ -1103,6 +1132,7 @@ PROPOSED_PRINT_DECIMALS = (
     ("contrast/*/t", 2), ("contrast/*/p", 4), ("contrast/*/holm_p", 4),
     ("*_j", 4),
 )
+RATIFIED_SOURCE = "lead decision 1, 2026-10-27 (made blind): ratified comparison precision"
 RUN_ENERGY_BAR_J = 1e-3  # S-13: each run's phase energy within 1 mJ.
 
 
@@ -1182,7 +1212,8 @@ def compare_value(kind, key, own, other, spec):
     return row
 
 
-def compare(recompute_output, driver_table, spec=PROPOSED_PRINT_DECIMALS, spec_source="proposed (NEEDS_RULING)"):
+def compare(recompute_output, driver_table, spec=RATIFIED_COMPARISON_DECIMALS, spec_source=RATIFIED_SOURCE,
+            release=False):
     own_table = recompute_output.get("comparison_table", recompute_output)
     own, other = table_rows(own_table), table_rows(driver_table)
     rows, classes = [], {}
@@ -1208,16 +1239,20 @@ def compare(recompute_output, driver_table, spec=PROPOSED_PRINT_DECIMALS, spec_s
         if finite(row["difference"]):
             t["max_observed_difference"] = max(t["max_observed_difference"] or 0.0, row["difference"])
     stopped = bool(recompute_output.get("comparison_stopped"))
+    # Lead decision 4: the release comparison is a closed block run; provisional pairings are same-day only.
+    release_inputs = (not release) or (recompute_output.get("mode") == "BLOCK" and recompute_output.get("closed") is True)
     for t in classes.values():
         t["result"] = "pass" if t["failed"] == 0 and t["unmatched"] == 0 and t["compared"] > 0 else "fail"
-    passed = bool(classes) and all(t["result"] == "pass" for t in classes.values()) and not stopped
+    passed = bool(classes) and all(t["result"] == "pass" for t in classes.values()) and not stopped and release_inputs
     restricted = {"schema": COMPARE_SCHEMA, "tolerance": {"run_phase_energy_j": RUN_ENERGY_BAR_J,
                   "printed": "half a unit of the last printed digit", "print_spec": [list(p) for p in spec],
                   "print_spec_source": spec_source,
                   "note": "observed differences are printed beside the bars and never set them"},
-                  "recompute_stopped": stopped, "classes": classes, "rows": rows, "pass": passed}
+                  "recompute_stopped": stopped, "release": release, "release_inputs_valid": release_inputs,
+                  "classes": classes, "rows": rows, "pass": passed}
     public = {"schema": COMPARE_PUBLIC_SCHEMA, "pass": passed, "recompute_stopped": stopped,
-              "print_spec_ratified": spec_source != "proposed (NEEDS_RULING)",
+              "release": release, "release_inputs_valid": release_inputs,
+              "print_spec_ratified": spec_source == RATIFIED_SOURCE,
               "classes": {cls: {k: t[k] for k in ("compared", "passed", "failed", "unmatched")} | {"pass": t["result"] == "pass"}
                           for cls, t in sorted(classes.items())}}
     return restricted, public
@@ -1225,9 +1260,33 @@ def compare(recompute_output, driver_table, spec=PROPOSED_PRINT_DECIMALS, spec_s
 
 def load_spec(path):
     if path is None:
-        return PROPOSED_PRINT_DECIMALS, "proposed (NEEDS_RULING)"
+        return RATIFIED_COMPARISON_DECIMALS, RATIFIED_SOURCE
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     return tuple((str(p), int(d)) for p, d in data["decimals"]), str(data.get("source", path))
+
+
+# ---------------------------------------------------------------- the key contract (lead decision 2)
+
+KEYS_SCHEMA = "joulewise.b6_comparison_keys.v1"
+
+
+def key_contract(restricted):
+    """Session-independent key names from a block run's restricted output; names only, no values."""
+    sessions = restricted["sessions"]
+    per_pack = {}
+    for r in sessions.values():
+        per_pack.setdefault(r["pack"], set()).update(r["quantities"])
+    gamma = per_pack.get("GAMMA", set())
+    return {"schema": KEYS_SCHEMA,
+            "ruling": "lead decision 2, 2026-10-27: this script's key pattern is the comparison contract",
+            "session_quantity_keys": {p: sorted(k) for p, k in sorted(per_pack.items())},
+            "single_session_gamma_keys": sorted(single_gamma_view(dict.fromkeys(gamma))),
+            "single_session_gamma_deferred": list(SINGLE_GAMMA_DEFERRED),
+            "block_quantity_keys": sorted(restricted["comparison_table"].get("block", {}).get("quantities", {})),
+            "run_phase_energy_keys": {
+                "form": "<run_id>/<phase>", "phases": ["decode", "prefill", "request"],
+                "runs": "every run of a kept unit, the surviving drift-screen references and the clean corpus"},
+            "model_tags": sorted(MODEL_TAG.values()), "phases": sorted(PHASE_LABEL.values())}
 
 
 # ---------------------------------------------------------------- command line
@@ -1250,16 +1309,26 @@ def main(argv=None) -> int:
     cmp = sub.add_parser("compare", help="S-13 comparison against the analysis driver's restricted outputs")
     cmp.add_argument("--recompute", required=True, help="this script's restricted output")
     cmp.add_argument("--driver", required=True, help="the driver's comparison table (restricted)")
-    cmp.add_argument("--print-spec", help="JSON {decimals: [[pattern, places], ...], source: ...}")
+    cmp.add_argument("--print-spec", help="JSON {decimals: [[pattern, places], ...], source: ...}; "
+                     "default: the ratified comparison precision")
+    cmp.add_argument("--release", action="store_true",
+                     help="the release comparison: requires a closed block run (lead decision 4)")
     cmp.add_argument("--restricted-out", required=True)
     cmp.add_argument("--public-out", required=True)
+    keys = sub.add_parser("keys", help="write the comparison key contract from a block run's restricted output")
+    keys.add_argument("--recompute", required=True)
+    keys.add_argument("--out", required=True)
     args = parser.parse_args(argv)
+    if args.command == "keys":
+        contract = key_contract(json.loads(Path(args.recompute).read_text(encoding="utf-8")))
+        Path(args.out).write_text(json.dumps(contract, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        return 0
     try:
         if args.command == "compare":
             spec, source = load_spec(args.print_spec)
             own = json.loads(Path(args.recompute).read_text(encoding="utf-8"))
             driver = json.loads(Path(args.driver).read_text(encoding="utf-8"))
-            restricted, public = compare(own, driver, spec, source)
+            restricted, public = compare(own, driver, spec, source, args.release)
             public = write_outputs(args.restricted_out, args.public_out, restricted, public)
             print("compare pass=" + json.dumps(public["pass"]) + " restricted_sha256=" + public["restricted_sha256"])
             return 0 if public["pass"] else 1
@@ -1278,6 +1347,9 @@ def main(argv=None) -> int:
                 # Same day as harvest: the paired floors may not exist yet; contrasts carry no floor gate.
                 attach_gamma(r, s, {}, None, False)
             r["quantities"] = session_quantities(r)
+            if r["pack"] == "GAMMA":
+                r["quantities"] = single_gamma_view(r["quantities"])
+                r["deferred_to_block_run"] = list(SINGLE_GAMMA_DEFERRED)
             restricted, public = finish_recompute("SINGLE_SESSION", {s.session_id: s}, {s.session_id: r}, None, flags)
         public = write_outputs(args.restricted_out, args.public_out, restricted, public)
     except SyntheticOnlyRefusal as exc:

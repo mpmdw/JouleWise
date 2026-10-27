@@ -49,8 +49,10 @@ def trace(power):
 def patch_metadata(path, pre):
     metadata = json.loads((path / "metadata.json").read_text())
     metadata["instrument_calibration"]["b_fiducial_s"] = pre
-    metadata["idle_baseline"] = {"power_w_mean": IDLE_W}
     dump(path / "metadata.json", metadata)
+    # The block-5 recompute's REG 5.8 idle source (lead decision 3): elapsed_ns-weighted rail sum.
+    (path / "rich_telemetry_idle.jsonl").write_text("".join(
+        json.dumps({"elapsed_ns": 130_500_000, "rail_sum_power_w": IDLE_W}) + "\n" for _ in range(4)))
 
 
 def build_session(parent, pack, round_number, k, *, drift_fail=False, exclude=None, assist=(), waited=(), n=10):

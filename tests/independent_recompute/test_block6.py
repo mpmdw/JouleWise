@@ -51,7 +51,7 @@ def perturb(table, fraction):
                 runs[phase] += fraction * b6.RUN_ENERGY_BAR_J
         for key, value in body["quantities"].items():
             if isinstance(value, float):
-                body["quantities"][key] = value + fraction * 0.5 * 10.0 ** -b6.decimals_for(key, b6.PROPOSED_PRINT_DECIMALS)
+                body["quantities"][key] = value + fraction * 0.5 * 10.0 ** -b6.decimals_for(key, b6.RATIFIED_COMPARISON_DECIMALS)
     return table
 
 
@@ -198,10 +198,42 @@ class Block6(unittest.TestCase):
         _, cmp = b6.compare(single, only_sessions(self.R["comparison_table"], ["b6-alpha-r1"]))
         self.assertTrue(cmp["pass"], cmp["classes"])
 
+    def test_release_comparison_requires_closed_block(self):
+        _, public = b6.compare(self.R, self.R["comparison_table"], release=True)
+        self.assertFalse(public["release_inputs_valid"])
+        self.assertFalse(public["pass"])
+        rc, closed, _ = recompute_block(self.archives, self.attempts, self.tmp / "closed", ["--closed"])
+        self.assertEqual(rc, 0)
+        _, public = b6.compare(closed, self.R["comparison_table"], release=True)
+        self.assertTrue(public["release_inputs_valid"])
+        self.assertTrue(public["pass"], public["classes"])
+        pairing = closed["sessions"]["b6-gamma-r2"]["pairing"]["ALPHA"]
+        self.assertEqual((pairing["rule"], pairing["provisional"]), ("2_next_counting", False))
+
+    def test_idle_family_uses_block5_source(self):
+        families = self.session("BETA", 1)["neg8"]["families"]
+        self.assertTrue(families["idle_subtracted"]["passed"])
+        gross, idle = families["gross"]["start_mean_j"], families["idle_subtracted"]["start_mean_j"]
+        self.assertAlmostEqual(gross - idle, 0.5 * 2.0, delta=1e-12)
+
+    def test_key_contract_matches_published_file(self):
+        published = json.loads((b6.ROOT_DIR / "configs/b6/recompute/comparison_keys.json").read_text())
+        self.assertEqual(b6.key_contract(self.R), published)
+        for r in self.R["sessions"].values():
+            self.assertEqual(sorted(r["quantities"]), published["session_quantity_keys"][r["pack"]], r["session_id"])
+
     def test_single_gamma_without_floors(self):
         rc, single, public = recompute_single(self.by_id["b6-gamma-r2"], self.tmp / "single-g2")
         self.assertEqual(rc, 0)
         self.assertEqual(public["sessions"]["b6-gamma-r2"]["pairing"]["ALPHA"]["session_id"], None)
+        published = json.loads((b6.ROOT_DIR / "configs/b6/recompute/comparison_keys.json").read_text())
+        self.assertEqual(sorted(single["sessions"]["b6-gamma-r2"]["quantities"]), published["single_session_gamma_keys"])
+        # Lead decision 5: run energies and floor-free statistics agree with the block run.
+        block = only_sessions(self.R["comparison_table"], ["b6-gamma-r2"])
+        block["sessions"]["b6-gamma-r2"] = {**block["sessions"]["b6-gamma-r2"], "quantities": b6.single_gamma_view(
+            block["sessions"]["b6-gamma-r2"]["quantities"])}
+        _, cmp = b6.compare(single, block)
+        self.assertTrue(cmp["pass"], cmp["classes"])
         contrast = single["sessions"]["b6-gamma-r2"]["contrasts"]["ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"]
         self.assertIsNone(contrast["floor_gate_j"])
         block = self.session("GAMMA", 2)["contrasts"]["ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"]
@@ -250,9 +282,9 @@ class Block6(unittest.TestCase):
                      "--restricted-out", self.tmp / "cmp-r.json", "--public-out", self.tmp / "cmp-p.json"])
         self.assertEqual(rc, 1)
         public = json.loads((self.tmp / "cmp-p.json").read_text())
-        self.assertEqual(set(public), {"schema", "pass", "recompute_stopped", "print_spec_ratified", "classes",
-                                       "restricted_sha256"})
-        self.assertFalse(public["print_spec_ratified"])
+        self.assertEqual(set(public), {"schema", "pass", "recompute_stopped", "release", "release_inputs_valid",
+                                       "print_spec_ratified", "classes", "restricted_sha256"})
+        self.assertTrue(public["print_spec_ratified"])
         for row in public["classes"].values():
             self.assertEqual(set(row), {"compared", "passed", "failed", "unmatched", "pass"})
         restricted = json.loads((self.tmp / "cmp-r.json").read_text())

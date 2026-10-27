@@ -18,9 +18,10 @@ Seat RC-B6-1, 2026-10-27. Branch `lane/2026-10-27-recompute-b6`, based on
   - A 1 ms edge shift is caught at about 10 mJ on its run, against the 1 mJ bar.
   - A dropped power record is caught.
   - Public outputs pass a structure-only guard.
-- **Before a real joint run** (NEEDS_RULING 1 and 2):
-  - The print precision behind "half a unit of its last printed digit" has to be ratified.
-  - The comparison keys have to be reconciled with the analysis driver's.
+- **Lead rulings applied (milestone 2).** The lead ruled on all six NEEDS_RULING items; see LEAD DECISIONS.
+  - The comparison precision is ratified.
+  - The key contract is published at `configs/b6/recompute/comparison_keys.json`.
+  - The release comparison requires a closed block run (`compare --release`).
 
 ## Independence
 
@@ -138,6 +139,42 @@ Seat RC-B6-1, 2026-10-27. Branch `lane/2026-10-27-recompute-b6`, based on
   - Flag codes appear only when they are structure codes. All others are counted as `restricted_flag_count`.
   - Stdout carries counts, the stop state and the restricted digest.
 
+## LEAD DECISIONS
+
+Rulings from the lead session, 2026-10-27, made blind, on this seat's NEEDS_RULING 1 to 6. Each is applied in the
+script, with the decision cited in a comment.
+
+1. **Comparison precision is ratified.** The proposed table is ratified as the S-13 comparison precision and renamed
+   `RATIFIED_COMPARISON_DECIMALS`.
+   - It is at least as fine as anything the paper prints, so it only makes the half-unit bar stricter.
+   - The paper may print fewer digits, which never loosens the comparison.
+   - `compare` uses it by default and reports `print_spec_ratified: true`.
+   - Ed may override it before the release.
+2. **The key pattern is the contract.** It is published, as key names only, at
+   `configs/b6/recompute/comparison_keys.json`, written by the new `keys` command from a block run. The file holds:
+   - the per-pack session keys (ALPHA 100, BETA 100, GAMMA 89);
+   - the 52 same-day GAMMA keys;
+   - the 310 block keys;
+   - the run-energy key form, `<run_id>/<phase>`.
+   
+   B6-AN-1 is to emit exactly these keys. Two changes follow:
+   - Run energies are compared for a defined set: every run of a kept unit, the surviving screen references and the
+     clean corpus.
+   - The load-correlated line is always printed, restoring nothing when no unit was triggered, so every session's key
+     set is fixed. A test checks that each synthetic session's keys equal the published set.
+3. **The idle-subtracted screen family** uses the block-5 recompute's REG 5.8 idle source: `rail_idle_power`,
+   elapsed_ns-weighted rich idle telemetry.
+4. **The release comparison requires `--closed`.** `compare --release` fails unless its recompute input is a
+   `BLOCK` run with `closed: true` (`release_inputs_valid`). Provisional pairings are for same-day checks only.
+5. **Same-day GAMMA in single mode** compares run energies and floor-free statistics only. These keys are dropped
+   from the single-session table and listed under `deferred_to_block_run`; the closed block run decides them:
+   - `contrast/*/outcome`, `ceiling` and `floor_gate_j`;
+   - `dominance/branch`;
+   - `cross_session/*`;
+   - the scaled line's outcome.
+6. **"Floor from block 5":** the registered block-5 floor stands in for the scaled-allowance line, labelled
+   "registered block-5 floor stands in (lead decision 6)".
+
 ## Coverage against §9 to §11
 
 | Section | Covered | Not covered |
@@ -160,7 +197,7 @@ Seat RC-B6-1, 2026-10-27. Branch `lane/2026-10-27-recompute-b6`, based on
 | §11.2 | replication word, short sentence, inclusive words beside | |
 | §11.3 | (claim ceilings come from §9.4) | |
 | §11.4 | eligibility (i)/(ii), added sessions listed, summary with them | |
-| §12.3 item 4 | comparator under S-13 | print precision ratification (NEEDS_RULING 1) |
+| §12.3 item 4 | comparator under S-13; ratified precision; release mode requires a closed block run | |
 
 ## Tests
 
@@ -173,7 +210,7 @@ JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR=/tmp/jwtmp /opt/homebrew
 
 | Run | Result |
 |---|---|
-| `tests.independent_recompute.test_block6` (new, 23 tests) | OK, 17.2 s |
+| `tests.independent_recompute.test_block6` (new, 26 tests after the lead decisions) | OK, 23.9 s |
 | `tests.independent_recompute` + `tests.test_shard_tests` (all 140) | OK (skipped=18), 110.9 s |
 | `tests.test_battery_float_sweep` | OK after classifying the new reader of `b_fiducial_s` (one row) |
 | `tests.test_docs_freshness`, `tests.test_custody_mode_inventory`, `tests.test_battery_float_consumers` | OK (56 tests, skipped=1) |
@@ -213,6 +250,11 @@ A1 B1 G1, B2 G2 A2, G3 A3 B3.
   `stored_energy_mismatch`.
 - **A dropped plist record** fails the run-energy class and raises `trace_csv_plist_mismatch`.
 - Public outputs pass the structure guard, and the guard refuses a float, an outcome word and a decimal token.
+- **Lead decisions:**
+  - Release mode fails on an unclosed run and passes on a closed one, with G2's rule-2 pairing final.
+  - The idle-subtracted family is gross minus the telemetry idle power times the request span.
+  - The key contract equals the published file, and each session's keys equal its pack's set.
+  - Same-day single GAMMA equals the block run on its non-deferred keys.
 - The synthetic-only guard exits 4 and writes nothing.
 - With fewer than 6 clean corpus runs the screen is `undefined` and the session cannot be computed. A lost midpoint
   leaves the screen defined, with no midpoint.
@@ -240,54 +282,29 @@ A1 B1 G1, B2 G2 A2, G3 A3 B3.
 
 ## NEEDS_RULING
 
-1. **Print precision for S-13's "half a unit of its last printed digit".** The paper's print format is not
-   registered. The comparator ships a proposal (`PROPOSED_PRINT_DECIMALS`), and its public output says
-   `print_spec_ratified: false` until a ratified table is passed with `--print-spec`.
-
-   | Quantity | Proposed decimal places |
-   |---|---|
-   | b_op (s) | 6 |
-   | per-token J | 6 |
-   | R and R_cm | 2 |
-   | factors and energy ratios | 3 |
-   | t | 2 |
-   | p and Holm p | 4 |
-   | every other J | 4 |
-
-   Whoever owns the paper's tables should fix this before the release comparison. It must not be set from observed
-   differences.
-2. **Comparison key names.** The comparator is a key-by-key join that fails closed on any unmatched key. This script's
-   keys follow the pattern in B6-AN-1's interface note (`reported/<model>/<phase>/mean_j`, `floor/…`, `dominance/…/R`,
-   `contrast/<c>/…`), with model tags `qwen3-1p7b` and `qwen3-8b` and phases `decode` and `prefill-p2048`. The driver
-   must emit the same keys, or an agreed mapping must be ratified. Until then the first real joint run will report
-   unmatched keys and fail.
-3. **The idle-subtracted screen family.** "Each run's idle-baseline power" is read as the run's recorded
-   `metadata.idle_baseline.power_w_mean` over its request span. If the registered reading is the rich idle telemetry
-   (the block-5 script's REG 5.8 source), it is a one-line change. The allowance uses gross energies only, so no
-   printed number depends on this; only the screen verdict cross-check does.
-4. **Provisional pairings before the close.** Rules 2 and 3 can change when a same-round floor session is harvested
-   later. The block run marks them provisional unless `--closed` is passed. Should the release comparison require
-   `--closed`?
-5. **Same-day GAMMA in `single` mode.** A GAMMA session analysed before its paired floor sessions exist has no floor
-   gate, so its outcome word, ceiling and leave-one-out floor status are not final. Proposed: the same-day check
-   compares GAMMA run energies and the floor-free statistics only, and the block run decides the rest.
-6. **"Floor from block 5" in the scaled-allowance line.** When a GAMMA session's floor comes from block 5, block 5
-   prints no scaled-allowance floor. The registered block-5 floor stands in for the scaled line, and is labelled.
+None open. Items 1 to 6 of milestone 1 are decided; see LEAD DECISIONS. Ed may override decision 1 before the
+release.
 
 ## SUMMARY
 
-- **What exists.** `scripts/independent_recompute_b6.py`, the independent block-6 recompute (`block`, `single`) and
-  the S-13 comparator (`compare`).
+- **What exists.** `scripts/independent_recompute_b6.py`, the independent block-6 recompute (`block`, `single`), the
+  S-13 comparator (`compare`, with `--release`) and the key-contract writer (`keys`).
 - **Basis and sources.**
   - Arithmetic: the existing independent block-5 script's raw-record arithmetic and estimators, applied per counting
     session, with block 6's rules from the registration text.
   - Counting: the loop's acceptance and attempt records.
   - Pairing: §6.2, by registered round.
 - **Coverage.** §9.1 to §9.4 in full, five of §9.5's lines, §10, §11.1, §11.2 and §11.4.
-- **Synthetic result.** 23 new tests on a nine-session synthetic block pass:
+- **Lead decisions.** All six are applied:
+  - the comparison precision is ratified;
+  - the key contract is published at `configs/b6/recompute/comparison_keys.json`;
+  - the idle family uses block 5's source;
+  - the release comparison needs a closed block run;
+  - same-day GAMMA defers its floor-dependent keys;
+  - a block-5 floor stands in for the scaled line, labelled.
+- **Synthetic result.** 26 tests on a nine-session synthetic block pass:
   - clean data agrees within the bars;
   - a 1 ms edge shift and a dropped record are each caught;
   - public outputs carry structure only.
-- **Owed before a real comparison:** ratified print precision (NEEDS_RULING 1) and key reconciliation with the driver
-  (NEEDS_RULING 2).
 - **Not built:** whole-machine (S-15) and the block-5-codes line.
+- **Next:** the driver emits the published keys; the first contact with real archives is through blind automation.
