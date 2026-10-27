@@ -102,6 +102,9 @@ class SessionAnalysis:
     quantities: Mapping = field(default_factory=dict)   # RESTRICTED
     contrasts: Mapping = field(default_factory=dict)    # RESTRICTED
     reasons: Mapping = field(default_factory=dict)      # RESTRICTED: quantity key -> why it is None
+    # RESTRICTED: run phase energies, "<run_id>/<decode|prefill|request>" -> J
+    # (the comparison contract's run keys).
+    run_energies: Mapping = field(default_factory=dict)
     # Structure: the binding's counting after the desk exclusion (design §4.6),
     # None when the binding does not report it.
     analysis_counting: bool | None = None

@@ -27,9 +27,54 @@ item 19; gate policy). The driver is the block-6 "pure layer" (audit N9), and it
 - **S-9 and S-11 removed from scope (lead item 2).** S-16 prints "not evaluated" for a rule its host cannot evaluate
   (audit B6-5).
 
-**Tests:** 99 synthetic tests pass. Sessions are desk-compressed by the real `joulewise.desk_compress`, using a
+**Tests:** 108 synthetic tests pass. Sessions are desk-compressed by the real `joulewise.desk_compress`, using a
 gzip-backed `zstd` stand-in, because this seat has no zstd. Eight counterfactual mutations each make their regression
 test fail, as gate-policy rule 3 asks.
+
+## COMPARISON CONTRACT (lead task, 2026-10-27, evening)
+
+The independent recompute (seat RC-B6-1) joins this driver's outputs key by key and fails closed on any unmatched
+key.
+
+- **Key set.** `joulewise/b6/analysis/comparison.py` generates the contract's key set from its rules: models, phases,
+  forms and fields. Each run writes a restricted object, `comparison`. Its shape is the one RC-B6-1's report says its
+  comparator reads, with nothing else in it: `{sessions: {<id>: {quantities, run_phase_energy_j}}, block:
+  {quantities}}`. Metadata (schema `joulewise.b6_comparison_values.v1`, the session-to-pack map, the single-session
+  flag) goes to a separate restricted object, `comparison_meta`, so it cannot become unmatched keys.
+  - `sessions/<id>/quantities`: exactly each analysed session's pack keys, 100 for ALPHA, 100 for BETA, 89 for
+    GAMMA. A GAMMA session analysed alone (`--mode session`) emits the 52 single-session keys; its 6 deferred groups
+    wait for the block run, as RC-B6-1's lead decision 5 does on its side.
+  - `sessions/<id>/run_phase_energy_j`: `<run_id>/<decode|prefill|request>`.
+  - `block/quantities` (cross-block phase only): the 310 `summary/`, `inclusive/`, `side_by_side/` and
+    `replication/` keys.
+- **Whose instruction.** The task came from lead session 015ASG1T by cross-session message. The user's notice of
+  2026-10-27 names the laptop copy of 015ASG1T as the only lead and says to note any other sender's instructions; the
+  message carried that session's id. Per that notice I read RC-B6-1's report (`.codex-report/RC-B6-1.md` at
+  74a4f8123), and only for the comparator's input shape and key rules.
+- **Vendored contract.** The recompute's `configs/b6/recompute/comparison_keys.json` is vendored byte for byte into
+  `tests/b6/analysis/fixtures/comparison_keys.json`. Its source (`lane/2026-10-27-recompute-b6` at
+  **74a4f81238409580bf437c11f2f54c91e7d3da1f**) and SHA-256 are in `comparison_keys.SOURCE.json`. Only that file was
+  read; none of the recompute's code or arithmetic.
+- **Tests.** `test_comparison.py` asserts that the generated set equals the vendored file in every part:
+  - the three session key lists;
+  - the single-session list and its deferred patterns;
+  - the 310 block keys;
+  - the model tags, phases and run-key form;
+  - and that the file has no part the driver does not emit.
+
+  `test_driver.py` checks the emitted objects end to end (per-session, cross-block and session modes). A session
+  missing a contract key is a tooling refusal (`comparison_key_absent`), never a silent None.
+- **What this changes for the adapter.** `SessionAnalysis.quantities` must carry every contract key of the session's
+  pack under the contract's name. Words, booleans and None are allowed, for example `neg8/verdict`,
+  `contrast/<c>/outcome`, `cross_session/…/agree`. A new restricted field, `run_energies`, carries the run phase
+  energies. The §10/§11.1/§11.4 lines now cover exactly the contract's summarised quantities: 20 per floor pack,
+  4 for GAMMA, plus any S-15 `whole_machine/` values.
+- **Observations for the lead:**
+  1. The contract has no `whole_machine/` keys (S-15 is not filled). The driver summarises such values but does not
+     emit them for comparison; the contract needs those keys when S-15 lands.
+  2. The block `n` is the number of sessions with a value (AD-1); the recompute must count the same way.
+  3. Which runs carry `run_energies` ("every run of a kept unit, the surviving drift-screen references and the clean
+     corpus") is the binding's to supply through L9's seams. The driver checks only the key form.
 
 ## LEAD ITEMS OF 2026-10-27
 
@@ -118,19 +163,22 @@ test fail, as gate-policy rule 3 asks.
   - `driver.py`: phases, runs, checks, record.
   - `summary.py`, `replication.py`, `inclusive.py`, `public.py`.
   - `slots.py`: S-15 carry, S-16 "not evaluated"; S-9/S-11 removed.
+  - `comparison.py` (new): the comparison contract's key set and the restricted `comparison` output.
   - `__init__.py`.
 - `scripts/b6_analyze.py`: `index` and `analyse --mode per-session|cross-block|session --run 1|2`.
 - `configs/b6/analysis/driver.json`.
 - `tests/b6/analysis/`:
   - `fakes.py`: the synthetic tree builder and fake adapter.
   - `bin/zstd`: a gzip-backed stand-in, for tests only.
-  - `test_census_pairing.py`, `test_lines.py`, `test_driver.py`, `test_slots_cli.py`.
+  - `test_census_pairing.py`, `test_lines.py`, `test_driver.py`, `test_slots_cli.py`, `test_comparison.py`
+    (new).
+  - `fixtures/comparison_keys.json` and `fixtures/comparison_keys.SOURCE.json` (vendored contract and its source).
 - `.codex-report/B6-AN-1.md`: this report.
 
 ## EVIDENCE
 
 - `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b6/analysis -t .`, Linux,
-  Python 3.13.17: **99 tests, OK** (178 s), on the pushed tree.
+  Python 3.13.17: **108 tests, OK** (189 s) on the pushed tree.
 - Counterfactuals (gate policy, rule 3). Each mutation was applied to a scratch copy, then the named regression test
   was run; all fail:
 
@@ -144,6 +192,7 @@ test fail, as gate-policy rule 3 asks.
   | M6: pairing ignores rounds | `test_closed_block6_pairing` | FAILED |
   | M7: guard lets floats through | `test_guard_refuses_numbers_and_words` | FAILED |
   | M8: no after-check | `test_a_write_into_a_session_during_the_run_is_caught` | FAILED |
+  | M9: the generated contract drops one cross-session field | `test_key_set_equals_the_contract` | FAILED |
 - `tests.b6.test_lane_adapters` keeps its 2 environmental failures (`/bin/zsh`, `/opt/homebrew/bin/python3.13`
   absent). They are identical on 991358f73.
 
@@ -158,22 +207,18 @@ test fail, as gate-policy rule 3 asks.
 - The index they take is `joulewise.b6_session_index.v1` from `scripts/b6_analyze.py index`. It is per session, not
   design §4.4's per-unit L9 `IndexEntry` file. The binding derives that from it.
 
-## INDEPENDENT RECOMPUTE: THE INTERFACE IT NEEDS (separate seat; shares no code)
+## INDEPENDENT RECOMPUTE: THE INTERFACE (separate seat RC-B6-1; shares no code)
 
-- **Inputs:**
-  - The session index (`joulewise.b6_session_index.v1`) for archive, custody and runs roots.
-  - The public record's `sessions` (counting and admission) and `pairings` (rule words, `final`). Counting comes from
-    loop acceptance; it must not re-derive counting from `claim_usable`.
-  - Desk-compressed bytes, read through `desk_compress.read_bytes` (design §4.1, "Not chosen": that reader stays the
-    recompute's).
-- **Outputs to compare (S-13):**
-  - Per session, a map with the same keys as the restricted `sessions` object's `quantities` and `contrasts`:
-    `reported/<model>/<phase>/mean_j`, `…/attribution_floor_j`, `floor/<model>/<phase>/<form>/operative_j`,
-    `dominance/<model>/<phase>/<form>/R`, `contrast/<c>/energy_ratio`, contrasts' `dbar` and `outcome`, and
-    `whole_machine/…` (S-15).
-  - Per run, the phase energies, compared at 1 mJ.
-  - The comparator (`compare.py`, design §15 step 10) joins the two by key under S-13's bars, and needs the per-run
-    phase energies from L9's re-reduced outputs, which the binding must expose by digest.
+The key contract is fixed (section COMPARISON CONTRACT above), and the driver writes its side of it.
+
+**What the recompute reads:**
+- The session index (`joulewise.b6_session_index.v1`).
+- The public record's `sessions` and `pairings`, for counting from loop acceptance and the pairing rules.
+- The desk-compressed bytes, through `desk_compress.read_bytes`.
+
+**What it compares under S-13:** its values against the restricted `comparison` object:
+- each run's phase energy, within 1 mJ;
+- every printed quantity, unrounded, within half a unit of its last printed digit.
 
 ## OPEN ISSUES
 

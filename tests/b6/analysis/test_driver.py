@@ -22,11 +22,13 @@ import tempfile
 import textwrap
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 
 from joulewise import desk_compress
-from joulewise.b6.analysis import driver, public, restore, schedule
+from joulewise.b6.analysis import comparison, driver, public, restore, schedule
 from joulewise.b6.analysis.adapter import L9ProgramAdapter, SessionRequest
+from tests.b6.analysis.test_comparison import vendored
 from tests.b6.analysis.fakes import (CLOSED_BLOCK6, FAKE_ZSTD_DIR, WITH_NONCOUNTING, FakeL9, build_block6, fake_zstd,
                                      tree_digest, write_r2_gamma_exclusions)
 
@@ -112,7 +114,7 @@ class PerSessionPhase(Harness):
         record = self.record()
         self.assertTrue(record["completed_without_tooling_refusal"])
         self.assertEqual(record["cross_block"], "not_run")
-        self.assertEqual(sorted(record["restricted"]), ["pairings", "sessions"])
+        self.assertEqual(sorted(record["restricted"]), ["comparison", "comparison_meta", "pairings", "sessions"])
         self.assertEqual(len(record["sessions"]), 9)
         for row in record["sessions"]:
             self.assertEqual((row["loop_counting"], row["acceptance_counting"], row["analysed"]), (True, True, True))
@@ -351,11 +353,10 @@ class CrossBlockPhase(Harness):
         for pack, sessions in (("alpha", ["block5", "r1-alpha", "r3-alpha", "r4-alpha"]),
                                ("beta", ["block5", "r1-beta", "r2-beta", "r3-beta"]),
                                ("gamma", ["block5", "r1-gamma", "r2-gamma", "r3-gamma"])):
+            expected = set(comparison.summarised_quantities(pack))
+            self.assertEqual({k for k in summary[pack]["quantities"] if not k.startswith("whole_machine/")}, expected)
             for key, row in summary[pack]["quantities"].items():
-                if "prefill-p42" in key:
-                    self.assertEqual((row["n"], row["note"]), (0, "not computable (n < 2)"))
-                else:
-                    self.assertEqual(row["sessions"], sessions, key)
+                self.assertEqual(row["sessions"], sessions, key)
         side = self.restricted("side_by_side", "cross-block-1")
         self.assertEqual(len(side["alpha"]["facts"]), 2)
         flagged = self.restricted("flagged_inclusive", "cross-block-1")
@@ -365,6 +366,40 @@ class CrossBlockPhase(Harness):
         replication = self.restricted("replication", "cross-block-1")
         self.assertEqual({c: r["word"] for c, r in replication.items()},
                          {"decode": "replicated", "prefill-p2048": "replicated"})
+
+    def test_the_comparison_output_carries_exactly_the_recompute_s_keys(self):
+        self.both_per_session_runs()
+        self.assertEqual(self.run_driver(self.fake(), mode="cross-block"), 0)
+        contract = vendored()
+        for directory in ("per-session-1", "cross-block-1"):
+            output, meta = self.restricted("comparison", directory), self.restricted("comparison_meta", directory)
+            self.assertEqual(meta["keys_schema"], contract["schema"])
+            self.assertEqual(set(output), {"sessions", "block"} if directory.startswith("cross") else {"sessions"})
+            self.assertEqual(sorted(output["sessions"]), sorted(s[0] for s in self.sessions))
+            for session_id, table in output["sessions"].items():
+                self.assertEqual(set(table), {"quantities", "run_phase_energy_j"})
+                self.assertEqual(sorted(table["quantities"]),
+                                 sorted(contract["session_quantity_keys"][meta["packs"][session_id]]), session_id)
+                self.assertTrue(table["run_phase_energy_j"])
+                self.assertTrue(all(k.rsplit("/", 1)[1] in contract["run_phase_energy_keys"]["phases"]
+                                    for k in table["run_phase_energy_j"]))
+        block = self.restricted("comparison", "cross-block-1")["block"]["quantities"]
+        self.assertEqual(sorted(block), sorted(contract["block_quantity_keys"]))
+        self.assertEqual(block["replication/decode/word"], "replicated")
+        self.assertEqual(block["summary/ALPHA/reported/qwen3-1p7b/decode/mean_j/n"], 4)
+        self.assertEqual(block["inclusive/ALPHA/reported/qwen3-1p7b/decode/mean_j/n"], 5)
+
+    def test_a_session_missing_a_contract_key_refuses(self):
+        class Short(FakeL9):
+            def analyse_floor_session(self, request, custody):
+                result = super().analyse_floor_session(request, custody)
+                if request.session_id != "r4-alpha":
+                    return result
+                quantities = {k: v for k, v in result.quantities.items() if k != "neg8/verdict"}
+                return replace(result, quantities=quantities)
+
+        self.assertEqual(self.run_driver(Short(index=self.block.index, noisy=False), mode="per-session"), 2)
+        self.assertIn(["comparison", "r4-alpha", "comparison_key_absent"], self.record()["line_refusals"])
 
     def test_a_disagreeing_session_is_not_replicated(self):
         disagree = {"block5": {"decode": ("direction_supported", 3.0)}, "r2-gamma": {"decode": ("unresolved", 0.9)}}
@@ -403,7 +438,11 @@ class SingleSession(Harness):
         self.assertEqual(self.run_driver(adapter, mode="session", only="r2-gamma"), 0)
         self.assertEqual(sorted(c[1] for c in adapter.calls), ["r2-beta", "r2-gamma", "r3-alpha"])
         record = self.record("session-r2-gamma")
-        self.assertEqual(sorted(record["restricted"]), ["pairings", "sessions"])
+        self.assertEqual(sorted(record["restricted"]), ["comparison", "comparison_meta", "pairings", "sessions"])
+        output = self.restricted("comparison", "session-r2-gamma")
+        self.assertTrue(self.restricted("comparison_meta", "session-r2-gamma")["single_session"])
+        self.assertEqual(sorted(output["sessions"]["r2-gamma"]["quantities"]),
+                         sorted(vendored()["single_session_gamma_keys"]))
         self.assertEqual(sorted(record["restore_cycles"]), ["r2-beta", "r2-gamma", "r3-alpha"])
 
     def test_one_floor_session(self):

@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from joulewise import desk_compress
+from joulewise.b6.analysis import comparison
 from joulewise.b6.analysis.adapter import AdapterRefusal, SessionAnalysis
 from joulewise.b6.analysis.session_index import build_session_index
 
@@ -237,10 +238,30 @@ class FakeL9:
         n = self.kept.get(session_id, 10)
         return n, self.drift.get(session_id, "passed")
 
+    @staticmethod
+    def _synthetic(session_id, key, n, drift):
+        """A synthetic value of the right kind for a contract key."""
+        if key.endswith(("/n", "/n_b", "/n_r")):
+            return n
+        words = {"/verdict": drift, "/outcome": "direction_supported", "/direction": "positive",
+                 "/ceiling": "L2", "dominance/branch": "A"}
+        for suffix, word in words.items():
+            if key.endswith(suffix):
+                return word
+        if key.endswith("/agree"):
+            return True
+        return unit(session_id, key, 0.1, 50.0)
+
+    @staticmethod
+    def _runs(session_id):
+        return {f"{session_id}-run{i}/{phase}": unit(session_id, f"run{i}{phase}", 5.0, 90.0)
+                for i in (1, 2) for phase in comparison.RUN_PHASES}
+
     def _floor(self, session_id, pack, custody):
         n, drift = self._common(session_id, pack, custody)
         model = MODELS[pack]
-        quantities = {}
+        quantities = {key: self._synthetic(session_id, key, n, drift)
+                      for key in comparison.session_keys(pack)}
         for phase in PHASES:
             quantities[f"reported/{model}/{phase}/mean_j"] = unit(session_id, f"m{phase}", 20.0, 30.0)
             quantities[f"reported/{model}/{phase}/attribution_floor_j"] = unit(session_id, f"a{phase}", 1.0, 3.0)
@@ -257,15 +278,20 @@ class FakeL9:
         return SessionAnalysis(session_id, pack, "ok", steps=(("1", "ok"), ("2", "ok"), ("3", "ok"), ("3b", "ok"),
                                ("4", "ok"), ("10", "ok"), ("11", "ok")), kept_units=kept, b_op_defined=True,
                                drift_screen=drift, outputs=outputs, quantities=quantities,
+                               run_energies=self._runs(session_id),
                                analysis_counting=None if session_id.startswith("block5") else self._counting(session_id))
 
-    def _gamma_values(self, session_id):
+    def _gamma_values(self, session_id, n=10, drift="passed"):
         values = self.contrasts.get(session_id, {})
         contrasts = {}
         for contrast in CONTRASTS:
             outcome, dbar = values.get(contrast, ("direction_supported", unit(session_id, f"d{contrast}", 2.0, 4.0)))
             contrasts[contrast] = {"outcome": outcome, "dbar": dbar}
-        quantities = {f"contrast/{c}/energy_ratio": unit(session_id, f"e{c}", 3.0, 5.0) for c in CONTRASTS}
+        quantities = {key: self._synthetic(session_id, key, n, drift) for key in comparison.gamma_session_keys()}
+        for contrast, row in contrasts.items():
+            quantities[f"contrast/{contrast}/dbar_j"] = row["dbar"]
+            quantities[f"contrast/{contrast}/outcome"] = row["outcome"]
+        quantities.update({f"contrast/{c}/energy_ratio": unit(session_id, f"e{c}", 3.0, 5.0) for c in CONTRASTS})
         if self.whole_machine_on_gamma:
             quantities["whole_machine/qwen3-8b/decode/mean_j"] = 1.0
         return contrasts, quantities
@@ -279,7 +305,7 @@ class FakeL9:
     def analyse_gamma_session(self, request, alpha, beta, custody):
         n, drift = self._common(request.session_id, request.pack, custody)
         self._write(Path(custody), "received.json", {"alpha": alpha.session_id, "beta": beta.session_id})
-        contrasts, quantities = self._gamma_values(request.session_id)
+        contrasts, quantities = self._gamma_values(request.session_id, n, drift)
         kept = {f"contrast/{c}": {"contrast_quad": n} for c in CONTRASTS}
         digest = self._write(Path(custody), "claim-result.json", {"contrasts": contrasts, "quantities": quantities})
         reads = [request.session_id] + [f.session_id for f in (alpha, beta) if f.session_id != "block5"]
@@ -287,7 +313,7 @@ class FakeL9:
                                steps=(("1", "ok"), ("5", "ok"), ("8", "ok"), ("6", "ok"), ("9", "ok"), ("9b", "ok"), ("11", "ok")),
                                kept_units=kept, b_op_defined=True, drift_screen=drift,
                                outputs={"claim_result": digest, **self._session_bytes(reads)},
-                               quantities=quantities, contrasts=contrasts,
+                               quantities=quantities, contrasts=contrasts, run_energies=self._runs(request.session_id),
                                analysis_counting=self._counting(request.session_id)))
 
     def block5_session(self, pack, custody):

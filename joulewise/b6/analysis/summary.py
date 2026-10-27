@@ -81,18 +81,20 @@ def _keys(sessions: list[SessionAnalysis]) -> list[str]:
     return sorted({key for s in sessions for key in session_values(s)})
 
 
-def pack_summary(block5: SessionAnalysis, sessions: list[SessionAnalysis]) -> dict:
-    """§10 for every quantity of one pack: block 5 first, then ``sessions``."""
+def pack_summary(block5: SessionAnalysis, sessions: list[SessionAnalysis], keys=None) -> dict:
+    """§10 for each quantity of one pack (``keys``, else every quantity the
+    sessions carry): block 5 first, then ``sessions``."""
     columns = [block5] + list(sessions)
     names = ["block5"] + [s.session_id for s in sessions]
-    return {"label": LABEL, "quantities": {key: describe(_rows(key, columns, names)) for key in _keys(columns)}}
+    keys = _keys(columns) if keys is None else sorted(keys)
+    return {"label": LABEL, "quantities": {key: describe(_rows(key, columns, names)) for key in keys}}
 
 
-def side_by_side(block5: SessionAnalysis, sessions: list[SessionAnalysis]) -> dict:
-    """§11.1 for every quantity of one pack.  The block-6 mean is over the
+def side_by_side(block5: SessionAnalysis, sessions: list[SessionAnalysis], keys=None) -> dict:
+    """§11.1 for each quantity of one pack.  The block-6 mean is over the
     block-6 sessions with a value; the sessions without one are listed."""
     table = {}
-    for key in _keys([block5] + list(sessions)):
+    for key in (_keys([block5] + list(sessions)) if keys is None else sorted(keys)):
         b5 = session_values(block5).get(key)
         b5 = b5 if _finite(b5) else None
         present, missing = _split(_rows(key, sessions))

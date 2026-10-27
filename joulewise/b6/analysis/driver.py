@@ -36,7 +36,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from joulewise.b6.analysis import census as census_module
-from joulewise.b6.analysis import inclusive, pairing, replication, schedule, slots, summary
+from joulewise.b6.analysis import comparison, inclusive, pairing, replication, schedule, slots, summary
 from joulewise.b6.analysis.acceptance_counting import (CountingRefusal, analysis_counting_problems,
                                                        require_loop_equals_acceptance)
 from joulewise.b6.analysis.adapter import COMPLETED, DEFERRED, SessionAnalysis, SessionRequest
@@ -181,8 +181,12 @@ def block6_lines(census, config, results: dict, pairings: dict, admissions: dict
             lines["summary"][pack] = lines["side_by_side"][pack] = {"refused": "input_session_not_analysed"}
             lines["flagged_inclusive"][pack] = {"refused": "input_session_not_analysed"}
             continue
-        lines["summary"][pack] = summary.pack_summary(b5, counting)
-        lines["side_by_side"][pack] = {**summary.side_by_side(b5, counting), "facts": list(SIDE_BY_SIDE_FACTS),
+        # The quantities §10 prints, as the comparison contract names them, plus
+        # S-15's whole-machine values where the binding supplies them.
+        keys = sorted(set(comparison.summarised_quantities(pack)) | {
+            k for a in [b5, *counting, *added] for k in a.quantities if k.startswith(slots.WHOLE_MACHINE_PREFIX)})
+        lines["summary"][pack] = summary.pack_summary(b5, counting, keys)
+        lines["side_by_side"][pack] = {**summary.side_by_side(b5, counting, keys), "facts": list(SIDE_BY_SIDE_FACTS),
                                        "note": None if counting else "no counting block-6 session"}
         inclusive_sessions = sorted(counting + added, key=lambda a: census_module.order_key(census.get(a.session_id, pack)))
         lines["flagged_inclusive"][pack] = {
@@ -190,7 +194,7 @@ def block6_lines(census, config, results: dict, pairings: dict, admissions: dict
                       else summary.INCLUSIVE_NONE),
             "added_sessions": [{"session_id": a.session_id, "codes": list(census.get(a.session_id, pack).codes)}
                                for a in added],
-            "summary": summary.pack_summary(b5, inclusive_sessions)}
+            "summary": summary.pack_summary(b5, inclusive_sessions, keys)}
     for node_key, result in sorted(results.items()):
         if result.status not in COMPLETED:
             continue
@@ -211,6 +215,34 @@ def block6_lines(census, config, results: dict, pairings: dict, admissions: dict
             contrast, gamma_b5, counting_gamma, target=config["target_counting_sessions"],
             floor_from_block5={g: p.floor_from_block5 for g, p in pairings.items()}, inclusive=added_gamma)
     return lines
+
+
+def comparison_output(census, config, results: dict, lines: dict | None, *, single_session: bool):
+    """The restricted table the independent recompute joins key by key, in the
+    shape its comparator reads (``{sessions: {id: {quantities,
+    run_phase_energy_j}}, block: {quantities}}``) and nothing else, plus its
+    metadata kept apart.  Returns ``(table, meta, refusals)``."""
+    refusals, sessions = [], {}
+    for entry in census.entries:
+        result = results.get(session_node(config, entry))
+        if result is None or result.status not in COMPLETED:
+            continue
+        try:
+            sessions[entry.session_id] = {
+                "quantities": comparison.session_values(result, single_session=single_session),
+                "run_phase_energy_j": comparison.run_values(result)}
+        except comparison.ComparisonRefusal as exc:
+            refusals.append(["comparison", entry.session_id, exc.code])
+    table = {"sessions": sessions}
+    if lines is not None:
+        try:
+            table["block"] = {"quantities": comparison.block_values(lines, config["packs"])}
+        except comparison.ComparisonRefusal as exc:
+            refusals.append(["comparison", "block", exc.code])
+    meta = {"schema_version": comparison.VALUES_SCHEMA, "keys_schema": comparison.KEYS_SCHEMA,
+            "single_session": single_session,
+            "packs": {e.session_id: comparison.PACK_NAMES[e.pack] for e in census.entries if e.session_id in sessions}}
+    return table, meta, refusals
 
 
 def _completed_record(custody: Path, name: str) -> tuple[dict, str]:
@@ -385,11 +417,17 @@ def _finish(adapter, units, store, census, index, accepted, config, config_sha, 
 
     store.put("sessions", [_session_record(node_id, results[node_id]) for node_id in order])
     store.put("pairings", [pairings[g].as_record() for g in sorted(pairings, key=lambda g: census.get(g, "gamma").round)])
+    lines = None
     if mode == "cross-block":
-        for role, value in block6_lines(census, config, results, pairings, admissions).items():
+        lines = block6_lines(census, config, results, pairings, admissions)
+        for role, value in lines.items():
             store.put(role, value)
             line_refusals += [[role, key, public_token(item["refused"])] for key, item in sorted(value.items())
                               if isinstance(item, dict) and "refused" in item]
+    compared, meta, refusals = comparison_output(census, config, results, lines, single_session=only is not None)
+    store.put("comparison", compared)
+    store.put("comparison_meta", meta)
+    line_refusals += refusals
 
     # §12.3 item 3 (lead ruling of 2026-10-27): every collected session is
     # analysed without a tooling refusal, or recorded with its registered

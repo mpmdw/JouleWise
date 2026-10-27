@@ -1,0 +1,8 @@
+{
+ "source_repository": "mpmdw/JouleWise",
+ "source_branch": "lane/2026-10-27-recompute-b6",
+ "source_commit": "74a4f81238409580bf437c11f2f54c91e7d3da1f",
+ "source_path": "configs/b6/recompute/comparison_keys.json",
+ "sha256": "1302308e2b5879b87b0f6ad59de6e692684adb9fe2b02c5fd4a0b68d5a69e2f7",
+ "note": "Key names only, vendored byte for byte by seat B6-AN-1; the recompute's arithmetic was not read."
+}
