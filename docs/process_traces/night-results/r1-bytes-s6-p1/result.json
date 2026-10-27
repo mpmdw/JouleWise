@@ -1,0 +1,120 @@
+{
+  "aborted_reason": "night_aborted_agent_present",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "eb00f3b3e2d6a4fce9269418ca06cf8196e9a298592502b473eb184553c726f1"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "cc2aaae34e856e3fcca630422ac27263b24653a1ab569f34ba800d551ed8b3c2"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "b803ec608f1e5847a6ea5a6081253aadcfe9b1826990231c7828c60bd03fc28c"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "868a2488ecfc2fb9aecb9b380a3aff5cc6c2df2978fae79e6335ee2d52c3b228"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "89a13ec27017b6608eba0b10faa6c5d16bd6338cb063c91e4262d940f5006ccf"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "b814c2e6e71a9ea66a1e67994f7f4ba987ad7f59772ed80b50802229de38e541"
+    },
+    {
+      "path": "night/arm_decision.json",
+      "sha256": "2d0562e7384e338f85fc243655ac472e41902d895d2a9e3122373c74534c3d22"
+    },
+    {
+      "path": "night/network_time_off.action.json",
+      "sha256": "a0b05007ad59b7e7d36677c1d8d1359870f376d7377b0ff99c4f5973c3b40c33"
+    },
+    {
+      "path": "night/arm_collectors.json",
+      "sha256": "3dc792678438263279f89440697ed95057fc26bb9ec53a6e58f4b7e3a43cf260"
+    },
+    {
+      "path": "night/executed_inventory.json",
+      "sha256": "ed41b7695723601af248f112042753d888ea4abf2d1d602d16713611adc00145"
+    },
+    {
+      "path": "night/lineage.json",
+      "sha256": "793beb91ede8b912bcdd849e35d35209ffe71067de87403da8d5ca8f936a5fe2"
+    },
+    {
+      "path": "night/monitor_supervision.jsonl",
+      "sha256": "f8a1dc4ac7cd9eb5ac7f870876bc8fe76cdb449649f8cd5cda545bf8ab57d0ad"
+    },
+    {
+      "path": "night/meter_supervision.jsonl",
+      "sha256": "8a213e83daa951d18096d44ed1f58675a192480281dfd2942e64cc43c712465a"
+    },
+    {
+      "path": "night/stage_yield.jsonl",
+      "sha256": "26f321ec0071550e2349e55c5786d3c87fcea6a88ea5ae5f4be1ab969a82d450"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 553,
+  "census_hits": [
+    {
+      "argv": [
+        "/usr/bin/pgrep",
+        "-a",
+        "-lf",
+        "[c]odex|[c]laude"
+      ],
+      "exit_code": 0,
+      "monotonic_ns": 1110451531523875,
+      "refusal": {
+        "detail": "pgrep exit 0; forbidden process output: 53391 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server daemon pid-update-loop\n53909 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server --listen unix:// --analytics-default-enabled --managed-daemon",
+        "evidence": [
+          {
+            "argv": [
+              "/usr/bin/pgrep",
+              "-a",
+              "-lf",
+              "[c]odex|[c]laude"
+            ],
+            "exit_code": 0,
+            "monotonic_ns": 1110451531523875,
+            "stderr": "",
+            "stdout": "53391 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server daemon pid-update-loop\n53909 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server --listen unix:// --analytics-default-enabled --managed-daemon\n"
+          }
+        ],
+        "reason": "night_refused_agent_present"
+      },
+      "stderr": "",
+      "stdout": "53391 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server daemon pid-update-loop\n53909 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server --listen unix:// --analytics-default-enabled --managed-daemon\n"
+    }
+  ],
+  "chain_exit_code": -15,
+  "chain_sha256": "6aa66ec09dec628f40344661ed7b6595cf35cac20b21ca57b91514c67dddd51b",
+  "ended_epoch_s": 1793126120.1990001,
+  "ended_monotonic_ns": 1110457182784125,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "r1-bytes-s6-p1",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1793109300.192904,
+  "started_monotonic_ns": 1093637176687333,
+  "verdict": "ABORTED"
+}

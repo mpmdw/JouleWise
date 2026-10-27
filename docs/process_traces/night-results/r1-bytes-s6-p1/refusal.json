@@ -1,0 +1,40 @@
+{
+  "plan_id": "r1-bytes-s6-p1",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "agent census refused while the chain was running",
+    "evidence": {
+      "argv": [
+        "/usr/bin/pgrep",
+        "-a",
+        "-lf",
+        "[c]odex|[c]laude"
+      ],
+      "exit_code": 0,
+      "monotonic_ns": 1110451531523875,
+      "refusal": {
+        "detail": "pgrep exit 0; forbidden process output: 53391 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server daemon pid-update-loop\n53909 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server --listen unix:// --analytics-default-enabled --managed-daemon",
+        "evidence": [
+          {
+            "argv": [
+              "/usr/bin/pgrep",
+              "-a",
+              "-lf",
+              "[c]odex|[c]laude"
+            ],
+            "exit_code": 0,
+            "monotonic_ns": 1110451531523875,
+            "stderr": "",
+            "stdout": "53391 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server daemon pid-update-loop\n53909 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server --listen unix:// --analytics-default-enabled --managed-daemon\n"
+          }
+        ],
+        "reason": "night_refused_agent_present"
+      },
+      "stderr": "",
+      "stdout": "53391 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server daemon pid-update-loop\n53909 /Users/edr/.codex/packages/app-server-daemon/releases/0.164.0-aarch64-apple-darwin/bin/codex app-server --listen unix:// --analytics-default-enabled --managed-daemon\n"
+    },
+    "reason": "night_aborted_agent_present"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}
