@@ -45,3 +45,25 @@ BYTES §19), the registration wins until it is amended under its own rule. It su
 8. **Release:** no cold gate beyond what the registration names (RUN_STATE item 37(ii), 2026-10-14).
 9. **Pruning tally:** each session record ends with a table: gate, ran, caught_number, caught_session_refusal,
    evidence. A gate with no catch in three sessions is proposed to Ed for removal.
+
+## Amendment, 2026-10-27 evening: who decides, and three lightenings
+
+**Ed's words:** "i want you, the one running, with actual logs and references, deciding sensible but minimal gates, not
+me who's 99% hands off - reading your reports."
+
+1. **Who decides.** The lead (the orchestrator, or the interactive lead session when one is running) picks the gate
+   level for each change under the rules above, and records the choice and its reason in one line in the session
+   record. Ed is told in reports. He is asked only about science-design forks, and about changes to what a
+   registration computes, excludes or counts.
+2. **Refuters on registration text.** One executing refuter only when the text changes what is computed, excluded,
+   counted or printed in a registered result. An addendum that adds a separately labelled result and leaves the
+   registered analysis byte-identical (for example the BYTES extension of 2026-10-27) needs CI and the lead's check
+   only.
+3. **Reviews block only what they cover.** A review of code that cannot change a number runs alongside work and blocks
+   nothing. A pending review of extension packs never holds a registered session.
+4. **The three-family audit (#416)** runs once per freeze of collection code that will produce claim data, not once per
+   pack.
+
+Unchanged: rule 3's two cross-family executing reviews for code that computes or selects a published number, the
+independent recompute and comparator, registration before data, blinding, hashes, physical-hazard refusals, the agent
+check during collection, and CI. October's record supports keeping them (rule "What the October record showed").
