@@ -10,12 +10,11 @@ Side by side (§11.1): block 5's value, each block-6 session's value, the
 difference between the blocks (mean over the block-6 sessions minus block 5's
 value) and each block-6 session's own difference from block 5.
 
-A session without a value of Q (for example a contrast that is not estimable)
-is left out of Q's summary and listed with its reason; n counts the sessions
-that have a value.  With fewer than two values the summary prints "not
-computable (n < 2)".  The registration is silent on a missing value; this is
-the lead's ruling of 2026-10-27 (report B6-AN-1, author decision AD-1): §10 is
-descriptive and no claim rests on it, so withholding it would hide information.
+Design §10 edge cases (lead ruling of 2026-10-27, which withdrew AD-1's
+wording): a session whose Q is not computable is left out, n is reduced and
+the line names it; n = 1 gives Q̄ = Q_1 and s_Q "not defined (n = 1)"; a
+block-5 value not computed leaves n counting block-6 sessions only and the
+line says "block 5: not computed"; n = 0 prints "not computable (n = 0)".
 """
 from __future__ import annotations
 
@@ -26,7 +25,9 @@ from joulewise.b6.analysis.adapter import SessionAnalysis
 LABEL = "between-session summary (n sessions): mean, standard deviation"
 INCLUSIVE_LABEL = "including sessions that did not count (n = {n})"
 INCLUSIVE_NONE = "including sessions that did not count: none"
-NOT_COMPUTABLE = "not computable (n < 2)"
+SD_NOT_DEFINED = "not defined (n = 1)"
+NOT_COMPUTABLE = "not computable (n = 0)"
+BLOCK5_NOT_COMPUTED = "block 5: not computed"
 
 
 def session_values(analysis: SessionAnalysis) -> dict[str, float | None]:
@@ -61,13 +62,17 @@ def _split(rows):
 
 
 def describe(rows: list[tuple[str, float | None, str | None]]) -> dict:
-    """§10 for one quantity over ``(session, value, reason if missing)`` rows."""
+    """§10 for one quantity over ``(session, value, reason if missing)`` rows
+    (block 5's row, when present, is named ``block5``)."""
     present, missing = _split(rows)
-    record = {"n": len(present), "sessions": [name for name, _ in present], "missing": missing}
-    if len(present) < 2:
+    record = {"n": len(present), "sessions": [name for name, _ in present], "missing": missing,
+              "block5": BLOCK5_NOT_COMPUTED if any(m["session"] == "block5" for m in missing) else None}
+    if not present:
         return {**record, "mean": None, "sd": None, "note": NOT_COMPUTABLE}
     numbers = [value for _, value in present]
     mean = math.fsum(numbers) / len(numbers)
+    if len(numbers) == 1:
+        return {**record, "mean": mean, "sd": None, "note": SD_NOT_DEFINED}
     sd = math.sqrt(math.fsum((v - mean) ** 2 for v in numbers) / (len(numbers) - 1))
     return {**record, "mean": mean, "sd": sd, "note": None}
 

@@ -61,22 +61,42 @@ class BetweenSessionSummary(unittest.TestCase):
 
     def test_only_mean_and_sd_no_ratio_no_interval(self):
         row = summary.describe([("a", 1.0, None), ("b", 3.0, None)])
-        self.assertEqual(set(row), {"n", "sessions", "missing", "mean", "sd", "note"})
+        self.assertEqual(set(row), {"n", "sessions", "missing", "block5", "mean", "sd", "note"})
         self.assertEqual((row["mean"], row["sd"]), (2.0, 2.0 ** 0.5))
 
-    def test_a_missing_value_is_left_out_and_named_with_its_reason(self):
-        """Lead ruling of 2026-10-27 (report decision AD-1)."""
+    def test_a_session_not_computable_is_left_out_and_named(self):
+        """Design §10 edge case (lead ruling of 2026-10-27)."""
         row = summary.describe([("block5", 1.0, None), ("s1", None, "not_estimable"), ("s2", 2.0, None),
                                 ("s3", float("nan"), "value_undefined")])
         self.assertEqual((row["n"], row["sessions"], row["mean"]), (2, ["block5", "s2"], 1.5))
         self.assertEqual(row["missing"], [{"session": "s1", "reason": "not_estimable"},
                                           {"session": "s3", "reason": "value_undefined"}])
-        self.assertIsNone(row["note"])
+        self.assertEqual((row["note"], row["block5"]), (None, None))
 
-    def test_fewer_than_two_values_is_not_computable(self):
-        for rows in ([("block5", 1.0, None), ("s1", None, "not_estimable")], [("block5", None, "not_estimable")]):
-            row = summary.describe(rows)
-            self.assertEqual((row["mean"], row["sd"], row["note"]), (None, None, "not computable (n < 2)"))
+    def test_one_value_gives_the_value_and_an_undefined_deviation(self):
+        """Design §10: n = 1 gives Q̄ = Q_1 and s_Q "not defined (n = 1)"."""
+        row = summary.describe([("block5", 26.10, None), ("s1", None, "not_estimable")])
+        self.assertEqual((row["n"], row["mean"], row["sd"], row["note"]), (1, 26.10, None, "not defined (n = 1)"))
+
+    def test_no_value_is_not_computable(self):
+        row = summary.describe([("block5", None, "not_estimable"), ("s1", None, "value_undefined")])
+        self.assertEqual((row["n"], row["mean"], row["sd"], row["note"]), (0, None, None, "not computable (n = 0)"))
+
+    def test_block5_not_computed_counts_block6_sessions_only(self):
+        row = summary.describe([("block5", None, "quantity_absent"), ("s1", 58.71, None), ("s2", 57.96, None)])
+        self.assertEqual((row["n"], row["sessions"], row["block5"]), (2, ["s1", "s2"], "block 5: not computed"))
+
+    def test_design_worked_examples(self):
+        """Design §10 (synthetic): BETA prefill 58.475 / 0.388 J; per token 0.02855225 / 0.00018955 J;
+        dbar 3.000 / 0.155 J; R 3.785 / 0.211 (bar B2: half a unit of the last printed digit)."""
+        cases = (((58.40, 58.71, 57.96, 58.83), 58.475, 0.388, 3),
+                 ((58.40 / 2048, 58.71 / 2048, 57.96 / 2048, 58.83 / 2048), 0.02855225, 0.00018955, 8),
+                 ((3.00, 2.84, 3.21, 2.95), 3.000, 0.155, 3),
+                 ((3.84, 3.51, 4.02, 3.77), 3.785, 0.211, 3))
+        for values, mean, sd, places in cases:
+            row = summary.describe([(f"s{i}", v, None) for i, v in enumerate(values)])
+            self.assertLessEqual(abs(row["mean"] - mean), 0.5 * 10 ** -places)
+            self.assertLessEqual(abs(row["sd"] - sd), 0.5 * 10 ** -places)
 
     def test_the_reason_comes_from_the_session(self):
         b5 = gamma("block5", "direction_supported", 3.0)

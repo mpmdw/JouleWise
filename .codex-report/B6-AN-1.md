@@ -1,7 +1,29 @@
 # B6-AN-1 report: block-6 analysis driver (the pure layer)
 
-bridge-report/v1 · status: **READY FOR THE TWO EXECUTING REVIEWS** on synthetic data. The run through the real L9
-programs is owed at integration, once L9 adds its per-session seams.
+bridge-report/v1 · status: **READY FOR THE TWO EXECUTING REVIEWS** on synthetic data, at the lane head that carries
+this report (named in the commit and in the message to the lead). The run through the real L9 programs is owed at
+integration, which waits for L9's acceptance.
+
+## LEAD RULINGS OF 2026-10-27 (laptop copy of 015ASG1T, the single lead)
+
+1. **§10 wording follows design §10 exactly.** This is applied in `summary.describe`:
+   - A session whose Q is not computable is left out, n is reduced, and the line names it.
+   - n = 1 gives Q̄ = Q₁, and s_Q prints "not defined (n = 1)".
+   - If block 5's value is not computed, n counts block-6 sessions only and the line says "block 5: not computed".
+   - n = 0 prints "not computable (n = 0)".
+
+   AD-1's wording "not computable (n < 2)" is withdrawn. Its tests now use the design text, plus design §10's worked
+   examples (58.475 / 0.388 J; 0.02855225 / 0.00018955 J; 3.000 / 0.155 J; 3.785 / 0.211), at bar B2.
+2. **Runs.**
+   - The per-session phase run now is not a registered run.
+   - The full dry run, including the cross-block phase after block 5's release, is REG §12.3 item 3 (design "Two
+     phases", §15 step 9).
+   - The release run is a separate third execution that must reproduce the dry run's digests (design §18 D18).
+     Cross-block run 2 is the B6-4 determinism repeat, not that release re-run.
+   - **Not built yet:** the driver has no release mode (a third execution of both phases from identical bytes,
+     compared with the dry run's digests). It is listed in OPEN ISSUES and is ready to build on request.
+3. **Confirmed:** the comparison-key emission (7505c291) closes that task, the earlier rulings stand, and
+   `analysis_lane.py` stays byte-identical to 991358f73.
 
 ## SUMMARY
 
@@ -27,7 +49,7 @@ item 19; gate policy). The driver is the block-6 "pure layer" (audit N9), and it
 - **S-9 and S-11 removed from scope (lead item 2).** S-16 prints "not evaluated" for a rule its host cannot evaluate
   (audit B6-5).
 
-**Tests:** 108 synthetic tests pass. Sessions are desk-compressed by the real `joulewise.desk_compress`, using a
+**Tests:** 111 synthetic tests pass. Sessions are desk-compressed by the real `joulewise.desk_compress`, using a
 gzip-backed `zstd` stand-in, because this seat has no zstd. Nine counterfactual mutations each make their regression
 test fail, as gate-policy rule 3 asks.
 
@@ -72,7 +94,8 @@ key.
 - **Observations for the lead:**
   1. The contract has no `whole_machine/` keys (S-15 is not filled). The driver summarises such values but does not
      emit them for comparison; the contract needs those keys when S-15 lands.
-  2. The block `n` is the number of sessions with a value (AD-1); the recompute must count the same way.
+  2. The block `n` is the number of sessions with a value (design §10). With n = 1, `sd` is None and `mean` is the
+     single value. The recompute must count and print the same way.
   3. Which runs carry `run_energies` ("every run of a kept unit, the surviving drift-screen references and the clean
      corpus") is the binding's to supply through L9's seams. The driver checks only the key form.
 
@@ -94,7 +117,7 @@ key.
 |---|---|---|
 | A1 counting from loop acceptance | **pass** | `census.py` reads only `attempts.jsonl` and `state.json` (`joulewise.b6.queue.counting_ids`), and `acceptance_counting.py` checks each session against its acceptance record (schema, session id and `counting` only). Tests: a synthetic r2-gamma whose `exclusions.json` says `claim_usable: false` counts, and an open-tripwire shows the census never opens that file. A loop/acceptance disagreement refuses before any unit runs; an analysis counting that is absent or different refuses. Counterfactuals M1, M2 and M5. |
 | A2 GAMMA pairing by round | **pass** | Design §5 rules, ties and `final`. The closed block pairs G r1→A r1/B r1, G r2→A r3/B r2 and G r3→A r3/B r3, both unit-tested and end to end in serial and with 3 workers. Design §5 examples 1 and 2 and the registration's §6.2 example pass. Counterfactual M6. |
-| A3 per-session steps, no pooling; §10 | **pass on the fake adapter** | One floor unit per ALPHA/BETA session and one GAMMA unit over {g, A(g), B(g)} (design §4.3). A recording fake shows one call per unit. §10 gives n, mean and sample SD (n − 1) with no ratio and no interval. A session without a value is listed with its reason (lead ruling, AD-1). Worked examples reproduced: registration §10, §11.1 and §11.2. |
+| A3 per-session steps, no pooling; §10 | **pass on the fake adapter** | One floor unit per ALPHA/BETA session and one GAMMA unit over {g, A(g), B(g)} (design §4.3). A recording fake shows one call per unit. §10 gives n, mean and sample SD (n − 1) with no ratio and no interval. A session without a value is left out and named with its reason. The n = 0, n = 1 and "block 5: not computed" cases follow design §10 (lead ruling 1). Worked examples reproduced: registration §10, §11.1 and §11.2. |
 | A4 replication word | **pass** | §11.2 and design §11.2 items 1 to 6, now including "below the commitment of 2". |
 | A5 flagged-inclusive index | **pass** | Every collected session is indexed. Under ruling 2, every session meeting §11.4 (i) is analysed, (ii) is read from the analysis, and a session failing (i) is recorded with W1/W2/W3/S1. The run is incomplete (`sessions_unaccounted`) while any session is undecided or refused. The label reads "including sessions that did not count: none" when none is added. |
 | A6 structure-only public bytes | **pass** | The record `B6-BLIND-DRY-RUN-RECORD.json`, stdout and stderr are guarded: no float, no decimal-looking token, no outcome or replication word, and restricted codes appear only as counts. Unit streams go to restricted logs. Restricted objects are content-addressed. Subprocess tests at 1 and 3 workers. Counterfactual M7. |
@@ -131,13 +154,13 @@ key.
      `apfs_compressed: false`.
 4. **Phases.** Design §14 has one full dry run plus a release re-run. Audit B6-4 replaces that with two per-session
    runs before the release and two cross-block runs after it. That is what is built (`--mode per-session|cross-block
-   --run 1|2`). There is no separate `--mode release`; cross-block run 2 is the digest replay. NEEDS_RULING 2 asks
-   whether §13's "after the release the analysis re-runs from identical bytes" needs a third run.
+   --run 1|2`). By the lead's ruling 2, the registered dry run is the full run including the cross-block phase, and
+   the release is a separate third execution that must reproduce its digests. That release mode is not built yet
+   (OPEN ISSUES).
 5. **Pairing.** Pairing uses loop counting, which equals acceptance counting by the L5 check. Design §4.6 pairs on
    analysis counting. Any difference between those is a refusal here (L5), so on any completed run they are the same
    sessions.
-6. **§10 when n < 2.** Design §10 prints Q̄ = Q₁ with "not defined (n = 1)". The lead's later ruling (AD-1) prints
-   "not computable (n < 2)" with no mean. I followed the lead (NEEDS_RULING 1).
+6. **§10 edge cases:** now exactly design §10 (lead ruling 1). No difference remains.
 7. **Not built, rendering:** §11.3's closed template table and its test, and §11's printed precision. These are
    rendering of restricted values for the paper. The lines carry the registered labels and the two §11.1 facts as
    data.
@@ -178,7 +201,7 @@ key.
 ## EVIDENCE
 
 - `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b6/analysis -t .`, Linux,
-  Python 3.13.17: **108 tests, OK** (189 s) on the pushed tree.
+  Python 3.13.17: **111 tests, OK** (186 s) on the pushed tree.
 - Counterfactuals (gate policy, rule 3). Each mutation was applied to a scratch copy, then the named regression test
   was run; all fail:
 
@@ -239,6 +262,10 @@ The key contract is fixed (section COMPARISON CONTRACT above), and the driver wr
   - S-14's pin (B6-3);
   - custody roots at identical paths on the analysis host (B6-6);
   - S-16 run where block 5's raw bytes are (B6-5), before the release.
+- **Release mode (lead ruling 2):** the third execution, after the full dry run (both phases), must reproduce the
+  dry run's digests from identical bytes (design §18 D18). It is not built. The comparison machinery exists
+  (`driver._difference`, `COMPARED`); what is missing is the mode that runs both phases again and binds the dry run's
+  records.
 - **Speed:** each `test_driver` class builds desk-compressed trees, so the package takes about 3 minutes.
 
 ## REVIEW GUIDE (for the two executing reviews)
@@ -253,19 +280,12 @@ Probe and mutate in this order:
 
 ## NEEDS_RULING
 
-1. **§10 with one value:** design §10 (Q̄ = Q₁, SD "not defined (n = 1)") or the lead's AD-1 ("not computable (n <
-   2)", no mean)? AD-1 is applied.
-2. **The release replay:** is cross-block run 2 (after block 5's release, same bytes, digests equal) §13's "after the
-   release the analysis re-runs from identical bytes", or does the release need a third, separately recorded run?
+None open. The lead ruled on both earlier items (see LEAD RULINGS OF 2026-10-27).
 
 ## DECISIONS I MADE
 
-1. **AD-1 (§15 style; lead ruling of 2026-10-27; for the next dated §17 entry). §10 with a missing value.**
-   - **Text:** a session in which a quantity Q is undefined is left out of Q's summary. n is the number of sessions
-     with a value, and each session left out is listed with its reason. With fewer than two values the summary prints
-     "not computable (n < 2)".
-   - **Rests on:** §10 ("no claim rests on it") and §11.3 (state n).
-   - **Effect:** changes no registered number or counting decision.
+1. **AD-1 is superseded** by the lead's ruling 1, which applies design §10's text. A session without a value is
+   still left out and named, with its reason; only the n = 0 and n = 1 wording changed.
 2. **A never-compressed session is left untouched** by the restore lifecycle (DIFFERENCES item 3).
 3. **An analysed session must report analysis counting.** A missing value is a refusal, not a pass (L5, "requires
    equality").
