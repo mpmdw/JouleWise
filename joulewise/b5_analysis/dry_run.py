@@ -768,7 +768,27 @@ def step_5(s,r):
         '--pinset-sha256',s.outputs['pinset']['sha256'],'--v2-input-manifest',s.output('mint_inputs'),
         '--out',floor,'--single-count-out',statement,'--d165-replay-out',sidecar,'--project-commit',s.commit,
         '--project-tree-state','clean'],step='5',outputs=[('floor_artifact',floor),('single_count',statement),('sidecar',sidecar)])
+    if exit_status:code=mint_refusal_code(result,code)
     return [s.record('5',exit_status=exit_status,code=code,outputs=outputs+found)]
+
+
+MINT_CONSUMPTION_REFUSED='mint_consumption_session_refused'
+
+
+def mint_refusal_code(result, code):
+    """Classify the mint's authenticated-consumption refusal.
+
+    The mint prints it as `error: <input label>: authenticated whole-window
+    consumption refused: <reason>`; the token before the first colon is the
+    label, which names no refusal.
+    """
+    if result.exception:return code
+    try:error=result.stderr_path.read_text(encoding='utf-8')
+    except OSError:return code
+    if any(line.startswith('error: ') and 'authenticated whole-window consumption refused' in line
+           for line in error.splitlines()):
+        return MINT_CONSUMPTION_REFUSED
+    return code
 
 
 def step_8(s,r):

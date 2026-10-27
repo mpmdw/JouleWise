@@ -220,3 +220,31 @@ class DriverDeadlineTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MintRefusalCodeTests(unittest.TestCase):
+    """L9-REV-1 MINOR-5: the step-5 mint's consumption-session refusal is classified."""
+
+    def result(self, stderr):
+        tmp = Path(tempfile.mkdtemp(prefix='mint-refusal-'))
+        self.addCleanup(lambda: __import__('shutil').rmtree(tmp, ignore_errors=True))
+        (tmp / 'out.log').write_text('')
+        (tmp / 'err.log').write_text(stderr)
+        return d.RunnerResult(2, tmp / 'out.log', tmp / 'err.log')
+
+    def record(self, code):
+        return d.step_record('5', exit_status=2, refusal_code=code, classes=d.refusal_classes())
+
+    def test_consumption_session_refusal_is_a_classified_tooling_code(self):
+        result = self.result('error: alpha producer report: authenticated whole-window consumption refused: '
+                             'whole_window_verdict_provenance_invalid\n')
+        # Counterfactual: the raw token is the input label, an unclassified refusal.
+        self.assertEqual(self.record(result.token()).status, 'unclassified_refusal')
+        code = d.mint_refusal_code(result, result.token())
+        self.assertEqual(code, d.MINT_CONSUMPTION_REFUSED)
+        self.assertEqual((self.record(code).status, self.record(code).refusal),
+                         ('tooling_refusal', d.MINT_CONSUMPTION_REFUSED))
+
+    def test_other_mint_refusals_keep_their_token(self):
+        result = self.result('error: floor_mint_kept_unit_mismatch: manifest exclusions_sha256 differs\n')
+        self.assertEqual(d.mint_refusal_code(result, result.token()), 'floor_mint_kept_unit_mismatch')

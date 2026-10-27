@@ -54,7 +54,7 @@ for path in sorted((OUT / 'children').glob('*.json')):
         result = 'ABSORBED_NO_REFUSAL'
     else:
         result = 'OTHER_STOP'
-    single = stop is not None and stop['refusal'] == 'calibration_wall_deadline_in_analysis'
+    single = stop is not None and stop['refusal'] == 'calibration_wall_deadline_fired'
     verdict.update(single_code=single, result=result, stop=None if stop is None else f"{stop['step']}/{stop['window']}/{stop['status']}/{stop['refusal']}",
                    changed=changed, ok=result in ('refused',), code=child.get('code'))
     verdicts.append(verdict)

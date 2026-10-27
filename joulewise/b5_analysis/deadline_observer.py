@@ -15,7 +15,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import sys
 
-CALIBRATION_WALL_DEADLINE = 'calibration_wall_deadline_in_analysis'
+CALIBRATION_WALL_DEADLINE = 'calibration_wall_deadline_fired'
 OBSERVER_UNAVAILABLE = 'calibration_deadline_observer_unavailable'
 WALL_DEADLINE_TRIGGER = 'wall_deadline'
 
