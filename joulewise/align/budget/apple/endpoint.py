@@ -114,25 +114,35 @@ class BudgetMlxEndpoint:
         finally:
             self.endpoint.runtime = native_runtime
             native_runtime._mlx_lm = native_module
-        flags = list(result.raw_usage.get("flags", ()))
+        native_usage = result.raw_usage["joulewise"]
+        flags = list(native_usage["flags"])
         if any(f.startswith("endpoint_error:") for f in flags):
             raise RuntimeError(";".join(flags))
         raw = result.raw_usage["raw_text"]
-        finish = self.endpoint.turn_provenance[-1]["generation"]["finish_reason"]
+        finish = native_usage["finish_reason"]
+        cut = any(f.startswith("turn_token_budget_reached:") for f in flags)
+        if finish is None and cut:
+            finish = "length"
         continuation = self.options.get("continue_final_message", False)
+        native_censored = not continuation and "reasoning_censored_at_token_limit" in flags
         enabled = self.options.get("chat_template_kwargs", {}).get("enable_thinking", True)
         if continuation:
             content, reasoning = raw, ""
             if "<think>" in raw:
                 flags.append("reasoning_after_forced_delimiter")
+        elif native_censored:
+            # The native parser preserves visible prefixes and earlier closed
+            # spans while hiding the unfinished thought, including tool text.
+            content, reasoning = result.content, result.reasoning_text
         elif enabled and "</think>" not in raw:
             content, reasoning = "", raw.removeprefix("<think>")
             flags.append("reasoning_block_unclosed")
-            if finish in ("length", "max_tokens", "max_new_tokens") or result.completion_tokens >= max_tokens:
-                finish = "length"
         else:
             content, reasoning, _, _ = parse_completion(raw)
-        reasoning_tokens = min(result.completion_tokens, len(self.codec.encode(reasoning))) if reasoning else 0
+        # Native cut parsing counts each span separately; the newline joining
+        # spans is presentation text, not additional generated reasoning.
+        reasoning_tokens = (result.reasoning_tokens if native_censored else
+                            min(result.completion_tokens, len(self.codec.encode(reasoning))) if reasoning else 0)
         if reasoning:
             flags.append("reasoning_tokens_retokenized")
         return replace(result, content=content, reasoning_text=reasoning,

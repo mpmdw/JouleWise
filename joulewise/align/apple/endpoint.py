@@ -13,6 +13,7 @@ from dataclasses import replace
 from functools import wraps
 from typing import Any, Mapping, Sequence
 
+from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
 from joulewise.clock import Clock
@@ -152,12 +153,14 @@ class MlxEndpoint:
         self, runtime: Any, config: BenchmarkConfig, clock: Clock, *,
         episode_domain: str, prepare_metadata: Mapping[str, Any] | None = None,
         mock_turns: Sequence[Mapping[str, Any]] = (),
+        enable_thinking: bool | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config
         self.clock = clock
         self.episode_domain = episode_domain
         self.mock_turns = tuple(mock_turns)
+        self.enable_thinking = enable_thinking
         self.events: list[Any] = []
         self.turn_provenance: list[Mapping[str, Any]] = []
         self.flags: list[str] = []
@@ -184,6 +187,7 @@ class MlxEndpoint:
             "mlx_lm_version": prepared.get("mlx_lm_version"),
             "model_artifact_identity": prepared.get("model_artifact_identity"),
         }, sort_keys=True)
+        self._prepare_flags = tuple(self.flags)
 
     def chat(
         self, messages: Sequence[ChatMessage], *, tools: Sequence[Mapping[str, Any]] = (),
@@ -270,11 +274,18 @@ class MlxEndpoint:
                                 "role": message.role, "content": message.content,
                                 **({"name": message.name} if message.name else {}),
                                 **({"tool_call_id": message.tool_call_id} if message.tool_call_id else {}),
+                                **({"tool_calls": [
+                                    {"id": call.call_id, "type": "function", "function": {
+                                        "name": call.name, "arguments": call.arguments_json}}
+                                    for call in message.tool_calls]}
+                                   if getattr(message, "tool_calls", ()) else {}),
                             }
-                            for message in chat
+                            for message in _coalesce_assistant_calls(chat)
                         ],
                         tools=list(tools) or None, tokenize=False,
                         add_generation_prompt=True,
+                        **({"enable_thinking": self.enable_thinking}
+                           if self.enable_thinking is not None else {}),
                     )
 
                 def prepare_prompt():
@@ -379,6 +390,22 @@ class MlxEndpoint:
             text, reasoning_tokens=reasoning_tokens
         )
         flags.extend(parse_flags)
+        if cut and "unclosed_reasoning_span" in parse_flags:
+            prefix, _, tail = text.rpartition("<think>")
+            # Parse tools only in the visible prefix; an unfinished thought
+            # may itself contain tool-like text that must remain hidden.
+            # Closed spans earlier in the same turn stay reasoning too.
+            visible, prior, calls, prefix_flags = parse_completion(
+                prefix, reasoning_tokens=reasoning_tokens
+            )
+            reasoning = "\n".join(part for part in (prior, tail) if part)
+            flags.extend(prefix_flags)
+            if self.config.hardware_target.runtime_backend == RuntimeBackend.MLX:
+                reasoning_tokens = min(completion_tokens, sum(
+                    len(_encode(tokenizer, part, add_special_tokens=False))
+                    for part in (prior, tail) if part))
+                flags.append("reasoning_tokens_retokenized")
+            flags.append("reasoning_censored_at_token_limit")
         calls = tuple(replace(call, call_id=f"{turn_index}-{call.call_id}") for call in calls)
         self.flags.extend(flags)
         self.turn_provenance.append({
@@ -391,5 +418,6 @@ class MlxEndpoint:
             prompt_tokens=prompt_tokens, cached_prompt_tokens=0,
             completion_tokens=completion_tokens, reasoning_tokens=reasoning_tokens,
             start_ns=start_ns, first_token_ns=first_ns, end_ns=end_ns,
-            raw_usage={"flags": flags, "cache_policy": "full_prompt_each_turn", "raw_text": text},
+            raw_usage={"joulewise": {"flags": list(dict.fromkeys([*self._prepare_flags, *flags])),
+                                     "finish_reason": finish_reason}, "cache_policy": "full_prompt_each_turn", "raw_text": text},
         )

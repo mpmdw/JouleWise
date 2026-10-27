@@ -483,6 +483,13 @@ class ProductionWorldsTest(unittest.TestCase):
                             query_width = max(query_width, math.fsum(trace_energy(
                                 record.power_traces[0], s.start_ns, s.end_ns, mapping=clock
                             ).half_width_j for s in result.segments))
+                        query_flags = queried.flags
+                        if (reference is result.total and sensor.source == "powermetrics"
+                                and math.isfinite(query_width)):
+                            # D-078 clause 11 floors the printed total only;
+                            # direct/eager queries retain their modeled bounds.
+                            query_width = max(1.0, query_width)
+                            query_flags = (*query_flags, "powermetrics.attribution_floor")
                         for actual, expected in ((queried.joules, reference.joules),
                                                  (query_width, reference.half_width_j)):
                             # Agreement is 1e-6 relative, capped at 1% of the
@@ -493,7 +500,7 @@ class ProductionWorldsTest(unittest.TestCase):
                             self.assertGreaterEqual(bar, 1e6 * math.ulp(scale))
                             self.assertLessEqual(abs(actual - expected), bar)
                         self.assertEqual(queried.method, reference.method)
-                        self.assertEqual(queried.flags, reference.flags)
+                        self.assertEqual(query_flags, reference.flags)
 
     def test_idle_subtraction_reaches_every_segment(self):
         record, truth = world(0, SENSORS[0])

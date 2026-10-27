@@ -207,7 +207,8 @@ def run_live(*, output: Path, config: BenchmarkConfig, model: CachedModel,
         stable_prepare = {k: v for k, v in prepared.metadata.items()
                           if k not in ("load_wall_time_s", "memory_snapshots")}
         spec = ModelSpec(model.repo_id, model.size_b, "mlx", endpoint.identity, endpoint.codec,
-                         endpoint.configured, "dense", DOMAIN, controls_verified=controls_verified)
+                         endpoint.configured, "dense", DOMAIN, controls_verified=controls_verified,
+                         supports_budget_continuation=True)
 
         def sampler_factory(_):
             capture = output / "captures" / uuid4().hex

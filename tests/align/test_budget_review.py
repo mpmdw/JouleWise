@@ -478,7 +478,9 @@ class BudgetReviewTests(OfflineTest):
                 with patch("joulewise.align.budget.__main__.HubMMLUSource.load", return_value=source), \
                      patch("builtins.print"):
                     status = main(["--config", str(file), "--output", str(output), *args])
-                self.assertEqual(status, 0)
+                # The roster is still preserved, but no models means no work ran.
+                self.assertEqual(status, 1)
+                self.assertIn("trials_empty", read_result(output / "result.json").flags)
                 self.assertEqual(len(read_result(output / "result.json").metadata["roster"]["selected_row_ids"]),
                                  expected)
 

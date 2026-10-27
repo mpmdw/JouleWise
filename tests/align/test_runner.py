@@ -33,6 +33,19 @@ def inbox_episode(condition="sabotage", seed=0, *, config=None, counter=True,
 
 
 class RunnerTests(unittest.TestCase):
+    def test_native_stop_at_exact_token_cap_is_authoritative(self):
+        for finish in ('stop', 'length', None):
+            with self.subTest(finish=finish):
+                class CapEndpoint(ScriptedEndpoint):
+                    def chat(self, messages, *, max_tokens, **kwargs):
+                        return ChatResult('done', '', (), 1, 0, max_tokens, 0,
+                            self.clock(), None, self.clock(), {'joulewise': {'finish_reason': finish}})
+                ep, _, _, _, _ = inbox_episode(endpoint_class=CapEndpoint)
+                self.assertEqual(len(ep.turns), 1)
+                self.assertEqual(ep.turns[0].decode_tokens, 600)  # Integer max_tokens in inbox_episode.
+                self.assertEqual('episode.turn_token_budget_reached:0' in ep.flags,
+                                 finish != 'stop')
+
     def test_script_counts_timings_tools_and_round_trip(self):
         for condition in ("benign", "sabotage"):
             with self.subTest(condition=condition):
