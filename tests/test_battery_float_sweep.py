@@ -31,6 +31,9 @@ READERS = {
     "scripts/independent_recompute_b5.py": (
         "independent recompute (comparison only)", "reads calibration captures' and members' stored "
         "b_fiducial_s to compute b_op for an offline cross-check; issues, pins and gates nothing"),
+    "scripts/independent_recompute_b6.py": (
+        "independent recompute (comparison only)", "reads block-6 calibration captures' and members' stored "
+        "b_fiducial_s to compute b_op for the S-13 cross-check; issues, pins and gates nothing"),
     "scripts/issue_calibration_acceptance_generation.py": (
         "gated", "check dry run and prepare-candidate, both through authenticate_battery_epoch "
         "(authenticate_committed_verdict); proved by test_battery_float_consumers and the "
