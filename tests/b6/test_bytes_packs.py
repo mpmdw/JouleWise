@@ -249,13 +249,6 @@ class BytesPackTests(unittest.TestCase):
                                 **{m['module_id'] + '-absolute': 1 for m in reg.modules},
                                 f'{p}-reference-end': 1}
                     self.assertEqual(compose.smoke_keep(layout), expected)
-                    if pass_number == 2:
-                        # C5 supplies six pass-1 rows; no pass-2 sizing is inferred.
-                        with self.assertRaisesRegex(ValueError, f'pack has no registered sizing: {p}'):
-                            plan_inputs.build(ROOT, sizing_path.parent, p, layout.session_id, identities,
-                                              custody_root='/x', runs_parent='/x', claim_backup='/x',
-                                              bound_backup='/x', head='a' * 40)
-                        continue
                     inputs = plan_inputs.build(ROOT, sizing_path.parent, p, layout.session_id, identities,
                                                custody_root='/x', runs_parent='/x', claim_backup='/x',
                                                bound_backup='/x', head='a' * 40)
