@@ -1,0 +1,587 @@
+{
+ "schema": "joulewise.b5_transfer_manifest.v1",
+ "item": "history-records",
+ "data_root": "/Users/edr",
+ "created_utc": "2026-10-28T14:54:53Z",
+ "procedure": "docs/process_traces/2026-10-27-l9-restart/BLOCK5-TRANSFER.md",
+ "notes": [
+  "Addendum 1: harvest.json and the whole derived/ of each of the 8 history archive roots; beta-a4 is the -r2 re-harvest"
+ ],
+ "file_count": 113,
+ "dir_count": 16,
+ "total_uncompressed_bytes": 8283415,
+ "files": [
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/bracket-binding.json",
+   "size_bytes": 1368,
+   "sha256": "4766a5fa8f672f9696421ee420f19751e9d6e2b85115a60181c6fdcc1b253bfe"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/code-identity.json",
+   "size_bytes": 851,
+   "sha256": "8b8b0876f24ae4d54edac99f1f3429839cdd0648bbe56ebee0f26d2cac463e0a"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/exclusions.json",
+   "size_bytes": 19892,
+   "sha256": "fb8c1f34a04a31cadc620df05174288dc2255ddc205d24d0897ce8670458295b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/flags.jsonl",
+   "size_bytes": 162461,
+   "sha256": "ebcc8180198b1f547af35a251a2f95452bfadda18606ef8d802677a514171619"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/harvest-thresholds.json",
+   "size_bytes": 1367,
+   "sha256": "8cc76c78d55d464a97dcf4922fad9503303b9444d0dff35ad4515d3975904e34"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/historical-custody.json",
+   "size_bytes": 572,
+   "sha256": "58efc2c33e3c88fe74c901dfd1dd891b47cad0104a61ef7243686ec2213fde09"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/neg8-allowance.json",
+   "size_bytes": 642,
+   "sha256": "83dc6f08a82132d46576c56400582ef22e137da51fed281f6ff02ab66444f8c6"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/neg8-bound.json",
+   "size_bytes": 958,
+   "sha256": "3eda0960559808934bf56024426dd66878063951be7f16b16244b1b7fad97fc5"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/neg8-clean-corpus.json",
+   "size_bytes": 1076,
+   "sha256": "4e19e759b1f03f0ae231a570f898292ccbd27ea95e08efe8a078484726bc46da"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/neg8-corpus-physics.json",
+   "size_bytes": 541,
+   "sha256": "f5e12868b2367fa96cea1fc10df132dcf8b46dd8bbe6b4ceef1da7867b86e15a"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/neg8-screen.json",
+   "size_bytes": 1501,
+   "sha256": "9f144f37864d929e2dfbef2b6f0725f5e2bfc9a27819863ecbafbfcc37f5b6f6"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/roster.json",
+   "size_bytes": 46207,
+   "sha256": "299e5c10f6fca16b0a1bf60debd82c3952befc3c1ead174545586b24fe127ee5"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/terminal-boundary.json",
+   "size_bytes": 450,
+   "sha256": "78d828194281edc08a7cec76887160ee0cd1311bb888d6eb2b1a69ec4d64921d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "2e65419de4a121c4ea09823bf17cfe3da01a4dfe3cfb79534e2ef1aaf771fb3d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/window_flags.json",
+   "size_bytes": 330436,
+   "sha256": "2c1c257de5fdc144371a726c6f739754f669e8baa31aa02e56fbcfbcb747e684"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/derived/yield.json",
+   "size_bytes": 2495,
+   "sha256": "8148d686741fdd8473c86652890611218e564f1d589b7a0548748a350faed72e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z/harvest.json",
+   "size_bytes": 5320,
+   "sha256": "c15f85f21b4d6b8a82cefaf0176291deafb4d009efbea37093c5806bf6eadc91"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a2-20261009T0515Z/derived/exclusions.json",
+   "size_bytes": 715,
+   "sha256": "d7209919f8af5fca6f45e0c11e17e37f71ece06c1144b04899f41df64aac5aed"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a2-20261009T0515Z/derived/flags.jsonl",
+   "size_bytes": 2080,
+   "sha256": "08ad7de3ce450564114a2019c528b8b0ba49fb264489b4e3f0200729ae398636"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a2-20261009T0515Z/derived/window_flags.json",
+   "size_bytes": 4160212,
+   "sha256": "bbb91292522e385fe0a6b4826c66aaceac0574eacc51f7e2369107f48f7f73c0"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a2-20261009T0515Z/harvest.json",
+   "size_bytes": 1338,
+   "sha256": "4564ea599b682c1e922dc090a42c01dd436f4c9e6bcb2c38e2271842ab4bd8a1"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/bracket-binding.json",
+   "size_bytes": 1368,
+   "sha256": "a8b8aed59e2af6c686f4957d0be6572eef79b3223a7746ee79df801134472e80"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/code-identity.json",
+   "size_bytes": 913,
+   "sha256": "3bfccef0daf9f1dca0b7041534bff9524bc9d77ad596e9511ae968c316a4e924"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/exclusions.json",
+   "size_bytes": 10657,
+   "sha256": "0c2450cf1e26cfbacdbfd829ec7b89f478694dde04a2aa7d24b24a5e6eceb0f1"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/flags.jsonl",
+   "size_bytes": 147748,
+   "sha256": "bfbb7dcf26e7f38fa1239d88bce3b43b211c88bd2abb7131ce29f85f5dc81249"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/harvest-thresholds.json",
+   "size_bytes": 1367,
+   "sha256": "8cc76c78d55d464a97dcf4922fad9503303b9444d0dff35ad4515d3975904e34"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/historical-custody.json",
+   "size_bytes": 572,
+   "sha256": "30378d84bda08ef178a6518dfc009046c77817399a84e70d31667f2ad7bc1c21"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/neg8-allowance.json",
+   "size_bytes": 420,
+   "sha256": "7bf580d91e7bfe0b96f60717c704131bfec42183c044faae88688ed2f11d743e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/neg8-bound.json",
+   "size_bytes": 332,
+   "sha256": "c15bfecd44eeaa7b6f6446bae65e55fbdf7133266745ec71e871a341b878f352"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/neg8-screen.json",
+   "size_bytes": 842,
+   "sha256": "ce4a0a88ba5a1e73d9eadc1e2e17077bf14b461cb283468723be320f0e751b3a"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/roster.json",
+   "size_bytes": 46207,
+   "sha256": "06da4cdf126c080962f974be08e8b194a1e74febbe7399b096a6a9d789b8d26b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/terminal-boundary.json",
+   "size_bytes": 450,
+   "sha256": "75199f416f5408212846230429b336ce04fd49e1e58b34db9957ff5d523552c0"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "c69aedabae82aebd46d57a383d621d5bbaba50fab73730aa977dcb5d465e77fb"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/window_flags.json",
+   "size_bytes": 322521,
+   "sha256": "64d1305589210a005cd953006f2a2a61fdbbb21e6b19a333df8c8a8201cd137a"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/derived/yield.json",
+   "size_bytes": 2494,
+   "sha256": "1e7f854e7c3762d73d17ebd6385c141b9a36a477c63610a6e05dec5ae1cedd8d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z/harvest.json",
+   "size_bytes": 5211,
+   "sha256": "e668781583da51efce7a7e7ef57fef8cbfab68b427acd40401dafc1529d4267e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/bracket-binding.json",
+   "size_bytes": 1356,
+   "sha256": "eafe9029fc4e1f396db831b95f6bf0fb6e6179467720fae1b5e2598e0059f482"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/code-identity.json",
+   "size_bytes": 911,
+   "sha256": "e9b1b42de451f314cdaabc375a08c876c19c511fcf11d6cd5a132c45446bf40b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/exclusions.json",
+   "size_bytes": 15905,
+   "sha256": "e23ea2c0eaf4426cbf65d35dc787e7e13d9af5acdb2db9143a31cbb84c3ef420"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/flags.jsonl",
+   "size_bytes": 168349,
+   "sha256": "00621723e83303624925f3f4561065f558c751c58d06f7cb4acd3612426336f2"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/harvest-thresholds.json",
+   "size_bytes": 1376,
+   "sha256": "4b9b09d56f750da99690930951d85cc149928fa42b837ff07078fdb1af51904e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/historical-custody.json",
+   "size_bytes": 570,
+   "sha256": "db60164915db57ddb506d8ec99e8bca2132e688317b3c3950467879a5eb9e2e9"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/neg8-allowance.json",
+   "size_bytes": 420,
+   "sha256": "f699231b7ffd3f00352ee760a665f3e69f4fa8463647bd513e33b0e6bcdb0a3e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/neg8-bound.json",
+   "size_bytes": 904,
+   "sha256": "9159afe1d41d7cea9b50c245109652bdbb9646a28562fdcf7b47fc3754f50a86"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/neg8-clean-corpus.json",
+   "size_bytes": 1368,
+   "sha256": "a35d2f1be60f5d73f10f2cb1ab080df341dded01fe74854109871cdcf0d9e05e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/neg8-corpus-physics.json",
+   "size_bytes": 834,
+   "sha256": "8fee0138d534115be9e27aae2f4ca93ae8ee871a2df217be33cf162e8cd21099"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/neg8-screen.json",
+   "size_bytes": 1221,
+   "sha256": "759bdd32a6010f7c114e7b6243e82918b2ec58b4b237fd40798cfc36bab4d8cf"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/roster.json",
+   "size_bytes": 46166,
+   "sha256": "ccd3ce119ac3ad4a9d8ee78bdd407a6fbd60c12c21dcf42791eeac2289735f97"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/terminal-boundary.json",
+   "size_bytes": 449,
+   "sha256": "6520427bf417b2365d01c9cae3f24f90095ba46f626b7dfa11228520e8182f78"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "8e1c4a24d54df48600530cba7d8043831783a34571b077e30bba219d2835fcd4"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/window_flags.json",
+   "size_bytes": 375933,
+   "sha256": "220e14fe452c82f50cb0aad203b67e9a3be676ac0437dfddbb621c99518db33d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/derived/yield.json",
+   "size_bytes": 2486,
+   "sha256": "3f7afc65370f9652bcae41898df9984925dfccd8e45565b08978807ace00ef7d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a1-20261010T0742Z/harvest.json",
+   "size_bytes": 5277,
+   "sha256": "f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/code-identity.json",
+   "size_bytes": 911,
+   "sha256": "aacd032142b62d6048a290bb1c58ae1fab48d307d30a67b028916c6a2a6f219a"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/exclusions.json",
+   "size_bytes": 43123,
+   "sha256": "0e783a446cb722846243134c48539b145ff6b64742523815d954e661c9c07a83"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/flags.jsonl",
+   "size_bytes": 152268,
+   "sha256": "24873c0963fc1e2277dafc24d274fa538eb6f7651e1c4e7ae36b43d07454d894"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/harvest-thresholds.json",
+   "size_bytes": 1376,
+   "sha256": "4b9b09d56f750da99690930951d85cc149928fa42b837ff07078fdb1af51904e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/historical-custody.json",
+   "size_bytes": 570,
+   "sha256": "e290e2f14fb9aa96e1ebedeb3eccaa2abdf8ec5f3d0ca1058d413651f40d0e3b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/neg8-bound.json",
+   "size_bytes": 904,
+   "sha256": "3827a0212314e0e77798efcc623345d9352c90ff56d7375f1bcb1fadbee0ee0c"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/neg8-clean-corpus.json",
+   "size_bytes": 1368,
+   "sha256": "5dde409714676e78368a3f4f896eb06afe1da754ddbceacd50f84e2860dc7dae"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/neg8-corpus-physics.json",
+   "size_bytes": 1018,
+   "sha256": "1a384b5550c8f9f8905ee0deb18780ce56f8b6c54b23e2bb71e2373e329e8fd8"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/roster.json",
+   "size_bytes": 46166,
+   "sha256": "b48fc26711e3c15ae0e5d7a8281895f6dc60a006ddf65a2fcc29826dfc36c42f"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/terminal-boundary.json",
+   "size_bytes": 447,
+   "sha256": "6597504c2cbbe1de752cfdd5b771a1bba80fb6812f0acbae7f5025117bb34242"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "8222b8d94c4921d13ed326771f8f289c66759ddf62375ed966611c17ad323bba"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/window_flags.json",
+   "size_bytes": 359386,
+   "sha256": "091ab6017994942b40ab4168936fb631f93ff350e664f4c5cfe36c2924ac62ca"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/derived/yield.json",
+   "size_bytes": 2463,
+   "sha256": "199e2c6bee55c833aabaefff310fb8750600901c9b6d2cc1289d35946b91239a"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a2-20261010T1756Z/harvest.json",
+   "size_bytes": 5011,
+   "sha256": "143ec4d5969f541d6829781c9076441412c21246dad67bcab54671150c77526f"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/code-identity.json",
+   "size_bytes": 911,
+   "sha256": "079de91cd33dff7a73eb5186c62861f7fc2a92ac4e66662d48e90e3bde2bd048"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/exclusions.json",
+   "size_bytes": 54104,
+   "sha256": "881e4c4876b44142e4f7a917f60c18b1bfcc31c993d627e23254e4ef65225b61"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/flags.jsonl",
+   "size_bytes": 116529,
+   "sha256": "f2c572f0de625f16d68e6aea4609bc667a752d3d9bdac26c51f2d3cb72fc4640"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/harvest-thresholds.json",
+   "size_bytes": 1376,
+   "sha256": "4b9b09d56f750da99690930951d85cc149928fa42b837ff07078fdb1af51904e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/historical-custody.json",
+   "size_bytes": 570,
+   "sha256": "4eb3200bb98cdd0a592c730b93b4041c83c2c6b19b12add5cfd94c0cd160ac56"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/neg8-bound.json",
+   "size_bytes": 332,
+   "sha256": "c15bfecd44eeaa7b6f6446bae65e55fbdf7133266745ec71e871a341b878f352"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/roster.json",
+   "size_bytes": 46166,
+   "sha256": "4bdf7a995234c60ed00cb10f0fc1be5e64dba6e5fc0452049f2dded2d7d95463"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/terminal-boundary.json",
+   "size_bytes": 447,
+   "sha256": "0fbe55ac4eb217d97c1efaf85fb22aa7d8b7b25bca0958106f2a0f4f9eee40a5"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "6d43923ad1f90360fa95df7b708adb53edd68a510fd4894f6bc99dd46dfb6e8f"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/window_flags.json",
+   "size_bytes": 372428,
+   "sha256": "edf8e8097fd701196d9eb0cdb067949634d8665e6d1f3ccab321819262688526"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/derived/yield.json",
+   "size_bytes": 2430,
+   "sha256": "818fd11fb41d91c949335870c030632dcfb21de1ee9d456e2b9ff364a43f510e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a3-20261010T2151Z/harvest.json",
+   "size_bytes": 4932,
+   "sha256": "a95540c91cec31d47b8dff62956c3020b1901801b9d111e2ec4155231c45e0c1"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/bracket-binding.json",
+   "size_bytes": 1356,
+   "sha256": "59ef78369412a2303489b4e6dd1d26594ff43138a210a6ce5f42f92a11cb27e4"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/code-identity.json",
+   "size_bytes": 911,
+   "sha256": "0ba3ba4d8d4fe353e537af5e66f7c15954f3b6fe0a6ee13a802dfd2dac1685fe"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/exclusions.json",
+   "size_bytes": 18545,
+   "sha256": "3de19fcaac2175cad70b86a474069a972dec09c2ccb88604be9b2ba378590f11"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/flags.jsonl",
+   "size_bytes": 164383,
+   "sha256": "1658499304da83025c4ab49f51fdfd32669a58c5e9b401371b294def06ae8d55"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/harvest-thresholds.json",
+   "size_bytes": 1376,
+   "sha256": "4b9b09d56f750da99690930951d85cc149928fa42b837ff07078fdb1af51904e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/historical-custody.json",
+   "size_bytes": 573,
+   "sha256": "9c5baf8b78a72d7ddda06522f816ee82364d1c31bf8a0dfd2cd94df4d0631524"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/neg8-allowance.json",
+   "size_bytes": 937,
+   "sha256": "9f793ea6567ddb0182988afdc3762988c9a5fbdee0b7c9f353c8c949354f495d"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/neg8-bound.json",
+   "size_bytes": 904,
+   "sha256": "64a35d23f97c4c0e6e28277f261ac7cc3481e487795cee8ffb957ef6989cd2d5"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/neg8-clean-corpus.json",
+   "size_bytes": 1368,
+   "sha256": "debd46b4dc77e4822d242c7acfe9f35d8e96b5e6b1b324c23d66b94165d1ef5b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/neg8-corpus-physics.json",
+   "size_bytes": 1018,
+   "sha256": "fc1b0a1441cc3d93f1f1dff989bb6cfa4b162301656f6d3747b9883c5ae988e5"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/neg8-screen.json",
+   "size_bytes": 1796,
+   "sha256": "1424bbdcfe9f87243a865e026c01b1f6636537fc6c9c68bd89cb8786484a7b9f"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/roster.json",
+   "size_bytes": 46166,
+   "sha256": "d1b19717a37eb644c5c0495ee0031d44da0b719034dfc10a4d9e7f4a7b6c8b91"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/terminal-boundary.json",
+   "size_bytes": 449,
+   "sha256": "f87095a729bc69864b2c955391049ce1caf7760ceb3c0ef3a06ef8bcfd9088b4"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "888655c6b89147294537bd45743e9c15f4af5dc29d25f7e215cbb3ecea6741dc"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/window_flags.json",
+   "size_bytes": 333308,
+   "sha256": "864953b7197ccc8fe7dc0841fd6db240adfaa068ac567ea91b5179bee2449698"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/derived/yield.json",
+   "size_bytes": 2485,
+   "sha256": "98c782b676c21a016cf1fed103765b709db451fc4572f10ad8d17869350195d1"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2/harvest.json",
+   "size_bytes": 5298,
+   "sha256": "b4aa474b1ebc4eefc0a8b5f4b9d6975544578113583d0da10fa410a9f139d5b6"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/bracket-binding.json",
+   "size_bytes": 1356,
+   "sha256": "83ba534f84eaedf57eec58207a2e649054630f3e22727dbe25a1027a8cf33c07"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/code-identity.json",
+   "size_bytes": 911,
+   "sha256": "af9994061ec65ea271e2aa2fa65000643751db17fbc797227e2e4ef9e67c325b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/exclusions.json",
+   "size_bytes": 16585,
+   "sha256": "ea127b3b23ce35bddce6ecaa811d821fbbf9aa447df28d789c7bb4816dbc56e8"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/flags.jsonl",
+   "size_bytes": 168998,
+   "sha256": "c9352aa8b4372b8f6dd784427c4c6e2c3c9b2212b193cac024b6e9222c889ae6"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/harvest-thresholds.json",
+   "size_bytes": 1376,
+   "sha256": "4b9b09d56f750da99690930951d85cc149928fa42b837ff07078fdb1af51904e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/historical-custody.json",
+   "size_bytes": 570,
+   "sha256": "e0197ab73354373f467b9686fda69d035401c15433e0b0811f7233088d2e5f6f"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/neg8-allowance.json",
+   "size_bytes": 937,
+   "sha256": "eaaffd96403216a7353e4ee680da4f805f5bef21dce48ce9607205888c02e40b"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/neg8-bound.json",
+   "size_bytes": 904,
+   "sha256": "48c6be7c7a110bacab1e56b7873036c1422d33419e42d5c33f313ccc68c78321"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/neg8-clean-corpus.json",
+   "size_bytes": 1368,
+   "sha256": "09051981dc4f801729d024019139740024b083d8cad447e086a35bc95cdfc2e8"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/neg8-corpus-physics.json",
+   "size_bytes": 1018,
+   "sha256": "7c1145921954ccb7a4bbcb6e16ad69fb45bd59ed36cd2ac07b239652330601e6"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/neg8-screen.json",
+   "size_bytes": 1802,
+   "sha256": "fe176b7a5e208002180fcef623d8a08e7060815c5234513ffa7946a249dfa56e"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/roster.json",
+   "size_bytes": 46166,
+   "sha256": "1e44bc310306fdefbb0c3821a5b5b0328a489e7ba007e42d6983479f7da5477c"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/terminal-boundary.json",
+   "size_bytes": 449,
+   "sha256": "952ea4e46cf2593d6a154f630cd4b4db2b22c398b3e796ba54ab8d3a6458bcaf"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/terminal-pin.json",
+   "size_bytes": 173,
+   "sha256": "c8455affce3f774eddbdbe518eb5721fe37697e1b1e2805ba120e08b34859ef1"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/window_flags.json",
+   "size_bytes": 330764,
+   "sha256": "611fca83b8f0a5d23841ed5f548df74586ddb6192e1b25b858116957d400b989"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/derived/yield.json",
+   "size_bytes": 2486,
+   "sha256": "b0ee73015d1dc958f22fec846dac93610b8963d1f61c3ab0abffcd768639c282"
+  },
+  {
+   "path": "night-archive/harvest-v5-b5-beta-a5-20261011T0739Z/harvest.json",
+   "size_bytes": 5296,
+   "sha256": "8e69f3ef88b932a4b5e0f6a56816e2c1e45d5a64d19595bebf88c02f9a76170d"
+  }
+ ],
+ "tar": {
+  "name": "history-records.tar.zst",
+  "size_bytes": 469461,
+  "sha256": "2f2dfc82bf490cc0b06c029fb89cf5b245a27fa00dcc45eadff3431e6020948d",
+  "command": "COPYFILE_DISABLE=1 tar --no-mac-metadata -n -cf - -C /Users/edr --null -T <dirs+files> | zstd -3 -T0",
+  "entries": 129
+ }
+}
