@@ -1,0 +1,886 @@
+{
+  "custody/b5-window-plan-record.json": {
+    "sha256": "a354c65998eae75f27b6de40797b5e45c4966f83233259993ff0f8023f6854d2",
+    "size": 21317
+  },
+  "custody/chain.zsh": {
+    "sha256": "1cb730267b75daced23f1c94733272b595cb724f0386a290b081ab8042a54907",
+    "size": 63898
+  },
+  "custody/chain.zsh.sha256": {
+    "sha256": "2ae88f04a0ea6f12b464497b1f62c25643264577b5f868c5680d05b5792ef382",
+    "size": 76
+  },
+  "custody/night_plan.json": {
+    "sha256": "24d8912cf26916286d9aedb7ca414537aadfebb383091c839874f7ff2b2845ed",
+    "size": 14061
+  },
+  "custody/window.env": {
+    "sha256": "72782390f4728e2ac8484df0e0cfbc98f0c1896749b3c7398ca57504f0ff70b6",
+    "size": 1772
+  },
+  "measurement/.venv": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/.venv"
+  },
+  "measurement/configs/analysis_registry": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/analysis_registry"
+  },
+  "measurement/configs/arm_readiness": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/arm_readiness"
+  },
+  "measurement/configs/b6": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/b6"
+  },
+  "measurement/configs/bytes": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/bytes"
+  },
+  "measurement/configs/calibration/battery_float_verdicts": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/battery_float_verdicts"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r3.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r3.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r4.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r4.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r5.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r5.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r6.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r7.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r8.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n17_r8.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+  },
+  "measurement/configs/calibration/calibration_acceptance_d079_v2_r2.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/calibration_acceptance_d079_v2_r2.json"
+  },
+  "measurement/configs/calibration/calibration_ledger_head.json": {
+    "sha256": "d399ed06c164d15b5dd2cc15e1d0ba618d02fa21efdffe474df2d5888671aa98",
+    "size": 173
+  },
+  "measurement/configs/calibration/observation_dispositions.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/observation_dispositions.json"
+  },
+  "measurement/configs/calibration/p2_046_load_transition": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/p2_046_load_transition"
+  },
+  "measurement/configs/calibration/powermetrics_fiducial": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/powermetrics_fiducial"
+  },
+  "measurement/configs/calibration/preregistration_d079_epoch_25g83_rev1.md": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+  },
+  "measurement/configs/campaign_policies": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaign_policies"
+  },
+  "measurement/configs/campaigns/align_pilot_v0": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/align_pilot_v0"
+  },
+  "measurement/configs/campaigns/bytes-mac-check/README.md": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes_mac_check/README.md"
+  },
+  "measurement/configs/campaigns/bytes-mac-check/collection_plan.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes_mac_check/collection_plan.json"
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r01.json": {
+    "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r02.json": {
+    "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r03.json": {
+    "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r04.json": {
+    "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r05.json": {
+    "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r06.json": {
+    "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r07.json": {
+    "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r08.json": {
+    "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r09.json": {
+    "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r10.json": {
+    "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r11.json": {
+    "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r12.json": {
+    "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r13.json": {
+    "sha256": "8fea610abfde881b3cea81d443f5311e8cfed2e75ab470b408a1fac58a33db9e",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r14.json": {
+    "sha256": "dd139ffd32eb67b13e6908c5508e3f944028f29c5f10729b74ec6d36f103a19b",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r15.json": {
+    "sha256": "3078d364f5846850be8f67261e94048ca318a512cbf8479a33b16a51ca8248fd",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r16.json": {
+    "sha256": "57538f51ad29f05ac1dafab851aa2a86843f9817fa2de53e52777d58d7c2a70e",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r17.json": {
+    "sha256": "e81a538f87b893136aad8390f90a1c449f0e40bb53442c7101ec7b39bf43ceaa",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/neg8-refcorpus-r18.json": {
+    "sha256": "1f401725513220c28ff748a9a00948543e36214a0ff514c54373b3087f0e3d06",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-bound-collection/order_manifest.json": {
+    "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa",
+    "size": 7360
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-llama-70b/bytes-mac-check-check-llama-70b-r01.json": {
+    "sha256": "1c0da7c200ef4948de6be1afe1f288c3bf0967305c339bb0c4699f8f8a511ade",
+    "size": 1345
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-llama-70b/bytes-mac-check-check-llama-70b-r02.json": {
+    "sha256": "d33c3d1706490de94613bd1fdaa70ff6937ee8336cf4d5ae5c1685d336c095c5",
+    "size": 1345
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-llama-70b/bytes-mac-check-check-llama-70b-r03.json": {
+    "sha256": "005fe57823fcf1c415e27eb2fe2c988ae46a2e4b2d711f5b169f997bdee7014e",
+    "size": 1345
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-llama-70b/bytes-mac-check-check-llama-70b-r04.json": {
+    "sha256": "08518a0c734699851ed50be14bf54955f56f5959ce6d096a3f6d53d1964dbe3b",
+    "size": 1345
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-llama-70b/bytes-mac-check-check-llama-70b-r05.json": {
+    "sha256": "b19f11ac8259c0703564026abb5744b4f157f46bd5ab8c583c91d4d4037df92b",
+    "size": 1345
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-llama-70b/order_manifest.json": {
+    "sha256": "603cb6f28411c6e542da23dc2910c9d274e96a237203c70ed5e009ed72cbd87d",
+    "size": 3748
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r01.json": {
+    "sha256": "8b297da44f665af53f0c799833a8563971a6e86243bab0fbdd457b550566f6cd",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r02.json": {
+    "sha256": "6be7d57d1ff085f186987ed764d583a3203c5ad4cb3b273cd4e1882d85f3747c",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r03.json": {
+    "sha256": "67fc8b9c918527e1adedbd5a9d6e6fa19216569fa8b0145ced32dff50a980aad",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r04.json": {
+    "sha256": "0fafec87e147d63e98280916df931096860b55605db185a7fc7a0aa4c93d4da1",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r05.json": {
+    "sha256": "837877ded08844dea6089f5049701e757033143ae7b2d580bc8ce144fde71b83",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-14b/order_manifest.json": {
+    "sha256": "6a8f68c79663518a91a12bb0f60368c44a0c438b897b52f480ad85702dbc0bff",
+    "size": 3748
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r01.json": {
+    "sha256": "d617f5d95a64b981d2d79f7ec261e1850f2b0b583184d27ede554994a788e641",
+    "size": 1323
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r02.json": {
+    "sha256": "c342c99d88d1ff6106cea4ae9c02a09f3ab68b872dc8399c9652caac3b19c0f1",
+    "size": 1323
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r03.json": {
+    "sha256": "1a969f0fa04c3c56a11b16ce6b4bccaff23fba9e4311e83fda37f82f575f3ad0",
+    "size": 1323
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r04.json": {
+    "sha256": "7f797c968f2168664f1c3e4f55e9f4652e7f44c96d6a9b1287cf63d974cebc55",
+    "size": 1323
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r05.json": {
+    "sha256": "0f9f07e679cd312b74322677182e57a9cd004689008a8ea52d8a784d85556c12",
+    "size": 1323
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-1p7b/order_manifest.json": {
+    "sha256": "03bd1de0114f81f44079194c756c916106c6b9f47ea341299495a5900eca3183",
+    "size": 3779
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r01.json": {
+    "sha256": "eeec91648ffb7f13760b2983565321e726d86a387e73a43c661630505db493ea",
+    "size": 1339
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r02.json": {
+    "sha256": "3d005b834fb00cb78a80e5716a962a9468f83190b4b27b96d3fffb51468b2c62",
+    "size": 1339
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r03.json": {
+    "sha256": "4bfc00e7d71a04ea93891ff3fdac634d9d0fdc4529f3e369e6abeba6e83ab731",
+    "size": 1339
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r04.json": {
+    "sha256": "8f0a00816b32ffe8fd3d854f4ccf7d681dfcca9dbbb635873ad66b2e24762200",
+    "size": 1339
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r05.json": {
+    "sha256": "3122668a299d4317bda6e0c1046833393c20e4af92071bc79d1a7b328343c736",
+    "size": 1339
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-30b-a3b/order_manifest.json": {
+    "sha256": "99ac172b5ad4609b5168e79837c2730daee31bfd15a77c3d575e017839173ed8",
+    "size": 3872
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r01.json": {
+    "sha256": "a3ab4763f18d987dfa4b74289141af8830e7fbd484253daf3d8908676ed6224b",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r02.json": {
+    "sha256": "c11c78dc3b091f4534e59fd90457d21af9a11b345c0b82ee4433402e0fe33ec8",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r03.json": {
+    "sha256": "3d35acd7472900c72a7e7e8fcbbe66454c8a859822feb1d0df3bfccffd2e75a3",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r04.json": {
+    "sha256": "b35276f1f960fb470f98c8357d37875027aa22c43716f6b47c778df4c0796970",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r05.json": {
+    "sha256": "38887681a23555df2ab3ff2f8be940f10109fce62c9b805fe03a5d914d667ced",
+    "size": 1319
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-32b/order_manifest.json": {
+    "sha256": "bae4ad7c9a06d7d9eceace57c415e34b603b57058dcb45c3205de2bb46493df3",
+    "size": 3748
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r01.json": {
+    "sha256": "6e25c9497383af9c4f5da1c96b62391ac4bd5cfc8ac075a54fc9c9cf8e9e53f5",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r02.json": {
+    "sha256": "e98d4dd7cfbaff7067d5c2e0c57b54f5377c30870ff594bb3ff3ebc20fb69f90",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r03.json": {
+    "sha256": "a058a651c39306fa6c087f2efde9993ead8aa24226714e7aadc08b69aeb0e237",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r04.json": {
+    "sha256": "a52c5e4badfb5d8c8e28b8e6a810efb7d14e50cb2d4082d43e97c664ebf98049",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r05.json": {
+    "sha256": "3491560390dbc4e4bda5c902a387a7d915c6c23f5991e39261f858052eeabefe",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-4b/order_manifest.json": {
+    "sha256": "92db716c4ec71be4d7c2017de2d2c6a9f8f7aa95fa64c540a5bdac5e76ac0917",
+    "size": 3717
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r01.json": {
+    "sha256": "d4b5fb0fd1542cd336bfe7218d6cc985f0fb1ff49fc6fc16440f3789fdb9470f",
+    "size": 1214
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r02.json": {
+    "sha256": "8c2399cd7e7956bc13f7c449c2a81ebcd604da3b0a1145c80e074adc47adfd39",
+    "size": 1214
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r03.json": {
+    "sha256": "056b1c69ea81bc4edad6160c835287b0d1da89083520d7e715639b4710184ddb",
+    "size": 1214
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r04.json": {
+    "sha256": "fbc6b78152d11c540744f0262d9dcb6177eae8b480acae8d31f4c5a00b5c3f02",
+    "size": 1214
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r05.json": {
+    "sha256": "70f24da675272393fbd4d6e0982a1dc1828212b11469e9a3c8c9e41b9456af41",
+    "size": 1214
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b-8bit/order_manifest.json": {
+    "sha256": "38d70c9946e89cf91c70a8aec65ff653f38fb70456ee803fcff58e245deb5ad1",
+    "size": 3872
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r01.json": {
+    "sha256": "e01444babb24764b315d9b60b46bef39983e90fc843b46d8058ef699b5efe5e3",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r02.json": {
+    "sha256": "1b413c4c6361f7d70086692924879e74ffa46c3af2e702d7cc6c356119311ca6",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r03.json": {
+    "sha256": "9107982253ea29661699f76fb161bfbfca3cdaaf29376301c1f604545b567e1d",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r04.json": {
+    "sha256": "ddb03f11ab0f76f2549b90c2c9a2b1d815404eafd39156a035a8f15b9fcb948a",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r05.json": {
+    "sha256": "3d2a1fbb09447427de7973d33943f4a89a004ebf83b6c97d3f50645779ed839e",
+    "size": 1315
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-8b/order_manifest.json": {
+    "sha256": "514a251824d37e54a9eeef682fa1eac1621c5a4bd542d92e4b832516015c8aa7",
+    "size": 3717
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r01.json": {
+    "sha256": "e39a0c896e2788029d1d33213ea9d135b9bfba2b225ba2ad923ff2e3675a08fe",
+    "size": 1370
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r02.json": {
+    "sha256": "4cee699d481986ca05459b2907aed8b4dd3c2ff3149617cb75ab6363d64283a0",
+    "size": 1370
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r03.json": {
+    "sha256": "2a311b3f1d3712fd87d27f8a2070fa0904415c806c28ca85cba9e011638e7985",
+    "size": 1370
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r04.json": {
+    "sha256": "5ee8a780c5cee471bb7432aff9e2b2b08f76e9adb286dfedf97b75a84b8ee996",
+    "size": 1370
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r05.json": {
+    "sha256": "73bb41cb665771a65abb1ffbfbcf6afc6edb20b6b6516aa9bf43ef3db105500d",
+    "size": 1370
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen3-next-80b/order_manifest.json": {
+    "sha256": "eb22ae4369a65c0073690439383844fddd997793b20009eaeff48d5ab42aa2e4",
+    "size": 3903
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r01.json": {
+    "sha256": "4d06b00d9f12d957433f43c5ec4aac1a34e9985aa15fef19f68ca7f4bd094a4d",
+    "size": 1268
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r02.json": {
+    "sha256": "2572cb7b55939617baa0497112046a7e7b937ca359a6ff95ff817684270ecd06",
+    "size": 1268
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r03.json": {
+    "sha256": "92f99448ba6e5e3bbd9b84ac15bc701a2d87e5d63681dc074867db39413e34e4",
+    "size": 1268
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r04.json": {
+    "sha256": "0866704017eec90333a47ca471b006b65ffd6816f41ab33268716daff2625560",
+    "size": 1268
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r05.json": {
+    "sha256": "5fe1084827413ede74fef6b7fe8b0d63bd0c328729992fea3537def081617259",
+    "size": 1268
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-check-qwen35-122b/order_manifest.json": {
+    "sha256": "2a931818373a319ac817a465996032d6f08fd75525e301882edb979c02f1d784",
+    "size": 3810
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-end/neg8-window-end-r1.json": {
+    "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab",
+    "size": 1283
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-end/neg8-window-end-r2.json": {
+    "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4",
+    "size": 1283
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-end/neg8-window-end-r3.json": {
+    "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80",
+    "size": 1283
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-end/order_manifest.json": {
+    "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440",
+    "size": 1720
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-midpoint/neg8-window-midpoint.json": {
+    "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024",
+    "size": 1285
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-midpoint/order_manifest.json": {
+    "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62",
+    "size": 887
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-start/neg8-window-start-r1.json": {
+    "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73",
+    "size": 1285
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-start/neg8-window-start-r2.json": {
+    "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6",
+    "size": 1285
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-start/neg8-window-start-r3.json": {
+    "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9",
+    "size": 1285
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-reference-start/order_manifest.json": {
+    "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe",
+    "size": 1748
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r01.json": {
+    "sha256": "64c82e4b95b9bef0dff95a1e5c8ebd3aa2f4693ef7ca10dea60c20ba1d5dbbb8",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r02.json": {
+    "sha256": "e63daa8649ea5069387a97ff61d28e5116186713d2fb7cc97c9fdfe93385c7bc",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r03.json": {
+    "sha256": "5ff9a2e6ca1a6df98daebf18f38ce58197e6b119e8187274e8f7bf7ca95fdfe0",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r04.json": {
+    "sha256": "57ecf35960c8ada08f1e6288906eca701fc547825465d3316078438fc4b01376",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r05.json": {
+    "sha256": "246cb1b3e33128949c923ede7ed70a705eacf70a7b49ceb6c9f40120b5a6e2b0",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r06.json": {
+    "sha256": "7bffb4476c6ec5f5bdadab1ae3ce21c190824efcf3bd6d53516ce6881fd74acd",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r07.json": {
+    "sha256": "afb7752f2216f275630c7e1057c7f78ef8f6f8fd0b8e1ff1ab59872d8d2c6a60",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r08.json": {
+    "sha256": "8aedbb996e07f6fb225047cc933380630c672608e9682251c13aac902e5073c7",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r09.json": {
+    "sha256": "6b266abb646153cbf14b2df12e3d33636103c7bff7356448dee882bbcb821144",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r10.json": {
+    "sha256": "57514636a00d6940f195e8e4dafae549adfb6c4faf92a9de0e4b390295abc84e",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r11.json": {
+    "sha256": "fd9fe460b91e5bef1c29d5367088c2727698394960a634d9ff2189e7f20ba509",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/bytes-mac-check-soak-llama-70b-r12.json": {
+    "sha256": "ce3390f46eab8a8a24fe8fd2c1ca41b0af09c3bc8ca1578ed49a8b177ce291de",
+    "size": 1343
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-llama-70b/order_manifest.json": {
+    "sha256": "bda7f4094890807f22538024801afc6f917c41a64051a93d4d52fa3e58e844cd",
+    "size": 8735
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r01.json": {
+    "sha256": "380e813039abe81e295aff2a837465fbc407d33c843b41f75f7441561e774a46",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r02.json": {
+    "sha256": "986d1d1b5ee9515021c089ffe4d6abc666e9a37b35499b60413db2dabf5d8a6a",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r03.json": {
+    "sha256": "207fabaffeb12eee0d8e5ddebae36c501462ce86bcde7f013d5c6ddd42506eaa",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r04.json": {
+    "sha256": "05223ac632c3237ade4f6d4faafc64ae636956968dc61105321515bc8ba76d22",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r05.json": {
+    "sha256": "1164b60dd0d89932a37021797aba367f535bb865dfc6ef5ccdf589e8b1d0a475",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r06.json": {
+    "sha256": "fdf638b972d6e803136d9594825b353fe4ba6f37200169b7d8a4617940946d92",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r07.json": {
+    "sha256": "7d649b4999df3154f602c9f2d2bb1c2d5e9f0c9659312ce045e9529ecd67cc60",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r08.json": {
+    "sha256": "ef39fb3f429cd966ca98c5e4c3e323fe3fece1100eb57648268cf699cbcd6bdb",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r09.json": {
+    "sha256": "167da106cd63bf3b1d13ecefb11729efecd79c327ef1321284491bc4e617a665",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r10.json": {
+    "sha256": "98f25aba2c2b49f8010cb9db94342125a969c06a328ee4f1fe1122792c6624d3",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r11.json": {
+    "sha256": "986fc3dad939fd4c24aa35d2bbf7e0bb06ddb4f4b2c798ade7ca879605cd3a12",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r12.json": {
+    "sha256": "c36bd305e64376d33c98cebf3db9ea7dd03fa5bfc5fc4d862a1b1341d98f9d62",
+    "size": 1266
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-soak-qwen35-122b/order_manifest.json": {
+    "sha256": "274a097f94019ed6991a7520f279092763912d3d7a912bd922d6ed1bba2524e2",
+    "size": 8881
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r01.json": {
+    "sha256": "6e31fe3383343532aaccb9d4aad7fddf7b1cf3257fe944c26048bcefe3c90d5b",
+    "size": 1346
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r02.json": {
+    "sha256": "3254352a3a7f96f210434e5bbc48dfd825cc510d5f6fb97631d226099d61870c",
+    "size": 1258
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r03.json": {
+    "sha256": "b11bf964c7979c37140a779349f7926dc11f7da4cfdd30666a82ab6809c690ad",
+    "size": 1346
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r04.json": {
+    "sha256": "4afb6af23ea1c4986dfffcda22e64ece3757677827fb09fcc3b17d6861a1f061",
+    "size": 1258
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-end/order_manifest.json": {
+    "sha256": "f3989960f8ee669404e8308039f7e747cf31682250099b2416724e568c2ec270",
+    "size": 3054
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r01.json": {
+    "sha256": "7034701301484ab59ab0531178d378298286c0008b01a01d29e7ab266ba57bb8",
+    "size": 1350
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r02.json": {
+    "sha256": "bebe2148fdafbc5e54c478e573033e5f49c8ed60677706fb8c5c4798a3166027",
+    "size": 1262
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r03.json": {
+    "sha256": "dc8447a5fe966716f521cffc68e1394bdd35f3c07995b5562a09d622129eb230",
+    "size": 1350
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r04.json": {
+    "sha256": "781012ed54512109507a4363855bb5f2684e237c628fc987a72b1437e10ee725",
+    "size": 1262
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-llama-70b-start/order_manifest.json": {
+    "sha256": "5102ea96a47610a56c67ec79dd321b0ed027628db416c929da62cb7c0abdc78e",
+    "size": 3088
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r01.json": {
+    "sha256": "fce71e23b6c87993c20b20c20f7661381a8d291a6caa3eb3bb1735c98688d9cc",
+    "size": 1371
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r02.json": {
+    "sha256": "eb9fccfbdeb1c990c3abdbce21436a592dd05031516628b43f3385abd960aea2",
+    "size": 1263
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r03.json": {
+    "sha256": "0e365dc6e62644a01fe8ea2b22682818c8bd2934a2fae820c1ffb442b35fd533",
+    "size": 1371
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r04.json": {
+    "sha256": "8b253d35c4219d97b1a6383ba011972d71cc0ad7dc79fc3ac47169ef208b2558",
+    "size": 1263
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-end/order_manifest.json": {
+    "sha256": "1c59ba804a6969707922bdc935a1f89014d76a0613a476e9833be6b7393f22b4",
+    "size": 3159
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r01.json": {
+    "sha256": "ccb8d1688bd26b020c280907b72b71bf046618247564c5049657c0683627f31e",
+    "size": 1375
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r02.json": {
+    "sha256": "6fc26d0d54f1fc2287fe3d3d8b0a1ee181926ab2fddc2bb746080f9d5efaa81c",
+    "size": 1267
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r03.json": {
+    "sha256": "9b931675b202bd69081d104554de16783fb073e863e418884c8b8f114d034255",
+    "size": 1375
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r04.json": {
+    "sha256": "b561438590f032fba8e49c24c612e6d7de963e63d5b3ddc8721781edf3391ef5",
+    "size": 1267
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen3-next-80b-start/order_manifest.json": {
+    "sha256": "4e262f1b840bfcc78e60f7fc5d1f1354cd6309478a4aa139da982c8e4b29bfe9",
+    "size": 3193
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r01.json": {
+    "sha256": "20d7d2e5cac8d48f270be48a1817c5aee0c34a1f738a4761fd12a26b2a841df6",
+    "size": 1269
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r02.json": {
+    "sha256": "d1562b3b6806a8a1fdf9c42dd31a9b2ddfbceb615d7dc4e80bcbf632ed4a17a7",
+    "size": 1260
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r03.json": {
+    "sha256": "47e30b43858fd0ab87183116e7350b1b80e247ed435268d5b0edfeb4843e979d",
+    "size": 1269
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r04.json": {
+    "sha256": "495bad56dfee78aac936094e07bdcd7b2ef88ea7a85c223fc11769021b5f81a8",
+    "size": 1260
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-end/order_manifest.json": {
+    "sha256": "52d9515e1d071955115fb7c557d662c42cc821fb754cd46eec94f9ff1f827f7d",
+    "size": 3096
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r01.json": {
+    "sha256": "6dad37a8fc1266f6234be86431043f1894882f8636f36d705ae3684232307a78",
+    "size": 1273
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r02.json": {
+    "sha256": "c44d839ae9410e75ae5f6d0eb1b39fedc3f508adafcef2cb5a3ee40b3bd28de3",
+    "size": 1264
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r03.json": {
+    "sha256": "d24baddb84824431fa40198eac229fe8b14f7fcd341beafaf41da2dd5b4e4c7a",
+    "size": 1273
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r04.json": {
+    "sha256": "8581c6b953a18cf015797e82eda07bc9b4972ffc3c39b96aedd97000d800020b",
+    "size": 1264
+  },
+  "measurement/configs/campaigns/bytes-mac-check/members/bytes-mac-check-test7-qwen35-122b-start/order_manifest.json": {
+    "sha256": "40c8ab39e902cea93a39321a11edbaedccea2553fb86cbda713b1b35adf253fb",
+    "size": 3130
+  },
+  "measurement/configs/campaigns/bytes-mac-check/plan_tree.json": {
+    "sha256": "5127cb691544f6fd272f22576af038a0234aba020f6841df4062598c21d2f1a5",
+    "size": 224220
+  },
+  "measurement/configs/campaigns/bytes-mac-check/plan_tree.sha256": {
+    "sha256": "9ca0fb1f9ffad83560d2457521bd92d64eb8fa38caf6a294c1cbbfc04ed09596",
+    "size": 81
+  },
+  "measurement/configs/campaigns/bytes-mac-check/registration": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes_mac_check/registration"
+  },
+  "measurement/configs/campaigns/bytes-mac-check/stages": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes_mac_check/stages"
+  },
+  "measurement/configs/campaigns/bytes-s1-p1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s1-p1"
+  },
+  "measurement/configs/campaigns/bytes-s1-p2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s1-p2"
+  },
+  "measurement/configs/campaigns/bytes-s2-p1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s2-p1"
+  },
+  "measurement/configs/campaigns/bytes-s2-p2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s2-p2"
+  },
+  "measurement/configs/campaigns/bytes-s3-p1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s3-p1"
+  },
+  "measurement/configs/campaigns/bytes-s3-p2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s3-p2"
+  },
+  "measurement/configs/campaigns/bytes-s4-p1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s4-p1"
+  },
+  "measurement/configs/campaigns/bytes-s4-p2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s4-p2"
+  },
+  "measurement/configs/campaigns/bytes-s5-p1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s5-p1"
+  },
+  "measurement/configs/campaigns/bytes-s5-p2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s5-p2"
+  },
+  "measurement/configs/campaigns/bytes-s6-p1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s6-p1"
+  },
+  "measurement/configs/campaigns/bytes-s6-p2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes-s6-p2"
+  },
+  "measurement/configs/campaigns/bytes_mac_check": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes_mac_check"
+  },
+  "measurement/configs/campaigns/bytes_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/bytes_v1"
+  },
+  "measurement/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+  },
+  "measurement/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+  },
+  "measurement/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3"
+  },
+  "measurement/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+  },
+  "measurement/configs/campaigns/d117_contrast_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_contrast_v5"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen25_1p5b_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen25_1p5b_v1"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen25_1p5b_v2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen25_1p5b_v2"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen25_1p5b_v3": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen25_1p5b_v3"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen25_7b_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen25_7b_v1"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen25_7b_v2": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen25_7b_v2"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen25_7b_v3": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen25_7b_v3"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen3-1p7b_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen3-1p7b_v5"
+  },
+  "measurement/configs/campaigns/d117_floor_qwen3-8b_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/d117_floor_qwen3-8b_v5"
+  },
+  "measurement/configs/campaigns/exploratory_2026_07_17": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/exploratory_2026_07_17"
+  },
+  "measurement/configs/campaigns/g2a_prefill_probe_25g83": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/g2a_prefill_probe_25g83"
+  },
+  "measurement/configs/campaigns/gamma_interior_references_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/gamma_interior_references_v5"
+  },
+  "measurement/configs/campaigns/metrology_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/metrology_v1"
+  },
+  "measurement/configs/campaigns/neg8_reference_corpus": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/neg8_reference_corpus"
+  },
+  "measurement/configs/campaigns/neg8_reference_corpus_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/neg8_reference_corpus_v5"
+  },
+  "measurement/configs/campaigns/p2_015_floors": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/p2_015_floors"
+  },
+  "measurement/configs/campaigns/p2_015_smoke": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/p2_015_smoke"
+  },
+  "measurement/configs/campaigns/quiet_predicate_evidence_01": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/quiet_predicate_evidence_01"
+  },
+  "measurement/configs/campaigns/qwen25_7b_decode_floor_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/qwen25_7b_decode_floor_v1"
+  },
+  "measurement/configs/campaigns/splitwise_decode_v1": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/splitwise_decode_v1"
+  },
+  "measurement/configs/campaigns/v5_claim_25g83": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/v5_claim_25g83"
+  },
+  "measurement/configs/campaigns/v5_qualification_25g83": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/v5_qualification_25g83"
+  },
+  "measurement/configs/campaigns/window_reference_spares_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/window_reference_spares_v5"
+  },
+  "measurement/configs/campaigns/window_references": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/window_references"
+  },
+  "measurement/configs/campaigns/window_references_v5": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/campaigns/window_references_v5"
+  },
+  "measurement/configs/characterization": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/characterization"
+  },
+  "measurement/configs/examples": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/examples"
+  },
+  "measurement/configs/flags": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/flags"
+  },
+  "measurement/configs/floor_mint": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/floor_mint"
+  },
+  "measurement/configs/gates": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/gates"
+  },
+  "measurement/configs/launchd": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/launchd"
+  },
+  "measurement/configs/model_panels": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/model_panels"
+  },
+  "measurement/configs/paper_supply": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/paper_supply"
+  },
+  "measurement/configs/pins": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/pins"
+  },
+  "measurement/configs/production_custody_inventory.json": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/production_custody_inventory.json"
+  },
+  "measurement/configs/suite_manifests": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/suite_manifests"
+  },
+  "measurement/configs/workloads": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/configs/workloads"
+  },
+  "measurement/docs": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/docs"
+  },
+  "measurement/joulewise": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/joulewise"
+  },
+  "measurement/runs": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/runs"
+  },
+  "measurement/scripts": {
+    "symlink": "/private/tmp/jwreview/bytescompare/measurement/scripts"
+  },
+  "session.json": {
+    "sha256": "6b7ce251b72b6f4bd540474f32b7d6ec2b81165a8ff9344bea6a2dee9d489daf",
+    "size": 12151
+  },
+  "staging/inputs/identity-epoch.json": {
+    "sha256": "cb8daed7b30399a1c3c8b83b3b7bee4b774a30fc389afc1d375e4c23a3cc4ae8",
+    "size": 19
+  },
+  "staging/inputs/t1-bindings.json": {
+    "sha256": "cb8daed7b30399a1c3c8b83b3b7bee4b774a30fc389afc1d375e4c23a3cc4ae8",
+    "size": 19
+  },
+  "staging/measurement-view.json": {
+    "sha256": "af39b9ce35a3de8b97db54afea6ca4834296bf4c1320acec2fda9a2193c1c311",
+    "size": 1535
+  },
+  "staging/plan-inputs.json": {
+    "sha256": "05d4ad109d6782d1fa5de272618c5dc8e1b9fc7f06f6db581bc3cf311fe9833f",
+    "size": 3272
+  }
+}

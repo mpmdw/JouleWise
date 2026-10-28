@@ -1,0 +1,60 @@
+{
+  "different_prefill_work": {
+    "checks": {
+      "I1_all_bundles_readable": true,
+      "I2_energy_on_every_episode": true,
+      "I3_attribution_tiles_episode": true,
+      "I4_greedy_repeats_identical_tokens": true
+    },
+    "decode": [
+      [
+        300,
+        120,
+        40
+      ],
+      [
+        300,
+        120,
+        40
+      ],
+      [
+        300,
+        120,
+        40
+      ]
+    ],
+    "prefill": [
+      5500,
+      5600,
+      5700
+    ],
+    "repeat_token_identity": {
+      "ledger_review/benign": true
+    },
+    "spread": {
+      "ledger_review/benign": {
+        "mock:mock": {
+          "mean_j": 75.75,
+          "n": 3,
+          "range_j": 1.5,
+          "sd_j": 0.75
+        }
+      }
+    }
+  },
+  "unresolved_anchor_desk": {
+    "desk_written": false,
+    "error": "Out of range float values are not JSON compliant: inf",
+    "flags": [
+      "model_revision_unpinned",
+      "seed_recorded_greedy_generation",
+      "synthetic_mock_runtime",
+      "single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j",
+      "episode_interval_excludes_scoring_and_serialization_tail",
+      "clock_anchor_unresolved"
+    ],
+    "half_width_j": "infinity",
+    "harvest_calls": 0,
+    "pilot_written": false
+  }
+}

@@ -1,0 +1,355 @@
+{
+  "disk": {
+    "available_for_important_usage_bytes": null,
+    "derivation": {
+      "B_bytes": 27802317346,
+      "allowances_by_model": {
+        "llama-70b": {
+          "count": 21,
+          "member_allowance_s": {
+            "denominator": 20000000000000,
+            "numerator": 4746400816793639
+          },
+          "stream_allowance_s": {
+            "denominator": 50000000000000,
+            "numerator": 9548214357147367
+          }
+        },
+        "neg8_reference": {
+          "count": 37,
+          "member_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 14122618421581197
+          },
+          "stream_allowance_s": {
+            "denominator": 25000000000000000000000000000000000,
+            "numerator": 2475038689504830954481754541426818773
+          }
+        },
+        "qwen3-14b": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 50000000000000,
+            "numerator": 7997038194774761
+          },
+          "stream_allowance_s": {
+            "denominator": 10000000000000,
+            "numerator": 1170599756606169
+          }
+        },
+        "qwen3-1p7b": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 14339574436176383
+          },
+          "stream_allowance_s": {
+            "denominator": 50000000000000,
+            "numerator": 5038150164881857
+          }
+        },
+        "qwen3-30b-a3b": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 250000000000,
+            "numerator": 37123965755447
+          },
+          "stream_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 10528254686699321
+          }
+        },
+        "qwen3-32b": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 50000000000000,
+            "numerator": 9232807294442027
+          },
+          "stream_allowance_s": {
+            "denominator": 10000000000000,
+            "numerator": 1415345379187543
+          }
+        },
+        "qwen3-4b": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 50000000000000,
+            "numerator": 7339681227489939
+          },
+          "stream_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 10409182074417483
+          }
+        },
+        "qwen3-8b": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 15232309187894657
+          },
+          "stream_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 10923731127617711
+          }
+        },
+        "qwen3-8b-8bit": {
+          "count": 5,
+          "member_allowance_s": {
+            "denominator": 5000000000000,
+            "numerator": 804528133384583
+          },
+          "stream_allowance_s": {
+            "denominator": 4000000000000,
+            "numerator": 472061748361189
+          }
+        },
+        "qwen3-next-80b": {
+          "count": 9,
+          "member_allowance_s": {
+            "denominator": 50000000000000,
+            "numerator": 7752958077403059
+          },
+          "stream_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 10830196702074579
+          }
+        },
+        "qwen35-122b": {
+          "count": 21,
+          "member_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 17078676005436927
+          },
+          "stream_allowance_s": {
+            "denominator": 100000000000000,
+            "numerator": 11577116221769523
+          }
+        }
+      },
+      "authority": "H-DISK-RULING, activation 283e9802, 2026-10-21; Fable section 1 adopted",
+      "estimated_footprint_bytes": 86236568521,
+      "extra_wait_peak_bytes": 26585402726,
+      "extra_wait_raw_bytes": 13292701363,
+      "fixed_retained_bytes": 4046531103,
+      "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(max bytes/stream_s * sum(count*own stream allowance)), ceil(max bytes/member_wall_s * sum(count*own member allowance))); WAIT=ceil(max bytes/stream_s * 7200); c=2 (raw + partitioned rsync backups; archive cp -c clone); fixed unchanged; no reserve",
+      "max_observed_bundle_bytes_per_stream_s": {
+        "denominator": 8813392312498763,
+        "numerator": 16271360000000000000000
+      },
+      "max_observed_bundle_bytes_per_wall_s": {
+        "denominator": 893951484135219,
+        "numerator": 1162240000000000000000
+      },
+      "max_observed_fixed_session_bytes": 1438707712,
+      "observed_member_wall_sum_s": 16042.009888648987,
+      "peak_copies": 2,
+      "reference_stream_allowance_s": {
+        "denominator": 25000000000000000000000000000000000,
+        "numerator": 2475038689504830954481754541426818773
+      },
+      "rounding": "exact rational arithmetic from committed decimal lexemes; ceiling each total basis and WAIT once",
+      "session_wait_budget_s": 7200,
+      "stream_basis_bytes": 27802317346,
+      "stream_seconds": {
+        "denominator": 25000000000000000000000000000000000,
+        "numerator": 376478564112515239815824918032792294601
+      },
+      "wall_basis_bytes": 26878191539,
+      "wall_seconds": {
+        "denominator": 100000000000000,
+        "numerator": 2067369839006041683
+      },
+      "window_max_s": 45120
+    },
+    "estimated_footprint_bytes": 86236568521,
+    "f_bavail": 1000000000000,
+    "f_frsize": 1,
+    "flags": [
+      "disk.purgeable_unreadable",
+      "disk.budget_encoded_from_p"
+    ],
+    "free_bytes": 1000000000000,
+    "member_count": 123,
+    "native_arm_budget": {
+      "bytes_per_member": 150690066,
+      "formula": "q=floor(c*B/(native_copies*member_count)); headroom=(c*B-native_copies*member_count*q)+c*WAIT+fixed",
+      "headroom_bytes": 30631934167,
+      "kind": "budget encoding derived from P",
+      "native_copies": 3,
+      "rounding_remainder_bytes": 338
+    },
+    "prepare_free_bytes": 1000000000000,
+    "purgeable_bytes": null,
+    "required_free_bytes": 86236568521
+  },
+  "flags": [
+    {
+      "block3_sha256": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607",
+      "file": "identity-epoch.json",
+      "kind": "identity_differs_from_block3",
+      "sha256": "cb8daed7b30399a1c3c8b83b3b7bee4b774a30fc389afc1d375e4c23a3cc4ae8"
+    },
+    {
+      "block3_sha256": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98",
+      "file": "t1-bindings.json",
+      "kind": "identity_differs_from_block3",
+      "sha256": "cb8daed7b30399a1c3c8b83b3b7bee4b774a30fc389afc1d375e4c23a3cc4ae8"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "llama-70b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "neg8_reference"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-14b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-1p7b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-30b-a3b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-32b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-4b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-8b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-8b-8bit"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen3-next-80b"
+    },
+    {
+      "kind": "runtime_stack_unobserved",
+      "model_id": "qwen35-122b"
+    },
+    {
+      "kind": "sizing.planning_bound_interpolated",
+      "model_id": "qwen3-8b-8bit"
+    }
+  ],
+  "inputs": {
+    "T_stream_max_s": {
+      "seconds": 190.96428714294734,
+      "source": {
+        "path": "configs/campaigns/bytes_mac_check/registration/sizing_b5.json",
+        "sha256": "42bd19f9b4387944b919346ac946f0b996bf694f5f9af084f15adff4d35622c6"
+      },
+      "source_pointer": "/packs/bytes-mac-check/T_stream_max_s"
+    },
+    "attempt": 1,
+    "bound_backup_destination": "/private/tmp/jwreview/bytescompare/session/backup-bound",
+    "bracket_session_id": "bytes-h-20231114T221320000000Z-calibration",
+    "bytes_per_member": 150690066,
+    "capture_screen": {
+      "alignment_reference_s": "0.037054941476587",
+      "bracket_screen_s": "0.010818",
+      "operative_bound_stop_s": null
+    },
+    "claim_backup_destination": "/private/tmp/jwreview/bytescompare/session/backup-claim",
+    "custody_root": "/private/tmp/jwreview/bytescompare/session/custody",
+    "g10": false,
+    "identity_epoch_json": {
+      "path": "/private/tmp/jwreview/bytescompare/session/staging/inputs/identity-epoch.json",
+      "sha256": "cb8daed7b30399a1c3c8b83b3b7bee4b774a30fc389afc1d375e4c23a3cc4ae8"
+    },
+    "measurement_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "measurement_root": "/private/tmp/jwreview/bytescompare/session/measurement",
+    "pack_root": "/private/tmp/jwreview/bytescompare/session/measurement/configs/campaigns/bytes-mac-check",
+    "plan_id": "bytes-h-20231114T221320000000Z",
+    "post_attempt_id": "bytes-h-20231114T221320000000Z-cal-post",
+    "pre_attempt_id": "bytes-h-20231114T221320000000Z-cal-pre",
+    "programmed_span_s": {
+      "seconds": 27370.23694186782,
+      "source": {
+        "path": "configs/campaigns/bytes_mac_check/registration/sizing_b5.json",
+        "sha256": "42bd19f9b4387944b919346ac946f0b996bf694f5f9af084f15adff4d35622c6"
+      },
+      "source_pointer": "/packs/bytes-mac-check/programmed_span_s"
+    },
+    "registration": {
+      "path": "configs/campaigns/v5_claim_25g83/registration_block5.md",
+      "sha256": "c7b3fdf78dde0a403bbc0b63262d1f8b1a697695bdeb2fb737a90cedde1ddb3f"
+    },
+    "repo_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "runs_parent": "/private/tmp/jwreview/bytescompare/session/runs-parent",
+    "schema": "joulewise.b5_window_plan_inputs.v2",
+    "spare_retries": false,
+    "t0_epoch_s": 1700000460,
+    "t1_bindings_json": {
+      "path": "/private/tmp/jwreview/bytescompare/session/staging/inputs/t1-bindings.json",
+      "sha256": "cb8daed7b30399a1c3c8b83b3b7bee4b774a30fc389afc1d375e4c23a3cc4ae8"
+    },
+    "thresholds": {
+      "battery": {
+        "limit_ma": 200,
+        "max_unobserved_s": 120,
+        "max_update_age_s": 180
+      },
+      "clock": {
+        "frequency_margin_ppm": 0.25,
+        "h_ms": 0,
+        "limit_ms": 5.0,
+        "residual_max_ns": 1000000,
+        "skew_max_ns": 1000000,
+        "step_ns": 1000000,
+        "t_stream_max_s": 335
+      },
+      "contention": {
+        "aggregate_cpu_limit_s_per_s": null,
+        "cap_s": 2700,
+        "clean_s": 180,
+        "cpu_limit_s_per_s": 0.05,
+        "interval_s": 30,
+        "window_interval_s": 10
+      },
+      "disk": {
+        "headroom_bytes": 30631934167,
+        "low_bytes": 10737418240,
+        "planned_bytes": 25190989824
+      },
+      "instrument": {
+        "bound_s": 55.0,
+        "frames": 300,
+        "max_ms_max": 200.0,
+        "median_ms_max": 150.0
+      },
+      "thermal": {
+        "max_gap_s": 15,
+        "max_level": 0
+      }
+    }
+  },
+  "measurement_root": "/private/tmp/jwreview/bytescompare/session/measurement",
+  "non_claim": true,
+  "plan_path": "/private/tmp/jwreview/bytescompare/session/custody/night_plan.json",
+  "plan_sha256": "24d8912cf26916286d9aedb7ca414537aadfebb383091c839874f7ff2b2845ed",
+  "preparation_status": "STAGED",
+  "registration_dir": "/private/tmp/jwreview/bytescompare/session/measurement/configs/campaigns/bytes_mac_check/registration",
+  "runs_roots": {
+    "bound": "/private/tmp/jwreview/bytescompare/session/runs-parent/runs_bytes_mac_check_bound",
+    "claim": "/private/tmp/jwreview/bytescompare/session/runs-parent/runs_bytes_mac_check"
+  },
+  "schema_version": "joulewise.bytes_h_session.v1",
+  "session_id": "bytes-h-20231114T221320000000Z",
+  "session_root": "/private/tmp/jwreview/bytescompare/session",
+  "source_measurement_root": "/private/tmp/jwreview/bytescompare/measurement",
+  "t0_epoch_s": 1700000460,
+  "window_max_s": 45120
+}

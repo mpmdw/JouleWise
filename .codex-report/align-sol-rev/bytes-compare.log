@@ -1,0 +1,18 @@
+{
+  "baseline": "991358f73",
+  "changed_generated_paths": [],
+  "files.json": {
+    "diff": "",
+    "diff_exit": 0
+  },
+  "head": "131abcd545a5eed3dbfad0ffcfcdcb655d23a4f0",
+  "paths_compared": 242,
+  "state.json": {
+    "diff": "",
+    "diff_exit": 0
+  },
+  "stdout.txt": {
+    "diff": "",
+    "diff_exit": 0
+  }
+}

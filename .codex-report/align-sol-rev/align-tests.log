@@ -1,0 +1,116 @@
+................................budget_pilot: refused: PilotInput.__init__() missing 4 required positional arguments: 'shakedown', 'counting', 'counting_item_ids', and 'energy_item_ids'
+budget_pilot: refused: input, JSON and Markdown must be distinct paths
+........................ANALYSIS CLI command=/opt/homebrew/opt/python@3.13/bin/python3.13 -B -m joulewise.align.analysis.metadata_baseline /private/tmp/jwreview/tmpnkr03zs4/episodes.jsonl --tampered-episodes /private/tmp/jwreview/tmpnkr03zs4/tampered.jsonl --results /private/tmp/jwreview/tmpnkr03zs4/results.json --table /private/tmp/jwreview/tmpnkr03zs4/table.md rc=0 longest_markdown_line=562 flag_counts={"synthetic-model-0": {"synthetic_not_hardware": 300, "tamper.delete_turns": 150, "tamper.drop_tool_calls": 150}, "synthetic-model-1": {"synthetic_not_hardware": 300, "tamper.delete_turns": 150, "tamper.drop_tool_calls": 150}}
+..............ANALYSIS ZERO NUMERATOR replay_draws=101 replay_zero_se_draws=1 ci=[0.0, 1.0]
+.ANALYSIS COVERAGE world=W0 method=descriptive_percentile covered=810/1000 unavailable=0 full_0_1=0 target=0.72018111 target_mc_se=0.00082472
+ANALYSIS COVERAGE world=W0 method=cluster_jackknife_t covered=941/1000 unavailable=0 full_0_1=0 target=0.72018111 target_mc_se=0.00082472
+ANALYSIS COVERAGE world=W0 method=studentized_cluster_bootstrap covered=960/1000 unavailable=0 full_0_1=0 target=0.72018111 target_mc_se=0.00082472
+ANALYSIS COVERAGE world=W0 method=mean_within_pair_t covered=950/1000 unavailable=0 full_0_1=0 target=0.75000000 target_mc_se=0.00000000
+ANALYSIS ZERO NUMERATOR world=W0 nonidentity_datasets=247/1000 nonidentity_draws=26469 identity_draws_per_dataset=120 zero_se_datasets=4/1000 zero_se_draws=39 runtime_s=39.823
+ANALYSIS ORIENTATION world=W0 failures=0 first=[]
+ANALYSIS COVERAGE world=W1 method=descriptive_percentile covered=841/1000 unavailable=0 full_0_1=0 target=0.73324276 target_mc_se=0.00107666
+ANALYSIS COVERAGE world=W1 method=cluster_jackknife_t covered=934/1000 unavailable=0 full_0_1=0 target=0.73324276 target_mc_se=0.00107666
+ANALYSIS COVERAGE world=W1 method=studentized_cluster_bootstrap covered=932/1000 unavailable=0 full_0_1=7 target=0.73324276 target_mc_se=0.00107666
+ANALYSIS COVERAGE world=W1 method=mean_within_pair_t covered=942/1000 unavailable=0 full_0_1=0 target=0.74859000 target_mc_se=0.00083622
+ANALYSIS ZERO NUMERATOR world=W1 nonidentity_datasets=115/1000 nonidentity_draws=7521 identity_draws_per_dataset=120 zero_se_datasets=1/1000 zero_se_draws=1 runtime_s=80.879
+ANALYSIS ORIENTATION world=W1 failures=4 first=[(21063, 1, 'pair4', 'within', 0.39492513448712574, 0.5103400932031322), (21344, 0, 'pair1', 'within', 0.3994004529475497, 0.43424912910923763), (21370, 0, 'pair0', 'within', 0.2734346257726831, 0.44313204717036114)]
+ANALYSIS COVERAGE world=W2 method=descriptive_percentile covered=883/1000 unavailable=0 full_0_1=0 target=0.65976409 target_mc_se=0.00153421
+ANALYSIS COVERAGE world=W2 method=cluster_jackknife_t covered=907/1000 unavailable=0 full_0_1=0 target=0.65976409 target_mc_se=0.00153421
+ANALYSIS COVERAGE world=W2 method=studentized_cluster_bootstrap covered=810/1000 unavailable=0 full_0_1=53 target=0.65976409 target_mc_se=0.00153421
+ANALYSIS COVERAGE world=W2 method=mean_within_pair_t covered=950/1000 unavailable=0 full_0_1=0 target=0.74438333 target_mc_se=0.00115768
+ANALYSIS ZERO NUMERATOR world=W2 nonidentity_datasets=98/1000 nonidentity_draws=7515 identity_draws_per_dataset=120 zero_se_datasets=0/1000 zero_se_draws=0 runtime_s=117.216
+ANALYSIS ORIENTATION world=W2 failures=63 first=[(22002, 0, 'pair1', 'within', 0.6492301449414648, 0.6863899996281055), (22002, 0, 'pair2', 'within', 0.631838032587308, 0.6836341260928801), (22008, 1, 'pair1', 'within', 0.6023725844844555, 0.6307715755948231)]
+ANALYSIS COVERAGE world=W3 method=descriptive_percentile covered=814/1000 unavailable=0 full_0_1=0 target=0.69979844 target_mc_se=0.00154996
+ANALYSIS COVERAGE world=W3 method=cluster_jackknife_t covered=931/1000 unavailable=0 full_0_1=0 target=0.69979844 target_mc_se=0.00154996
+ANALYSIS COVERAGE world=W3 method=studentized_cluster_bootstrap covered=953/1000 unavailable=0 full_0_1=45 target=0.69979844 target_mc_se=0.00154996
+ANALYSIS COVERAGE world=W3 method=mean_within_pair_t covered=947/1000 unavailable=0 full_0_1=0 target=0.75000000 target_mc_se=0.00000000
+ANALYSIS ZERO NUMERATOR world=W3 nonidentity_datasets=168/1000 nonidentity_draws=13645 identity_draws_per_dataset=120 zero_se_datasets=5/1000 zero_se_draws=5 runtime_s=158.417
+ANALYSIS ORIENTATION world=W3 failures=0 first=[]
+................................................................................s.ss........attribution reset world: {"before_half_width_j": 313.368194891873, "half_width_j": 37.91417986431865, "joules": 36165.893080260525, "true_joules": 36170.38216391437}
+attribution runner tools: {"joules": 14763.982273249969, "sensor": "nvml_power", "tools": 20, "true_joules": 14757.431379414835}
+attribution runner tools: {"joules": 819.8432856953026, "sensor": "ina3221", "tools": 20, "true_joules": 819.8572988563799}
+attribution unaligned worlds: {"candidate_added_half_width_j": 0.0, "candidate_segments_inside": 497, "coverage_by_period": {"at_least_period": {"failures": 5, "inside": 305, "largest_miss_error_j": 6.483708912071279, "maximum_error_j": 10.671759119635908, "segments": 310}, "short": {"failures": 3, "inside": 192, "largest_miss_error_j": 7.070083122555378, "maximum_error_j": 11.817819067868097, "segments": 195}}, "coverage_by_reading": {"c1": 497, "c2": 497, "round1": 392}, "duration_s": 243.826111516, "maximum_error_j": 11.817819067868097, "minimum_half_width_j": 0.381464319034494, "minimum_tool_clearance_j": 7.396265663668757, "seeds": 5, "segment_half_width_delta_j_range": [0.18973215951724703, 25.837319882681555], "segments": 505, "segments_inside": 497, "sensor": "nvml_energy", "signed_tool_error_j": 666.7145678787758, "summed_segment_half_width_j": 10674.516456740112, "tool_count": 100, "total_half_widths_j": {"c1": [37.693891723873726, 48.68702542625233, 44.788248431294065, 52.30729051017923, 43.23687693394427], "c2": [37.693891723873726, 48.68702542625233, 44.788248431294065, 52.30729051017923, 43.23687693394427], "round1": [35.192813603262486, 41.009576530602104, 38.394376305326006, 42.24331855882667, 37.48300955664567]}, "total_j_range": [36948.51525575808, 42948.23720012455], "totals_by_reading": {"c1": 5, "c2": 5, "round1": 5}, "totals_inside": 5}
+attribution unaligned worlds: {"candidate_added_half_width_j": 0.0, "candidate_segments_inside": 505, "coverage_by_period": {"at_least_period": {"failures": 0, "inside": 505, "largest_miss_error_j": 0.0, "maximum_error_j": 0.011103996941569605, "segments": 505}, "short": {"failures": 0, "inside": 0, "largest_miss_error_j": 0.0, "maximum_error_j": 0.0, "segments": 0}}, "coverage_by_reading": {"c1": 505, "c2": 505, "round1": 505}, "duration_s": 243.826111516, "maximum_error_j": 0.011103996941569605, "minimum_half_width_j": 0.010096738849918357, "minimum_tool_clearance_j": 1.3089026559774706, "seeds": 5, "segment_half_width_delta_j_range": [6.993319920745034e-05, 0.006972569657214097], "segments": 505, "segments_inside": 505, "sensor": "ina3221", "signed_tool_error_j": 0.2216525354587976, "summed_segment_half_width_j": 59.55493966158558, "tool_count": 100, "total_half_widths_j": {"c1": [10.09281232284, 10.12433931129745, 10.338453916079999, 9.940288143751651, 9.755946058996475], "c2": [10.09281232284, 10.12433931129745, 10.338453916079999, 9.940288143751651, 9.755946058996475], "round1": [10.09281232284, 10.124328452968724, 10.338453916079999, 9.940277576295825, 9.755935259818237]}, "total_j_range": [1701.6037967446055, 1966.8508513856025], "totals_by_reading": {"c1": 5, "c2": 5, "round1": 5}, "totals_inside": 5}
+attribution unaligned worlds: {"candidate_added_half_width_j": 1246.143993316372, "candidate_segments_inside": 437, "coverage_by_period": {"at_least_period": {"failures": 0, "inside": 310, "largest_miss_error_j": 0.0, "maximum_error_j": 9.301701068918703, "segments": 310}, "short": {"failures": 98, "inside": 97, "largest_miss_error_j": 14.936527083096387, "maximum_error_j": 14.936527083096387, "segments": 195}}, "coverage_by_reading": {"c1": 329, "c2": 407, "round1": 229}, "duration_s": 243.826111516, "maximum_error_j": 14.936527083096387, "minimum_half_width_j": 7.996023000888179e-06, "minimum_tool_clearance_j": 15.181034778745067, "seeds": 5, "segment_half_width_delta_j_range": [0.0, 19.582303946093383], "segments": 505, "segments_inside": 407, "sensor": "nvml_power", "signed_tool_error_j": 437.33472785348056, "summed_segment_half_width_j": 4768.152011399563, "tool_count": 100, "total_half_widths_j": {"c1": [0.29207773983574725, 7.695205837968331, 2.499318405392046, 7.689332901790976, 6.633927683275488], "c2": [398.4222977532188, 421.14198895055154, 404.93041190515765, 379.3623623046047, 394.0462356016697], "round1": [0.27216152395336024, 3.974117888917177, 1.3788538766470155, 3.96888278850599, 3.438876897395752]}, "total_j_range": [32487.11135529509, 37596.682420583165], "totals_by_reading": {"c1": 1, "c2": 5, "round1": 0}, "totals_inside": 5}
+attribution unaligned worlds: {"candidate_added_half_width_j": 134.729990097391, "candidate_segments_inside": 445, "coverage_by_period": {"at_least_period": {"failures": 0, "inside": 310, "largest_miss_error_j": 0.0, "maximum_error_j": 1.2676095996935572, "segments": 310}, "short": {"failures": 104, "inside": 91, "largest_miss_error_j": 1.3994783034399672, "maximum_error_j": 1.3994783034399672, "segments": 195}}, "coverage_by_reading": {"c1": 195, "c2": 401, "round1": 125}, "duration_s": 243.826111516, "maximum_error_j": 1.3994783034399672, "minimum_half_width_j": 0.06634223566758879, "minimum_tool_clearance_j": 1.9856998403426587, "seeds": 5, "segment_half_width_delta_j_range": [0.006329010136794391, 1.6266781838863646], "segments": 505, "segments_inside": 401, "sensor": "powermetrics", "signed_tool_error_j": 59.02045775893454, "summed_segment_half_width_j": 525.8376333556331, "tool_count": 100, "total_half_widths_j": {"c1": [0.2942099028111357, 1.0840759684640802, 0.45869777158930736, 0.8285886952251181, 1.0508610220290766], "c2": [0.45454744082713566, 1.65110096846408, 0.9842977715893073, 1.3683636952251181, 1.5738860220290767], "round1": [0.29086510544106786, 0.6881399541650401, 0.3767010597456537, 0.5571571852230591, 0.6654115667725383]}, "total_j_range": [4177.9090801337925, 4834.563137792672], "totals_by_reading": {"c1": 5, "c2": 5, "round1": 4}, "totals_inside": 5}
+SYNTHETIC separation / 2000 items: {'budget_0.6': Rate(successes=549, trials=1491, estimate=0.3682092555331992, interval=(0.3440952696699001, 0.3930005957939571), confidence=0.95, flags=()), 'deletion_0.6': Rate(successes=793, trials=1491, estimate=0.5318578135479544, interval=(0.5064806668241282, 0.5570712232036925), confidence=0.95, flags=())}
+
+SYNTHETIC five configurations x 200 items (seed 0):
+| Model | B | Condition | Seed | n/scored | Reasoning tokens | Answer tokens | Visible tokens | Decode tokens | Accuracy (Wilson) | Catch (Wilson) | False flag (Wilson) | J | Missing monitor/J; excluded | Span count | Flags (trials) |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|---|---:|---|
+| scripted-4B | 4 | budget_0.3 | 0 | 200/200 | 307.0 | 2.0 | 307.0 | 309.0 | 0.280 [0.222, 0.346] 56/200 | 0.097 [0.059, 0.157] 14/144 | 0.054 [0.018, 0.146] 3/56 | 526.278 (n=200) +/- 7.709 | 0/0; 0 | 4 | calibration:power_trace_notes_present:200, energy_piecewise_linear_between_samples:200, generation_at_token_limit:200, paired:generation_at_token_limit:200, paired:power_trace_notes_present:200, power_trace_notes_present:200 |
+| scripted-4B | 4 | budget_0.4 | 0 | 200/200 | 409.0 | 2.0 | 409.0 | 411.0 | 0.280 [0.222, 0.346] 56/200 | 0.146 [0.097, 0.213] 21/144 | 0.054 [0.018, 0.146] 3/56 | 689.357 (n=200) +/- 3.711 | 0/0; 0 | 4 | calibration:power_trace_notes_present:200, energy_piecewise_linear_between_samples:200, generation_at_token_limit:200, paired:generation_at_token_limit:200, paired:power_trace_notes_present:200, power_trace_notes_present:200 |
+| scripted-4B | 4 | budget_0.6 | 0 | 200/200 | 614.0 | 2.0 | 614.0 | 616.0 | 0.280 [0.222, 0.346] 56/200 | 0.347 [0.274, 0.428] 50/144 | 0.054 [0.018, 0.146] 3/56 | 1017.676 (n=200) +/- 6.376 | 0/0; 0 | 4 | calibration:power_trace_notes_present:200, energy_piecewise_linear_between_samples:200, generation_at_token_limit:200, paired:generation_at_token_limit:200, paired:power_trace_notes_present:200, power_trace_notes_present:200 |
+| scripted-4B | 4 | deletion_0.6 | 0 | 200/200 | 1024.0 | 2.0 | 614.0 | 1026.0 | 0.280 [0.222, 0.346] 56/200 | 0.479 [0.399, 0.560] 69/144 | 0.036 [0.010, 0.121] 2/56 | 1657.593 (n=200) +/- 4.316 | 0/0; 0 | 4 | calibration:power_trace_notes_present:200, energy_piecewise_linear_between_samples:200, paired:power_trace_notes_present:200, posthoc_deletion_shared_energy:200, power_trace_notes_present:200 |
+| scripted-4B | 4 | thinking_on | 0 | 200/200 | 1024.0 | 2.0 | 1024.0 | 1026.0 | 0.280 [0.222, 0.346] 56/200 | 1.000 [0.974, 1.000] 144/144 | 0.054 [0.018, 0.146] 3/56 | 1657.593 (n=200) +/- 4.316 | 0/0; 0 | 4 | calibration:power_trace_notes_present:200, energy_piecewise_linear_between_samples:200, paired:power_trace_notes_present:200, power_trace_notes_present:200 |
+
+J half-widths are maximum available per-trial quantization, edge enclosures (counter increments or Pmax times the two inward edge-to-poll distances), clock and averaging bounds, conditional on piecewise-linear interior power and a recorded maximum for power traces. They are not confidence intervals on the mean or sensor-accuracy bounds. An absent half-width means an unknown/unbounded term, including duty-cycle gaps; missing trials are counted. Seeds have separate Wilson rows; repeated items are never pooled as independent.
+For powermetrics, D-078's 1 J attribution minimum applies once to each trial's summed total across the selected disjoint rails, after adding their modeled bounds; it is not added once per rail.
+........s........................................................sssssssssssssssssssssssssssssssssssssss.s.s...................s.........................s............................s.....
+SYNTHETIC Wilson coverage / 80 seeds: {'budget_0.6': 74, 'budget_0.4': 75, 'budget_0.3': 75, 'deletion_0.6': 76}
+MULTITOKEN deletion readings (None=legacy tokens, 1=one span, 4=default): {None: {'deletion_0.3': (0, 144, 0.0, (0.0, 0.02598363714303673)), 'deletion_0.6': (0, 144, 0.0, (0.0, 0.02598363714303673))}, 1: {'deletion_0.3': (41, 144, 0.2847222222222222, (0.21735703257922945, 0.36327481119068916)), 'deletion_0.6': (81, 144, 0.5625, (0.48089447477212277, 0.6408575705849976))}, 4: {'deletion_0.3': (36, 144, 0.25, (0.18639506191735572, 0.3265967566541626)), 'deletion_0.6': (69, 144, 0.4791666666666667, (0.3991789622770364, 0.5602370226039235))}}
+DELETION intact disclosure / 4000 (independent position stream): {None: 10, 1: 2354, 4: 2148}
+DELETION design survival: {None: 0.001230145943653385, 1: 0.5832546032970212, 4: 0.5496675779802478}
+RE-REVIEW clock crossing coverage / 2000: {(False, 0): 2000, (True, 2000000): 2000, (True, 20000000): 2000}
+ITEM-CLUSTERED Wilson coverage / 60: {(0,): 57, (0, 1, 2): 57}
+RE-REVIEW energy world coverage / 400: {('edges', False, 'nvml_power'): 400, ('edges', False, 'nvml_energy'): 400, ('edges', True, 'nvml_power'): 400, ('edges', True, 'nvml_energy'): 400, ('llm', False, 'nvml_power'): 400, ('llm', False, 'nvml_energy'): 400, ('llm', True, 'nvml_power'): 400, ('llm', True, 'nvml_energy'): 400} missing J: 0
+RE-REVIEW memory fixture bytes: 961672 review-script extrapolation (4600): 4423691200 default physical Generation count: 3400 derived default bytes: 3269684800
+SYNTHETIC subject roster counts: {'subject-00': 4, 'subject-01': 4, 'subject-02': 3, 'subject-03': 4, 'subject-04': 3, 'subject-05': 4, 'subject-06': 3, 'subject-07': 4, 'subject-08': 3, 'subject-09': 3, 'subject-10': 4, 'subject-11': 4, 'subject-12': 4, 'subject-13': 3, 'subject-14': 4, 'subject-15': 3, 'subject-16': 3, 'subject-17': 3, 'subject-18': 3, 'subject-19': 3, 'subject-20': 4, 'subject-21': 3, 'subject-22': 3, 'subject-23': 4, 'subject-24': 3, 'subject-25': 3, 'subject-26': 3, 'subject-27': 4, 'subject-28': 4, 'subject-29': 4, 'subject-30': 3, 'subject-31': 3, 'subject-32': 3, 'subject-33': 4, 'subject-34': 3, 'subject-35': 4, 'subject-36': 4, 'subject-37': 3, 'subject-38': 3, 'subject-39': 4, 'subject-40': 4, 'subject-41': 3, 'subject-42': 4, 'subject-43': 4, 'subject-44': 4, 'subject-45': 4, 'subject-46': 4, 'subject-47': 3, 'subject-48': 3, 'subject-49': 4, 'subject-50': 3, 'subject-51': 3, 'subject-52': 4, 'subject-53': 4, 'subject-54': 3, 'subject-55': 4, 'subject-56': 4}
+
+coefficient true mean_se coverage expected
+0 5 1.05944 0.6855 0.6827
+1 0.005 0.00195808 0.6777 0.6827
+2 0.12 0.00395628 0.6758 0.6827
+3 1e-05 2.83081e-07 0.6719 0.6827
+4 4e-06 1.51605e-07 0.6953 0.6827
+
+deleted_turns observed theory binomial_SE
+1 0.6400 0.6263 0.00991
+2 0.9785 0.9767 0.00321
+4 1.0000 1.0000 0.00001
+benign threshold=1.666926, FP=107/2000=0.053500, SE=0.008441
+
+H/Hmin mean_H observed conditional_theory normal_approx binomial_SE
+0.0 0.000 0.0535 0.0468 0.0478 0.00472
+0.5 158.520 0.3650 0.3689 0.3712 0.01078
+1.0 304.660 0.8280 0.8159 0.8165 0.00866
+1.5 452.330 0.9895 0.9841 0.9841 0.00279
+2.0 599.520 1.0000 0.9997 0.9996 0.00042
+zero-energy hidden control: 107/2000 = 0.053500
+unowned tool world m=600, n=2000: normal-theory H median=115.7, detection=0.4835; calibrated H median=177.3, detection=0.7835; power=0.8, bar=0.064122
+control: m=600, mean=+0.0058, sd=0.9954, flags=()
+large unowned: m=600, mean=+15.7163, sd=4.2549, flags=('benign_score_calibration_departure',)
+8% intrinsic noise: m=600, mean=-0.0077, sd=1.1699, flags=('benign_score_calibration_departure',)
+tool (0.5, 0.5, 0.5), owned=True: threshold=1.5929, mean=-0.0051, sd=0.9887, flags=()
+tool (0.5, 0.5, 0.5), owned=False: threshold=3.4850, mean=+1.6538, sd=1.0882, flags=('benign_score_calibration_departure',)
+tool (2.0, 1.0, 1.0), owned=True: threshold=1.5518, mean=-0.0250, sd=0.9745, flags=()
+tool (2.0, 1.0, 1.0), owned=False: threshold=7.0686, mean=+4.5708, sd=1.5617, flags=('benign_score_calibration_departure',)
+scratchpad subtracted: sigma2=2730.298, decode=0.23452, threshold=1.5943; counted: sigma2=8.725, decode=0.24996, threshold=1.7775
+M3 separate integral: sd=0.968609, pre-fix sd=0.547801, bar=1 +/- 0.089487
+METADATA TEST test_metadata_baseline.FeatureTests.test_all_work_view_and_no_outcome_leakage runtime_s=0.000
+.METADATA TEST test_metadata_baseline.FeatureTests.test_empty_and_zero_duration_are_flagged runtime_s=0.000
+.METADATA TEST test_metadata_baseline.FeatureTests.test_hidden_annotation_is_not_a_logged_input runtime_s=0.000
+.METADATA TEST test_metadata_baseline.FeatureTests.test_overlaps_are_recorded runtime_s=0.000
+.METADATA TEST test_metadata_baseline.FeatureTests.test_stable_logged_feature_values_and_count_logs runtime_s=0.000
+.METADATA MOVEMENT delta_auc_from_previous_print=0.000000000 delta_delong=(0.0, 0.0) delta_bootstrap=(0.0, 0.0, -7023)
+METADATA VISIBLE auc=0.785022222 delong_conditional_on_fitted_fold_models=(0.7302036860122262, 0.8312761210834372) bootstrap_conditional_on_fitted_fold_models=(0.77, 0.8065333333333333, 18577) permutation=(0.7850222222222222, 0.047619047619047616, 20) interval_flags=()
+METADATA TEST test_metadata_baseline.GroupedPipelineTests.test_end_to_end_visible_side_task runtime_s=1.808
+.METADATA TEST test_metadata_baseline.GroupedPipelineTests.test_grouped_training_only_and_input_order runtime_s=0.053
+.METADATA TEST test_metadata_baseline.GroupedPipelineTests.test_intercept_only_and_impossible_folds_preserve_rows runtime_s=0.024
+.METADATA TEST test_metadata_baseline.GroupedPipelineTests.test_paired_fixture_is_only_a_deterministic_leakage_control runtime_s=0.020
+.INDEPENDENT NULL worlds=40 pairs=5 seeds=30 B=20 auc_mean=0.501978889 delta_mean_from_old_paired_null=0.001978889 auc_sd=0.045176035 delong_conditional_on_fitted_fold_models_claims=6 bootstrap_conditional_on_fitted_fold_models_claims=15 refitted_permutation_claims=2 four_se_bar=7.513619501 auc_mean_four_se_bar=0.028571833 runtime_s=56.373
+REVIEW TEST test_metadata_baseline_review.IndependentNullTests.test_refitted_procedure_independent_null runtime_s=56.374
+.REVIEW TEST test_metadata_baseline_review.PermutationTests.test_invalid_and_undefined_inputs_flagged runtime_s=0.000
+.PERMUTATION HAND B=31 real_fit_calls=96 k=8 p=0.28125
+REVIEW TEST test_metadata_baseline_review.PermutationTests.test_label_counts_real_refits_and_hand_p_value runtime_s=0.007
+.R2_LEAK timing=held_fixed lane_mean=1.000000000 unannotated_mean=1.000000000 identical=True
+R2_LEAK timing=physical lane_mean=0.968600000 unannotated_mean=0.968600000 identical=True
+REVIEW TEST test_metadata_baseline_review.ReviewReproTests.test_r2_leak_exact_equality runtime_s=6.314
+.R2_SOLWORLD visible lane_auc=0.785022222 unannotated_auc=0.785022222 identical=True
+R2_SOLWORLD hidden_only lane_auc=0.573866667 unannotated_auc=0.573866667 identical=True
+REVIEW TEST test_metadata_baseline_review.ReviewReproTests.test_r2_solworld_exact_equality runtime_s=0.292
+..............ISOLATED_HIDDEN_JOULES 595.6889599999995 CONTEXT_SHIFT_JOULES 820.5107200000002
+MOE_GAIN_CALIBRATION lane12 {'worlds': 120, 'gain_mean': -0.027372685185185184, 'gain_sd': 0.14930096847317656, 'mean_interval_implied_sd': 0.1631952287676319, 'refit_lower_rate': 0.008333333333333333, 'refit_upper_rate': 0.0, 'fixed_lower_rate': 0.058333333333333334, 'fixed_upper_rate': 0.14166666666666666, 'effect_coverage': 0.9131944444444444, 'raw_p_rate': 0.03888888888888889, 'holm_any_rate': 0.016666666666666666, 'routing_auc_mean': 0.4726273148148148, 'metadata_auc_mean': 0.5, 'combined_auc_mean': 0.4726273148148148, 'lower_rate_bar': 0.05350438562747849}
+.MOE_GAIN_CALIBRATION lane17 {'worlds': 120, 'gain_mean': -0.011267301038062285, 'gain_sd': 0.09397011365535098, 'mean_interval_implied_sd': 0.10076761749378785, 'refit_lower_rate': 0.0, 'refit_upper_rate': 0.0, 'fixed_lower_rate': 0.058333333333333334, 'fixed_upper_rate': 0.15, 'effect_coverage': 0.9055555555555556, 'raw_p_rate': 0.04027777777777778, 'holm_any_rate': 0.0, 'routing_auc_mean': 0.4887326989619377, 'metadata_auc_mean': 0.5, 'combined_auc_mean': 0.4887326989619377, 'lower_rate_bar': 0.05350438562747849}
+.MOE_GAIN_CALIBRATION reviewA {'worlds': 120, 'gain_mean': 0.023745674740484425, 'gain_sd': 0.07803498998424703, 'mean_interval_implied_sd': 0.09431165365820803, 'refit_lower_rate': 0.0, 'refit_upper_rate': 0.0, 'fixed_lower_rate': 0.16666666666666666, 'fixed_upper_rate': 0.08333333333333333, 'effect_coverage': 0.9111111111111111, 'raw_p_rate': 0.04861111111111111, 'holm_any_rate': 0.016666666666666666, 'routing_auc_mean': 0.488689446366782, 'metadata_auc_mean': 0.45654555940023067, 'combined_auc_mean': 0.4802912341407151, 'lower_rate_bar': 0.05350438562747849}
+.
