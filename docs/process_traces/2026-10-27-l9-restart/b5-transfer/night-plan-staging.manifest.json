@@ -1,0 +1,247 @@
+{
+ "schema": "joulewise.b5_transfer_manifest.v1",
+ "item": "night-plan-staging",
+ "data_root": "/Users/edr",
+ "created_utc": "2026-10-28T13:33:17Z",
+ "procedure": "docs/process_traces/2026-10-27-l9-restart/BLOCK5-TRANSFER.md",
+ "notes": [
+  "identity-epoch.json and t1-bindings.json referenced by each analysed attempt's night_plan.json (hazard_window.bindings); added beside the brief's items as custody locators the dry run may read"
+ ],
+ "file_count": 45,
+ "dir_count": 9,
+ "total_uncompressed_bytes": 265504,
+ "files": [
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/arm-env.zsh",
+   "size_bytes": 592,
+   "sha256": "dfd332ab70ff65ffdd6261b63c2753675cd3cb954e336ee211b439a574196c11"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/chain-check.json",
+   "size_bytes": 826,
+   "sha256": "6515ce7257e30d7f14fcfdcd7dfbcbdfa6e903a960e6c441a1b9375748000615"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/desk-seal-check/flags/collector_runs.jsonl",
+   "size_bytes": 3627,
+   "sha256": "7ad155677d616b59f4a98fcede8420e139384fa52b5d3da7c4c30d2dd15c1b67"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/desk-seal-check/flags/executed_inventory.desk.aea21652d453.json",
+   "size_bytes": 55023,
+   "sha256": "aea21652d453dcb72c4114d04c8680d6fcc05a5998e51912bb5f04341b3fc393"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/desk-seal-check/stderr.txt",
+   "size_bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/desk-seal-check/stdout.json",
+   "size_bytes": 420,
+   "sha256": "c8b898afdc9044857177651c432bc0220b9a5c395980d6da3412fd8f3f45c192"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/harvest.stderr",
+   "size_bytes": 1731,
+   "sha256": "12d383b40c7b1e6cc76961f6d45e12c5a17a1e870d5d8697f108f931028ed7bf"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/harvest.stdout",
+   "size_bytes": 2901,
+   "sha256": "c5f4fb9727604707665c1e7d4e1e48cd93145223d16530cf1f41f276298157f4"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/identity-epoch.json",
+   "size_bytes": 246,
+   "sha256": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/inputs-summary.json",
+   "size_bytes": 443,
+   "sha256": "c649aa1cbdebc955423f322c7555c532cdf554bab8198021a88550db03a10bae"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/install.out",
+   "size_bytes": 1078,
+   "sha256": "b104b60a66e99685d6072a90c2ca4018e78e09cad0262b0250f3f19ccb8567f2"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/plan-inputs.json",
+   "size_bytes": 3202,
+   "sha256": "7c94422a3288077e8a1c0ecec6eef83762f649e0deebf945b38fe9f0aae2ffd4"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/plan-record.json",
+   "size_bytes": 16522,
+   "sha256": "5ca1413ea5287c8b1b5f30873f4087309638d3e74498991ba339d0c116b5bbdf"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/schedule.json",
+   "size_bytes": 273,
+   "sha256": "cad34620c55ea7f7dfe214be6474f1f3434b7a03d96adf8b42768548aeff74b6"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-alpha-a1-20261009T2312Z/t1-bindings.json",
+   "size_bytes": 541,
+   "sha256": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/arm-env.zsh",
+   "size_bytes": 584,
+   "sha256": "28ac3e8b8cf599b18d085cd2858fa5bfccc02e402b302e5e9e6902b13cb4d469"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/chain-check.json",
+   "size_bytes": 824,
+   "sha256": "615c3d529af337a66ff3711262f3adddb7b2d27fe69bad6e0cb6fca87b7033ce"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/desk-seal-check/flags/collector_runs.jsonl",
+   "size_bytes": 3618,
+   "sha256": "feb8e290ca5f8cab374e536211b0f9f2c41aa2fd428a06550e148047ef3f7d2c"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/desk-seal-check/flags/executed_inventory.desk.9cf7e205f41c.json",
+   "size_bytes": 54571,
+   "sha256": "9cf7e205f41cd4bc04b6714267b6091ebc67370011be7caba5f3f4c64c15390d"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/desk-seal-check/stderr.txt",
+   "size_bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/desk-seal-check/stdout.json",
+   "size_bytes": 419,
+   "sha256": "00821b11f7201174cee4c5ef5140071bb27170c5ad38a8fbbce3159bffe7880b"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/harvest.stderr",
+   "size_bytes": 1873,
+   "sha256": "d803576924bcb12bcc72e1c7cde3443046a3db3d4fcf320ef53169291c8e156e"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/harvest.stdout",
+   "size_bytes": 3057,
+   "sha256": "e1b154872b55173aba84d14ed6c6ce894a881940bcba5ef70e7f5eb537068c8d"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/identity-epoch.json",
+   "size_bytes": 246,
+   "sha256": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/inputs-summary.json",
+   "size_bytes": 441,
+   "sha256": "1dd878533e25f46bd3d9c4b4e61994735ac5220862e75aa449441a3971e6a57d"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/install.out",
+   "size_bytes": 1077,
+   "sha256": "df8266f582c54ad2e795166ce5c92a29a0b96a5488105a86a4cbc3b3ebb142e7"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/plan-inputs.json",
+   "size_bytes": 3188,
+   "sha256": "1561c3200a68c0c132dbdfd8915d687d55e0459730aa137211c0a1ca556008b5"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/plan-record.json",
+   "size_bytes": 16287,
+   "sha256": "e9ec25020e800443a69b7b0b0fea40e0aa9caf952095849d23e4ad941d9c62a1"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/schedule.json",
+   "size_bytes": 274,
+   "sha256": "d3f566a4324d42813b81e31703df0273e25534d406ce6c7fa6d1e0cd5f092db3"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-beta-a6-20261011T2011Z/t1-bindings.json",
+   "size_bytes": 541,
+   "sha256": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/arm-env.zsh",
+   "size_bytes": 592,
+   "sha256": "bf6ca5e769fb312eb40f2dc2331a22ecad4dd53c6434a6cdf8971ff0f713f7ef"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/chain-check.json",
+   "size_bytes": 841,
+   "sha256": "554dd3f989e68ffe68e579ecf496cb616a7d3e99e2608b2a5a8cefdedf59f0a6"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/desk-seal-check/flags/collector_runs.jsonl",
+   "size_bytes": 4645,
+   "sha256": "1f83fc407688f81fccbdd2793f08dc9196e99fa658541f2a73ae74fee51d904b"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/desk-seal-check/flags/executed_inventory.desk.89ed4041d9b7.json",
+   "size_bytes": 57114,
+   "sha256": "89ed4041d9b793bd43270b9ffe168fae6195f75a58323c65f7c82cbdf33d6e9a"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/desk-seal-check/stderr.txt",
+   "size_bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/desk-seal-check/stdout.json",
+   "size_bytes": 420,
+   "sha256": "fc79c4833001f517ce3105f07f9b32d628a4fe404bccb86fc2beb1126ecae5d6"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/harvest.stderr",
+   "size_bytes": 1439,
+   "sha256": "ae59225802bfc8b2e7ab71797ea528d66f28ed535e7f5e1b861e97b85c907938"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/harvest.stdout",
+   "size_bytes": 3074,
+   "sha256": "4070c566cd901ba9a73a9aa69e11ae7147885e80f776f95f85dd24bc9f51c960"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/identity-epoch.json",
+   "size_bytes": 246,
+   "sha256": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/inputs-summary.json",
+   "size_bytes": 442,
+   "sha256": "9f3825b6e2b84c714d4a1f9a45f16e3455d940cabf75c2d60d4db6d091304944"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/install.out",
+   "size_bytes": 1078,
+   "sha256": "ca499b430f39439bb2b27c2f73e8e05fa0c4fcc38d8d91387b20ee4bc1bc1d65"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/plan-inputs.json",
+   "size_bytes": 3216,
+   "sha256": "61b596b06cbead66fd69191ee1373a99926ab246581216e4813c5309fa2b9f26"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/plan-record.json",
+   "size_bytes": 17158,
+   "sha256": "cac08d30aa4f01a76897f2e50c61c5f0faea91de23f5fd3a28d2ff66936d8230"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/schedule.json",
+   "size_bytes": 273,
+   "sha256": "f049c4c6b5478d11bae36e09599641e179c1489c6677dc6c027022f5fa28d3de"
+  },
+  {
+   "path": "night-plan-staging/v5-b5-gamma-a1-20261012T0420Z/t1-bindings.json",
+   "size_bytes": 541,
+   "sha256": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98"
+  }
+ ],
+ "tar": {
+  "name": "night-plan-staging.tar.zst",
+  "size_bytes": 47406,
+  "sha256": "c7e3f8a93066bfac21bb48d01c57098a382280fd4d2c53b71f453237558a0cfb",
+  "command": "COPYFILE_DISABLE=1 tar --no-mac-metadata -n -cf - -C /Users/edr --null -T <dirs+files> | zstd -3 -T0",
+  "entries": 54
+ }
+}
