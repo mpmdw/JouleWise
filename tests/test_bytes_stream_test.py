@@ -4,6 +4,8 @@ import io
 import json
 import math
 import statistics
+import random
+from fractions import Fraction as F
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +17,13 @@ import weakref
 
 from scripts import bytes_stream_test as probe
 from joulewise.flags.collect import RUNTIME_PACKAGES
+
+
+def synthetic_clock():
+    return {"clock": "CLOCK_MONOTONIC_RAW", "clock_resolution_s": 4.2e-8,
+            "clock_tick_num_ns": 125, "clock_tick_den": 3,
+            "clock_tick_source": "synthetic 125/3 ns model (lead measurement 2026-10-28)",
+            "clock_ns_conversion": "unknown", "clock_ns_conversion_source": "synthetic"}
 
 
 class Array:
@@ -304,7 +313,7 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
     @staticmethod
     def knee(calls):
         receipts = [{"bytes_per_read": size, "start_ns": 0, "end_ns": duration*1e9,
-                     "repeats": n} for size, rows in calls.items() for duration, n in rows]
+                     "repeats": n, **synthetic_clock()} for size, rows in calls.items() for duration, n in rows]
         result = probe.knee_scan(receipts)
         marg = {p["size"]: p["m_bytes_s"] for p in result["pairs"] if p["m_bytes_s"] is not None}
         dm = {p["size"]: p["dm_bytes_s"] for p in result["pairs"] if p["m_bytes_s"] is not None}
@@ -429,7 +438,7 @@ class ReaderTests(unittest.TestCase):
                 self.ns += round(seconds*1e9)
         from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
         cls.payload = {'S': 2**32,'C1':2**22,'C3':2**23,'C2':2**24}
-        cls.scan = probe.knee_scan([{'bytes_per_read':size,'repeats':n,'start_ns':0,'end_ns':round(d*1e9)}
+        cls.scan = probe.knee_scan([{'bytes_per_read':size,'repeats':n,'start_ns':0,'end_ns':round(d*1e9),**synthetic_clock()}
                     for size,rows in ReadingRuleArithmeticTests.scan_model(True,True).items() for d,n in rows])
         reference,versions = probe.registered_stack()
         stack = deepcopy(reference);stack.update(versions)
@@ -558,6 +567,168 @@ class ReaderTests(unittest.TestCase):
         value=probe.reduce_boundary(calls,self.payload,'rails')
         self.assertEqual(value['epsilon_flip_over_alpha'],'not defined (alpha is zero)')
 
+
+
+def dram_only(s):
+    return 50e-6+s/331.6e9
+
+
+def worked5(s):
+    # marginal: 1000 GB/s up to 32 MiB; 32->64 MiB pair at 198.8 GB/s; 331.6 from 64 MiB up
+    k = 64*2**20
+    if s <= k//2:
+        return 50e-6+s/1e12
+    t32 = 50e-6+(k//2)/1e12
+    t64 = t32+(k//2)/198.8e9
+    return t64+(s-k)/331.6e9
+
+
+def quantized_stamp(tick_index, rounding):
+    value = tick_index*125
+    return value//3 if rounding == 'floor' else (value+1)//3
+
+
+def receipts(model, sigma, rng, rounding='floor'):
+    out=[]
+    for s in (2**k for k in range(14,36)):
+        td=model(s)
+        n=math.floor(2/td)
+        for j in range(3):
+            dur=n*td*(1+rng.gauss(0,sigma))
+            # Random phase in one physical tick, at random integer tick epoch.
+            # Integer arithmetic for the large epoch avoids floating cancellation.
+            phase=rng.random()
+            index=rng.randrange(24_000_000_000,48_000_000_000)
+            end_index=index+math.floor(phase+dur*1e9/(125/3))
+            start=quantized_stamp(index,rounding)
+            end=quantized_stamp(end_index,rounding)
+            out.append(dict(bytes_per_read=s,repeats=n,start_ns=start,end_ns=end,
+                **{**synthetic_clock(), "clock_ns_conversion": rounding}))
+    return out
+
+
+def exact_reference(rec):
+    times={}
+    for s in sorted({c['bytes_per_read'] for c in rec}):
+        calls=[c for c in rec if c['bytes_per_read']==s]
+        ds=[F(c['end_ns']-c['start_ns'],10**9*c['repeats']) for c in calls]
+        t=sum(ds)/len(ds)
+        qs=[2*(max(F(str(c['clock_resolution_s']))*10**9, F(c['clock_tick_num_ns'],c['clock_tick_den']))+1)
+            / (10**9*c['repeats']) for c in calls]
+        times[s]=(t,max(abs(d-t) for d in ds)+sum(qs)/len(qs))
+    pairs={}
+    sizes=sorted(times)
+    for lo,hi in zip(sizes,sizes[1:]):
+        d=times[hi][0]-times[lo][0]
+        dd=times[hi][1]+times[lo][1]
+        if d>dd:
+            pairs[hi]={'m_bytes_s':F(hi-lo)/d,'lower':F(hi-lo)/(d+dd),'upper':F(hi-lo)/(d-dd)}
+    c=max(pairs,key=lambda s:pairs[s]['lower'])
+    md,mc=pairs[sizes[-1]],pairs[c]
+    h=lambda x,y:1/(F(63,64)/x+F(1,64)/y)
+    th={key:h(md[key],mc[key]) for key in ('m_bytes_s','lower','upper')}
+    target=pairs[2**25]
+    target.update(margin=target['m_bytes_s']-th['m_bytes_s'],
+                  bar=target['m_bytes_s']-target['lower']+th['upper']-th['m_bytes_s'])
+    return th,target
+
+
+
+class ExactKneeTests(unittest.TestCase):
+    def test_rational_worked_comparison(self):
+        rec=receipts(worked5,0,random.Random(8))
+        result=probe.knee_scan(rec)
+        th,pair=exact_reference(rec)
+        actual=next(p for p in result['pairs'] if p['size']==2**25)
+        differences=[float(abs(F(actual[key])-pair[key]))/1e9
+                     for key in ('m_bytes_s','lower','upper','margin','bar')]
+        differences += [float(abs(F(result[outkey])-th[key]))/1e9 for outkey,key in
+                        [('threshold','m_bytes_s'),('threshold_lower','lower'),('threshold_upper','upper')]]
+        # Consult verify.py: 1% of H2's smallest printed uncertainty,
+        # 0.000045 GB/s, is 4.5e-7 GB/s. Against the exact rationals,
+        # 1e6 * binary64 discrepancy must also fit below that same bar.
+        agreement=4.5e-7
+        self.assertLess(1e6*max(differences),agreement)
+        for difference in differences:
+            self.assertLess(difference,agreement)
+        self.assertEqual(result['K'],2**26)  # discrete output identity
+
+    def test_reduced_consult_noise_sweep(self):
+        # Fixed assumptions, not fitted tolerances; retain outcomes without
+        # asserting rates. 20 trials/cell keeps this regression in seconds.
+        for rounding in ('floor','nearest'):
+            for level,sigma in enumerate((0,.0005,.002,.005,.01)):
+                for world,model in enumerate((worked5,dram_only)):
+                    rng=random.Random(20261028+level*10+world)
+                    for trial in range(20):
+                        rec=receipts(model,sigma,rng,rounding)
+                        result=probe.knee_scan(rec)
+                        self.assertEqual(len(result['pairs']),21)
+                        if sigma == 0:
+                            self.assertEqual(result['K'],2**26 if world==0 else None)
+                        if result['K'] is not None:
+                            self.assertTrue(all(p['above'] for p in result['arm_checks']))
+                            self.assertTrue(all(p['lower']>result['threshold_upper'] for p in
+                                                result['pairs'] if p['above']))
+
+    def test_real_stream_scan_receipts_reloaded_through_cli(self):
+        class ScanMX:
+            uint8='uint8'
+            def __init__(self, td): self.td,self.count=td,0
+            def ones(self, shape, dtype): return object()
+            def sum(self, data): return object()
+            def eval(self, value): self.count+=1
+            def synchronize(self): pass
+            def clock(self): return 10**12+round(self.count*self.td*1e9)
+        reference,versions=probe.registered_stack()
+        stack={**reference,**versions}
+        for model,expected in ((worked5,2**26),(dram_only,None)):
+            all_calls=[]
+            with tempfile.TemporaryDirectory() as tmp:
+                for size in (2**k for k in range(14,36)):
+                    for j in range(3):
+                        mx=ScanMX(model(size));n=math.floor(2/model(size))
+                        with patch.object(probe,'collect_stack',return_value=stack), \
+                             patch.object(probe,'clock_metadata',return_value=synthetic_clock()):
+                            rec=probe.stream(size,n,device='synthetic',idle_s=0,settle_s=0,
+                                             mx=mx,clock_ns=mx.clock,sleep=lambda _:None)
+                        path=Path(tmp)/f'{size}-{j}.json'
+                        path.write_text(json.dumps(rec,allow_nan=False))
+                        all_calls.append(json.loads(path.read_text()))
+                path=Path(tmp)/'scan.json';path.write_text(json.dumps(all_calls))
+                cli=subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
+                                    'scan',str(path)],capture_output=True,text=True)
+                self.assertEqual(cli.returncode,0,cli.stderr)
+                result=json.loads(cli.stdout)
+                self.assertEqual(result['K'],expected)
+                self.assertEqual(len(result['receipts']),66)
+
+    def test_missing_clock_retains_all_calls_and_reason(self):
+        rec=receipts(worked5,0,random.Random(8))
+        del rec[0]['clock_resolution_s']
+        result=probe.knee_scan(rec)
+        self.assertIsNone(result['K'])
+        self.assertIn('clock resolution missing',result['reason'])
+        self.assertEqual(result['receipts'],rec)
+
+    def test_clock_receipt_and_measured_mac_timebase(self):
+        self.assertEqual(probe.clock_duration_bound_ns(synthetic_clock()),86.)
+        metadata=probe.clock_metadata()
+        self.assertEqual(metadata['clock_resolution_s'],probe.time.clock_getres(probe.time.CLOCK_MONOTONIC_RAW))
+        self.assertEqual(metadata['clock_ns_conversion'],'unknown')
+        # Exercise the actual macOS collection path via a fake C ABI, rather
+        # than substituting this seat's Linux clock for the Mac timebase.
+        class Mach:
+            def __call__(self, ptr):
+                ptr._obj.numer,ptr._obj.denom=125,3
+                return 0
+        class Lib:
+            mach_timebase_info=Mach()
+        with patch.object(probe.sys,'platform','darwin'), patch('ctypes.CDLL',return_value=Lib()), \
+             patch.object(probe.time,'clock_getres',return_value=4.2e-8):
+            mac=probe.clock_metadata()
+        self.assertEqual((mac['clock_tick_num_ns'],mac['clock_tick_den']),(125,3))
+        self.assertEqual(mac['clock_duration_bound_ns'],86.)
 
 
 if __name__ == "__main__":

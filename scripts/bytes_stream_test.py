@@ -144,65 +144,124 @@ def compare_stack(stack, reference, versions, *, capture_stack=None):
             "comparison": comparison}
 
 
-def knee_scan(receipts):
-    """§1: three calls per doubling size; uncertainties are endpoint bounds.
+def clock_metadata():
+    """Record the actual clock, without inferring conversion from its return type."""
+    result = {"clock": "CLOCK_MONOTONIC_RAW", "clock_resolution_s": None,
+              "clock_tick_num_ns": None, "clock_tick_den": None,
+              "clock_tick_source": "not applicable (non-macOS clock_getres)",
+              "clock_ns_conversion": "unknown", "clock_ns_conversion_source": "unknown"}
+    try:
+        result["clock_resolution_s"] = time.clock_getres(time.CLOCK_MONOTONIC_RAW)
+        if sys.platform == "darwin":
+            import ctypes
+            class Timebase(ctypes.Structure):
+                _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
+            info = Timebase()
+            lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            lib.mach_timebase_info.argtypes = [ctypes.POINTER(Timebase)]
+            lib.mach_timebase_info.restype = ctypes.c_int
+            result["clock_tick_source"] = "mach_timebase_info"
+            if lib.mach_timebase_info(ctypes.byref(info)) != 0 or not info.denom:
+                raise ValueError("mach_timebase_info unavailable")
+            result.update(clock_tick_num_ns=info.numer, clock_tick_den=info.denom)
+        result["clock_duration_bound_ns"] = clock_duration_bound_ns(result)
+    except (OSError, ValueError, AttributeError) as exc:
+        result["clock_error"] = str(exc)
+        result["clock_duration_bound_ns"] = not_defined(str(exc))
+    return result
 
-    Return every input and comparison, including undefined pairs, for printing.
-    Only the receipt's integer-ns resolution and observed spread set the bars.
-    """
+
+def clock_duration_bound_ns(receipt):
+    """Two endpoints, each within r plus the 1 ns integer conversion unit."""
+    if receipt.get("clock") != "CLOCK_MONOTONIC_RAW":
+        raise ValueError("clock identity missing or unsupported")
+    res = receipt.get("clock_resolution_s")
+    if not isinstance(res, (int, float)) or not math.isfinite(res) or res <= 0:
+        raise ValueError("clock resolution missing")
+    tick = 0
+    if receipt.get("clock_tick_source") != "not applicable (non-macOS clock_getres)":
+        num, den = receipt.get("clock_tick_num_ns"), receipt.get("clock_tick_den")
+        if type(num) is not int or type(den) is not int or num <= 0 or den <= 0:
+            raise ValueError("clock timebase missing")
+        tick = num/den
+    return 2*(max(res*1e9, tick)+1)
+
+
+def knee_scan(receipts):
+    """§1 exact reciprocal intervals; preserve every call, pair and arm check."""
+    result = {"status": "knee not found", "K": None, "sizes": {}, "pairs": [],
+              "receipts": receipts, "candidate_K": None, "arm_checks": [],
+              "threshold": None, "threshold_uncertainty": None}
     grouped = {}
-    for receipt in receipts:
-        grouped.setdefault(receipt["bytes_per_read"], []).append(receipt)
-    sizes = sorted(grouped)
-    if len(sizes) < 2 or any(hi != 2*lo for lo, hi in zip(sizes, sizes[1:])):
-        raise ValueError("scan needs consecutive doubling sizes")
-    times = {}
-    for size, calls in sorted(grouped.items()):
-        if len(calls) != 3:
-            raise ValueError("scan needs three calls per size")
-        values = [(c["end_ns"]-c["start_ns"])/1e9/c["repeats"] for c in calls]
-        if any(c["repeats"] <= 0 or v <= 0 for c, v in zip(calls, values)):
-            raise ValueError("scan counts and durations must be positive")
-        mean = statistics.mean(values)
-        uncertainty = max(abs(v-mean) for v in values) + statistics.mean(1e-9/c["repeats"] for c in calls)
-        times[size] = {"t_s": mean, "dt_s": uncertainty, "calls": calls}
-    pairs = []
+    try:
+        for receipt in receipts:
+            grouped.setdefault(receipt["bytes_per_read"], []).append(receipt)
+        sizes = sorted(grouped)
+        if len(sizes) < 2 or any(hi != 2*lo for lo, hi in zip(sizes, sizes[1:])):
+            raise ValueError("scan needs consecutive doubling sizes")
+        times = result["sizes"]
+        for size, calls in sorted(grouped.items()):
+            if len(calls) != 3:
+                raise ValueError("scan needs three calls per size")
+            if any(c["repeats"] <= 0 or c["end_ns"] <= c["start_ns"] for c in calls):
+                raise ValueError("scan counts and durations must be positive")
+            values = [(c["end_ns"]-c["start_ns"])/1e9/c["repeats"] for c in calls]
+            mean = statistics.mean(values)
+            qs = [clock_duration_bound_ns(c)/1e9/c["repeats"] for c in calls]
+            uncertainty = max(abs(v-mean) for v in values) + statistics.mean(qs)
+            times[size] = {"t_s": mean, "dt_s": uncertainty, "q_s": qs, "calls": calls}
+    except (KeyError, TypeError, ValueError) as exc:
+        result["reason"] = "scan prerequisite missing: "+str(exc)
+        return result
+    pairs = result["pairs"]
     for lo, hi in zip(sizes, sizes[1:]):
         d = times[hi]["t_s"]-times[lo]["t_s"]
         dd = times[hi]["dt_s"]+times[lo]["dt_s"]
         pair = {"size": hi, "difference_s": d, "uncertainty_s": dd,
                 "m_bytes_s": None, "dm_bytes_s": None, "above": False}
         if d <= dd:
-            pair["description"] = "not defined (dispatch-time difference not separated from zero)"
+            pair["description"] = not_defined("dispatch-time difference not separated from zero")
         else:
-            pair.update(m_bytes_s=(hi-lo)/d, dm_bytes_s=(hi-lo)*dd/(d*(d-dd)))
+            m, low, high = (hi-lo)/d, (hi-lo)/(d+dd), (hi-lo)/(d-dd)
+            pair.update(m_bytes_s=m, lower=low, upper=high,
+                        lower_excursion=m-low, upper_excursion=high-m, dm_bytes_s=high-m)
         pairs.append(pair)
-    result = {"status": "knee not found", "K": None, "sizes": times, "pairs": pairs,
-              "threshold": None, "threshold_uncertainty": None}
     defined = [p for p in pairs if p["m_bytes_s"] is not None]
     if pairs[-1]["m_bytes_s"] is None:
         result["reason"] = "top pair undefined"
         return result
-    peak = max(defined, key=lambda p: p["m_bytes_s"])
-    md, ud = pairs[-1]["m_bytes_s"], pairs[-1]["dm_bytes_s"]
-    mc, uc = peak["m_bytes_s"], peak["dm_bytes_s"]
-    if md <= ud or mc <= uc:
-        result["reason"] = "reference lower endpoint nonpositive"
-        return result
+    cache = max(defined, key=lambda p: (p["lower"], -p["size"]))
+    dram = pairs[-1]
     def h(x, y):
         return 1 / ((63/64)/x + (1/64)/y)
-    threshold = h(md, mc)
-    dth = max(h(md+ud, mc+uc)-threshold, threshold-h(md-ud, mc-uc))
-    result.update(threshold=threshold, threshold_uncertainty=dth)
+    threshold = h(dram["m_bytes_s"], cache["m_bytes_s"])
+    low, high = h(dram["lower"],cache["lower"]), h(dram["upper"],cache["upper"])
+    result.update(threshold=threshold, threshold_lower=low, threshold_upper=high,
+                  threshold_uncertainty=max(threshold-low, high-threshold),
+                  cache_reference_size=cache["size"], dram_reference_size=dram["size"],
+                  cache_reference=dict(cache), dram_reference=dict(dram))
     for pair in defined:
-        margin, bar = pair["m_bytes_s"]-threshold, pair["dm_bytes_s"]+dth
-        pair.update(margin=margin, bar=bar, above=margin > bar)
+        # L > T_U, equivalently m-T > (m-L)+(T_U-T); no epsilon.
+        pair.update(margin=pair["m_bytes_s"]-threshold,
+                    bar=pair["m_bytes_s"]-pair["lower"]+high-threshold,
+                    above=pair["lower"] > high)
     above = [p["size"] for p in pairs if p["above"]]
     k = next((s for s in sizes[1:] if not any(a >= s for a in above)), None)
+    result["candidate_K"] = k
+    if k is not None:
+        bysize = {p["size"]: p for p in pairs}
+        for lo, hi in ((k//16,k//8),(k//8,k//4)):
+            pair = bysize.get(hi)
+            reason = ("pair not scanned" if pair is None else
+                      "pair undefined" if pair["m_bytes_s"] is None else
+                      "pair not above threshold" if not pair["above"] else None)
+            result["arm_checks"].append({"from_size":lo,"size":hi,"above":reason is None,"reason":reason})
     if not above:
         result["reason"] = "no resolved cache evidence"
     elif k is None or 64*k > sizes[-1]:
         result["reason"] = "64 K > s_max"
+    elif not all(p["above"] for p in result["arm_checks"]):
+        result["reason"] = "cache arm pairs not both resolved"
     else:
         result.update(status="knee found", K=k, B=max(2**32, 64*k),
                       Bc1=k//16, Bc3=k//8, Bc2=k//4, phi=k/max(2**32, 64*k))
@@ -559,7 +618,7 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
     if idle_s and (pre_end <= pre_start or post_end <= post_start):
         raise ValueError("idle has no positive monotonic span")
     return {"schema_version": "joulewise.bytes_stream.v2", "non_claim": True,
-            "clock": "CLOCK_MONOTONIC_RAW", "start_ns": start, "end_ns": end,
+            **clock_metadata(), "start_ns": start, "end_ns": end,
             "idle_pre_start_ns": pre_start, "idle_pre_end_ns": pre_end,
             "idle_post_start_ns": post_start, "idle_post_end_ns": post_end,
             "idle_s": idle_s, "settle_s": settle_s,

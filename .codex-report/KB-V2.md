@@ -409,3 +409,35 @@ gate-ledger was skipped. At the final code/kit head `c748238eb`, CI run
 is pending, and gate-ledger run 40759703675 is skipped. This is a status
 snapshot, not a claim that the new head is CI-green. No approval rejection or
 scope blocker occurred. NEEDS_RULING: none.
+
+## Round 4 (fix round)
+
+2026-10-28, magistrate activation caa9ff66. Continued `a7a20c197` on
+`codex/2026-10-28-kb-v2` (draft PR #593). Read Sol delta review, Opus delta
+review and all its scripts, and knee consult at `47bead35d`.
+
+Step 1 — K1–K2. Installed the consult's replacement §1 scan steps, Sizes
+bullet and complete §3, plus its revised §5 knee numbers. Exact reciprocal
+endpoints, largest-lower-endpoint cache reference (smaller-size tie), monotone
+threshold endpoints and both actual cache-arm increment checks now govern the
+program. Every call/pair, candidate K and arm check remains visible; no retry,
+late-pair filtering or shrinking K. Receipts collect RAW getres, macOS
+mach_timebase_info, clock identity and unknown conversion/source. The bound is
+2(r+1 ns)/N: two endpoints, each within max(getres,tick) plus integer conversion.
+The lead's 2026-10-28 Mac measurement gives r=42 ns and 86 ns/N.
+
+Before: reproduced 123/400 noisy worked refusals and 72/200 noiseless tick
+DRAM false knees; the original focused baseline passed 33 tests. After:
+the same metadata-completed seeded scenarios give 0/400 refusals at 0.05%
+noise and 0/200 noiseless DRAM false knees, with 200/200 worked K=64 MiB.
+The three original DRAM-noise cells give 0/200 accepted each; these observed
+rates are not guarantees. Original pre-metadata inputs now print missing-clock
+reasons; adapted replays explicitly add synthetic clock provenance. The old
+single-line candidate patch is superseded by the ruled production rule.
+The ported rational check reproduces margin 664.900336137 GB/s, bar
+0.000429892228 GB/s and threshold uncertainty 0.000044586060 GB/s.
+Agreement bar 4.5e-7 GB/s = 1% of 0.000045; 1e6 times exact-rational/binary64
+discrepancy is 2.879319e-7 GB/s, below that bar. Energy-example numbers do not
+change. Both touched modules pass 38 tests, including the reduced fixed-seed
+noise sweep (no rate assertions), both integer conversions, and real stream
+receipts written/reloaded through the scan CLI for worked and DRAM-only models.

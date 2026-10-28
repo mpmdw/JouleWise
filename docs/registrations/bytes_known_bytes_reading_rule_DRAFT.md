@@ -90,44 +90,59 @@ with no energy capture and with `--idle-s 0 --settle-s 0` (§2; otherwise the id
 each call lasts about 2 s (planning choices: they set the observed timing spread, propagated below). If a
 size cannot be allocated as one buffer, the scan stops at the largest size that can, s_max (32 GiB if all can).
 1. Per size s and call j, let d_j(s) = (end_ns − start_ns) / (10⁹ N_j), and let t(s) be the mean of
-   the three d_j. The integer-nanosecond stamps have resolution 1 ns: two endpoints, each rounded within
-   half a unit, give a duration error at most 1 ns. Thus q_j = 10⁻⁹ / N_j seconds per dispatch. Use
-   δt(s) = max_j |d_j − t(s)| + mean_j q_j. The first term envelopes the observed three-call spread about
-   its mean; the second bounds the mean's stamp quantization error. This is an observed-spread bound,
-   not a confidence claim about unobserved timing excursions. Print t, δt and all three calls.
-2. Per adjacent pair (s/2, s), write D = t(s) − t(s/2), δD = δt(s) + δt(s/2), A = s − s/2.
-   If D ≤ 0 or D ≤ δD, m(s) is `not defined (dispatch-time difference not separated from zero)` and
-   never counts as above threshold. Otherwise m(s) = A / D. The fixed dispatch time cancels; whole-call
-   throughput does not cancel it and misreads K (the old ±4% rule gives 512 MiB, ±2% gives 1 GiB in §5).
-   **Propagated uncertainty, derived beside the comparison bar:** the reciprocal's larger endpoint error is
-   A/(D − δD) − A/D = A δD / [D(D − δD)], so use δm(s) equal to that value. It also covers the smaller
-   downward error A/D − A/(D + δD), without a linear approximation near zero.
-3. m_D is the top pair's defined marginal throughput (16 → 32 GiB if s_max = 32 GiB); m_C is the largest
-   defined m(s). Carry their own δm_D and δm_C from step 2. Undefined pairs are omitted from m_C. If the
-   top pair is undefined, or either lower endpoint m_D − δm_D or m_C − δm_C is nonpositive, the threshold
-   is not defined and the knee is not found; the timing does not resolve the reference throughputs.
-4. **Threshold, derived.** A pair whose added bytes come from cache in a fraction c takes
-   (1 − c)/m_D + c/m_C seconds per byte. The sizes below cap S's cached fraction at 1/64, so set
-   H(x,y) = 1 / [(63/64)/x + (1/64)/y], m_th = H(m_D,m_C). Since H increases in both positive arguments,
-   δm_th = max(H(m_D+δm_D,m_C+δm_C) − m_th,
-   m_th − H(m_D−δm_D,m_C−δm_C)) bounds its timing uncertainty. A defined pair counts as **above threshold
-   only when m(s) − m_th > δm(s) + δm_th**. This bar follows from the receipt's stamp resolution and
-   three-call spread propagated through both sides; no numerical epsilon or percentage band is added.
-   It is one-sided: a slow straddling pair does not count as above. Print each margin and its bar.
-5. K is the smallest scanned pair size with no above-threshold pair at that size or higher. Undefined pairs
-   never count as above, but cannot supply a reference in step 3. The scan establishes cache evidence only
-   through a pair separated from the threshold by its propagated uncertainty; it does not assert that noise
-   can only raise K.
-6. **Refusal.** The knee is not found when the reference/threshold is undefined, no pair counts as above
-   threshold (no resolved cache evidence), or 64 K > s_max (B cannot be formed). The measured hour then
-   does not run, every class is UNDETERMINED (`knee not found`), and the slot records the scan and reason.
+   the three d_j. Every receipt records CLOCK_MONOTONIC_RAW's reported `clock_getres` in seconds,
+   the measured physical tick as an exact numerator/denominator in ns with its source,
+   and the integer-nanosecond conversion convention/source (`truncation`, `nearest`, or `unknown`).
+   An integer-nanosecond return type does not imply a 1 ns physical tick or rounding to the nearest tick.
+   Let r be the larger of the reported resolution and measured tick, in seconds, and u = 10⁻⁹ s.
+   Use q_j = 2(r + u)/N_j seconds per dispatch: each endpoint can be displaced by at most one physical
+   tick plus one integer conversion unit, and a duration has two endpoints. This conservative truncation/
+   unknown-conversion bound also covers nearest-integer conversion. On the recorded Mac values,
+   r = max(42 ns,125/3 ns) = 42 ns, so q_j = 86 ns/N_j. Use
+   δt(s) = max_j |d_j − t(s)| + mean_j q_j. The first term envelopes the observed three-call spread
+   about its mean; the second bounds the mean's stamp error. This is an observed-spread bound,
+   not a confidence claim about unobserved timing excursions. Print t, δt, clock metadata and all three calls.
+2. Per adjacent pair (s/2,s), write D = t(s) − t(s/2), δD = δt(s) + δt(s/2), A = s − s/2.
+   If D ≤ δD, the marginal throughput is `not defined (dispatch-time difference not separated from zero)`;
+   this pair never counts as above threshold. Otherwise m(s) = A/D and its exact propagated interval is
+   L(s) = A/(D + δD), U(s) = A/(D − δD). Derivation: A/D decreases with positive D, whose endpoints are
+   D−δD and D+δD. Print m, L, U and their endpoint excursions, without replacing the asymmetric interval
+   by a symmetric lower endpoint. The fixed dispatch time cancels; whole-call throughput does not cancel it.
+3. The DRAM reference is the top pair's m_D with interval [L_D,U_D] (16→32 GiB if s_max=32 GiB).
+   The cache reference is the defined pair with largest L(s), carrying that pair's m_C and [L_C,U_C];
+   break an exact tie by smaller pair size. Print both reference sizes and intervals. If the top pair is
+   undefined, no threshold is defined and the knee is not found. For every defined pair D>δD ensures
+   positive exact reciprocal endpoints; do not refuse because a symmetric approximation's lower endpoint
+   would be nonpositive. Undefined pairs cannot supply either reference.
+4. Threshold, derived: a pair whose added bytes come from cache in fraction c takes
+   (1−c)/m_D + c/m_C seconds per byte. The stream-size rule caps its cached fraction at 1/64, so let
+   H(x,y)=1/[(63/64)/x+(1/64)/y], T=H(m_D,m_C). Since H increases in both positive arguments, its propagated
+   interval is [T_L,T_U]=[H(L_D,L_C),H(U_D,U_C)]. A defined pair counts as above threshold only when
+   L(s)>T_U. Equivalently print margin=m(s)−T and bar=[m(s)−L(s)]+[T_U−T], and require margin>bar.
+   This bar is derived from the receipts' observed spread and clock quantities through exact endpoints;
+   no numerical epsilon, noise multiplier or percentage band is added. Print every comparison.
+5. First form the candidate K as the smallest scanned pair size with no above-threshold pair at that
+   size or higher. Use all above pairs, including isolated late pairs; an undefined pair never counts as above.
+   Then require both actual proposed cache-arm increments (K/16→K/8) and (K/8→K/4) to be scanned,
+   defined and above threshold by step 4. These are the C1→C3 and C3→C2 increments of the existing arms,
+   so their number and locations follow from the arm geometry. Missing evidence is not repaired by
+   discarding a late pair, shrinking K or repeating the scan. Print the candidate K and each arm check.
+   Observed-spread intervals do not guarantee against a false knee or a false refusal under timing noise.
+   A false knee can spend the measured hour on DRAM-reading “cache” arms; DC validity will often then
+   read UNDETERMINED, but is not guaranteed to catch every timing misclassification.
+6. Refusal: the knee is not found if the top reference/clock prerequisite is unavailable, no pair is above,
+   no candidate K exists, either cache-arm increment fails step 5, or 64K>s_max. Print the candidate and
+   the specific reason. The measured hour then does not run; every class is UNDETERMINED (`knee not found`),
+   and the slot records the scan and reason. Preserve the one scan's calls; do not retry it into acceptance.
 
 The scan reads no energy and is not BYTES data.
 
 **Sizes.**
-- *Bc2 = K / 4.* By step 5 the pair (K/4, K/2) counts as above threshold (otherwise K/2 would qualify as K), so some bytes
-  beyond K/4 still come from cache: the cache holds more than K/4, and K/4 is the largest power of two the scan
-  shows resident. This is the Opus seat's "clear of the knee", now with its reason.
+- *Bc2 = K / 4.* The scan directly requires separated marginal evidence on C1→C3 and C3→C2, and K's
+  definition makes the pair ending at K/2 above threshold. Under the stated cache/DRAM timing model,
+  these observations support using K/4 clear of the transition. They are timing evidence, not a hardware
+  cache-residency counter or proof against unobserved timing excursions. Bc1=K/16 and Bc3=K/8 retain
+  their existing roles and sizes.
 - *Bc1 = Bc2 / 4, Bc3 = Bc2 / 2.* δγ_c falls as Bc2 − Bc1 grows (§3); dividing Bc2 by 4 gives 3/4 of the largest
   possible difference while keeping a power of two (Bc3) between the two ends for the linearity check. A planning
   choice; its effect is the printed δΔ.
@@ -164,6 +179,14 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
      and the meter's r_max + Δt (38 ms on H, §3). 3 s is the next whole second above τ. The same delay applies after fill/warm-up, hence the extra gap before pre-idle. If the test's own τ
      exceeds 3 s, each idle mean is taken over its stamped span minus its first τ − 3 s. Energy inside the gaps enters
      no quantity.
+   Every receipt, including measured arms, records `clock` = `CLOCK_MONOTONIC_RAW`,
+   `clock_resolution_s` from `time.clock_getres(time.CLOCK_MONOTONIC_RAW)`, and on macOS
+   `clock_tick_num_ns`/`clock_tick_den` from `mach_timebase_info`, with `clock_tick_source`.
+   `clock_ns_conversion` and `clock_ns_conversion_source` are `unknown` unless a source
+   establishes the convention; the observed steps alone do not. The derived
+   `clock_duration_bound_ns` = 2(max(resolution_ns, tick_ns) + 1) retains both raw inputs.
+   On non-macOS the timebase fields are null and marked not applicable; getres supplies r.
+   Missing clock prerequisites retain the receipt and print the scan reason, with no 1 ns fallback.
 2. **Stack object** (the governed runtime identity, so a change of OS or library between pass 1 and the test is
    visible). The sources and comparisons are listed below (§4, "Stack check"); the device source is explicit
    because this standalone probe has no telemetry device metadata:
@@ -207,6 +230,17 @@ Integrating rails, the GPU series, DC input and the battery term over the receip
 a run's own phases, is the one new piece of harvest code; it calls the pass-1 integrators unchanged.
 
 ## 3. The reported quantity and its bound
+
+**Knee-scan prerequisite and scope.** Use K, B and the three cache sizes only after the §1 scan
+has passed its exact-interval comparisons and both C1→C3 and C3→C2 timing-evidence checks.
+The scan's intervals are derived from clock quantization and three observed calls; they are not
+confidence intervals on future timing noise and do not prove cache residency. If the knee is not
+found, preserve and print its calls, clock metadata, comparisons, candidate K and specific reason;
+the measured hour does not run, the classes are UNDETERMINED (`knee not found`), and quantities
+requiring K print `not defined (knee not found)`. A false positive can spend the hour with cache
+arms reading DRAM; DC validity may then be UNDETERMINED, but this is a downstream check, not a
+logical guarantee that every false knee will be caught. This scan prerequisite changes no
+collected BYTES number and adds no energy-uncertainty term to the propagation below.
 
 **Boundaries.** rails (CPU + GPU + ANE), the GPU rail alone (the `gpu_power` series of the same capture), DC input,
 and rest. Each is integrated over a stamped span exactly as pass 1 integrates it (reg. §7):
@@ -438,13 +472,23 @@ throughput 1 TB/s; 28 W (rails) and 25 W (rest) above idle during cache arms; a 
 transient and no fixed-cost change between sizes, so rep_a = 0 and r = 0. The baseline example has no meter
 gaps; the gap counterexample below uses the H adapter rating, 140 W, and measured battery maximum 0 W.
 
-*Knee.* Marginal throughputs: 1,000 GB/s up to 32 MiB, 198.8 GB/s for the straddling pair (32 → 64 MiB), 331.6 GB/s
-from 64 MiB up; m_th = 335.12 GB/s; K = 64 MiB. For three identical approximately 2 s scan calls,
-δt is the 1 ns duration resolution divided by repeats. On the 16 → 32 MiB cache pair, the propagated
-comparison bar δm + δm_th is about 0.0000077 GB/s (about 0.000010 GB/s after quantization), against a margin about 665 GB/s. Integer-nanosecond
-quantization preserves K. Sol's DRAM-only model (50 µs + s/331.6 GB/s, all sizes) has no pair separated
-from the threshold by its bar, both with unquantized and integer-nanosecond durations: `knee not found`. The draft's whole-call rule returns 512 MiB (±4%) or 1 GiB (±2%) on
-the same inputs. So B = 4 GiB, Bc1 = 4 MiB, Bc3 = 8 MiB, Bc2 = 16 MiB, φ = 1/64.
+*Knee.* With the stated cache/DRAM timing model, the exact-interval scan and both cache-arm
+increment checks give K=64 MiB, B=4 GiB, Bc1=4 MiB, Bc3=8 MiB, Bc2=16 MiB and φ=1/64.
+Clock bars use the receipts' recorded resolution and timebase, not the integer output unit.
+For the supplied 42 ns resolution and 125/3 ns tick, the conservative duration contribution is
+86 ns divided by repeats. In the independently recomputed quantized worked example, the
+16→32 MiB margin is about 664.90034 GB/s against a derived one-sided bar of 0.00043 GB/s;
+the threshold half-width is 0.000045 GB/s. The reviewer model's rounded DRAM reference
+331.6 GB/s gives T≈335.0997 GB/s. Random-phase tick quantization preserves K in the noiseless
+worked example. A noiseless DRAM-only model supplies no cache-arm evidence with the corrected
+clock bar. Neither statement guarantees an outcome under unobserved per-call timing noise.
+
+The measurement Mac was measured by the lead on 2026-10-28: timebase 125/3 ns,
+`time.clock_getres(time.CLOCK_MONOTONIC_RAW)` = 4.2e-8 s, smallest positive deltas
+41, 42, 83, 84 and 125 ns. These do not establish the integer conversion convention.
+The worked scan agreement bar is 4.5e-7 GB/s = 1% of the smallest printed uncertainty
+(0.000045 GB/s); the independent rational check finds 10⁶ × binary64 noise below it.
+Clock changes affect the scan only: K and all energy-example counts and numbers below remain unchanged.
 
 *Hour.* 3,573.6 s = 921.6 idle + 72 settle + 80 allocation/exit + 2,500 stream. Every arm's paired stream
 midpoints average 1,788.3 s, 1.5 s beyond the session midpoint 1,786.8 s (the additional pre-idle gap). N per call: S 38,457 (330,343 GB over
