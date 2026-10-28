@@ -93,3 +93,4 @@ For the laptop lead:
 - `ledger-captures` packs the 126 capture folders outside the other items, including superseded attempts' cal-pre and cal-post folders, because the procedure requires every referenced capture. The 19 whole runs roots the ledgers also name were not packed.
 
 The loop resumed 06:45 (`b6_loop.py resume`). The hold cost about 24 minutes of Mac time.
+- Exit: email to Ed Gmail `1a182c2b46a9c7cc` (transfer done, 21-minute hold). Background watchers stopped. In flight in the cloud only: KB-V2 fix round (pointer (1b)).
