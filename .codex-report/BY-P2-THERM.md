@@ -23,3 +23,15 @@ None.
 ## Verification and CI
 
 Pending implementation and focused verification.
+
+## Implementation step
+
+The thermal member loop keeps the full-hull call for `thermal.unmeasured` and
+uses a second production call on `[member_start, request_end]` only to replace
+`thermal.os_level_nonzero` for pass-2 science members. Absent requests retain
+the hull. Full-hull evidence is
+`withheld/member-assessments.json` → `members[run_id].thermal_os_level_nonzero_member_hull`:
+`span_monotonic_ns`, `excluded`, all nonzero `samples`, and `journal_available`.
+An unknown hull has `excluded: null`. Missing journals remain explicitly marked.
+Assessments are sealed before monitor joins, so their evidence is read from the
+same thermal journal during assessment; the source-stability check remains active.
