@@ -1,6 +1,6 @@
 # KB-V2 — activation 39206674, 2026-10-28
 
-Status: Steps 1 and 2 implemented and locally verified; reconciled rule awaiting the lead's admission. No hardware measurements. CI result pending.
+Status: Steps 1 and 2 implemented and locally verified; reconciled rule awaiting the lead's admission. No hardware measurements. CI read: completed checks pass; ordinary shards still in progress. Stopped at the scope boundary for v1 compatibility-test updates.
 
 ## Authority and inputs
 
@@ -48,6 +48,26 @@ Locations below refer to sections of the installed reconciled draft (the wording
 | Opus 10 (nonblocking) | Amend registration §1 wording, rest caveat, agreement rule, glosses, tree paths | §4 proposed wording and slot; §3 Agreement bar; Status, §§0–3, §5 | applied differently: registration amendment is proposed here, not written outside scope. One common bar replaces per-boundary bars to satisfy this brief. Glosses and source tree supplied. |
 
 No missing correction ids. Nonblocking Fable notes are also incorporated: explicit inputs, scale wording, count/φ agreement, size rationale, scan flags/allocation fallback, warm-up placement, GPU series and harvest plumbing.
+
+### Independent arithmetic check
+
+A second recomputation used Python 3.13 decimal.Decimal with 50-digit precision, directly from the printed source/assumed inputs and §3 formulas (not the reconciler's arithmetic functions). Publication strings, not a new numerical tolerance, were compared. All table digits and counts agree:
+
+```text
+rails: alpha=1.4000 mJ, gamma_c=0.02800, gamma_d=0.09472, delta=0.066716626, halfwidth=0.000571796, N=[38457, 4613030, 3743791]
+dc: alpha=2.6500 mJ, gamma_c=0.05300, gamma_d=0.24594, delta=0.192943505, halfwidth=0.002345131, N=[38457, 4613030, 3743791]
+rest: alpha=1.2500 mJ, gamma_c=0.02500, gamma_d=0.15123, delta=0.126226879, halfwidth=0.002265001, N=[38457, 4613030, 3743791]
+epsilon0 0.000049009052306508565348800952662555789157502220838697
+threshold_GBps 335.12493427470529063389713447750248541739917022974
+se_idle 0.0077578992001701079075615640442830854506491747057725 0.035355339059327376220042218105242451964241796884424
+f=0.3458 +/- 0.0072
+rails: epsilon_flip=7.20 microJ, share=0.51%
+dc: epsilon_flip=29.54 microJ, share=1.11%
+rest: epsilon_flip=28.53 microJ, share=2.28%
+Decimal audit: all table publication digits and counts agree; no added tolerance
+```
+
+Read-only final audit also confirmed that current-main's draft is byte-identical to the cold-reviewed draft at 948cc31b9, and that the installed reconciler body differs only in the relocated worked-script citation (besides the required Status block).
 
 ### Fixes made to the reconciler's artifact
 
@@ -145,4 +165,39 @@ Earlier run: 16 tests passed; then added the end-to-end fake-MLX CLI test and re
 
 ## CI
 
-Draft PR #593: https://github.com/mpmdw/JouleWise/pull/593 . Pending final-head CI.
+Draft PR **#593**, [CI only: KB-V2](https://github.com/mpmdw/JouleWise/pull/593), targets `ci/2026-10-27-bytes-enddate` at exactly `e624d67c7`. Still draft; no merge or admission.
+
+Code/test head: `5e2833d1e923bcbb0e8d69e1f27b9972b83f38e0`.
+[CI run 40681260779](https://github.com/mpmdw/JouleWise/actions/runs/40681260779) (ci #3844): **IN_PROGRESS, not established green** at the final observation. Read via the GitHub connector (the CLI's api.github.com route is forbidden; Git operations and connector reads work).
+
+| Job | Observed result |
+|---|---|
+| changes | success |
+| fences | success |
+| build | success |
+| installed-wheel | success |
+| quick | success |
+| calibration-exits-exclusive (3.13) | success |
+| calibration-writer-crash-matrix-exclusive (3.13, 1 and 2) | both success |
+| ordinary test (3.13, shards 1–12) | all in progress; no completed result yet |
+| gate-ledger (run 40681260764) | skipped (draft) |
+
+Read the completed quick job's log (job 122792993711); relevant tail:
+
+```text
+2026-10-28T11:38:37.7814951Z EXCLUDE tests.test_bytes_mac_kit: unknown weight
+2026-10-28T11:38:37.7816289Z EXCLUDE tests.test_bytes_stream_test: unknown weight
+2026-10-28T11:42:12.6954316Z QUICK SUMMARY tier=quick modules=213 excluded=246 failures=0 seconds=214.936 result=PASS
+```
+
+Thus quick green does not cover either probe module. The new module's direct local 17-test pass is the evidence for it. No CI failure is asserted before a completed job log establishes it. This final report-only checkpoint will trigger another CI run; it does not change the verified code or tests.
+
+## Scope stop and handoff
+
+The four allowed files are the entire branch diff. The old v1 compatibility tests in **tests/test_bytes_mac_kit.py** need a v2 update outside that allowlist; stop here rather than editing them or adding a v1 behavior path that contradicts §2. The operational invocation in **configs/campaigns/bytes_mac_check/README.md** is likewise unchanged. These are scope boundaries, not unresolved choices changing which data count or a printed number; NEEDS_RULING remains none.
+
+Next exact step: lead review/admission of the reconciled rule; observe the ordinary/final-head CI result and authorize any compatibility-test or operational-instruction update separately. Capture/harvest integration and actual Metal validation remain external to this synthetic receipt change.
+
+Final checks: `git diff --check e624d67c7` exit 0; `git diff e624d67c7 --name-only` contains exactly the four WRITE_SCOPE paths; reconciler-body preservation and main/cold-reviewed draft equivalence PASS. One optional static CI-layout introspection attempt stopped while importing a split-declaration module because the read-only shell could not probe a temporary directory; it executed no test methods and changed no repository file. Only tests.test_bytes_stream_test was executed locally.
+
+Commit checkpoints: `3c1776298` early authority/access; `c644a5b3c` Step 1; `5e2833d1e` Step 2; final report-only evidence checkpoint follows. Each checkpoint committed and pushed.
