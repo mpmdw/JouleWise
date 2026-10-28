@@ -333,8 +333,41 @@ def compare_brackets(c, custody, ours):
     c.numeric("count", "block/T", get(block, "T"), line.get("T"))
 
 
+KIND_ORDER = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j", "E_whole_window_drift_allowance_j")
+
+
 def compare_reported(c, custody, ours):
-    """Step 10 reported cells: mapped once the projection shape is read from the full-size run."""
+    """Step 10: each pack's reported cells (estimator 1) against the recompute's reported_cells."""
+    for pack in ("alpha", "beta"):
+        projection = custody.one(r"outputs/[0-9a-f]{64}-projection-" + pack + r"\.json")
+        cells = get(projection, "cells", default=[]) if projection is not None else [{}]
+        for cell in cells:
+            phase = cell.get("phase") or "missing"
+            cid = f"df-ph-{'decode' if phase == 'decode' else 'prefill-p2048'}-{tag(pack)}"
+            mine = get(ours, "reported_cells", cid, default={})
+            key = pack + "/" + cid
+            for field in ("mean_j", "lower_j", "upper_j"):
+                c.numeric("reported_cell_j", key + "/" + field, cell.get(field), mine.get(field))
+            ivl, ours_ivl = cell.get("interval") or {}, mine.get("interval") or {}
+            for field, other in (("h_j", "h_j"), ("B_j", "B_j"), ("s_r", "s_r"), ("s_b", "s_b"), ("variance", "variance")):
+                c.numeric("reported_cell_j", key + "/interval/" + field, ivl.get(field), ours_ivl.get(other))
+            kinds = ours_ivl.get("kind_averages_j") or [None] * 3
+            for i, name in enumerate(KIND_ORDER):
+                c.numeric("reported_cell_j", key + "/interval/" + name, get(ivl, "kind_averages_j", name),
+                          kinds[i] if i < len(kinds) else None)
+            for field in ("value_j", "minimum_j"):
+                c.numeric("reported_cell_j", key + "/attribution_floor/" + field, get(cell, "attribution_floor", field),
+                          get(mine, "attribution_floor", field))
+            c.numeric("reported_cell_j", key + "/j_per_token", get(cell, "per_token", "j_per_token"),
+                      get(mine, "per_token", "j_per_token"))
+            for field, other in (("n_r", "n_r"), ("n_b", "n_b")):
+                c.numeric("count", key + "/" + field, ivl.get(field), mine.get(other))
+            c.numeric("count", key + "/n_bundles", cell.get("n_bundles"), mine.get("n_bundles"))
+            c.numeric("count", key + "/interval/df", ivl.get("df"), ours_ivl.get("df"))
+        for refused in get(projection, "refused_cells", default=[]) or []:
+            if "p42" in str(refused.get("cell_id")):
+                c.exact("p42_status", pack + "/" + refused["cell_id"], "expected_unresolvable",
+                        get(ours, "p42", "df-ph-prefill-p42-" + tag(pack), "status"))
 
 
 def compare_exclusions(c, ours):
