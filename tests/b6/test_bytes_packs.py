@@ -99,7 +99,7 @@ class BytesPackTests(unittest.TestCase):
                     self.assertEqual((reg.status, reg.kind, reg.session_shape), (expected, 'new', 'fixed'))
                     self.assertEqual((reg.target_sessions, reg.minimum_sessions), (1, 1))
                     self.assertEqual(reg.corpus, {'planned': 18, 'stop_after_valid': 12})
-                    self.assertEqual(reg.stopping, {'count': 1, 'end_t0_before': '2026-11-02T00:00:00-08:00', 'precision': None})
+                    self.assertEqual(reg.stopping, {'count': 1, 'end_t0_before': '2026-11-05T00:00:00-08:00', 'precision': None})
                     self.assertEqual(reg.blinding_group, 'bytes')
                     self.assertEqual(reg.blinding, {'hidden_offset': True})
                     self.assertEqual(reg.interleave, 'none')

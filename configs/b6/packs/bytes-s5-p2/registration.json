@@ -353,7 +353,7 @@
   "status": "draft",
   "stopping": {
     "count": 1,
-    "end_t0_before": "2026-11-02T00:00:00-08:00",
+    "end_t0_before": "2026-11-05T00:00:00-08:00",
     "precision": null
   },
   "target_sessions": 1,
