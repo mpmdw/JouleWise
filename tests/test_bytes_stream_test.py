@@ -344,13 +344,21 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
         # integrator is a mean of retained samples, so equal support per stream.
         meter = [2.386] * 2880
         battery = [1.0 if int(i/5) % 2 == 0 else -1.0 for i in range(288)]
-        vm = nw(meter, 500, [57.6/len(meter)] * len(meter)).governed_variance_of_mean_w2
-        vb = nw(battery, 50, [57.6/len(battery)] * len(battery)).governed_variance_of_mean_w2
-        se = math.sqrt(vm/2) + math.sqrt(vb/2)
-        self.assertGreater(se, 0)
-        # The same native streams give exactly one output, independent of any
-        # hold/linear policy, since neither policy is an input to this formula.
-        self.assertEqual(se, math.sqrt(vm + vm)/2 + math.sqrt(vb + vb)/2)
+        def native(values, step_ns, kind):
+            return probe.idle_statistics([{'stamp_ns': i*step_ns, 'power_w': p} for i,p in enumerate(values)],
+                                         0,57_600_000_000,kind)
+        m = native(meter,20_000_000,'meter')
+        b = native(battery,200_000_000,'battery')
+        spans = {'meter': m, 'battery': b, 'rails': {'reason':'not supplied'}, 'gpu': {'reason':'not supplied'}}
+        result = probe.combined_idle(spans,spans)
+        self.assertEqual((m['lag_count'],b['lag_count']), (500,50))
+        self.assertEqual((m['sample_count'],b['sample_count']), (2880,288))
+        self.assertGreater(result['dc']['se_w'],0)
+        self.assertEqual(result['dc']['se_w'], math.sqrt(m['variance_w2']/2)+math.sqrt(b['variance_w2']/2))
+        # Independent native-battery arithmetic: no held/interpolated meter stamps.
+        expected = nw(battery,50,[.2]*288).governed_variance_of_mean_w2
+        # Bit-identity: the same estimator receives the identical native inputs.
+        self.assertEqual(b['variance_w2'],expected)
 
     def test_revised_worked_energy_publication_digits_and_bounded_gap(self):
         # Recompute §3 directly from §5 input ratios. Compare publication
@@ -372,19 +380,15 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
             rows[arm] = (n, {'rails': pr*t/n, 'dc': (pr+pe)*t/n, 'rest': pe*t/n},
                          {'rails': br/n, 'dc': bd/n, 'rest': (br+bd)/n})
         def reduce(beta, gap_j=0):
-            vals = {a: (v[1][beta], v[2][beta] + (gap_j/(2*v[0]) if a == 'C2' and beta != 'rails' else 0))
-                    for a, v in rows.items()}
-            (xs, ds), (x1, d1), (x3, _), (x2, d2) = (vals[a] for a in ('S','C1','C3','C2'))
-            c1, c3, c2 = (payload[a] for a in ('C1','C3','C2'))
-            gc = (x2-x1)/(c2-c1)
-            alpha = x1-gc*c1
-            residual = x3-alpha-gc*c3
-            dgc = (d1+d2+abs(residual))/(c2-c1)
-            da = d1+abs(residual)+dgc*c1
-            delta = ((xs-alpha)/b-gc)*gb
-            width = ((ds+da+abs(alpha))/b+dgc)*gb
-            eps = width*(c2-c1)/gb/(1-c1/b)
-            return delta, width, eps*1e6
+            calls = []
+            for arm in ('S','C1','C3','C2','C2','C3','C1','S'):
+                n,energy,bounds = rows[arm]
+                calls.append({'arm': arm, 'N': n, 'boundaries': {beta: {
+                    'excess_j': energy[beta]*n,
+                    'bound_j': bounds[beta]*n + (gap_j if arm=='C2' and beta!='rails' and
+                                                not any(c['arm']=='C2' for c in calls) else 0)}}})
+            v = probe.reduce_boundary(calls, payload, beta)
+            return v['delta'],v['halfwidth'],v['epsilon_flip']*1e6
         self.assertEqual([f'{reduce(x)[1]:.8f}' for x in ('rails','dc','rest')],
                          ['0.00057180','0.00252421','0.00244408'])
         self.assertEqual([f'{reduce(x)[2]:.2f}' for x in ('rails','dc','rest')], ['7.20','31.79','30.78'])
@@ -399,6 +403,161 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
         self.assertEqual(f'{(ur+abs(f)*ud)/abs(dd):.4f}', '0.0075')
         # Sol's zero-rails case is nonsingular with valid DC.
         self.assertEqual((.001 + abs(0/.1)*.002)/abs(.1), .01)
+
+
+class ReaderTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Real stream(), full §5 counts and sizes, constant-memory fake array.
+        # Per-dispatch clocks use integer ns, as the actual receipts do.
+        class ProductionMLX:
+            uint8 = 'uint8'
+            __version__ = '0.31.2'
+            def __init__(self, ns, dispatch_ns):
+                self.ns,self.dispatch_ns,self.sums,self.sleeps = ns,dispatch_ns,0,[]
+            def ones(self, shape, dtype):
+                return Array()
+            def sum(self, data):
+                self.sums += 1
+                return Array()
+            def eval(self, value):
+                self.ns += self.dispatch_ns
+            def synchronize(self):
+                pass
+            def sleep(self, seconds):
+                self.sleeps.append(seconds)
+                self.ns += round(seconds*1e9)
+        from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
+        cls.payload = {'S': 2**32,'C1':2**22,'C3':2**23,'C2':2**24}
+        cls.scan = probe.knee_scan([{'bytes_per_read':size,'repeats':n,'start_ns':0,'end_ns':round(d*1e9)}
+                    for size,rows in ReadingRuleArithmeticTests.scan_model(True,True).items() for d,n in rows])
+        reference,versions = probe.registered_stack()
+        stack = deepcopy(reference);stack.update(versions)
+        cls.records=[]
+        ns=0
+        idle_dc=(6101.072862-5967.417892)/56.018813
+        # Native alternating fixtures scaled so governed per-span SEs are
+        # the §5 assumptions. Battery is charging, so measured max discharge=0.
+        shapes={}
+        for kind,step,se in [('rails',100_000_000,math.sqrt(1.2037e-4)),('gpu',100_000_000,0),
+                             ('meter',20_000_000,.05),('battery',200_000_000,.01)]:
+            n=57_600_000_000//step
+            values=[(-1)**i for i in range(n)]
+            var=nw(values,10_000_000_000//step,[57.6/n]*n).governed_variance_of_mean_w2
+            shapes[kind]=(step,[v*se/math.sqrt(var) for v in values])
+        for arm in ('S','C1','C3','C2','C2','C3','C1','S'):
+            size=cls.payload[arm]
+            td=50e-6+size/(4597412096*512/7.098 if arm=='S' else 1e12)
+            n=math.floor((500 if arm=='S' else 250)/td)
+            mx=ProductionMLX(ns,round(td*1e9))
+            with patch.object(probe,'collect_stack',return_value=deepcopy(stack)):
+                r=probe.stream(size,n,device='macbook_m3_max',mx=mx,clock_ns=lambda:mx.ns,sleep=mx.sleep)
+            assert mx.sums==n+1
+            assert mx.sleeps==[3,57.6,3,3,57.6]
+            ns=mx.ns
+            t=r['duration_s']
+            pr,pe=(223.22/7.098-.051,577.210005/11.017813-(idle_dc-.051)) if arm=='S' else (28.,25.)
+            h={'energy_j':{'rails':(.051+pr)*t,'gpu':(pr/2)*t,
+                           'meter':(idle_dc+pr+pe+10)*t,'battery':-10*t},
+               'idle':{},'anchor_shift_j':.5388,'r_max_s':.017762388,'tau_s':2.302,
+               'meter_edge_w':[idle_dc+pr+pe]*2,'battery_edge_j':[0,0],
+               'capture_stack':reference,'adapter_max_w':140,'adapter_source':'H adapter nameplate 140 W',
+               'battery_source':'synthetic native battery polls','meter_gaps':[]}
+            for name,sign in [('pre',1),('post',-1)]:
+                start=r['idle_'+name+'_start_ns'];h['idle'][name]={}
+                for kind,(step,values) in shapes.items():
+                    mean={'rails':.051+sign*.002,'gpu':0,'meter':idle_dc+10+sign*.05,'battery':-10}[kind]
+                    h['idle'][name][kind]=[dict({'stamp_ns':start+i*step} if kind in ('meter','battery') else
+                        {'start_ns':start+i*step,'end_ns':start+(i+1)*step},power_w=mean+v) for i,v in enumerate(values)]
+            h['battery_samples']=h['idle']['pre']['battery']+h['idle']['post']['battery']
+            cls.records.append({'receipt':r,'harvest':h})
+        cls.result=probe.read_known_bytes(cls.records,cls.scan)
+
+    def test_full_production_shaped_palindrome_reader_and_cli(self):
+        res=self.result
+        self.assertEqual([c['arm'] for c in res['calls']],['S','C1','C3','C2','C2','C3','C1','S'])
+        # Common bar 5.7e-6 J/GB is derived in §3/§5, not a new tolerance.
+        for beta,delta,width in [('rails',.066716626,.000571796),('dc',.192943505,.002524213),
+                                  ('rest',.126226879,.002444084)]:
+            v=res['boundaries'][beta]
+            self.assertLessEqual(abs(v['delta']-delta),5.7e-6)
+            self.assertLessEqual(abs(v['halfwidth']-width),5.7e-6)
+            self.assertEqual(v['class'],'RESOLVED')
+        self.assertEqual(f"{res['share']['df']:.4f}",'0.0075')
+        self.assertEqual(res['printed']['contrasts']['dc'],'0.1929 ± 0.0025')
+        self.assertEqual(res['printed']['share'],'0.3458 ± 0.0075')
+        self.assertEqual(res['calls'][0]['thermal']['spans'],'not defined (thermal journal missing)')
+        # Real read CLI serialization from the same production-shaped records.
+        with tempfile.TemporaryDirectory() as tmp, patch('sys.stdout',new_callable=io.StringIO) as out:
+            path=Path(tmp)/'input.json'
+            path.write_text(json.dumps({'scan':self.scan,'records':self.records},allow_nan=False))
+            self.assertEqual(probe.main(['read',str(path)]),0)
+            self.assertEqual(json.loads(out.getvalue()),json.loads(json.dumps(res)))
+
+    def test_stream_and_idle_gaps_preserve_validity_and_disclose_sources(self):
+        records=deepcopy(self.records)
+        records[3]['harvest']['meter_gaps']=[{'span':'stream','missing_samples':1}]
+        res=probe.read_known_bytes(records,self.scan)
+        self.assertEqual(f"{res['calls'][3]['meter_gaps']['bound_j']:.1f}",'2.8')
+        for beta in ('dc','rest'):
+            self.assertEqual(res['boundaries'][beta]['class'],'RESOLVED')
+        for beta,width in [('dc',.00255396),('rest',.00247383)]:
+            self.assertLessEqual(abs(res['boundaries'][beta]['halfwidth']-width),5.7e-6)
+        direct=probe.meter_gap_bound([{'span':'pre','missing_samples':2},{'span':'post','missing_samples':1}],
+            duration_s=250,idle_lengths_s={'pre':57.6,'post':57.6},adapter_max_w=140,
+            adapter_source='nameplate',battery_max_w=5,battery_source='native polls')
+        self.assertEqual(direct['P_max_w'],145)
+        self.assertEqual(direct['bound_j'],sum(n*.020*145*250/(2*57.6) for n in (2,1)))
+
+    def test_metadata_disclosure_and_physical_mismatch_classes(self):
+        records=deepcopy(self.records)
+        records[0]['receipt']['stack']['packages']['transformers']='metadata-only'
+        res=probe.read_known_bytes(records,self.scan)
+        self.assertEqual(res['boundaries']['rails']['class'],'RESOLVED')
+        self.assertIn('packages.transformers',res['stack_comparisons'][0]['disclosure_differences'])
+        records[0]['receipt']['stack']['os_version']='different-build'
+        res=probe.read_known_bytes(records,self.scan)
+        self.assertEqual(res['boundaries']['rails']['class'],'UNDETERMINED')
+        self.assertEqual(res['boundaries']['rails']['reason'],'stack differs in: os_version')
+
+    def test_missing_native_support_and_battery_keep_receipts_and_rails_numbers(self):
+        records=deepcopy(self.records)
+        records[0]['harvest']['idle']['pre']['battery']=[]
+        records[0]['harvest']['energy_j']['battery']=None
+        res=probe.read_known_bytes(records,self.scan)
+        self.assertIn('delta',res['boundaries']['rails'])
+        self.assertEqual(len(res['calls']),8)
+        self.assertEqual(res['share']['f'],'not defined (DC contrast not valid)')
+        records=deepcopy(self.records)
+        records[0]['harvest']['idle']['pre']['meter']=records[0]['harvest']['idle']['pre']['meter'][:4]
+        res=probe.read_known_bytes(records,self.scan)
+        self.assertTrue(any('idle variance not defined' in s for s in res['reasons']))
+
+    def test_missing_knee_and_invalid_dc_are_reasoned_results(self):
+        result=probe.read_known_bytes(self.records,{'K':None,'status':'knee not found'})
+        self.assertEqual(result['boundaries']['rails']['reason'],'knee not found')
+        self.assertEqual(result['boundaries']['rails']['description'],'not defined (knee not found)')
+        records=deepcopy(self.records)
+        for record in records:
+            h=record['harvest'];t=record['receipt']['duration_s']
+            h['energy_j']['meter']=(10+(6101.072862-5967.417892)/56.018813)*t
+        result=probe.read_known_bytes(records,self.scan)
+        self.assertEqual(result['boundaries']['rails']['reason'],'contrast not resolved')
+        self.assertEqual(result['share']['df'],'not defined (DC contrast not valid)')
+
+    def test_nonsingular_descriptions_and_ordered_classes(self):
+        self.assertEqual(probe.describe_share({'delta':0.,'halfwidth':.001},{'delta':.1,'halfwidth':.002}),
+                         {'f':0.,'df':.01})
+        self.assertEqual(probe.describe_share(None,{'delta':0.,'halfwidth':0.})['df'],
+                         'not defined (DC contrast not valid)')
+        for delta,width,expected in [(2.5e-5,1e-5,'RESOLVED'),(-.0100,.0020,'UNDETERMINED'),
+                                     (1e-5,2e-5,'BELOW ATTRIBUTION LEVEL'),(0,.00057,'NOT RESOLVED')]:
+            self.assertEqual(probe.classify(delta,width,1/64)['class'],expected)
+        calls=[{'arm':a,'N':1,'boundaries':{'rails':{'excess_j':self.payload[a]*1e-9,'bound_j':.001}}}
+               for a in ('S','C1','C3','C2','C2','C3','C1','S')]
+        value=probe.reduce_boundary(calls,self.payload,'rails')
+        self.assertEqual(value['epsilon_flip_over_alpha'],'not defined (alpha is zero)')
+
 
 
 if __name__ == "__main__":

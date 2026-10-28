@@ -395,6 +395,27 @@ Every description with a zero denominator or missing prerequisite prints `not de
 For Δ_rails = 0 and valid DC, f = 0 and δf = δΔ_rails/|Δ_DC| are defined. A missing description never
 refuses a measurement or changes a class; the validity prerequisites above retain their explicit role.
 
+**Executable reader (synthetic or harvested products).** `scripts/bytes_stream_test.py scan SCAN.json`
+prints §1 from a JSON list of the 66 probe receipts (or the completed doubling prefix).
+`scripts/bytes_stream_test.py read INPUT.json` prints the full §3/§4 record, including the stack comparison
+in every outcome and H2-formatted claim lines. INPUT has `scan` (the scan command's result) and `records`
+(the eight entries in stamped palindrome order), each with `receipt` and `harvest`.
+The harvest contract is explicit: `energy_j` holds pass-1 stream integrals `rails`, `gpu`, `meter`, `battery`;
+`idle.pre`/`idle.post` hold native `rails`/`gpu` interval rows (`start_ns`, `end_ns`, `power_w`)
+and native `meter`/`battery` polls (`stamp_ns`, `power_w`), in RAW time. Supply the untrimmed native rows;
+the reader clips intervals, selects polls in the half-open idle spans and applies §2's τ trim.
+`anchor_shift_j`, `operative_timing_bound_s`, `r_max_s`, `tau_s`, `meter_edge_w` (two edge powers),
+and `battery_edge_j` (the two edge v terms) come from the governed integrators, not from this reader.
+`capture_stack` completes the comparison. `battery_samples` supplies the call's native discharge-power polls;
+`adapter_max_w`, `adapter_source`, `battery_source`, and `meter_gaps` (rows with `span` stream/pre/post and
+integer `missing_samples`) supply the R5 disclosures. Optional description inputs are `gpu_state`,
+`thermal_spans` joined from the named journal by RAW spans, and `hour_as_run_s` measured from session endpoints.
+Absent description inputs print the reasoned `not defined` convention. Native variance estimates and their
+cadences/supports, all receipts, systematic bounds and gap sources remain in the record. Full precision numeric
+fields support recomputation; `printed` carries the §14 rounded intervals and §4 claim-side sentences.
+This reader consumes the existing integrators' products; it does not claim to implement the external capture
+extension or validate a live Mac. The tests run the real probe with production-shaped fake arrays through it.
+
 ## 5. Worked example (illustration, not a prediction)
 
 From JouleWise-data `claude/kb-revise-opus` at `0609bcc0caf941fd68c36fccea323f34c3951730`,

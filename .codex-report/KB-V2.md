@@ -338,3 +338,37 @@ writes eight receipts with the added gap (its old-order boolean now correctly
 prints False); event-order tests assert the new first sleep. Duration is exact
 1.0 for 10^9 ns. Both focused modules pass (26 tests). Step 1's 3573.6 s hour
 and common midpoint offset remain correct; no arithmetic correction required.
+
+Step 5 — R3/R4/R5 and the §3/§4 reader: native rails/GPU intervals and
+meter/battery polls feed the named estimator with their own cadence and sample
+support. DC adds separate SEs; no alignment/covariance choice exists. The reader
+uses actual receipt spans and integrator products, adds source-labelled gap
+bounds (including half-weighted idle gaps), computes repeatability/contrasts,
+prints the full stack comparison, ordered classes, H2 intervals and claim lines.
+The nonsingular share and reasoned undefined descriptions never veto a class.
+The CLI now exposes `read`; its harvest-input contract is documented in §4.
+Thermal descriptions name `hazards/monitor/thermal.jsonl`; no journal is invented.
+
+Before: exact Sol 3/4 repros showed hold/linear SEs 0.0131781/0.0122875 W and
+two zero divisions. Opus's exact replay voided DC/rest on a single gap. After:
+the native-cadence program has one SE construction; zero rails yields f=0,
+δf=0.01 on Sol's inputs. The real `stream()` ran all eight §5 production-sized
+calls through constant-memory fake arrays with the full repeat counts, then
+native synthetic harvest samples through the real reader and JSON CLI.
+It reproduces the revised §5 numbers within the existing 5.7e-6 J/GB bar:
+DC 0.1929 ± 0.0025, rest 0.1262 ± 0.0024, f 0.3458 ± 0.0075. A single C2 gap
+adds 2.8 J, leaving DC/rest RESOLVED at ±0.0026/±0.0025. Tests cover baseline
+gap weighting, native support failures, missing battery, zero α, invalid DC,
+missing knee, disclosure-only versus physical mismatches and ordered classes.
+
+Opus's seeded 2000-trial-per-level noise experiment was also rerun through the
+new program, retaining all three individual call durations and stamp rounding.
+Noiseless: 100% 64 MiB. At 0.05/0.10/0.20/0.30/0.50% per-call noise, the
+not-found fractions are 31.45/29.70/29.95/29.10/30.65%. This is a limitation of
+the admitted reference/uncertainty rule (unresolved references must not count),
+not evidence warranting a new percentage band. Decisions I made: retain that
+rule exactly; expose raw recomputation values alongside governed printed values;
+keep capture/integration outside this probe reader and require their products.
+All evidence is synthetic. Step 1's arithmetic needs no correction.
+Verification for Step 5: both touched modules pass, 32 tests. Only these
+modules were run, as requested; no full-suite or live-hardware claim is made.
