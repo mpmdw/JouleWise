@@ -329,3 +329,12 @@ all governed physical fields do, and divergent/unreadable checkout files still
 produce comparisons/receipts. Both focused modules pass (27 tests).
 Decision: capture metadata and kernel_library remain full disclosures, per R2;
 only OS/hardware and the MLX/Metal versions affect physical transfer.
+
+Step 4 — R6/R9 code: sleep one existing settle gap after warm-up synchronize
+and before the pre-idle stamp. All three gaps are outside the stamped spans.
+Before: Opus's exact production-shaped eight-call fake run confirmed immediate
+pre-idle; Sol 5 found the 1e-6 duration tolerance. After: the same review script
+writes eight receipts with the added gap (its old-order boolean now correctly
+prints False); event-order tests assert the new first sleep. Duration is exact
+1.0 for 10^9 ns. Both focused modules pass (26 tests). Step 1's 3573.6 s hour
+and common midpoint offset remain correct; no arithmetic correction required.

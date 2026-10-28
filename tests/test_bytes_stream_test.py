@@ -84,10 +84,10 @@ class ReceiptTests(unittest.TestCase):
         receipt, mx = self.run_stream()
         names = [event[0] for event in mx.events]
         self.assertEqual(names, ["ones", "eval", "sync", "sum", "eval", "sync",
-                                 "stamp", "sleep", "stamp", "sleep", "stamp",
+                                 "sleep", "stamp", "sleep", "stamp", "sleep", "stamp",
                                  "sum", "eval", "sum", "eval", "sum", "eval", "sync",
                                  "stamp", "sleep", "stamp", "sleep", "stamp"])
-        self.assertEqual([event[1] for event in mx.events if event[0] == "sleep"], [57.6, 3, 3, 57.6])
+        self.assertEqual([event[1] for event in mx.events if event[0] == "sleep"], [3, 57.6, 3, 3, 57.6])
         self.assertEqual(mx.events[0], ("ones", (1024,), "uint8"))
         self.assertEqual(len(mx.results), 4)  # one warm-up plus three measured reads
         self.assertEqual(len({event[1] for event in mx.events if event[0] == "eval"}), 5)

@@ -240,6 +240,8 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
     mx.eval(warm)
     mx.synchronize()
 
+    if settle_s:
+        sleep(settle_s)
     pre_start = clock_ns()
     if idle_s:
         sleep(idle_s)

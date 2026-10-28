@@ -2,7 +2,6 @@
 from collections import Counter
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import subprocess
@@ -144,12 +143,11 @@ class MacKitTests(unittest.TestCase):
         result = probe.stream(1024, 3, device="macbook_m3_max", idle_s=1, settle_s=2,
                               mx=mx, clock_ns=lambda: next(stamps), sleep=sleeps.append)
         self.assertEqual([result[key] for key in span_keys], list(span_values))
-        self.assertEqual(sleeps, [1, 2, 2, 1])
+        self.assertEqual(sleeps, [2, 1, 2, 2, 1])
         self.assertEqual(result["schema_version"], "joulewise.bytes_stream.v2")
         self.assertEqual(result["bytes_read"], 3 * 1024)
-        # Duration has no half-width: the brief prescribes 1e-6 relative
-        # or absolute in seconds, above amplified floating noise.
-        self.assertTrue(math.isclose(result["duration_s"], 1, rel_tol=1e-6, abs_tol=1e-6))
+        # Integer 10^9 ns divided by 10^9 is the bit-exact value 1.0.
+        self.assertEqual(result["duration_s"], 1.0)
         self.assertEqual([c[0] for c in mx.calls], ["ones", "eval", "sync", "sum", "eval", "sync",
             "sum", "eval", "sum", "eval", "sum", "eval", "sync"])
         self.assertEqual(len({id(c[1]) for c in mx.calls if c[0] == "eval"}), 5)  # payload, warm-up, three measured reads
