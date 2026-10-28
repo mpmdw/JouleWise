@@ -466,3 +466,18 @@ processes for the requested variants. The isolated-late-pair regression retains
 all 21 pairs and candidate 256 MiB, then refuses the cache-arm checks rather
 than shrinking K. Focused suite: 43 tests passed; the subsequent K/B missing-φ
 regression also passed. No new numeric acceptance bar was introduced.
+
+Step 3 — S1. Fixed scan/read invocations in `scripts/bytes_mac_kit.py`'s README
+string and the rule to start with `/opt/homebrew/bin/python3.13`; expanded the
+kit verification invocation likewise. Regenerated exclusively through the kit
+generator. Generated files changed: `configs/campaigns/bytes_mac_check/README.md`
+and `configs/campaigns/bytes_mac_check/plan_tree.json`. The latter's generator
+SHA256 is `7a11cd67331bfcfb928524833eedbf0b560938d21b3e9b89fc38e90820efb69e`,
+matching the generator bytes. An explicit pre-write check confirmed every
+out-of-scope generated product was already identical, including smoke_keep.
+F7's five 8B-8bit model revisions remain as regeneration writes them; none
+changed this round. Before: Sol's bare scan/read commands exit 126. After:
+instructions have the absolute interpreter, generator/README bytes agree,
+`--check` passes, and both touched modules pass all 44 tests. This Linux seat
+uses `/usr/bin/python3.13` (3.13.5); the Mac path is verified as instruction text,
+with the same scan/read entrypoints executed under the available Python 3.13.

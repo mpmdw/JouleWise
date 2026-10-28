@@ -446,9 +446,9 @@ including share and GPU arm-power contrast, is `not defined (knee not found)`.
 The NOT RESOLVED upper limit uses the same decimal place as its H2 interval. A zero
 half-width uses a fixed two-decimal display (`0.00`), since zero has no significant digit.
 
-**Executable reader (synthetic or harvested products).** `scripts/bytes_stream_test.py scan SCAN.json`
+**Executable reader (synthetic or harvested products).** `/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py scan SCAN.json`
 prints §1 from a JSON list of the 66 probe receipts (or the completed doubling prefix).
-`scripts/bytes_stream_test.py read INPUT.json` prints the full §3/§4 record, including the stack comparison
+`/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py read INPUT.json` prints the full §3/§4 record, including the stack comparison
 in every outcome and H2-formatted claim lines. INPUT has `scan` (the scan command's result) and `records`
 (the eight entries in stamped palindrome order), each with `receipt` and `harvest`.
 The harvest contract is explicit: `energy_j` holds pass-1 stream integrals `rails`, `gpu`, `meter`, `battery`;

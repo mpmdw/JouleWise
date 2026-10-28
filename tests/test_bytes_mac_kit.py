@@ -78,6 +78,11 @@ class MacKitTests(unittest.TestCase):
         self.assertIn('6731d5249',kit.README)
         self.assertIn('physical_differences',kit.README)
         self.assertNotIn('Run `python3.13',kit.README)
+        for command in ('scan SCAN.json','read INPUT.json'):
+            self.assertIn('/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py '+command,kit.README)
+            self.assertNotIn('`scripts/bytes_stream_test.py '+command,kit.README)
+        self.assertIn('/opt/homebrew/bin/python3.13 scripts/bytes_mac_kit.py --check',kit.README)
+        self.assertIn('measurement_boundary_label.rails',kit.README)
 
     def test_generator_reproduces_in_scratch_and_only_writes_scope(self):
         with tempfile.TemporaryDirectory() as tmp:
