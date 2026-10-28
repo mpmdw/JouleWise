@@ -95,7 +95,22 @@ they otherwise change even when harvest behavior is identical. This does not
 claim that two ordinary invocations at different program heads have identical
 provenance. The fixture includes late nonzero thermal reads and a 5.3-second
 poll gap. The same exact replay also covers a block-5 lane and a non-BYTES lane.
-Final replay results are recorded below when complete.
+Final replay: all 177 archive files are byte-identical for pass 1. The same
+177-file exact comparisons pass for block 5 and a non-BYTES block-six lane.
+The manifest digest hashes sorted `relative_path + NUL + SHA256(file_bytes)`;
+temporary absolute paths are present in the files, so it identifies this replay,
+not a portable golden artifact.
+
+```text
+BYTE_IDENTITY pass1: 177 files, exact equality; manifest_sha256=fbd9cb7dba05cbfa6cc9c161195574672e96a43b1c0b1fc10f9039e75a14e2bd
+BYTE_IDENTITY block5: 177 files, exact equality; manifest_sha256=dc11de3bb6809a8d24cb3cc8a65d1373963ca630487de86700002764379ed63b
+BYTE_IDENTITY alpha: 177 files, exact equality; manifest_sha256=ed6e7ce27dc85f3f3743451d02c2aff5c058d09cda240fe2c3117a6c57120234
+```
+
+The pass-2 end-to-end case also passes: all six science bundles are strict-valid,
+late-only OS levels produce no primary OS exclusion, and every member assessment
+records the full-hull exclusion and its samples. The 780-stream subset check has
+zero request-end-only OS exclusions.
 
 ## Test commands and output tails
 
@@ -135,8 +150,17 @@ locally; the full suite is left to CI as instructed.
     six generated science bundles: all six returned `[]`. The first diagnostic
     attempt omitted the required cache argument and raised `TypeError`; the
     corrected command passed. Both used the same synthetic-only environment.
-11. `tests.b6.test_bytes_p2_thermal_window` (`/tmp/by-p2-final-new2.log`): running
-    all 11 tests after the six-bundle strict-validation check.
+11. `tests.b6.test_bytes_p2_thermal_window` (`/tmp/by-p2-final-new2.log`):
+    `Ran 11 tests in 231.111s; OK`. Final replay manifest lines are above.
+12. `tests.test_harvest_b5_window tests.flags.test_flags_fx_regressions`
+    (`/tmp/by-p2-final-regressions.log`):
+    `Ran 193 tests in 462.897s; OK (skipped=11)`.
+
+Final local results: requested existing regression modules green (193 tests,
+11 skips); new unit/property/entry module green (11 tests); b6 wrapper green
+(6 tests). The development failures above were fixture/census issues and are
+resolved; no production-code correction was needed after the implementation
+commit.
 
 `git diff --check`: passed (empty output).
 Catalog SHA-256, unchanged from base:
@@ -146,6 +170,50 @@ Catalog SHA-256, unchanged from base:
 
 Draft PR [#594](https://github.com/mpmdw/JouleWise/pull/594), **CI only: BY-P2-THERM**,
 targets `ci/2026-10-27-bytes-enddate`. No merge requested or performed.
-CI for test-fix commit `fb0f901de` is running:
-[run 40680943678](https://github.com/mpmdw/JouleWise/actions/runs/40680943678).
-The earlier test-development runs are superseded by the corrected fixtures.
+CI for final code/test commit `a9f4617edfda44f85d8c7c5c5a24f39d6a012e11`
+is **not green**:
+[run 40681601271](https://github.com/mpmdw/JouleWise/actions/runs/40681601271),
+[failed shard 6](https://github.com/mpmdw/JouleWise/actions/runs/40681601271/job/122794203445).
+At the stop boundary, 13 jobs had succeeded, shard 6 had failed, and six shards
+were still running. Build, fences, quick, installed-wheel, both crash-matrix jobs,
+and the calibration-exit job passed. The gate-ledger workflow was skipped for the
+draft PR. Earlier development runs were superseded by corrected fixtures.
+
+The failed job's completed log was read. Its only error was:
+
+```text
+ERROR: test_bytes_drafts_never_enter_live_loop_despite_base_order
+       (test_b6_loop.LoopTests.test_bytes_drafts_never_enter_live_loop_despite_base_order)
+  File "tests/test_b6_loop.py", line 170, in test_bytes_drafts_never_enter_live_loop_despite_base_order
+    rejected = self.loop.state["pack_not_open"]
+KeyError: 'pack_not_open'
+Ran 64 tests in 8.249s
+FAILED (errors=1)
+MODULE FAIL tests.test_b6_loop tests=64 failures=0 errors=1 skipped=0 seconds=8.249
+SHARD SUMMARY index=6/12 modules=38 tests=1270 failures=0 errors=1 skipped=3 result=FAIL
+```
+
+### Scope boundary
+
+**File needed: `tests/test_b6_loop.py`.** Its lines 149–173 still assume pass 2 is
+`draft` and assert that all six pass-2 registration files are rejected as drafts.
+The specified base `de35f6403` registers those packs; for example
+`configs/b6/packs/bytes-s1-p2/registration.json:357` already has
+`"status": "registered"`. The real registration gate therefore supplies no draft
+rejections and the fixture's `pack_not_open` lookup fails. The test and loop
+implementation are byte-unchanged from `de35f6403` (`git diff` for both is empty),
+and the failing test uses fake lanes rather than this harvest implementation.
+This is a base-registration/test expectation mismatch, not a thermal-window
+failure. The requested scope excludes that test file, so it was neither edited
+nor executed locally. Repair would make this test self-contained with explicit
+draft registrations, or update its registered-pack expectations while preserving
+a separate draft-refusal case. No registration or production-loop change is
+needed to address this error.
+
+Per the brief's exhaustive WRITE_SCOPE rule, stop here and request that exact
+file if the stale CI expectation is to be repaired. All authorized implementation,
+focused tests, byte-identity evidence and this report are complete. A final
+report-only commit follows the tested code/test commit; pushing it may supersede
+the still-running jobs, but the failed shard's result above is retained.
+The required two executing reviews remain external to this build; no production
+pass-2 harvest was opened.
