@@ -27,15 +27,47 @@ label alone is not an export switch. Keep the native `.runs.csv` and matching
 
 ## Known-bytes companion probe
 
-Run `python3.13 scripts/bytes_stream_test.py --bytes B --repeats N --out RECEIPT`
-under concurrent rails and KM003C capture on the quiet Mac. B and N are explicit
-integer counts chosen for the available memory and the planned one-hour test;
-there is no guessed bandwidth-derived default. Use a payload above cache
-capacity when testing external-memory traffic. The receipt records B*N logical
-uint8 payload bytes and its own CLOCK_MONOTONIC_RAW start/end, excluding initial
-allocation/fill. It includes reduction workspace/dispatch in the span, and does
-not claim a hardware memory-controller count. Keep the receipt with the harvest;
-map/integrate rails and DC input over its exact start/end to compare boundaries.
+Follow [the known-bytes reading rule §2](../../../docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md#2-the-receipt-change-one-small-code-change-before-the-test)
+for each call on the quiet Mac:
+
+```sh
+python3.13 scripts/bytes_stream_test.py --bytes B --repeats N --device DEVICE --idle-s 57.6 --settle-s 3 --out RECEIPT
+```
+
+Replace DEVICE with `hardware_target.id` from the non-claim checkout's run
+config. B and N are explicit integer counts selected by the rule's §1 knee,
+size and duration procedure for the eight-call test; there is no guessed
+bandwidth-derived default. Use `--idle-s 0 --settle-s 0` only for the knee scan.
+
+The `joulewise.bytes_stream.v2` receipt counts B*N logical uint8 payload bytes,
+excluding the warm-up. The probe allocates/fills/evaluates and synchronizes the
+payload, runs one warm reduction and synchronizes, then stamps pre-idle, stream
+and post-idle spans on CLOCK_MONOTONIC_RAW. The two 3 s settle gaps enter no
+quantity. The payload stays resident through post-idle. Stream duration excludes
+allocation/fill, warm-up, idles and gaps; reduction workspace/dispatch work is
+inside the stream span, but workspace bytes are excluded from B*N. This is not
+a hardware memory-controller count.
+
+One continuous powermetrics capture and one continuous KM003C meter stream
+must cover all eight calls, with one meter clock fit for the test, from its own
+non-claim checkout with the registration §19 chain extension. Keep every receipt
+with the harvest. The harvest extension must integrate rails, the GPU series,
+DC input and the battery term over the receipt's exact stamped spans using the
+pass-1 integrators unchanged. Measure the test's own τ = 2*T_SMC + Δt_p; if τ
+exceeds 3 s, compute P_post after trimming the first τ − 3 s from the stamped
+post-idle span, as §2 requires.
+
+The receipt records the runtime stack and local comparison. At harvest, supply
+the concurrent capture's `telemetry_backend` and
+`measurement_boundary_label.rails` to `compare_stack(..., capture_stack=...)`;
+missing capture identity remains pending. Compare the §2 projections against
+any unit in `configs/b6/registration/identity_pins.json`, and Python plus every
+package key against `configs/bytes/identity_pins.json` `runtime_versions`.
+Git commit is printed, not compared; the five model-specific fields are
+`not_applicable`. Retain receipts and stack differences for the rule's §4
+interpretation. Probe execution alone does not implement or validate the capture
+and harvest extension.
+
 MLX imports only on execution. This is a standalone companion probe; it is not
 a new runtime adapter or a claim-bearing stage in the fixed tree.
 

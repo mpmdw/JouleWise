@@ -201,3 +201,57 @@ Next exact step: lead review/admission of the reconciled rule; observe the ordin
 Final checks: `git diff --check e624d67c7` exit 0; `git diff e624d67c7 --name-only` contains exactly the four WRITE_SCOPE paths; reconciler-body preservation and main/cold-reviewed draft equivalence PASS. One optional static CI-layout introspection attempt stopped while importing a split-declaration module because the read-only shell could not probe a temporary directory; it executed no test methods and changed no repository file. Only tests.test_bytes_stream_test was executed locally.
 
 Commit checkpoints: `3c1776298` early authority/access; `c644a5b3c` Step 1; `5e2833d1e` Step 2; final report-only evidence checkpoint follows. Each checkpoint committed and pushed.
+
+
+## Round 2 — authorized v2 compatibility and operations follow-up
+
+Authority: magistrate activation 39206674, 2026-10-28 follow-up. Continued
+`codex/2026-10-28-kb-v2` at exactly `9add41e36a21acd8247ca4f475dd9c8fc17761fe`.
+The exhaustive write scope for this round is `tests/test_bytes_mac_kit.py`,
+`configs/campaigns/bytes_mac_check/README.md` and this report. The previous
+round's scope stop is resolved for those two named files only.
+
+### Changes and decisions
+
+- Updated both legacy probe compatibility tests to v2: explicit device,
+  fake MLX `__version__`, six ordered integer RAW stamps, one warm reduction
+  and synchronization before pre-idle, and five distinct evaluations (payload,
+  warm result, three measured results). Retained logical byte count, positive
+  measured span, duration tolerance, clock, non-claim and bad-count assertions.
+  CLI smoke uses zero idle/settle for a fast synthetic invocation; the direct
+  test injects sleep and six stamps to check nonzero idle/settle behavior without
+  wall-clock waiting. No v1 code path and no production-code changes.
+- Updated the operational command with `--device DEVICE --idle-s 57.6
+  --settle-s 3`. DEVICE comes from the checkout config's `hardware_target.id`.
+  Linked the governing draft; documented warm-up and payload residency,
+  logical count/span boundaries, the eight-call continuous captures and one
+  clock fit, unchanged pass-1 span integrators, measured-τ post-idle trimming,
+  and local versus harvest stack comparison sources. Capture/harvest work
+  remains external to the probe; these instructions do not claim it is done.
+- NEEDS_RULING: none. All changes follow the branch's §2 and the explicit
+  follow-up; no choice changes which data count or a printed number.
+
+### Verification
+
+Python: `/workspace/.joulewise-env/bin/python3.13` (3.13.5).
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /workspace/.joulewise-env/bin/python3.13 -m unittest -v tests.test_bytes_mac_kit tests.test_bytes_stream_test
+```
+
+Baseline: 21 tests, one failure and one error, both existing compatibility
+calls missing the required device. Final: **21 tests in 0.761s, OK** (four kit
+tests and 17 receipt tests). `git diff --check`: exit 0. Fixture orphan census:
+`[]`, exit 0. Only the two requested test modules ran; no full suite or hardware
+capture. Synthetic evidence is not hardware validation.
+
+### Push and CI handoff
+
+PR #593 remains draft, targeting `ci/2026-10-27-bytes-enddate`; no admission or
+merge. Before this round's push, the connector reports the prior head's
+[ci run 40683266757](https://github.com/mpmdw/JouleWise/actions/runs/40683266757)
+as **queued**, with gate-ledger skipped (draft). This is not green evidence.
+This Round 2 checkpoint is committed and pushed with the two compatibility
+updates. The final response records the remote-confirmed SHA and its CI
+observation after push, avoiding another report-only commit that would replace
+the observed head. The full-suite/live/merge gates remain lead-owned.
