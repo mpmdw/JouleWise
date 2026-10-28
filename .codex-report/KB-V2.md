@@ -372,3 +372,22 @@ keep capture/integration outside this probe reader and require their products.
 All evidence is synthetic. Step 1's arithmetic needs no correction.
 Verification for Step 5: both touched modules pass, 32 tests. Only these
 modules were run, as requested; no full-suite or live-hardware claim is made.
+
+Step 6 — R8: edited the generator's README string, then regenerated the kit;
+no generated file was hand-edited. All documented Mac invocations use
+`/opt/homebrew/bin/python3.13`. The Linux seat has `/usr/bin/python3.13`
+(3.13.5), so synthetic execution/checks used that available interpreter.
+Before: Opus 1's exact README comparison was False and `--check` drifted first
+on the 8B-8bit config. After: README bytes equal the generator, and
+`python3.13 -B scripts/bytes_mac_kit.py --check` passes. The generator alone
+updated `configs/campaigns/bytes_mac_check/plan_tree.json`'s generator SHA256,
+its source manifest locators/digests, and the five 8B-8bit configs plus their
+order-manifest digests (the source revision is now explicit). Those are the
+existing moved-input drifts exposed by regeneration; no source inputs changed.
+The generator skips identical files, so the already-identical out-of-scope
+`configs/b6/smoke_keep.json` was not rewritten. Tests now require byte equality
+with every generated output instead of accepting historical drift.
+Verification: both touched modules pass, 33 tests; `--check` and
+`git diff --check` pass. Decisions I made: regenerate from the current supplied
+inputs as R8 requires, retaining their exact source locators and hashes.
+NEEDS_RULING: none. No hardware capture, unblinding, admission or merge.

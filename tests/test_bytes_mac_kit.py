@@ -20,11 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class MacKitTests(unittest.TestCase):
     def test_generated_tree_and_configs_validate_without_a_pack_registration(self):
-        # The committed kit is the frozen record of the H and BY-H2 sizing
-        # sessions, which ran from it. The generator's inputs have since moved
-        # on by design (the 8B-8bit revision, the pass-1 trees), so the
-        # committed files are validated as they stand, not regenerated.
-        files = {path: (ROOT / path).read_bytes() for path in kit.build_files(ROOT)}
+        # R8: all committed products must agree with the generator, including
+        # the README and the generator digest in plan_tree.json.
+        files = kit.build_files(ROOT)
+        for path, raw in files.items():
+            self.assertEqual((ROOT/path).read_bytes(),raw,str(path))
         tree = json.loads(files[kit.KIT / "plan_tree.json"])
         self.assertTrue(tree["non_claim"])
         self.assertEqual(len(chain.stage_plan(tree)), len(tree["stage_graph"]))
@@ -70,6 +70,14 @@ class MacKitTests(unittest.TestCase):
             for end in ("start", "end"):
                 rows = [m for m in plan["members"] if m["stage_id"] == f"bytes-mac-check-test7-{mid}-{end}"]
                 self.assertEqual([m["model_id"] for m in rows], [mid, "reference"] * 2)
+
+    def test_readme_uses_absolute_python_and_current_probe_contract(self):
+        self.assertIn('/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py',kit.README)
+        self.assertIn('--device DEVICE --idle-s 57.6 --settle-s 3',kit.README)
+        self.assertIn('three 3 s settle gaps',kit.README)
+        self.assertIn('6731d5249',kit.README)
+        self.assertIn('physical_differences',kit.README)
+        self.assertNotIn('Run `python3.13',kit.README)
 
     def test_generator_reproduces_in_scratch_and_only_writes_scope(self):
         with tempfile.TemporaryDirectory() as tmp:
