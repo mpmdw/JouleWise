@@ -164,3 +164,56 @@ class ResultsFillAdapterTests(unittest.TestCase):
         self.assertEqual(source["alpha"]["cells"], {})
         with self.assertRaises(ResultsFillAdapterError):
             adapt_claim_verdicts(render_claim_verdicts(produced_verdict()), campaigns={})
+
+
+class ScopedLimitationProjectionTests(unittest.TestCase):
+    def issued(self):
+        import base64
+        import hashlib
+        from tests.test_detection_floor import launch_lineage
+        artifact = produced_verdict()
+        floor = json.loads(base64.b64decode(artifact['inputs']['floor_artifact']['embedded_bytes_base64']))
+        floor['provenance']['launch_lineage'] = launch_lineage()
+        raw = (json.dumps(floor, sort_keys=True) + '\n').encode()
+        artifact['inputs']['floor_artifact']['embedded_bytes_base64'] = base64.b64encode(raw).decode()
+        artifact['inputs']['floor_artifact']['file_sha256'] = hashlib.sha256(raw).hexdigest()
+        family = artifact['contrasts'][0]['conditions']['condition_a_id']
+        artifact['inputs']['limitations'] = [
+            'floor_launch_lineage_unauthenticated:aggregate',
+            'consumer_identity_set_unauthenticated:' + family,
+            'consumer_identity_recording_difference:' + family,
+            'floor_cell_from_floor_pack:' + family + ':floor-cell:no_envelope_comparison',
+            'consumer_identity_set_unauthenticated:unrelated-family',
+        ]
+        artifact = finalize_claim_verdicts(artifact)
+        self.assertEqual(validate_claim_verdicts(artifact), [])
+        return artifact
+
+    def test_every_issued_limitation_and_real_source_cell_reaches_fill(self):
+        from joulewise.results_fill_adapter import adapt_claim_verdicts
+        artifact = self.issued()
+        output = adapt_claim_verdicts(render_claim_verdicts(artifact), campaigns=campaigns())
+        self.assertEqual(output['gamma']['limitations'], artifact['inputs']['limitations'])
+        row = output['gamma']['contrasts'][0]
+        self.assertEqual(row['limitations'], artifact['inputs']['limitations'][:-1])
+        self.assertEqual(row['floor_source_cell_ids'], artifact['contrasts'][0]['floor']['floor_row_ids'])
+        output['gamma']['limitations'].clear()
+        self.assertEqual(len(artifact['inputs']['limitations']), 5)
+
+    def test_omitted_changed_or_reordered_notes_and_changed_source_refuse(self):
+        from joulewise.results_fill_adapter import adapt_claim_verdicts, validate_results_fill_projection, ResultsFillAdapterError
+        artifact = self.issued()
+        original = adapt_claim_verdicts(render_claim_verdicts(artifact), campaigns=campaigns())
+        for variant in ('drop', 'text', 'order', 'gamma', 'source', 'floor'):
+            with self.subTest(variant=variant):
+                output = deepcopy(original)
+                row = output['gamma']['contrasts'][0]
+                if variant == 'drop': row['limitations'].pop()
+                elif variant == 'text': row['limitations'][0] += '-different'
+                elif variant == 'order': row['limitations'].reverse()
+                elif variant == 'gamma': output['gamma']['limitations'].pop()
+                elif variant == 'source': row['floor_source_cell_ids'][0] += '-different'
+                else: row['floor']['resolutions'][0]['source_cell_ids'][0] += '-different'
+                code = 'floor' if variant in ('source', 'floor') else 'contrast_census'
+                with self.assertRaisesRegex(ResultsFillAdapterError, '^results_fill_' + code + '_mismatch$'):
+                    validate_results_fill_projection(output, artifact)

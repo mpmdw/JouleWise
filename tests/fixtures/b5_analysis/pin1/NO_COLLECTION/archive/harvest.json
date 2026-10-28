@@ -1,0 +1,106 @@
+{
+  "archive_root": "/private/tmp/b5-s0-alpha-pin1-7f1dg6yi/archive",
+  "attempt": 1,
+  "claim_usable": false,
+  "exclude_window_reasons": [
+    "cell.below_minimum",
+    "neg8.screen_failed",
+    "roster.no_science_bundles"
+  ],
+  "faults": [],
+  "flags": 38,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "f68e53d4e84292c182772a20edf2e3649c7470a7113ff87ebdec6f91208c9bc2",
+      "joulewise/whole_window.py": "ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "7e6158d669cbb6fb35761aee18abf363f07c5d36",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin1",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_assessed": 0,
+  "outputs": {
+    "derived/bracket-binding.json": "8e671c5f099bd42805216760a62ac0dc1ba4bc789b382d782c797b6c768ff7a2",
+    "derived/code-identity.json": "4005c61d24581f9045b1d12093e9dd1182cf7b0b3d3504cbb252f3daf77d2c6e",
+    "derived/exclusions.json": "ce7f3b27b3a6f6e658a88717958301610a1f77d847d90c1cce0846af0035ca49",
+    "derived/flags.jsonl": "ccfe846a7939e8d0d8389300be29b527cc025553e98e50848c2798690c0c79d0",
+    "derived/harvest-thresholds.json": "bf0fc501554cc20e39ae7c6b4380dc7276821c4b6c4ee48470eab12e7bbd6f89",
+    "derived/historical-custody.json": "cc54650ff9611c478d616953c4b67881c2d1672675b2d0535b114deb1bbcbba3",
+    "derived/neg8-allowance.json": "a074532f5bb337d5d5700a91f13e895fb1ed38686fbbb72ea5b99013261865e3",
+    "derived/neg8-bound.json": "d910db1f5ecbb8107f6b60f189e10a4487c94695c26499f8930c74c5b5bdf801",
+    "derived/neg8-corpus-physics.json": "fac844b4d5625d796df77d73841687b5f2056f35db98d85b5464f145c05fbb9b",
+    "derived/neg8-screen.json": "95abf4bfe41fed4ccfdd89385809272b5db97361d50d6e37a883ce1a0a93f710",
+    "derived/roster.json": "61a74a4e2fcfea92ed1e01a6ed4ff3a6b683e1ee5cc8b2a1baf84cb7baeed953",
+    "derived/terminal-boundary.json": "e32c565532818d5c48f21260c6db284065676d79a8a1f01de91fbc6202e53389",
+    "derived/terminal-pin.json": "93bd35ae338b11320bf27545fd467da183fc7819589b8bb4925067eba5aa45bb",
+    "derived/window_flags.json": "2bfe6a3588a940fb3a38348334d7c9858568090e581ea17c07ecf239e9c89cf2",
+    "derived/yield.json": "39e1819e70680a204cc9c5c9261ad81ff9d02b89edee319afc1d605a586bcf53"
+  },
+  "pack_id": "s0_alpha_mock_v5",
+  "plan_id": "s0-alpha-plan",
+  "runs_root_overrides": [],
+  "schema": "joulewise.harvest_b5_window.v1",
+  "verdict": "NO_COLLECTION",
+  "yield": {
+    "j3_failed_stages": [],
+    "per_collection_stage": [],
+    "per_roster_stage": [
+      {
+        "planned": 2,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "01_abs",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 4,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "02_abba",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 3,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "end_reference",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 1,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "midpoint_reference",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 3,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "start_reference",
+        "strict_deferred": 0,
+        "succeeded": 0
+      }
+    ],
+    "planned": 13,
+    "present": 0,
+    "raw_valid": 0,
+    "schema": "joulewise.b5_harvest_yield.v1",
+    "stage_journal": {
+      "campaign_collection": 0,
+      "stages": 1
+    },
+    "strict_deferred": 0,
+    "succeeded": 0,
+    "unresolved_collection_stages": [],
+    "window_stage_yield": null
+  }
+}

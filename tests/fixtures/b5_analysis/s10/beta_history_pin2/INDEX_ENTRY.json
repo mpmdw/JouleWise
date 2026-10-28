@@ -1,0 +1,20 @@
+{
+  "archive_root": "/private/tmp/b5-s0-beta-pin2-bit9q19_/archive",
+  "attempt": 1,
+  "bound_runs_root": "/private/tmp/b5-s0-beta-pin2-bit9q19_/bound-runs",
+  "cause_key": null,
+  "claim_runs_root": "/private/tmp/b5-s0-beta-pin2-bit9q19_/claim-runs",
+  "claim_usable": false,
+  "custody_root": "/private/tmp/b5-s0-beta-pin2-bit9q19_/custody",
+  "entry_kind": "harvested",
+  "harvest_pin": "224a264c5faaae90cdf56118df37e773a932700b",
+  "harvest_record_sha256": "3d58cd179a9ed8d9344a686ef99a54c74960340cc5a9da8fec798533fc53f105",
+  "measurement_root": "/private/tmp/b5-s0-beta-pin2-bit9q19_/measurement",
+  "pack": "beta",
+  "pack_id": "d117_floor_qwen3-8b_v5",
+  "plan_id": "v5-b5-beta-a1-s10-history",
+  "seal": "second",
+  "superseded_archive_roots": [],
+  "t0_epoch_s": 1791649800,
+  "verdict": "COLLECTED"
+}

@@ -33,6 +33,7 @@ from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
 from .estimators import tost_p_value
 from .inputs import AnalysisInputError, authenticate_floor_artifact_bytes
+from joulewise.authentication_io import read_authentication_input
 from .multiplicity import adjust_p_values
 from .ratio import (
     ratio_floor_diagnostic_collision_source_ids,
@@ -813,7 +814,7 @@ def _validate_cross_field_claim_semantics(
                     )
 
     observed_n = sampling.get("observed_complete_n")
-    planned_n = sampling.get("planned_n")
+    planned_n = sampling.get("kept_n", sampling.get("planned_n"))
     directional_raw_p: float | None = None
     if (
         _number(estimator.get("estimate"))
@@ -982,6 +983,7 @@ def validate_claim_verdicts(
     value: Mapping[str, Any],
     *,
     frozen_manifest: Mapping[str, Any] | None = None,
+    floor_pinset_path: Path | None = None,
 ) -> list[str]:
     """Return every structural/canonical error in a v1 verdict artifact."""
 
@@ -1079,6 +1081,10 @@ def validate_claim_verdicts(
                         embedded_bytes,
                         expected_sha256=floor_link.get("file_sha256"),
                         expected_artifact_id=floor_id,
+                        **({"pinset_path": floor_pinset_path,
+                            "expected_pinset_sha256": hashlib.sha256(read_authentication_input(
+                                floor_pinset_path, grammar="json", label="floor producer pinset")).hexdigest()}
+                           if floor_pinset_path is not None else {}),
                     )
                 except AnalysisInputError as exc:
                     errors.append(
@@ -1086,9 +1092,15 @@ def validate_claim_verdicts(
                         f"{exc}"
                     )
                 else:
-                    authenticated_floor_root_ids = set(
-                        authenticated_floor.root_ids
-                    )
+                    authenticated_floor_root_ids = set(authenticated_floor.root_ids)
+                    # Other scoped limitations are derived by the consumer route.
+                    # Compare the complete floor-lineage subsequence exactly so
+                    # neither a missing nor an invented carrier note validates.
+                    floor_notes = [note for note in inputs.get("limitations", [])
+                                   if isinstance(note, str) and note.startswith(
+                                       ("floor_launch_lineage_unauthenticated:", "floor_producer_lineage_absent:"))]
+                    if floor_notes != list(authenticated_floor.limitations):
+                        errors.append("artifact.inputs.limitations: disagrees with authenticated floor lineage limitations")
         if not _relative_label(inputs["runs_root_label"]):
             errors.append("artifact.inputs.runs_root_label: must be a relative label")
         if not isinstance(inputs["evidence_class"], str) or inputs[
@@ -1774,8 +1786,12 @@ def validate_claim_verdicts(
             "not_run",
         }:
             errors.append(f"{where}.sensitivity_status: invalid")
+        if "unit_removed_by_exclusion_function" in contrast.get("claim_evaluation", {}).get("reason_codes", []):
+            errors.append(f"{where}.claim_evaluation: removed-unit label is not a contrast reason")
         sampling_row = contrast["sampling"]
-        if _exact_keys(sampling_row, _CONTRAST_SAMPLING_KEYS, f"{where}.sampling", errors):
+        kept_sampling = isinstance(sampling_row, Mapping) and "kept_n" in sampling_row
+        sampling_keys = _CONTRAST_SAMPLING_KEYS | ({"kept_n", "removed_block_ids"} if kept_sampling else set())
+        if _exact_keys(sampling_row, sampling_keys, f"{where}.sampling", errors):
             if not isinstance(sampling_row["confirmatory_status"], str) or sampling_row[
                 "confirmatory_status"
             ] not in {
@@ -1783,7 +1799,7 @@ def validate_claim_verdicts(
                 "demoted_exploratory",
             }:
                 errors.append(f"{where}.sampling.confirmatory_status: invalid")
-            for key in ("planned_n", "observed_complete_n"):
+            for key in (("planned_n", "observed_complete_n", "kept_n") if kept_sampling else ("planned_n", "observed_complete_n")):
                 if isinstance(sampling_row[key], bool) or not isinstance(sampling_row[key], int) or sampling_row[key] < 0:
                     errors.append(f"{where}.sampling.{key}: must be a nonnegative integer")
         if (
@@ -2039,6 +2055,19 @@ def validate_claim_verdicts(
                         for row in rows
                         if isinstance(row, Mapping) and row.get("included") is True
                     )
+                    if kept_sampling:
+                        removed_ids = [row.get("block_id") for row in rows if isinstance(row, Mapping)
+                                       and row.get("included") is False]
+                        if (sampling_row.get("removed_block_ids") != removed_ids
+                                or sampling_row.get("kept_n") != observed_complete
+                                or sampling_row.get("planned_n") != observed_complete + len(removed_ids)
+                                or any(not isinstance(row.get("position_bundle_ids"), Mapping)
+                                       or row.get("reason_codes") != ["unit_removed_by_exclusion_function"]
+                                       for row in rows if isinstance(row, Mapping) and row.get("included") is False)):
+                            errors.append(f"{where}.sampling: kept quads require exact removed-unit labels and counts")
+                    elif any(isinstance(row, Mapping) and "unit_removed_by_exclusion_function" in row.get("reason_codes", [])
+                             for row in rows):
+                        errors.append(f"{where}.sampling: removed-unit labels require kept-quad sampling")
                     if sampling_row.get("observed_complete_n") != observed_complete:
                         errors.append(
                             f"{where}.sampling.observed_complete_n: must equal included block count"
@@ -2230,7 +2259,7 @@ def validate_claim_verdicts(
                     )
                 if contrast.get("equivalence") is not None or contrast.get(
                     "mde"
-                ) is not None:
+                ) is not None and not kept_sampling:
                     errors.append(
                         f"{where}: v3 equivalence and MDE must remain unregistered"
                     )
@@ -2902,7 +2931,7 @@ def validate_claim_verdicts(
                     ] not in CLAIM_OUTCOMES:
                         errors.append(f"{loo_where}.outcome: invalid")
             estimator_n = estimator.get("n") if isinstance(estimator, Mapping) else None
-            planned_n = sampling_row.get("planned_n") if isinstance(sampling_row, Mapping) else None
+            planned_n = sampling_row.get("kept_n", sampling_row.get("planned_n")) if isinstance(sampling_row, Mapping) else None
             if (
                 isinstance(estimator_n, int)
                 and not isinstance(estimator_n, bool)
@@ -2913,7 +2942,9 @@ def validate_claim_verdicts(
                     errors.append(f"{where}.loo: complete n<=10 evidence requires one row per block")
                 elif isinstance(blocks, Mapping) and isinstance(blocks.get("planned_block_ids"), list):
                     omitted = [row.get("omitted_block_id") for row in loo["rows"] if isinstance(row, Mapping)]
-                    if omitted != blocks["planned_block_ids"]:
+                    expected_omitted = [bid for bid in blocks["planned_block_ids"]
+                                        if bid not in sampling_row.get("removed_block_ids", [])]
+                    if omitted != expected_omitted:
                         errors.append(f"{where}.loo.rows: omissions must follow planned block order")
             elif isinstance(estimator_n, int) and estimator_n > 10 and loo["status"] != "not_required":
                 errors.append(f"{where}.loo.status: n>10 must be not_required")
@@ -3220,6 +3251,9 @@ def validate_claim_verdicts(
                 omitted_block_id = block_id_by_contrast[contrast_id]
                 row = loo_by_id[contrast_id].get(omitted_block_id)
                 candidate = row.get("raw_p") if isinstance(row, Mapping) else None
+                sampling = contrast_by_id[contrast_id].get("sampling", {})
+                if row is None and omitted_block_id in sampling.get("removed_block_ids", []):
+                    candidate = contrast_by_id[contrast_id].get("multiplicity", {}).get("raw_p")
                 loo_raw[contrast_id] = (
                     float(candidate) if _probability(candidate) else None
                 )
@@ -3377,7 +3411,8 @@ def validate_claim_verdicts(
                         errors.append(
                             f"{loo_where}.influence_triggers: verdict triggers disagree with full-vs-LOO comparison"
                         )
-                    mde = full.get("mde")
+                    mde = (full_floor.get("active_floor_j") if "kept_n" in full.get("sampling", {})
+                           else full.get("mde"))
                     if _number(mde) and _number(full_estimator.get("estimate")) and _number(
                         row.get("estimate")
                     ):
@@ -3593,12 +3628,14 @@ def finalize_claim_verdicts(
     value: Mapping[str, Any],
     *,
     frozen_manifest: Mapping[str, Any] | None = None,
+    floor_pinset_path: Path | None = None,
 ) -> dict[str, Any]:
     artifact = dict(value)
     artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
     errors = validate_claim_verdicts(
         artifact,
         frozen_manifest=frozen_manifest,
+        **({"floor_pinset_path": floor_pinset_path} if floor_pinset_path is not None else {}),
     )
     if errors:
         raise ClaimArtifactError("invalid claim-verdict artifact: " + "; ".join(errors))
@@ -3610,10 +3647,12 @@ def write_claim_verdicts_atomic(
     value: Mapping[str, Any],
     *,
     frozen_manifest: Mapping[str, Any] | None = None,
+    floor_pinset_path: Path | None = None,
 ) -> None:
     errors = validate_claim_verdicts(
         value,
         frozen_manifest=frozen_manifest,
+        **({"floor_pinset_path": floor_pinset_path} if floor_pinset_path is not None else {}),
     )
     if errors:
         raise ClaimArtifactError("refusing to write invalid artifact: " + "; ".join(errors))

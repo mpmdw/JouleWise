@@ -29,7 +29,10 @@ Layout under the archive root (created once; a re-harvest uses a new root):
 * ``withheld/``: the numbers (re-reduced summaries), member spans, bracket
   evaluation, the re-evaluated NEG-8 bracket, member assessments and
   transcripts.  Restricted custody.
-* ``harvest.json``: the verdict and the digests of every output.
+* ``harvest.json``: the verdict, the digests of every output, and the
+  checkout this program ran from (``harvest_checkout``: its commit, whether
+  it was clean, the SHA-256 of each harvest program file), which
+  ``derived/exclusions.json`` records too.
 
 Other-lane seams.  The harvest reads files written by lanes that land in the
 same integration change: the hazard monitor journals and the arm record (L1),
@@ -81,6 +84,9 @@ TERMINAL_BOUNDARY_SCHEMA = "joulewise.b5_terminal_boundary.v1"
 NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
 NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
 NEG8_CORPUS_PHYSICS_SCHEMA = "joulewise.b5_neg8_corpus_physics.v1"
+ERRATUM_2_ADMITTED_AT = "2026-10-10T16:30:00Z"
+ERRATUM_2_ADMITTED_AT_EPOCH_S = 1791649800
+ERRATUM_3_ADMITTED_AT_EPOCH_S = 1791738000
 # NEG-8 ruling 2026-10-07 (registration 0.12 "Lost references", 5.3): the
 # member-level physics exclusions of 6.4 that drop a corpus member from the
 # bound and a reference from the screen.  The order is the order a lost
@@ -88,17 +94,40 @@ NEG8_CORPUS_PHYSICS_SCHEMA = "joulewise.b5_neg8_corpus_physics.v1"
 NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", "battery.accumulator_excursion",
                            "thermal.os_level_nonzero", "thermal.powermetrics_pressure_elevated",
                            "clock.step_overlap")
+# Seal gate stage 1, RF-5 (2026-10-07; registration 0.12): four more physics
+# codes lose a reference, though not a corpus member (the corpus keeps its own
+# rule, registration 5.3, so they are not in the tuple above).  A reference
+# whose contention or battery evidence was never taken (contention.unmeasured,
+# battery.unmeasured: a monitor journal gap over it) cannot be shown clean,
+# and an unseen contender or charge inside a reference can move the screen by
+# more than its bound; a science member in that state is removed for the same
+# reason (registration 6.4).  A reference with a measured quiet-state
+# violation (display awake, screensaver, Low Power Mode) or a failed battery
+# capture pair has a contaminated or unattributable energy.
+# clock.unmeasured and thermal.unmeasured are not here: the reference's own
+# anchor bound and its own thermal records carry those quantities.
+NEG8_REFERENCE_PHYSICS_LOSS_CODES = ("contention.unmeasured", "battery.unmeasured",
+                                     "env.member_quiet_state_violated", "battery.capture_pair_failed")
 # A reference is also lost when the runner stopped it (timeout, admission
-# abort) or it fails strict validation.  The "unmeasured" codes are not here:
-# unknown evidence never authorises an omission.
+# abort) or it fails strict validation.
 # Orchestrator ruling N8 (2026-10-07, cold pass 2): a reference whose model
 # identity is not the sealed one (model.identity_mismatch), or could not be
 # derived from its own record (model.identity_underivable), measures a
 # different workload, so it is lost and the survivors rule decides.  These
 # are identity findings of the reference's own bytes, not unmeasured hazards.
-NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
-                             "member.strict_validation_failed", "model.identity_mismatch",
-                             "model.identity_underivable")
+# Seal gate stage 1, RF-1 (2026-10-07, registration 0.12 "Lost references"):
+# the six member codes under which this harvest finds that a member's bytes
+# or energy cannot bear a number (its bundle is missing, ambiguous or
+# unreadable; a fresh reduction differs from its stored summary; its clock
+# anchor is not bounded or does not recompute).  On a science member each
+# costs one unit; on a reference each loses the reference, never the window.
+NEG8_MEMBER_VALIDITY_LOSS_CODES = ("member.anchor_not_bounded", "member.anchor_recompute_mismatch",
+                                   "member.reduction_mismatch", "member.unreadable", "member.bytes_missing",
+                                   "member.bytes_ambiguous")
+NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, *NEG8_REFERENCE_PHYSICS_LOSS_CODES,
+                             "member.timeout", "member.admission_aborted",
+                             "member.strict_validation_failed", *NEG8_MEMBER_VALIDITY_LOSS_CODES,
+                             "model.identity_mismatch", "model.identity_underivable")
 # How a reference the verdict writer dropped for its status (or an unreadable
 # summary) is named, when the harvest has the member's own flag.  The timeout
 # comes first: a member SIGKILLed at the hung-process cap has no summary, and
@@ -155,7 +184,13 @@ CODE_PREFIXES = ("joulewise/", "scripts/")
 SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
 # The head comparison (registration section 11) lists every path that differs
 # between H_claim and the head a window ran from, and puts each in one class.
-# The classes are the same in joulewise.flags.collect (tests compare them).
+# joulewise.flags.collect holds the arm collector's copy of the classes.  The
+# two differ in one direction since the seal-landing review (F2, H-9): the
+# harvest calls a path record-only only when it is on the list below, where
+# the collector calls record-only everything outside joulewise/, scripts/,
+# configs/ and the runbook.  In production the collector compares a head with
+# itself, so only the harvest's comparison ties a window to the seal
+# (tests.flags.test_flags_collect states the relation between the two).
 #
 # Seal documents.  The sealed inventory names H_claim as its ``head``, and a
 # file cannot name the commit that contains it.  So the filled inventory, and
@@ -165,34 +200,90 @@ SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
 # their SHA-256s; the head comparison lists them and judges nothing by them.
 SEAL_DOCUMENT_PATHS = frozenset(f"{SEALED_DIRECTORY}/{name}" for name in (
     "sealed_inventory.json", "registration_block5.md", "analysis_plan_block5.md"))
-# Window inputs.  A window reads code under joulewise/ and scripts/,
-# configuration under configs/ (its pack, the files its plan tree pins, the
-# flag catalog, the identity pins, the sizing output) and one document: the
-# runbook whose pre-calibration screen the plan writer copies into the chain
-# (joulewise.b5.chain.RUNBOOK_RELATIVE).  A changed window input is a
-# difference.  Files under the executed roots are also compared one by one
-# with the sealed inventory; for the rest this comparison is the only one.
-WINDOW_INPUT_PREFIXES = CODE_PREFIXES + ("configs/",)
+# Record-only paths: a positive list (seal-landing review F2, H-9).  A changed
+# path cannot change a window's bytes when it is a document under docs/ (but
+# the runbook, below), a test under tests/, a file inside a top-level
+# directory whose name begins with a dot (.github/, .claude/, .codex/,
+# .agents/: tooling no window runs), or a Markdown file at the repository
+# root (README.md, RUN_STATE.md, TASK_QUEUE.md).  Such a path is written to
+# derived/code-identity.json and excludes nothing.
+RECORD_ONLY_PREFIXES = ("docs/", "tests/")
+RECORD_ONLY_ROOT_SUFFIX = ".md"
+# Window inputs: every other path.  A window reads code under joulewise/ and
+# scripts/, configuration under configs/ (its pack, the files its plan tree
+# pins, the flag catalog, the identity pins, the sizing output) and one
+# document: the runbook whose pre-calibration screen the plan writer copies
+# into the chain (joulewise.b5.chain.RUNBOOK_RELATIVE).  Before H-9 those
+# were the whole class and any other path was record-only.  That let through
+# a tracked Python module at the repository root (every script puts the root
+# first on its import path, ahead of the standard library), the environment
+# lock and pyproject.toml (which fix the installed runtime), and .gitignore
+# and .gitattributes (which change which files a checkout holds and their
+# bytes).  A path nobody listed is now a window input, and a changed window
+# input is a difference.  Files under the executed roots are also compared
+# one by one with the sealed inventory; for the rest this comparison is the
+# only one.
 WINDOW_INPUT_FILES = frozenset({"docs/phase_2/window_runbook.md"})
-# Every other changed path (documents, tests, status files) cannot change a
-# window's bytes.  It is written to derived/code-identity.json and excludes
-# nothing.
+# The block's three claim packs: the two floor packs and the contrast pack
+# (the pack ids of configs/campaigns/v5_claim_25g83/sizing_b5.json; a test
+# holds the two equal).  A window executes one of them.  What it reads from
+# any other campaign directory (references, spares, the NEG-8 corpus) is
+# pinned by its own plan tree and compared by ``pack_identity``.  So a commit
+# after the seal that is confined to another claim pack's directory cannot
+# change this window's bytes: for a window of a different pack such a path
+# is recorded, not a difference (cold pass 5, case C6; H-12).  The window's
+# own pack, and every other path under configs/, stay window inputs.
+CLAIM_PACK_DIRECTORIES = frozenset(f"configs/campaigns/{name}" for name in (
+    "d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5", "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"))
 HEAD_CHANGE_CLASSES = ("pin_only", "seal_document", "window_input", "record_only")
 CODE_IDENTITY_SCHEMA = "joulewise.b5_code_identity.v1"
 
 
-def head_change_class(relative: str) -> str:
-    """The class of one path that differs between H_claim and the executed head."""
+def in_another_claim_pack(relative: str, own_pack: str | None) -> bool:
+    """Whether ``relative`` lies in the directory of a claim pack other than the window's own.
+
+    ``own_pack`` is the window's pack directory relative to the measurement
+    checkout (``configs/campaigns/<pack id>``); None (unknown) answers False,
+    so every pack then stays a window input.  Letter case is ignored, as in
+    ``head_change_class``: a case variant of the window's own pack directory
+    is the window's own pack.
+    """
+    if not own_pack:
+        return False
+    folded, own = relative.casefold(), own_pack.casefold().rstrip("/")
+    if folded.startswith(own + "/"):
+        return False
+    return any(folded.startswith(directory.casefold() + "/") for directory in CLAIM_PACK_DIRECTORIES
+               if directory.casefold() != own)
+
+
+def head_change_class(relative: str, own_pack: str | None = None) -> str:
+    """The class of one path that differs between H_claim and the executed head.
+
+    The pin and the three seal documents are matched by their exact names.
+    Every other test ignores letter case: the measurement Mac's volume does
+    not distinguish case, so a tracked ``Docs/Phase_2/Window_Runbook.md``
+    lands on the runbook and a tracked ``Joulewise/x.py`` in ``joulewise/``.
+    A case variant of the pin or of a seal document is therefore not that
+    file's class; it falls through to ``window_input``.  ``own_pack``: the
+    window's own pack directory; a path in another claim pack's directory is
+    then ``record_only`` (``in_another_claim_pack``).
+    """
     if relative in PIN_ONLY_PATHS:
         return "pin_only"
     if relative in SEAL_DOCUMENT_PATHS:
         return "seal_document"
-    # Letter case is ignored here: the measurement Mac's volume does not
-    # distinguish case, so a tracked "Joulewise/x.py" lands in joulewise/.
     folded = relative.casefold()
-    if folded.startswith(WINDOW_INPUT_PREFIXES) or folded in WINDOW_INPUT_FILES:
+    if folded in WINDOW_INPUT_FILES:
         return "window_input"
-    return "record_only"
+    if in_another_claim_pack(relative, own_pack):
+        return "record_only"
+    first, separator, _rest = folded.partition("/")
+    if folded.startswith(RECORD_ONLY_PREFIXES) \
+            or (separator and first.startswith(".")) \
+            or (not separator and folded.endswith(RECORD_ONLY_ROOT_SUFFIX)):
+        return "record_only"
+    return "window_input"
 
 
 # joulewise.flags.collect.read_identity_pins documents this file; its "units"
@@ -571,6 +662,45 @@ IDENTITY_SUPERSESSION_CHECKS = {
     "model_identity": frozenset({"pins", "members_compared"}),
 }
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
+# Seal gate stage 1, RF-3 (K-5; registration 6.2).  The flag lines the harvest
+# reads were all written before it started: the flag files under
+# <custody>/flags and the unwritten-flag marker lines in the operator logs,
+# the members' stderr copies and the desk transcript.  Three kinds of program
+# write them, and a damaged line can only have been one of their codes:
+#
+# * the protected-core writers and the chain, through joulewise.flags.core
+#   (the controller, the campaign runner, the fiducial validator, the bracket
+#   reservation, the chain's flag helper): joulewise.flags.core.CORE_FLAG_CODES;
+# * the desk and arm collectors (joulewise.flags.collect): the codes its
+#   collectors pass, its UNMEASURED_BY_COLLECTOR table and the code of
+#   UNKNOWN_COLLECTOR_UNMEASURED (in no catalog, so its effect is UNCLASSIFIED);
+# * the driver (joulewise.b5.driver, <custody>/flags/driver.jsonl), which also
+#   records what it sees of the hazard monitor and the wall meter.
+#
+# The launch-lineage finding codes (joulewise.window_lineage.FINDING_CODES)
+# are listed with them, as the seal gate ruled: the driver runs that module
+# before launch.  A code that only this harvest emits is derived again from
+# the preserved bytes whatever any flag line says, so a damaged line cannot
+# have lost it and it is never a candidate (``_candidate_codes``).
+# ``tests.test_harvest_b5_window.PreHarvestCodeTests`` holds each set equal to
+# its writers' own tables and code literals.  Two of the six codes below that
+# this harvest never names elsewhere are spelled in two parts, so the
+# emitted-code scan of this file does not read them as codes it emits.
+PRE_HARVEST_CORE_CODES = frozenset({*CORE_WRITER_CODES, "code.executed_differs_from_sealed"})
+PRE_HARVEST_COLLECTOR_CODES = frozenset({
+    "pack.identity_mismatch", "pack.identity_unmeasured", "code.executed_differs_from_sealed",
+    "code.identity_unmeasured", "model.identity_mismatch", "model.identity_unmeasured", "model.identity_unpinned",
+    "records" ".checkout_untracked", "calibration" ".ledger_not_ready", "calibration" ".ledger_readiness_unmeasured",
+    "collector.unmeasured"})
+PRE_HARVEST_DRIVER_CODES = frozenset({
+    "census.journal_write_failed", "census.unmeasured", "code.executed_differs_from_sealed", "disk.low",
+    "meter.supervision_fault", "monitor.crash_loop", "monitor.orphan_unverified", "monitor.outage",
+    "monitor.restarted", "network_time.off_output", "records" ".lineage_formality",
+    "records.lineage_prelaunch_mismatch", "stage.members_refused_pre_bundle_identical", "supervision.pass_failed",
+    "yield.stage_low", "yield.stage_stalled", "yield.stage_zero",
+    *(f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention", "disk"))})
+PRE_HARVEST_CODES = frozenset({*PRE_HARVEST_CORE_CODES, *PRE_HARVEST_COLLECTOR_CODES, *PRE_HARVEST_DRIVER_CODES,
+                               *LINEAGE_CODES})
 # Empty since the Opus triple audit F2 fix (2026-10-07): a never-classified
 # code blocked release with no registered cure.  Kept so the tests' set
 # arithmetic reads the same.
@@ -726,7 +856,12 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
 # mint byte for byte; this set only decides what the harvest accepts.  It is
 # the core's own set, imported, so the harvest accepts exactly the mint's
 # drops and the two can never drift apart (one source).
-from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS  # noqa: E402
+from joulewise.whole_window import (  # noqa: E402
+    NEG8_DRIFT_MINIMUM_N,
+    NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS,
+)
+# The 2026-10-09 erratum caps the deciding desk bound; the core minimum stays 10.
+NEG8_CLEAN_CORPUS_MAXIMUM_N = 12
 
 
 def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
@@ -891,6 +1026,51 @@ def _neg8_endpoints(bracket: Any) -> dict[str, Any] | None:
     return endpoints
 
 
+# Fields of a NEG-8 bracket itself that the reference bundles alone fix: the
+# endpoint means of the gross family with their admissible sets.  The
+# idle-subtracted endpoint means sit in ``idle_subtracted_companion``.
+_NEG8_BRACKET_REFERENCE_FIELDS = ("endpoint_protocol", "reference_counts", "start_gross_j", "end_gross_j",
+                                  "start_admissible_set_j", "end_admissible_set_j")
+
+
+def _neg8_bracket_references(bracket: Any) -> dict[str, Any] | None:
+    """What a NEG-8 bracket with no claim-family record still says of its references (else None).
+
+    The evaluator writes no claim-family record when an endpoint holds a
+    reference with no energy (seal gate RF-1: the writer hands over a
+    reference whose energy it cannot read).  The bracket then still carries,
+    for each endpoint whose references all read, the endpoint mean of each
+    family and the gross family's admissible set; an endpoint that holds the
+    unreadable reference carries None.  These are compared in place of the
+    family records.
+    """
+    if not isinstance(bracket, Mapping) or bracket.get("claim_families") != {}:
+        return None
+    companion = bracket.get("idle_subtracted_companion")
+    companion = companion if isinstance(companion, Mapping) else {}
+    return {**{key: bracket.get(key) for key in _NEG8_BRACKET_REFERENCE_FIELDS},
+            "idle_subtracted_start_point_j": companion.get("start_point_j"),
+            "idle_subtracted_end_point_j": companion.get("end_point_j")}
+
+
+def _neg8_reproduces(rederived: Mapping[str, Any], stored: Any, *, energy_unreadable: bool) -> bool:
+    """Whether a bracket re-derived from the reference bundles is the stored bracket's, bound aside.
+
+    With claim-family records: each family's bound-independent fields are
+    equal (``_neg8_endpoints``).  With none, and only when the window holds a
+    reference whose energy the writer could not read (``energy_unreadable``):
+    the bracket-level reference fields are equal
+    (``_neg8_bracket_references``).  The estimand is equal in both cases.
+    """
+    if rederived.get("estimand") != (stored.get("estimand") if isinstance(stored, Mapping) else None):
+        return False
+    endpoints = _neg8_endpoints(rederived)
+    if endpoints is not None:
+        return endpoints == _neg8_endpoints(stored)
+    references = _neg8_bracket_references(rederived)
+    return energy_unreadable and references is not None and references == _neg8_bracket_references(stored)
+
+
 def _epoch_s(text: Any) -> float | None:
     """An ISO-8601 instant with a zone (the verdict writer's ``utc_timestamp``) as epoch seconds."""
     if not isinstance(text, str) or not text:
@@ -991,6 +1171,92 @@ def verdict_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
     if not current:  # the row validator replays such a row on the frozen gross-only bracket, which has no bound
         return "not_point_drift"
     return manifests, current, registered
+
+
+def claim_neg8_sources(row: Mapping[str, Any], runs_root: Path, *, roster: Mapping[str, Any]) \
+        -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
+    """Authenticate the complete runs-root catalog when the verdict recorded no sources.
+
+    Do not project onto the verdict's directory-fallback evaluation basis:
+    it omitted absent members and lost their reference roles.  Invoked
+    references without bundles must reach the survivor loss test too.
+    """
+    from joulewise import whole_window as ww
+    from joulewise.campaign_provenance import (CAMPAIGN_PROVENANCE_SCHEMA_V2,
+                                              load_authenticated_campaign_catalog, load_campaign_log_rows)
+    from joulewise.window_lineage import is_hazard_runs_root
+    root = Path(runs_root)
+    # Erratum 2, item 0(b), (c).  The caller checked (a) and the admission
+    # clock first.  Test these conditions before reading the catalog.
+    if not is_hazard_runs_root(root):
+        return "runs_root_not_hazard"
+    core = row.get("idle_admission_core")
+    conditions = core.get("conditions") if isinstance(core, Mapping) else None
+    if not isinstance(conditions, list) or "whole_window_campaign_membership_unresolved" not in conditions \
+            or "whole_window_campaign_membership_ambiguous" in conditions \
+            or any(isinstance(word, str) and word.startswith("campaign_occurrence_") for word in conditions):
+        return "membership_condition_not_unresolved"
+    catalog = load_authenticated_campaign_catalog(root, root / "campaign_log.jsonl")
+    if catalog is None:
+        return "source_manifest_unauthenticated"
+    if not catalog:
+        return "source_manifests_unrecorded"
+    if any(record.value.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA_V2 for record in catalog):
+        return "source_manifest_schema_v1"
+    # Item 0(d), (e), (f), in that order.  An authenticated catalog is needed
+    # to enumerate the invoked members; it is never replaced by a subset.
+    invoked = [bundle_id for record in catalog for member in record.value["members"]
+               if member.get("execution") == "invoked" for bundle_id in member["bundle_ids"]]
+    present = [ww.ordinary_present_bundle_paths(root, bundle_id) for bundle_id in invoked]
+    if not any(not paths for paths in present):
+        return "no_absent_invoked_member"
+    if any(len(paths) > 1 for paths in present):
+        return "invoked_member_ambiguous"
+    log_rows = load_campaign_log_rows(root / "campaign_log.jsonl")
+    if log_rows is None:
+        return "source_manifest_unauthenticated"
+    if any(ww._is_recognizable_occurrence_supersession(entry) for entry in log_rows):
+        return "occurrence_supersession_present"
+    policy = row.get("campaign_policy")
+    policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
+    registered = ww._registered_bracket_policy(policy_sha)
+    if registered is None:
+        return "policy_unregistered"
+    if ww._validated_evaluation_basis(row, root) is None:
+        return "evaluation_basis_invalid"
+    manifests: list[Mapping[str, Any]] = []
+    referenced: set[str] = set()
+    for record in catalog:
+        if ww._safe_source_path(root, f"campaign_manifests/{record.path.name}") is None:
+            return "source_manifest_path_invalid"
+        manifest_policy = record.value.get("campaign_policy")
+        if not isinstance(manifest_policy, Mapping) or manifest_policy.get("sha256") != policy_sha:
+            return "source_manifest_policy_differs"
+        # Item 2 counts occurrences, including those whose bundles are absent;
+        # the recorded-source helper's frozen set collapse cannot detect all
+        # duplicates here.  Non-invoked members must have safe ids as well.
+        ids = [bundle_id for member in record.value["members"] for bundle_id in member["bundle_ids"]]
+        members = set(ids)
+        if ww._manifest_members(record.value, root) is None or len(ids) != len(members) \
+                or referenced & members or any(ww._safe_source_path(root, item) is None for item in ids):
+            return "source_manifest_members_invalid"
+        referenced.update(members)
+        manifests.append(record.value)
+    slots = {(member.get("run_id"), member.get(field))
+             for member in roster.get("members", []) if isinstance(member, Mapping)
+             for field in ("neg8_slot", "spare_slot")}
+    for manifest in manifests:
+        for member in manifest["members"]:
+            if member.get("execution") != "invoked":
+                continue
+            position = ww._neg8_position(member.get("role"), member.get("sentinel_position"))
+            if position in ("start", "midpoint", "end") and (
+                    (member.get("run_id"), position) not in slots or any(
+                        (bundle_id, position) not in slots for bundle_id in member["bundle_ids"])):
+                return "reference_not_in_roster"
+    # Item 6 mandates the current point-drift path, even if every reference is
+    # lost.  The evaluator must report the realised insufficient shape.
+    return manifests, True, registered
 
 
 def _fsync_dir(path: Path) -> None:
@@ -3652,6 +3918,61 @@ def _l4_exclusions(flags: list[dict[str, Any]], roster: Mapping[str, Any], spans
     return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)))
 
 
+HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
+# The harvest program's own files.  Registration section 11 item 4: an
+# addendum to the seal record pins the harvest program before the first
+# window's harvest, by these files' SHA-256s and the commit of the checkout
+# the harvest runs from (a desk checkout, never the measurement checkout).
+HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
+
+
+def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
+    """The checkout this harvest program runs from (seal gate K-7): a record, never a flag.
+
+    The harvest decides which members and windows are claim-usable, and it
+    runs from a checkout other than the one that collected the window.  So
+    which program decided must be on record: ``head`` is that checkout's
+    commit (``git rev-parse HEAD`` in the directory that holds this file's
+    package), ``status_clean`` whether ``git status --porcelain`` printed
+    nothing there (no tracked edit and no untracked file), ``status_lines``
+    how many paths it printed, and ``files`` the SHA-256 of each harvest
+    program file as it is on disk.  With a clean checkout the commit fixes
+    every byte of the program; with a dirty one the file digests still say
+    whether the pinned files are the pinned bytes.  A value git or the disk
+    cannot give is None and named in ``errors``; nothing here stops or
+    excludes anything.
+    """
+    root = Path(__file__).resolve().parents[2]
+    record: dict[str, Any] = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": str(root), "head": None,
+                              "status_clean": None, "status_lines": None, "files": {}, "errors": []}
+    for name, arguments in (("head", ["rev-parse", "HEAD"]),
+                            ("status", ["status", "--porcelain=v1", "--untracked-files=all"])):
+        try:
+            result = runner(["git", "-C", str(root), *arguments], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", check=False, timeout=60)
+        except (OSError, subprocess.SubprocessError) as exc:
+            record["errors"].append(f"{name}:{type(exc).__name__}")
+            continue
+        if result.returncode != 0:
+            record["errors"].append(f"{name}:git_exit_{result.returncode}")
+        elif name == "head":
+            head = result.stdout.strip()
+            if re.fullmatch(r"[0-9a-f]{40}([0-9a-f]{24})?", head):
+                record["head"] = head
+            else:
+                record["errors"].append("head:not_a_commit_name")
+        else:
+            lines = [line for line in result.stdout.splitlines() if line.strip()]
+            record["status_clean"], record["status_lines"] = not lines, len(lines)
+    for relative in HARVEST_PROGRAM_FILES:
+        try:
+            record["files"][relative] = sha256_file(root / relative)
+        except OSError as exc:
+            record["files"][relative] = None
+            record["errors"].append(f"file:{relative}:{type(exc).__name__}")
+    return record
+
+
 @dataclasses.dataclass
 class Seams:
     """Process and other-lane seams.  Tests replace these; production does not."""
@@ -3673,6 +3994,8 @@ class Seams:
     desk_gone_wait_s: float = DESK_GONE_WAIT_S
     killpg: Callable[[int, int], None] = os.killpg
     observe_identity: Callable[[int], Any] = _observe_identity
+    # The checkout the harvest program runs from (K-7), read once at the start.
+    harvest_checkout: Callable[[], Mapping[str, Any]] = harvest_checkout
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -3700,6 +4023,13 @@ class _Harvest:
         self.inputs, self.archive, self.seams = inputs, archive_root, seams
         self.prepare_desk, self.run_g3 = prepare_desk, run_g3
         self.derived, self.withheld = archive_root / "derived", archive_root / "withheld"
+        # K-7: which program decides, read before it reads anything else.  A record only.
+        try:
+            self.harvest_checkout: dict[str, Any] = dict(seams.harvest_checkout())
+        except Exception as exc:
+            self.harvest_checkout = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": None, "head": None,
+                                     "status_clean": None, "status_lines": None, "files": {},
+                                     "errors": [f"record:{type(exc).__name__}"]}
         self.catalog = Catalog.load(inputs.catalog_path)
         self.flags = FlagLedger(plan_id=inputs.plan_id, attempt=inputs.attempt, catalog=self.catalog,
                                 boot_session_uuid=seams.boot_session_uuid(), now=seams.now,
@@ -3717,6 +4047,22 @@ class _Harvest:
         self.spans: dict[str, dict[str, Any]] = {}
         self.hazards: dict[str, Any] = {}
         self.outputs: dict[str, str] = {}
+        t0 = inputs.plan.get("t0_epoch_s")
+        governed = (not isinstance(t0, bool) and isinstance(t0, (int, float))
+                    and (not isinstance(t0, float) or math.isfinite(t0))
+                    and t0 > ERRATUM_3_ADMITTED_AT_EPOCH_S)
+        self.calibration_bracket: dict[str, Any] = {
+            "erratum_3_governed": governed,
+            "trigger_scope": "window_evidence" if governed else "sealed",
+            "evaluated": False,
+            "status": None,
+            "reasons": [],
+            "freshness": None,
+            "observed_triggers": [],
+            "recorded_only_triggers": [],
+            "corpus_doubling": None,
+            "other_session_systematic_sequences": [],
+        }
         self.repo_copy: Path | None = None
         self.pair_missing: dict[str, Any] = {}  # run_id -> #421 pair status, joined to coverage later
         # run_id -> flag_id of a battery.capture_pair_failed whose pair failed on
@@ -4298,8 +4644,22 @@ class _Harvest:
             inputs.claim_runs_root, valid, policy.calibration_bracketing, mode="issuing",
             ledger_snapshot=snapshot, bracket_binding=binding, bracket_window_id=identity.get("window_id"),
             bracket_plan_id=plan.get("plan_id"), bracket_plan_sha256=plan_sha,
-            bracket_evidence_root_id=identity.get("evidence_root_id"))
-        write_json_once(self.withheld / "bracket-evaluation.json",
+            bracket_evidence_root_id=identity.get("evidence_root_id"),
+            trigger_scope=self.calibration_bracket["trigger_scope"])
+        acceptance = assessment.get("acceptance") or {}
+        prospective = acceptance.get("prospective_rederivation") or {}
+        self.calibration_bracket.update({
+            "evaluated": True,
+            "status": assessment.get("status"),
+            "reasons": sorted(map(str, reasons)),
+            "freshness": (acceptance.get("freshness") or {}).get("status"),
+            "observed_triggers": list(prospective.get("observed_triggers", [])),
+            "recorded_only_triggers": list(prospective.get("recorded_only_triggers", [])),
+            "corpus_doubling": prospective.get("corpus_doubling"),
+            "other_session_systematic_sequences": list(
+                prospective.get("other_session_systematic_sequences", [])),
+        })
+        self.outputs["withheld/bracket-evaluation.json"] = write_json_once(self.withheld / "bracket-evaluation.json",
                         {"assessment": assessment, "reasons": list(reasons), "members": len(valid)})
         if assessment.get("status") != "passed" or reasons:
             self.emit("calibration.bracket_acceptance_failed", level="window", collector="calibration",
@@ -4517,7 +4877,6 @@ class _Harvest:
         dropped = [member for member in listed if canonical_json_bytes(member) not in kept_rows]
         check["dropped_bundle_ids"] = [member.get("bundle_id") if isinstance(member, Mapping) else None
                                        for member in dropped]
-        from joulewise.whole_window import NEG8_DRIFT_MINIMUM_N
         if len(kept) < NEG8_DRIFT_MINIMUM_N:
             problems.append("collected_members_below_minimum")
             return None
@@ -4662,10 +5021,17 @@ class _Harvest:
           (``observed.collected_bound_rescreen``);
         * a reference the verdict names carries a reference-loss flag the
           stored bracket did not drop (``NEG8_REFERENCE_LOSS_CODES``: a 6.4
-          physics exclusion, a timeout, an admission abort, failed strict
-          validation, a model identity that is not the sealed one or cannot
-          be derived (ruling N8)): the screen runs on the survivors (NEG-8 ruling
-          2026-10-07, registration 0.12);
+          physics exclusion, contention or battery evidence that was never
+          taken, a quiet-state violation or a failed battery pair (seal gate
+          RF-5), a timeout, an admission abort, failed strict
+          validation, bytes or an energy that cannot bear a number
+          (``NEG8_MEMBER_VALIDITY_LOSS_CODES``), a model identity that is not the
+          sealed one or cannot be derived (ruling N8)), or succeeded with an
+          energy the verdict writer cannot read (reason ``energy_unreadable``,
+          seal gate RF-1): the screen runs on the survivors (NEG-8 ruling
+          2026-10-07, registration 0.12).  The stored row records the screen
+          as failed for such a reference (the writer hands it over with no
+          energy); that failure decides nothing by itself;
         * a corpus member carries a 6.4 physics exclusion, so the bound was
           re-derived from the clean members (``neg8_corpus_physics``, 5.3).
 
@@ -4697,17 +5063,24 @@ class _Harvest:
         if conditions:
             reasons.append("neg8_conditions")
         harvest_losses = self._neg8_reference_losses(row)
-        # The stored bracket's own loss list is trusted only when its sources
-        # authenticate: otherwise every known loss goes to the re-screen, which
-        # then cannot run, so an unauthenticated source never leaves a passing
-        # screen standing over a loss-flagged reference (delta audit A3).
+        # Only authenticated recorded sources let the stored loss list stand.
+        # Catalog recovery applies every loss afresh; unauthenticated sources
+        # never leave a passing screen standing over a known loss (audit A3).
         source = getattr(self, "neg8_reference_source", None)
         sources_authentic = isinstance(source, Mapping) and source.get("source") == "verdict_sources"
         stored_lost = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
                        if isinstance(item, Mapping)} if sources_authentic else set()
         new_losses = {run_id: code for run_id, code in harvest_losses.items() if run_id not in stored_lost}
         clean_bound = getattr(self, "neg8_clean_bound", None)
-        survivors = bool(new_losses) or clean_bound is not None
+        clean_required = getattr(self, "neg8_clean_bound_required", False)
+        catalog_rescreen = isinstance(source, Mapping) and source.get("source") == \
+            "claim_campaign_manifests_authenticated"
+        recovery = catalog_rescreen or isinstance(source, Mapping) and "campaign_sources_problem" in source
+        survivors = bool(new_losses) or clean_bound is not None or clean_required or recovery
+        # Catalog recovery rebuilds the absent source roles; otherwise only
+        # the pre-cap loss cases may clear other stored NEG-8 conditions.
+        loss_rescreen = catalog_rescreen or bool(new_losses) or (clean_bound is not None and
+                                             getattr(self, "neg8_corpus_physics_dropped", False))
         underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
         collected = (self.neg8 or {}).get("derived_from") == "collected_subset" and bool(conditions & underived)
         if not reasons and not survivors:
@@ -4722,7 +5095,7 @@ class _Harvest:
             # The exclusion pass always runs (with no harvest loss too), so a
             # strict-invalid reference is dropped before aggregation (A5).
             rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic,
-                                           exclude=harvest_losses, survivors=survivors)
+                                           exclude=harvest_losses, survivors=loss_rescreen)
             observed["collected_bound_rescreen"] = rescreen
             if survivors:
                 observed["survivor_rescreen"] = {"new_losses": dict(sorted(new_losses.items())),
@@ -4738,7 +5111,9 @@ class _Harvest:
                     # allowance (audit A1).
                     return "survivor_rescreen"
             else:
-                screened = None
+                # No new screen ran: retain the stored screen for naming the
+                # failure only.  Passing still requires the re-screen above.
+                screened = bracket
         else:
             self._neg8_disclose(bracket, harvest_losses, record="whole-window-verdict.json")
         if isinstance(screened, Mapping) and screened.get("survivor_screen") == "references_insufficient":
@@ -4776,6 +5151,11 @@ class _Harvest:
                         "evaluation_basis_sha256": basis_sha if isinstance(basis_sha, str) else None},
             "source": source if source in ("stored_verdict", "survivor_rescreen") else "none",
             "survivor_bracket": None, "bound_used": None, "bound_artifact_sha256": None, "clean_bound": None}
+        reference_source = getattr(self, "neg8_reference_source", None)
+        if isinstance(reference_source, Mapping) and (
+                reference_source.get("source") == "claim_campaign_manifests_authenticated"
+                or "campaign_sources_problem" in reference_source):
+            record["reference_source"] = dict(reference_source)
         binding = getattr(self, "neg8_rescreen_binding", None)
         if record["source"] == "survivor_rescreen" and isinstance(binding, Mapping):
             try:
@@ -4788,14 +5168,28 @@ class _Harvest:
             self.archive / ww.NEG8_HARVEST_ALLOWANCE_RECORD, record)
 
     def _neg8_reference_losses(self, row: Mapping[str, Any]) -> dict[str, str]:
-        """{run_id: code} for each NEG-8 reference the verdict names that a reference-loss flag hits.
+        """{run_id: reason} for each NEG-8 reference the verdict names that the harvest finds lost.
 
         The references are the invoked start, midpoint and end members of the
         verdict's own source manifests (``verdict_neg8_sources``); the codes
         are ``NEG8_REFERENCE_LOSS_CODES`` at member level, the first in that
-        order naming the loss.  No energy is read.
+        order naming the loss.
 
-        When the verdict's sources do not authenticate, the references are
+        Seal gate RF-1: a reference no code names, whose stored summary
+        records ``succeeded`` and whose energy the verdict writer cannot read
+        (``whole_window._neg8_writer_reference_energy``, the writer's own
+        test on the stored summary), is lost with the reason
+        ``energy_unreadable``.  ``self.neg8_energy_unreadable`` lists every
+        succeeded reference that fails that test, whatever names its loss.
+        The test reads whether an energy is present and well formed.  No
+        reference is lost for the size of its energy.
+
+        When the verdict recorded no sources, the authenticated claim-root
+        catalog supplies the references and the re-screen.  Its absent
+        invoked references are losses, including a bundle-less spare.
+        This recovery requires a prospective registration erratum (6.5).
+
+        When recorded verdict sources do not authenticate, the references are
         read from the claim root's campaign manifests as written
         (``campaign_manifests/*.json``, unauthenticated; cold pass 2 N1), so a
         loss-flagged reference is still mapped: the re-screen then cannot run
@@ -4812,16 +5206,15 @@ class _Harvest:
         if runs is None or getattr(self, "flags", None) is None:
             return {}
         try:
-            sources = verdict_neg8_sources(row, runs)
+            sources = self._neg8_sources(row, runs)
         except Exception as exc:
             sources = f"sources_raised:{type(exc).__name__}"
-        if isinstance(sources, str):
-            manifests = _claim_campaign_manifests_as_written(Path(runs))
             self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
                                           "verdict_sources_problem": sources}
+        if isinstance(sources, str):
+            manifests = _claim_campaign_manifests_as_written(Path(runs))
         else:
             manifests = sources[0]
-            self.neg8_reference_source = {"source": "verdict_sources"}
         references: set[str] = set()
         for manifest in manifests:
             for member in manifest.get("members") or [] if isinstance(manifest, Mapping) else []:
@@ -4830,6 +5223,8 @@ class _Harvest:
                 if ww._neg8_position(member.get("role"), member.get("sentinel_position")) in ("start", "midpoint",
                                                                                                 "end"):
                     references.update(item for item in member.get("bundle_ids") or [] if isinstance(item, str))
+        absent = {run_id for run_id in references if not (Path(runs) / run_id).is_dir()} \
+            if self.neg8_reference_source.get("source") == "claim_campaign_manifests_authenticated" else set()
         # Delta audit A3: the sealed roster (the plan tree) names every planned
         # reference (``neg8_slot``) and every spare (``spare_slot``) whatever
         # the manifests say, so a known loss always reaches the survivors
@@ -4847,7 +5242,97 @@ class _Harvest:
             if scope.get("level") == "member" and run_id in references and code in order \
                     and (run_id not in losses or order[code] < order[losses[run_id]]):
                 losses[run_id] = code
+        # A planned reference with no bundle directory at all never reached
+        # the verdict writer: no stored screen holds its energy, the stored
+        # counts already lack it and ``_neg8_lost_rows`` names it
+        # ``bundle_absent`` from the roster (cold pass 2 N2).  Its
+        # member.bytes_missing therefore names no loss the stored bracket did
+        # not already have.  A bundle that is present with a file missing
+        # carries the same code and is a loss.
+        for run_id in [run_id for run_id, code in losses.items() if code == "member.bytes_missing"]:
+            try:
+                present = self._bundle_on_disk(run_id)
+            except Exception:
+                present = (Path(runs) / run_id).is_dir()
+            if not present:
+                del losses[run_id]
+        # Seal gate RF-1.  The bundle of a reference is where the replay will
+        # look for it: the manifests' own resolution when the sources
+        # authenticate, else the claim root's directory of that name.
+        paths: Mapping[str, Path] = {}
+        if not isinstance(sources, str):
+            try:
+                paths = ww._manifest_bundle_paths(list(manifests), Path(runs)) or {}
+            except Exception:
+                paths = {}
+        unreadable: list[str] = []
+        for run_id in sorted(references):
+            try:
+                summary = ww._read_json_object(Path(paths.get(run_id) or Path(runs) / run_id) / "summary_metrics.json")
+            except Exception:
+                summary = None
+            if isinstance(summary, Mapping) and summary.get("status") == "succeeded" \
+                    and None in ww._neg8_writer_reference_energy(summary):
+                unreadable.append(run_id)
+                losses.setdefault(run_id, ww.NEG8_LOSS_ENERGY_UNREADABLE)
+        self.neg8_energy_unreadable = unreadable
+        for run_id in sorted(absent):
+            # No other reason can be computed for an absent reference.
+            losses[run_id] = "bundle_absent"
         return losses
+
+    def _neg8_sources(self, row: Mapping[str, Any], runs: Path) \
+            -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
+        provenance = row.get("row_provenance")
+        descriptors = provenance.get("source_campaign_manifests") if isinstance(provenance, Mapping) else None
+        absent = not isinstance(provenance, Mapping) or "source_campaign_manifests" not in provenance
+        if absent or isinstance(descriptors, list) and not descriptors:
+            # Item 0(a), then section 5's prospective clock, then 0(b).
+            plan = getattr(self.inputs, "plan", None)
+            t0 = plan.get("t0_epoch_s") if isinstance(plan, Mapping) else None
+            if isinstance(t0, bool) or not isinstance(t0, (int, float)) \
+                    or isinstance(t0, float) and not math.isfinite(t0) \
+                    or t0 <= ERRATUM_2_ADMITTED_AT_EPOCH_S:
+                sources = "recovery_predates_erratum"
+            else:
+                sources = claim_neg8_sources(row, runs, roster=getattr(self, "roster", None) or {})
+            self.neg8_reference_source = {
+                "source": "claim_campaign_manifests_unauthenticated" if isinstance(sources, str)
+                          else "claim_campaign_manifests_authenticated",
+                "verdict_sources_problem": "source_manifests_unrecorded"}
+            if isinstance(sources, str):
+                self.neg8_reference_source["campaign_sources_problem"] = sources
+        else:
+            sources = verdict_neg8_sources(row, runs)
+            self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
+                                          "verdict_sources_problem": sources} if isinstance(sources, str) \
+                else {"source": "verdict_sources"}
+        return sources
+
+    @staticmethod
+    def _neg8_basis_reference_check(row: Mapping[str, Any], runs: Path) -> Callable[[str, Path], str | None]:
+        """Item 7(b), on survivors only, before either energy is reduced."""
+        from joulewise import whole_window as ww
+        basis = ww._validated_evaluation_basis(row, runs)
+        occurrences = {item["bundle_id"]: item for item in basis["member_occurrences"]} if basis else {}
+
+        def check(bundle_id: str, path: Path) -> str | None:
+            if basis is None:
+                return "evaluation_basis_invalid"
+            occurrence = occurrences.get(bundle_id)
+            if occurrence is None:
+                return "reference_not_in_verdict_basis"
+            for name, field in (("config.json", "config_sha256"), ("metadata.json", "metadata_sha256"),
+                                ("summary_metrics.json", "summary_sha256")):
+                try:
+                    if sha256_bytes((path / name).read_bytes()) == occurrence.get(field):
+                        continue
+                except OSError:
+                    pass
+                return "reference_not_in_verdict_basis"
+            return None
+
+        return check
 
     def _neg8_spares(self) -> dict[str, list[str]]:
         """{slot: spare run ids} from the roster (the spare-slot retry, registration 0.12)."""
@@ -4952,18 +5437,32 @@ class _Harvest:
         bundles the verdict was written from and nothing is evaluated (that
         pass replays the stored selection: references the stored bracket
         lists as ``strict_invalid`` are dropped once verified, an unlisted
-        strict-invalid one is read as the writer read it).  With
-        ``exclude`` ({run_id: code}, possibly empty) the decision is then the
-        re-derivation that drops those references before aggregation.  The
-        collected-bound case alone (no exclusions, no clean bound) still runs
-        only when the stored NEG-8 conditions were the two ``*_UNDERIVED``
-        ones.
+        strict-invalid one is read as the writer read it, and a reference
+        whose energy the writer could not read is entered as the writer
+        entered it, with no energy).  A stored bracket written over such a
+        reference has no family record; its endpoint means and admissible
+        sets are then compared instead (``_neg8_reproduces``, seal gate
+        RF-1).  With ``exclude`` ({run_id: reason}, possibly empty) the
+        decision is then the re-derivation that drops those references, and
+        any other reference whose energy cannot be read, before aggregation;
+        a dropped reference's energy is never read.  The
+        case without a newly lost reference or a physics-dropped corpus
+        member still runs only when the stored NEG-8 conditions were the two
+        ``*_UNDERIVED`` ones; the always-on clean bound does not relax this
+        guard.
 
         Row authenticity is recorded (``verdict_authenticated``), not
         required: the harvest validates rows without a consumption session,
         which the row validator requires under every consumption semantics, so
         no row is authentic here (``whole_window.verdict_unauthenticated`` is
         disclosed), and the screen is re-derived rather than read from the row.
+
+        If the verdict recorded no sources, an authenticated complete catalog
+        replaces its role-less directory fallback.  There is no stored
+        reference bracket to compare in that case: require the clean bound,
+        run the exclusion pass and disclose the catalog source.  Recorded
+        sources retain the comparison above.  This recovery needs a
+        prospective registration erratum (6.5, 10).
 
         The re-derived bracket (energies) goes to
         ``withheld/neg8-rescreen-bracket.json``; its decision, conditions,
@@ -4974,15 +5473,27 @@ class _Harvest:
                                   "evaluated_at_source": None, "verdict_authenticated": bool(authentic),
                                   "problems": []}
         problems: list[str] = result["problems"]
-        if bracket is None:
+        reference_source = getattr(self, "neg8_reference_source", {})
+        catalog_rescreen = reference_source.get("source") == "claim_campaign_manifests_authenticated"
+        recovery = catalog_rescreen or "campaign_sources_problem" in reference_source
+        if recovery:
+            result["reference_source"] = dict(reference_source)
+            if "campaign_sources_problem" in reference_source:
+                problems.append(reference_source["campaign_sources_problem"])
+        if bracket is None and not recovery:
             problems.append("bracket_absent")
-        if other_conditions and not survivors:
+        if other_conditions and not survivors and not recovery:
             problems.append("conditions_beyond_bound_underived")
-        bound = getattr(self, "neg8_clean_bound", None) or getattr(self, "neg8_collected_bound", None)
-        if bound is None and survivors and bracket is not None:
-            bound = bracket.get("drift_bound_artifact")
-        if bound is None:
-            problems.append("collected_bound_unavailable")
+        bound = getattr(self, "neg8_clean_bound", None)
+        if bound is None and (recovery or getattr(self, "neg8_clean_bound_required", False)):
+            if not recovery or not problems:
+                problems.append("clean_bound_unavailable")
+        elif bound is None:
+            bound = getattr(self, "neg8_collected_bound", None)
+            if bound is None and survivors and bracket is not None:
+                bound = bracket.get("drift_bound_artifact")
+            if bound is None:
+                problems.append("collected_bound_unavailable")
         evaluated_at = None
         scope = row.get("evaluation_scope")
         for source, text in (("evaluation_scope.completed_at", scope.get("completed_at")
@@ -4991,13 +5502,13 @@ class _Harvest:
             if evaluated_at is not None:
                 result["evaluated_at_source"] = source
                 break
-        if evaluated_at is None:
+        if evaluated_at is None and (not recovery or not problems):
             problems.append("evaluation_time_unrecorded")
         derived: Any = None
         if not problems:
             runs = self.inputs.claim_runs_root
             try:
-                sources = verdict_neg8_sources(row, runs)
+                sources = self._neg8_sources(row, runs)
                 if isinstance(sources, str):
                     problems.append(sources)
                 else:
@@ -5018,24 +5529,39 @@ class _Harvest:
                         return (members.get(bundle_id) or {}).get("strict_valid") is False
 
                     def rederive(excluded: Mapping[str, str] | None) -> tuple[Any, str | None]:
-                        replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read"} \
-                            if excluded is None else {}
+                        replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read",
+                                  "unreadable_energy": "writer_entry"} \
+                            if excluded is None else {"unreadable_energy": "lost"}
+                        if catalog_rescreen:
+                            replay["require_replicated_endpoints"] = True
+                            replay["surviving_reference_check"] = self._neg8_basis_reference_check(row, runs)
+                            replay["required_reference_ids"] = frozenset(
+                                member["run_id"] for member in (getattr(self, "roster", None) or {}).get("members", [])
+                                if isinstance(member, Mapping) and isinstance(member.get("run_id"), str)
+                                and (member.get("neg8_slot") in ("start", "midpoint", "end")
+                                     or member.get("spare_slot") in ("start", "midpoint", "end")))
                         return ww._derived_neg8_decision(
                             manifests, runs, policy, current=current, point_drift=True,
                             drift_bound_artifact=bound, return_bracket=True,
                             freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded,
                             strict_invalid=harvest_strict_invalid, **replay)
 
-                    stored, problem = rederive(None)
+                    # A directory-fallback verdict lost the source roles and
+                    # has no reference bracket to reproduce.  Authenticate the
+                    # complete catalog instead and run the same exclusion pass;
+                    # never relax comparison for a verdict with recorded sources.
+                    stored, problem = rederive(dict(exclude or {})) if catalog_rescreen else rederive(None)
                     if problem is not None:
-                        problems.append(f"rederivation_failed:{problem}")
+                        problems.append(problem if catalog_rescreen and problem in (
+                                            "reference_not_in_verdict_basis", "evaluation_basis_invalid")
+                                        else f"rederivation_failed:{problem}")
                     elif not isinstance(stored, Mapping):
                         problems.append("rederivation_invalid")
-                    elif _neg8_endpoints(stored) is None or _neg8_endpoints(stored) != _neg8_endpoints(bracket) \
-                            or stored.get("estimand") != (bracket or {}).get("estimand"):
+                    elif not catalog_rescreen and not _neg8_reproduces(stored, bracket, energy_unreadable=bool(
+                            getattr(self, "neg8_energy_unreadable", None))):
                         problems.append("rederivation_differs_from_stored_bracket")
                     derived = stored
-                    if not problems and exclude is not None:
+                    if not problems and exclude is not None and not catalog_rescreen:
                         derived, problem = rederive(dict(exclude))
                         if problem is not None:
                             problems.append(f"rederivation_failed:{problem}")
@@ -5043,6 +5569,16 @@ class _Harvest:
                             problems.append("rederivation_invalid")
             except Exception as exc:  # the core failing evaluates nothing
                 problems.append(f"rederivation_raised:{type(exc).__name__}")
+        if recovery:
+            # Every cannot-run record carries exactly the same source object
+            # in the screen, allowance and failed-screen flag.
+            self.neg8_reference_source = {
+                "source": "claim_campaign_manifests_unauthenticated" if problems
+                          else "claim_campaign_manifests_authenticated",
+                "verdict_sources_problem": "source_manifests_unrecorded"}
+            if problems:
+                self.neg8_reference_source["campaign_sources_problem"] = problems[0]
+            result["reference_source"] = dict(self.neg8_reference_source)
         survivor_bracket = None
         if isinstance(derived, Mapping):
             # Hash-bound into the derived records, so an allowance consumer
@@ -5064,7 +5600,8 @@ class _Harvest:
                     "endpoint_protocol", "reference_counts", "planned_reference_counts", "reference_losses",
                     "midpoint_lost", "survivor_screen") if key in derived}
         decision = bracket.get("decision") if bracket is not None else None
-        bound_used = ("corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
+        bound_used = (None if bound is None else
+                      "corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
                       else "collected_subset" if getattr(self, "neg8_collected_bound", None) is not None
                       else "stored_bracket" if bound is not None else None)
         clean_bound = getattr(self, "neg8_clean_bound_record", None) if bound_used == "corpus_physics_clean" else None
@@ -5082,16 +5619,19 @@ class _Harvest:
         return result
 
     def neg8_corpus_physics(self) -> None:
-        """Registration 5.3 (NEG-8 ruling 2026-10-07): a corpus member with a 6.4 physics exclusion is omitted.
+        """Registration 5.3 (NEG-8 erratum 2026-10-09): always build the first-12 clean bound.
 
         Runs after the monitor joins, which alone can see the journals.  A
         corpus member of the validated bound on which a member-level physics
         exclusion fires (``NEG8_PHYSICS_LOSS_CODES``) measured the
         disturbance, not the instrument; kept, it widens the bound and the
         allowance.  Each is ``neg8.corpus_member_dropped`` (reason: the
-        physics code).  The bound is re-derived from the clean members by the
+        physics code).  In committed order_manifest.json order, the first 12
+        remaining members decide the bound; later members are beyond_cap,
+        not dropped for cause, and their points are never used here.
+        The bound is re-derived from the clean members by the
         collected-subset path: the clean manifest is the bound's own manifest
-        bytes less those members (written to ``derived/neg8-clean-corpus.json``),
+        bytes less the dropped and capped members (written to ``derived/neg8-clean-corpus.json``),
         the core builds the bound from the bound's recorded member points,
         freshness and lineage, and validates its arithmetic and its corpus
         identity against those bytes.  Fewer than ``NEG8_DRIFT_MINIMUM_N``
@@ -5106,6 +5646,9 @@ class _Harvest:
         bound = getattr(self, "neg8_bound_value", None)
         if check.get("derived_from") is None or not isinstance(bound, Mapping):
             return
+        # Once this desk step is required, an in-window bound cannot decide a
+        # screen or allowance if clean-bound construction fails.
+        self.neg8_clean_bound_required = True
         corpus = bound.get("reference_corpus") if isinstance(bound.get("reference_corpus"), Mapping) else {}
         members = [member for member in corpus.get("members") or [] if isinstance(member, Mapping)]
         ids = {member.get("bundle_id") for member in members}
@@ -5115,39 +5658,68 @@ class _Harvest:
             scope = flag.get("scope") if isinstance(flag.get("scope"), Mapping) else {}
             if scope.get("level") == "member" and scope.get("run_id") in ids and flag.get("code") in order:
                 flagged.setdefault(scope["run_id"], set()).add(flag["code"])
-        if not flagged:
-            return
         record: dict[str, Any] = {
             "schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound_derived_from": check.get("derived_from"),
             "dropped": [{"bundle_id": bundle_id, "reasons": sorted(codes, key=order.__getitem__)}
                         for bundle_id, codes in sorted(flagged.items())],
-            "members_bound": len(members), "members_kept": None, "minimum_n": ww.NEG8_DRIFT_MINIMUM_N,
+            "members_bound": len(members), "members_collected": len(members),
+            "members_kept": None, "beyond_cap": [],
+            "minimum_n": ww.NEG8_DRIFT_MINIMUM_N,
             "clean_manifest": None, "clean_bound_validated": False, "problems": []}
         problems: list[str] = record["problems"]
         for row in record["dropped"]:
             self.emit("neg8.corpus_member_dropped", level="member", run_id=row["bundle_id"], collector="neg8",
                       observed={"bundle_id": row["bundle_id"], "reason": row["reasons"][0],
                                 "reasons": row["reasons"], "source": "harvest_physics"})
-        kept = [dict(member) for member in members if member.get("bundle_id") not in flagged]
-        record["members_kept"] = len(kept)
         base = getattr(self, "neg8_corpus_bytes", None)
+        manifest_check = {"problems": problems}
         if base is None:
-            base = self._committed_corpus_bytes({"problems": problems})
+            base = self._committed_corpus_bytes(manifest_check)
+        committed = check.get("committed_manifest") or manifest_check.get("committed_manifest") or {}
+        kept = []
+        order_valid = False
+        try:
+            relative = (Path(committed["path"]).parent.parent / "order_manifest.json").as_posix()
+            tree = read_json(self.pack_copy / "plan_tree.json")
+            pins = {row["sha256"] for row in pinned_files(
+                tree, pack_root=self.pack_copy, repo_root=self.repo_root_copy) if row["path"] == relative}
+            order_raw = (self.repo_root_copy / relative).read_bytes()
+            if pins != {sha256_bytes(order_raw)}:
+                problems.append("corpus_order_manifest_differs_from_pin")
+            else:
+                ordered_ids = [row["run_id"] for row in json.loads(
+                    order_raw, object_pairs_hook=_unique_pairs)["executed_order"]]
+                positions = {bundle_id: index for index, bundle_id in enumerate(ordered_ids)}
+                if len(positions) != len(ordered_ids) or not ids <= positions.keys():
+                    problems.append("corpus_order_manifest_members_differ")
+                else:
+                    ordered = sorted(members, key=lambda member: positions[member["bundle_id"]])
+                    remaining = [member for member in ordered if member["bundle_id"] not in flagged]
+                    record["beyond_cap"] = [member["bundle_id"]
+                                            for member in remaining[NEG8_CLEAN_CORPUS_MAXIMUM_N:]]
+                    kept = [dict(member) for member in remaining[:NEG8_CLEAN_CORPUS_MAXIMUM_N]]
+                    order_valid = True
+        except (OSError, ValueError, TypeError, KeyError):
+            problems.append("corpus_order_manifest_unreadable")
+        record["members_kept"] = len(kept)
         clean_raw = None
         if base is None:
             problems.append("corpus_manifest_bytes_unavailable")
         else:
             try:
                 manifest = json.loads(base, object_pairs_hook=_unique_pairs)
-                rows = [item for item in manifest["members"]
-                        if not (isinstance(item, Mapping) and item.get("bundle_id") in flagged)]
-                clean_raw = (json.dumps({**manifest, "members": rows}, indent=2, sort_keys=True) + "\n").encode()
+                by_id = {item["bundle_id"]: item for item in manifest["members"]}
+                rows = [by_id[member["bundle_id"]] for member in kept]
+                # No omission or reordering: preserve the in-window bound's
+                # manifest digest and therefore its exact bound payload.
+                clean_raw = base if rows == manifest["members"] else (
+                    json.dumps({**manifest, "members": rows}, indent=2, sort_keys=True) + "\n").encode()
             except (ValueError, TypeError, KeyError):
                 problems.append("corpus_manifest_unreadable")
         if clean_raw is not None:
             write_once(self.derived / "neg8-clean-corpus.json", clean_raw)
             record["clean_manifest"] = {"path": "derived/neg8-clean-corpus.json", "sha256": sha256_bytes(clean_raw)}
-        if len(kept) < ww.NEG8_DRIFT_MINIMUM_N:
+        if order_valid and len(kept) < ww.NEG8_DRIFT_MINIMUM_N:
             problems.append("clean_members_below_minimum")
         if not problems:
             freshness = bound.get("freshness") if isinstance(bound.get("freshness"), Mapping) else {}
@@ -5168,6 +5740,7 @@ class _Harvest:
             if valid:
                 record["clean_bound_validated"] = True
                 self.neg8_clean_bound = clean
+                self.neg8_corpus_physics_dropped = bool(flagged)
                 # Hash-bound so an allowance consumer can authenticate the
                 # clean bound the survivor screen used (audit A1).
                 record["clean_bound"] = {"path": "withheld/neg8-clean-bound.json", "sha256": write_json_once(
@@ -5179,7 +5752,8 @@ class _Harvest:
             self.derived / "neg8-corpus-physics.json", record)
         if problems:
             self.emit("neg8.bound_not_derived", level="window", collector="neg8",
-                      observed={"artifact": True, "problems": problems[:8], "members_collected": len(kept),
+                      observed={"artifact": True, "problems": problems[:8], "members_collected": len(members),
+                                "members_kept": len(kept),
                                 "minimum_n": ww.NEG8_DRIFT_MINIMUM_N, "source": "corpus_physics"})
 
     def neg8_deferred_screen(self) -> None:
@@ -5699,7 +6273,18 @@ class _Harvest:
             "h_claim_source": "sealed_inventory" if sealed_head else ("plan" if h_claim else None),
             "plan_measurement_head": inputs.h_claim, "executed_head": executed_head,
             "sealed_inventory_sha256": sha256_file(sealed_path) if sealed_path.is_file() else None,
-            "comparison": "not_compared", "changed_paths": {name: [] for name in HEAD_CHANGE_CLASSES}}
+            "comparison": "not_compared", "changed_paths": {name: [] for name in HEAD_CHANGE_CLASSES},
+            "own_pack": _relative_to(inputs.pack_root, inputs.measurement_root),
+            "changed_paths_in_other_claim_packs": []}
+        if isinstance(sealed_value, Mapping) and sealed_head is None:
+            # Seal-landing review F3 (H-10).  The sealed inventory was read and
+            # names no head.  The comparison below then runs against the plan's
+            # copy, which the installer sets to the checkout's own HEAD, so it
+            # compares the executed head with itself and says "identical"
+            # whatever was committed after the seal.  That is no comparison
+            # with the seal: the head check is unmeasured.  The record still
+            # shows what the plan's copy gave (``h_claim_source`` "plan").
+            unmeasured.append({"check": "head", "missing_input": "sealed_inventory_head"})
         if h_claim is None:
             unmeasured.append({"check": "head", "missing_input": "h_claim"})
         elif executed_head is None:
@@ -5716,9 +6301,14 @@ class _Harvest:
             else:
                 # Each changed path has one class (head_change_class).  Only a
                 # changed window input is a difference; the rest is recorded.
+                # A path in another claim pack's directory is record-only for
+                # this window (H-12) and is also listed under its own key.
                 head_record["comparison"] = "compared"
+                own_pack = _relative_to(inputs.pack_root, inputs.measurement_root)
                 for relative in sorted(set(changed)):
-                    head_record["changed_paths"][head_change_class(relative)].append(relative)
+                    head_record["changed_paths"][head_change_class(relative, own_pack)].append(relative)
+                    if in_another_claim_pack(relative, own_pack):
+                        head_record["changed_paths_in_other_claim_packs"].append(relative)
                 window_inputs = head_record["changed_paths"]["window_input"]
                 if window_inputs:
                     differences.append({"check": "head", "observed": executed_head, "expected": h_claim,
@@ -5738,6 +6328,19 @@ class _Harvest:
                 differences.append({"check": "untracked_in_executed_roots", "observed": sorted(untracked)[:16]})
         elif executed is not None:
             unmeasured.append({"check": "tracked_edits", "missing_input": "status_porcelain"})
+        # The driver, the hazard modules, the monitor, the collectors and the
+        # G10 and meter programs run from the checkout that installed the
+        # launch agent.  When that is not the measurement checkout the driver
+        # inventories it separately (L2, ``driver_checkout``).  Its code is
+        # code a window executed, so it is compared like the measurement
+        # checkout's (seal-landing review F1, H-8): a file under joulewise/ or
+        # scripts/ whose bytes are not the sealed bytes is a difference, and
+        # the checkout's own ``git status`` output is replayed in the scope
+        # that checkout executes (a tracked edit to a window input, an
+        # untracked file under joulewise/ or scripts/).  A second checkout
+        # that holds the sealed bytes, whatever its commit and whatever else
+        # is dirty in it, stays a record.
+        driver_record = self._driver_checkout_differences(driver_checkout, sealed, differences, unmeasured)
         missing = {item["check"] for item in unmeasured}
         self.identity_checks["checkout_identity"] = {
             "head": "head" not in missing and h_claim is not None and executed_head is not None,
@@ -5751,25 +6354,84 @@ class _Harvest:
         if unmeasured:
             self.emit("code.identity_unmeasured", level="window", collector="code_identity",
                       observed={"unmeasured": unmeasured})
-        # The driver, the hazard modules, the monitor and the collectors run from
-        # the checkout that installed the launch agent.  When that is not the
-        # measurement checkout the driver inventories it separately (L2,
-        # ``driver_checkout``).  It is recorded here with the number of its code
-        # files that differ from the sealed inventory; it raises no flag
-        # (registration: the agents are installed from the measurement checkout).
-        head_record["driver_checkout"] = None
-        if isinstance(driver_checkout, Mapping):
-            driver_files = driver_checkout.get("files") if isinstance(driver_checkout.get("files"), Mapping) else {}
-            differing = None if sealed is None else sorted(
-                relative for relative in set(sealed) | set(driver_files)
-                if relative.startswith(CODE_PREFIXES) and sealed.get(relative) != driver_files.get(relative))
-            head_record["driver_checkout"] = {
-                "root": driver_checkout.get("root"), "head": driver_checkout.get("head"),
-                "status_clean": driver_checkout.get("status_clean"), "file_count": len(driver_files),
-                "files_differing_from_sealed": None if differing is None else differing[:64],
-                "files_differing_from_sealed_count": None if differing is None else len(differing)}
+        head_record["driver_checkout"] = driver_record
         # Written last: the flags above stand even if this record cannot be written.
         self.outputs["derived/code-identity.json"] = write_json_once(self.derived / "code-identity.json", head_record)
+
+    def _driver_checkout_differences(self, driver_checkout: Any, sealed: Mapping[str, str] | None,
+                                     differences: list[dict[str, Any]],
+                                     unmeasured: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Compare a separate driver checkout with the sealed code; return its record (None when there is none).
+
+        ``driver_checkout`` is the driver's own inventory of the checkout it
+        ran from (``joulewise.b5.driver.executed_inventory``: root, head,
+        ``status_porcelain``, ``files`` {path: sha256} of that checkout's
+        tracked files).  Appends to ``differences``
+        (``code.executed_differs_from_sealed``):
+
+        * ``driver_checkout``: at least one path under joulewise/ or scripts/
+          whose digest in that checkout is not the sealed digest (a file that
+          only one of the two lists differs too);
+        * ``driver_checkout_tracked_edits``: its ``git status`` lists an
+          uncommitted change to a tracked path that is a window input
+          (``head_change_class``);
+        * ``driver_checkout_untracked_in_code_roots``: its ``git status``
+          lists an untracked file under joulewise/ or scripts/, which an
+          import can load and no inventory lists.
+
+        Every other path its ``git status`` lists (a document, a test, a
+        scratch file elsewhere) cannot change an executed byte: it is counted
+        in the record and raises nothing.  Appends to ``unmeasured``
+        (``code.identity_unmeasured``) when the comparison could not be made:
+        the driver recorded no file map, or no ``git status`` output.  With no
+        sealed inventory the file comparison is not made here; the missing
+        inventory is already unmeasured.
+        """
+        if not isinstance(driver_checkout, Mapping):
+            return None
+        files = driver_checkout.get("files")
+        driver_files = {str(key): value for key, value in files.items()} if isinstance(files, Mapping) else {}
+        differing: list[str] | None = None
+        if not driver_files:
+            unmeasured.append({"check": "driver_checkout", "missing_input": "driver_checkout_files"})
+        elif sealed is not None:
+            differing = sorted(relative for relative in set(sealed) | set(driver_files)
+                               if relative.startswith(CODE_PREFIXES) and sealed.get(relative) != driver_files.get(relative))
+            if differing:
+                differences.append({"check": "driver_checkout", "root": driver_checkout.get("root"),
+                                    "head": driver_checkout.get("head"), "files": differing[:16],
+                                    "file_count": len(differing)})
+        porcelain = driver_checkout.get("status_porcelain")
+        tracked: list[str] = []
+        untracked: list[str] = []
+        recorded_only = 0
+        if isinstance(porcelain, str):
+            for line in porcelain.splitlines():
+                if not line.strip():
+                    continue
+                # "XY path", or "XY old -> new" for a rename: every path named counts.
+                paths = [_porcelain_path(part) for part in line[3:].split(" -> ")]
+                if line.startswith("?? "):
+                    hits = [path for path in paths if path.casefold().startswith(CODE_PREFIXES)]
+                    untracked.extend(hits)
+                else:
+                    hits = [path for path in paths if head_change_class(path) == "window_input"]
+                    tracked.extend(hits)
+                recorded_only += not hits
+            if tracked:
+                differences.append({"check": "driver_checkout_tracked_edits", "observed": sorted(tracked)[:16]})
+            if untracked:
+                differences.append({"check": "driver_checkout_untracked_in_code_roots",
+                                    "observed": sorted(untracked)[:16]})
+        else:
+            unmeasured.append({"check": "driver_checkout", "missing_input": "driver_checkout_status_porcelain"})
+        return {"root": driver_checkout.get("root"), "head": driver_checkout.get("head"),
+                "status_clean": driver_checkout.get("status_clean"), "file_count": len(driver_files),
+                "files_differing_from_sealed": None if differing is None else differing[:64],
+                "files_differing_from_sealed_count": None if differing is None else len(differing),
+                "tracked_edits_to_window_inputs": sorted(tracked)[:64] if isinstance(porcelain, str) else None,
+                "untracked_in_code_roots": sorted(untracked)[:64] if isinstance(porcelain, str) else None,
+                "status_paths_recorded_only": recorded_only if isinstance(porcelain, str) else None}
 
     def _changed_paths(self, base: str, head: str) -> list[str] | None:
         """Every path whose committed bytes differ between two commits, or None when git cannot say.
@@ -5777,12 +6439,17 @@ class _Harvest:
         ``--no-renames`` lists both the old and the new path of a moved file,
         so a window input moved out of its directory is still listed.  ``-z``
         separates paths with NUL and never quotes one, so a path is classed
-        by its real first characters.
+        by its real first characters.  A path whose bytes are not UTF-8 is
+        decoded with the replacement character in place of each bad byte
+        (seal-landing review F6, H-11): it is still listed and classed by its
+        directory, as the arm collector does; decoded strictly it raised and
+        the whole harvest faulted over a path's spelling.
         """
         try:
             result = self.seams.runner(["git", "-C", str(self.inputs.measurement_root), "diff", "--name-only",
                                         "--no-renames", "-z", f"{base}..{head}"],
-                                       capture_output=True, text=True, check=False, timeout=60)
+                                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                       check=False, timeout=60)
         except (OSError, subprocess.SubprocessError):
             return None
         if result.returncode != 0:
@@ -5880,8 +6547,10 @@ class _Harvest:
         says (the flag is also in ``NEG8_REFERENCE_LOSS_CODES``, so the screen
         drops that reference too).  With no sealed pin and no strict majority
         no member's identity can be told right, and each is
-        ``model.identity_underivable`` (not in the flag catalog, so its effect
-        is UNCLASSIFIED; it is a NEG-8 reference loss code).  No energy is read.
+        ``model.identity_underivable`` (EXCLUDE_MEMBER in the flag catalog, so
+        it removes that member; it is also a NEG-8 reference-loss code, so
+        each such reference is lost and the survivors rule decides the
+        screen).  No energy is read.
         """
         if not references:
             return
@@ -6583,7 +7252,10 @@ class _Harvest:
 
         ``records.malformed_flag`` is DISCLOSE.  What the line still shows of
         its code (the whole code, or a prefix when the line was torn inside
-        it) names the codes it could have been.  If any of them is
+        it) names the codes it could have been: the whole code itself, or,
+        for a prefix, every code with that prefix that a program writing
+        flag lines before the harvest can emit (``PRE_HARVEST_CODES``; seal
+        gate RF-3).  If any of them is
         EXCLUDE_WINDOW in the catalog in force, the window is excluded
         (``records.malformed_flag_exclusion_possible``).  Else, if any is
         EXCLUDE_MEMBER and the line still shows a run id, that member is
@@ -6614,14 +7286,21 @@ class _Harvest:
                                                             if self.catalog.effect(item) == "EXCLUDE_MEMBER")[:20]})
 
     def _candidate_codes(self, code: str | None, exact: bool) -> set[str]:
-        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be.
+        """Every code a damaged flag line showing ``code`` (whole, or as a prefix) could have been.
 
-        An empty prefix shows no code and names none (cold pass 2 N7).
+        A line that still shows its whole code names that code.  A line torn
+        inside its code names every pre-harvest writer's code with that
+        prefix (``PRE_HARVEST_CODES``).  Before the seal gate's RF-3 the
+        prefix was matched against every code of the catalog and of this
+        harvest, so a torn copy of the controller's disclosed
+        ``calibration.capture_battery_pair_unverified`` removed the window
+        for ``calibration.capture_invalid``, which this harvest alone emits
+        and derives again from the preserved bytes.  An empty prefix shows no
+        code and names none (cold pass 2 N7).
         """
         if not code:
             return set()
-        known = set(self.catalog.entries) | set(CODES)
-        return {code} if exact else {item for item in known if item.startswith(code)}
+        return {code} if exact else {item for item in PRE_HARVEST_CODES if item.startswith(code)}
 
     def _rebuild_unbuilt_flag(self, source: str, number: int, value: Mapping[str, Any]) -> None:
         """A writer's designed stand-in line for a flag it could not build or write.
@@ -7452,6 +8131,10 @@ class _Harvest:
                 flags = ordered()
         self.outputs["derived/flags.jsonl"] = write_jsonl_once(self.derived / "flags.jsonl", flags)
         exclusions = dict(exclusions) if isinstance(exclusions, Mapping) else {"value": exclusions}
+        # K-7: the program that applied the catalog, beside the catalog's own
+        # digest (``catalog_sha256``, written by the exclusion function).  The
+        # analysis checks both against the seal record (analysis plan 2.2).
+        exclusions["harvest_checkout"] = dict(self.harvest_checkout)
         self.outputs["derived/exclusions.json"] = write_json_once(self.derived / "exclusions.json", exclusions)
         write_json_once(self.withheld / "collector-errors.json",
                         {"schema": "joulewise.b5_collector_errors.v1", "errors": self.error_details})
@@ -7491,6 +8174,8 @@ class _Harvest:
                   "yield": getattr(self, "yield_block", None),
                   "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
                   "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
+                  "harvest_checkout": dict(self.harvest_checkout),
+                  "calibration_bracket": dict(self.calibration_bracket),
                   "outputs": dict(sorted(self.outputs.items()))}
         write_json_once(self.archive / "harvest.json", record)
         return record

@@ -219,7 +219,7 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
     stale: list[StaleRow] = []
     warnings: list[str] = []
     era_literals: dict[str, dict[str, census.Literal]] = {}
-    era_commits: dict[tuple[str, int], str] = {}
+    era_commits: dict[tuple[str, int, str], str] = {}
     try:
         census.validate_era_records(root)
     except census.EraRecordError as error:
@@ -264,7 +264,7 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
                     spec = census.era_spec(path, literal, text)
                     if spec is None:
                         raise census.EraRecordError(f"{path} {pointer}: literal is outside declared era scope")
-                    claim = (path, id(spec))
+                    claim = (path, *census.era_claim(path, spec, pointer))
                     if claim not in era_commits:
                         era_commits[claim] = census.era_commit(root, path, text, literal)
                     declared = era_commits[claim]

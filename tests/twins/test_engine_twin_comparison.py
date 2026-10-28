@@ -129,7 +129,7 @@ def synthetic_prepared(blocks, *, missing=()):
         "entries": entries, "blocks": manifest_blocks,
         "schema_version": MANIFEST_SCHEMA,
         "design": {"sampling_plan": {"planned_n_blocks": len(blocks)}}},
-        effective=effective, top_up_entry_ids=frozenset())
+        effective=effective, top_up_entry_ids=frozenset(), kept_quads=None)
     floor = {"active_floor_j": 1.2}
     with ExitStack() as stack:
         stack.enter_context(patch.object(engine, "window_evidence_precheck", return_value={"reasons": []}))

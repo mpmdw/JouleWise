@@ -67,9 +67,7 @@ L1_JOURNALS = FIXTURES / "l1_monitor"
 PREFIX = ROOT / "tests/fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
 ACCEPTANCE = "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
 POLICY = "configs/campaign_policies/quiet_mac_p2_production.json"
-# Allow desk-only runs to avoid probing an archive outside their read authority.
-B3W1 = Path(os.environ.get("JW_B5_B3W1_ROOT",
-                          "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2"))
+B3W1 = Path("/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2")
 REAL_TMP = os.path.realpath(tempfile.gettempdir())
 
 
@@ -122,6 +120,10 @@ DESIGN_BRANCH = "design/2026-10-05-v5-claim-block-draft"
 SEALED_DIR = "configs/campaigns/v5_claim_25g83"
 REGISTRATION_RELATIVE = f"{SEALED_DIR}/registration_block5.md"
 CORPUS_RELATIVE = "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+CORPUS_ORDER_RELATIVE = "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json"
+# Delegated, blinded desk runs must not inspect local archives or mutate Git,
+# including the temporary Git repositories some unrelated tests construct.
+SYNTHETIC_ONLY = os.environ.get("JW_B5_SYNTHETIC_ONLY") == "1"
 # The registration 4.3 shape L2's plan writer copies into hazard_window.thresholds
 # (nested per hazard module); the harvest must not read it as its own block.
 L2_NESTED_THRESHOLDS = {"battery": {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120},
@@ -224,8 +226,10 @@ def template() -> Path:
 
 
 def tearDownModule():  # noqa: N802 (unittest hook)
+    global _TEMPLATE
     if _TEMPLATE is not None:
         shutil.rmtree(_TEMPLATE, ignore_errors=True)
+        _TEMPLATE = None  # other test modules also use this shared fixture
 
 
 # ``cp -c`` asks macOS for a clone of each file (clonefile(2) on APFS: the
@@ -495,12 +499,14 @@ class Window:
     def __init__(self, root: Path, *, prefix_ledger=False, target_precheck=None, catalog_overrides=None,
                  journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32,
                  acceptance_policy=None, sealed_inventory=True, registration=True, registration_block=None,
-                 p42_precheck=None):
+                 p42_precheck=None, corpus_size=None, reverse_corpus=False, corpus_plan=None):
         self.root = root
         # p42_precheck: also register a second, non-target condition family
         # read from the same members (the floor packs' p42 cells: the decode
         # members' prefill, registration 0.5 and 6.6) with this precheck path.
         self.p42_precheck = p42_precheck
+        self.corpus_size, self.reverse_corpus = corpus_size, reverse_corpus
+        self.corpus_plan = corpus_plan
         self.registration = (root / "measurement" / REGISTRATION_RELATIVE) if registration else None
         self.registration_block = registration_block
         self.measurement = root / "measurement"
@@ -529,9 +535,32 @@ class Window:
             target = self.measurement / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"# {relative}\n")
-        # The committed 18-member NEG-8 settled corpus, exactly as the floor packs pin it.
+        # Default: the committed corpus bytes. An explicit 12 retains the
+        # historical no-cap case even after the committed corpus grows.
         (self.measurement / CORPUS_RELATIVE).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / CORPUS_RELATIVE, self.measurement / CORPUS_RELATIVE)
+        shutil.copyfile(ROOT / CORPUS_ORDER_RELATIVE, self.measurement / CORPUS_ORDER_RELATIVE)
+        committed_n = len(json.loads((ROOT / CORPUS_RELATIVE).read_bytes())["members"])
+        if (self.corpus_size is not None and self.corpus_size != committed_n) or self.reverse_corpus:
+            size = committed_n if self.corpus_size is None else self.corpus_size
+            ids = [f"neg8-refcorpus-r{index:02d}" for index in range(1, size + 1)]
+            corpus = json.loads((ROOT / CORPUS_RELATIVE).read_bytes())
+            corpus["corpus_id"] = "synthetic-neg8-corpus"
+            corpus["members"] = [{"bundle_id": bundle_id, "bundle_path": bundle_id}
+                                 for bundle_id in (reversed(ids) if self.reverse_corpus else ids)]
+            put(self.measurement / CORPUS_RELATIVE, corpus)
+            if size == 12 and not self.reverse_corpus:
+                historical = ROOT / "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                shutil.copyfile(historical, self.measurement / CORPUS_RELATIVE)
+                corpus = json.loads((self.measurement / CORPUS_RELATIVE).read_bytes())
+            if size != committed_n:
+                order = json.loads((ROOT / CORPUS_ORDER_RELATIVE).read_bytes())
+                order.update({"manifest_id": "synthetic-neg8-order", "plan_id": corpus["corpus_id"],
+                              "planned_n_bundles": len(ids), "executed_order": [
+                                  {**order["executed_order"][0], "index": index, "run_id": bundle_id,
+                                   "config": bundle_id + ".json", "rep": index, "block_index": index}
+                                  for index, bundle_id in enumerate(ids, 1)]})
+                put(self.measurement / CORPUS_ORDER_RELATIVE, order)
         if self.registration is not None:
             self.registration.parent.mkdir(parents=True, exist_ok=True)
             self.registration.write_text(registration_text(self.registration_block))
@@ -587,7 +616,9 @@ class Window:
             "acceptance_policy": acceptance_policy if acceptance_policy is not None else {
                 "issued_acceptance": {"path": ACCEPTANCE, "artifact_sha256": sha(ROOT / ACCEPTANCE)}},
             "science": science,
-            "external_inputs": {"manifests": [], "artifacts": []},
+            "external_inputs": {"manifests": [{"external_input_id": "neg8_bound", "members": [],
+                "manifest": {"path": CORPUS_ORDER_RELATIVE,
+                             "sha256": sha(self.measurement / CORPUS_ORDER_RELATIVE)}}], "artifacts": []},
             "arm_attachments": {"identity_pin_projection": {"identity_units": [{
                 "identity_unit_id": "b5t-unit", "config_inventory": inventory,
                 "model_runtime_config": {
@@ -600,7 +631,8 @@ class Window:
             # The floor packs' bound-derivation stage, as d117_floor_qwen3-1p7b_v5 writes it.
             "stage_graph": [{
                 "stage_id": "b5t-bound-derivation", "kind": "bound_derivation", "expected_count": 1,
-                "input": {"kind": "external_artifact", "path": CORPUS_RELATIVE, "sha256": sha(ROOT / CORPUS_RELATIVE)},
+                "input": {"kind": "external_artifact", "path": CORPUS_RELATIVE,
+                          "sha256": sha(self.measurement / CORPUS_RELATIVE)},
                 "launch": {"schema_version": "joulewise.stage_launch.v1", "commands": [{
                     "command_id": "b5t-bound-derivation.derive", "command_kind": "bound_derivation",
                     "argv_template": {"tool_id": "campaign_runner", "interface_id": "joulewise.run_campaign.cli.v1",
@@ -613,6 +645,24 @@ class Window:
                                           {"kind": "literal", "value": "--runs-dir"},
                                           {"kind": "binding", "value": "bound_runs_root"}]}}]}}],
         }
+        if self.corpus_plan is not None:
+            # Exercise the committed plan's actual corpus pins, not pins
+            # recomputed from synthetic replacements of the corpus files.
+            source_pack = ROOT / "configs/campaigns" / self.corpus_plan
+            external = json.loads((source_pack / "plan_tree.json").read_bytes())["external_inputs"]
+            if isinstance(external, dict):
+                external = {
+                    "manifests": [row for row in external["manifests"]
+                                  if row.get("manifest", {}).get("path") == CORPUS_ORDER_RELATIVE],
+                    "artifacts": [row for row in external["artifacts"] if row.get("path") == CORPUS_RELATIVE]}
+            else:
+                external = [row for row in external if row.get("manifest_path") == CORPUS_ORDER_RELATIVE
+                            or row.get("path") == CORPUS_RELATIVE]
+            tree["external_inputs"] = external
+            for pin in h.pinned_files({"external_inputs": external}, pack_root=source_pack, repo_root=ROOT):
+                target = self.measurement / pin["path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / pin["path"], target)
         put(self.pack / "plan_tree.json", tree)
         (self.pack / "plan_tree.sha256").write_text(f"{sha(self.pack / 'plan_tree.json')}  plan_tree.json\n")
         files = {path.relative_to(self.measurement).as_posix(): sha(path)
@@ -1517,7 +1567,7 @@ def neg8_member_gates():
 def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=True) -> str | None:
     """Run the chain's NEG-8 corpus stage on ``window``; return the mint's refusal, if any.
 
-    The 18 committed corpus members become bundles in the bound runs root
+    The window's explicitly selected corpus members become bundles in the bound runs root
     (``failed`` did not succeed; a ``manifest_members`` id outside the
     committed corpus gets a succeeded bundle too).  Then, as the chain and the
     driver do: the chain's own prune helper (``b5.chain.PRUNE_HELPER``) writes
@@ -1527,7 +1577,9 @@ def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=Tr
     under 10 members, as the chain's derivation stage would); the driver's
     ``b5.chain.neg8_corpus_record`` locator goes into night/hazard_result.json.
     """
-    ids = set(CORPUS_IDS) | {member["bundle_id"] for member in manifest_members or ()}
+    committed = json.loads((window.measurement / CORPUS_RELATIVE).read_bytes())
+    ids = {member["bundle_id"] for member in committed["members"]} | {
+        member["bundle_id"] for member in manifest_members or ()}
     for bundle_id in sorted(ids):
         bundle = window.bound / bundle_id
         bundle.mkdir(parents=True, exist_ok=True)
@@ -1543,7 +1595,7 @@ def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=Tr
     source = window.measurement / CORPUS_RELATIVE
     if manifest_members is not None:
         source = window.root / "selected-corpus.json"
-        source.write_text(json.dumps({**COMMITTED_CORPUS, "members": manifest_members}, indent=2, sort_keys=True)
+        source.write_text(json.dumps({**committed, "members": manifest_members}, indent=2, sort_keys=True)
                           + "\n")
     subprocess.run([sys.executable, "-B", "-c", b5_chain.PRUNE_HELPER, str(source), str(window.bound),
                     str(collected), str(summary)], check=True, capture_output=True)
@@ -1576,20 +1628,30 @@ def write_verdict(window: "Window", *, status: str, decision: str | None, condit
 class Neg8BoundTests(WindowTestCase):
     """Registration 5.3: a bound derived from at least 10 of the 18 corpus members is valid."""
 
-    def harvest_neg8(self, name: str, failed=(), **kwargs):
-        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+    def harvest_neg8(self, name: str, failed=(), *, corpus_size=None, **kwargs):
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE, corpus_size=corpus_size)
         refusal = neg8_corpus(window, failed, **kwargs)
         window.harvest()
         return window, json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes()), refusal
 
-    def test_eighteen_members_derive_against_the_collected_corpus(self):
-        window, check, _refusal = self.harvest_neg8("kept18")
+    def test_twelve_members_derive_against_the_committed_corpus(self):
+        """Keep the historical 12-member reader route explicitly."""
+        window, check, _refusal = self.harvest_neg8("kept12", corpus_size=12)
         self.assertNotIn("neg8.bound_not_derived", window.codes())
-        self.assertEqual((check["derived_from"], check["problems"]), ("collected_subset", []))
+        self.assertEqual((check["derived_from"], check["problems"]), ("registered_corpus", []))
+
+    def test_eighteen_members_derive_against_the_collected_corpus(self):
+        window, check, refusal = self.harvest_neg8("kept18")
+        self.assertIsNone(refusal)
+        self.assertIsNone(whole_window.load_neg8_drift_bound_artifact(window.bound / "neg8-drift-bound.json"))
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+        self.assertEqual((check["derived_from"], check["members_committed"], check["members_collected"],
+                          check["problems"]), ("collected_subset", 18, 18, []))
 
     def test_eleven_and_ten_members_are_derived_from_the_custodied_collected_manifest(self):
         """Before the fix both ended neg8.bound_not_derived: the core reader authenticates only the 12."""
-        for failed in ([CORPUS_IDS[4], *CORPUS_IDS[12:]], [CORPUS_IDS[0], CORPUS_IDS[11], *CORPUS_IDS[12:]]):
+        for failed in ([CORPUS_IDS[4], *CORPUS_IDS[12:]],
+                       [CORPUS_IDS[0], CORPUS_IDS[11], *CORPUS_IDS[12:]]):
             kept = 18 - len(failed)
             with self.subTest(kept=kept):
                 window, check, refusal = self.harvest_neg8(f"kept{kept}", failed)
@@ -1782,20 +1844,24 @@ class Neg8ScreenTests(WindowTestCase):
         self.assertNotIn("whole_window.not_passed", reasons)  # disclosed only
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
-    def test_passed_verdict_with_a_derived_bound_keeps_the_screen(self):
+    def test_passed_verdict_without_rederivation_inputs_fails_the_clean_bound_screen(self):
         window = self.window()
         neg8_corpus(window)
         write_verdict(window, status="failed", decision="passed", member_conditions=["cpu_admission_failed"])
         window.harvest()
         self.assertIn("whole_window.not_passed", window.codes())
-        self.assertNotIn("neg8.screen_failed", window.codes())
+        self.assertIn("neg8.screen_failed", window.codes())
+        screen = json.loads((window.archive / "derived/neg8-screen.json").read_bytes())
+        self.assertEqual((screen["rescreen"]["evaluated"], screen["rescreen"]["problems"]),
+                         (False, ["recovery_predates_erratum"]))
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
     def test_collected_corpus_bound_with_a_verdict_whose_screen_cannot_be_rederived(self):
         """The writer read no bound; a re-evaluation that cannot run leaves the screen failed.
 
-        This stored row names no source manifests and no evaluation time, so
-        the screen cannot be re-derived against the 17-member bound
+        This stored row names no source manifests and its plan has no governed
+        t0, so the prospective recovery gate fails before evaluation-time checks.
+        The screen cannot be re-derived against the 17-member bound
         (Neg8RescreenTests covers rows it can).
         """
         window = self.window()
@@ -1807,9 +1873,10 @@ class Neg8ScreenTests(WindowTestCase):
         self.assertNotIn("neg8.bound_not_derived", window.codes())
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
         rescreen = flag["observed"]["collected_bound_rescreen"]
-        self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["evaluation_time_unrecorded"]))
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["recovery_predates_erratum"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
-        # The full 18-member corpus also takes the collected-manifest route; without an evaluation time it cannot re-screen.
+        # The always-on clean bound also tries the registered 12-member case,
+        # and the same missing rederivation inputs still leave it failed.
         twelve = Window(self.tmp / "twelve", catalog_overrides=self.ISOLATE)
         neg8_corpus(twelve)
         write_verdict(twelve, status="failed", decision="failed",
@@ -1817,7 +1884,7 @@ class Neg8ScreenTests(WindowTestCase):
                                   whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED])
         twelve.harvest()
         (flag,) = [flag for flag in twelve.flags() if flag["code"] == "neg8.screen_failed"]
-        self.assertEqual(flag["observed"]["collected_bound_rescreen"]["problems"], ["evaluation_time_unrecorded"])
+        self.assertEqual(flag["observed"]["collected_bound_rescreen"]["problems"], ["recovery_predates_erratum"])
         self.assertTrue((twelve.archive / "derived" / "neg8-screen.json").exists())
 
     def test_unreadable_verdict_fails_the_screen(self):
@@ -1838,6 +1905,21 @@ NEG8_REFERENCES = (
     *((f"b5t-neg8-end-{index}", "neg8_daily_reference_end") for index in (1, 2, 3)),
 )
 NEG8_REFERENCE_MANIFEST = "campaign_manifests/b5t-neg8-references.json"
+
+
+def neg8_reference_summary(gross_j: float) -> dict:
+    """A synthetic reference's stored summary: the fields the verdict writer reads for the NEG-8 screen.
+
+    A real summary carries the gross energy with its anchor-shift envelope
+    and the idle-subtracted energy; the verdict writer reads exactly these
+    (``run_campaign._gross_energy_for`` and ``_idle_subtracted_energy_for``),
+    and a summary without them is one whose energy the writer cannot read
+    (seal gate RF-1).  The values are the ones ``neg8_reference_gates``
+    returns for the same point (idle-subtracted = gross - 20 J).
+    """
+    return {"status": "succeeded", "gross_energy_j": gross_j, "idle_subtracted_energy_j": gross_j - 20.0,
+            "energy_anchor_shift_envelopes": {"/gross_energy_j": {
+                "point_j": gross_j, "lower_j": gross_j - 0.01, "upper_j": gross_j + 0.01}}}
 
 
 def neg8_trajectory(drift_j: float) -> dict[str, float]:
@@ -1909,7 +1991,7 @@ def write_neg8_reference_verdict(window: "Window", points: dict[str, float], *, 
         bundle = window.claim / bundle_id
         put(bundle / "config.json", {"run_id": bundle_id})
         put(bundle / "metadata.json", {"run_id": bundle_id})
-        put(bundle / "summary_metrics.json", {"status": "succeeded"})
+        put(bundle / "summary_metrics.json", neg8_reference_summary(points[bundle_id]))
         members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
                         "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
     policy_sha = sha(ROOT / POLICY)
@@ -1971,7 +2053,8 @@ class Neg8RescreenTests(WindowTestCase):
 
     def test_a_screen_that_passes_against_the_collected_bound_keeps_the_window(self):
         """Before the fix both windows were removed by neg8.screen_failed, whatever their drift."""
-        for failed in ([CORPUS_IDS[4], *CORPUS_IDS[12:]], [CORPUS_IDS[0], CORPUS_IDS[11], *CORPUS_IDS[12:]]):
+        for failed in ([CORPUS_IDS[4], *CORPUS_IDS[12:]],
+                       [CORPUS_IDS[0], CORPUS_IDS[11], *CORPUS_IDS[12:]]):
             with self.subTest(kept=18 - len(failed)):
                 window, rescreen = self.harvest(f"pass{18 - len(failed)}", failed, drift=0.5)
                 self.assertEqual((rescreen["evaluated"], rescreen["decision"], rescreen["conditions"],
@@ -2006,7 +2089,7 @@ class Neg8RescreenTests(WindowTestCase):
                          (False, ["rederivation_differs_from_stored_bracket"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
-    def test_any_other_neg8_condition_is_not_re_evaluated(self):
+    def test_any_other_neg8_condition_is_not_re_evaluated_without_physics_losses(self):
         window, rescreen = self.harvest("other-condition", [CORPUS_IDS[4]],
                                         extra_conditions=["neg8_bracket_reference_invalid"])
         self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
@@ -2033,8 +2116,8 @@ class Neg8RescreenTests(WindowTestCase):
         derived = screen + (window.archive / "derived" / "flags.jsonl").read_text()
         for value in (family["derived_repeatability_bound_j"], family["point_delta_j"], family["start"]["mean_j"],
                       family["end"]["mean_j"]):
-            # The value as a whole number token anywhere (object member, array item or inside a
-            # string), but not as digits inside a longer number such as an emitted wall timestamp.
+            # Match a whole numeric token, including one inside a string,
+            # without mistaking digits inside a longer wall timestamp for energy.
             self.assertNotRegex(derived, r"(?<![\d.])" + re.escape(repr(value)) + r"(?!\d)")
         self.assertNotIn('_j"', screen)
         self.assertNotIn("_s\"", screen)  # nor the verdict's evaluation time
@@ -2305,6 +2388,146 @@ class EmittedCodeTests(unittest.TestCase):
                      "yield.json"}  # a file name
         self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
 
+
+class DocstringFactTests(unittest.TestCase):
+    """H-13: a docstring that states a catalog effect states the catalog's."""
+
+    def test_the_reference_identity_docstring_states_the_catalogs_effect_of_underivable(self):
+        """Before H-13 it said the code was "not in the flag catalog, so its effect is UNCLASSIFIED".
+
+        The sealed catalog classes ``model.identity_underivable`` EXCLUDE_MEMBER
+        (cold pass 5, note 9).  The counterfactual is the docstring itself.
+        """
+        sealed = json.loads((ROOT / SEALED_DIR / "flag_catalog.json").read_bytes())["codes"]
+        effect = sealed["model.identity_underivable"]["effect"]
+        self.assertEqual(effect, "EXCLUDE_MEMBER")
+        text = " ".join(h._Harvest._reference_model_identity.__doc__.split())
+        self.assertIn(f"``model.identity_underivable`` ({effect} in the flag catalog", text)
+        self.assertNotIn("UNCLASSIFIED", text)
+        self.assertNotIn("not in the flag catalog", text)
+        self.assertIn("model.identity_underivable", h.NEG8_REFERENCE_LOSS_CODES)
+
+
+class PreHarvestCodeTests(unittest.TestCase):
+    """Seal gate RF-3 (K-5): ``PRE_HARVEST_CODES`` is the code tables of the programs that write flag lines.
+
+    A damaged flag line is matched against these codes only.  A writer that
+    gains a code changes its own table or its own source; each test below
+    then fails until the harvest's constant names the code, so a new
+    pre-harvest exclusion can never be missing from the candidates.
+    """
+
+    # Every program that writes a flag line before the harvest reads them.
+    CORE_WRITERS = ("joulewise/controller.py", "scripts/run_campaign.py", "scripts/validate_powermetrics_fiducial.py",
+                    "scripts/reserve_calibration_window_bracket.py")
+    CHAIN = "joulewise/b5/chain.py"
+    COLLECTORS = "joulewise/flags/collect.py"
+    DRIVER = "joulewise/b5/driver.py"
+
+    @classmethod
+    def setUpClass(cls):
+        from joulewise.flags.catalog import DRAFT_CODES
+        from joulewise.flags.collect import UNKNOWN_COLLECTOR_UNMEASURED
+        from joulewise.flags.core import CORE_FLAG_CODES
+        sealed = json.loads((ROOT / SEALED_DIR / "flag_catalog.json").read_bytes())["codes"]
+        # Every flag code any table of the repository names.
+        cls.known = set(sealed) | set(DRAFT_CODES) | set(h.CODES) | set(CORE_FLAG_CODES) \
+            | {UNKNOWN_COLLECTOR_UNMEASURED[0]}
+        cls.sealed = sealed
+
+    def literals(self, relative: str) -> set[str]:
+        """Every quoted flag code in one source file."""
+        return set(re.findall(r"""["']([a-z0-9_]+\.[a-z0-9_]+)["']""", (ROOT / relative).read_text())) & self.known
+
+    def test_the_flag_writers_are_the_ones_listed_here(self):
+        """Every file under joulewise/ and scripts/ that can write a flag line is one the tests below read.
+
+        A flag is built by ``joulewise.flags.schema.make_flag`` (or the
+        driver's ``build_flag``) and written through
+        ``joulewise.flags.core.emit`` or a ``FlagSink``.  The harvest has its
+        own ledger and writes ``derived/flags.jsonl``, which no harvest reads.
+        """
+        writers = set()
+        for directory in ("joulewise", "scripts"):
+            for path in sorted((ROOT / directory).rglob("*.py")):
+                text = path.read_text(errors="replace")
+                if re.search(r"flags_core\.emit\(|FlagSink\(|make_flag\(|build_flag\(", text):
+                    writers.add(path.relative_to(ROOT).as_posix())
+        plumbing = {"joulewise/flags/core.py", "joulewise/flags/schema.py", "joulewise/flags/sink.py",
+                    "scripts/collect_window_flags.py"}
+        self.assertEqual(writers - plumbing, {*self.CORE_WRITERS, self.CHAIN, self.COLLECTORS, self.DRIVER})
+        # The collectors' script builds no flag of its own: it hands the collectors' flags to the sink.
+        self.assertEqual(self.literals("scripts/collect_window_flags.py"), set())
+
+    def test_the_core_set_is_the_core_writers_table(self):
+        from joulewise.flags.core import CORE_FLAG_CODES
+        self.assertEqual(h.PRE_HARVEST_CORE_CODES, set(CORE_FLAG_CODES))
+        # Every code a core writer or the chain passes is in that table.
+        for relative in self.CORE_WRITERS:
+            with self.subTest(relative):
+                source = (ROOT / relative).read_text()
+                passed = set(re.findall(r"flags_core\.emit\(\s*[^,]+,\s*([^,\s)]+)", source))
+                self.assertTrue(passed)
+                # A code passed by name is one of the file's own quoted codes (the controller's two env codes).
+                self.assertEqual({item for item in passed if not item.startswith('"')} - {"code"}, set())
+                self.assertEqual({item.strip('"') for item in passed if item.startswith('"')} - set(CORE_FLAG_CODES),
+                                 set())
+                self.assertEqual(self.literals(relative) - set(CORE_FLAG_CODES), set())
+        chain = set(re.findall(r"\bflag ([a-z0-9_]+\.[a-z0-9_]+) ", (ROOT / self.CHAIN).read_text()))
+        self.assertEqual(chain, {"roster.horizon_truncated", "member.retried"})
+        self.assertEqual(chain - set(CORE_FLAG_CODES), set())
+
+    def test_the_collector_set_is_the_collectors_codes(self):
+        from joulewise.flags import collect
+        source = (ROOT / self.COLLECTORS).read_text()
+        passed = set(re.findall(r"\bcode=([^,\s)]+)", source))
+        self.assertEqual({item for item in passed if not item.startswith('"')}, {"code"})  # the tables below
+        tables = {row[0] for row in collect.UNMEASURED_BY_COLLECTOR.values()} | {collect.UNKNOWN_COLLECTOR_UNMEASURED[0]}
+        expected = {item.strip('"') for item in passed if item.startswith('"')} | tables
+        self.assertEqual(self.literals(self.COLLECTORS), expected)
+        self.assertEqual(h.PRE_HARVEST_COLLECTOR_CODES, expected)
+
+    def test_the_driver_set_is_the_drivers_codes(self):
+        from joulewise.b5 import driver
+        source = (ROOT / self.DRIVER).read_text()
+        passed = set(re.findall(r"\.flag\(\s*([^,\s]+)", source))
+        by_name = {item for item in passed if not item.startswith('"')}
+        # The three codes the driver passes by name: a yield code chosen from two literals, the arm's
+        # unmeasured code of one hazard module, and one constant.
+        self.assertEqual(by_name, {"code", "arm_unmeasured_code(module)", "LINEAGE_PRELAUNCH_MISMATCH"})
+        arm = {driver.arm_unmeasured_code(module) for module in driver.HAZARD_MODULES} & self.known
+        self.assertEqual(arm, {f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention",
+                                                                         "disk")})
+        expected = self.literals(self.DRIVER) | arm
+        self.assertTrue({item.strip('"') for item in passed if item.startswith('"')} <= expected)
+        self.assertTrue({driver.LINEAGE_PRELAUNCH_MISMATCH, driver.ORPHAN_UNVERIFIED, "yield.stage_zero",
+                         "yield.stage_low"} <= expected)
+        self.assertEqual(h.PRE_HARVEST_DRIVER_CODES, expected)
+
+    def test_the_whole_set_is_the_union_and_holds_every_pre_harvest_exclusion(self):
+        from joulewise import window_lineage
+        self.assertEqual(h.PRE_HARVEST_CODES, h.PRE_HARVEST_CORE_CODES | h.PRE_HARVEST_COLLECTOR_CODES
+                         | h.PRE_HARVEST_DRIVER_CODES | set(window_lineage.FINDING_CODES))
+        # Every code in it is classified by the sealed catalog, but the collectors' deliberate unknown.
+        self.assertEqual(h.PRE_HARVEST_CODES - set(self.sealed), {"collector.unmeasured"})
+        excluding = {code for code in h.PRE_HARVEST_CODES
+                     if self.sealed.get(code, {}).get("effect") == "EXCLUDE_WINDOW"}
+        self.assertEqual(excluding, {
+            "code.executed_differs_from_sealed", "code.identity_unmeasured", "lineage.plan_tree_digest_differs",
+            "model.identity_mismatch", "model.identity_unmeasured", "model.identity_unpinned",
+            "pack.identity_mismatch", "pack.identity_unmeasured"})
+        # The registration's worked examples (section 6.2), from the sealed catalog.
+        def candidates(prefix):
+            return {code: self.sealed[code]["effect"] for code in h.PRE_HARVEST_CODES if code.startswith(prefix)}
+        self.assertEqual(candidates("calibration.capt"), {"calibration.capture_battery_pair_unverified": "DISCLOSE"})
+        self.assertEqual(candidates("model.identity_m"), {"model.identity_mismatch": "EXCLUDE_WINDOW"})
+        self.assertEqual(candidates("member.tok"), {})
+        # The seven catalog codes behind the first prefix, four of them window-removing: all harvest-only.
+        seven = {code: entry["effect"] for code, entry in self.sealed.items() if code.startswith("calibration.capt")}
+        self.assertEqual((len(seven), sorted(code for code, effect in seven.items() if effect == "EXCLUDE_WINDOW")),
+                         (7, ["calibration.capture_battery_pair_failed", "calibration.capture_battery_span",
+                              "calibration.capture_battery_unmeasured", "calibration.capture_invalid"]))
+
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
         from joulewise import window_lineage
         self.assertEqual(set(window_lineage.FINDING_CODES), set(h.LINEAGE_CODES))
@@ -2374,6 +2597,132 @@ class CliTests(WindowTestCase):
         self.assertEqual(code, 4)
         self.assertIn("verdict=NOT_READY", output)
         self.assertFalse(window.archive.exists())
+
+    def test_cli_prints_the_checkout_it_ran_from(self):
+        window = self.window()
+        code, output = self.run_cli(window, False, "--workers", "1")
+        self.assertEqual(code, 0, output)
+        head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              check=True).stdout.strip()
+        (line,) = [line for line in output.splitlines() if line.startswith("harvest_checkout=")]
+        self.assertTrue(line.startswith(f"harvest_checkout={head} clean="), line)
+        self.assertTrue(line.endswith(f"root={ROOT}"), line)
+
+
+class HarvestCheckoutTests(WindowTestCase):
+    """Seal gate K-7: ``harvest.json`` and ``exclusions.json`` record the checkout the harvest ran from.
+
+    The harvest runs from a desk checkout, not from the checkout that
+    collected the window, and it decides ``claim_usable``.  Registration 11
+    item 4 pins the harvest program by an addendum that names its files'
+    SHA-256s and the desk checkout's commit; before K-7 no output of the
+    harvest said which program had run, so the addendum could not be checked
+    from the archive.
+    """
+
+    @staticmethod
+    def git(*arguments):
+        return subprocess.run(["git", "-C", str(ROOT), *arguments], capture_output=True, text=True,
+                              check=True).stdout
+
+    def test_both_records_name_the_commit_the_program_files_and_whether_the_checkout_was_clean(self):
+        window = self.window()
+        dirty_at_checkout = []
+        def checkout_reader():
+            checkout = h.harvest_checkout()
+            dirty_at_checkout.extend(line for line in self.git(
+                "status", "--porcelain=v1", "--untracked-files=all").splitlines() if line.strip())
+            return checkout
+        record = window.harvest(seams=h.Seams(group_alive=lambda pgid: False,
+            exclusions_compute=EXCLUSIONS, boot_session_uuid=lambda: "B5-TEST-BOOT",
+            harvest_checkout=checkout_reader))
+        checkout = record["harvest_checkout"]
+        # This test runs the harvest from this very checkout.
+        self.assertEqual((checkout["schema"], checkout["root"], checkout["errors"]),
+                         ("joulewise.b5_harvest_checkout.v1", str(ROOT), []))
+        self.assertEqual(checkout["head"], self.git("rev-parse", "HEAD").strip())
+        # TMPDIR is inside the tree: the harvest adds scratch files after the
+        # checkout record, so compare against the status at that record's read.
+        dirty = dirty_at_checkout
+        self.assertEqual((checkout["status_clean"], checkout["status_lines"]), (not dirty, len(dirty)))
+        self.assertEqual(checkout["files"], {relative: sha(ROOT / relative) for relative in (
+            "joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py",
+            "joulewise/whole_window.py", "scripts/harvest_b5_window.py")})
+        self.assertEqual(json.loads((window.archive / "harvest.json").read_bytes())["harvest_checkout"], checkout)
+        exclusions = window.exclusions()
+        self.assertEqual(exclusions["harvest_checkout"], checkout)
+        # Beside the catalog's digest, which the exclusion function writes (analysis plan 2.2 checks both).
+        if L4_AVAILABLE:
+            self.assertEqual(exclusions["catalog_sha256"],
+                             sha(window.archive / "sources" / "inputs" / "flag_catalog.json"))
+
+    def test_a_null_window_and_a_window_without_the_exclusion_function_record_it_too(self):
+        window = self.window()
+        (window.custody / "night" / "chain.started").unlink()
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "NULL")
+        self.assertEqual(window.exclusions()["harvest_checkout"], record["harvest_checkout"])
+        self.assertTrue(record["harvest_checkout"]["head"])
+        other = Window(self.tmp / "no-function", catalog_overrides=self.ISOLATE)
+
+        def unavailable(*_args):
+            raise ModuleNotFoundError("joulewise.flags.exclusions")
+
+        record = other.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=unavailable,
+                                             boot_session_uuid=lambda: "B5-TEST-BOOT"))
+        self.assertEqual(other.exclusions()["status"], "UNAVAILABLE")
+        self.assertEqual(other.exclusions()["harvest_checkout"], record["harvest_checkout"])
+
+    def test_clean_dirty_and_unreadable_checkouts(self):
+        """The reader on each git answer: a clean checkout, a dirty one, and answers git cannot give."""
+        head = "c" * 40
+
+        def runner(status, *, head_text=head + "\n", head_code=0, status_code=0, raises=None):
+            def run(argv, **kwargs):
+                self.assertEqual(argv[:3], ["git", "-C", str(ROOT)])
+                if raises is not None:
+                    raise raises
+                if "rev-parse" in argv:
+                    return subprocess.CompletedProcess(argv, head_code, head_text, "")
+                self.assertEqual(argv[3:], ["status", "--porcelain=v1", "--untracked-files=all"])
+                return subprocess.CompletedProcess(argv, status_code, status, "")
+            return run
+
+        clean = h.harvest_checkout(runner(""))
+        self.assertEqual((clean["head"], clean["status_clean"], clean["status_lines"], clean["errors"]),
+                         (head, True, 0, []))
+        dirty = h.harvest_checkout(runner(" M joulewise/b5/harvest.py\n?? scratch.py\n"))
+        self.assertEqual((dirty["head"], dirty["status_clean"], dirty["status_lines"], dirty["errors"]),
+                         (head, False, 2, []))
+        self.assertEqual(dirty["files"], clean["files"])  # the digests are of the files on disk either way
+        failed = h.harvest_checkout(runner("", head_code=128, status_code=128))
+        self.assertEqual((failed["head"], failed["status_clean"], failed["errors"]),
+                         (None, None, ["head:git_exit_128", "status:git_exit_128"]))
+        odd = h.harvest_checkout(runner("", head_text="not a commit\n"))
+        self.assertEqual((odd["head"], odd["status_clean"], odd["errors"]), (None, True, ["head:not_a_commit_name"]))
+        absent = h.harvest_checkout(runner("", raises=FileNotFoundError("git")))
+        self.assertEqual((absent["head"], absent["status_clean"], absent["errors"]),
+                         (None, None, ["head:FileNotFoundError", "status:FileNotFoundError"]))
+        self.assertEqual(set(absent["files"]), set(h.HARVEST_PROGRAM_FILES))
+
+    def test_the_record_never_changes_a_flag_or_an_exclusion(self):
+        """A record, never a flag: a checkout that cannot be read at all leaves the harvest's result as it was."""
+        baseline = self.window()
+        expected = baseline.harvest()
+
+        def broken():
+            raise RuntimeError("no git here")
+
+        window = Window(self.tmp / "unreadable", catalog_overrides=self.ISOLATE)
+        record = window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                                              boot_session_uuid=lambda: "B5-TEST-BOOT", harvest_checkout=broken))
+        self.assertEqual(record["harvest_checkout"]["errors"], ["record:RuntimeError"])
+        self.assertIsNone(record["harvest_checkout"]["head"])
+        self.assertEqual((record["verdict"], record["faults"], record["flags"], record["claim_usable"]),
+                         (expected["verdict"], expected["faults"], expected["flags"], expected["claim_usable"]))
+        self.assertEqual(sorted(flag["code"] for flag in window.flags()),
+                         sorted(flag["code"] for flag in baseline.flags()))
+        self.assertEqual(window.exclusions()["reasons"], baseline.exclusions()["reasons"])
 
 
 # ---------------------------------------------------------------------------
@@ -3424,7 +3773,9 @@ class IdentityReplayTests(WindowTestCase):
     SEAL_DOCUMENTS = [f"{SEALED_DIR}/{name}" for name in (
         "analysis_plan_block5.md", "registration_block5.md", "sealed_inventory.json")]
     PIN = "configs/calibration/calibration_ledger_head.json"
-    RECORDS = ["RUN_STATE.md", "TASK_QUEUE.md", "docs/process_traces/seal/52-seal-record.md", "tests/test_new.py"]
+    # One path of each record-only kind (H-9): a file in a top-level dot-directory, root Markdown, docs/, tests/.
+    RECORDS = [".github/workflows/ci.yml", "RUN_STATE.md", "TASK_QUEUE.md",
+               "docs/process_traces/seal/52-seal-record.md", "tests/test_new.py"]
 
     def diff_seams(self, changed, *, returncode=0, calls=None):
         """Production seams, except that ``git diff`` answers with ``changed`` (NUL-separated, as ``-z`` prints)."""
@@ -3478,9 +3829,15 @@ class IdentityReplayTests(WindowTestCase):
 
     def test_a_changed_window_input_after_the_seal_is_still_a_difference(self):
         # One path of each kind: code, configuration no per-file check covers, and the
-        # chain-source runbook.  tests.flags.test_flags_collect classes every other kind.
+        # chain-source runbook.  Then the kinds the seal-landing review found unlisted (F2, H-9):
+        # before H-9 each of them was record_only and raised no flag.  A module at the repository
+        # root is importable by every script (the root is first on the import path); the lock and
+        # pyproject.toml fix the installed runtime; .gitignore and .gitattributes change which
+        # files a checkout holds and their bytes; analysis/ is a package no list names.
         for index, relative in enumerate((
-                "joulewise/b5t_stub.py", f"{SEALED_DIR}/identity_pins.json", "docs/phase_2/window_runbook.md")):
+                "joulewise/b5t_stub.py", f"{SEALED_DIR}/identity_pins.json", "docs/phase_2/window_runbook.md",
+                "hashlib.py", "env/mac-measurement-lock.txt", "pyproject.toml", ".gitignore", ".gitattributes",
+                "analysis/zz_new.py")):
             with self.subTest(relative):
                 window = Window(self.tmp / f"input-{index}", catalog_overrides=self.ISOLATE,
                                 executed_overrides={"head": self.EXECUTED_HEAD})
@@ -3491,6 +3848,172 @@ class IdentityReplayTests(WindowTestCase):
                                    "changed_paths": [relative]}])
                 self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
                 self.assertEqual(self.code_identity_record(window)["changed_paths"]["window_input"], [relative])
+
+    def test_a_sealed_inventory_with_files_and_no_head_is_identity_unmeasured(self):
+        """Seal-landing review F3 (H-10): an inventory that names no head compares the window with nothing.
+
+        The counterfactual input: the sealed inventory keeps its file map and
+        loses its ``head``; the plan's ``measurement_head`` is the executed
+        head, as the installer makes it.  Before H-10 the record said
+        ``comparison: identical`` (the plan's copy against itself), no flag
+        was raised, and the harvest superseded an arm collector's
+        ``code.identity_unmeasured`` on the strength of that comparison.
+        """
+        arm_flag = l4_flag_line("code.identity_unmeasured", family="CODE_IDENTITY", klass="NUMBER", level="window",
+                                stage="arm", collector="joulewise.flags.collect.checkout_identity",
+                                observed={"check": "head", "missing_input": "git"})
+
+        def harvested(name, head):
+            window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+            sealed = window.measurement / SEALED_DIR / "sealed_inventory.json"
+            value = json.loads(sealed.read_bytes())
+            self.assertTrue(value["files"])
+            value["head"] = head
+            put(sealed, value)
+            (window.custody / "flags").mkdir(parents=True, exist_ok=True)
+            (window.custody / "flags" / "arm.jsonl").write_text(json.dumps(arm_flag, sort_keys=True) + "\n")
+            window.harvest()
+            return window
+
+        # Control: with its head the inventory gives a real comparison, and the arm's flag is superseded.
+        control = harvested("with-head", H_CLAIM)
+        self.assertNotIn("code.identity_unmeasured", control.codes())
+        self.assertIn("records.identity_unmeasured_superseded", control.codes())
+        self.assertEqual(self.code_identity_record(control)["h_claim_source"], "sealed_inventory")
+
+        window = harvested("no-head", None)
+        unmeasured = [flag["observed"].get("unmeasured") for flag in window.flags()
+                      if flag["code"] == "code.identity_unmeasured" and flag["source"]["collector"] == "code_identity"]
+        self.assertEqual(unmeasured, [[{"check": "head", "missing_input": "sealed_inventory_head"}]])
+        self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())  # the file map still compares clean
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["h_claim_source"], identity["h_claim"], identity["comparison"]),
+                         ("plan", H_CLAIM, "identical"))
+        # The arm collector's own unmeasured flag stands: the harvest did not make the head check.
+        self.assertNotIn("records.identity_unmeasured_superseded", window.codes())
+        self.assertEqual(len([flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured"]), 2)
+
+    # -- a commit confined to another claim pack (cold pass 5, case C6; H-12) ----
+    ALPHA_PACK = "configs/campaigns/d117_floor_qwen3-1p7b_v5"
+    BETA_PACK = "configs/campaigns/d117_floor_qwen3-8b_v5"
+    GAMMA_PACK = "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+
+    def test_the_claim_packs_are_the_sizing_files_three(self):
+        sizing = json.loads((ROOT / SEALED_DIR / "sizing_b5.json").read_bytes())
+        self.assertEqual(h.CLAIM_PACK_DIRECTORIES,
+                         {f"configs/campaigns/{pack['pack_id']}" for pack in sizing["packs"].values()})
+        self.assertEqual(h.CLAIM_PACK_DIRECTORIES, {self.ALPHA_PACK, self.BETA_PACK, self.GAMMA_PACK})
+        for directory in h.CLAIM_PACK_DIRECTORIES:
+            self.assertTrue((ROOT / directory / "plan_tree.json").is_file(), directory)
+
+    def test_another_claim_packs_directory_is_record_only_for_a_window_of_a_different_pack(self):
+        """Each row: the changed path, the window's own pack, the class.  Before H-12 every row was window_input."""
+        rows = (
+            (f"{self.BETA_PACK}/plan_tree.json", self.ALPHA_PACK, "record_only"),
+            (f"{self.GAMMA_PACK}/01_quads/x.json", self.ALPHA_PACK, "record_only"),
+            (f"{self.ALPHA_PACK}/plan_tree.json", self.GAMMA_PACK, "record_only"),
+            # The window's own pack stays a window input, in any letter case.
+            (f"{self.ALPHA_PACK}/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            (f"{self.ALPHA_PACK.upper()}/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            (f"{self.BETA_PACK}/plan_tree.json", self.BETA_PACK + "/", "window_input"),
+            # A case variant of another pack's directory lands in that directory: still the other pack.
+            (f"configs/campaigns/D117_Floor_Qwen3-8B_v5/plan_tree.json", self.ALPHA_PACK, "record_only"),
+            # Every other path under configs/ stays a window input: what a window reads from other
+            # campaign directories, the sealed directory, the policies, the calibration files.
+            ("configs/campaigns/window_references_v5/00_start/r1.json", self.ALPHA_PACK, "window_input"),
+            ("configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json", self.ALPHA_PACK,
+             "window_input"),
+            (f"{SEALED_DIR}/flag_catalog.json", self.ALPHA_PACK, "window_input"),
+            (f"{SEALED_DIR}/identity_pins.json", self.GAMMA_PACK, "window_input"),
+            ("configs/campaign_policies/quiet_mac_p2_production.json", self.ALPHA_PACK, "window_input"),
+            # A directory whose name only begins with a claim pack's name is not that pack.
+            (f"{self.BETA_PACK}_draft/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            (f"{self.BETA_PACK}", self.ALPHA_PACK, "window_input"),
+            # A pack the block does not claim on is no claim pack.
+            ("configs/campaigns/d117_floor_qwen25_7b_v3/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            # With no pack known, nothing is narrowed.
+            (f"{self.BETA_PACK}/plan_tree.json", None, "window_input"),
+            # The pin and the seal documents keep their classes whatever the pack.
+            (self.PIN, self.ALPHA_PACK, "pin_only"),
+            (self.SEAL_DOCUMENTS[0], self.ALPHA_PACK, "seal_document"),
+        )
+        for relative, own_pack, klass in rows:
+            with self.subTest(relative=relative, own_pack=own_pack):
+                self.assertEqual(h.head_change_class(relative, own_pack), klass)
+                self.assertEqual(h.in_another_claim_pack(relative, own_pack),
+                                 klass == "record_only" and relative.casefold().startswith("configs/campaigns/d117_"))
+
+    def test_a_commit_confined_to_another_claim_pack_is_recorded_not_a_difference(self):
+        """Cold pass 5, C6, through the harvest.  The fixture's pack stands in for one claim pack of three.
+
+        The window's own pack directory and two others are the claim packs.
+        A commit after the seal changes one file in each of the other two:
+        both are listed and no flag is raised (before H-12:
+        ``code.executed_differs_from_sealed``, head check, for a window that
+        never read them).  The counterfactual: the same commit also changes a
+        file in the window's own pack, and that one is a difference.
+        """
+        own = f"configs/campaigns/{PACK_ID}"
+        others = [f"{self.BETA_PACK}/plan_tree.json", f"{self.GAMMA_PACK}/00_start/config.json"]
+        packs = frozenset({own, self.BETA_PACK, self.GAMMA_PACK})
+        with mock.patch.object(h, "CLAIM_PACK_DIRECTORIES", packs):
+            window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
+            window.harvest(seams=self.diff_seams(self.SEAL_DOCUMENTS + others))
+            self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+            self.assertNotIn("code.identity_unmeasured", window.codes())
+            identity = self.code_identity_record(window)
+            self.assertEqual((identity["own_pack"], identity["changed_paths_in_other_claim_packs"],
+                              identity["changed_paths"]["record_only"], identity["changed_paths"]["window_input"]),
+                             (own, sorted(others), sorted(others), []))
+            changed = Window(self.tmp / "own-pack", catalog_overrides=self.ISOLATE,
+                             executed_overrides={"head": self.EXECUTED_HEAD})
+            changed.harvest(seams=self.diff_seams(self.SEAL_DOCUMENTS + others + [f"{own}/extraction_spec.json"]))
+            flag = next(flag for flag in changed.flags() if flag["code"] == "code.executed_differs_from_sealed")
+            self.assertEqual(flag["observed"]["differences"],
+                             [{"check": "head", "observed": self.EXECUTED_HEAD, "expected": H_CLAIM,
+                               "changed_paths": [f"{own}/extraction_spec.json"]}])
+            self.assertEqual(self.code_identity_record(changed)["changed_paths_in_other_claim_packs"], sorted(others))
+
+    def test_a_changed_path_that_is_not_utf8_is_listed_and_classed_not_a_fault(self):
+        """Seal-landing review F6 (H-11): ``git diff -z`` prints a path's raw bytes.
+
+        The seam here runs a real child process that prints what git prints
+        for two changed paths whose names hold the byte 0xFF, and passes the
+        harvest's own decoding arguments to ``subprocess.run``.  Before H-11
+        the output was decoded strictly, ``subprocess.run`` raised
+        ``UnicodeDecodeError`` and the harvest ended HARVEST_FAULT.  Now each
+        bad byte reads as U+FFFD and each path is classed by its directory:
+        the one under docs/ is recorded, the one under joulewise/ is a
+        difference.
+        """
+        printed = b"docs/review-\xff.md\0joulewise/b5t-\xff.py\0"
+
+        def seams(raw):
+            def runner(argv, *args, **kwargs):
+                if list(argv[:1]) == ["git"] and "diff" in argv:
+                    return subprocess.run([sys.executable, "-B", "-c",
+                                           f"import sys; sys.stdout.buffer.write({raw!r})"], *args, **kwargs)
+                return subprocess.run(argv, *args, **kwargs)
+            return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                           boot_session_uuid=lambda: "B5-TEST-BOOT", runner=runner)
+
+        window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
+        record = window.harvest(seams=seams(printed))
+        self.assertEqual((record["verdict"], record["faults"]), ("COLLECTED", []))
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["comparison"], identity["changed_paths"]["record_only"],
+                          identity["changed_paths"]["window_input"]),
+                         ("compared", ["docs/review-\ufffd.md"], ["joulewise/b5t-\ufffd.py"]))
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.executed_differs_from_sealed")
+        self.assertEqual(flag["observed"]["differences"][0]["changed_paths"], ["joulewise/b5t-\ufffd.py"])
+        # The document alone: listed, no flag.
+        documents = Window(self.tmp / "documents", catalog_overrides=self.ISOLATE,
+                           executed_overrides={"head": self.EXECUTED_HEAD})
+        record = documents.harvest(seams=seams(b"docs/review-\xff.md\0"))
+        self.assertEqual((record["verdict"], record["faults"]), ("COLLECTED", []))
+        self.assertNotIn("code.executed_differs_from_sealed", documents.codes())
+        self.assertNotIn("code.identity_unmeasured", documents.codes())
 
     def test_a_head_comparison_git_cannot_make_stays_unmeasured(self):
         window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
@@ -3503,24 +4026,112 @@ class IdentityReplayTests(WindowTestCase):
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertEqual(self.code_identity_record(window)["comparison"], "git_diff_unavailable")
 
-    def test_a_separate_driver_checkout_is_recorded_and_raises_no_flag(self):
-        """The driver ran from another checkout whose copy of one code file differs from the sealed bytes."""
-        window = self.window()
+    # -- a driver that ran from another checkout (seal-landing review F1, H-8) ----
+    # The launch agent runs the driver, the hazard modules, the monitor and the
+    # collectors from the checkout that installed it.  When that is not the
+    # measurement checkout, the driver inventories it as ``driver_checkout``.
+
+    def driver_window(self, name, *, files=None, porcelain="", head="c" * 40, drop_files=False, **extra):
+        """A window whose executed inventory carries a separate driver checkout.
+
+        The driver checkout's file map is the sealed code (every path under
+        joulewise/ and scripts/), with ``files`` laid over it.
+        """
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
         path = window.custody / "night" / "executed_inventory.json"
         value = json.loads(path.read_bytes())
         code = {relative: digest for relative, digest in value["measurement_checkout"]["files"].items()
                 if relative.startswith(("joulewise/", "scripts/"))}
-        value["driver_checkout"] = {"root": "/elsewhere/driver", "head": "c" * 40, "status_porcelain": "",
-                                    "status_clean": True, "errors": [],
-                                    "files": {**code, "joulewise/b5t_stub.py": "f" * 64}}
+        checkout = {"root": "/elsewhere/driver", "head": head, "status_porcelain": porcelain,
+                    "status_clean": not porcelain, "errors": [], "files": {**code, **(files or {})}, **extra}
+        for relative, digest in (files or {}).items():
+            if digest is None:
+                del checkout["files"][relative]
+        if drop_files:
+            del checkout["files"]
+        value["driver_checkout"] = checkout
         put(path, value)
         window.harvest()
+        return window, len(checkout.get("files", {}))
+
+    def code_differences(self, window):
+        return [row for flag in window.flags() if flag["code"] == "code.executed_differs_from_sealed"
+                for row in flag["observed"]["differences"]]
+
+    def test_a_driver_checkout_with_the_sealed_bytes_is_recorded_and_raises_no_flag(self):
+        """Identical bytes stay a record: another root, another commit, and dirt that cannot be executed."""
+        window, count = self.driver_window(
+            "driver-same", porcelain=" M docs/notes.md\n?? scratch/notes.txt\n M tests/test_x.py\n")
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertNotIn("code.identity_unmeasured", window.codes())
         self.assertEqual(self.code_identity_record(window)["driver_checkout"], {
-            "root": "/elsewhere/driver", "head": "c" * 40, "status_clean": True, "file_count": len(code),
-            "files_differing_from_sealed": ["joulewise/b5t_stub.py"], "files_differing_from_sealed_count": 1})
+            "root": "/elsewhere/driver", "head": "c" * 40, "status_clean": False, "file_count": count,
+            "files_differing_from_sealed": [], "files_differing_from_sealed_count": 0,
+            "tracked_edits_to_window_inputs": [], "untracked_in_code_roots": [], "status_paths_recorded_only": 3})
+        # The same window with no second checkout is excluded for the same reasons, no more.
+        baseline = Window(self.tmp / "driver-baseline", catalog_overrides=self.ISOLATE)
+        baseline.harvest()
+        self.assertEqual(window.exclusions()["reasons"], baseline.exclusions()["reasons"])
 
+    def test_a_driver_checkout_whose_code_differs_from_the_sealed_code_is_a_difference(self):
+        """Review F1.  Before H-8 the record listed the differing file and no flag was raised.
+
+        The counterfactual inputs, each alone: one code file with other
+        bytes; a code file the sealed inventory has and the driver checkout
+        lacks; a code file only the driver checkout has.  The call site is
+        ``_Harvest._driver_checkout_differences``.
+        """
+        cases = {
+            "changed": ({"joulewise/b5t_stub.py": "f" * 64}, ["joulewise/b5t_stub.py"]),
+            "missing": ({"scripts/b5t_stub.py": None}, ["scripts/b5t_stub.py"]),
+            "added": ({"joulewise/hazards/zz_added.py": "e" * 64}, ["joulewise/hazards/zz_added.py"]),
+        }
+        for label, (files, differing) in cases.items():
+            with self.subTest(label):
+                window, count = self.driver_window(f"driver-{label}", files=files)
+                self.assertEqual(self.code_differences(window), [
+                    {"check": "driver_checkout", "root": "/elsewhere/driver", "head": "c" * 40,
+                     "files": differing, "file_count": 1}])
+                self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
+                self.assertNotIn("code.identity_unmeasured", window.codes())
+                record = self.code_identity_record(window)["driver_checkout"]
+                self.assertEqual((record["files_differing_from_sealed"], record["files_differing_from_sealed_count"],
+                                  record["file_count"]), (differing, 1, count))
+
+    def test_a_driver_checkouts_own_status_is_replayed_in_the_scope_it_executes(self):
+        """H-8: an uncommitted change to a window input, or an untracked importable file, is a difference.
+
+        The file map lists tracked files at their committed or working
+        bytes; an untracked module under joulewise/ or scripts/ is in no
+        inventory, and only the checkout's ``git status`` output shows it.
+        The 2026-10-06 rehearsal's driver checkout had exactly that line.
+        """
+        window, _count = self.driver_window(
+            "driver-status", porcelain=("?? scripts/rehearse_b5_real.py\n M joulewise/b5/driver.py\n"
+                                        "R  docs/old.md -> scripts/new_tool.py\n?? notes.txt\n M docs/x.md\n"))
+        self.assertEqual(self.code_differences(window), [
+            {"check": "driver_checkout_tracked_edits", "observed": ["joulewise/b5/driver.py", "scripts/new_tool.py"]},
+            {"check": "driver_checkout_untracked_in_code_roots", "observed": ["scripts/rehearse_b5_real.py"]}])
+        self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
+        record = self.code_identity_record(window)["driver_checkout"]
+        self.assertEqual((record["tracked_edits_to_window_inputs"], record["untracked_in_code_roots"],
+                          record["status_paths_recorded_only"], record["files_differing_from_sealed"]),
+                         (["joulewise/b5/driver.py", "scripts/new_tool.py"], ["scripts/rehearse_b5_real.py"], 2, []))
+
+    def test_a_driver_checkout_that_cannot_be_compared_is_identity_unmeasured(self):
+        """Which code ran could not be established: no file map, or no ``git status`` output."""
+        window, _count = self.driver_window("driver-no-files", drop_files=True)
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured")
+        self.assertEqual(flag["observed"]["unmeasured"],
+                         [{"check": "driver_checkout", "missing_input": "driver_checkout_files"}])
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        window, _count = self.driver_window("driver-no-status", porcelain=None)
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured")
+        self.assertEqual(flag["observed"]["unmeasured"],
+                         [{"check": "driver_checkout", "missing_input": "driver_checkout_status_porcelain"}])
+        self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
+
+    @unittest.skipIf(SYNTHETIC_ONLY, "blinded desk run forbids Git writes")
     def test_the_real_git_history_of_a_seal_landing(self):
         """The whole landing against real git: H_claim, the seal commit, a records commit; then a counterfactual.
 
@@ -3650,7 +4261,8 @@ class IdentityReplayTests(WindowTestCase):
                 self.assertNotIn("code.identity_unmeasured", window.codes())
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(not SYNTHETIC_ONLY and (B3W1 / "harvest.json").is_file(),
+                     "blinded desk run or local block-3 archive unavailable")
 class RehearsalRound1Tests(WindowTestCase):
     """The breaks the block-5 end-to-end rehearsal (round 1, 2026-10-06) found, each through the real harvest."""
 
@@ -3947,6 +4559,8 @@ def desk_seams(desk_runner, **extra):
 
 def commit_checkout(window: "Window") -> None:
     """Make the fixture's measurement checkout a git checkout with its pin committed (as H_claim has it)."""
+    if SYNTHETIC_ONLY:
+        raise unittest.SkipTest("blinded desk run forbids Git writes")
     from tests.git_fixture import init_git_fixture
     git = ["git", "-C", str(window.measurement)]
     if (window.measurement / ".git").exists():
@@ -4314,12 +4928,22 @@ class UnwrittenCoreFlagTests(WindowTestCase):
     def test_a_torn_flag_line_is_disclosed_or_excluded_by_what_it_still_shows(self):
         """Opus audit F2 (c): a torn line never blocks release; a recoverable exclusion code still excludes."""
         run_id = MEMBERS[1][0]
-        full_window = self.unwritten_line("calibration.capture_invalid", level="window", observed={"slot": "post"})
+        full_window = self.unwritten_line("calibration.capture_battery_pair_unverified", level="window",
+                                          observed={"pair": "not_passed"})
+        full_identity = self.unwritten_line("model.identity_mismatch", level="window", observed={"unit": "alpha"})
         full_member = self.unwritten_line("battery.member_span", level="member", run_id=run_id,
                                           observed={"smc_ma_max": 412})
         cases = {
-            # torn inside the code: the prefix "calibration.capt" could be calibration.capture_invalid
-            "window_prefix": (full_window[:full_window.index('"calibration.capt') + len('"calibration.capt')],
+            # Seal gate RF-3 (K-5).  Torn inside the code "calibration.capt": the only pre-harvest writer's
+            # code with that prefix is the controller's disclosed calibration.capture_battery_pair_unverified
+            # (the line it was torn from), so the line is disclosed and removes nothing.  Before K-5 the
+            # prefix also named calibration.capture_invalid, which this harvest alone emits, and the window
+            # was removed (records.malformed_flag_exclusion_possible).
+            "window_prefix_harvest_only": (
+                full_window[:full_window.index('"calibration.capt') + len('"calibration.capt')], None, None, None),
+            # Torn inside "model.identity_m": the arm collector's model.identity_mismatch (EXCLUDE_WINDOW)
+            # could have been lost with the line, so the window is still removed.
+            "window_prefix": (full_identity[:full_identity.index('"model.identity_m') + len('"model.identity_m')],
                               "records.malformed_flag_exclusion_possible", "window", None),
             # torn after the run id: battery.member_span is EXCLUDE_MEMBER and names its member
             "member_whole": (full_member[:full_member.index(run_id, full_member.index('"run_id"')) + len(run_id) + 1],
@@ -4332,6 +4956,7 @@ class UnwrittenCoreFlagTests(WindowTestCase):
             # a member code but torn before the run id: disclosed only
             "member_unplaced": (full_member[:full_member.index('"battery.member_span"') + 22], None, None, None),
         }
+        run = h._Harvest.__new__(h._Harvest)  # for the candidate list alone: it reads no state
         for label, (torn, extra, level, scoped) in cases.items():
             with self.subTest(label):
                 window = Window(self.tmp / f"torn-{label}", catalog_overrides=self.ISOLATE)
@@ -4346,15 +4971,84 @@ class UnwrittenCoreFlagTests(WindowTestCase):
                 if extra is None:
                     self.assertFalse({"records.malformed_flag_exclusion_possible",
                                       "records.malformed_flag_member_exclusion_possible"} & set(window.codes()))
+                    if label == "window_prefix_harvest_only":
+                        (malformed,) = [flag for flag in window.flags() if flag["code"] == "records.malformed_flag"]
+                        self.assertEqual(malformed["observed"]["salvaged_code_prefix"], "calibration.capt")
+                        self.assertNotIn("records.malformed_flag_exclusion_possible", exclusions["reasons"])
+                        self.assertEqual(run._candidate_codes("calibration.capt", False),
+                                         {"calibration.capture_battery_pair_unverified"})
                     continue
                 (flag,) = [flag for flag in window.flags() if flag["code"] == extra]
                 self.assertEqual((level, scoped), (flag["scope"]["level"], flag["scope"]["run_id"]))
                 if level == "window":
                     self.assertIn(extra, exclusions["reasons"])
-                    self.assertIn("calibration.capture_invalid", flag["observed"]["excluding"])
+                    self.assertEqual((flag["observed"]["salvaged_code_prefix"], flag["observed"]["candidate_codes"],
+                                      flag["observed"]["excluding"]),
+                                     ("model.identity_m", ["model.identity_mismatch"], ["model.identity_mismatch"]))
                 else:
                     excluded = {row["run_id"]: row["codes"] for row in exclusions["members_excluded"]}
                     self.assertIn(extra, excluded[run_id])
+
+    def test_a_flag_file_line_torn_inside_calibration_capt_is_disclosed_and_removes_nothing(self):
+        """Seal gate RF-3 (K-5), the registration's worked example (6.2), under the sealed catalog's effects.
+
+        The controller's flag file holds its DISCLOSE flag
+        ``calibration.capture_battery_pair_unverified``.  Whole, it is
+        absorbed.  Cut after ``"code":"calibration.capt`` it is disclosed
+        (``records.malformed_flag``) and the window's exclusion reasons are
+        those of the same window without the line.  Before K-5 the cut line
+        added ``records.malformed_flag_exclusion_possible`` (EXCLUDE_WINDOW)
+        with seven candidates, four of them codes this harvest alone emits.
+        The counterfactual: the arm collector's ``model.identity_mismatch``
+        cut after ``"code":"model.identity_m`` still removes the window.
+        """
+        from joulewise.flags.schema import canonical_json_bytes
+        sealed = json.loads((ROOT / SEALED_DIR / "flag_catalog.json").read_bytes())
+        self.assertEqual(sealed["codes"]["calibration.capture_battery_pair_unverified"]["effect"], "DISCLOSE")
+        self.assertEqual(sealed["codes"]["model.identity_mismatch"]["effect"], "EXCLUDE_WINDOW")
+
+        def harvested(name, file=None, payload=None):
+            window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+            catalog = copy.deepcopy(sealed)  # the sealed effects, with the fixture's two documented deviations
+            catalog["rules"]["cell_unit_minimum"] = 1
+            catalog["codes"]["member.cooldown_evidence_unverified"]["effect"] = "DISCLOSE"
+            put(window.measurement / SEALED_DIR / "flag_catalog.json", catalog)
+            if file is not None:
+                (window.custody / "flags").mkdir(parents=True, exist_ok=True)
+                (window.custody / "flags" / file).write_bytes(payload)
+            window.harvest()
+            return window
+
+        def cut(line, prefix):
+            return line[:line.index(b'"code":"') + len(b'"code":"') + len(prefix)]
+
+        controller = canonical_json_bytes(l4_flag_line(
+            "calibration.capture_battery_pair_unverified", family="CALIBRATION", klass="PHYSICS", level="member",
+            run_id=MEMBERS[0][0], stage="window", collector="core.controller", observed={"pair": "not_passed"})) + b"\n"
+        collector = canonical_json_bytes(l4_flag_line(
+            "model.identity_mismatch", family="MODEL_IDENTITY", klass="NUMBER", level="window", stage="arm",
+            collector="joulewise.flags.collect.model_identity", observed={"unit": "alpha"})) + b"\n"
+        baseline = harvested("baseline").exclusions()["reasons"]
+        whole = harvested("whole", "core-controller.jsonl", controller)
+        self.assertEqual(whole.exclusions()["reasons"], baseline)
+        self.assertNotIn("records.malformed_flag", whole.codes())
+        self.assertIn("calibration.capture_battery_pair_unverified", whole.codes())
+
+        torn = harvested("torn", "core-controller.jsonl", cut(controller, "calibration.capt"))
+        (malformed,) = [flag for flag in torn.flags() if flag["code"] == "records.malformed_flag"]
+        self.assertEqual((malformed["observed"]["file"], malformed["observed"]["salvaged_code_prefix"]),
+                         ("core-controller.jsonl", "calibration.capt"))
+        self.assertEqual(torn.exclusions()["reasons"], baseline)
+        self.assertFalse({"records.malformed_flag_exclusion_possible",
+                          "records.malformed_flag_member_exclusion_possible"} & torn.codes())
+        self.assertFalse(torn.exclusions()["release_blocked"])
+
+        identity = harvested("identity", "arm.jsonl", cut(collector, "model.identity_m"))
+        (flag,) = [flag for flag in identity.flags() if flag["code"] == "records.malformed_flag_exclusion_possible"]
+        self.assertEqual((flag["observed"]["candidate_codes"], flag["observed"]["excluding"]),
+                         (["model.identity_mismatch"], ["model.identity_mismatch"]))
+        self.assertEqual(sorted(set(identity.exclusions()["reasons"]) - set(baseline)),
+                         ["records.malformed_flag_exclusion_possible"])
 
     def test_an_unreadable_log_or_log_directory_is_disclosed(self):
         """Review gap: a log that may hold a marker line but cannot be read is never silently skipped.
@@ -4489,7 +5183,8 @@ def neg8_corpus_in_process(window: "Window", failed=()) -> dict:
     mint.  Returns the helper's summary; the bound and the driver's locator are written as the chain and
     the driver write them.
     """
-    for bundle_id in CORPUS_IDS:
+    committed = json.loads((window.measurement / CORPUS_RELATIVE).read_bytes())
+    for bundle_id in (member["bundle_id"] for member in committed["members"]):
         put_corpus_stub(window.bound / bundle_id, bundle_id, "failed" if bundle_id in failed else "succeeded")
     night = window.custody / "night"
     collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
@@ -4516,19 +5211,20 @@ class Neg8MintDropTests(WindowTestCase):
     FAILED = CORPUS_IDS[0]
     DROP = [{"bundle_id": CORPUS_IDS[6], "reason": "not_current_strict_mint"}]
 
-    def corpus_window(self, name: str, *, hazard: bool = True, omit: bool = True) -> "Window":
-        """A window whose collected manifest left out FAILED and OMITTED, or, with ``omit=False``, all 18.
+    def corpus_window(self, name: str, *, hazard: bool = True, omit: bool = True, corpus_size=None) -> "Window":
+        """A window whose collected manifest left out FAILED and OMITTED, or, with ``omit=False``, all members.
 
         On a HAZARD root the chain's helper drops OMITTED because the (injected) mint drop rule names
         it; on any other root the helper never consults that rule, so the collected manifest is a
         corpus no rule selected (written as the selected input to the helper)."""
-        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE, corpus_size=corpus_size)
         if hazard:
             LineageFindingTests.publish(self, window)
             self.assertTrue((window.bound / LineageFindingTests.LOCATOR).is_file())
             with hazard_member_gates(), mint_drops_patch(self.DROP if omit else []):
                 summary = neg8_corpus_in_process(window, [self.FAILED] if omit else [])
-            self.assertEqual(summary["members_kept"], 16 if omit else 18)
+            n = 12 if corpus_size == 12 else 18
+            self.assertEqual(summary["members_kept"], n - 2 if omit else n)
         elif omit:
             members = [member for member in COMMITTED_CORPUS["members"] if member["bundle_id"] != self.OMITTED]
             self.assertIsNone(neg8_corpus(window, [self.FAILED], manifest_members=members))
@@ -4602,22 +5298,23 @@ class Neg8MintDropTests(WindowTestCase):
             return ({**gross, "point_j": gross["point_j"] + 0.5} if path.name == shifted else gross), idle, problem
 
         energy = mock.patch.object(whole_window, "_reference_energy_evidence", side_effect=energy_differs)
-        for omit, derived in ((True, "collected_subset"), (False, "collected_subset")):
+        for size, omit, derived in ((None, True, "collected_subset"), (None, False, "collected_subset"),
+                                   (12, False, "registered_corpus")):
             drops = self.DROP if omit else []
             with self.subTest(derived, tamper="energy"):
-                window = self.corpus_window(f"energy-{derived}-{omit}", omit=omit)
+                window = self.corpus_window(f"energy-{derived}-{omit}", omit=omit, corpus_size=size)
                 check, _asked = self.harvest(window, drops, energy)
                 self.assertEqual((check["derived_from"], check["members_rederived"]), (None, False))
                 self.assertEqual(check["problems"], [f"bound_member_energy_differs:{shifted}"])
                 self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
             with self.subTest(derived, tamper="bytes"):
-                window = self.corpus_window(f"bytes-{derived}-{omit}", omit=omit)
+                window = self.corpus_window(f"bytes-{derived}-{omit}", omit=omit, corpus_size=size)
                 put(window.bound / shifted / "metadata.json", {"run_id": shifted, "edited": True})
                 check, _asked = self.harvest(window, drops)
                 self.assertEqual(check["problems"], [f"bound_member_bytes_differ:{shifted}"])
                 self.assertIn("neg8.bound_not_derived", window.codes())
             with self.subTest(derived, tamper="calibration"):
-                window = self.corpus_window(f"calibration-{derived}-{omit}", omit=omit)
+                window = self.corpus_window(f"calibration-{derived}-{omit}", omit=omit, corpus_size=size)
                 other = {**NEG8_FRESHNESS, "calibration_identity_sha256": "0" * 64}
                 fields = lambda metadata: dict(other if metadata.get("run_id") == shifted else NEG8_FRESHNESS)
                 check, _asked = self.harvest(
@@ -4627,7 +5324,7 @@ class Neg8MintDropTests(WindowTestCase):
                 self.assertEqual(check["problems"], [f"bound_member_calibration_differs:{shifted}"])
                 self.assertIsNone(check["derived_from"])
             with self.subTest(derived, tamper="lineage"):
-                window = self.corpus_window(f"lineage-{derived}-{omit}", omit=omit)
+                window = self.corpus_window(f"lineage-{derived}-{omit}", omit=omit, corpus_size=size)
 
                 def lineage(path, **kwargs):
                     if Path(path).name == shifted:
@@ -4640,7 +5337,7 @@ class Neg8MintDropTests(WindowTestCase):
                 self.assertEqual(check["problems"], [f"bound_member_lineage_unauthenticated:{shifted}"])
                 self.assertIsNone(check["derived_from"])
             with self.subTest(derived, tamper="none"):
-                window = self.corpus_window(f"clean-{derived}-{omit}", omit=omit)
+                window = self.corpus_window(f"clean-{derived}-{omit}", omit=omit, corpus_size=size)
                 check, _asked = self.harvest(window, drops)
                 self.assertEqual((check["derived_from"], check["members_rederived"], check["problems"]),
                                  (derived, True, []))
@@ -5056,7 +5753,8 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
             self.assertEqual("DISCLOSE", DRAFT_CODES[code]["effect"])
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(not SYNTHETIC_ONLY and (B3W1 / "harvest.json").is_file(),
+                     "blinded desk run or local block-3 archive unavailable")
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 

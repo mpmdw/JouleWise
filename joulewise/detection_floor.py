@@ -1215,6 +1215,24 @@ def _common_mode_member_windows(
     return normalized
 
 
+def common_mode_zero_points_agree(
+    a: float, b: float, summed_joule_terms: Sequence[float]
+) -> bool:
+    """Compare zero points at the scale of their contributing joule terms."""
+
+    scale = max(abs(value) for value in summed_joule_terms)
+    # 1e-6 J is the project's absolute agreement bar. 1e6 times binary64
+    # float noise (u = 2**-53) at size S is the band's lower edge. At
+    # production S <= about 2.5e6 J the bar is <= 2.8e-4 J: 1e-3 J
+    # divergence is caught up to S about 9e6 J, and the bar stays below 1%
+    # of the ~1 J attribution limit up to S about 9e7 J. S includes |zero
+    # point|, so the absolute term already scales with it; no relative term.
+    return math.isclose(
+        a, b, rel_tol=0.0,
+        abs_tol=max(1e-6, 1e6 * 2**-53 * scale),
+    )
+
+
 def _common_mode_block_half_width(
     delta: float,
     onset: Sequence[float],
@@ -1411,23 +1429,21 @@ def two_shared_edge_common_mode_floor(
                     f"block {index} residuals must be finite and nonnegative",
                 )
             residuals.append(residual)
-        if not math.isclose(
-            zero_point,
-            deltas[index],
-            rel_tol=1e-9,
-            abs_tol=1e-12,
-        ):
-            _common_mode_refuse(
-                "common_mode_zero_point_divergence_out_of_domain",
-                f"block {index} zero point diverges from its block delta "
-                "outside the registered provenance band",
-            )
         member_envelope_sum = _common_mode_finite(raw_member_envelope_sum)
         if member_envelope_sum is None or member_envelope_sum < 0.0:
             _common_mode_refuse(
                 "common_mode_precondition_failed",
                 f"block {index} member envelope integral sum must be finite "
                 "and nonnegative",
+            )
+        if not common_mode_zero_points_agree(
+            zero_point, deltas[index],
+            (member_envelope_sum, zero_point, deltas[index], *onset, *offset),
+        ):
+            _common_mode_refuse(
+                "common_mode_zero_point_divergence_out_of_domain",
+                f"block {index} zero point diverges from its block delta "
+                "outside the registered provenance band",
             )
         block_widths.append(
             _common_mode_block_half_width(
@@ -2126,7 +2142,9 @@ _PROVENANCE_KEYS = {
     "implementation",
 }
 _PROVENANCE_OPTIONAL_KEYS = {
+    "diagnostics",
     "producer_calibration_plans",
+    "producer_launch_lineages",
     "producer_config_sets",
     "assurance",
     "calibration_custody_store",
@@ -2340,6 +2358,27 @@ def floor_mint_config_set_sha256(scientific_hashes: Sequence[str]) -> str:
         raise ValueError("per-cell scientific config identities must be lowercase SHA-256")
     payload = json.dumps(sorted(set(scientific_hashes)), separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def floor_mint_runtime_set_sha256(runtime_hashes: Sequence[str]) -> str:
+    """Use the same canonical set encoding for per-cell runtime identities."""
+    return floor_mint_config_set_sha256(runtime_hashes)
+
+
+def floor_mint_producer_runtime_set(producer: Mapping) -> str | None:
+    """Validate optional runtime pins without changing the legacy inventory."""
+    cells = producer["cells"]
+    present = ["runtime_identity_sha256" in cell for cell in cells]
+    if not any(present):
+        return None
+    if not all(present):
+        raise ValueError("per-cell runtime pins must cover every producer cell")
+    if any("scientific_config_identity_sha256" not in cell for cell in cells):
+        raise ValueError("per-cell runtime pins require per-cell scientific config pins")
+    digest = floor_mint_runtime_set_sha256([cell["runtime_identity_sha256"] for cell in cells])
+    if producer["model_runtime_config"]["runtime_identity_sha256"] != digest:
+        raise ValueError("runtime-set pin does not match the sorted per-cell runtime set")
+    return digest
 
 
 def floor_mint_producer_config_set(producer: Mapping) -> dict | None:
@@ -2585,11 +2624,11 @@ def _project_floor_mint_pinset_v2(
         producer_members: set[str] = set()
         custody_pins: list[tuple[object, ...]] = []
         for cell in cells:
-            optional = ({"scientific_config_identity_sha256"}
-                        if isinstance(cell, Mapping) and "scientific_config_identity_sha256" in cell else set())
+            optional = ({name for name in ("scientific_config_identity_sha256", "runtime_identity_sha256")
+                         if name in cell} if isinstance(cell, Mapping) else set())
             if not _v2_exact_mapping(cell, _V2_CELL_KEYS | optional):
                 return None
-            if optional and not _is_hex(cell["scientific_config_identity_sha256"]):
+            if any(not _is_hex(cell[name]) for name in optional):
                 return None
             role = cell.get("role")
             expected_metric = {
@@ -2693,7 +2732,6 @@ def _project_floor_mint_pinset_v2(
                 )
                 or any(
                     not _is_six_decimal_literal(post.get(key))
-                    or post.get(key) == "7.377086"
                     for key in (
                         "absolute_floor_six_decimal",
                         "comparative_floor_six_decimal",
@@ -2748,6 +2786,7 @@ def _project_floor_mint_pinset_v2(
             return None
         try:
             config_set = floor_mint_producer_config_set(producer)
+            floor_mint_producer_runtime_set(producer)
         except ValueError:
             return None
         config_sets_by_identity[(mint_tool_version, plan["plan_id"], plan["sha256"])] = (
@@ -3036,6 +3075,63 @@ def _validate_hashed_object(
     return True
 
 
+def exact_stack_serving_cell(
+    artifact: Mapping, *, backend: str, metric: str, window_class: str,
+    condition_family_id: str, condition_family_sha256: str,
+    stack_identity_sha256: str, transport_group_id: str | None = None,
+) -> Mapping | None:
+    """Select the unique exact-stack cell, including a group's sole floor source.
+
+    Family and stack hashes are identity comparisons. Group-served phase and
+    token lengths come from both hash-authenticated family definitions; the
+    eleven-field stack hash includes the model artifact digest. No stress
+    envelope comparison belongs to sealed exact_stack_only.v1.
+    """
+    matches = []
+    for cell in artifact.get("cells", []):
+        if not isinstance(cell, Mapping):
+            continue
+        key = cell.get("key", {})
+        regime = cell.get("source_regime", {})
+        if (not isinstance(key, Mapping) or not isinstance(regime, Mapping)
+            or any(key.get(k) != v for k, v in (("backend", backend), ("metric", metric), ("window_class", window_class)))
+            or regime.get("stack_identity_sha256") != stack_identity_sha256
+            or cell.get("eligibility", {}).get("claim_usable") is not True
+            or (transport_group_id is not None and cell.get("transport_group_id") != transport_group_id)):
+            continue
+        if (key.get("condition_family_id"), key.get("condition_family_sha256")) == (condition_family_id, condition_family_sha256):
+            matches.append(cell)
+            continue
+        source_family = {k: key.get(k) for k in _CONDITION_FAMILY_KEYS}
+        if not _validate_condition_family(source_family, "source family", []):
+            continue
+        for group in artifact.get("transport_groups", []):
+            if (not isinstance(group, Mapping)
+                or group.get("transport_group_id") != cell.get("transport_group_id")
+                or group.get("source_cell_ids") != [cell.get("cell_id")]
+                or any(group.get(k) != v for k, v in (("backend", backend), ("metric", metric),
+                    ("window_class", window_class), ("stack_identity_sha256", stack_identity_sha256)))):
+                continue
+            admitted = [f for f in group.get("allowed_consumer_condition_families", [])
+                        if isinstance(f, Mapping) and f.get("condition_family_id") == condition_family_id
+                        and f.get("condition_family_sha256") == condition_family_sha256]
+            if len(admitted) != 1 or not _validate_condition_family(admitted[0], "consumer family", []):
+                continue
+            source = source_family["condition_family_definition"]
+            consumer = admitted[0]["condition_family_definition"]
+            source_workload = source.get("workload_profile", {})
+            consumer_workload = consumer.get("workload_profile", {})
+            if (not isinstance(source_workload, Mapping) or not isinstance(consumer_workload, Mapping)
+                or source.get("measurement_target", {}).get("metric") != metric
+                or consumer.get("measurement_target", {}).get("metric") != metric
+                or any(type(source_workload.get(k)) is not int or type(consumer_workload.get(k)) is not int
+                       or source_workload[k] != consumer_workload[k] for k in ("prompt_tokens", "output_tokens"))):
+                continue
+            matches.append(cell)
+            break
+    return matches[0] if len(matches) == 1 else None
+
+
 def _validate_condition_family(container, where, errors) -> bool:
     if not _check_keys(container, _CONDITION_FAMILY_KEYS, where, errors):
         return False
@@ -3201,12 +3297,43 @@ def _validate_provenance(
     ):
         errors.append(f"{where}.mint_tool_version: must be a nonempty string")
 
+    if "diagnostics" in provenance:
+        diagnostics = provenance["diagnostics"]
+        if not isinstance(diagnostics, list) or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"code", "producer_plan_id", "derived_allowance_s",
+                             "window_bracket_allowance_s"}
+            or item.get("code") != "allowance_differs_from_window_bracket"
+            or any(not isinstance(value, str) for value in item.values())
+            for item in diagnostics
+        ):
+            errors.append(f"{where}.diagnostics: invalid allowance observations")
+
     if "launch_lineage" in provenance:
         _validate_launch_lineage_provenance(
             provenance["launch_lineage"],
             f"{where}.launch_lineage",
             errors,
         )
+
+    if "producer_launch_lineages" in provenance:
+        inventory = provenance["producer_launch_lineages"]
+        plans = provenance.get("producer_calibration_plans")
+        if "launch_lineage" in provenance:
+            errors.append(f"{where}: launch_lineage and producer_launch_lineages are mutually exclusive")
+        if (provenance["mint_tool_version"] != _FLOOR_MINT_TOOL_VERSION_V2
+            or not isinstance(plans, list) or not isinstance(inventory, list)
+            or len(inventory) != len(plans)):
+            errors.append(f"{where}.producer_launch_lineages: must inventory the v2 producer plans in order")
+        else:
+            for index, (entry, plan) in enumerate(zip(inventory, plans, strict=True)):
+                entry_where = f"{where}.producer_launch_lineages[{index}]"
+                if not _check_keys(entry, {"plan_id", "launch_lineage"}, entry_where, errors):
+                    continue
+                if entry["plan_id"] != plan.get("plan_id"):
+                    errors.append(f"{entry_where}.plan_id: must match producer plan order")
+                if entry["launch_lineage"] is not None:
+                    _validate_launch_lineage_provenance(entry["launch_lineage"], entry_where + ".launch_lineage", errors)
 
     mint_tool_version = provenance["mint_tool_version"]
     is_v2 = mint_tool_version == _FLOOR_MINT_TOOL_VERSION_V2
@@ -3355,6 +3482,13 @@ def _validate_provenance(
 def _validate_launch_lineage_provenance(value, where, errors) -> None:
     """Validate the optional settled-lineage carrier without reopening custody."""
 
+    from joulewise import window_lineage
+    if window_lineage.is_hazard_lineage(value):
+        try:
+            window_lineage.validate_lineage(value)
+        except window_lineage.HazardLineageError as exc:
+            errors.append(f"{where}: {exc}")
+        return
     if not _check_keys(value, _LAUNCH_LINEAGE_KEYS, where, errors):
         return
     if value["schema_version"] != LAUNCH_LINEAGE_SCHEMA:

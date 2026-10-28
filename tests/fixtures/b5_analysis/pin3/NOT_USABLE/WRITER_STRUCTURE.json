@@ -1,0 +1,74 @@
+{
+  "claim_licensing": true,
+  "conditions": [
+    "environment_admission_failed",
+    "environment_admission_missing",
+    "instrument_calibration_bracket_missing",
+    "neg8_drift_bound_underived",
+    "neg8_idle_sub_drift_bound_underived"
+  ],
+  "excluded_bundles": [],
+  "member_failures": [
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_failed\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-a1",
+      "reason_code": "environment_admission_failed"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_missing\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-a1",
+      "reason_code": "environment_admission_missing"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_failed\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-a2",
+      "reason_code": "environment_admission_failed"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_missing\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-a2",
+      "reason_code": "environment_admission_missing"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_failed\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-b1",
+      "reason_code": "environment_admission_failed"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_missing\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-b1",
+      "reason_code": "environment_admission_missing"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_failed\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-b2",
+      "reason_code": "environment_admission_failed"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_missing\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-b01-b2",
+      "reason_code": "environment_admission_missing"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_failed\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-r01",
+      "reason_code": "environment_admission_failed"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_missing\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-r01",
+      "reason_code": "environment_admission_missing"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_failed\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-r02",
+      "reason_code": "environment_admission_failed"
+    },
+    {
+      "detail": "{\"claim_reason\":null,\"decision\":\"admitted\",\"reason_code\":\"environment_admission_missing\",\"source\":\"whole_window_environment_validation\"}",
+      "member_id": "s0-mock-r02",
+      "reason_code": "environment_admission_missing"
+    }
+  ],
+  "status": "failed"
+}
