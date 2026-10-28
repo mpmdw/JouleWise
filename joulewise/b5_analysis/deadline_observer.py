@@ -59,18 +59,24 @@ def observe_wall_deadline():
             observer.firings += 1
 
     code = None
+    callback_installed = events_installed = False
     try:
         try:
             code = _projection_code()
             monitoring.register_callback(tool, event, returned)
+            callback_installed = True
             monitoring.set_local_events(tool, code, event)
+            events_installed = True
         except (AttributeError, RuntimeError, ValueError):
             observer = None
         yield observer
     finally:
+        # Undo only what was installed: a call the setup could not make (for
+        # example one an audit hook rejects) is not repeated during cleanup.
         try:
-            if code is not None:
+            if events_installed:
                 monitoring.set_local_events(tool, code, 0)
-            monitoring.register_callback(tool, event, None)
+            if callback_installed:
+                monitoring.register_callback(tool, event, None)
         finally:
             monitoring.free_tool_id(tool)
