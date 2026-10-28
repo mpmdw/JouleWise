@@ -78,3 +78,7 @@ Attempt line at about 05:47: COLLECTED, ACCEPT, counting, chain rc 0, harvest rc
 - CI shard: caught the emitter-test fault. Test-only.
 - Executing reviews: KB-V2 found three rule-text defects that would have changed a class; BY-P2-THERM found none.
 - Registration cold gate: text corrections only, and it missed the sizing gap. M2: no overturn.
+
+## Slip: pointer (0f) missed at the s1-p1 desk; packaging started at 06:30 with the loop held
+
+The laptop lead committed (0f) to main at 01:05 PDT (`c99f123cf`, B5-TRANSFER: GO; Ed: "b5 transfer go if that gets analysis done faster"). This activation read RUN_STATE from the canonical root, whose `origin/main` was stale (not fetched at launch), so it worked from item 82's pointer and used the s1-p1 desk for pass 2. Found when merging the records to main at 06:23. The loop was in PRECHECK for s6-p2, with no smoke launched and no collection.active, so it was held at 06:24 (`b6_loop.py hold`). Packaging per BLOCK5-TRANSFER.md runs as a local background agent (blind: hash and compress only; path fields only from night_plans and ledgers). Lesson for the launch sequence: fetch `origin` (read-only, in a worktree) before reading the pointer.
