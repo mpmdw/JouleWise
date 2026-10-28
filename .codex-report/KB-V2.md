@@ -441,3 +441,28 @@ discrepancy is 2.879319e-7 GB/s, below that bar. Energy-example numbers do not
 change. Both touched modules pass 38 tests, including the reduced fixed-seed
 noise sweep (no rate assertions), both integer conversions, and real stream
 receipts written/reloaded through the scan CLI for worked and DRAM-only models.
+
+Step 2 — F4–F6, F8–F9. Missing prerequisites print complete inputs, all retained
+calls, available per-call/complete-arm arithmetic, central contrasts and reasoned
+undefined bounds. Replayed Opus's five exception cases before and after: unnamed
+gap source, absent adapter rating, lost call, absent r_max and missing meter
+integral now print UNDETERMINED instead of raising. Additional CLI cases cover
+battery source, edge bounds, anchor bound, tau, each stream integral, empty input
+and a missing receipt. Missing redundant φ is recomputed from its definition K/B.
+Native cadence uses positive intervals; duplicates are counted without removing
+polls or voiding variance. Different rail sets now have an explicit physical
+reason on rails/rest only; DC/GPU are unaffected. No-knee sizes, φ, contrasts,
+coefficients, residuals, sensitivities, share and GPU arm-power contrast use
+`not defined (knee not found)`. Upper limits share the H2 interval's decimal
+place; zero-width intervals use fixed two-decimal formatting.
+
+Before: a duplicate vetoed DC validity, a rail-set mismatch remained RESOLVED,
+no-knee descriptions had unrelated reasons, and 0.000996 printed an extra
+upper-limit digit; zero width exposed float repr. After: the corresponding
+production-shaped CLI regressions pass. Actual stream scan receipts are written,
+reloaded and processed by the real scan CLI; its worked/no-knee outputs feed
+the eight real production-sized fake-array stream calls and fresh read CLI
+processes for the requested variants. The isolated-late-pair regression retains
+all 21 pairs and candidate 256 MiB, then refuses the cache-arm checks rather
+than shrinking K. Focused suite: 43 tests passed; the subsequent K/B missing-φ
+regression also passed. No new numeric acceptance bar was introduced.

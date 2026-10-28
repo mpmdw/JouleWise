@@ -214,9 +214,11 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
 
    **Physical scope of a difference.** The OS build can change the driver, scheduling and power states; the
    hardware unit/device changes the cache, memory path and rails; `runtime_version.name/version`, `packages.mlx`
-   and `packages.mlx-metal` select the reduction kernel and its execution. These are the only stack differences
-   that prevent transfer and set UNDETERMINED. `kernel_library` is recorded as prepare metadata (the actual
-   running kernel versions are the two MLX packages). `telemetry_backend` and the rails label disclose the
+   and `packages.mlx-metal` select the reduction kernel and its execution. These differences
+   prevent transfer and set UNDETERMINED. A difference in `measurement_boundary_label.rails`
+   changes the physical set of measured rails: rails and rest are UNDETERMINED
+   (`measured rails boundary differs`); DC is unaffected. `kernel_library` is recorded as prepare metadata (the actual
+   running kernel versions are the two MLX packages). `telemetry_backend` discloses the
    capture metadata; the governed boundary integrations above still have to be supplied. They do not independently
    veto a class. `mlx-lm` loads/generates model text; `transformers` and `tokenizers` supply model/token processing;
    `safetensors` reads model weights; `numpy` supplies host arrays. None is used by this uint8 MLX reduction.
@@ -297,8 +299,9 @@ of the rows below for call i:
   using rails/GPU native interval durations clipped to the idle span. Meter/battery means retain the pass-1
   integrator's arithmetic sample support in [span_start, span_end): give each of its n retained samples equal
   duration span_length/n in the estimator, so its weighted mean equals the integrated mean. Thus do not interpolate, hold a battery poll onto meter stamps, or construct a joint series.
-  For battery polls use lag_count = floor(10 s / median native inter-poll interval); record the interval,
-  lag count, sample count and equal support durations. The approximately 1 Hz SMC updates are already repeated in the native
+  For battery polls use lag_count = floor(10 s / median positive native inter-poll interval); record the interval,
+  lag count, sample count and equal support durations. Count and disclose duplicated stamps;
+  retain every poll, and do not make variance undefined solely because a stamp is duplicated. The approximately 1 Hz SMC updates are already repeated in the native
   battery polls and enter this estimator's serial dependence, not a resampled stream. Each stream needs the
   estimator's own sample/cadence support (including at least three bandwidths); if unavailable, print the
   missing prerequisite and do not claim DC validity. This rule registers the estimator for meter and battery
@@ -358,8 +361,10 @@ gross energy, as reg. §12 uses it (worked example: 2.5 × 10⁻¹⁰ ≤ 5.7 ×
 memory-traffic cost must show there; if it does not, the control failed to separate DRAM traffic from GPU work.
 
 **Stack check.** Record and print the full comparison in every case, including all disclosure-only differences
-and pending fields. Only differences in OS build, hardware unit/device, or MLX/MLX-Metal runtime versions set
-UNDETERMINED; §2 gives the physical path from each to the measured energy. Other differences change no class.
+and pending fields. Differences in OS build, hardware unit/device, or MLX/MLX-Metal runtime versions set
+UNDETERMINED; §2 gives their physical paths. A different `measurement_boundary_label.rails`
+is a different measured rails boundary: rails and rest are UNDETERMINED with that reason,
+while DC is unaffected. Other differences change no class.
 The receipt keeps `differences`, `physical_differences` and `disclosure_differences`; harvest completes the
 capture comparison and prints it even for an otherwise undetermined result.
 
@@ -368,7 +373,7 @@ defined below. The rows are tested **in order** and the first that holds is the 
 
 | Order | Class | Condition | Meaning |
 |---|---|---|---|
-| 1 | UNDETERMINED | knee not found; physically relevant stack differs; battery reading missing or idle-variance prerequisite missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
+| 1 | UNDETERMINED | knee not found; physically relevant stack differs; a required call, integral, bound, gap source, battery reading or native-support prerequisite missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
 | 2 | RESOLVED | Δ − δΔ > 0 | memory-traffic energy is resolved on this boundary |
 | 3 | BELOW ATTRIBUTION LEVEL | max(\|Δ − δΔ\|, \|Δ + δΔ\|) / (1 − φ) ≤ ε₀ | the interval spans 0 and every value in it, corrected for cache bias, is too small to move any registered model's run by the instrument's per-run attribution limit; this does **not** say the controller is off this rail |
 | 4 | NOT RESOLVED | otherwise | neither is shown |
@@ -428,6 +433,18 @@ Every description with a zero denominator or missing prerequisite prints `not de
 `not defined (knee not found)` for a quantity requiring K, or `not defined (thermal journal missing)`.
 For Δ_rails = 0 and valid DC, f = 0 and δf = δΔ_rails/|Δ_DC| are defined. A missing description never
 refuses a measurement or changes a class; the validity prerequisites above retain their explicit role.
+
+**Missing prerequisites.** Print the whole record, with each affected class UNDETERMINED
+and `not defined (<reason>)`, beside every still-computable number. This includes a missing
+call, missing stream integral, missing r_max/edge bound, missing native support or unnamed
+gap power source/missing adapter rating. A gap's power sources must be named; enforce this
+through the printed reason, never an exception that discards the record. Retain all inputs,
+per-call excesses, available bounds and central contrasts when only their bound is undefined.
+A missing DC prerequisite prevents common DC validity; a rails-only prerequisite affects
+rails/rest, and a GPU-only prerequisite affects GPU. With no K, every K-dependent quantity,
+including share and GPU arm-power contrast, is `not defined (knee not found)`.
+The NOT RESOLVED upper limit uses the same decimal place as its H2 interval. A zero
+half-width uses a fixed two-decimal display (`0.00`), since zero has no significant digit.
 
 **Executable reader (synthetic or harvested products).** `scripts/bytes_stream_test.py scan SCAN.json`
 prints §1 from a JSON list of the 66 probe receipts (or the completed doubling prefix).

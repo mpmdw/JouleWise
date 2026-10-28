@@ -49,7 +49,7 @@ REFERENCE_SOURCES = {'configs/b6/registration/identity_pins.json': '95d07401bb5d
 REFERENCE_STACK = {'os_version': 'macOS-26.6.2-arm64-arm-64bit-Mach-O', 'hardware_unit': {'machine': 'arm64', 'device': 'macbook_m3_max'}, 'runtime_version': {'name': 'mlx', 'version': '0.31.2'}, 'kernel_library': 'unavailable', 'telemetry_backend': 'powermetrics', 'measurement_boundary_label': {'rails': ['cpu_power', 'gpu_power', 'ane_power']}}
 REFERENCE_VERSIONS = {'packages': {'mlx': '0.31.2', 'mlx-lm': '0.31.3', 'mlx-metal': '0.31.2', 'numpy': '2.5.1', 'safetensors': '0.8.0', 'tokenizers': '0.22.2', 'transformers': '5.12.1'}, 'python': '3.13.1'}
 PHYSICAL_FIELDS = ("os_version", "hardware_unit.machine", "hardware_unit.device",
-                   "runtime_version.name", "runtime_version.version", "packages.mlx", "packages.mlx-metal")
+                   "runtime_version.name", "runtime_version.version", "packages.mlx", "packages.mlx-metal", "measurement_boundary_label.rails")
 
 
 def registered_stack(repo_root=ROOT):
@@ -280,6 +280,9 @@ def idle_statistics(rows, start_ns, end_ns, stream):
     """
     from joulewise.idle_dependence import estimate_newey_west_bartlett
     length = (end_ns-start_ns)/1e9
+    required = ("stamp_ns","power_w") if stream in ("meter","battery") else ("start_ns","end_ns","power_w")
+    if any(any(r.get(k) is None for k in required) for r in rows):
+        return {"reason":stream+" native row field missing", "sample_count":len(rows)}
     if stream in ("meter", "battery"):
         selected = sorted((r for r in rows if start_ns <= r["stamp_ns"] < end_ns),
                           key=lambda r: r["stamp_ns"])
@@ -292,64 +295,85 @@ def idle_statistics(rows, start_ns, end_ns, stream):
         powers = [r["power_w"] for r in selected]
         intervals = [r["end_ns"]-r["start_ns"] for r in selected]
         durations = [(min(end_ns,r["end_ns"])-max(start_ns,r["start_ns"]))/1e9 for r in selected]
-    if len(powers) < 2 or not intervals or min(intervals) <= 0:
-        return {"reason": stream+" insufficient native samples"}
-    cadence_ns = statistics.median(intervals)
-    lags = math.floor(10_000_000_000/cadence_ns)
-    if length < 30 or len(powers) < 3*(lags+1):
-        return {"reason": stream+" support below three 10 s bandwidths"}
-    estimate = estimate_newey_west_bartlett(powers, lags, durations)
-    mean = (math.fsum(powers)/len(powers) if stream in ("meter","battery") else
-            math.fsum(p*d for p,d in zip(powers,durations))/math.fsum(durations))
-    return {"mean_w": mean,
-            "variance_w2": estimate.governed_variance_of_mean_w2,
-            "sample_count": len(powers), "lag_count": lags,
-            "native_interval_ns": cadence_ns, "support_durations_s": durations,
-            "method": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"}
+    duplicates = sum(v == 0 for v in intervals) if stream in ("meter", "battery") else 0
+    positive = [v for v in intervals if v > 0]
+    cadence_ns = statistics.median(positive) if positive else None
+    lags = math.floor(10_000_000_000/cadence_ns) if cadence_ns else None
+    result = {"sample_count": len(powers), "duplicate_stamp_count": duplicates,
+              "native_interval_ns": cadence_ns, "lag_count": lags,
+              "support_durations_s": durations,
+              "method": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"}
+    if powers and sum(durations) > 0:
+        result["mean_w"] = (math.fsum(powers)/len(powers) if stream in ("meter","battery") else
+                            math.fsum(p*d for p,d in zip(powers,durations))/math.fsum(durations))
+    if len(powers) < 2 or not positive or length <= 0:
+        result["reason"] = stream+" insufficient native samples"
+    elif length < 30 or len(powers) < 3*(lags+1):
+        result["reason"] = stream+" support below three 10 s bandwidths"
+    else:
+        estimate = estimate_newey_west_bartlett(powers, lags, durations)
+        result["variance_w2"] = estimate.governed_variance_of_mean_w2
+    return result
 
 
 def combined_idle(pre, post):
-    """Mean of span means; SEs add for meter+battery correlation +1."""
+    """Mean of span means; keep means even if an SE cannot be computed."""
     result = {}
     for stream in ("rails", "gpu", "meter", "battery"):
         a,b = pre[stream],post[stream]
+        stats = result[stream] = {}
+        if "mean_w" in a and "mean_w" in b:
+            stats.update(pre_w=a["mean_w"],post_w=b["mean_w"])
         if "reason" in a or "reason" in b:
-            result[stream] = {"reason": a.get("reason", b.get("reason"))}
+            stats["reason"] = a.get("reason",b.get("reason"))
         else:
-            result[stream] = {"pre_w": a["mean_w"], "post_w": b["mean_w"],
-                              "se_w": math.sqrt(a["variance_w2"]+b["variance_w2"])/2}
-    m,b = result["meter"], result["battery"]
+            stats["se_w"] = math.sqrt(a["variance_w2"]+b["variance_w2"])/2
+    m,b = result["meter"],result["battery"]
+    dc = result["dc"] = {}
+    if "pre_w" in m and "pre_w" in b:
+        dc.update(pre_w=m["pre_w"]+b["pre_w"],post_w=m["post_w"]+b["post_w"])
     if "reason" in m or "reason" in b:
-        result["dc"] = {"reason": m.get("reason",b.get("reason"))}
+        dc["reason"] = m.get("reason",b.get("reason"))
     else:
-        result["dc"] = {"pre_w": m["pre_w"]+b["pre_w"],
-                        "post_w": m["post_w"]+b["post_w"], "se_w": m["se_w"]+b["se_w"]}
+        dc["se_w"] = m["se_w"]+b["se_w"]
     return result
 
 
 def meter_gap_bound(gaps, *, duration_s, idle_lengths_s, adapter_max_w,
                     adapter_source, battery_max_w, battery_source):
     """§3 R5: missing samples × 20 ms × (adapter rating + battery maximum)."""
+    result = {"gaps": gaps, "adapter_max_w": adapter_max_w, "adapter_source": adapter_source,
+              "battery_max_w": battery_max_w, "battery_source": battery_source}
+    reason = None
     if not adapter_source or not battery_source:
-        raise ValueError("gap power sources must be named")
+        reason = "gap power sources must be named"
+    elif adapter_max_w is None:
+        reason = "adapter rating missing"
+    elif battery_max_w is None:
+        reason = "battery maximum missing"
+    if reason:
+        return {**result, "reason": reason, "description": not_defined(reason), "bound_j": None}
     battery_max_w = max(0, battery_max_w)
     pmax = adapter_max_w+battery_max_w
     terms = []
     for gap in gaps:
-        n,span = gap["missing_samples"],gap["span"]
+        n,span = gap.get("missing_samples"),gap.get("span")
         if type(n) is not int or n < 0 or span not in ("stream", "pre", "post"):
-            raise ValueError("gap needs nonnegative integer missing samples and named span")
+            reason = "gap needs nonnegative integer missing samples and named span"
+            return {**result, "reason":reason,"description":not_defined(reason),"bound_j":None,"terms":terms}
+        if span != "stream" and idle_lengths_s.get(span,0) <= 0:
+            reason = "gap idle span has no positive duration"
+            return {**result, "reason":reason,"description":not_defined(reason),"bound_j":None,"terms":terms}
         weight = 1 if span == "stream" else duration_s/(2*idle_lengths_s[span])
         terms.append({**gap, "missing_s": n*.020, "weight": weight, "bound_j": n*.020*pmax*weight})
-    return {"bound_j": math.fsum(t["bound_j"] for t in terms), "terms": terms,
-            "P_max_w": pmax, "adapter_max_w": adapter_max_w, "adapter_source": adapter_source,
-            "battery_max_w": battery_max_w, "battery_source": battery_source}
+    return {**result,"bound_j": math.fsum(t["bound_j"] for t in terms), "terms": terms,
+            "P_max_w": pmax,"battery_max_w": battery_max_w}
 
 
 def describe_share(rails, dc):
-    if dc is None or dc["delta"]-dc["halfwidth"] <= 0:
+    if dc is None or not isinstance(dc.get("halfwidth"),(int,float)) or dc["delta"]-dc["halfwidth"] <= 0:
         return {"f": not_defined("DC contrast not valid"), "df": not_defined("DC contrast not valid")}
-    if rails is None:
+    if rails is None or not isinstance(rails.get("halfwidth"),(int,float)):
         return {"f": not_defined("rails contrast missing"), "df": not_defined("rails contrast missing")}
     f = rails["delta"]/dc["delta"]
     return {"f": f, "df": (rails["halfwidth"]+abs(f)*dc["halfwidth"])/abs(dc["delta"])}
@@ -375,13 +399,23 @@ def reduce_boundary(calls, sizes, boundary):
     for arm in ("S", "C1", "C3", "C2"):
         rows = [c for c in calls if c["arm"] == arm]
         if len(rows) != 2 or any(boundary not in c["boundaries"] for c in rows):
-            return None
+            arms[arm] = {"xi": [c["boundaries"][boundary]["excess_j"]/c["N"] for c in rows
+                                if boundary in c["boundaries"] and c.get("N",0)>0],
+                         "description":not_defined("two complete arm calls missing")}
+            continue
         n = sum(c["N"] for c in rows)
         xi = [c["boundaries"][boundary]["excess_j"]/c["N"] for c in rows]
         rep = abs(xi[0]-xi[1])*max(c["N"] for c in rows)/n
         arms[arm] = {"x": sum(c["boundaries"][boundary]["excess_j"] for c in rows)/n,
-                     "dx": sum(c["boundaries"][boundary]["bound_j"] for c in rows)/n+rep,
+                     "dx": (sum(c["boundaries"][boundary]["bound_j"] for c in rows)/n+rep
+                            if all(c["boundaries"][boundary].get("bound_j") is not None for c in rows) else None),
                      "xi": xi, "rep": rep}
+    if any("x" not in a for a in arms.values()):
+        result = {"arms":arms,"reason":"two complete arm calls missing",
+                  "description":not_defined("two complete arm calls missing")}
+        if "x" in arms["S"]:
+            result["raw_stream_j_per_byte"] = arms["S"]["x"]/sizes["S"]
+        return result
     xs,x1,x3,x2 = (arms[a]["x"] for a in ("S","C1","C3","C2"))
     ds,d1,d2 = (arms[a]["dx"] for a in ("S","C1","C2"))
     b,c1,c3,c2 = (sizes[a] for a in ("S","C1","C3","C2"))
@@ -389,6 +423,15 @@ def reduce_boundary(calls, sizes, boundary):
     alpha = x1-gc*c1
     residual = x3-alpha-gc*c3
     gd = (xs-alpha)/b
+    central = {"delta": (gd-gc)*1e9, "alpha":alpha,"gamma_c":gc*1e9,"gamma_d":gd*1e9,
+               "r":residual,"arms":arms,
+               "raw_stream_j_per_byte": arms["S"]["x"]/b}
+    if any(v is None for v in (ds,d1,d2)):
+        reason = next((c["boundaries"][boundary]["reason"] for c in calls
+                       if "reason" in c["boundaries"].get(boundary,{})),"bound input missing")
+        undefined = not_defined(reason)
+        return {**central,"halfwidth":undefined,"epsilon_flip":undefined,
+                "epsilon_flip_over_alpha":undefined,"description":undefined,"reason":reason}
     dgc = (d1+d2+abs(residual))/(c2-c1)
     da = d1+abs(residual)+dgc*c1
     delta = (gd-gc)*1e9
@@ -403,127 +446,193 @@ def reduce_boundary(calls, sizes, boundary):
 
 
 def read_known_bytes(records, scan):
-    """Read real receipts plus harvest products; no capture is invented here.
-
-    Harvest supplies pass-1 span integrals/edge bounds, RAW native idle samples,
-    capture stack, battery polls, and source-labelled adapter rating. The CLI
-    prints this entire result, even when validity or a prerequisite fails.
-    """
-    sizes = {"S": scan.get("B"), "C1": scan.get("Bc1"), "C3": scan.get("Bc3"), "C2": scan.get("Bc2")}
-    output = {"scan": scan, "calls": [], "boundaries": {}, "stack_comparisons": []}
+    """Print every record and all computable values, even with absent prerequisites."""
+    names = ("rails","gpu","dc","rest")
+    sizes = {"S":scan.get("B"),"C1":scan.get("Bc1"),"C3":scan.get("Bc3"),"C2":scan.get("Bc2")}
+    phi = scan.get("K")/sizes["S"] if scan.get("K") is not None and sizes["S"] else None
+    output = {"scan":scan,"input_records":records,"calls":[],"boundaries":{},"stack_comparisons":[]}
     reasons = []
-    if len(records) != 8:
-        raise ValueError("the test requires all eight calls")
-    if scan.get("K") is not None:
-        order = [next((a for a,size in sizes.items() if size == r["receipt"]["bytes_per_read"]), None)
-                 for r in records]
-        if order != ["S","C1","C3","C2","C2","C3","C1","S"]:
-            raise ValueError("records must be the complete stamped palindrome")
-        if any(b["receipt"]["start_ns"] <= a["receipt"]["start_ns"] for a,b in zip(records,records[1:])):
-            raise ValueError("records must be in stamped call order")
+    affected = {b:[] for b in names}
     if scan.get("K") is None:
         reasons.append("knee not found")
-    for i, record in enumerate(records, 1):
-        receipt,h = record["receipt"],record["harvest"]
+    if len(records) != 8:
+        reasons.append("the test requires all eight calls")
+    if scan.get("K") is not None:
+        order = [next((a for a,size in sizes.items() if size == r.get("receipt",{}).get("bytes_per_read")),None)
+                 for r in records]
+        if order != ["S","C1","C3","C2","C2","C3","C1","S"]:
+            reasons.append("records must be the complete stamped palindrome")
+        stamps = [r.get("receipt",{}).get("start_ns") for r in records]
+        if any(v is None for v in stamps) or any(b <= a for a,b in zip(stamps,stamps[1:])):
+            reasons.append("records must be in stamped call order")
+    for i,record in enumerate(records,1):
+        receipt,h = record.get("receipt",{}),record.get("harvest",{})
         reference,versions = registered_stack()
-        check = compare_stack(receipt["stack"], reference, versions, capture_stack=h.get("capture_stack"))
+        check = compare_stack((receipt.get("stack") or {}),reference,versions,capture_stack=h.get("capture_stack"))
         output["stack_comparisons"].append(check)
-        if check["physical_differences"]:
-            reasons.append("stack differs in: "+", ".join(check["physical_differences"]))
-        # Span integration/idle selection uses the same receipt clock. Long tau
-        # trims the start of each idle exactly as §2 prescribes.
-        trim_ns = round(max(0,h["tau_s"]-receipt["settle_s"])*1e9)
-        spans = {name: (receipt["idle_"+name+"_start_ns"]+trim_ns, receipt["idle_"+name+"_end_ns"])
-                 for name in ("pre","post")}
-        prepost = {name: {stream: idle_statistics(h["idle"][name].get(stream,[]), *span, stream)
-                          for stream in ("rails","gpu","meter","battery")}
-                   for name,span in spans.items()}
+        fields = [f for f in check["physical_differences"] if f != "measurement_boundary_label.rails"]
+        if fields:
+            reasons.append("stack differs in: "+", ".join(fields))
+        rail_field = "measurement_boundary_label.rails"
+        if rail_field in check["physical_differences"] or rail_field in check["pending_fields"]:
+            why = "measured rails boundary differs" if rail_field in check["physical_differences"] else "measured rails boundary missing"
+            for beta in ("rails","rest"):
+                affected[beta].append(why+" (measurement_boundary_label.rails)")
+        call = {"receipt":receipt,"arm":None,"boundaries":{},"prerequisites":{b:[] for b in names}}
+        output["calls"].append(call)
+        def missing(beta, reason):
+            call["prerequisites"][beta].append(reason)
+            affected[beta].append(reason)
+        try:
+            n = receipt["repeats"]
+            t = (receipt["end_ns"]-receipt["start_ns"])/1e9
+            if n <= 0 or t <= 0:
+                raise ValueError("positive counts and durations required")
+            arm = next((a for a,size in sizes.items() if size == receipt["bytes_per_read"]),None)
+            call.update(arm=arm,N=n,T=t)
+            if h.get("tau_s") is None:
+                raise ValueError("tau missing")
+            trim_ns = round(max(0,h["tau_s"]-receipt["settle_s"])*1e9)
+            spans = {name:(receipt["idle_"+name+"_start_ns"]+trim_ns,receipt["idle_"+name+"_end_ns"])
+                     for name in ("pre","post")}
+        except (KeyError,TypeError,ValueError) as exc:
+            why = "call prerequisite missing in call "+str(i)+": "+str(exc)
+            reasons.append(why)
+            call["description"] = not_defined(why)
+            continue
+        prepost = {name:{stream:idle_statistics(h.get("idle",{}).get(name,{}).get(stream,[]),*span,stream)
+                         for stream in ("rails","gpu","meter","battery")} for name,span in spans.items()}
         idle = combined_idle(prepost["pre"],prepost["post"])
-        t = (receipt["end_ns"]-receipt["start_ns"])/1e9
-        arm = next((a for a,size in sizes.items() if size == receipt["bytes_per_read"]), None)
-        call = {"arm": arm, "N": receipt["repeats"], "T": t, "idle": idle,
-                "native_idle": prepost, "boundaries": {}, "receipt": receipt}
-        battery = [p for p in h.get("battery_samples",[]) if
+        call.update(idle=idle,native_idle=prepost)
+        energy = h.get("energy_j",{})
+        battery_rows = h.get("battery_samples",[])
+        if any(p.get("stamp_ns") is None or p.get("power_w") is None for p in battery_rows):
+            missing("dc","battery poll field missing")
+        battery = [p for p in battery_rows if p.get("stamp_ns") is not None and p.get("power_w") is not None and
                    receipt["idle_pre_start_ns"] <= p["stamp_ns"] < receipt["idle_post_end_ns"]]
-        if (not battery or any(not h["idle"][name].get("battery") for name in ("pre","post"))
-                or h["energy_j"].get("battery") is None):
-            reasons.append(f"battery reading missing in call {i}")
-            dc_available = False
-        else:
-            dc_available = True
-        gaps = {"bound_j": 0, "terms": []}
-        if h.get("meter_gaps") and dc_available:
+        if not battery or any(not h.get("idle",{}).get(name,{}).get("battery") for name in ("pre","post")) or energy.get("battery") is None:
+            missing("dc",f"battery reading missing in call {i}")
+        gaps = {"bound_j":0,"terms":[]}
+        if h.get("meter_gaps"):
             gaps = meter_gap_bound(h["meter_gaps"],duration_s=t,
                 idle_lengths_s={name:(end-start)/1e9 for name,(start,end) in spans.items()},
-                adapter_max_w=h["adapter_max_w"],adapter_source=h["adapter_source"],
-                battery_max_w=max(p["power_w"] for p in battery),battery_source=h["battery_source"])
+                adapter_max_w=h.get("adapter_max_w"),adapter_source=h.get("adapter_source"),
+                battery_max_w=max((p["power_w"] for p in battery),default=None),battery_source=h.get("battery_source"))
+            if "reason" in gaps:
+                missing("dc",gaps["reason"])
         call["meter_gaps"] = gaps
-        for boundary in ("rails","gpu","dc"):
-            if boundary == "dc" and not dc_available:
-                continue
-            stats = idle[boundary]
+        for beta in ("rails","gpu","dc"):
+            stats = idle[beta]
             if "reason" in stats:
-                # GPU is a separate boundary; missing GPU samples do not veto rails.
-                if boundary != "gpu":
-                    reasons.append("idle variance not defined ("+stats["reason"]+")")
-                continue
-            energy = (h["energy_j"]["meter"]+h["energy_j"]["battery"] if boundary=="dc"
-                      else h["energy_j"].get(boundary))
-            if energy is None:
-                continue
-            if boundary == "dc":
-                edge = sum(h["meter_edge_w"])*(h["r_max_s"]+.020)+sum(h["battery_edge_j"])
-                edge += gaps["bound_j"]
+                missing(beta,"idle variance not defined ("+stats["reason"]+")")
+            if beta == "dc":
+                e = None if any(energy.get(k) is None for k in ("meter","battery")) else energy["meter"]+energy["battery"]
+                for key in ("meter","battery"):
+                    if energy.get(key) is None:
+                        missing(beta,key+" stream integral missing")
+                for key,label in (("r_max_s","r_max missing"),("meter_edge_w","meter edge powers missing"),
+                                  ("battery_edge_j","battery edge energy missing")):
+                    if h.get(key) is None:
+                        missing(beta,label)
+                if not call["prerequisites"][beta]:
+                    edge = sum(h["meter_edge_w"])*(h["r_max_s"]+.020)+sum(h["battery_edge_j"])+gaps["bound_j"]
             else:
-                edge = h["anchor_shift_j"]
-            baseline = t*(abs(stats["pre_w"]-stats["post_w"])/2+2*stats["se_w"])
-            call["boundaries"][boundary] = {"excess_j": energy-t*(stats["pre_w"]+stats["post_w"])/2,
-                                            "bound_j": edge+baseline}
+                e = energy.get(beta)
+                if e is None:
+                    missing(beta,beta+" stream integral missing")
+                if h.get("anchor_shift_j") is None:
+                    missing(beta,"anchor shift bound missing")
+                edge = h.get("anchor_shift_j")
+            if e is None or "pre_w" not in stats:
+                continue
+            row = {"excess_j":e-t*(stats["pre_w"]+stats["post_w"])/2,"bound_j":None}
+            if call["prerequisites"][beta]:
+                row["reason"] = call["prerequisites"][beta][0]
+                row["description"] = not_defined(row["reason"])
+            else:
+                baseline = t*(abs(stats["pre_w"]-stats["post_w"])/2+2*stats["se_w"])
+                row.update(bound_j=edge+baseline,edge_bound_j=edge,baseline_bound_j=baseline)
+            call["boundaries"][beta] = row
         if all(b in call["boundaries"] for b in ("rails","dc")):
             r,d = (call["boundaries"][b] for b in ("rails","dc"))
-            call["boundaries"]["rest"] = {"excess_j": d["excess_j"]-r["excess_j"],
-                                            "bound_j": d["bound_j"]+r["bound_j"]}
-        call["timing"] = {"r_max_s": h["r_max_s"], "tau_s": h["tau_s"],
-                          "operative_timing_bound_s": h.get("operative_timing_bound_s",not_defined("operative timing bound missing"))}
+            rest = {"excess_j":d["excess_j"]-r["excess_j"],"bound_j":None}
+            if r["bound_j"] is not None and d["bound_j"] is not None:
+                rest["bound_j"] = d["bound_j"]+r["bound_j"]
+            else:
+                rest["reason"] = d.get("reason",r.get("reason"))
+                rest["description"] = not_defined(rest["reason"])
+            call["boundaries"]["rest"] = rest
+        call["timing"] = {key:h.get(key,not_defined(label)) for key,label in
+                          (("r_max_s","r_max missing"),("tau_s","tau missing"),
+                           ("operative_timing_bound_s","operative timing bound missing"))}
         call["gpu_state"] = h.get("gpu_state",not_defined("GPU frequency/residency missing"))
-        call["thermal"] = {"source": "hazards/monitor/thermal.jsonl",
-                           "spans": h.get("thermal_spans",not_defined("thermal journal missing"))}
-        output["calls"].append(call)
-    if scan.get("K") is not None:
-        for boundary in ("rails","gpu","dc","rest"):
-            output["boundaries"][boundary] = reduce_boundary(output["calls"],sizes,boundary)
+        call["thermal"] = {"source":"hazards/monitor/thermal.jsonl","spans":h.get("thermal_spans",not_defined("thermal journal missing"))}
+    for beta in names:
+        if scan.get("K") is not None and all(sizes.values()) and all(c.get("N",0)>0 for c in output["calls"]):
+            output["boundaries"][beta] = reduce_boundary(output["calls"],sizes,beta)
     dc = output["boundaries"].get("dc")
-    if not reasons and (dc is None or dc["delta"]-dc["halfwidth"] <= 0):
+    # DC is the common validity prerequisite. Keep other boundaries' numbers.
+    if affected["dc"]:
+        reasons.extend(affected["dc"])
+    elif dc is None or not isinstance(dc.get("halfwidth"),(int,float)):
+        reasons.append("DC contrast input missing")
+    elif dc["delta"]-dc["halfwidth"] <= 0:
         reasons.append("contrast not resolved")
-    output["reasons"] = list(dict.fromkeys(reasons))
-    reason = reasons[0] if reasons else None
-    for boundary in ("rails","gpu","dc","rest"):
-        value = output["boundaries"].get(boundary)
+    affected["rest"].extend(affected["rails"]+affected["dc"])
+    output["reasons"] = list(dict.fromkeys(reasons+[r for rs in affected.values() for r in rs]))
+    for beta in names:
+        value = output["boundaries"].get(beta)
+        reason = next(iter(reasons+affected[beta]),None)
         if value is None:
-            output["boundaries"][boundary] = {"class": "UNDETERMINED",
-                "reason": reason or "boundary input missing", "description": not_defined(reason or "boundary input missing")}
+            reason = reason or "boundary input missing"
+            value = {"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)}
+            if scan.get("K") is None:
+                value.update({key:not_defined("knee not found") for key in
+                    ("delta","halfwidth","alpha","gamma_c","gamma_d","r","epsilon_flip",
+                     "epsilon_flip_over_alpha","raw_stream_j_per_byte","arms")})
+            output["boundaries"][beta] = value
+        elif not isinstance(value.get("halfwidth"),(int,float)):
+            reason = reason or value.get("reason","bound input missing")
+            value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)})
         else:
-            value.update(classify(value["delta"],value["halfwidth"],scan["phi"],reason=reason))
-    output["share"] = describe_share(output["boundaries"].get("rails") if
-                    "delta" in output["boundaries"]["rails"] else None, dc)
-    gpu = [c for c in output["calls"] if c["arm"] in ("S","C2")]
-    if len(gpu)==4 and all("gpu" in c["boundaries"] for c in gpu):
-        power = {arm:sum(c["boundaries"]["gpu"]["excess_j"] for c in gpu if c["arm"]==arm)/
-                     sum(c["T"] for c in gpu if c["arm"]==arm) for arm in ("S","C2")}
-        output["gpu_power_contrast_w"] = power["S"]-power["C2"]
+            value.update(classify(value["delta"],value["halfwidth"],phi,reason=reason))
+            if reason:
+                value["description"] = not_defined(reason)
+    if scan.get("K") is None:
+        output["share"] = {k:not_defined("knee not found") for k in ("f","df")}
+        output["gpu_power_contrast_w"] = not_defined("knee not found")
     else:
-        output["gpu_power_contrast_w"] = not_defined("GPU spans missing")
-    output["hour_as_run_s"] = records[0]["harvest"].get("hour_as_run_s",not_defined("session endpoints missing"))
-    output["stamped_envelope_s"] = (records[-1]["receipt"]["idle_post_end_ns"]-
-                                       records[0]["receipt"]["idle_pre_start_ns"])/1e9
+        rails = output["boundaries"]["rails"]
+        output["share"] = describe_share(rails if "delta" in rails else None,dc)
+        gpu = [c for c in output["calls"] if c["arm"] in ("S","C2")]
+        if len(gpu)==4 and all("gpu" in c["boundaries"] for c in gpu):
+            power = {arm:sum(c["boundaries"]["gpu"]["excess_j"] for c in gpu if c["arm"]==arm)/
+                         sum(c["T"] for c in gpu if c["arm"]==arm) for arm in ("S","C2")}
+            output["gpu_power_contrast_w"] = power["S"]-power["C2"]
+        else:
+            output["gpu_power_contrast_w"] = not_defined("GPU spans missing")
+    output["sizes"] = sizes if scan.get("K") is not None else {a:not_defined("knee not found") for a in sizes}
+    output["phi"] = phi if scan.get("K") is not None else not_defined("knee not found")
+    output["hour_as_run_s"] = records[0].get("harvest",{}).get("hour_as_run_s",not_defined("session endpoints missing")) if records else not_defined("session endpoints missing")
+    try:
+        output["stamped_envelope_s"] = (records[-1]["receipt"]["idle_post_end_ns"]-records[0]["receipt"]["idle_pre_start_ns"])/1e9
+    except (IndexError,KeyError,TypeError):
+        output["stamped_envelope_s"] = not_defined("session endpoints missing")
     output["printed"] = printed_record(output)
     return output
+
+
+def interval_places(halfwidth):
+    # Zero has no significant digit; a fixed two-decimal display avoids repr.
+    if halfwidth == 0:
+        return 2
+    return max(0,1-math.floor(math.log10(float(format(halfwidth,".2g")))))
 
 
 def format_interval(value, halfwidth):
     """§14 H2: two significant half-width digits; estimate at the same place."""
     if halfwidth == 0:
-        return f"{value} ± 0"
+        return f"{value:.2f} ± 0.00"
     rounded = float(format(halfwidth, ".2g"))
     places = 1-math.floor(math.log10(rounded))
     return f"{round(value,places):.{max(0,places)}f} ± {round(halfwidth,places):.{max(0,places)}f}"
@@ -534,7 +643,8 @@ def printed_record(result):
     printed = {"claim_lines": {}, "contrasts": {}, "share": result["share"],
                "stack_comparisons": result["stack_comparisons"]}
     for boundary,value in result["boundaries"].items():
-        interval = format_interval(value["delta"],value["halfwidth"]) if "delta" in value else value["description"]
+        interval = (format_interval(value["delta"],value["halfwidth"]) if isinstance(value.get("halfwidth"),(int,float))
+                    else ((f"{value['delta']} J/GB; " if isinstance(value.get("delta"),(int,float)) else "")+value["description"]))
         printed["contrasts"][boundary] = interval
         if boundary not in ("rails","rest") or value["class"] == "RESOLVED":
             continue
@@ -546,7 +656,7 @@ def printed_record(result):
                     f"{boundary} lines here carry no resolvable memory-traffic energy.")
         else:
             # The upper limit uses the estimate's printed decimal place.
-            digits = max(0,1-math.floor(math.log10(value["halfwidth"])))
+            digits = interval_places(value["halfwidth"])
             line = (f"Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({interval} J/GB, "
                     f"cache-bias-corrected upper limit {value['upper_limit']:.{digits}f} J/GB); "
                     f"whether {boundary} lines include memory-traffic energy is not established.")
@@ -635,7 +745,7 @@ def main(argv=None):
         parser.add_argument("input", type=Path, help="JSON object with scan and records")
         args = parser.parse_args(argv[1:])
         data = json.loads(args.input.read_text())
-        print(json.dumps(read_known_bytes(data["records"], data["scan"]), allow_nan=False, indent=2))
+        print(json.dumps(read_known_bytes(data.get("records",[]), data.get("scan",{})), allow_nan=False, indent=2))
         return 0
     if argv and argv[0] == "scan":
         parser = argparse.ArgumentParser(description="Read §1 scan receipts; print full timing comparisons")

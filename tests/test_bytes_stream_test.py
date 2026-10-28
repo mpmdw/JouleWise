@@ -438,8 +438,8 @@ class ReaderTests(unittest.TestCase):
                 self.ns += round(seconds*1e9)
         from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
         cls.payload = {'S': 2**32,'C1':2**22,'C3':2**23,'C2':2**24}
-        cls.scan = probe.knee_scan([{'bytes_per_read':size,'repeats':n,'start_ns':0,'end_ns':round(d*1e9),**synthetic_clock()}
-                    for size,rows in ReadingRuleArithmeticTests.scan_model(True,True).items() for d,n in rows])
+        cls.scan = real_scan_cli(worked5)
+        cls.dram_scan = real_scan_cli(dram_only)
         reference,versions = probe.registered_stack()
         stack = deepcopy(reference);stack.update(versions)
         cls.records=[]
@@ -554,6 +554,100 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(result['boundaries']['rails']['reason'],'contrast not resolved')
         self.assertEqual(result['share']['df'],'not defined (DC contrast not valid)')
 
+    def read_cli(self, records, scan=None):
+        # Every variant serializes/reloads the real stream receipts and all
+        # harvest data before entering the actual read CLI. Synthetic only.
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'input.json'
+            path.write_text(json.dumps({'records':records,'scan':self.scan if scan is None else scan},allow_nan=False))
+            cli=subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
+                                'read',str(path)],capture_output=True,text=True)
+            self.assertEqual(cli.returncode,0,cli.stderr)
+            return json.loads(cli.stdout)
+
+    def test_missing_prerequisites_print_complete_results_through_cli(self):
+        cases=[('adapter_source','',True,'gap power sources must be named'),
+               ('battery_source',None,True,'gap power sources must be named'),
+               ('adapter_max_w',None,True,'adapter rating missing'),
+               ('r_max_s',None,False,'r_max missing'),
+               ('meter_edge_w',None,False,'meter edge powers missing'),
+               ('battery_edge_j',None,False,'battery edge energy missing'),
+               ('anchor_shift_j',None,False,'anchor shift bound missing'),
+               ('tau_s',None,False,'tau missing')]
+        for field,value,gap,reason in cases:
+            with self.subTest(field=field):
+                records=deepcopy(self.records);h=records[0]['harvest']
+                if value is None: del h[field]
+                else: h[field]=value
+                if gap: h['meter_gaps']=[{'span':'stream','missing_samples':1}]
+                result=self.read_cli(records)
+                self.assertEqual(len(result['calls']),8)
+                self.assertEqual(result['input_records'],records)
+                self.assertTrue(any(reason in r for r in result['reasons']))
+                beta='rails' if field in ('anchor_shift_j','tau_s') else 'dc'
+                self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
+                self.assertIn('not defined (',result['boundaries'][beta]['description'])
+                if field=='anchor_shift_j':
+                    self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
+                elif field!='tau_s':
+                    self.assertIn('delta',result['boundaries']['rails'])
+                    self.assertIn('delta',result['boundaries']['dc'])
+        for beta in ('rails','gpu','meter','battery'):
+            with self.subTest(integral=beta):
+                records=deepcopy(self.records);del records[0]['harvest']['energy_j'][beta]
+                result=self.read_cli(records)
+                self.assertEqual(len(result['calls']),8)
+                self.assertTrue(any('stream integral missing' in r or 'battery reading missing' in r for r in result['reasons']))
+        for records in (self.records[:7],[],[{}]+self.records[1:]):
+            result=self.read_cli(records)
+            self.assertEqual(len(result['calls']),len(records))
+            self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
+
+    def test_duplicate_stamps_are_disclosed_and_keep_native_variance(self):
+        for stream,expected in (('meter',20_000_000),('battery',200_000_000)):
+            records=deepcopy(self.records)
+            rows=records[0]['harvest']['idle']['pre'][stream]
+            rows[1]['stamp_ns']=rows[0]['stamp_ns']
+            result=self.read_cli(records)
+            stats=result['calls'][0]['native_idle']['pre'][stream]
+            self.assertEqual(stats['duplicate_stamp_count'],1)
+            self.assertEqual(stats['sample_count'],len(rows))
+            self.assertEqual(stats['native_interval_ns'],expected)
+            self.assertIn('variance_w2',stats)
+            self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
+
+    def test_different_rail_set_has_boundary_specific_physical_effect(self):
+        records=deepcopy(self.records)
+        records[0]['harvest']['capture_stack']['measurement_boundary_label']['rails']=['cpu_power','gpu_power']
+        result=self.read_cli(records)
+        self.assertIn('measurement_boundary_label.rails',result['stack_comparisons'][0]['physical_differences'])
+        for beta in ('rails','rest'):
+            self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
+            self.assertIn('measured rails boundary differs',result['boundaries'][beta]['reason'])
+            self.assertIn('delta',result['boundaries'][beta])
+        self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
+        self.assertEqual(result['boundaries']['gpu']['class'],'RESOLVED')
+
+    def test_phi_is_recomputed_from_its_defining_sizes(self):
+        scan=deepcopy(self.scan);del scan['phi']
+        result=self.read_cli(self.records,scan)
+        self.assertEqual(result['phi'],1/64)  # power-of-two fraction is bit exact
+        self.assertEqual(result['printed']['contrasts']['dc'],'0.1929 ± 0.0025')
+
+    def test_no_knee_descriptions_and_h2_upper_limit_rounding(self):
+        result=self.read_cli(self.records,self.dram_scan)
+        self.assertEqual(result['share'],{k:'not defined (knee not found)' for k in ('f','df')})
+        self.assertEqual(result['gpu_power_contrast_w'],'not defined (knee not found)')
+        self.assertEqual(result['phi'],'not defined (knee not found)')
+        for beta in result['boundaries'].values():
+            for key in ('delta','halfwidth','alpha','gamma_c','gamma_d','r','epsilon_flip','raw_stream_j_per_byte'):
+                self.assertEqual(beta[key],'not defined (knee not found)')
+        value={'delta':0.,'halfwidth':.000996,**probe.classify(0.,.000996,1/64)}
+        printed=probe.printed_record({'share':{'f':'unknown'},'stack_comparisons':[], 'boundaries':{'rails':value}})
+        self.assertEqual(printed['contrasts']['rails'],'0.0000 ± 0.0010')
+        self.assertIn('upper limit 0.0010 J/GB',printed['claim_lines']['rails'])
+        self.assertEqual(probe.format_interval(.1+.2,0),'0.30 ± 0.00')
+
     def test_nonsingular_descriptions_and_ordered_classes(self):
         self.assertEqual(probe.describe_share({'delta':0.,'halfwidth':.001},{'delta':.1,'halfwidth':.002}),
                          {'f':0.,'df':.01})
@@ -634,6 +728,35 @@ def exact_reference(rec):
 
 
 
+def real_scan_cli(model):
+    class ScanMX:
+        uint8='uint8'
+        def __init__(self, td): self.td,self.count=td,0
+        def ones(self, shape, dtype): return object()
+        def sum(self, data): return object()
+        def eval(self, value): self.count+=1
+        def synchronize(self): pass
+        def clock(self): return 10**12+round(self.count*self.td*1e9)
+    reference,versions=probe.registered_stack()
+    stack={**reference,**versions}
+    calls=[]
+    with tempfile.TemporaryDirectory() as tmp:
+        for size in (2**k for k in range(14,36)):
+            for j in range(3):
+                mx=ScanMX(model(size));n=math.floor(2/model(size))
+                with patch.object(probe,'collect_stack',return_value=stack), \
+                     patch.object(probe,'clock_metadata',return_value=synthetic_clock()):
+                    rec=probe.stream(size,n,device='synthetic',idle_s=0,settle_s=0,
+                                     mx=mx,clock_ns=mx.clock,sleep=lambda _:None)
+                path=Path(tmp)/f'{size}-{j}.json'
+                path.write_text(json.dumps(rec,allow_nan=False))
+                calls.append(json.loads(path.read_text()))
+        path=Path(tmp)/'scan.json';path.write_text(json.dumps(calls))
+        cli=subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
+                            'scan',str(path)],capture_output=True,text=True,check=True)
+        return json.loads(cli.stdout)
+
+
 class ExactKneeTests(unittest.TestCase):
     def test_rational_worked_comparison(self):
         rec=receipts(worked5,0,random.Random(8))
@@ -672,36 +795,23 @@ class ExactKneeTests(unittest.TestCase):
                                                 result['pairs'] if p['above']))
 
     def test_real_stream_scan_receipts_reloaded_through_cli(self):
-        class ScanMX:
-            uint8='uint8'
-            def __init__(self, td): self.td,self.count=td,0
-            def ones(self, shape, dtype): return object()
-            def sum(self, data): return object()
-            def eval(self, value): self.count+=1
-            def synchronize(self): pass
-            def clock(self): return 10**12+round(self.count*self.td*1e9)
-        reference,versions=probe.registered_stack()
-        stack={**reference,**versions}
         for model,expected in ((worked5,2**26),(dram_only,None)):
-            all_calls=[]
-            with tempfile.TemporaryDirectory() as tmp:
-                for size in (2**k for k in range(14,36)):
-                    for j in range(3):
-                        mx=ScanMX(model(size));n=math.floor(2/model(size))
-                        with patch.object(probe,'collect_stack',return_value=stack), \
-                             patch.object(probe,'clock_metadata',return_value=synthetic_clock()):
-                            rec=probe.stream(size,n,device='synthetic',idle_s=0,settle_s=0,
-                                             mx=mx,clock_ns=mx.clock,sleep=lambda _:None)
-                        path=Path(tmp)/f'{size}-{j}.json'
-                        path.write_text(json.dumps(rec,allow_nan=False))
-                        all_calls.append(json.loads(path.read_text()))
-                path=Path(tmp)/'scan.json';path.write_text(json.dumps(all_calls))
-                cli=subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
-                                    'scan',str(path)],capture_output=True,text=True)
-                self.assertEqual(cli.returncode,0,cli.stderr)
-                result=json.loads(cli.stdout)
-                self.assertEqual(result['K'],expected)
-                self.assertEqual(len(result['receipts']),66)
+            result=real_scan_cli(model)
+            self.assertEqual(result['K'],expected)
+            self.assertEqual(len(result['receipts']),66)
+
+    def test_isolated_late_pair_is_retained_and_does_not_shrink_k(self):
+        def late_model(s):
+            if 2**26 < s <= 2**27:
+                return worked5(2**26)+(s-2**26)/1e12
+            return worked5(s)
+        result=probe.knee_scan(receipts(late_model,0,random.Random(8)))
+        self.assertTrue(next(p for p in result['pairs'] if p['size']==2**27)['above'])
+        self.assertEqual(result['candidate_K'],2**28)
+        self.assertIsNone(result['K'])
+        self.assertEqual(result['reason'],'cache arm pairs not both resolved')
+        self.assertEqual(len(result['pairs']),21)
+        self.assertEqual([p['size'] for p in result['arm_checks']],[2**25,2**26])
 
     def test_missing_clock_retains_all_calls_and_reason(self):
         rec=receipts(worked5,0,random.Random(8))
