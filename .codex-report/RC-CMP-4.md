@@ -1,0 +1,12 @@
+# RC-CMP-4 seat report
+
+bridge-report/v1 · branch `report/2026-10-28-rc-cmp-4` cut from `lane/2026-10-27-recompute-comparator` at
+`e5ccf720b`. Synthetic data only; no real block-5/6 or BYTES data was opened.
+
+## STATUS: IN PROGRESS
+
+- 2026-10-28 15:21 UTC: L9 full-size synthetic dry run started (read-only worktree of `lane/2026-10-27-l9-2` at
+  `2b3047d5b`, L9's own fixture `chain_fixture` with `JW_B5_S10_REAL_PROGRAMS=1`, L9's `JoinedHarness(...).execute()`,
+  scratch driver outside any tracked path). Window restored at 15:22 UTC.
+- 15:23 UTC: independent recompute at `e5ccf720b` on the restored bytes (20,317 input files): exit 0 in 24 s.
+  Comparator waits for L9's step 11.
