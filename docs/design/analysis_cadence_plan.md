@@ -99,3 +99,36 @@ For BYTES this is already the design (stage-1 analysis as soon as the fit set ex
 | before block 5's dry run finishes | step-12 and block-6 §13 amendments (5) | lead drafts, Ed approves, one executing refuter each |
 | after block 5's dry run | governed deadline and cell-count fix with its reissue (2.4) | new seat, full gate |
 | after 2.4 | analysis machine and per-session analysis (3, 4) | lead with Ed (hardware choice) |
+
+## Disk on the analysis laptop (2026-10-28, lead, at Ed's request)
+
+The laptop has about 190 GiB free. A session is 33-39 GiB plain (block-6 compressed-file census). Block 5's three
+windows are about 130 GiB; block 6's nine sessions are about 390 GiB. The constraint is the plain working set, not
+storage, because the compressed form is small (`zstd -3` is about 70x on powermetrics plists).
+
+**Measured 2026-10-28 on `tests/fixtures/powermetrics_sample.plist`:** plain 264 KiB on disk; APFS transparent
+compression (`ditto --hfsCompression`) 20 KiB, so about 13x, and the file reads back byte-identical (`cmp`);
+`zstd -3` 12 KiB.
+
+**Rule:**
+1. **The cloud copy is the compressed tars only,** in iCloud `JouleWise-transfer/`. After a tar's SHA-256 is
+   checked, evict its local copy (`brctl evict`). It downloads again on demand and is re-checked by hash.
+2. **Block 5 unpacks plain.** It fits, and the synthetic acceptance run used plain files, so nothing about the read
+   path changes.
+3. **Block 6 and BYTES use the block-6 design's rule:** restore one unit's sessions (at most three) as APFS
+   transparently compressed files, run the unit, then recompress (`b6_analysis_additions.md` §4.1). The on-disk
+   working set is then a few tens of GiB instead of about 390 GiB.
+4. **After a block's release has been rerun byte-identically, delete its unpacked copy on the laptop.** The tars and
+   their manifests are the record.
+5. **Nothing is written into iCloud Drive from the laptop during collection.** iCloud mirrors to the measurement Mac,
+   and a download there is load on a session. Outputs leave by git, since they are structure records.
+6. **Dropbox, on the analysis laptop only** (installed by Ed 2026-10-28; never on the measurement Mac). Folder
+   `~/Dropbox/JouleWise-analysis/`. It is the laptop-only store, so nothing written there reaches the measurement Mac:
+   - backups of restricted custody outputs before release (they may not go to git or iCloud);
+   - offloaded unpacked copies of released blocks, kept online-only.
+
+   Making a file online-only from a script uses `FileManager.evictUbiquitousItem`, compiled from a three-line Swift
+   file. Tested 2026-10-28: a 20 MB file went from 19,532 KiB to 0 on disk, and reading it downloaded it again with a
+   matching SHA-256. Quit Dropbox (`osascript -e 'quit app "Dropbox"'`) for the length of a full-size or real
+   analysis run, then reopen it, so sync load cannot trip the 120 s deadline.
+7. **Fallback: an external 1-2 TB SSD** for a block that must be resident plain all at once.

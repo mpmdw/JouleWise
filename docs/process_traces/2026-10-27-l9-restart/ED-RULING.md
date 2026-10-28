@@ -99,6 +99,18 @@ blinding, the independent recompute and its agreement bars, and the release reco
    custody on the laptop (they land where any agent running as `edr` can read them), the laptop's disk was never
    sized, and iCloud uploads on the measurement Mac run on into sessions. Until a transfer design closes those, block
    5's dry run is on the measurement Mac at a BYTES session boundary (items 6 and 6a).
+10. **Hold on 6b lifted (Ed, 2026-10-28: "b5 transfer go if that gets analysis done faster").** The block-5 dry run
+   moves to the analysis laptop under `BLOCK5-TRANSFER.md`, with the three gaps in item 9 closed as follows:
+   - **Custody:** the raw bundles sit under `edr` on the laptop exactly as they do on the measurement Mac. The
+     blinding rule is the same on both: only the driver and the independent recompute read them, no agent opens,
+     parses or prints a value from them, and only structure leaves the restricted folder.
+   - **Disk:** every manifest states its total uncompressed bytes. The laptop unpacks only if free space exceeds the
+     sum plus 25 GiB (190 GiB free on 2026-10-28; block 5 is about 130 GiB).
+   - **iCloud upload into sessions:** after placing the tars, the measurement Mac holds the loop, so no PRECHECK
+     starts, until iCloud reports every tar uploaded. One later session start is the cost.
+
+   Packaging may start at once (it hashes and compresses only). The laptop dry run starts only after L9 acceptance
+   (`BLOCK5-TRANSFER.md` condition 1).
 7. **Block 6** follows the same principle wherever its registration allows. Where the block-6 registration itself
    requires a synthetic stage chain before its blind run, that requirement stands until amended by a dated entry
    under its §17 rules.

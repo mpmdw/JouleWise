@@ -42,6 +42,9 @@ below).
 3. Put the tars and manifests in iCloud Drive at `JouleWise-transfer/b5-dryrun/` (one subfolder per item). Do not
    use `JouleWise-backup` or `JouleWise-archive`; the laptop keeps those cloud-only.
 4. Leave the originals in place on the measurement Mac. Nothing here moves or deletes block-5 data.
+4b. Each manifest also states the item's total uncompressed bytes. After the last tar is placed, keep the loop held
+   (no PRECHECK) until iCloud reports every tar uploaded (for example `brctl status` or the Finder upload state
+   shows none pending). The upload must not run into a session.
 5. Commit the manifests (not the tars) to `docs/process_traces/2026-10-27-l9-restart/b5-transfer/` and say in
    the RECORD which items are complete.
 
@@ -63,3 +66,17 @@ below).
 `test_dry_run` at L9-2's cached commit (`60473bee`), run alone on the laptop on 2026-10-27, is the check. If it fires,
 the dry run stays on the measurement Mac, as originally ruled.
 3. The lead has told Ed the evidence and Ed has not objected.
+
+## GO record
+
+Condition 1 (L9 acceptance and both executing reviews) is still being completed on 2026-10-28. It governs only
+the start of the laptop dry run, not the packaging.
+
+Condition 2: the laptop full-size cached run at `60473bee` passed step 9b with no deadline firing (RUN_STATE item 81).
+Its only 2 failures were path-token artefacts of the temporary folder's name.
+
+Condition 3: Ed was told the evidence and plan in session 015ASG1T and answered "b5 transfer go if that gets
+analysis done faster" (2026-10-28). ED-RULING item 10 records the custody, disk and upload rules.
+
+B5-TRANSFER: GO
+
