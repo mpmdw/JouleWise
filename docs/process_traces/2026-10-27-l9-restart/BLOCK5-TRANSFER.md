@@ -80,3 +80,26 @@ analysis done faster" (2026-10-28). ED-RULING item 10 records the custody, disk 
 
 B5-TRANSFER: GO
 
+
+## Addendum 1 (lead, 2026-10-28): history records
+
+The dry run opens the attempt record of **every** indexed attempt, not only the three analysed ones
+(`joulewise/b5_analysis/archive.py` `open_attempt_record`, called for each index entry at step 0 and by each child
+program; found by S11-INDEX-1, `lane/2026-10-28-b5-window-index` `.codex-report/S11-INDEX-1.md` I5). Without these
+records step 0 refuses with `harvest_record_not_the_indexed_one`. At the next BYTES SESSION_DESK, or while the loop is
+held, package one more item, `history-records`, by the same **How** steps 1-5 above (hash and compress only; open no
+values; manifest with total uncompressed bytes; tar in `JouleWise-transfer/b5-dryrun/history-records/`; hold the loop
+until uploaded; commit the manifest to `b5-transfer/`). Contents, for each of these 8 archive roots, `harvest.json`
+and the whole `derived/` directory:
+
+- `/Users/edr/night-archive/harvest-v5-b5-alpha-a1-20261008T2201Z`
+- `/Users/edr/night-archive/harvest-v5-b5-alpha-a2-20261009T0515Z`
+- `/Users/edr/night-archive/harvest-v5-b5-alpha-a3-20261009T0644Z`
+- `/Users/edr/night-archive/harvest-v5-b5-beta-a1-20261010T0742Z`
+- `/Users/edr/night-archive/harvest-v5-b5-beta-a2-20261010T1756Z`
+- `/Users/edr/night-archive/harvest-v5-b5-beta-a3-20261010T2151Z`
+- `/Users/edr/night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2` (the re-harvest; not the cut-short first harvest)
+- `/Users/edr/night-archive/harvest-v5-b5-beta-a5-20261011T0739Z`
+
+If a root or its `harvest.json` is absent, record it in the manifest notes and continue; do not substitute another
+directory. These are analysis inputs only for the attempt census; they do not change which attempts are analysed.
