@@ -149,6 +149,6 @@
       "window_class": "phase"
     }
   ],
-  "draft_status": "draft",
+  "draft_status": "registered",
   "schema_version": "joulewise.detection_floor_extraction_spec.v1"
 }
