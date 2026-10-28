@@ -248,3 +248,45 @@ class MintRefusalCodeTests(unittest.TestCase):
     def test_other_mint_refusals_keep_their_token(self):
         result = self.result('error: floor_mint_kept_unit_mismatch: manifest exclusions_sha256 differs\n')
         self.assertEqual(d.mint_refusal_code(result, result.token()), 'floor_mint_kept_unit_mismatch')
+
+
+class ObserverSetupFailureTests(unittest.TestCase):
+    """L9-SOL-REV MINOR-1: setup failures are the classified refusal, with a record."""
+
+    def test_missing_monitoring_api_yields_none(self):
+        with mock.patch.object(__import__('sys'), 'monitoring', None):
+            with observe_wall_deadline() as observer:
+                self.assertIsNone(observer)
+
+    def test_lost_tool_id_race_yields_none_and_keeps_the_winner(self):
+        import sys
+        monitoring = sys.monitoring
+        reserved = []
+        original = monitoring.use_tool_id
+
+        def race(tool, name):
+            # Another tool takes the id between the availability read and the reservation.
+            original(tool, 'competing-test-tool')
+            reserved.append(tool)
+            return original(tool, name)
+        try:
+            with mock.patch.object(monitoring, 'use_tool_id', race):
+                with observe_wall_deadline() as observer:
+                    self.assertIsNone(observer)
+            self.assertEqual(monitoring.get_tool(reserved[0]), 'competing-test-tool')
+        finally:
+            for tool in reserved:
+                monitoring.free_tool_id(tool)
+
+    def test_driver_records_the_classified_refusal_when_setup_fails(self):
+        rows = []
+
+        def capture(**record_kwargs):
+            rows.extend((r.step, r.status, r.refusal) for r in record_kwargs['steps'])
+            raise RuntimeError('captured')
+        steps = [(name, lambda s, r, name=name: [s.record(name)]) for name in ('0', '1', '2')]
+        with mock.patch.object(__import__('sys'), 'monitoring', None), \
+             mock.patch.object(d, 'build_dry_run_record', side_effect=capture):
+            driver(steps)
+        self.assertEqual(rows[0], ('0', 'tooling_refusal', OBSERVER_UNAVAILABLE))
+        self.assertEqual([status for _, status, _ in rows[1:]], ['not_run', 'not_run'])

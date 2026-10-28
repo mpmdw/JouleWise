@@ -34,26 +34,43 @@ def _projection_code():
 
 @contextmanager
 def observe_wall_deadline():
-    """Count wall-deadline dispositions in this process; None if no tool id is free."""
-    monitoring = sys.monitoring
-    tool = next((n for n in range(6) if monitoring.get_tool(n) is None), None)
+    """Count wall-deadline dispositions in this process.
+
+    Yields None when no observer can be installed (no ``sys.monitoring``, no
+    free tool id, or the reservation lost a race); the driver then refuses
+    the run with ``calibration_deadline_observer_unavailable``.
+    """
+    monitoring = getattr(sys, 'monitoring', None)
+    tool = None
+    try:
+        tool = next((n for n in range(6) if monitoring.get_tool(n) is None), None)
+        if tool is not None:
+            monitoring.use_tool_id(tool, 'joulewise-b5-wall-deadline-observer')
+    except (AttributeError, RuntimeError, ValueError):
+        tool = None
     if tool is None:
         yield None
         return
     observer = DeadlineObserver()
-    code = _projection_code()
     event = monitoring.events.PY_RETURN
 
     def returned(_code, _offset, value):
         if getattr(value, 'projection_budget_trigger', None) == WALL_DEADLINE_TRIGGER:
             observer.firings += 1
 
-    monitoring.use_tool_id(tool, 'joulewise-b5-wall-deadline-observer')
+    code = None
     try:
-        monitoring.register_callback(tool, event, returned)
-        monitoring.set_local_events(tool, code, event)
+        try:
+            code = _projection_code()
+            monitoring.register_callback(tool, event, returned)
+            monitoring.set_local_events(tool, code, event)
+        except (AttributeError, RuntimeError, ValueError):
+            observer = None
         yield observer
     finally:
-        monitoring.set_local_events(tool, code, 0)
-        monitoring.register_callback(tool, event, None)
-        monitoring.free_tool_id(tool)
+        try:
+            if code is not None:
+                monitoring.set_local_events(tool, code, 0)
+            monitoring.register_callback(tool, event, None)
+        finally:
+            monitoring.free_tool_id(tool)
