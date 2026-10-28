@@ -33,8 +33,8 @@ RESTRICTED = "dry-run/restricted"
 PACKS = {"alpha": "ALPHA", "beta": "BETA", "gamma": "GAMMA"}
 MODELS = {"alpha": "Qwen3-1.7B-4bit", "beta": "Qwen3-8B-4bit"}
 NUMERIC = ("run_phase_energy_j", "floor_j", "floor_gate_j", "dominance_ratio", "reported_cell_j",
-           "contrast_j", "contrast_p", "b_op_s", "count")
-CATEGORICAL = ("outcome_word", "dominance_branch", "p42_status", "holm_order", "exclusions_rederivation")
+           "contrast_j", "contrast_p", "descriptive_ratio", "per_token_j", "b_op_s", "count")
+CATEGORICAL = ("outcome_word", "dominance_branch", "p42_status", "holm_order", "kept_units", "exclusions_rederivation")
 
 
 class Refusal(Exception):
@@ -74,7 +74,15 @@ def load_bars(path):
             raise Refusal("bars_invalid:" + family)
         if not {"absolute", "relative", "printed_decimals"} & set(spec):
             raise Refusal("bars_invalid:" + family)
+        for override in spec.get("keys", []):
+            if not isinstance(override, dict) or not isinstance(override.get("match"), str):
+                raise Refusal("bars_invalid:" + family)
     return bars
+
+
+def family_spec(spec, key):
+    """A family's bar, or the first per-key override whose pattern matches the key (a field printed at its own precision)."""
+    return next((o for o in spec.get("keys", []) if re.fullmatch(o["match"], key)), spec)
 
 
 def bar_for(spec, reference):
@@ -93,7 +101,7 @@ class Comparison:
         row = {"family": family, "key": key, "l9": l9, "recompute": ours}
         if finite(l9) and finite(ours):
             row["difference"] = ours - l9
-            row["bar"] = bar_for(self.bars["families"][family], l9)
+            row["bar"] = bar_for(family_spec(self.bars["families"][family], key), l9)
             row["verdict"] = "AGREE" if abs(ours - l9) <= row["bar"] else "DISAGREE"
         else:
             row["verdict"], row["reason"] = "DISAGREE", "missing_or_null"
@@ -299,6 +307,10 @@ def compare_contrasts(c, custody, ours):
         c.numeric("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
         c.exact("outcome_word", f"{cid}/holm_reject", multiplicity.get("rejected"), mine.get("holm_reject"))
         c.numeric("count", f"{cid}/n", est.get("n"), mine.get("n"))
+        c.numeric("count", f"{cid}/df", est.get("df"), mine["n"] - 1 if finite(mine.get("n")) else None)
+        blocks = get(row, "bundle_blocks", "blocks", default=None)
+        kept = sorted(b["block_id"] for b in blocks if b.get("included") is True) if isinstance(blocks, list) else None
+        c.exact("kept_units", f"{cid}/kept_quads", kept, sorted(mine["kept_quads"]) if mine.get("kept_quads") else None)
         evaluation = row.get("claim_evaluation") or {}
         c.exact("outcome_word", f"{cid}/outcome", evaluation.get("outcome"), mine.get("outcome"))
         # L9 names a direction only for a supported claim; "none" is a value, absence is not.
@@ -315,6 +327,14 @@ def compare_contrasts(c, custody, ours):
             c.numeric("contrast_p", key + "/raw_p", l9_loo.get("raw_p"), mine_loo.get("p"))
             c.numeric("contrast_p", key + "/adjusted_p", l9_loo.get("adjusted_p"), mine_loo.get("holm_p"))
             c.exact("outcome_word", key + "/outcome", l9_loo.get("outcome"), mine_loo.get("outcome"))
+            for name, other in (("metrology_aware_ci95", "metrology_interval_j"), ("decision_interval", "decision_interval_j")):
+                for side, (a, b) in zip(("lower", "upper"), zip(interval(l9_loo.get(name)), interval(mine_loo.get(other)))):
+                    c.numeric("contrast_j", f"{key}/{other}/{side}", a, b)
+            c.numeric("count", key + "/n", l9_loo.get("n_blocks"), mine_loo.get("n"))
+            c.numeric("count", key + "/df", l9_loo.get("df"), mine_loo["n"] - 1 if finite(mine_loo.get("n")) else None)
+            above = mine_loo.get("above_floor")
+            c.exact("outcome_word", key + "/floor_status", l9_loo.get("floor_status"),
+                    None if above is None else "above_floor" if above else "not_above_floor")
         for block in loo_l9:
             c.numeric("contrast_j", f"{cid}/loo/{block}/dbar_j", loo_l9[block].get("estimate"), None)
     c.exact("holm_order", "raw_p_order", holm_order(l9_p), holm_order(our_p))
@@ -331,6 +351,7 @@ def compare_brackets(c, custody, ours):
     block = custody.one(r"brackets/[0-9a-f]{64}-block\.json")
     c.numeric("b_op_s", "block/B_max_s", get(block, "value_s"), line.get("B_max_s"))
     c.numeric("count", "block/T", get(block, "T"), line.get("T"))
+    c.numeric("count", "block/attained_by_sequence", get(block, "attained_by_sequence"), line.get("attaining_sequence"))
 
 
 KIND_ORDER = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j", "E_whole_window_drift_allowance_j")
@@ -363,11 +384,132 @@ def compare_reported(c, custody, ours):
             for field, other in (("n_r", "n_r"), ("n_b", "n_b")):
                 c.numeric("count", key + "/" + field, ivl.get(field), mine.get(other))
             c.numeric("count", key + "/n_bundles", cell.get("n_bundles"), mine.get("n_bundles"))
+            kept = cell.get("kept_units")
+            c.exact("kept_units", key + "/kept_units",
+                    sorted((u.get("stratum"), u.get("unit_id")) for u in kept) if isinstance(kept, list) else None,
+                    sorted((s, u) for s, units in (mine.get("kept_units") or {}).items() for u in units) or None)
             c.numeric("count", key + "/interval/df", ivl.get("df"), ours_ivl.get("df"))
         for refused in get(projection, "refused_cells", default=[]) or []:
             if "p42" in str(refused.get("cell_id")):
                 c.exact("p42_status", pack + "/" + refused["cell_id"], "expected_unresolvable",
                         get(ours, "p42", "df-ph-prefill-p42-" + tag(pack), "status"))
+
+
+def compare_sensitivity(c, custody, ours):
+    """Step 11 sensitivity line (registered B_max bound) against the recompute's sensitivity_bound line."""
+    names = custody.names(r"outputs/[0-9a-f]{64}\.json")
+    record = next((custody.read(n) for n in names if custody.read(n).get("label") == "sensitivity"), None)
+    line = get(ours, "disclosures", "sensitivity_bound", default={})
+    if record is None:
+        c.numeric("floor_gate_j", "sensitivity/record", None, None)
+        return
+    c.numeric("b_op_s", "sensitivity/B_max_s", get(record, "b_max", "value_s"), line.get("B_max_s"))
+    for cell in record.get("floor_cells", []):
+        model, phase = floor_cell_key(cell.get("cell_id", ""))
+        mine = get(line, "floor_cells", str(model) + "/" + phase, default={})
+        for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
+            c.numeric("floor_gate_j", f"sensitivity/{model}/{phase}/{field}", get(cell, "sensitivity", field), mine.get(field))
+    for row in record.get("contrasts", []):
+        cid = row.get("contrast_id")
+        mine = get(line, "contrasts", cid, default={})
+        c.numeric("contrast_j", f"sensitivity/{cid}/D_j", get(row, "sensitivity", "D_j"), mine.get("D_j"))
+        c.numeric("floor_gate_j", f"sensitivity/{cid}/floor_gate_j", get(row, "sensitivity", "floor_gate_j"),
+                  mine.get("floor_gate_j"))
+        c.exact("outcome_word", f"sensitivity/{cid}/outcome", get(row, "sensitivity", "outcome"), mine.get("outcome"))
+    for cell in record.get("reported_cells", []):
+        pack = cell.get("pack")
+        cid = cell.get("cell_id", "").replace("d117-reported-mean-ph-", "df-ph-")
+        mine = get(line, "reported_cells", cid, default={})
+        sens = cell.get("sensitivity") or {}
+        if "p42" in cid:
+            # The registered p42 exit: no reported value on either side; compared as a status, not as numbers.
+            l9 = "expected_unresolvable" if not any(finite(v) for v in sens.values()) else "computed"
+            c.exact("p42_status", f"sensitivity/{pack}/{cid}", l9, get(ours, "p42", cid, "status"))
+            continue
+        for field in ("mean_j", "lower_j", "upper_j"):
+            c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/{field}", sens.get(field), mine.get(field))
+        c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/h_j", sens.get("h_j"), get(mine, "interval", "h_j"))
+        c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/B_j", sens.get("B_j"), get(mine, "interval", "B_j"))
+        c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/attribution_floor_j", sens.get("attribution_floor_j"),
+                  get(mine, "attribution_floor", "value_j"))
+
+
+def reported_key(cell_id):
+    """d117-reported-mean-ph-decode-qwen3-1p7b -> (recompute cell id, model/phase)."""
+    cid = str(cell_id).replace("d117-reported-mean-ph-", "df-ph-")
+    model = MODELS["alpha"] if cid.endswith("qwen3-1p7b") else MODELS["beta"]
+    return cid, model + "/" + cell_phase(cid)
+
+
+def compare_disclosures(c, custody, ours):
+    """Step 11 disclosure lines that the recompute also computes."""
+    names = custody.names(STEP11_SOURCES[1][1])
+    record = custody.read(names[0]) if len(names) == 1 else None
+    if record is None:
+        c.numeric("reported_cell_j", "disclosure/record", None, None)
+        return
+    disclosures = ours.get("disclosures") or {}
+    for row in record.get("cells", []):
+        cid, model_phase = reported_key(row.get("cell_id"))
+        key = f"disclosure/{row.get('pack')}/{cid}/{row.get('line')}"
+        if row.get("line") == "cross_window":
+            mine = get(disclosures, "cross_window", model_phase, default={})
+            for field in ("F_j", "G_j", "delta_j", "h_F_j", "h_G_j"):
+                c.numeric("reported_cell_j", key + "/" + field, row.get(field), mine.get(field))
+            c.exact("outcome_word", key + "/agree", row.get("agree"), mine.get("agree"))
+        elif row.get("line") == "battery_assist_cell":
+            mine = get(disclosures, "battery_assist", cid, default={})
+            without = row.get("without") or {}
+            for field in ("mean_j", "lower_j", "upper_j"):
+                c.numeric("reported_cell_j", key + "/without/" + field, without.get(field), mine.get(field))
+            for field in ("h_j", "B_j"):
+                c.numeric("reported_cell_j", key + "/without/" + field, without.get(field), get(mine, "interval", field))
+            for stratum in ("repeat", "quad"):
+                c.numeric("count", key + "/assist_members/" + stratum, get(row, "assist_members", stratum),
+                          get(mine, "assist_members_by_stratum", stratum))
+    for row in record.get("contrasts", []):
+        cid = row.get("contrast_id")
+        key = f"disclosure/{cid}/{row.get('line')}"
+        if row.get("line") == "battery_assist_contrast":
+            mine = get(disclosures, "battery_assist", cid, default={})
+            ivl = interval(mine.get("metrology_interval_j"))
+            for field, value in (("mean_j", mine.get("dbar_j")), ("lower_j", ivl[0]), ("upper_j", ivl[1]),
+                                 ("s_d", mine.get("s_d_j")), ("se", mine.get("se_j"))):
+                c.numeric("contrast_j", key + "/" + field, row.get(field), value)
+            c.numeric("contrast_p", key + "/t_star", row.get("t_star"), mine.get("t_star"))
+            c.numeric("count", key + "/n", row.get("n"), mine.get("n"))
+            c.numeric("count", key + "/assist_quads", row.get("assist_quads"), mine.get("assist_quads"))
+        elif row.get("line") == "magnitude_ratio":
+            mine = get(ours, "descriptive", cid, default={})
+            ivl = interval(mine.get("ratio_interval"))
+            for field, value in (("ratio", mine.get("ratio")), ("lower", ivl[0]), ("upper", ivl[1])):
+                c.numeric("descriptive_ratio", key + "/" + field, row.get(field), value)
+        elif row.get("line") == "magnitude_per_token":
+            mine = get(ours, "descriptive", cid, default={})
+            c.numeric("per_token_j", key + "/value_j", row.get("value_j"), mine.get("per_token_difference_j"))
+            for name, other in (("metrology", "per_token_metrology_interval_j"), ("decision", "per_token_decision_interval_j")):
+                for side, (a, b) in zip(("lower", "upper"), zip(interval(row.get(name)), interval(mine.get(other)))):
+                    c.numeric("per_token_j", f"{key}/{name}/{side}", a, b)
+        elif row.get("line") == "loo_counts":
+            loo = get(ours, "contrasts", cid, "loo")
+            c.numeric("count", key + "/count", row.get("count"), len(loo) if isinstance(loo, list) else None)
+    for pack, lines in (record.get("window_lines") or {}).items():
+        neg8 = get(ours, "windows", PACKS.get(pack, ""), "neg8", default={})
+        for row in lines:
+            key = f"disclosure/{pack}/{row.get('line')}"
+            if row.get("line") == "neg8_allowance":
+                values = row.get("values_j") or {}
+                base = "bracket.claim_families.gross_energy."
+                for field, other in (("bound_envelope_j", "bound_envelope_j"), ("bound_prediction_j", "bound_prediction_j"),
+                                     ("start.mean_j", "start_mean_j"), ("midpoint.mean_j", "midpoint_j"),
+                                     ("end.mean_j", "end_mean_j"), ("trajectory_excursion_max_j", "spread_j"),
+                                     ("drift_allowance_j", "allowance_j")):
+                    c.numeric("floor_j", key + "/" + field, values.get(base + field), neg8.get(other))
+            elif row.get("line") == "reference_counts":
+                for slot, other in (("start", "n_start"), ("midpoint", "n_mid"), ("end", "n_end")):
+                    c.numeric("count", key + "/" + slot, get(row, "counts", slot), neg8.get(other))
+            elif row.get("line") == "corpus_counts":
+                c.numeric("count", key + "/deciding", row.get("deciding"), neg8.get("corpus_n"))
 
 
 def compare_exclusions(c, ours):
@@ -377,12 +519,68 @@ def compare_exclusions(c, ours):
 
 
 # Step-11 coverage. Each leaf of the fill input and the disclosure record has a path
-# like gamma/contrasts/*/estimate (list indices become *). A rule is a regular
-# expression over that path and either a family whose comparisons cover it or
-# "uncovered:<reason>". The first matching rule wins; an unmatched leaf refuses.
+# like fill:gamma/contrasts/*/estimate (list items become *). A rule is a regular
+# expression over that path and either a family or "uncovered:<reason>". The first
+# matching rule wins. A leaf mapped to a family is covered only when its value is a
+# value that family compared on the L9 side (the fill or placement copies a compared
+# quantity); otherwise, like a leaf no rule matches, it refuses the run.
 STEP11_SOURCES = (("fill", r"outputs/[0-9a-f]{64}-results-fill-input\.json"),
-                  ("disclosure", r"disclosures/[^/]+\.json"))
-COVERAGE = ()
+                  ("disclosure", r"disclosures/[0-9a-f]{64}\.json"))
+TEXT = "uncovered:rendered text and labels; checked against issued values by the post-release reader (synthesis 2(b)(iii))"
+IDENTITY = "uncovered:identity, label or provenance (ids, digests, pins, stage names); bound by L9's record, not a computed quantity"
+STRUCTURE = "uncovered:window structure the recompute does not re-derive (flag tallies, hazards, monitor, battery, ledger, tripwires); reader item 2(b)"
+NUMBERS = "contrast_j|contrast_p|floor_j|floor_gate_j|reported_cell_j|dominance_ratio|per_token_j|descriptive_ratio|b_op_s|count"
+DERIVED_FLAGS = "uncovered:L9's own consistency booleans and status words over values compared individually here"
+COVERAGE = (
+    (r"(fill|disclosure):(.*/)?(text|label|line|restricted|schema_version)", TEXT),
+    # Window lines: only the NEG-8 terms, b_op, reference and corpus counts the recompute computes are compared.
+    (r"disclosure:window_lines/[a-z]+/\*/values_j/bracket\.claim_families\.gross_energy\."
+     r"(bound_envelope_j|bound_prediction_j|start\.mean_j|midpoint\.mean_j|end\.mean_j|trajectory_excursion_max_j|drift_allowance_j)",
+     "floor_j"),
+    (r"disclosure:window_lines/[a-z]+/\*/b_op_s", "b_op_s"),
+    (r"disclosure:window_lines/[a-z]+/\*/(counts/(start|midpoint|end)|deciding)", "count"),
+    (r"disclosure:window_lines/.*", STRUCTURE + "; includes NEG-8 bracket internals (admissible sets, standard errors, "
+     "idle-subtracted companion, drift-bound artifact) that only L9 computes"),
+    (r"disclosure:block_lines/\*/(catalog_path|cause_key|causes/\*|collected|planned|verdict|superseded|"
+     r"flags_by_family/[A-Z_0-9]+|no_analysed_window_harvested_twice|triggers(/.*)?|status|widened)", STRUCTURE),
+    (r"disclosure:block_lines/\*/(component)", IDENTITY),
+    (r"disclosure:block_lines/\*/dominance_sentence_licensed", "uncovered:follows from the dominance branch (compared)"),
+    (r"disclosure:(block_lines/\*/record|sensitivity/[a-z_]+/\*|sensitivity/windows/[a-z]+)/"
+     r"(bound_independent_values_equal_primary|equals_primary|mean_and_half_width_equal_primary|not_below_primary|"
+     r"outcome_equals_primary|widened|status|code)", DERIVED_FLAGS),
+    (r"disclosure:(cells|contrasts|floors)/\*/(codes/\*/(blinding|code)|families/\*|stratum|removed_unit_ids|attained_by|source)",
+     "uncovered:removed-unit codes and families; exclusions are re-derived by the recompute (exclusions_rederivation)"),
+    (r"disclosure:(cells/\*/(status|primary/status|without/status)|contrasts/\*/status)", DERIVED_FLAGS),
+    (r"disclosure:contrasts/\*/estimator/(name|excluded_stochastic_terms|variance_contributions)",
+     "uncovered:registered estimator definition (name, no extra stochastic terms)"),
+    (r"disclosure:contrasts/\*/exact_t", "uncovered:unrounded t quantile; the registered rounded t* is compared"),
+    (r"disclosure:contrasts/\*/(exclusive_block_numbers|rows)", "uncovered:leave-one-out trigger lists; the outcomes, "
+     "estimates and p values of every leave-one-out row are compared"),
+    (r"disclosure:contrasts/\*/denominator", "uncovered:registered token denominator (512 output or 2048 prompt tokens)"),
+    (r"disclosure:contrasts/\*/(log_mean|log_sd)", "uncovered:log-scale internals of the descriptive ratio; ratio and interval compared"),
+    (r"fill:gamma/contrasts/\*/deterministic_widening_total", "contrast_j"),
+    (r"disclosure:fixed_sentences/.*", TEXT),
+    (r"(fill|disclosure):(.*/)?(cell_id|contrast_id|unit_id|plan_id|run_id|bundle_id|pack|harvest_pin|attempt|record_shape|"
+     r"stage_ids/\*|stage_id|positions/\*|floor_cell_ids/\*|floor_row_ids/\*|source_cell_ids/\*|floor_source_cell_ids/\*|"
+     r"omitted_block_id|transport_group_id|[a-z_]*sha256|[a-z_]*_id|claim_verdicts_id|manifest_id|artifact_id)", IDENTITY),
+    (r"fill:campaigns/.*", IDENTITY),
+    (r"fill:(gamma/(evidence_class|limitations/\*|contrasts/\*/limitations/\*))", "uncovered:registered limitation notes; copied from the claim verdicts by L9's validated adapter"),
+    (r"fill:characterization/.*", "uncovered:characterization selection; not funded, not run (constant)"),
+    (r"fill:gamma/contrasts/\*/(conditions/.*|metric/.*|claim_role|hypothesized_direction|equivalence|sampling/confirmatory_status)",
+     "uncovered:registered contrast definition from the sealed manifest"),
+    (r"fill:gamma/contrasts/\*/(claim_evaluation/reason_codes(/\*)?|claim_evaluation/claim_ready_for_l2_l3|loo/status|"
+     r"loo/rows/\*/influence_triggers(/\*)?)", "uncovered:L9 reason-code vocabulary; the recompute derives the outcome, ceiling and influence, not these codes"),
+    (r"fill:gamma/contrasts/\*/(kept_block_ids|removed_block_ids|sampling/removed_block_ids)/\*", "uncovered:block identity; kept sets compared as kept_units"),
+    (r"fill:gamma/contrasts/\*/j_per_token", "uncovered:null for a J contrast by registration (J/token contrasts only)"),
+    (r"fill:gamma/contrasts/\*/floor/(aggregation|claim_floor_rule|status|transport_verdict|arm_gates/\*/(arm_id|condition_family_id|status)|"
+     r"resolutions/\*/(status|transport_rule_id|reason_codes))", "uncovered:registered floor rule names and resolution status"),
+    (r"fill:gamma/contrasts/\*/(claim_evaluation/(outcome|claim_level_ceiling|direction)|loo/rows/\*/(outcome|floor_status)|multiplicity/rejected)", "outcome_word"),
+    (r"(fill|disclosure):.*/(branch)", "dominance_branch"),
+    (r"(fill|disclosure):.*/(outcome|agree)", "outcome_word"),
+    (r"(fill|disclosure):.*/[^/]*(_j|_p|_s|/lower|/upper|ratio|log_mean|log_sd|s_d|se|SE_[a-z]+|t_star|t_critical_95|rounded_t|estimate)", NUMBERS),
+    (r"(fill|disclosure):.*/(n|n_r|n_b|n_blocks|df|kept_n|observed_complete_n|planned_n|count|T|assist_quads|assist_members/[a-z]+|"
+     r"denominator|attained_by_sequence|counts/(start|midpoint|end)|deciding)", "count"),
+)
 
 
 def leaves(value, path=""):
@@ -393,31 +591,49 @@ def leaves(value, path=""):
         for item in value:
             yield from leaves(item, path + "/*")
     else:
-        yield path
+        yield path, value
+
+
+def scalar_key(value):
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return ("word", "none" if value is None else value)
+    if finite(value):
+        return ("number", float(value))
+    return ("other", json.dumps(value, sort_keys=True))
+
+
+def compared_values(comparison):
+    seen = {}
+    for row in comparison.rows:
+        value = row.get("l9")
+        for item in (value if isinstance(value, list) else [value]):
+            seen.setdefault(row["family"], set()).add(scalar_key(item if not isinstance(item, list) else tuple(item)))
+    return seen
 
 
 def coverage(custody, comparison, rules=None):
     rules = COVERAGE if rules is None else rules
-    report, unmapped, absent = {}, [], []
-    families = {family for family, _ in comparison.keys()}
+    values = compared_values(comparison)
+    report, unmapped, uncompared, absent = {}, set(), set(), []
     for label, pattern in STEP11_SOURCES:
         names = custody.names(pattern)
         if not names:
             absent.append(label)
         for name in names:
-            for leaf in sorted(set(leaves(custody.read(name)))):
+            for leaf, value in leaves(custody.read(name)):
                 path = label + ":" + leaf
                 rule = next((r for r in rules if re.fullmatch(r[0], path)), None)
                 if rule is None:
-                    unmapped.append(path)
-                    continue
-                target = rule[1]
-                if not target.startswith("uncovered:") and target not in families:
-                    # Mapped to a family that produced no comparison: that is not coverage.
-                    unmapped.append(path)
-                    continue
-                report[path] = target
-    return {"leaves": report, "unmapped": sorted(set(unmapped)), "absent_sources": absent}
+                    unmapped.add(path)
+                elif rule[1].startswith("uncovered:"):
+                    report[path] = rule[1]
+                elif any(scalar_key(value) in values.get(f, ()) for f in rule[1].split("|")):
+                    report[path] = next(f for f in rule[1].split("|") if scalar_key(value) in values.get(f, ()))
+                else:
+                    # Mapped, but this value was never compared: not coverage.
+                    uncompared.add(path)
+    return {"leaves": report, "unmapped": sorted(unmapped | uncompared), "uncompared": sorted(uncompared),
+            "absent_sources": absent}
 
 
 def run(l9_custody, recompute_path, bars_path, rules=None):
@@ -434,6 +650,8 @@ def run(l9_custody, recompute_path, bars_path, rules=None):
     compare_aggregate(c, custody, ours)
     compare_contrasts(c, custody, ours)
     compare_reported(c, custody, ours)
+    compare_sensitivity(c, custody, ours)
+    compare_disclosures(c, custody, ours)
     compare_exclusions(c, ours)
     cover = coverage(custody, c, rules)
     return {"schema": SCHEMA, "bar_set": bars.get("bar_set"), "bars": bars["families"],
