@@ -122,5 +122,13 @@ compression (`ditto --hfsCompression`) 20 KiB, so about 13x, and the file reads 
    their manifests are the record.
 5. **Nothing is written into iCloud Drive from the laptop during collection.** iCloud mirrors to the measurement Mac,
    and a download there is load on a session. Outputs leave by git, since they are structure records.
-6. **No Dropbox.** It would add a second sync daemon on the measurement Mac.
+6. **Dropbox, on the analysis laptop only** (installed by Ed 2026-10-28; never on the measurement Mac). Folder
+   `~/Dropbox/JouleWise-analysis/`. It is the laptop-only store, so nothing written there reaches the measurement Mac:
+   - backups of restricted custody outputs before release (they may not go to git or iCloud);
+   - offloaded unpacked copies of released blocks, kept online-only.
+
+   Making a file online-only from a script uses `FileManager.evictUbiquitousItem`, compiled from a three-line Swift
+   file. Tested 2026-10-28: a 20 MB file went from 19,532 KiB to 0 on disk, and reading it downloaded it again with a
+   matching SHA-256. Quit Dropbox (`osascript -e 'quit app "Dropbox"'`) for the length of a full-size or real
+   analysis run, then reopen it, so sync load cannot trip the 120 s deadline.
 7. **Fallback: an external 1-2 TB SSD** for a block that must be resident plain all at once.
