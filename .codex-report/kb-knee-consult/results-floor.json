@@ -1,0 +1,889 @@
+{
+  "base": "a7a20c19751730f49dae445d44d9ac363ee41e08",
+  "production_source_sha256": "6f0960e88dce13ac050ff84dc8a20ee908fd64ffc218f3c2ffdd71ac40861b14",
+  "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+  "trials_per_cell": 2000,
+  "rounding": "floor",
+  "tick_ns": "125/3",
+  "resolution_ns": 42,
+  "seed_scheme": "20261028 + level*10 + world",
+  "cells": [
+    {
+      "noise_percent": 0,
+      "world": "true-knee",
+      "candidate": "current",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "true-knee",
+      "candidate": "F1",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "true-knee",
+      "candidate": "F1+F2",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "true-knee",
+      "candidate": "F1+F2+adjacent",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "true-knee",
+      "candidate": "F1+F2+frontier",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "true-knee",
+      "candidate": "exact+arms",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "DRAM-only",
+      "candidate": "current",
+      "found": 662,
+      "refused": 1338,
+      "wrong_k": 662,
+      "outcomes": {
+        "1048576": 239,
+        "524288": 279,
+        "no resolved cache evidence": 1321,
+        "131072": 38,
+        "64 K > s_max": 17,
+        "2097152": 58,
+        "262144": 7,
+        "65536": 17,
+        "134217728": 10,
+        "4194304": 5,
+        "8388608": 4,
+        "536870912": 3,
+        "268435456": 2
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "DRAM-only",
+      "candidate": "F1",
+      "found": 1116,
+      "refused": 884,
+      "wrong_k": 1116,
+      "outcomes": {
+        "1048576": 253,
+        "524288": 521,
+        "no resolved cache evidence": 672,
+        "131072": 112,
+        "64 K > s_max": 212,
+        "268435456": 42,
+        "4194304": 6,
+        "16777216": 2,
+        "2097152": 59,
+        "134217728": 74,
+        "262144": 7,
+        "65536": 17,
+        "536870912": 14,
+        "8388608": 8,
+        "33554432": 1
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "DRAM-only",
+      "candidate": "F1+F2",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+adjacent",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+frontier",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 2000
+      }
+    },
+    {
+      "noise_percent": 0,
+      "world": "DRAM-only",
+      "candidate": "exact+arms",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 2000
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "true-knee",
+      "candidate": "current",
+      "found": 1403,
+      "refused": 597,
+      "wrong_k": 0,
+      "outcomes": {
+        "reference lower endpoint nonpositive": 597,
+        "67108864": 1403
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "true-knee",
+      "candidate": "F1",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "true-knee",
+      "candidate": "F1+F2",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "true-knee",
+      "candidate": "F1+F2+adjacent",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "true-knee",
+      "candidate": "F1+F2+frontier",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "true-knee",
+      "candidate": "exact+arms",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "DRAM-only",
+      "candidate": "current",
+      "found": 82,
+      "refused": 1918,
+      "wrong_k": 82,
+      "outcomes": {
+        "reference lower endpoint nonpositive": 616,
+        "no resolved cache evidence": 1302,
+        "1048576": 19,
+        "4194304": 13,
+        "524288": 16,
+        "8388608": 2,
+        "2097152": 11,
+        "262144": 16,
+        "131072": 4,
+        "536870912": 1
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "DRAM-only",
+      "candidate": "F1",
+      "found": 262,
+      "refused": 1738,
+      "wrong_k": 253,
+      "outcomes": {
+        "no resolved cache evidence": 1677,
+        "4194304": 39,
+        "8388608": 28,
+        "1048576": 43,
+        "524288": 29,
+        "64 K > s_max": 61,
+        "268435456": 8,
+        "67108864": 9,
+        "16777216": 22,
+        "2097152": 45,
+        "33554432": 11,
+        "134217728": 3,
+        "262144": 19,
+        "131072": 4,
+        "536870912": 2
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "DRAM-only",
+      "candidate": "F1+F2",
+      "found": 261,
+      "refused": 1739,
+      "wrong_k": 252,
+      "outcomes": {
+        "no resolved cache evidence": 1678,
+        "4194304": 39,
+        "8388608": 28,
+        "1048576": 42,
+        "524288": 29,
+        "64 K > s_max": 61,
+        "268435456": 8,
+        "67108864": 9,
+        "16777216": 22,
+        "2097152": 45,
+        "33554432": 11,
+        "134217728": 3,
+        "262144": 19,
+        "131072": 4,
+        "536870912": 2
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+adjacent",
+      "found": 2,
+      "refused": 1998,
+      "wrong_k": 2,
+      "outcomes": {
+        "no resolved cache evidence": 1992,
+        "1048576": 1,
+        "64 K > s_max": 6,
+        "268435456": 1
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+frontier",
+      "found": 2,
+      "refused": 1998,
+      "wrong_k": 2,
+      "outcomes": {
+        "no resolved cache evidence": 1994,
+        "1048576": 1,
+        "64 K > s_max": 4,
+        "268435456": 1
+      }
+    },
+    {
+      "noise_percent": 0.05,
+      "world": "DRAM-only",
+      "candidate": "exact+arms",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 1549,
+        "cache arm pairs not both resolved": 396,
+        "64 K > s_max": 55
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "true-knee",
+      "candidate": "current",
+      "found": 1389,
+      "refused": 611,
+      "wrong_k": 0,
+      "outcomes": {
+        "reference lower endpoint nonpositive": 611,
+        "67108864": 1389
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "true-knee",
+      "candidate": "F1",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "true-knee",
+      "candidate": "F1+F2",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "true-knee",
+      "candidate": "F1+F2+adjacent",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "true-knee",
+      "candidate": "F1+F2+frontier",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "true-knee",
+      "candidate": "exact+arms",
+      "found": 2000,
+      "refused": 0,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 2000
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "DRAM-only",
+      "candidate": "current",
+      "found": 76,
+      "refused": 1924,
+      "wrong_k": 75,
+      "outcomes": {
+        "reference lower endpoint nonpositive": 616,
+        "no resolved cache evidence": 1300,
+        "4194304": 16,
+        "1048576": 16,
+        "8388608": 8,
+        "524288": 8,
+        "16777216": 4,
+        "2097152": 15,
+        "64 K > s_max": 8,
+        "67108864": 1,
+        "33554432": 3,
+        "268435456": 2,
+        "262144": 2,
+        "536870912": 1
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "DRAM-only",
+      "candidate": "F1",
+      "found": 151,
+      "refused": 1849,
+      "wrong_k": 142,
+      "outcomes": {
+        "33554432": 11,
+        "no resolved cache evidence": 1779,
+        "8388608": 25,
+        "64 K > s_max": 70,
+        "1048576": 18,
+        "4194304": 26,
+        "67108864": 9,
+        "2097152": 23,
+        "16777216": 13,
+        "134217728": 8,
+        "536870912": 6,
+        "524288": 8,
+        "268435456": 2,
+        "262144": 2
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "DRAM-only",
+      "candidate": "F1+F2",
+      "found": 151,
+      "refused": 1849,
+      "wrong_k": 142,
+      "outcomes": {
+        "33554432": 11,
+        "no resolved cache evidence": 1779,
+        "8388608": 25,
+        "64 K > s_max": 70,
+        "1048576": 18,
+        "4194304": 26,
+        "67108864": 9,
+        "2097152": 23,
+        "16777216": 13,
+        "134217728": 8,
+        "536870912": 6,
+        "524288": 8,
+        "268435456": 2,
+        "262144": 2
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+adjacent",
+      "found": 1,
+      "refused": 1999,
+      "wrong_k": 1,
+      "outcomes": {
+        "no resolved cache evidence": 1998,
+        "64 K > s_max": 1,
+        "1048576": 1
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+frontier",
+      "found": 1,
+      "refused": 1999,
+      "wrong_k": 1,
+      "outcomes": {
+        "no resolved cache evidence": 1999,
+        "1048576": 1
+      }
+    },
+    {
+      "noise_percent": 0.2,
+      "world": "DRAM-only",
+      "candidate": "exact+arms",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "cache arm pairs not both resolved": 250,
+        "no resolved cache evidence": 1685,
+        "64 K > s_max": 65
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "true-knee",
+      "candidate": "current",
+      "found": 1411,
+      "refused": 589,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 1411,
+        "reference lower endpoint nonpositive": 585,
+        "64 K > s_max": 4
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "true-knee",
+      "candidate": "F1",
+      "found": 1995,
+      "refused": 5,
+      "wrong_k": 2,
+      "outcomes": {
+        "67108864": 1993,
+        "536870912": 2,
+        "64 K > s_max": 5
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "true-knee",
+      "candidate": "F1+F2",
+      "found": 1995,
+      "refused": 5,
+      "wrong_k": 2,
+      "outcomes": {
+        "67108864": 1993,
+        "536870912": 2,
+        "64 K > s_max": 5
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "true-knee",
+      "candidate": "F1+F2+adjacent",
+      "found": 1995,
+      "refused": 5,
+      "wrong_k": 2,
+      "outcomes": {
+        "67108864": 1993,
+        "536870912": 2,
+        "64 K > s_max": 5
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "true-knee",
+      "candidate": "F1+F2+frontier",
+      "found": 1993,
+      "refused": 7,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 1993,
+        "no resolved cache evidence": 7
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "true-knee",
+      "candidate": "exact+arms",
+      "found": 1993,
+      "refused": 7,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 1993,
+        "cache arm pairs not both resolved": 2,
+        "64 K > s_max": 5
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "DRAM-only",
+      "candidate": "current",
+      "found": 55,
+      "refused": 1945,
+      "wrong_k": 55,
+      "outcomes": {
+        "no resolved cache evidence": 1326,
+        "8388608": 13,
+        "reference lower endpoint nonpositive": 605,
+        "4194304": 20,
+        "64 K > s_max": 14,
+        "16777216": 6,
+        "1048576": 4,
+        "134217728": 1,
+        "2097152": 7,
+        "536870912": 2,
+        "33554432": 1,
+        "268435456": 1
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "DRAM-only",
+      "candidate": "F1",
+      "found": 122,
+      "refused": 1878,
+      "wrong_k": 114,
+      "outcomes": {
+        "no resolved cache evidence": 1798,
+        "8388608": 28,
+        "4194304": 25,
+        "64 K > s_max": 80,
+        "16777216": 21,
+        "268435456": 9,
+        "2097152": 8,
+        "33554432": 10,
+        "1048576": 4,
+        "67108864": 8,
+        "134217728": 4,
+        "536870912": 5
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "DRAM-only",
+      "candidate": "F1+F2",
+      "found": 122,
+      "refused": 1878,
+      "wrong_k": 114,
+      "outcomes": {
+        "no resolved cache evidence": 1798,
+        "8388608": 28,
+        "4194304": 25,
+        "64 K > s_max": 80,
+        "16777216": 21,
+        "268435456": 9,
+        "2097152": 8,
+        "33554432": 10,
+        "1048576": 4,
+        "67108864": 8,
+        "134217728": 4,
+        "536870912": 5
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+adjacent",
+      "found": 1,
+      "refused": 1999,
+      "wrong_k": 1,
+      "outcomes": {
+        "no resolved cache evidence": 1995,
+        "64 K > s_max": 4,
+        "4194304": 1
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+frontier",
+      "found": 1,
+      "refused": 1999,
+      "wrong_k": 1,
+      "outcomes": {
+        "no resolved cache evidence": 1996,
+        "64 K > s_max": 3,
+        "4194304": 1
+      }
+    },
+    {
+      "noise_percent": 0.5,
+      "world": "DRAM-only",
+      "candidate": "exact+arms",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 1686,
+        "cache arm pairs not both resolved": 234,
+        "64 K > s_max": 80
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "true-knee",
+      "candidate": "current",
+      "found": 1350,
+      "refused": 650,
+      "wrong_k": 1,
+      "outcomes": {
+        "reference lower endpoint nonpositive": 640,
+        "67108864": 1349,
+        "268435456": 1,
+        "64 K > s_max": 10
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "true-knee",
+      "candidate": "F1",
+      "found": 1975,
+      "refused": 25,
+      "wrong_k": 2,
+      "outcomes": {
+        "67108864": 1973,
+        "268435456": 1,
+        "64 K > s_max": 25,
+        "536870912": 1
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "true-knee",
+      "candidate": "F1+F2",
+      "found": 1975,
+      "refused": 25,
+      "wrong_k": 2,
+      "outcomes": {
+        "67108864": 1973,
+        "268435456": 1,
+        "64 K > s_max": 25,
+        "536870912": 1
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "true-knee",
+      "candidate": "F1+F2+adjacent",
+      "found": 1975,
+      "refused": 25,
+      "wrong_k": 2,
+      "outcomes": {
+        "67108864": 1973,
+        "268435456": 1,
+        "64 K > s_max": 25,
+        "536870912": 1
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "true-knee",
+      "candidate": "F1+F2+frontier",
+      "found": 1973,
+      "refused": 27,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 1973,
+        "no resolved cache evidence": 27
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "true-knee",
+      "candidate": "exact+arms",
+      "found": 1974,
+      "refused": 26,
+      "wrong_k": 0,
+      "outcomes": {
+        "67108864": 1974,
+        "cache arm pairs not both resolved": 2,
+        "64 K > s_max": 24
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "DRAM-only",
+      "candidate": "current",
+      "found": 35,
+      "refused": 1965,
+      "wrong_k": 31,
+      "outcomes": {
+        "no resolved cache evidence": 1337,
+        "reference lower endpoint nonpositive": 602,
+        "64 K > s_max": 26,
+        "4194304": 4,
+        "8388608": 8,
+        "2097152": 1,
+        "134217728": 4,
+        "16777216": 5,
+        "536870912": 2,
+        "67108864": 4,
+        "33554432": 5,
+        "268435456": 2
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "DRAM-only",
+      "candidate": "F1",
+      "found": 66,
+      "refused": 1934,
+      "wrong_k": 60,
+      "outcomes": {
+        "no resolved cache evidence": 1870,
+        "64 K > s_max": 64,
+        "16777216": 13,
+        "4194304": 5,
+        "8388608": 10,
+        "134217728": 9,
+        "2097152": 1,
+        "536870912": 5,
+        "33554432": 11,
+        "67108864": 6,
+        "268435456": 6
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "DRAM-only",
+      "candidate": "F1+F2",
+      "found": 66,
+      "refused": 1934,
+      "wrong_k": 60,
+      "outcomes": {
+        "no resolved cache evidence": 1870,
+        "64 K > s_max": 64,
+        "16777216": 13,
+        "4194304": 5,
+        "8388608": 10,
+        "134217728": 9,
+        "2097152": 1,
+        "536870912": 5,
+        "33554432": 11,
+        "67108864": 6,
+        "268435456": 6
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+adjacent",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 1996,
+        "64 K > s_max": 4
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "DRAM-only",
+      "candidate": "F1+F2+frontier",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 1999,
+        "64 K > s_max": 1
+      }
+    },
+    {
+      "noise_percent": 1.0,
+      "world": "DRAM-only",
+      "candidate": "exact+arms",
+      "found": 0,
+      "refused": 2000,
+      "wrong_k": 0,
+      "outcomes": {
+        "no resolved cache evidence": 1791,
+        "64 K > s_max": 71,
+        "cache arm pairs not both resolved": 138
+      }
+    }
+  ]
+}
