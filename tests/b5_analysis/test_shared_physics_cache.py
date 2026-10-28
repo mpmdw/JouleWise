@@ -90,9 +90,11 @@ class SharedPhysicsCacheTests(unittest.TestCase):
         cache = {}
         with ww.shared_instrument_calibration_physics_cache(cache):
             cold = self.outputs('cold')
-            self.assertEqual(self.refits, 1, 'one verified refit serves both programs')
+            # Strict validation shares the run cache; `reduce` keeps BASE_HEAD's
+            # uncached refit (it has no metadata in hand without an extra read).
+            self.assertEqual(self.refits, 2)
             warm = self.outputs('warm')
-        self.assertEqual(self.refits, 1, 'a warm shared cache refits nothing')
+        self.assertEqual(self.refits, 3, 'a warm cache serves strict validation; reduce refits')
         # One partition (the member's exact metadata bound), holding one verified fit.
         self.assertEqual([list(partition) for partition in cache.values()], [[sha(self.evidence)]])
         for other in (cold, warm):

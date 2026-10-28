@@ -491,6 +491,8 @@ def _strict_problems(
     ``physics_cache``: see :func:`validate_bundle` (J2).  An explicit dict is
     used as given and never replaced by a V2 authentication session's cache.
     """
+    from joulewise.whole_window import physics_cache_for
+
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
     summary = reader.raw_summary()
@@ -502,9 +504,11 @@ def _strict_problems(
             else None
         )
         if physics_cache is None:
-            from joulewise.whole_window import physics_cache_for
-
             physics_cache = physics_cache_for(None, metadata)
+    else:
+        # A caller's own dict keeps its semantics; inside an analysis run it
+        # also sees the run partition for this bundle's exact metadata bound.
+        physics_cache = physics_cache_for(physics_cache, metadata)
     axi_selected = (
         isinstance(raw_config, dict)
         and raw_config.get("schema_extensions")
@@ -1946,15 +1950,7 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     requested_version = args.reducer_version
     if requested_version is None and stored_path.is_file():
         requested_version = recorded_version
-    from joulewise.whole_window import bundle_metadata_for_physics_cache, physics_cache_for
-
-    summary = reduce_bundle(
-        bundle_path,
-        reducer_version=requested_version,
-        _instrument_calibration_physics_cache=physics_cache_for(
-            None, bundle_metadata_for_physics_cache(bundle_path)
-        ),
-    )
+    summary = reduce_bundle(bundle_path, reducer_version=requested_version)
     try:
         payload = summary.to_dict()
     except SchemaError as exc:

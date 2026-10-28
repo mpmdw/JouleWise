@@ -4660,13 +4660,7 @@ def _reference_energy_evidence_detail(
         # is accepted for primary-evidence NEG-8 re-derivation.
         from joulewise.reduce import reduce_bundle
 
-        reduced = reduce_bundle(
-            bundle_path,
-            reducer_version=reducer_version,
-            _instrument_calibration_physics_cache=physics_cache_for(
-                None, bundle_metadata_for_physics_cache(bundle_path)
-            ),
-        ).to_dict()
+        reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)
@@ -7084,7 +7078,9 @@ def whole_window_strict_workers(member_count: int) -> int:
 # tolerance, so the run store is partitioned by that exact metadata value: a
 # cross-call hit is always the value a fresh fit of the same bundle inputs
 # returns.  Each call keeps its own local dict with its previous semantics;
-# outside a run nothing is shared.
+# outside a run nothing is shared.  The partition is chosen only from metadata
+# the caller already holds; a site that would need an extra read keeps its
+# previous behaviour.
 _SHARED_PHYSICS_CACHE: contextvars.ContextVar[dict[str, dict[str, float]] | None] = (
     contextvars.ContextVar(
         "joulewise_shared_instrument_calibration_physics_cache", default=None
@@ -7164,19 +7160,6 @@ class _RunPhysicsCacheView(dict):
 _MISSING_PHYSICS_ENTRY = object()
 
 
-def bundle_metadata_for_physics_cache(bundle_path: Path) -> Any:
-    """A bundle's metadata, read only to choose a cache partition.
-
-    A plain read outside any authentication session's read census; on any
-    failure the call gets no run partition and behaves as without a run.
-    """
-
-    try:
-        return json.loads((Path(bundle_path) / "metadata.json").read_bytes())
-    except (OSError, UnicodeDecodeError, ValueError):
-        return None
-
-
 def physics_cache_for(
     local: dict[str, float] | None, metadata: Any
 ) -> dict[str, float] | None:
@@ -7209,10 +7192,7 @@ def _strict_validation_problems(
 
     try:
         if physics_cache is not None and _accepts_physics_cache(validator):
-            cache = physics_cache_for(
-                physics_cache, bundle_metadata_for_physics_cache(path)
-            )
-            return list(validator(path, strict=True, physics_cache=cache))
+            return list(validator(path, strict=True, physics_cache=physics_cache))
         return list(validator(path, strict=True))
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         return [f"strict validation raised {type(exc).__name__}: {exc}"]

@@ -166,7 +166,6 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
         bundles = sorted({str(Path(name).parent) for name in inventory
                           if name.endswith("/metadata.json")
                           and str(Path(name).parent) in registered_ids})
-        from joulewise.whole_window import physics_cache_for
         selected, selected_paths, cache = set(), [], {}
         for relative in bundles:
             target = directory / relative
@@ -194,8 +193,7 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
             uncertainty = metadata.get("uncertainty_evidence")
             anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
             if (summary.get("status") == "succeeded" and isinstance(anchor, Mapping) and anchor.get("status") == "bounded"
-                    and not validate_bundle(target, strict=True,
-                        physics_cache=physics_cache_for(cache, metadata))):
+                    and not validate_bundle(target, strict=True, physics_cache=cache)):
                 selected.add(relative)
                 selected_paths.append(target)
         if not selected_paths or selected != recorded:
