@@ -42,6 +42,10 @@ for path in sorted((OUT / 'children').glob('*.json')):
             key = (row['step'], row['window'], o['name'])
             if clean_digests.get(key) != o['sha256']:
                 changed.append('/'.join(str(x) for x in key))
+    # Outputs a refused step registered before it stopped: compared too, reported apart.
+    refused_step_changed = [] if stop is None else [
+        '/'.join(str(x) for x in (stop['step'], stop['window'], o['name'])) for o in stop['outputs']
+        if clean_digests.get((stop['step'], stop['window'], o['name'])) != o['sha256']]
     refused = stop is not None and stop['status'] in ('tooling_refusal', 'unclassified_refusal')
     at_or_after = stop is not None and ORDER.index(stop['step']) >= ORDER.index(info['step'])
     if not fired:
@@ -56,14 +60,15 @@ for path in sorted((OUT / 'children').glob('*.json')):
         result = 'OTHER_STOP'
     single = stop is not None and stop['refusal'] == 'calibration_wall_deadline_fired'
     verdict.update(single_code=single, result=result, stop=None if stop is None else f"{stop['step']}/{stop['window']}/{stop['status']}/{stop['refusal']}",
-                   changed=changed, ok=result in ('refused',), code=child.get('code'))
+                   changed=changed, refused_step_outputs=len(stop['outputs']) if stop else 0,
+                   refused_step_changed=refused_step_changed, ok=result in ('refused',), code=child.get('code'))
     verdicts.append(verdict)
 
 (OUT / 'verdicts.json').write_text(json.dumps(verdicts, indent=1))
-print('| child | first firing site | trigger | stop (step/window/status/refusal) | single code | changed ok-step outputs | result |')
-print('|---|---|---|---|---|---|---|')
+print('| child | first firing site | firings | stop (step/window/status/refusal) | single code | changed ok-step outputs | refused-step outputs (changed) | result |')
+print('|---|---|---|---|---|---|---|---|')
 for v in verdicts:
-    print(f"| {v['name']} | `{v['site']}` | {v.get('trigger')} | {v.get('stop')} | {v.get('single_code')} | {len(v.get('changed') or [])} | **{v['result']}** |")
+    print(f"| {v['name']} | `{v['site']}` | {v.get('fired')} | {v.get('stop')} | {v.get('single_code')} | {len(v.get('changed') or [])} | {v.get('refused_step_outputs', 0)} ({len(v.get('refused_step_changed') or [])}) | **{v['result']}** |")
 print()
 print('children with a firing:', len(verdicts), ' refused:', sum(v['result'] == 'refused' for v in verdicts),
       ' findings:', [v['name'] for v in verdicts if v['result'] not in ('refused',)])
