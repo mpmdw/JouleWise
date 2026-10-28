@@ -1,6 +1,6 @@
 # KB-V2 — activation 39206674, 2026-10-28
 
-Status: in progress; reconciled rule awaiting the lead's admission. No hardware measurements.
+Status: Steps 1 and 2 implemented and locally verified; reconciled rule awaiting the lead's admission. No hardware measurements. CI result pending.
 
 ## Authority and inputs
 
@@ -99,7 +99,49 @@ rest : alpha = 1.2500 mJ  gamma_c = 0.02500  gamma_d = 0.15123  r = -0.000 uJ  D
 
 ## Step 2 — receipt and tests
 
-Pending implementation.
+### Receipt diff summary (file:line)
+
+- `scripts/bytes_stream_test.py:44`: read registered reference projections from the two §2 pin files; verify unit projections agree.
+- `scripts/bytes_stream_test.py:60`: collect platform/machine, passed-in device, mx.__version__, pass-1 kernel-library fallback, Python/all packages through runtime_versions(sys.executable), checkout git HEAD, and all five not_applicable fields. Collection is outside all stamped spans.
+- `scripts/bytes_stream_test.py:77`: compare exactly the §2 projections, every package key and Python; omit adapter/config_id/model fields/git from comparison. Capture fields come only through harvest's capture_stack argument. Missing capture identity remains pending_capture; it is never called a match. Differences do not suppress the receipt.
+- `scripts/bytes_stream_test.py:114`: injected array module, clock and sleep; defaults 57.6 s idle and 3 s settle (from §2, not invented bars). Allocate/fill/evaluate/sync; one warm sum/eval/sync; pre-idle; settle; measured fresh reductions/sync; settle; post-idle, retaining payload. All six stamps are integer CLOCK_MONOTONIC_RAW ns. Zero idle/settle supports the knee scan.
+- `scripts/bytes_stream_test.py:166`: v2 receipt preserves logical byte counts/duration/boundary/non_claim and adds idle stamps, requested idle/settle lengths, stack and comparison result. Warm-up is excluded from counts and duration; gaps enter no span.
+- `scripts/bytes_stream_test.py:177`: CLI adds --device (required, passed from hardware_target.id), --idle-s and --settle-s; strict JSON output retained.
+- `tests/test_bytes_stream_test.py:81`: fake-array/event-clock tests for ordering, payload residency, exact counts/stamps, zero-span scan mode, bad clocks/arguments, all compared fields/packages, capture deferral/mismatch, ignored projections, reference consistency, CLI/help and end-to-end fake MLX with real runtime metadata and git sources.
+
+### Decisions I made (implementation)
+
+- Device must be explicitly supplied from the checkout's run config (--device), rather than guessed from platform.machine or copied from the pin being checked.
+- Identity equality is the registered string/key projection equality in §2; no numerical tolerance enters the identity comparison. Synthetic timing assertions use integer ns and the exactly representable 1/2 s conversion, not a new timing bar.
+- Record stack differences and retain the receipt; a mismatch is an interpretation failure under §4, not an exclusion of collected numbers.
+- Compare local fields immediately; expose compare_stack(..., capture_stack=...) for harvest to complete comparison with concurrent telemetry identity. Missing capture fields are explicitly pending, not fabricated from reference values. The full check can only match after harvest.
+- Keep the kernel unchanged (sum/eval per dispatch); add precisely one warm reduction before pre-idle. Do not implement the rejected alternative kernel or leverage model.
+- §2's continuous powermetrics/meter capture, one clock fit, arbitrary-span integration with existing pass-1 integrators and τ-dependent post-idle trimming are capture/harvest operations, not performed by this probe. The receipt supplies raw spans and the comparison helper; no new energy reducer or capture launcher was added. No measured τ can be invented on this non-Metal seat.
+
+### §2/code disagreements and scope boundary
+
+- Compared with v1, the old probe had no idle spans/settle gaps/stack and compiled its first reduction in the measured span. Those disagreements are fixed in v2.
+- No identified disagreement remains in the receipt-producing operations of §2. The capture/harvest paragraph remains an external operational requirement; this change does not claim to implement or validate that chain extension. In particular, telemetry_backend/rails identity and τ-based trimming require the actual capture at harvest, not a locally guessed value.
+- The existing v1 tests in `tests/test_bytes_mac_kit.py:85` and `:110` omit the now-required device, provide a fake module with no __version__, assume only two stamps and no warm reduction. They require a v2 update outside WRITE_SCOPE. **Preserved unchanged; no broader test module was run locally.** The existing README invocation also needs the device/idle/settle arguments when the lead updates operational instructions; `configs/campaigns/bytes_mac_check/README.md` is outside scope and preserved. No attempt was made to repair these other files.
+
+### Test command and output tail
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /workspace/.joulewise-env/bin/python3.13 -m unittest -v tests.test_bytes_stream_test
+```
+
+```text
+test_scan_zero_idle_and_settle_still_stamps_and_warms ... ok
+test_stamps_use_one_clock_and_exclude_idle_settle_and_warmup ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 0.291s
+
+OK
+```
+
+Earlier run: 16 tests passed; then added the end-to-end fake-MLX CLI test and reran this same touched module. `git diff --check`: exit 0. No hardware validation, full suite, quiet capture, blinded data, new tolerance or out-of-scope repository file writes.
+
 
 ## CI
 
