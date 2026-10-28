@@ -1,0 +1,14 @@
+N0 baseline: exit=0 stderr='' fails={} unbound=[] flags=[]
+N1a control: number under fill:campaigns catch-all: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[] flags=[]
+N1b NaN under fill:campaigns catch-all: exit=0 stderr='' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+N1c Infinity printed as a J contrast's j_per_token: exit=0 stderr='' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+N1d NaN under an uncovered-by-name rule: exit=0 stderr='' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+    uncovered_numeric lists it: False leaf report: uncovered-by-name:registered c
+N2 duplicated row keys: [('count', 'Qwen3-1.7B-4bit/decode/absolute/n')]
+N2a ratio line prints the floor cell's n=9 (ratio n is 7 on both sides): exit=0 stderr='' fails={} unbound=[] flags=[]
+N2b ratio line prints the correct ratio n=7: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:block_lines/dominance_ratio/n', 'value_differs')] flags=[]
+N3 baseline meter fixture: {} []
+    L9 band: {'pack': 'alpha'}
+    recompute's own band rows: {"Qwen3-1.7B-4bit": {"n_members": 1, "rho_n": 1, "rho_median": 0.1732986735986136, "rail_delta_median_J": 18.2, "machine_delta_median_J": 105.02100000000002, "rho_min": 0.1732986735986136, "rho_max": 
+N3a recompute sets no central band, L9 prints one: {} []
+N3b recompute's band is BETA's, L9's is alpha's: {} []

@@ -1,0 +1,12 @@
+int64_scale_origin_9e18: streams=60 max_host_diff_ns=0 {'same_env': 60}
+origin_2p53_plus: streams=60 max_host_diff_ns=0 {'same_env': 60}
+exact_ties_no_jitter_1e16: streams=30 max_host_diff_ns=0 {'same_env': 30}
+rtt_at_3ms_cap: streams=60 max_host_diff_ns=0 {'same_env': 60}
+n_at_63_cap: streams=40 max_host_diff_ns=0 {'same_env': 40}
+negative_rtt: streams=60 max_host_diff_ns=0 {'same_env': 60}
+rx_out_of_order: streams=60 max_host_diff_ns=0 {'same_env': 60}
+duplicated_polls: streams=40 max_host_diff_ns=0 {'same_env': 40}
+device_wrap_gaps: streams=40 max_host_diff_ns=0 {'same_env': 40}
+fallback_19_eligible: streams=60 max_host_diff_ns=0 {'same_env': 60}
+two_polls: streams=30 max_host_diff_ns=0 {'same_env': 30}
+negative_drift_ppm: streams=40 max_host_diff_ns=0 {'same_env': 40}
