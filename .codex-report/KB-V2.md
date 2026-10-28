@@ -391,3 +391,21 @@ Verification: both touched modules pass, 33 tests; `--check` and
 `git diff --check` pass. Decisions I made: regenerate from the current supplied
 inputs as R8 requires, retaining their exact source locators and hashes.
 NEEDS_RULING: none. No hardware capture, unblinding, admission or merge.
+
+Step 7 — final verification and CI snapshot. Implementation steps were committed
+and pushed separately: Step 2 `3bffbf220`, Step 3 `1d00f80d1`, Step 4
+`6cbbcd517`, Step 5 `46c5777be`, Step 6 `c748238eb`. The final implementation
+has 33 passing focused tests and a passing generator `--check`; the complete
+round diff passes `git diff --check`. The changed-file list is wholly inside
+WRITE_SCOPE. No changes to RUN_STATE, TASK_QUEUE, smoke_keep or data-repository
+content were made. The final report is a separate commit.
+
+PR #593 remains open and draft. CI was read through GitHub: the starting
+`86b73a26b` CI run [40696166708](https://github.com/mpmdw/JouleWise/actions/runs/40696166708)
+completed successfully (all returned jobs, including fences, quick, build,
+installed-wheel, calibration exclusives and all 12 unit shards, passed);
+gate-ledger was skipped. At the final code/kit head `c748238eb`, CI run
+[40759703837](https://github.com/mpmdw/JouleWise/actions/runs/40759703837)
+is pending, and gate-ledger run 40759703675 is skipped. This is a status
+snapshot, not a claim that the new head is CI-green. No approval rejection or
+scope blocker occurred. NEEDS_RULING: none.
