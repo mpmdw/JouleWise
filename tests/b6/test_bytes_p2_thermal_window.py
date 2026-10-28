@@ -25,6 +25,18 @@ FIELD = "thermal_os_level_nonzero_member_hull"
 BASE = "de35f6403"
 
 
+def setUpModule():
+    # The shared b5 fixture's own teardown removes its directory. Support a
+    # command that runs that module before this one in the same interpreter.
+    if windows._TEMPLATE is not None and not windows._TEMPLATE.is_dir():
+        windows._TEMPLATE = None
+
+
+def tearDownModule():
+    windows.tearDownModule()
+    windows._TEMPLATE = None
+
+
 def thermal_journal(times, nonzero=(), *, failed=()):
     journal = windows.L1Journal("thermal")
     for stamp in times:
