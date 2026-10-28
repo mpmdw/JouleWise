@@ -182,3 +182,59 @@ I did not run the full repository suite. CI on this branch is the check for that
 8. **Arm:** `python3.13 -B scripts/align_pilot_session.py prepare --measurement-root R --session-root S`. Then
    `... install --session-root S` is the lead's last action, after which the lead exits. After the terminal record,
    run `... desk --session-root S` and read `PILOT.json` `checks`.
+
+## FIX (ALIGN-FIX-1, 2026-10-28)
+
+Fix commit: **`dcbef5c07`** on `lane/2026-10-27-align-ready` (parent `131abcd54`). It disposes of both MEDIUM findings of
+the Sol executing review `.codex-report/ALIGN-SOL-REV.md` (`review/2026-10-28-align-sol-rev` `03c931fa1`), under lead
+rulings RUN_STATE item 82. It touches only `scripts/align_pilot_session.py` and `tests/test_align_pilot_session.py`.
+
+**Reproduction at `131abcd54`.** The reviewer's `.codex-report/align-sol-rev/probe_checks.py` reproduced both findings
+unchanged, with synthetic bundles only:
+- F2: decode counts `[300,120,40]` x3, prefill 5500/5600/5700, all four checks pass, spread SD 0.75 J and range 1.5 J;
+- F1: `desk` raises `Out of range float values are not JSON compliant: inf`, with no PILOT.json, no desk.json and 0
+  harvest calls.
+
+After the fix, the probe stops at its first assertion (`assert all(checks.values())`), because it asserts the old
+behaviour.
+
+**F1.** `episode_summary` writes a nonfinite `joules`, `half_width_j` or `segment_sum_j` as `null`. It records the
+reason under `unavailable` as `estimate.nonfinite:<value>`, for example `{"half_width_j": "estimate.nonfinite:inf"}`.
+A null total is not energy for I2, and a null total or sum never tiles for I3. Spreads skip null values. `desk` now
+writes PILOT.json (`instrument_incomplete`) and desk.json, and makes the one `--non-claim` harvest call.
+
+**F2.** The summaries carry `per_turn_{context,prefill,decode,hidden}_tokens`. I4 compares the per-turn
+(context, prefill, decode, hidden) tuples, as protocol I4 (`docs/align/pilot_protocol_v0.md:74`) requires. A cell whose
+repeats differ gets `repeat_token_identity` false and no `repeat_energy_spread` entry, because its spread is not a
+noise estimate.
+
+**Regression tests (counterfactual recorded).** The tests below were run against `131abcd54` with the new test file:
+
+| Test | Result at `131abcd54` |
+|---|---|
+| `test_repeats_with_different_prefill_work_fail_i4_and_report_no_spread` (probe case F2) | FAIL, `True is not false` on I4 |
+| `test_unresolved_anchor_still_writes_the_fault_report_and_runs_the_harvest` (probe case F1) | ERROR, `Out of range float values ... inf` |
+| `test_checks_fail_for_missing_bundle_and_nondeterministic_repeat`, extended with a null-total case and a per-field change case for each of the four counts | ERROR, `float - NoneType` |
+
+All pass at `dcbef5c07`.
+
+**Tests at `dcbef5c07`** (container, synthetic only, `JW_B5_SYNTHETIC_ONLY=1`, TMPDIR outside the checkout):
+- `tests.test_bytes_h_session` + `tests.test_align_pilot_session`: 47 OK. The pilot file alone is also OK on python3.13
+  (11 tests).
+- `tests/align` (discover): 940 tests ran on python3.11, with 11 errors, all in `twins/test_frontier_twin_selfcheck`:
+  `random.binomialvariate` needs Python 3.12 or later. That module is 40 OK on python3.13. No test in `tests/align`
+  imports the changed script.
+- `tests/test_harvest_*.py` (7 files): 427 tests, with 4 errors in `test_harvest_v5_g2b_window.FoldedL10Tests`. Each is
+  `FileNotFoundError: /opt/homebrew/bin/zstd` (no zstd in this container, and it cannot be installed here). The same 4
+  errors occur at `131abcd54`, so they are environmental, not this change.
+
+**BYTES item H unchanged.** The reviewer's `compare_bytes.py` was run with its paths repointed to this checkout and a
+scratch directory: the `991358f73` item-H runner against the runner at `dcbef5c07`. It compared 242 paths, with
+`changed_generated_paths` `[]` and `diff` exit 0 for stdout, state and the file manifest. `scripts/bytes_h_session.py`
+has zero diff from `131abcd54`.
+
+**Governed estimators.** `joulewise/powermetrics_fiducial.py`, `joulewise/reduce.py`,
+`joulewise/uncertainty_evidence.py` and `joulewise/adapters/powermetrics.py` are byte-identical between `dcbef5c07` and
+`origin/main` (`8b39d4846`).
+
+No real measurement data was opened. Nothing was armed, and no PR was opened.
