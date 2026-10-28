@@ -222,12 +222,16 @@ class HarvestEntryTests(unittest.TestCase):
         for run_id, *_ in windows.MEMBERS:
             path = window.claim / run_id / "events.jsonl"
             _start, end = windows.member_span_ns(run_id)
-            with path.open("a") as stream:
-                for event_type, stamp in (("stage_started", end), ("stage_completed", end + 30 * NS)):
-                    stream.write(json.dumps({"timestamp_s": (stamp + windows.WALL_OFFSET_NS) / NS,
-                        "event_type": event_type, "phase": "idle_drift_sentinel",
-                        "message": "synthetic post-request sentinel",
-                        "metadata": {"run_id": run_id, "monotonic_ns": stamp}}) + "\n")
+            events = [json.loads(line) for line in path.read_text().splitlines()]
+            finalized = events.pop()
+            for event_type, stamp in (("stage_started", end), ("stage_completed", end + 30 * NS)):
+                events.append({"timestamp_s": (stamp + windows.WALL_OFFSET_NS) / NS,
+                    "event_type": event_type, "phase": "idle_drift_sentinel",
+                    "message": "synthetic post-request sentinel",
+                    "metadata": {"run_id": run_id, "monotonic_ns": stamp}})
+            finalized["timestamp_s"] = events[-1]["timestamp_s"] + 1
+            events.append(finalized)
+            path.write_text("".join(json.dumps(event) + "\n" for event in events))
         # Polls are 5 s apart, with one 5.3 s gap; tails contain a level-1 read.
         journal = windows.L1Journal("thermal")
         for run_id, *_ in windows.MEMBERS:

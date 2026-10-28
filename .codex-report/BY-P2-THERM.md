@@ -31,7 +31,7 @@ No additional authority/code discrepancy or science choice was found.
 - `joulewise/b5/harvest.py:4087`: store full-hull OS evidence per science member.
 - `joulewise/b5/harvest.py:6231`: keep the hull join and replace only its OS
   flag with the production request-end OS result.
-- `tests/test_harvest_b5_window.py:2321`: recognize `thermal.jsonl` as a filename
+- `tests/test_harvest_b5_window.py:2322`: recognize `thermal.jsonl` as a filename
   in the emitted-code literal census; no catalog exemption or code was added.
 - `tests/b6/test_bytes_p2_thermal_window.py`: production-journal unit tests,
   a deterministic 780-stream subset property, committed-plan selection checks,
@@ -125,8 +125,18 @@ locally; the full suite is left to CI as instructed.
    (`/tmp/by-p2-catalog.log`): `Ran 4 tests in 0.016s; OK` after filename fix.
 7. `tests.b6.test_session_wrapper` (`/tmp/by-p2-wrapper.log`):
    `Ran 6 tests in 0.125s; OK`.
-8. `tests.b6.test_bytes_p2_thermal_window` (`/tmp/by-p2-final-new.log`): running
-   the corrected strict-valid fixture and all 11 final tests.
+8. `tests.b6.test_bytes_p2_thermal_window` (`/tmp/by-p2-final-new.log`):
+   `Ran 11 tests in 229.351s; FAILED (failures=1)`. The synthetic sentinel had
+   been appended after `run_finalized`; strict validation requires finalization
+   to be last. Moved the tail before that marker and updated its timestamp.
+9. `tests.test_harvest_b5_window.EmittedCodeTests tests.b6.test_bytes_p2_thermal_window.ThermalWindowTests tests.b6.test_session_wrapper`
+   (`/tmp/by-p2-final-focused.log`): `Ran 19 tests in 0.394s; OK`.
+10. Direct fixture validation: `h.strict_problems(bundle, None)` on each of the
+    six generated science bundles: all six returned `[]`. The first diagnostic
+    attempt omitted the required cache argument and raised `TypeError`; the
+    corrected command passed. Both used the same synthetic-only environment.
+11. `tests.b6.test_bytes_p2_thermal_window` (`/tmp/by-p2-final-new2.log`): running
+    all 11 tests after the six-bundle strict-validation check.
 
 `git diff --check`: passed (empty output).
 Catalog SHA-256, unchanged from base:
