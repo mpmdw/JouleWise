@@ -53,6 +53,7 @@ class CollectionEmitterTests(unittest.TestCase):
                 harvest.pair_missing = {}
                 harvest.battery_assist = {'members': {}, 'captures': {}}
                 harvest.withheld = root / 'withheld'
+                harvest.bytes_pass_two = False  # set by _Harvest.__init__; this test bypasses it
                 harvest.flags = h.FlagLedger(plan_id='synthetic', attempt=1,
                     catalog=h.Catalog.load(smoke.CATALOG_PATH), boot_session_uuid='BOOT')
                 harvest._pair_assist = mock.Mock()
