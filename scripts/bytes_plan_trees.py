@@ -183,7 +183,7 @@ def registration(number, pass_number, repo_root=ROOT):
                  status="registered" if pass_number in REGISTERED_PASSES else "draft", kind="new", session_shape="fixed", plan_tree_ref=(path / "plan_tree.json").as_posix(),
                  target_sessions=1, minimum_sessions=1, estimators=deepcopy(ESTIMATORS),
                  flag_catalog="configs/b6/flag_catalog_b6.json",
-                 stopping={"count": 1, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
+                 stopping={"count": 1, "end_t0_before": "2026-11-05T00:00:00-08:00", "precision": None},
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
     if pass_number == 1:
         for estimator in value["estimators"]:
