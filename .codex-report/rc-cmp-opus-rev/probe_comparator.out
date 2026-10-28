@@ -1,0 +1,21 @@
+baseline: exit0=True fails={} unmapped=[]
+baseline, shipped COVERAGE: exit0=True fails={} unmapped=[]
+P1 fill swaps two contrasts' estimates (test RULES): exit0=True fails={} unmapped=[]
+P1b same, shipped COVERAGE rules: exit0=True fails={} unmapped=[]
+P2 fill prints another field's value (s_d) as the estimate, COVERAGE: exit0=True fails={} unmapped=[]
+P3 fill outcome words 'L1' and null (truth not_resolvable), COVERAGE: exit0=True fails={} unmapped=[]
+P4 contrast present on the recompute side only: exit0=True fails={} unmapped=[]
+P5 run present on the recompute side only (no L9 rereduced file): exit0=True fails={} unmapped=[]
+P6 L9 extraction report with no cells (recompute has floors): exit0=True fails={} unmapped=[]
+P7 meter line on recompute + harvest record, none in L9 disclosure, --harvest-meter given: exit0=True fails={} unmapped=[]
+P8 per-key override absolute=Infinity accepted by load_bars (planted D_j=1e9): exit0=True fails={} unmapped=[]
+P8b per-key override printed_decimals=-9 accepted (planted D_j=1e8): exit0=True fails={} unmapped=[]
+P8c control: family-level Infinity: REFUSED bars_invalid:contrast_j
+P9 exact(): L9 True vs recompute 1 / 1.0: exit0=True fails={} unmapped=[]
+P10 NaN on the recompute side (run() level): exit0=False fails={'contrast_j': 1} unmapped=[]
+P11 numeric family absent from bar file: REFUSED bars_family_missing:count
+P12 energy leaves under window_lines/*, fill:campaigns/*, fill:characterization/* (COVERAGE): exit0=False fails={'meter_j': 1, 'machine_j': 2, 'rho': 1} unmapped=[]
+     fill:campaigns/gamma/gross_energy_j -> uncovered:identity, label or provenance (ids, digests, pins,
+     fill:characterization/delta_j -> uncovered:characterization selection; not funded, not run (c
+     disclosure:window_lines/alpha/*/meter_energy_j -> uncovered:window structure the recompute does not re-derive 
+     disclosure:window_lines/alpha/*/values/rho -> uncovered:window structure the recompute does not re-derive 

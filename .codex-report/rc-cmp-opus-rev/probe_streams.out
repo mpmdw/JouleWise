@@ -1,0 +1,13 @@
+recompute: exit=0 decimal_tokens_on_streams=['2e2'] l9_or_parser_touched=[]
+   stdout: sha256=5a91646a55fcd8abb74470abffcd2e2c001d9b32c5b65950f1599390ec25911c python=3.13.17 flags={"exclusions_rederivation_unavailable":1} exclusions_rederivation={"ALPHA":"not_computed"} comparison={"compared_runs":69,"not_compared_by_reason":{},"not_compared_runs":0} comparison_stopped=false
+   stderr: 
+recompute-exception: exit=2 decimal_tokens_on_streams=[] l9_or_parser_touched=[]
+   stdout: 
+   stderr: error: internal ValueError
+comparator: exit=2 decimal_tokens_on_streams=['7e322'] l9_or_parser_touched=[]
+   stdout: bar_set=b5_release_recompute_coded_7e322b76 families={"b_op_s":{"fail":0,"pass":8},"battery_term":{"fail":0,"pass":0},"contrast_j":{"fail":0,"pass":16},"contrast_p":{"fail":0,"pass":6},"count":{"fail":0,"pass":15},"descriptive_ratio":{"fail":0,"pass":3},"dominance_branch":{"fail":0,"pass":1},"dominance_ratio":{"fail":0,"pass":1},"exclusions_rederivation":{"fail":0,"pass":3},"floor_gate_j":{"fail":
+   stderr: refused=step11_unmapped_fill
+comparator-l9-nan: exit=2 decimal_tokens_on_streams=[] l9_or_parser_touched=[]
+   stdout: 
+   stderr: error=internal ValueError
+restricted written for NaN case: False

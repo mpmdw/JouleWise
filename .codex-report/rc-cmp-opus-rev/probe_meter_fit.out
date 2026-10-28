@@ -1,0 +1,14 @@
+A offset=0e+00ns: max|host diff|=1 ns; seeds >1ns or refused: 0 []
+A offset=1e+15ns: max|host diff|=1 ns; seeds >1ns or refused: 0 []
+A offset=4e+15ns: max|host diff|=1 ns; seeds >1ns or refused: 0 []
+B planted near-ties: 55 streams with |host diff| > 1 ns
+  base=1e+15 seed=26 target=-0.3 parser_residual_gap_ns=-0.0602 max_host_diff_ns=71838
+  base=1e+15 seed=26 target=-0.1 parser_residual_gap_ns=-0.0565 max_host_diff_ns=71836
+  base=1e+15 seed=26 target=+0.0 parser_residual_gap_ns=-0.0565 max_host_diff_ns=71836
+  base=1e+15 seed=26 target=+0.1 parser_residual_gap_ns=-0.0565 max_host_diff_ns=71836
+  base=1e+15 seed=26 target=+0.3 parser_residual_gap_ns=-0.0565 max_host_diff_ns=71836
+  base=1e+15 seed=32 target=-0.3 parser_residual_gap_ns=-0.0137 max_host_diff_ns=41305
+  base=1e+15 seed=32 target=-0.1 parser_residual_gap_ns=-0.0100 max_host_diff_ns=41305
+  base=1e+15 seed=32 target=+0.0 parser_residual_gap_ns=-0.0100 max_host_diff_ns=41305
+B hits by base: {'1e+15': 15, '4e+15': 40} of 200 streams per base
+B with relative coordinates in the recompute fit: 0 of 55 still differ by > 1 ns
