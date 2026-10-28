@@ -123,7 +123,7 @@ class Round3ArithmeticTests(unittest.TestCase):
                 assert_values_agree(self, row['gross_share'], .6)
                 self.assertEqual(row['battery_activity']['active'], current != 0)
                 self.assertEqual(any(f['code'] == 'meter_battery_activity' for f in flags), current != 0)
-                self.assertEqual(stream.fit['bin_origin'], 'device time 0 at the first kept sample')
+                self.assertEqual(stream.fit['bin_origin'], 'device time of the first fit point')
 
     def test_gross_phase_has_no_idle_stage_dependency_and_four_corners(self):
         reader = r.Reader('ALPHA', [])

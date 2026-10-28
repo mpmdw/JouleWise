@@ -87,7 +87,13 @@ class MeterTests(unittest.TestCase):
 
     def test_no_fit_and_uncovered_span_are_null_records(self):
         path = self.root / 'stream-001.jsonl'
+        # Parser definition: fewer than 20 eligible polls fit every poll, so
+        # 19 polls still fit; one poll cannot define a line.
         stream_file(path, lambda t: 50., count=19)
+        stream = r.MeterStream(path, self.reader)
+        self.assertFalse(stream.fit['filtered'])
+        self.assertEqual(stream.fit['points_used'], 19)
+        stream_file(path, lambda t: 50., count=1)
         stream = r.MeterStream(path, self.reader)
         self.assertIsNone(stream.fit)
         row = r.machine_member(member(self.reader), 'request', [stream], [], .045)
@@ -151,15 +157,17 @@ class MeterTests(unittest.TestCase):
         rows = [json.loads(x) for x in path.read_text().splitlines()]
         for row in rows:
             if row.get('k') == 'b':
-                # In every 10-second device bin, exactly one poll arrives on
-                # the true line; the others arrive 17 ms above it.
+                # Every 10 s of device time one poll arrives on the true
+                # line; the others arrive 17 ms above it. The 45 s span gives
+                # max(4, int(45000 / 10000)) = 4 bins of 11250.25 ms.
                 latency = 0 if (row['rx'] - 10**12) % 10_000_000_000 == 0 else 17_000_000
                 row['rx'] += latency; row['tx'] += latency
         path.write_text(''.join(json.dumps(x) + '\n' for x in rows))
         stream = r.MeterStream(path, self.reader)
         self.assertEqual(stream.fit['intercept_ns'], 10**12)
         assert_values_agree(self, stream.fit['slope_ns_per_ms'], 1_000_000.)
-        self.assertEqual(stream.fit['minimum_bins'], 5)
+        self.assertEqual(stream.fit['minimum_bins'], 4)
+        self.assertEqual(stream.fit['bin_width_device_ms'], 11250.25)
         assert_values_agree(self, stream.r_max_s, .017)
 
     def test_machine_weighting_missing_unit_and_gamma_side_exact_t(self):

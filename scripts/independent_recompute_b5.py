@@ -1476,6 +1476,51 @@ def fit_line(points):
     return y0 + ym - slope * (x0 + xm), slope
 
 
+# Registered meter clock fit (block-5 registration: "the parser fits the
+# meter's sample clock to the host's clock from the poll times"; RUN_STATE
+# item 84). Same definition as the parser's, written here independently.
+FIT_RESPONSE_CAP = 63        # a full 63-sample response may have left samples queued
+FIT_MAX_RTT_MS = 3.0         # eligible polls answered within 3 ms
+FIT_MIN_POINTS = 20          # fewer eligible polls: fit every poll instead
+FIT_BIN_DEVICE_MS = 10_000   # envelope bins about 10 s of device time wide
+FIT_MIN_BINS = 4
+
+
+def meter_clock_fit(points):
+    """Lower-envelope clock fit over (newest device ms, rx ns, RTT ms, n) per poll."""
+    if len(points) < 2:
+        return None
+    eligible = [p for p in points if p[3] < FIT_RESPONSE_CAP and p[2] < FIT_MAX_RTT_MS]
+    filtered = len(eligible) >= FIT_MIN_POINTS
+    used = eligible if filtered else points
+    if len(used) < 2:
+        return None
+    pairs = [(p[0], p[1]) for p in used]
+    initial = fit_line(pairs)
+    if initial is None:
+        return None
+    a0, b0 = initial
+    origin = pairs[0][0]
+    span = pairs[-1][0] - origin
+    bins = max(FIT_MIN_BINS, int(span / FIT_BIN_DEVICE_MS))
+    width = (span + 1) / bins
+    minima = {}
+    for x, y in pairs:
+        residual = y - (a0 + b0 * x)
+        key = min(int((x - origin) / width), bins - 1)
+        if key not in minima or residual < minima[key][0]:
+            minima[key] = (residual, (x, y))
+    envelope = fit_line([minima[k][1] for k in sorted(minima)]) if len(minima) >= 2 else None
+    a, b = envelope if envelope is not None else initial
+    if b <= 0 or not all(finite(v) for v in (a, b)):
+        return None
+    return {"intercept_ns": a, "slope_ns_per_ms": b, "fit_points": len(points),
+            "points_used": len(used), "filtered": filtered, "bins": bins,
+            "minimum_bins": len(minima), "envelope_fallback": envelope is None,
+            "bin_origin": "device time of the first fit point", "bin_width_device_ms": width,
+            "max_above_envelope_ns": max(y - (a + b * x) for x, y in pairs)}
+
+
 class MeterStream:
     """Independent raw-byte decoder and clock fit, RECONCILE-r2 section 3."""
     def __init__(self, path, reader):
@@ -1494,6 +1539,7 @@ class MeterStream:
         device, powers, points = [], [], []
         previous_seq, previous_rx, current, running_max, duplicates = None, None, 0, None, 0
         decoder = struct.Struct("<HHiiHHHH")
+        polls = []
         for row in rows:
             if row.get("k") != "b":
                 continue
@@ -1507,6 +1553,11 @@ class MeterStream:
             except (ValueError, TypeError):
                 reader.flag("meter_stream_malformed", self.name, "invalid batch")
                 continue
+            polls.append((rx, tx, n, payload, row))
+        # Registered parser definition: polls are taken in host receive order
+        # (stable for equal rx), so decoding and the fit see one sequence.
+        polls.sort(key=lambda poll: poll[0])
+        for rx, tx, n, payload, row in polls:
             newest = None
             for k, (seq, _, voltage, current_ua, *_aux) in enumerate(decoder.iter_unpack(payload)):
                 if previous_seq is not None:
@@ -1528,10 +1579,10 @@ class MeterStream:
                 powers.append((voltage / 1e6) * (current_ua / 1e6))
             if payload:
                 previous_rx = rx
-            # Meter fit contract: an uncapped (<63) batch and RTT <3 ms
-            # identify a drained queue's earliest arrival, not agreement slack.
-            if newest is not None and 0 < n < 63 and 0 <= rx - tx < 3e6:
-                points.append((newest, rx))
+            # One fit point per poll that kept a sample: its newest sample
+            # against the poll's host receive time, with RTT ms and count.
+            if newest is not None:
+                points.append((newest, rx, (rx - tx) / 1e6, n))
             ac, av = get(row, "smc", "B0AC"), get(row, "smc", "B0AV")
             if finite(ac):
                 self.battery_current_times.append(rx)
@@ -1539,26 +1590,13 @@ class MeterStream:
             if finite(ac) and finite(av):
                 self.battery_times.append(rx)
                 self.battery_powers.append(-ac * av / 1e6)
-        # RECONCILE-r2 section 3 fixes at least 20 eligible polls and 10 s
-        # bins from device zero; two bin minima are needed to fit a line.
-        initial = fit_line(points) if len(points) >= 20 else None
-        minima = {}
-        if initial:
-            a, b = initial
-            for point in points:
-                residual = point[1] - (a + b * point[0])
-                key = point[0] // 10000
-                if key not in minima or residual < minima[key][0]:
-                    minima[key] = (residual, point)
-        final = fit_line([minima[k][1] for k in sorted(minima)]) if len(minima) >= 2 else None
-        if final is None or final[1] <= 0 or not all(finite(v) for v in final):
-            reader.flag("meter_no_fit", self.name, {"fit_points": len(points), "minimum_bins": len(minima)})
+        fit = meter_clock_fit(points)
+        if fit is None:
+            reader.flag("meter_no_fit", self.name, {"fit_points": len(points)})
             return
-        a, b = final
-        self.fit = {"intercept_ns": a, "slope_ns_per_ms": b, "fit_points": len(points),
-                    "minimum_bins": len(minima), "duplicates_dropped": duplicates,
-                    "bin_origin": "device time 0 at the first kept sample", "bin_width_device_ms": 10000}
-        self.r_max_s = max(0.0, max(y - (a + b * x) for x, y in points) / 1e9)
+        a, b = fit["intercept_ns"], fit["slope_ns_per_ms"]
+        self.fit = {**fit, "duplicates_dropped": duplicates}
+        self.r_max_s = max(0.0, fit["max_above_envelope_ns"] / 1e9)
         # Meter clock contract: publish integer host ns before sample selection.
         self.times = [round(a + b * x) for x in device]
         self.powers = powers

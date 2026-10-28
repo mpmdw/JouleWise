@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from .support import (assert_values_agree, SCRIPT, ROOT, agreement_bar, bundle, dump, full_pack,
                       recompute as r, remove_member, run_cli)
@@ -410,7 +411,7 @@ class AuditFixTests(unittest.TestCase):
                 self.assertEqual(out["comparison"]["summary"]["not_compared_runs"], 1)
                 self.assertTrue(out["comparison_stopped"])
 
-    def test_different_clock_fit_bins_disclose_energy_difference_without_slack(self):
+    def adversarial_fit_window(self):
         from joulewise.external import km003c_parse as primary
 
         archive, rid, recorded, _ = self.machine_archive()
@@ -424,12 +425,15 @@ class AuditFixTests(unittest.TestCase):
                 row["tx"] += latency
                 row["rx"] += latency
         path.write_text("".join(json.dumps(row) + "\n" for row in rows))
-        own_stream = r.MeterStream(path, r.Reader("synthetic", []))
         primary_stream = primary.parse(path)
-        # At 50 Hz, sample 1150 is 23 s after stream start. Place the stop
-        # between the two fits' placements so their method difference matters.
+        # The pre-RC-CMP-2 binning (7e322b767) placed sample 1150, 23 s after
+        # stream start at 50 Hz, 1249 ns from the parser. The stop sits between
+        # the two placements, where the old method moved a sample across it.
+        from .test_meter_fit import old_clock_fit
+        with mock.patch.object(r, "meter_clock_fit", old_clock_fit):
+            old_stream = r.MeterStream(path, r.Reader("synthetic", []))
         sample = 1150
-        boundary = (own_stream.times[sample] + primary_stream.host_ns[sample]) // 2
+        boundary = (old_stream.times[sample] + primary_stream.host_ns[sample]) // 2
         metadata_path = archive / "sources/claim-runs" / rid / "metadata.json"
         metadata = json.loads(metadata_path.read_text())
         stamp = metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"]["sampling_stopped"]
@@ -441,18 +445,37 @@ class AuditFixTests(unittest.TestCase):
         record.update(machine=machine, rail_delta_J=2 * (10.1 - 1.))
         record["rho"] = record["rail_delta_J"] / machine["delta_J"]
         dump(archive / "withheld/meter.json", recorded)
-        _, out, _ = run_cli({"ALPHA": archive}, self.root / "fit-difference.json")
+        return archive, rid, machine, old_stream, primary_stream, path, sample
+
+    def test_adversarial_clock_fit_jitter_agrees_with_parser_within_coded_bar(self):
+        archive, rid, machine, old_stream, primary_stream, path, sample = self.adversarial_fit_window()
+        own_stream = r.MeterStream(path, r.Reader("synthetic", []))
+        self.assertLessEqual(max(abs(a - b) for a, b in zip(own_stream.times, primary_stream.host_ns)), 1)
+        _, out, _ = run_cli({"ALPHA": archive}, self.root / "fit-agreement.json")
+        own = out["disclosures"]["whole_machine"]["windows"]["ALPHA"]["members"][rid]["phases"]["request"]
+        difference = own["meter"]["energy_J"] - machine["meter"]["energy_J"]
+        self.assertFalse([f for f in out["flags"] if f["code"] == "meter_request_mismatch" and f["scope"] == rid])
+        self.assertTrue(own["recorded_comparison"]["matches"], own["recorded_comparison"])
+        self.assertEqual(own["meter"]["n"], machine["meter"]["n"])
+        self.assertLessEqual(abs(difference), agreement_bar(machine["meter"]["energy_J"]))
+        print("synthetic_fit_agreement=" + json.dumps({
+            "energy_difference_J": difference,
+            "agreement_bar_J": agreement_bar(machine["meter"]["energy_J"]),
+            "old_sample_time_difference_ns": old_stream.times[sample] - primary_stream.host_ns[sample],
+            "sample_time_difference_ns": own_stream.times[sample] - primary_stream.host_ns[sample]},
+            sort_keys=True))
+
+    def test_counterfactual_old_clock_fit_bins_fail_the_coded_bar(self):
+        archive, rid, machine, *_ = self.adversarial_fit_window()
+        from .test_meter_fit import old_clock_fit
+        with mock.patch.object(r, "meter_clock_fit", old_clock_fit):
+            _, out, _ = run_cli({"ALPHA": archive}, self.root / "fit-difference.json")
         own = out["disclosures"]["whole_machine"]["windows"]["ALPHA"]["members"][rid]["phases"]["request"]
         difference = own["meter"]["energy_J"] - machine["meter"]["energy_J"]
         flag = next(f for f in out["flags"] if f["code"] == "meter_request_mismatch" and f["scope"] == rid)
         self.assertIn("meter/energy_J", flag["detail"]["fields"])
         self.assertIn("meter/n", flag["detail"]["fields"])
         self.assertGreater(abs(difference), agreement_bar(machine["meter"]["energy_J"]))
-        # A single extra sample on the 1 W/s ramp changes mean power by
-        # 0.01 W; over approximately 2 s this is 0.02 J (Agreement policy unrounded bar).
+        # One extra sample on the 1 W/s ramp changes mean power by 0.01 W;
+        # over about 2 s that is the 0.02 J of commit 7e322b767.
         assert_values_agree(self, difference, -.02)
-        print("synthetic_fit_difference=" + json.dumps({
-            "energy_difference_J": difference,
-            "agreement_bar_J": agreement_bar(machine["meter"]["energy_J"]),
-            "sample_time_difference_ns": own_stream.times[sample] - primary_stream.host_ns[sample],
-            "count_difference": own["meter"]["n"] - machine["meter"]["n"]}, sort_keys=True))
