@@ -1,0 +1,6 @@
+arm_wrong_id {} [] cli 0
+arm_correct_id {} [{'path': 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'family': 'floor_gate_j', 'key': 'Qwen3-8B-4bit/decode/floor_gate_j', 'reason': 'value_differs'}] cli 2
+new_finite_leaf {} ['fill:campaigns/gamma/gross_energy_j']
+new_nonfinite_leaf {} [] uncovered:identity, label or provenance (ids, digests, pins, stage names); bound by L9's record, not a computed quantity [{'code': 'nonfinite_value_read_as_null', 'source': 'l9:outputs/0000000000000000000000000000000000000000000000000000000000000000-results-fill-input.json', 'count': 1}] cli 0
+assist_recompute_only ({}, [])
+assist_stratum_present ({'count': 1}, [{'family': 'count', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': 0, 'recompute': 3, 'difference': 3, 'bar': 0.0, 'verdict': 'DISAGREE'}])

@@ -1,0 +1,1 @@
+compressed_plist rc= 0 comparison_stopped= True member= {'compressed_input': 'raw/powermetrics.plist.zst', 'input': 'raw/powermetrics.plist', 'input_status': 'compressed', 'reason': 'trace_plist_missing', 'restore_tool': 'scripts/restore_run_to_scratch.py', 'status': 'not_compared'} not_compared= 1

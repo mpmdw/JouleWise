@@ -1,0 +1,18 @@
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+infinite_override REFUSED bars_invalid:contrast_j
+family_absent bars_family_missing:contrast_j
+public_counts_before (0, {'fail': 0, 'pass': 3}, '')
+public_counts_after (1, {'fail': 1, 'pass': 2}, '')
+meter_baseline {} []
+wrong_machine_median {'rho': 1} ['disclosure:window_lines/alpha/machine_summary/median'] None median= 1.1732986735986135 member_rho= 0.1732986735986136
+wrong_machine_median_cli 2 stderr= refused=step11_unmapped_fill
+missing_harvest_member {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 2, 'rho': 2, 'battery_term': 1} {'pass': 0, 'fail': 2} disclosed_members= 2
+missing_harvest_member_cli 2
+missing_harvest_machine {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 1, 'rho': 1, 'battery_term': 1} {'pass': 0, 'fail': 2}
+no_harvest_meter {'meter_j': 1, 'rho': 1}
