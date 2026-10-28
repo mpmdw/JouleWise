@@ -760,8 +760,8 @@
     "bytes-qwen35-122b"
   ],
   "plan": {
-    "actual_sha256": "686fb9a76bbef6a03ea0ff6de98fb35b492ce0e7e1df67466b860443d7da2d80",
-    "declared_sha256": "686fb9a76bbef6a03ea0ff6de98fb35b492ce0e7e1df67466b860443d7da2d80",
+    "actual_sha256": "5f62be4ddc1eccbf1cb0c779f20a5c78c24eef8f2e66fed82b081e2509289955",
+    "declared_sha256": "5f62be4ddc1eccbf1cb0c779f20a5c78c24eef8f2e66fed82b081e2509289955",
     "path": "collection_plan.json",
     "plan_id": "bytes-s6-p1"
   },

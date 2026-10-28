@@ -1004,8 +1004,8 @@
     "bytes-qwen3-1p7b"
   ],
   "plan": {
-    "actual_sha256": "e21577bc0bd09b1952f3137448dba62741afaef1c81b9f48545d6209b3dc616b",
-    "declared_sha256": "e21577bc0bd09b1952f3137448dba62741afaef1c81b9f48545d6209b3dc616b",
+    "actual_sha256": "cd5b4efdd881e4ce77be041a009b567a020d45d0412ec244eac2f7eed5b6849f",
+    "declared_sha256": "cd5b4efdd881e4ce77be041a009b567a020d45d0412ec244eac2f7eed5b6849f",
     "path": "collection_plan.json",
     "plan_id": "bytes-s1-p2"
   },

@@ -1004,8 +1004,8 @@
     "bytes-qwen3-next-80b"
   ],
   "plan": {
-    "actual_sha256": "24557440cdce846ec58f3673115c0c31c20e4fc5c78a64c3a194ffd017c99cc4",
-    "declared_sha256": "24557440cdce846ec58f3673115c0c31c20e4fc5c78a64c3a194ffd017c99cc4",
+    "actual_sha256": "74d5981d07fc7f44b0d8a3f533b00c50d7f6b0d954c11c4d395c5e791777b27e",
+    "declared_sha256": "74d5981d07fc7f44b0d8a3f533b00c50d7f6b0d954c11c4d395c5e791777b27e",
     "path": "collection_plan.json",
     "plan_id": "bytes-s3-p1"
   },
