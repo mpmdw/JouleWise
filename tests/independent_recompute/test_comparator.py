@@ -152,7 +152,9 @@ class ComparatorTests(unittest.TestCase):
                 self.assertEqual(self.fails(result), {})
                 self.assertEqual(result["coverage"]["unmapped"], [])
                 self.assertTrue(all(result["counts"][f]["pass"] for f in cmp.NUMERIC + cmp.CATEGORICAL
-                                    if f != "reported_cell_j"), result["counts"])
+                                    if f not in ("reported_cell_j", "battery_term")), result["counts"])
+                # This fixture has no meter stream; the meter line is in test_comparator_meter.
+                self.assertFalse(set(cmp.METER) & set(result["counts"]))
 
     def planted(self, family, edit, check):
         """The fault fails its family; with the check disabled it passes (counterfactual)."""

@@ -3,15 +3,22 @@
 
 Standard library only; imports no repository code, in particular none of L9's analysis package.
 Inputs: L9's dry-run custody root (its record and restricted folder), the
-recompute's --member-detail output, and a bar-set config. No bar is coded here:
-every numeric family's bar comes from the config, and a family the config does
-not name refuses the run.
+recompute's --member-detail output, a bar-set config (default: block 5's release
+set, configs/analysis/b5/recompute_bars.json), and, for each window whose
+disclosure carries the whole-machine line, the harvest's withheld meter record
+(--harvest-meter PACK=PATH). No bar is coded here: every numeric family's bar
+comes from the config, and a family the config does not name refuses the run
+(the meter families when a meter line is compared).
 
 Rules (RC-CMP-1 A1-A4):
 - numeric families pass when both sides are finite numbers within the family bar;
 - categorical families (outcome words, dominance branch, p42 status, Holm order,
   the recompute's exclusion re-derivation) pass only on exact equality;
 - a value missing or null on either side is DISAGREE;
+- the whole-machine meter line (RC-CMP-2 M4): per member, the disclosure's rho,
+  dE_rail and dE_machine, and the harvest meter record's gross meter energy,
+  baseline power, battery term, sample counts and window, against the
+  recompute's request phase; a disclosed window with no record is DISAGREE;
 - every leaf of the step-11 outputs (fill input and disclosure record) must match
   a coverage rule, either a comparison family or a listed uncovered reason; an
   unmapped leaf refuses the run;
@@ -34,7 +41,11 @@ PACKS = {"alpha": "ALPHA", "beta": "BETA", "gamma": "GAMMA"}
 MODELS = {"alpha": "Qwen3-1.7B-4bit", "beta": "Qwen3-8B-4bit"}
 NUMERIC = ("run_phase_energy_j", "floor_j", "floor_gate_j", "dominance_ratio", "reported_cell_j",
            "contrast_j", "contrast_p", "descriptive_ratio", "per_token_j", "b_op_s", "count")
-CATEGORICAL = ("outcome_word", "dominance_branch", "p42_status", "holm_order", "kept_units", "exclusions_rederivation")
+# The whole-machine meter line; required of a bar set only when a meter line is compared.
+METER = ("meter_j", "meter_w", "machine_j", "rho")
+CATEGORICAL = ("outcome_word", "dominance_branch", "p42_status", "holm_order", "kept_units", "exclusions_rederivation",
+               "battery_term")
+DEFAULT_BARS = Path(__file__).resolve().parents[1] / "configs/analysis/b5/recompute_bars.json"
 
 
 class Refusal(Exception):
@@ -63,8 +74,10 @@ def load_bars(path):
         raise Refusal("bars_unreadable") from None
     if not isinstance(bars, dict) or bars.get("schema") != BARS_SCHEMA or not isinstance(bars.get("families"), dict):
         raise Refusal("bars_invalid")
-    for family in NUMERIC:
+    for family in NUMERIC + METER:
         spec = bars["families"].get(family)
+        if spec is None and family in METER:
+            continue
         if not isinstance(spec, dict):
             raise Refusal("bars_family_missing:" + family)
         for key in ("absolute", "relative"):
@@ -97,7 +110,9 @@ class Comparison:
         self.bars, self.rows = bars, []
 
     def numeric(self, family, key, l9, ours):
-        assert family in NUMERIC, family
+        assert family in NUMERIC + METER, family
+        if family not in self.bars["families"]:
+            raise Refusal("bars_family_missing:" + family)
         row = {"family": family, "key": key, "l9": l9, "recompute": ours}
         if finite(l9) and finite(ours):
             row["difference"] = ours - l9
@@ -122,7 +137,8 @@ class Comparison:
         return {(row["family"], row["key"]) for row in self.rows}
 
     def counts(self):
-        counts = {family: {"pass": 0, "fail": 0} for family in NUMERIC + CATEGORICAL}
+        counts = {family: {"pass": 0, "fail": 0} for family in NUMERIC + METER + CATEGORICAL
+                  if family not in METER or family in self.bars["families"]}
         for row in self.rows:
             counts[row["family"]]["pass" if row["verdict"] == "AGREE" else "fail"] += 1
         return counts
@@ -512,6 +528,69 @@ def compare_disclosures(c, custody, ours):
                 c.numeric("count", key + "/deciding", row.get("deciding"), neg8.get("corpus_n"))
 
 
+def compare_machine(c, custody, ours, meter_records):
+    """The whole-machine meter line: L9's disclosure and the harvest's meter record against the recompute."""
+    names = custody.names(STEP11_SOURCES[1][1])
+    record = custody.read(names[0]) if len(names) == 1 else {}
+    windows = get(ours, "disclosures", "whole_machine", "windows", default={})
+    for pack, lines in sorted((record.get("window_lines") or {}).items()):
+        members = [row for row in lines if row.get("line") == "machine_member"]
+        if not members:
+            continue
+        mine = get(windows, PACKS.get(pack, ""), "members", default={})
+        for row in members:
+            rid = row.get("run_id")
+            key = f"machine/{pack}/{rid}/request"
+            own = get(mine, rid, "phases", "request", default={})
+            c.numeric("rho", key + "/rho", row.get("rho"), own.get("rho"))
+            c.numeric("machine_j", key + "/rail_delta_J", row.get("rail_j"), own.get("rail_delta_J"))
+            c.numeric("machine_j", key + "/delta_J", row.get("machine_j"), own.get("delta_J"))
+        stored = meter_records.get(pack)
+        if stored is None:
+            # The disclosure shows a meter line, so its source record is required.
+            c.numeric("meter_j", f"machine/{pack}/meter_record", None, None)
+            continue
+        for rid, row in sorted((stored.get("members") or {}).items()):
+            machine = row.get("machine")
+            if not isinstance(machine, dict):
+                continue
+            key = f"meter/{pack}/{rid}/request"
+            own = get(mine, rid, "phases", "request", default={})
+            c.numeric("meter_j", key + "/meter/energy_J", get(machine, "meter", "energy_J"), get(own, "meter", "energy_J"))
+            c.numeric("meter_j", key + "/meter/delta_J", get(machine, "meter", "delta_J"), get(own, "meter", "delta_J"))
+            c.numeric("meter_w", key + "/meter/baseline_W", get(machine, "meter", "baseline_W"), get(own, "meter", "baseline_W"))
+            for field in ("n", "n_baseline"):
+                c.numeric("count", key + "/meter/" + field, get(machine, "meter", field), get(own, "meter", field))
+            available = machine.get("battery_term_available")
+            c.exact("battery_term", key + "/battery_term_available", available, own.get("battery_term_available"))
+            if available:
+                c.numeric("machine_j", key + "/battery/delta_J", get(machine, "battery", "delta_J"), get(own, "battery", "delta_J"))
+                c.numeric("count", key + "/battery/n", get(machine, "battery", "n"), get(own, "battery", "n"))
+            c.numeric("machine_j", key + "/delta_J", machine.get("delta_J"), own.get("delta_J"))
+            c.numeric("machine_j", key + "/rail_delta_J", row.get("rail_delta_J"), own.get("rail_delta_J"))
+            c.numeric("rho", key + "/rho", row.get("rho"), own.get("rho"))
+            for index, edge in enumerate(("start", "end")):
+                c.numeric("count", f"{key}/window_ns/{edge}", get(machine, "window_ns", index), get(own, "window_ns", index))
+
+
+def load_meter_records(specs):
+    """--harvest-meter PACK=PATH: the harvest's withheld meter record, with its digest."""
+    records, digests = {}, {}
+    for spec in specs or ():
+        pack, _, path = spec.partition("=")
+        if pack not in PACKS or not path or pack in records:
+            raise Refusal("harvest_meter_argument_invalid")
+        try:
+            raw = Path(path).read_bytes()
+            records[pack] = json.loads(raw)
+        except (OSError, ValueError):
+            raise Refusal("harvest_meter_unreadable") from None
+        if not isinstance(records[pack], dict):
+            raise Refusal("harvest_meter_unreadable")
+        digests[pack] = hashlib.sha256(raw).hexdigest()
+    return records, digests
+
+
 def compare_exclusions(c, ours):
     for pack in sorted(PACKS.values()):
         # L9 consumes derived/exclusions.json; the recompute re-derives it from the flags (AN-18 partial).
@@ -538,6 +617,11 @@ COVERAGE = (
      r"(bound_envelope_j|bound_prediction_j|start\.mean_j|midpoint\.mean_j|end\.mean_j|trajectory_excursion_max_j|drift_allowance_j)",
      "floor_j"),
     (r"disclosure:window_lines/[a-z]+/\*/b_op_s", "b_op_s"),
+    # Whole-machine member lines (machine_member): rho, dE_rail and dE_machine are compared per member.
+    (r"disclosure:window_lines/[a-z]+/\*/rho", "rho"),
+    (r"disclosure:window_lines/[a-z]+/\*/(rail_j|machine_j)", "machine_j"),
+    (r"disclosure:window_lines/[a-z]+/\*/(median|minimum|maximum|q25|q75|spread|central_band/(lower|upper))",
+     "uncovered:order statistics and band of the member rho values compared individually here (machine_summary)"),
     (r"disclosure:window_lines/[a-z]+/\*/(counts/(start|midpoint|end)|deciding)", "count"),
     (r"disclosure:window_lines/.*", STRUCTURE + "; includes NEG-8 bracket internals (admissible sets, standard errors, "
      "idle-subtracted companion, drift-bound artifact) that only L9 computes"),
@@ -636,8 +720,9 @@ def coverage(custody, comparison, rules=None):
             "absent_sources": absent}
 
 
-def run(l9_custody, recompute_path, bars_path, rules=None):
+def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()):
     bars = load_bars(bars_path)
+    meter_records, meter_digests = load_meter_records(meter)
     custody = Custody(l9_custody)
     try:
         ours = json.loads(Path(recompute_path).read_bytes())
@@ -652,11 +737,13 @@ def run(l9_custody, recompute_path, bars_path, rules=None):
     compare_reported(c, custody, ours)
     compare_sensitivity(c, custody, ours)
     compare_disclosures(c, custody, ours)
+    compare_machine(c, custody, ours, meter_records)
     compare_exclusions(c, ours)
     cover = coverage(custody, c, rules)
     return {"schema": SCHEMA, "bar_set": bars.get("bar_set"), "bars": bars["families"],
             "l9_steps": {f"{s}/{w}" if w else str(s): v for (s, w), v in sorted(custody.status.items(), key=str)},
-            "recompute_program_sha256": ours.get("program_sha256"), "counts": c.counts(),
+            "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
+            "counts": c.counts(),
             "coverage": cover, "comparisons": c.rows}
 
 
@@ -664,11 +751,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--l9-custody", required=True, help="L9 dry-run custody root")
     parser.add_argument("--recompute", required=True, help="independent recompute --member-detail output")
-    parser.add_argument("--bars", required=True, help="bar-set config (joulewise.b5_comparator_bars.v1)")
+    parser.add_argument("--bars", default=str(DEFAULT_BARS),
+                        help="bar-set config (joulewise.b5_comparator_bars.v1); default block 5's release set")
+    parser.add_argument("--harvest-meter", action="append", default=[], metavar="PACK=PATH",
+                        help="a window's withheld meter record (alpha, beta or gamma); repeat per window")
     parser.add_argument("--restricted-out", required=True, help="restricted file for values and differences")
     args = parser.parse_args(argv)
     try:
-        result = run(args.l9_custody, args.recompute, args.bars)
+        result = run(args.l9_custody, args.recompute, args.bars, meter=args.harvest_meter)
         out = Path(args.restricted_out)
         if out.exists():
             raise Refusal("restricted_output_exists")
