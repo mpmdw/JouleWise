@@ -36,12 +36,15 @@ step still assigned to the Mac takes the gap at 8 Nov first (contingency §7, po
 - The identity-pin projection validates.
 - A fixture SHADE episode runs end to end through the real controller on the mock runtime and reaches `PILOT.json`
   with all four instrument checks passing.
+- The real `harvest_b6_session.py --non-claim` exits 0 over a prepared, seeded session that includes 12 mock align
+  bundles.
 
 **What remains unproven:**
 
 - No real SHADE environment has run anywhere: its Python packages are absent here, and the cloud proxy blocks PyPI.
 - No episode has run with real MLX and real powermetrics through this kit.
-- The native harvest has never read an `align_episode` bundle.
+- The native harvest has read `align_episode` bundles only from the mock runtime. A synthetic test exits 0, but
+  bundles from real MLX plus powermetrics have never been harvested.
 
 That is why the first session is an instrument check. `desk` writes `PILOT.json` before the harvest runs, so a
 harvest fault cannot lose the pilot's episodes.
@@ -66,11 +69,11 @@ Status values:
 | 7 | Clock mapping to turns and tool calls | DONE (synthetic) | `stamp_mapping` (`joulewise/align/apple/sampler.py:83`); per-turn, phase and tool attribution in `attribute_episode` (`joulewise/align/attribution.py:632`). Repeated prefill/decode phase pairs plus `align_tool_N_M` events are described in `docs/align/apple_path.md` "Execution and records". PR #561 Opus F6 says a sampler capture must exceed the roughly 60 s anchor-fit span; the BYTES member's 57.6 s idle plus warm-up precedes every episode, so this holds. |
 | 8 | Loop integration (arm like a BYTES session) | DONE (synthetic) | The block-6 loop cannot carry this kit: module kinds are only floor or contrast, at 50 or 40 runs (`joulewise/b6/pack_registration.py:89-94`); DIF-READY-1 found the same. The non-claim fixed-kit route that BY-H2 ran (RUN_STATE item 68) is used instead: `scripts/align_pilot_kit.py` builds the kit on `compose` exactly as `scripts/bytes_mac_kit.py` does, and `scripts/align_pilot_session.py` reuses `bytes_h_session.prepare`/`install`. Tests: `SessionPrepareTests` (real window-plan writer, member_count 37, STAGED) and `RealKitStagingTests` (all 37 configs authenticate, identity projection validates, harvest roster has 37 members). |
 | 9 | Desk / precheck | DONE (synthetic) / CODE | The item-H route uses the in-chain agent census and arm checks, not the block-6 loop precheck. `desk` writes `PILOT.json` (checks I1-I4) and then runs `harvest_b6_session.py --non-claim`. `SyntheticDeskTests` runs 4 fixture episodes, then desk; the harvest is stubbed there. |
-| 10 | Harvest of `align_episode` bundles | MISSING (unverified) | No test runs the real block-6 harvest over align bundles; `tests/test_bytes_h_session.py` seeds only BYTES-shaped bundles. A harvest failure leaves `PILOT.json` intact, but the native export may refuse. |
+| 10 | Harvest of `align_episode` bundles | DONE (synthetic) / CODE (real) | `SessionPrepareTests.test_prepared_session_desk_reads_episodes_then_runs_the_real_harvest`: the real `harvest_b6_session.py --non-claim` exits 0 over a prepared session with 12 mock align bundles and reaches a structural verdict. Align members carry flags of their own, e.g. `member.bytes_missing` and `member.anchor_not_bounded` on mock bundles that have no native powermetrics bytes; these must be read on the first real session. Bundles from real MLX plus powermetrics have never been harvested. |
 | 11 | Pilot protocol | DONE (DRAFT) | `docs/align/pilot_protocol_v0.md` |
 | 12 | Session time budget | CODE (planning bound) | `configs/campaigns/align_pilot_v0/registration/sizing_b5.json`, flagged `sizing.planning_bound_unmeasured`: programmed span 30,670 s (8.5 h), window maximum 48,420 s (13.5 h). Expected 5-6 h, which is a guess. Static estimate of tool-schema size from the pinned source (chars/4, not tokenized): about 5.6k tokens for banking (70 tools) and 3.3k for spam filter (40 tools), so a 32,768-token context bound is plausible but untested. |
 | 13 | Identity pins and model inventory | CODE / MAC | The kit copies the BYTES kit's file hashes for the same two directories. `configs/campaigns/align_pilot_v0/registration/derive_identity_pins.py` re-derives them at the Mac. There is one identity unit per episode, because the identity projection requires one declared workload per unit (`joulewise/identity_pins.py:1656`) and each episode spec is its own workload. |
-| 14 | Order-dependent `test_power_duty` failures (DUTY-ORDER) | see TESTS | The seat never executed (`.codex-report/DUTY-ORDER.md`). Here `tests.align.test_power_duty` passes alone. The combined-order result is in TESTS. |
+| 14 | Order-dependent `test_power_duty` failures (DUTY-ORDER) | NOT REPRODUCED | The DUTY-ORDER seat never executed (`.codex-report/DUTY-ORDER.md`). Here the whole `tests/align` suite in one discovery-order process ran 940 tests, OK; `test_power_duty` also passes alone. No fix was made, because nothing failed. If it recurs on the Mac or under pytest, record the exact order. |
 | 15 | Paid services or session-time network | none | No paid API anywhere. Session-time network: none (the factory refuses to fetch). Desk-time network: the SHADE fetch and `pip install`. |
 
 ## CHANGES (branch `lane/2026-10-27-align-ready`)
@@ -81,6 +84,7 @@ Status values:
 | `de61d0bfe` | Merge `fix/2026-10-22-align-duty-order` (`9ff65870f`). This brings in PR #561's real-smoke fixes (`bef534273`, still open against integration) and the DUTY-ORDER blocker record; clean. |
 | `7a26c2c45` | Merge the collection line `work/2026-10-23-by-slots-draft` (`991358f73`, the b6 loop the Mac runs; not on main). Conflicts in `configs/gates/hazard_refusals.json` and `scripts/test_timings.json` were resolved as unions of both sides. |
 | `f02772b60` | Align pilot v0: `joulewise/align/apple/pilot.py`, `scripts/align_pilot_kit.py`, `scripts/align_pilot_session.py`, kit `configs/campaigns/align_pilot_v0/`, `tests/test_align_pilot_session.py`, `docs/align/pilot_protocol_v0.md`. `scripts/bytes_h_session.py`: `prepare`/`measurement_view` take a kit and pack id, with BYTES defaults unchanged; `align_episode` configs get one identity unit each. |
+| `7e519a01e`, `3bfc7f6ca`, this commit | This report, and the end-to-end prepared-session test that runs the real harvest. |
 
 Branches not merged, with reasons:
 
@@ -105,7 +109,20 @@ a measurement checkout only after BYTES closes.
 All runs used `JW_B5_SYNTHETIC_ONLY=1`, a private `TMPDIR` per module, and `python3.13 -B -m unittest <module>`,
 one process per module, on Linux with 4 CPUs.
 
-TEST_TABLE_PLACEHOLDER
+| Run | Result |
+|---|---|
+| `tests/align`, 64 modules, each in its own process | 64/64 modules OK. 983 test results, which include one nested 43-test runner inside a test; 17 skipped. The skips are optional extras that are not installed: torch/transformers MoE hooks, NVML, and the real-upstream SHADE packages. |
+| `tests/align` in one process, discovery order (`unittest discover -s tests/align -t .`) | **Ran 940 tests in 3,473 s, OK (skipped=17).** The two order-dependent `test_power_duty` failures recorded for #561 do **not** reproduce on Linux under `python3.13 -m unittest`. Both duty tests use `assertWarns`, which resets warning registries itself, so I made no change there. The 10-22 failures were seen on the Mac, possibly under pytest; pytest is not installed here, and that environment was not reproduced. |
+| `tests.test_align_pilot_session` (new) | 9 tests, OK (140 s). Covers: kit equals generator; ABBA order; configs equal the BYTES 8B member apart from the workload; registration inputs; offline factory never fetches; fixture episodes through the real controller to `PILOT.json` (I1-I4 pass, hidden work exceeds the summed half-widths); check failures; real-kit staging and lineage with identity projection; prepare through the real window writer (37 members, STAGED); **prepared session to desk with the real `harvest_b6_session.py --non-claim` subprocess over 25 seeded scaffold bundles and 12 mock align bundles: exit 0**, structural EXCLUDE verdict as expected for seeded data, no program fault. |
+| `tests.test_bytes_h_session` | 36 tests, OK (1,475 s). The BYTES runner is unchanged in behaviour after the kit parameters were added. |
+| `tests.test_bytes_mac_kit`, `test_bytes_plan_trees`, `test_b6_compose`, `test_b6_queue`, `test_b6_registration`, `test_arm_census` | 4, 7, 6, 10, 13 and 20 tests, all OK. |
+| `tests.b6.test_precheck`, `test_smoke`, `test_bytes_launch`, `test_bytes_packs`, `test_session_wrapper` | 24, 22, 2, 10 and 6 tests, all OK. |
+| `tests.b6.test_loop_round_desk`, `tests.b6.test_desk_resume_finalize` | 6 and 6 tests, OK. Two environment problems had to be removed first. The scratch `TMPDIR` path contained "claude", which the agent census correctly refuses; the rerun used `/tmp/jwt`. The tests also call the Mac interpreter `/opt/homebrew/bin/python3.13`, which I linked to the container's python3.13. |
+| `tests.test_b6_loop` | 64 tests; 62 OK and 2 errors. Both errors are `/bin/zsh` absent from this Linux container (`test_done_guard_skips_tick_and_resume_invalidates`, `test_guard_skip_pass_terminal_and_overrun_plist_and_cli_override`). DIF-READY-1 saw the same 2 errors on the collection line alone. |
+| `tests.hazards.test_refusal_allowlist`, `tests.b6.test_catalog`, `tests.test_b5_chain_static_check`, `tests.test_docs_freshness`, `tests.test_shard_split`, `tests.test_shard_tests` | 23 (1 skipped), 4, 6, 31, 33 and 6 tests, all OK. |
+| `scripts/align_pilot_kit.py --check`; `scripts/repin.py --check`; governed files `sha256sum -c` | kit verified; `PASS 16 pin families current`, with the sealed-inventory warning noted in CHANGES; governed files OK. |
+
+I did not run the full repository suite. CI on this branch is the check for that.
 
 ## NEEDS_RULING
 
