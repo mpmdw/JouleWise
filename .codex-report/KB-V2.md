@@ -255,3 +255,51 @@ This Round 2 checkpoint is committed and pushed with the two compatibility
 updates. The final response records the remote-confirmed SHA and its CI
 observation after push, avoiding another report-only commit that would replace
 the observed head. The full-suite/live/merge gates remain lead-owned.
+
+
+## Round 3 (fix round)
+
+Authority: magistrate activation 39206674, 2026-10-28; continued
+`codex/2026-10-28-kb-v2` at `94af71056` (draft PR #593). Both executing
+reviews were reachable and read: Sol `.codex-report/KB-V2-REV-SOL.md` on
+`codex/2026-10-28-kb-v2-rev-sol`, and Opus `kb-v2-rev-opus/REPORT.md` on
+JouleWise-data `claude/kb-v2-rev-opus-t9vl2k`. R1–R9 govern this round.
+
+### Step 1 — reading rule and arithmetic
+
+- R1: derive per-dispatch uncertainty from two half-nanosecond stamp endpoints
+  plus the three-call spread; propagate through the reciprocal marginal
+  throughput and harmonic threshold. Undefined differences never count above
+  threshold. Before: Sol's unquantized/quantized DRAM-only scans falsely found
+  8/4 MiB knees. After: both give `knee not found`; the worked example retains
+  64 MiB in both cases. Zero, negative and uncertainty-overlapping differences
+  are explicitly undefined.
+- R2/R4/R9: print every stack difference, scope the interpretation consequence
+  to OS/hardware/MLX/MLX-Metal with physical reasons, use the nonsingular δf,
+  and print `not defined (<reason>)` for unavailable descriptions without a
+  refusal. Name `hazards/monitor/thermal.jsonl` and correct the device source.
+- R3/R5: estimate meter and battery idle means separately at native cadence and
+  sample support; add their SEs using the correlation +1 bound. Bound counter
+  gaps by missing time times adapter rating plus measured battery maximum,
+  propagating idle gaps through their half-weight. No alignment, covariance
+  estimate or partial-call selection. Revised §5: DC 0.1929 ± 0.0025, rest
+  0.1262 ± 0.0024 J/GB; f = 0.3458 ± 0.0075. One 20 ms gap in call 4 adds
+  2.8 J and yields DC/rest half-widths 0.0026/0.0025, still resolved.
+- R6: the hour is 3573.6 s with 24 settle gaps; paired stream midpoints share
+  1788.3 s, 1.5 s past the session midpoint. Linear drift cancellation holds.
+
+Decisions I made: use the maximum observed deviation around the three-call
+mean plus mean stamp-resolution bound; bound threshold uncertainty too; retain
+arithmetic sample weights for meter/battery as their integrator requires;
+illustrate separate SEs with assumed 0.05 W meter and 0.01 W battery per span.
+The latter is an explicit example assumption, not a measurement. Preserve the
+existing missing-battery prerequisite. NEEDS_RULING: none.
+
+Verification: the baseline 21 focused tests passed. Re-ran Sol's five repros:
+false knees, metadata-only mismatch, hold/linear variance discrepancy and both
+zero divisions reproduced; the duration tolerance was present. The revised
+independent arithmetic fixtures (5 tests) pass, including the bounded gap and
+all revised publication digits. The original worked script at `0609bcc0c` was
+executed in memory before and after substituting the stated R3/R6 inputs;
+its original output and revised arithmetic reproduce. Agreement bar remains
+5.7e-6 J/GB, above 1e6 × float noise (2.5e-10). No hardware evidence.

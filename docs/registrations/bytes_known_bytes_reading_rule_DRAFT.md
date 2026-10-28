@@ -80,38 +80,52 @@ holds dispatch structure fixed, would need new kernel code; the multi-size desig
 §3 says what it leaves unbounded.
 
 **Order.** Eight probe calls in a palindrome, **S, C1, C3, C2, C2, C3, C1, S**, the two calls of each arm with the
-same planned length. Each arm's two calls then sit symmetrically about the session midpoint, so a drift linear in
-time puts every arm at the same mean state (the drift's value at the midpoint; §5 checks the midpoints). This is
+same planned length. Each arm's two stream midpoints then have the same mean time, so a drift linear in
+time puts every arm at the same mean state (§5 checks these mean times). The extra settle before pre-idle
+shifts that common time 1.5 s beyond the session midpoint; this shared offset does not change the cancellation. This is
 the reasoning of the registration's null quads (A, B, B, A, reg. §5) applied to arms.
 
 **Cache knee K: measure first.** The repository records no cache size for this M3 Max. Before the measured hour,
 with no energy capture and with `--idle-s 0 --settle-s 0` (§2; otherwise the idle spans would add about two hours): run the probe at `--bytes 2^k` for k = 14 to 35 (16 KiB to 32 GiB), three calls per size, repeats chosen so
-each call lasts about 2 s (planning choices: they set the timing noise, and noise can only raise K, below). If a
+each call lasts about 2 s (planning choices: they set the observed timing spread, propagated below). If a
 size cannot be allocated as one buffer, the scan stops at the largest size that can, s_max (32 GiB if all can).
-1. Per size s, t(s) is the mean over its three calls of duration / repeats from the receipts (seconds per
-   dispatch).
-2. Per adjacent pair (s/2, s), the **marginal throughput** m(s) = (s − s/2) / (t(s) − t(s/2)). The per-dispatch
-   fixed time is in both t values and cancels; whole-call throughput (bytes / duration) does not cancel it and
-   misreads K (the Fable cold pass: on the §5 inputs a ±4% band on whole-call throughput returns 512 MiB, ±2%
-   returns 1 GiB, against a true 64 MiB; §5 reproduces this).
-3. The DRAM plateau m_D is the top pair's marginal throughput (16 GiB → 32 GiB if s_max = 32 GiB); the cache's
-   own marginal throughput m_C is the largest m(s) in the scan.
+1. Per size s and call j, let d_j(s) = (end_ns − start_ns) / (10⁹ N_j), and let t(s) be the mean of
+   the three d_j. The integer-nanosecond stamps have resolution 1 ns: two endpoints, each rounded within
+   half a unit, give a duration error at most 1 ns. Thus q_j = 10⁻⁹ / N_j seconds per dispatch. Use
+   δt(s) = max_j |d_j − t(s)| + mean_j q_j. The first term envelopes the observed three-call spread about
+   its mean; the second bounds the mean's stamp quantization error. This is an observed-spread bound,
+   not a confidence claim about unobserved timing excursions. Print t, δt and all three calls.
+2. Per adjacent pair (s/2, s), write D = t(s) − t(s/2), δD = δt(s) + δt(s/2), A = s − s/2.
+   If D ≤ 0 or D ≤ δD, m(s) is `not defined (dispatch-time difference not separated from zero)` and
+   never counts as above threshold. Otherwise m(s) = A / D. The fixed dispatch time cancels; whole-call
+   throughput does not cancel it and misreads K (the old ±4% rule gives 512 MiB, ±2% gives 1 GiB in §5).
+   **Propagated uncertainty, derived beside the comparison bar:** the reciprocal's larger endpoint error is
+   A/(D − δD) − A/D = A δD / [D(D − δD)], so use δm(s) equal to that value. It also covers the smaller
+   downward error A/D − A/(D + δD), without a linear approximation near zero.
+3. m_D is the top pair's defined marginal throughput (16 → 32 GiB if s_max = 32 GiB); m_C is the largest
+   defined m(s). Carry their own δm_D and δm_C from step 2. Undefined pairs are omitted from m_C. If the
+   top pair is undefined, or either lower endpoint m_D − δm_D or m_C − δm_C is nonpositive, the threshold
+   is not defined and the knee is not found; the timing does not resolve the reference throughputs.
 4. **Threshold, derived.** A pair whose added bytes come from cache in a fraction c takes
-   (1 − c) / m_D + c / m_C seconds per byte. A pair counts as DRAM-sourced when c ≤ 1/64, the cached fraction the
-   sizes below already allow in S (φ ≤ 1/64), so m(s) ≤ m_th = 1 / ((63/64) / m_D + (1/64) / m_C). The test is
-   one-sided: a pair slower than the plateau is DRAM-sourced (the pair that straddles the knee re-reads its
-   smaller payload from DRAM, which makes it slow). No band is chosen; m_th follows from the 1/64 cap and two
-   measured throughputs, and lies between m_D and 64/63 × m_D whatever m_C is.
-5. **K** is the smallest scanned size s such that m(s′) ≤ m_th for every s′ ≥ s. Timing noise that lifts one pair
-   above m_th can only make K larger, which pushes the outcome toward NOT RESOLVED (§3, "Bias").
-6. **Refusal.** The knee is not found when no pair exceeds m_th (K would be the smallest scanned size, so the scan
-   shows no cache) or when 64 K > s_max (B could not be formed). The measured hour then does not run, every class
-   is UNDETERMINED (`knee not found`), and the slot records the scan.
+   (1 − c)/m_D + c/m_C seconds per byte. The sizes below cap S's cached fraction at 1/64, so set
+   H(x,y) = 1 / [(63/64)/x + (1/64)/y], m_th = H(m_D,m_C). Since H increases in both positive arguments,
+   δm_th = max(H(m_D+δm_D,m_C+δm_C) − m_th,
+   m_th − H(m_D−δm_D,m_C−δm_C)) bounds its timing uncertainty. A defined pair counts as **above threshold
+   only when m(s) − m_th > δm(s) + δm_th**. This bar follows from the receipt's stamp resolution and
+   three-call spread propagated through both sides; no numerical epsilon or percentage band is added.
+   It is one-sided: a slow straddling pair does not count as above. Print each margin and its bar.
+5. K is the smallest scanned pair size with no above-threshold pair at that size or higher. Undefined pairs
+   never count as above, but cannot supply a reference in step 3. The scan establishes cache evidence only
+   through a pair separated from the threshold by its propagated uncertainty; it does not assert that noise
+   can only raise K.
+6. **Refusal.** The knee is not found when the reference/threshold is undefined, no pair counts as above
+   threshold (no resolved cache evidence), or 64 K > s_max (B cannot be formed). The measured hour then
+   does not run, every class is UNDETERMINED (`knee not found`), and the slot records the scan and reason.
 
 The scan reads no energy and is not BYTES data.
 
 **Sizes.**
-- *Bc2 = K / 4.* By step 5 the pair (K/4, K/2) exceeds m_th (otherwise K/2 would qualify as K), so some bytes
+- *Bc2 = K / 4.* By step 5 the pair (K/4, K/2) counts as above threshold (otherwise K/2 would qualify as K), so some bytes
   beyond K/4 still come from cache: the cache holds more than K/4, and K/4 is the largest power of two the scan
   shows resident. This is the Opus seat's "clear of the knee", now with its reason.
 - *Bc1 = Bc2 / 4, Bc3 = Bc2 / 2.* δγ_c falls as Bc2 − Bc1 grows (§3); dividing Bc2 by 4 gives 3/4 of the largest
@@ -126,8 +140,8 @@ The scan reads no energy and is not BYTES data.
 
 **Repeats.** Each call's repeats N = floor(T_call / t_dispatch), with t_dispatch = duration / repeats measured at
 that exact payload in the knee scan and T_call the call's planned stream length. Planned split of the hour: sixteen
-idle spans of 57.6 s (921.6 s), sixteen settle gaps of 3 s (48 s; §2), about 10 s per call of allocation, fill,
-warm-up and exit (80 s; measured in the scan), S 2 × 500 s, C1, C3 and C2 2 × 250 s each (2,500 s): 3,549.6 s.
+idle spans of 57.6 s (921.6 s), twenty-four settle gaps of 3 s (72 s; §2), about 10 s per call of allocation, fill,
+warm-up and exit (80 s; measured in the scan), S 2 × 500 s, C1, C3 and C2 2 × 250 s each (2,500 s): 3,573.6 s.
 These are planning choices, not thresholds; the arithmetic uses the actual stamped spans.
 
 ## 2. The receipt change (one small code change, before the test)
@@ -135,8 +149,8 @@ These are planning choices, not thresholds; the arithmetic uses the actual stamp
 The receipt gains schema `joulewise.bytes_stream.v2` with:
 
 1. **Order inside a call, idle spans and settle gaps.** Allocate and fill the payload, `mx.synchronize()`, run one
-   warm reduction and synchronize (so the first measured dispatch is not a kernel compile), then: sleep the
-   pre-idle span (`--idle-s 57.6`), sleep the settle gap (`--settle-s 3`), stream from `start_ns` to `end_ns`,
+   warm reduction and synchronize (so the first measured dispatch is not a kernel compile), then: sleep one
+   settle gap before stamping `idle_pre_start_ns`, sleep the pre-idle span (`--idle-s 57.6`), sleep the settle gap (`--settle-s 3`), stream from `start_ns` to `end_ns`,
    sleep the settle gap, sleep the post-idle span with the payload still resident, exit. Stamp
    `idle_pre_start_ns`, `idle_pre_end_ns`, `idle_post_start_ns`, `idle_post_end_ns` on CLOCK_MONOTONIC_RAW, the
    clock of `start_ns` and `end_ns`. Without these, the baseline cannot be computed from the receipt and traces
@@ -147,17 +161,17 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
      late or smears across the edge. The longest such delay is the battery's, τ = 2 × T_SMC + Δt_p (reg. §7: the
      system controller publishes battery current once a second, T_SMC = 1.0 s, and Δt_p is the longest interval
      between meter polls), 2.302 s on H; it exceeds one rails sample interval (100 ms at the registered 10 Hz)
-     and the meter's r_max + Δt (38 ms on H, §3). 3 s is the next whole second above τ. If the test's own τ
-     exceeds 3 s, P_post is taken over the post-idle span minus its first τ − 3 s. Energy inside the gaps enters
+     and the meter's r_max + Δt (38 ms on H, §3). 3 s is the next whole second above τ. The same delay applies after fill/warm-up, hence the extra gap before pre-idle. If the test's own τ
+     exceeds 3 s, each idle mean is taken over its stamped span minus its first τ − 3 s. Energy inside the gaps enters
      no quantity.
 2. **Stack object** (the governed runtime identity, so a change of OS or library between pass 1 and the test is
-   visible). Each field is recorded from the same function pass 1 uses, and compared as listed (§4, "Stack
-   check"):
+   visible). The sources and comparisons are listed below (§4, "Stack check"); the device source is explicit
+   because this standalone probe has no telemetry device metadata:
 
    | Receipt field | Source | Compared with (registered pass-1 stack) |
    |---|---|---|
    | `os_version` | `platform.platform()` | `stack_identity.os_version`, string equality |
-   | `hardware_unit.machine`, `hardware_unit.device` | `platform.machine()`; the checkout's `hardware_target.id`, passed in | `stack_identity.hardware_unit.machine`, `.device` |
+   | `hardware_unit.machine`, `hardware_unit.device` | `platform.machine()`; explicit `--device` from `hardware_target.id` (pass 1 takes `device` from telemetry device metadata; its `config_id` comes from `hardware_target.id`) | `stack_identity.hardware_unit.machine`, `.device` |
    | `runtime_version` | `{"name": "mlx", "version": mx.__version__}` | `stack_identity.runtime_version.name` and `.version` |
    | `kernel_library` | as pass-1 prepare records it, else `"unavailable"` | `stack_identity.kernel_library`, string equality (`"unavailable"` on both sides is equal) |
    | `python`, `packages` | `joulewise.flags.collect.runtime_versions` (Python and all seven packages) | `configs/bytes/identity_pins.json` `runtime_versions`, every key |
@@ -166,10 +180,26 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
 
    `telemetry_backend` and `measurement_boundary_label.rails` come from the concurrent capture's record at harvest
    (the step that collects traces and computes per-run fields after a session), as in pass 1, and are compared
-   with `stack_identity.telemetry_backend` and `.measurement_boundary_label.rails`. The reference is any `units`
-   entry of `configs/b6/registration/identity_pins.json`: at `6731d5249` all 19 entries carry the same values on
-   these fields (`macOS-26.6.2-arm64-arm-64bit-Mach-O`, `arm64`, `macbook_m3_max`, mlx 0.31.2, `unavailable`,
-   `powermetrics`, `cpu_power, gpu_power, ane_power`).
+   with `stack_identity.telemetry_backend` and `.measurement_boundary_label.rails`. The reference is the embedded projection read at `6731d5249` from all 19 `units`
+   entries of `configs/b6/registration/identity_pins.json`, which agree on these fields (`macOS-26.6.2-arm64-arm-64bit-Mach-O`, `arm64`, `macbook_m3_max`, mlx 0.31.2, `unavailable`,
+   `powermetrics`, `cpu_power, gpu_power, ane_power`). Source sha256:
+   `95d07401bb5d7c7e44e9dc27984bc3da4fb04642ec7cf80bf3c6ecadaf2efc6e`.
+   The embedded Python/package projection comes from `configs/bytes/identity_pins.json` at the same commit,
+   sha256 `0760eded0603782b5367ad56721faf96417b9ea87bb698dc520835f34e03b2b2`.
+   The receipt records these provenance values and the running checkout's full projected comparison with them,
+   including missing/unreadable files and divergent units. Checkout divergence never raises or changes a class.
+
+   **Physical scope of a difference.** The OS build can change the driver, scheduling and power states; the
+   hardware unit/device changes the cache, memory path and rails; `runtime_version.name/version`, `packages.mlx`
+   and `packages.mlx-metal` select the reduction kernel and its execution. These are the only stack differences
+   that prevent transfer and set UNDETERMINED. `kernel_library` is recorded as prepare metadata (the actual
+   running kernel versions are the two MLX packages). `telemetry_backend` and the rails label disclose the
+   capture metadata; the governed boundary integrations above still have to be supplied. They do not independently
+   veto a class. `mlx-lm` loads/generates model text; `transformers` and `tokenizers` supply model/token processing;
+   `safetensors` reads model weights; `numpy` supplies host arrays. None is used by this uint8 MLX reduction.
+   Python patch level changes the host interpreter metadata, not the selected MLX/Metal kernel; dispatch work is
+   measured and removed by the cache arms. Each of these differences is printed as a disclosure and changes no
+   class. `git_commit` and the five not-applicable model fields have the non-comparison roles in the table.
 
 **Capture and harvest.** One continuous `powermetrics` capture and one continuous meter stream cover all eight
 calls, with one meter clock fit for the test, from the test's own non-claim checkout with the chain extension (reg. §19).
@@ -188,12 +218,17 @@ and rest. Each is integrated over a stamped span exactly as pass 1 integrates it
   "Battery term");
 - rest = DC − rails per span, before any averaging.
 
-**Meter gap.** A dropped meter sample (reg. §7: an exact gap in the device's counter sequence) whose mapped time lies in
-any stamped span of any call, or a span with no battery poll carrying both readings (reg. §7, "Missing readings"),
-makes DC input and rest unavailable for the whole test. Using the remaining calls would break the palindrome's
-symmetry and the repeatability term below, and no bound would cover what is lost; without DC, validity (§4) cannot
-be shown. Every class is then UNDETERMINED (`meter gap in call i` or `battery reading missing in call i`), and the
-rails and GPU-rail Δ still print.
+**Meter gap.** An exact device-counter gap of n samples gives a missing duration n × Δt, with Δt = 20 ms
+(50 samples/s). Charge n × Δt × P_max to that call's DC systematic bound, where P_max is the adapter's rated
+maximum (nameplate/specification source recorded) plus the maximum measured positive battery discharge power
+in that call (record the battery poll source and maximum). Derivation: the missing energy is no greater than
+missing time times maximum supplied power. This is the adopted measured-maximum bound; it does not claim an
+unmeasured battery peak cannot exceed that maximum. Keep every call, DC and rest valid, and disclose each gap.
+For a gap in a baseline, charge its missing-energy bound divided by that idle span's length, times T_i/2,
+because that span mean has weight 1/2 in P_idle; for a stream gap the coefficient is 1. Sum these contributions
+in b_i (rest inherits DC). No 50 Hz battery alignment is introduced. A span with no battery poll carrying both
+readings still makes DC and rest unavailable for the whole test (`battery reading missing in call i`);
+without that prerequisite the supply/baseline and DC validity cannot be evaluated. Rails/GPU Δ still print.
 
 **Arithmetic, per boundary β** (energies in J; 1 GB = 10⁹ bytes):
 
@@ -214,6 +249,7 @@ of the rows below for call i:
 | Term | rails and GPU rail | DC input | rest |
 |---|---|---|---|
 | Edges at start_ns and end_ns | the call's rails **anchor-shift bound** (the energy that moving both span edges by the operative timing bound could add, computed by the pass-1 function on the call's span; H: 0.28 to 0.63 J per run, both edges together); the GPU rail uses the rails bound, which is never smaller because GPU power never exceeds rails power; interpolation term 0 for interval support | u + v of reg. §7: u = (P_start + P_end)(r_max + Δt), with r_max the largest excess latency of the test's meter clock fit and Δt = 20 ms at 50 samples/s; v = v_start + v_end, the battery energy of the polls received in [edge, edge + τ) | rails row + DC row |
+| Counter gaps | 0 | sum of the gap contributions derived above | DC row |
 | Baseline | T_i × (\|P_pre − P_post\| / 2 + 2 se_idle) | same, with the DC spans' values | rails row + DC row |
 
 - *Baseline term.* The half-difference bounds a baseline drift that is monotone across the call; the 2 is reg. §9's
@@ -222,8 +258,21 @@ of the rows below for call i:
   `joulewise.idle_dependence.estimate_newey_west_bartlett` (method
   `duration_weighted_newey_west_bartlett_10s_iid_floor_v2`, the estimator behind pass-1's
   `idle_variance_of_mean_w2`: the larger of the IID variance and a Newey–West estimate with a 10 s Bartlett
-  bandwidth). It is applied to each idle span's samples on rails and on the GPU series (10 Hz, 100 lags), and is
-  registered here for the meter's DC power samples (50 samples/s, 500 lags); it is not inherited by analogy.
+  bandwidth). Apply it separately to rails and GPU samples (10 Hz, 100 lags), meter samples (50 Hz,
+  500 lags), and battery discharge-power polls at their own observed cadence (about 5 Hz, about 50 lags),
+  using rails/GPU native interval durations clipped to the idle span. Meter/battery means retain the pass-1
+  integrator's arithmetic sample support in [span_start, span_end): give each of its n retained samples equal
+  duration span_length/n in the estimator, so its weighted mean equals the integrated mean. Thus do not interpolate, hold a battery poll onto meter stamps, or construct a joint series.
+  For battery polls use lag_count = floor(10 s / median native inter-poll interval); record the interval,
+  lag count, sample count and equal support durations. The approximately 1 Hz SMC updates are already repeated in the native
+  battery polls and enter this estimator's serial dependence, not a resampled stream. Each stream needs the
+  estimator's own sample/cadence support (including at least three bandwidths); if unavailable, print the
+  missing prerequisite and do not claim DC validity. This rule registers the estimator for meter and battery
+  separately; neither inherits it by analogy.
+- *DC combination, derived without alignment.* For each stream h, se_h = √(v_h,pre + v_h,post)/2. Then
+  Var(mean_meter + mean_battery) = se_meter² + se_battery² + 2 Cov ≤ (se_meter + se_battery)² by
+  |Cov| ≤ se_meter se_battery. Thus se_DC = se_meter + se_battery (the correlation +1 bound), with no
+  covariance estimate. Use this in the DC baseline row; retain the summed stream means for P_pre/P_post.
 - *Rest* sums the rails and DC rows, so it needs no variance of its own.
 
 **Repeatability.** Every row above is systematic; none responds to the two calls of an arm disagreeing, so energy
@@ -274,15 +323,18 @@ gross energy, as reg. §12 uses it (worked example: 2.5 × 10⁻¹⁰ ≤ 5.7 ×
 **Validity.** The contrast is valid only when Δ_DC − δΔ_DC > 0. DC input encloses rails and rest, so a real
 memory-traffic cost must show there; if it does not, the control failed to separate DRAM traffic from GPU work.
 
-**Stack check.** If any compared field of §2 item 2 differs from the registered pass-1 stack, the result does not
-transfer to pass 1.
+**Stack check.** Record and print the full comparison in every case, including all disclosure-only differences
+and pending fields. Only differences in OS build, hardware unit/device, or MLX/MLX-Metal runtime versions set
+UNDETERMINED; §2 gives the physical path from each to the measured energy. Other differences change no class.
+The receipt keeps `differences`, `physical_differences` and `disclosure_differences`; harvest completes the
+capture comparison and prints it even for an otherwise undetermined result.
 
 **Classes**, read separately on rails, on the GPU rail and on rest, with I = [Δ − δΔ, Δ + δΔ], φ = K / B and ε₀
 defined below. The rows are tested **in order** and the first that holds is the class, so exactly one holds:
 
 | Order | Class | Condition | Meaning |
 |---|---|---|---|
-| 1 | UNDETERMINED | knee not found; stack differs; meter gap or battery reading missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
+| 1 | UNDETERMINED | knee not found; physically relevant stack differs; battery reading missing or idle-variance prerequisite missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
 | 2 | RESOLVED | Δ − δΔ > 0 | memory-traffic energy is resolved on this boundary |
 | 3 | BELOW ATTRIBUTION LEVEL | max(\|Δ − δΔ\|, \|Δ + δΔ\|) / (1 − φ) ≤ ε₀ | the interval spans 0 and every value in it, corrected for cache bias, is too small to move any registered model's run by the instrument's per-run attribution limit; this does **not** say the controller is off this rail |
 | 4 | NOT RESOLVED | otherwise | neither is shown |
@@ -310,7 +362,8 @@ boundary's class is not RESOLVED (values filled from the test record; Δ is sign
 
 - BELOW ATTRIBUTION LEVEL: `Known-bytes check: {boundary} energy per DRAM-sourced byte differed from cache-sourced by {Δ} ± {δΔ} J/GB (DRAM minus cache), within the 1 J-per-run attribution level ({ε₀} J/GB); {boundary} lines here carry no resolvable memory-traffic energy.`
 - NOT RESOLVED: `Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({Δ} ± {δΔ} J/GB, cache-bias-corrected upper limit {(Δ+δΔ)/(1−φ)} J/GB); whether {boundary} lines include memory-traffic energy is not established.`
-- UNDETERMINED: `Known-bytes check: {boundary} memory-traffic attribution is undetermined ({reason}).` with reason one of `knee not found`, `stack differs in: <fields>`, `meter gap in call <i>`, `battery reading missing in call <i>`, `contrast not resolved` (validity fails), `contrast negative` (Δ + δΔ < 0).
+- UNDETERMINED: `Known-bytes check: {boundary} memory-traffic attribution is undetermined ({reason}).` with reason one of `knee not found`, `stack differs in: <physical fields>`, `battery reading missing in call <i>`,
+  `idle variance not defined (<stream/support reason>)`, `contrast not resolved` (validity fails), `contrast negative` (Δ + δΔ < 0).
 - Test not run before stage-1 unblinding: beside the rails and rest lines, `Known-bytes check: not measured; the boundary attribution of memory-read energy (§1) is not established.`
 
 When a boundary is RESOLVED, nothing prints beside its claim lines. Inside printed lines, "§1" is the
@@ -327,13 +380,20 @@ memory traffic costs energy on the GPU rail, on rails and on rest is measured by
 
 **Description only** (no class reads them), printed in the test record:
 - the stream arm's raw excess per logical byte, X_S / (Σ N_S × B), on each boundary;
-- the rails share f = Δ_rails / Δ_DC, with δf = |f| (δΔ_rails / |Δ_rails| + δΔ_DC / |Δ_DC|);
+- the rails share f = Δ_rails / Δ_DC, with δf = (δΔ_rails + |f| δΔ_DC) / |Δ_DC| when DC is valid;
 - the GPU-rail excess-power contrast between S and C2, X_S / T_S − X_C2 / T_C2;
 - per boundary, the residual r and ε_flip = δΔ (Bc2 − Bc1) / (1 − Bc1 / B), the fixed-cost difference between C1
   and C2 dispatches that would move Δ by its own half-width, also as a fraction of α;
 - per arm, each call's x_a,i and rep_a; the mean GPU active frequency and residency from the capture's
-  `gpu_power` sampler; per span, the OS thermal level, as pass 1 prints it;
+  `gpu_power` sampler; per span, the OS thermal level from the notify-bus journal
+  `hazards/monitor/thermal.jsonl`, selected by the span's RAW stamps;
 - the test's r_max, τ and operative timing bound, and the hour as run.
+
+Every description with a zero denominator or missing prerequisite prints `not defined (<reason>)`, e.g.
+`not defined (alpha is zero)` for ε_flip/α, `not defined (DC contrast not valid)` for f and δf,
+`not defined (knee not found)` for a quantity requiring K, or `not defined (thermal journal missing)`.
+For Δ_rails = 0 and valid DC, f = 0 and δf = δΔ_rails/|Δ_DC| are defined. A missing description never
+refuses a measurement or changes a class; the validity prerequisites above retain their explicit role.
 
 ## 5. Worked example (illustration, not a prediction)
 
@@ -349,16 +409,24 @@ session of 2026-10-21/22 (records at JouleWise-data `8db1b40d6`, `bytes-h-desk-2
 - rails anchor-shift bound 0.5388 J per call (8B-4bit median); r_max = 17.76 ms; Δt = 20 ms; v = 0 (84 W is below
   the 140 W adapter).
 
-Assumed, standing in for what the test measures: DC idle standard error 0.05 W per span (se_idle 0.0354 W);
+Assumed, standing in for what the test measures: meter idle standard error 0.05 W and battery idle standard
+error 0.01 W per span, each from its own stream estimator. Thus se_meter = 0.05/√2 = 0.03536 W,
+se_battery = 0.01/√2 = 0.007071 W, se_DC = 0.04243 W; no covariance or alignment is assumed;
 half-differences |P_pre − P_post| / 2 of 0.002 W (rails) and 0.05 W (DC); fixed time 50 µs per dispatch; cache
 throughput 1 TB/s; 28 W (rails) and 25 W (rest) above idle during cache arms; a true cache capacity of 64 MiB; no
-transient and no fixed-cost change between sizes, so rep_a = 0 and r = 0.
+transient and no fixed-cost change between sizes, so rep_a = 0 and r = 0. The baseline example has no meter
+gaps; the gap counterexample below uses the H adapter rating, 140 W, and measured battery maximum 0 W.
 
 *Knee.* Marginal throughputs: 1,000 GB/s up to 32 MiB, 198.8 GB/s for the straddling pair (32 → 64 MiB), 331.6 GB/s
-from 64 MiB up; m_th = 335.12 GB/s; K = 64 MiB. The draft's whole-call rule returns 512 MiB (±4%) or 1 GiB (±2%) on
+from 64 MiB up; m_th = 335.12 GB/s; K = 64 MiB. For three identical approximately 2 s scan calls,
+δt is the 1 ns duration resolution divided by repeats. On the 16 → 32 MiB cache pair, the propagated
+comparison bar δm + δm_th is about 0.0000077 GB/s (about 0.000010 GB/s after quantization), against a margin about 665 GB/s. Integer-nanosecond
+quantization preserves K. Sol's DRAM-only model (50 µs + s/331.6 GB/s, all sizes) has no pair separated
+from the threshold by its bar, both with unquantized and integer-nanosecond durations: `knee not found`. The draft's whole-call rule returns 512 MiB (±4%) or 1 GiB (±2%) on
 the same inputs. So B = 4 GiB, Bc1 = 4 MiB, Bc3 = 8 MiB, Bc2 = 16 MiB, φ = 1/64.
 
-*Hour.* 3,549.6 s; every arm's midpoint is 1,774.8 s, the session midpoint. N per call: S 38,457 (330,343 GB over
+*Hour.* 3,573.6 s = 921.6 idle + 72 settle + 80 allocation/exit + 2,500 stream. Every arm's paired stream
+midpoints average 1,788.3 s, 1.5 s beyond the session midpoint 1,786.8 s (the additional pre-idle gap). N per call: S 38,457 (330,343 GB over
 both calls), C1 4,613,030, C3 4,281,657, C2 3,743,791.
 
 | | rails | DC input | rest |
@@ -367,14 +435,26 @@ both calls), C1 4,613,030, C3 4,281,657, C2 3,743,791.
 | γ_c (J/GB) | 0.02800 | 0.05300 | 0.02500 |
 | γ_d (J/GB) | 0.09472 | 0.24594 | 0.15123 |
 | r (µJ) | 0.000 | 0.000 | 0.000 |
-| Δ ± δΔ (J/GB) | 0.06672 ± 0.00057 | 0.1929 ± 0.0023 | 0.1262 ± 0.0023 |
-| ε_flip (µJ; share of α) | 7.20; 0.51% | 29.54; 1.11% | 28.53; 2.28% |
+| Δ ± δΔ (J/GB) | 0.06672 ± 0.00057 | 0.1929 ± 0.0025 | 0.1262 ± 0.0024 |
+| ε_flip (µJ; share of α) | 7.20; 0.51% | 31.79; 1.20% | 30.78; 2.46% |
 
-Validity: 0.1929 − 0.0023 > 0. Stack assumed identical. Rails: 0.06672 − 0.00057 > 0, RESOLVED, nothing prints.
+Validity: 0.1929 − 0.0025 > 0. Stack assumed identical. Rails: 0.06672 − 0.00057 > 0, RESOLVED, nothing prints.
 Rest: RESOLVED, nothing prints. GPU rail: not separable in these inputs (H exports rails totals only). Description:
-f = 0.3458 ± 0.0072. Agreement bar 5.7 × 10⁻⁶ J/GB (1% of 0.00057); 10⁶ × float noise 2.5 × 10⁻¹⁰ J/GB.
+f = 0.3458 ± 0.0075. Agreement bar 5.7 × 10⁻⁶ J/GB (1% of 0.00057); 10⁶ × float noise 2.5 × 10⁻¹⁰ J/GB.
+
+The full revised half-widths are 0.000571796 (rails), 0.002524213 (DC) and 0.002444084 (rest) J/GB.
+The original `0609bcc0c` script predates this round: reproduce the revision by replacing its assumed
+`V_IDLE_DC = 0.05**2` with `(0.05 + 0.01)**2`, its two settle gaps per call with three, and adding the
+extra gap before each pre-idle in the timeline. The source ratios, energy means and counts do not change.
+The synthetic arithmetic tests in `tests/test_bytes_stream_test.py` also recompute these publication digits.
 
 *Other outcomes, same inputs except as stated:*
+- One missing 20 ms meter sample in the stream of call 4 (C2): P_max = 140 + 0 = 140 W (H adapter rating
+  above; assumed battery poll maximum zero), so add 2.8 J to that call's DC/rest b_i. The resulting Δ_DC
+  is 0.1929 ± 0.0026 and Δ_rest is 0.1262 ± 0.0025 J/GB; both remain valid/RESOLVED. Their ε_flip are
+  32.17 µJ (1.21% of α) and 31.16 µJ (2.49%). Rails, counts, energy point estimates and the agreement bar
+  are unchanged. A pre-idle gap in that call would instead add 2.8 × T_i/(2 × 57.6) J, by the baseline weight.
+  The gap and its power sources print as disclosures, not an UNDETERMINED reason.
 - True Δ_rails = 0.00030: the rule gives 0.00030 ± 0.00057, I = [−0.00027, 0.00087], spanning 0;
   0.00087 / (1 − 1/64) = 0.00089 > ε₀ = 0.000049, so rails is NOT RESOLVED, upper limit 0.00089 J/GB.
 - The same world with a 5 W transient through the whole first S call (Opus cold pass): Δ_rails = 0.0079 ± 0.0081,
@@ -404,7 +484,6 @@ Made in the revision, where the cold passes offered a choice (reasons in `kb-rev
 - Fixed-cost non-constancy: Fable's third cache size with its residual charged, not a new kernel; the unbounded
   remainder is stated (§3) and ε_flip printed.
 - Arm repeatability: Opus's additive term, not an agreement check that would set every class UNDETERMINED.
-- Meter gap: the whole test's DC and rest unavailable (Opus), not a sum over the remaining calls (Fable), because the
-  remainder loses the palindrome's drift cancellation and no bound covers it.
+- Meter gap (superseded by Round 3 R5): keep every call; bound each known missing duration by supplied power (§3).
 - Agreement bar: one bar, 1% of the smallest printed δΔ, for every Δ and δΔ.
-- Settle gap of 3 s around the stream (§2), added by the revision to keep stream energy out of the idle means.
+- Settle gap of 3 s around the stream and after fill/warm-up (§2), to keep delayed energy out of idle means.

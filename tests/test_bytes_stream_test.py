@@ -2,6 +2,8 @@
 from copy import deepcopy
 import io
 import json
+import math
+import statistics
 from pathlib import Path
 import subprocess
 import sys
@@ -285,6 +287,133 @@ class ReceiptTests(unittest.TestCase):
         self.assertIn("--idle-s", result.stdout)
         self.assertIn("--settle-s", result.stdout)
         self.assertIn("--device", result.stdout)
+
+
+class ReadingRuleArithmeticTests(unittest.TestCase):
+    """Independent arithmetic fixtures for the normative rule, not hardware evidence."""
+
+    @staticmethod
+    def knee(calls):
+        # Each size has three (duration_s, repeats) observations. The 1 ns
+        # duration bound is from two half-ns stamp endpoints, §1 step 1.
+        sizes = sorted(calls)
+        t, dt, marg, dm = {}, {}, {}, {}
+        for size, rows in calls.items():
+            values = [duration / n for duration, n in rows]
+            t[size] = statistics.mean(values)
+            dt[size] = max(abs(v - t[size]) for v in values) + statistics.mean(1e-9 / n for _, n in rows)
+        for lo, hi in zip(sizes, sizes[1:]):
+            d, dd = t[hi] - t[lo], dt[hi] + dt[lo]
+            if d <= dd:
+                continue
+            marg[hi] = (hi - lo) / d
+            dm[hi] = (hi - lo) * dd / (d * (d - dd))
+        if sizes[-1] not in marg:
+            return None, marg, dm, None
+        mc_size = max(marg, key=marg.get)
+        md, mc = marg[sizes[-1]], marg[mc_size]
+        ud, uc = dm[sizes[-1]], dm[mc_size]
+        if md <= ud or mc <= uc:
+            return None, marg, dm, None
+        def h(x, y):
+            return 1 / ((63/64)/x + (1/64)/y)
+        threshold = h(md, mc)
+        dth = max(h(md + ud, mc + uc) - threshold, threshold - h(md - ud, mc - uc))
+        above = [s for s in marg if marg[s] - threshold > dm[s] + dth]
+        k = next((s for s in sizes[1:] if not any(a >= s for a in above)), None)
+        if not above or k is None or 64*k > sizes[-1]:
+            k = None
+        return k, marg, dm, (threshold, dth)
+
+    @staticmethod
+    def scan_model(cache, quantized):
+        calls = {}
+        for s in (2**k for k in range(14, 36)):
+            throughput = 1e12 if cache and s < 2**26 else 331.6e9
+            td = 50e-6 + s / throughput
+            n = math.floor(2 / td)
+            duration = round(n * td * 1e9) / 1e9 if quantized else n * td
+            calls[s] = [(duration, n)] * 3
+        return calls
+
+    def test_dram_only_rounding_never_supplies_cache_evidence(self):
+        for quantized in (False, True):
+            with self.subTest(quantized=quantized):
+                self.assertIsNone(self.knee(self.scan_model(False, quantized))[0])
+
+    def test_worked_example_knee_survives_stamp_quantization(self):
+        for quantized in (False, True):
+            with self.subTest(quantized=quantized):
+                self.assertEqual(self.knee(self.scan_model(True, quantized))[0], 2**26)
+
+    def test_zero_negative_and_uncertain_differences_are_undefined(self):
+        for duration in (1.0, 0.9, 1.000000001):
+            calls = {2**k: [(duration if k == 15 else 1.0, 1)] * 3 for k in range(14, 36)}
+            k, marg, _, _ = self.knee(calls)
+            self.assertNotIn(2**15, marg)
+            self.assertIsNone(k)
+
+    def test_native_dc_variance_needs_no_alignment(self):
+        from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
+        # Sol's alternating battery fixture, clipped to [0,57.6); the
+        # integrator is a mean of retained samples, so equal support per stream.
+        meter = [2.386] * 2880
+        battery = [1.0 if int(i/5) % 2 == 0 else -1.0 for i in range(288)]
+        vm = nw(meter, 500, [57.6/len(meter)] * len(meter)).governed_variance_of_mean_w2
+        vb = nw(battery, 50, [57.6/len(battery)] * len(battery)).governed_variance_of_mean_w2
+        se = math.sqrt(vm/2) + math.sqrt(vb/2)
+        self.assertGreater(se, 0)
+        # The same native streams give exactly one output, independent of any
+        # hold/linear policy, since neither policy is an input to this formula.
+        self.assertEqual(se, math.sqrt(vm + vm)/2 + math.sqrt(vb + vb)/2)
+
+    def test_revised_worked_energy_publication_digits_and_bounded_gap(self):
+        # Recompute §3 directly from §5 input ratios. Compare publication
+        # strings; these are rounding properties, not new acceptance bars.
+        gb, b = 1e9, 2**32
+        payload = {'S': b, 'C1': 2**22, 'C3': 2**23, 'C2': 2**24}
+        thr = 4597412096 * 512 / 7.098
+        idle_r, idle_dc = .051, (6101.072862 - 5967.417892) / 56.018813
+        sr = 223.22/7.098 - idle_r
+        se = 577.210005/11.017813 - (idle_dc - idle_r)
+        rows = {}
+        for arm, size in payload.items():
+            td = 50e-6 + size / (thr if arm == 'S' else 1e12)
+            n = math.floor((500 if arm == 'S' else 250) / td)
+            t = n * td
+            pr, pe = (sr, se) if arm == 'S' else (28., 25.)
+            br = .5388 + t * (.002 + 2 * math.sqrt(1.2037e-4/2))
+            bd = 2 * (pr+pe+idle_dc) * (.017762388+.020) + t * (.05 + 2 * (.05+.01)/math.sqrt(2))
+            rows[arm] = (n, {'rails': pr*t/n, 'dc': (pr+pe)*t/n, 'rest': pe*t/n},
+                         {'rails': br/n, 'dc': bd/n, 'rest': (br+bd)/n})
+        def reduce(beta, gap_j=0):
+            vals = {a: (v[1][beta], v[2][beta] + (gap_j/(2*v[0]) if a == 'C2' and beta != 'rails' else 0))
+                    for a, v in rows.items()}
+            (xs, ds), (x1, d1), (x3, _), (x2, d2) = (vals[a] for a in ('S','C1','C3','C2'))
+            c1, c3, c2 = (payload[a] for a in ('C1','C3','C2'))
+            gc = (x2-x1)/(c2-c1)
+            alpha = x1-gc*c1
+            residual = x3-alpha-gc*c3
+            dgc = (d1+d2+abs(residual))/(c2-c1)
+            da = d1+abs(residual)+dgc*c1
+            delta = ((xs-alpha)/b-gc)*gb
+            width = ((ds+da+abs(alpha))/b+dgc)*gb
+            eps = width*(c2-c1)/gb/(1-c1/b)
+            return delta, width, eps*1e6
+        self.assertEqual([f'{reduce(x)[1]:.8f}' for x in ('rails','dc','rest')],
+                         ['0.00057180','0.00252421','0.00244408'])
+        self.assertEqual([f'{reduce(x)[2]:.2f}' for x in ('rails','dc','rest')], ['7.20','31.79','30.78'])
+        for beta, digits in (('dc','0.00255396'), ('rest','0.00247383')):
+            delta, width, _ = reduce(beta, .020*140)
+            self.assertEqual(f'{width:.8f}', digits)
+            self.assertGreater(delta-width, 0)
+        dr, ur, _ = reduce('rails')
+        dd, ud, _ = reduce('dc')
+        f = dr/dd
+        self.assertEqual(f'{f:.4f}', '0.3458')
+        self.assertEqual(f'{(ur+abs(f)*ud)/abs(dd):.4f}', '0.0075')
+        # Sol's zero-rails case is nonsingular with valid DC.
+        self.assertEqual((.001 + abs(0/.1)*.002)/abs(.1), .01)
 
 
 if __name__ == "__main__":
