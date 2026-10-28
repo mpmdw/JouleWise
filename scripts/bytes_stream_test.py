@@ -14,6 +14,7 @@ from pathlib import Path
 import platform
 import subprocess
 import sys
+import statistics
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -105,6 +106,71 @@ def compare_stack(stack, reference, versions, *, capture_stack=None):
             "differences": differences, "pending_fields": pending}
 
 
+def knee_scan(receipts):
+    """§1: three calls per doubling size; uncertainties are endpoint bounds.
+
+    Return every input and comparison, including undefined pairs, for printing.
+    Only the receipt's integer-ns resolution and observed spread set the bars.
+    """
+    grouped = {}
+    for receipt in receipts:
+        grouped.setdefault(receipt["bytes_per_read"], []).append(receipt)
+    sizes = sorted(grouped)
+    if len(sizes) < 2 or any(hi != 2*lo for lo, hi in zip(sizes, sizes[1:])):
+        raise ValueError("scan needs consecutive doubling sizes")
+    times = {}
+    for size, calls in sorted(grouped.items()):
+        if len(calls) != 3:
+            raise ValueError("scan needs three calls per size")
+        values = [(c["end_ns"]-c["start_ns"])/1e9/c["repeats"] for c in calls]
+        if any(c["repeats"] <= 0 or v <= 0 for c, v in zip(calls, values)):
+            raise ValueError("scan counts and durations must be positive")
+        mean = statistics.mean(values)
+        uncertainty = max(abs(v-mean) for v in values) + statistics.mean(1e-9/c["repeats"] for c in calls)
+        times[size] = {"t_s": mean, "dt_s": uncertainty, "calls": calls}
+    pairs = []
+    for lo, hi in zip(sizes, sizes[1:]):
+        d = times[hi]["t_s"]-times[lo]["t_s"]
+        dd = times[hi]["dt_s"]+times[lo]["dt_s"]
+        pair = {"size": hi, "difference_s": d, "uncertainty_s": dd,
+                "m_bytes_s": None, "dm_bytes_s": None, "above": False}
+        if d <= dd:
+            pair["description"] = "not defined (dispatch-time difference not separated from zero)"
+        else:
+            pair.update(m_bytes_s=(hi-lo)/d, dm_bytes_s=(hi-lo)*dd/(d*(d-dd)))
+        pairs.append(pair)
+    result = {"status": "knee not found", "K": None, "sizes": times, "pairs": pairs,
+              "threshold": None, "threshold_uncertainty": None}
+    defined = [p for p in pairs if p["m_bytes_s"] is not None]
+    if pairs[-1]["m_bytes_s"] is None:
+        result["reason"] = "top pair undefined"
+        return result
+    peak = max(defined, key=lambda p: p["m_bytes_s"])
+    md, ud = pairs[-1]["m_bytes_s"], pairs[-1]["dm_bytes_s"]
+    mc, uc = peak["m_bytes_s"], peak["dm_bytes_s"]
+    if md <= ud or mc <= uc:
+        result["reason"] = "reference lower endpoint nonpositive"
+        return result
+    def h(x, y):
+        return 1 / ((63/64)/x + (1/64)/y)
+    threshold = h(md, mc)
+    dth = max(h(md+ud, mc+uc)-threshold, threshold-h(md-ud, mc-uc))
+    result.update(threshold=threshold, threshold_uncertainty=dth)
+    for pair in defined:
+        margin, bar = pair["m_bytes_s"]-threshold, pair["dm_bytes_s"]+dth
+        pair.update(margin=margin, bar=bar, above=margin > bar)
+    above = [p["size"] for p in pairs if p["above"]]
+    k = next((s for s in sizes[1:] if not any(a >= s for a in above)), None)
+    if not above:
+        result["reason"] = "no resolved cache evidence"
+    elif k is None or 64*k > sizes[-1]:
+        result["reason"] = "64 K > s_max"
+    else:
+        result.update(status="knee found", K=k, B=max(2**32, 64*k),
+                      Bc1=k//16, Bc3=k//8, Bc2=k//4, phi=k/max(2**32, 64*k))
+    return result
+
+
 def _seconds(value):
     if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
         raise ValueError("idle and settle seconds must be finite nonnegative numbers")
@@ -175,6 +241,13 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "scan":
+        parser = argparse.ArgumentParser(description="Read §1 scan receipts; print full timing comparisons")
+        parser.add_argument("receipts", type=Path, help="JSON list of three receipts per size")
+        args = parser.parse_args(argv[1:])
+        print(json.dumps(knee_scan(json.loads(args.receipts.read_text())), allow_nan=False, indent=2))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bytes", type=int, required=True, dest="byte_count")
     parser.add_argument("--repeats", type=int, required=True)

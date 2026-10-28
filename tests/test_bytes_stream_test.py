@@ -294,36 +294,12 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
 
     @staticmethod
     def knee(calls):
-        # Each size has three (duration_s, repeats) observations. The 1 ns
-        # duration bound is from two half-ns stamp endpoints, §1 step 1.
-        sizes = sorted(calls)
-        t, dt, marg, dm = {}, {}, {}, {}
-        for size, rows in calls.items():
-            values = [duration / n for duration, n in rows]
-            t[size] = statistics.mean(values)
-            dt[size] = max(abs(v - t[size]) for v in values) + statistics.mean(1e-9 / n for _, n in rows)
-        for lo, hi in zip(sizes, sizes[1:]):
-            d, dd = t[hi] - t[lo], dt[hi] + dt[lo]
-            if d <= dd:
-                continue
-            marg[hi] = (hi - lo) / d
-            dm[hi] = (hi - lo) * dd / (d * (d - dd))
-        if sizes[-1] not in marg:
-            return None, marg, dm, None
-        mc_size = max(marg, key=marg.get)
-        md, mc = marg[sizes[-1]], marg[mc_size]
-        ud, uc = dm[sizes[-1]], dm[mc_size]
-        if md <= ud or mc <= uc:
-            return None, marg, dm, None
-        def h(x, y):
-            return 1 / ((63/64)/x + (1/64)/y)
-        threshold = h(md, mc)
-        dth = max(h(md + ud, mc + uc) - threshold, threshold - h(md - ud, mc - uc))
-        above = [s for s in marg if marg[s] - threshold > dm[s] + dth]
-        k = next((s for s in sizes[1:] if not any(a >= s for a in above)), None)
-        if not above or k is None or 64*k > sizes[-1]:
-            k = None
-        return k, marg, dm, (threshold, dth)
+        receipts = [{"bytes_per_read": size, "start_ns": 0, "end_ns": duration*1e9,
+                     "repeats": n} for size, rows in calls.items() for duration, n in rows]
+        result = probe.knee_scan(receipts)
+        marg = {p["size"]: p["m_bytes_s"] for p in result["pairs"] if p["m_bytes_s"] is not None}
+        dm = {p["size"]: p["dm_bytes_s"] for p in result["pairs"] if p["m_bytes_s"] is not None}
+        return result["K"], marg, dm, result["threshold"]
 
     @staticmethod
     def scan_model(cache, quantized):

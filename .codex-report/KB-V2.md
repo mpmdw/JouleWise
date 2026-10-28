@@ -303,3 +303,17 @@ all revised publication digits. The original worked script at `0609bcc0c` was
 executed in memory before and after substituting the stated R3/R6 inputs;
 its original output and revised arithmetic reproduce. Agreement bar remains
 5.7e-6 J/GB, above 1e6 × float noise (2.5e-10). No hardware evidence.
+
+### Step 2 onward
+
+Continuation authority: magistrate activation caa9ff66, 2026-10-28, starting at
+`86b73a26b`. Step 1 was read first and retained. Both reviews were reachable.
+
+Step 2 — R1 in the program: `knee_scan` consumes the real three-call receipts,
+prints every pair, undefined reason, margin and propagated bar; `scan` exposes
+it through the CLI. The tests now call this implementation instead of their
+own transcription. Before: Sol's exact DRAM-only repro found 8/4 MiB knees;
+Opus's exact noise script reproduced its reported refusal rates. After: both
+DRAM-only cases give `knee not found`; the §5 model gives 64 MiB, with and
+without quantization. Zero/negative/uncertain differences never count.
+Decision: retain Step 1's endpoint propagation, without an added epsilon.
