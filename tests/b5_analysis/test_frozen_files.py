@@ -4,12 +4,18 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 from joulewise.b5_analysis.windows import ROOT, SealPins
 
 SEALED_DIR = "configs/campaigns/v5_claim_25g83/"
 SEAL = ROOT / "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
+# The accepted block-5 analysis commit (RUN_STATE items 83, 88, 92): the dry run and the release run
+# there. Main may evolve a collection file after L9's acceptance; for such a file the freeze binds the
+# analysis commit's bytes, not main's working tree.
+B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
+EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py"})
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
                  "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")
 
@@ -30,12 +36,19 @@ def frozen_digests():
     return digests
 
 
+def _bytes(root, path):
+    if path not in EVOLVED_ON_MAIN:
+        return (root / path).read_bytes()
+    return subprocess.run(["git", "-C", str(root), "show", f"{B5_ANALYSIS_COMMIT}:{path}"],
+                          check=True, capture_output=True).stdout
+
+
 def frozen_mismatches(root=ROOT):
     result = []
     for path, digest in frozen_digests().items():
         try:
-            same = hashlib.sha256((root / path).read_bytes()).hexdigest() == digest
-        except OSError:
+            same = hashlib.sha256(_bytes(root, path)).hexdigest() == digest
+        except (OSError, subprocess.CalledProcessError):
             same = False
         if not same:
             result.append(path)

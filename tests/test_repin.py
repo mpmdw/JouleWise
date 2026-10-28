@@ -486,6 +486,13 @@ class SealedInventoryEraRecordTests(unittest.TestCase):
     INVENTORY_PATH = "configs/campaigns/v5_claim_25g83/sealed_inventory.json"
 
     def setUp(self) -> None:
+        # The real rule, sized to this miniature inventory. The pairing with the
+        # block-5 registration is Block5EraRecordTests' subject, not this one's.
+        inventory = dict(census.ERA_RECORDS[self.INVENTORY_PATH], expected_count=5)
+        for patcher in (patch.dict(census.ERA_RECORDS, {self.INVENTORY_PATH: inventory}),
+                        patch.object(census, "B5_REGISTRATION", self.INVENTORY_PATH)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.tree = MiniatureTree()
         self.addCleanup(self.tree.close)
         root = self.tree.root
@@ -517,6 +524,13 @@ class SealedInventoryEraRecordTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             census.main(["--write", "--root", str(root)])
 
+    def assertCurrentWithSealedDriftWarning(self) -> None:
+        # Every sealed file changed after the claim, so --check passes and warns.
+        code, output = self.tree.check()
+        self.assertEqual(code, 0)
+        self.assertIn("WARNING: current files differ from the sealed inventory", output)
+        self.assertTrue(output.endswith("PASS 1 pin families current\n"))
+
     def test_all_sealed_files_bind_once_and_survive_later_edits(self) -> None:
         registry = census.load_registry(self.tree.root)
         self.assertEqual(rows_by_path(registry)[self.INVENTORY_PATH], sorted(
@@ -524,12 +538,12 @@ class SealedInventoryEraRecordTests(unittest.TestCase):
              "estimator_code" if name in census.MEASUREMENT_CORE else "pack_config_bytes",
              f"file@{self.era}:{name}") for name in self.record["files"]))
         sealed_bytes = self.inventory.read_bytes()
-        self.assertEqual(self.tree.check(), (0, "PASS 1 pin families current\n"))
+        self.assertCurrentWithSealedDriftWarning()
         # A later lane edit needs neither a new inventory row nor a repin.
         for name in self.record["files"]:
             path = self.tree.path(name)
             path.write_bytes(path.read_bytes() + b"\n")
-        self.assertEqual(self.tree.check(), (0, "PASS 1 pin families current\n"))
+        self.assertCurrentWithSealedDriftWarning()
         self.assertEqual(census.load_registry(self.tree.root), registry)
         self.assertEqual(self.inventory.read_bytes(), sealed_bytes)
 
