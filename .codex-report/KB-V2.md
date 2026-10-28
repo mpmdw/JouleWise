@@ -317,3 +317,15 @@ Opus's exact noise script reproduced its reported refusal rates. After: both
 DRAM-only cases give `knee not found`; the §5 model gives 64 MiB, with and
 without quantization. Zero/negative/uncertain differences never count.
 Decision: retain Step 1's endpoint propagation, without an added epsilon.
+
+Step 3 — R2/R7: receipts contain full actual/expected comparisons, all
+physical/disclosure differences and pending capture fields. Embedded projections
+come from `6731d5249`; both source SHA256 values match the registered git blobs
+and are printed in every receipt. Every running-checkout unit and the versions
+file are compared; missing/unreadable/divergent references are recorded, never
+raised. Before: Sol 2 reproduced the metadata-only veto; Opus 4's checkout
+reference could raise. After: transformers-only changes have no physical veto;
+all governed physical fields do, and divergent/unreadable checkout files still
+produce comparisons/receipts. Both focused modules pass (27 tests).
+Decision: capture metadata and kernel_library remain full disclosures, per R2;
+only OS/hardware and the MLX/Metal versions affect physical transfer.

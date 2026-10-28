@@ -179,8 +179,10 @@ class ReceiptTests(unittest.TestCase):
     def test_match_compares_projections_not_model_adapter_config_or_git(self):
         self.stack["hardware_unit"]["config_id"] = "not compared"
         self.stack["runtime_version"]["adapter"] = "not compared"
-        self.assertEqual(probe.compare_stack(self.stack, self.reference, self.versions, capture_stack=self.capture),
-                         {"status": "match", "differences": [], "pending_fields": []})
+        check = probe.compare_stack(self.stack, self.reference, self.versions, capture_stack=self.capture)
+        self.assertEqual(check["status"], "match")
+        self.assertEqual(check["differences"], [])
+        self.assertEqual(len(check["comparison"]), len(probe.LOCAL_FIELDS)+len(probe.CAPTURE_FIELDS)+8)
 
     def test_every_compared_local_field_and_each_package_detects_change(self):
         fields = probe.LOCAL_FIELDS + ("python",) + tuple("packages." + k for k in RUNTIME_PACKAGES)
@@ -193,7 +195,9 @@ class ReceiptTests(unittest.TestCase):
             value[parts[-1]] = "different"
             with self.subTest(field=field):
                 check = probe.compare_stack(stack, self.reference, self.versions, capture_stack=self.capture)
-                self.assertEqual(check, {"status": "differs", "differences": [field], "pending_fields": []})
+                self.assertEqual(check["differences"], [field])
+                self.assertEqual(check["physical_differences"], [field] if field in probe.PHYSICAL_FIELDS else [])
+                self.assertEqual(check["disclosure_differences"], [] if field in probe.PHYSICAL_FIELDS else [field])
 
     def test_missing_and_extra_package_keys_are_not_ignored(self):
         for name, value in (("mlx", None), ("extra", "1")):
@@ -247,8 +251,13 @@ class ReceiptTests(unittest.TestCase):
             probe.registered_stack(root)
             other["os_version"] = "changed"
             bp.write_text(json.dumps(pins))
-            with self.assertRaisesRegex(ValueError, "os_version"):
-                probe.registered_stack(root)
+            self.assertEqual(probe.registered_stack(root), (self.reference, self.versions))
+            check = probe.checkout_reference_check(root)
+            self.assertEqual(check["units"]["two"]["differences"], ["os_version"])
+            bp.write_text("invalid json")
+            self.assertTrue(probe.checkout_reference_check(root)["errors"])
+        self.assertTrue(probe.checkout_reference_check("/nonexistent/kb-reference")["errors"])
+
 
     def test_cli_flags_and_receipt_serialization_without_metal(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(probe, "stream", return_value={"fake": True}) as stream, \

@@ -8,6 +8,7 @@ receive the concurrent capture's stack identity; the probe cannot attest to it.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 import math
 from pathlib import Path
@@ -42,20 +43,49 @@ def _field(value, path):
     return value
 
 
+# Registered pass-1 projection, never loaded from the running checkout.
+REFERENCE_COMMIT = "6731d5249"
+REFERENCE_SOURCES = {'configs/b6/registration/identity_pins.json': '95d07401bb5d7c7e44e9dc27984bc3da4fb04642ec7cf80bf3c6ecadaf2efc6e', 'configs/bytes/identity_pins.json': '0760eded0603782b5367ad56721faf96417b9ea87bb698dc520835f34e03b2b2'}
+REFERENCE_STACK = {'os_version': 'macOS-26.6.2-arm64-arm-64bit-Mach-O', 'hardware_unit': {'machine': 'arm64', 'device': 'macbook_m3_max'}, 'runtime_version': {'name': 'mlx', 'version': '0.31.2'}, 'kernel_library': 'unavailable', 'telemetry_backend': 'powermetrics', 'measurement_boundary_label': {'rails': ['cpu_power', 'gpu_power', 'ane_power']}}
+REFERENCE_VERSIONS = {'packages': {'mlx': '0.31.2', 'mlx-lm': '0.31.3', 'mlx-metal': '0.31.2', 'numpy': '2.5.1', 'safetensors': '0.8.0', 'tokenizers': '0.22.2', 'transformers': '5.12.1'}, 'python': '3.13.1'}
+PHYSICAL_FIELDS = ("os_version", "hardware_unit.machine", "hardware_unit.device",
+                   "runtime_version.name", "runtime_version.version", "packages.mlx", "packages.mlx-metal")
+
+
 def registered_stack(repo_root=ROOT):
-    """Read the §2 reference projections, checking that any unit is equivalent."""
-    root = Path(repo_root)
-    pins = json.loads((root / "configs/b6/registration/identity_pins.json").read_text())
-    versions = json.loads((root / "configs/bytes/identity_pins.json").read_text())["runtime_versions"]
-    stacks = [unit["stack_identity"] for unit in pins["units"].values()]
-    if not stacks:
-        raise ValueError("registered stack has no units")
-    reference = stacks[0]
-    for field in LOCAL_FIELDS + CAPTURE_FIELDS:
-        expected = _field(reference, field)
-        if expected is None or any(_field(stack, field) != expected for stack in stacks):
-            raise ValueError(f"registered stack units lack one common {field}")
-    return reference, versions
+    """Return independent copies of the pinned projection, regardless of checkout."""
+    return deepcopy(REFERENCE_STACK), deepcopy(REFERENCE_VERSIONS)
+
+
+def checkout_reference_check(repo_root=ROOT):
+    """Disclose every unit's projection against the embedded reference; never veto."""
+    result = {"commit": REFERENCE_COMMIT, "sources": REFERENCE_SOURCES,
+              "units": {}, "errors": [], "versions": None}
+    for path in REFERENCE_SOURCES:
+        try:
+            value = json.loads((Path(repo_root)/path).read_text())
+            if path.startswith("configs/b6/"):
+                for name, unit in value["units"].items():
+                    result["units"][name] = compare_stack(
+                        unit["stack_identity"], REFERENCE_STACK, REFERENCE_VERSIONS,
+                        capture_stack=unit["stack_identity"])
+                    # Unit records do not contain runtime_versions; compare those separately.
+                    check = result["units"][name]
+                    check["comparison"] = [row for row in check["comparison"]
+                                           if row["field"] in LOCAL_FIELDS+CAPTURE_FIELDS]
+                    for key in ("differences", "physical_differences", "disclosure_differences"):
+                        check[key] = [f for f in check[key] if f in LOCAL_FIELDS+CAPTURE_FIELDS]
+                    check["status"] = "differs" if check["differences"] else "match"
+                if not value["units"]:
+                    result["errors"].append(path+": no units")
+            else:
+                local = deepcopy(REFERENCE_STACK)
+                local.update(value["runtime_versions"])
+                result["versions"] = compare_stack(local, REFERENCE_STACK, REFERENCE_VERSIONS,
+                                                    capture_stack=REFERENCE_STACK)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            result["errors"].append(path+": "+str(exc))
+    return result
 
 
 def collect_stack(mx, device, *, repo_root=ROOT, prepare=None):
@@ -81,16 +111,20 @@ def compare_stack(stack, reference, versions, *, capture_stack=None):
     A pending capture is not a successful comparison. A mismatch is recorded,
     not an exception that would discard the receipt or its measured numbers.
     """
-    differences = []
+    differences, comparison = [], []
     for field in LOCAL_FIELDS:
         actual, expected = _field(stack, field), _field(reference, field)
+        comparison.append({"field": field, "actual": actual, "expected": expected})
         if actual is None or expected is None or actual != expected:
             differences.append(field)
+    comparison.append({"field": "python", "actual": stack.get("python"), "expected": versions.get("python")})
     if stack.get("python") is None or stack.get("python") != versions.get("python"):
         differences.append("python")
     actual_packages = stack.get("packages") or {}
     expected_packages = versions["packages"]
     for package in sorted(actual_packages.keys() | expected_packages.keys()):
+        comparison.append({"field": "packages."+package, "actual": actual_packages.get(package),
+                           "expected": expected_packages.get(package)})
         # A null observed version cannot stand in for an installed pinned package.
         if (package not in actual_packages or package not in expected_packages
                 or actual_packages[package] != expected_packages[package]):
@@ -98,12 +132,16 @@ def compare_stack(stack, reference, versions, *, capture_stack=None):
     pending = []
     for field in CAPTURE_FIELDS:
         actual = _field(capture_stack, field)
+        comparison.append({"field": field, "actual": actual, "expected": _field(reference, field)})
         if actual is None:
             pending.append(field)
         elif _field(reference, field) is None or actual != _field(reference, field):
             differences.append(field)
     return {"status": "differs" if differences else ("pending_capture" if pending else "match"),
-            "differences": differences, "pending_fields": pending}
+            "differences": differences, "pending_fields": pending,
+            "physical_differences": [f for f in differences if f in PHYSICAL_FIELDS],
+            "disclosure_differences": [f for f in differences if f not in PHYSICAL_FIELDS],
+            "comparison": comparison}
 
 
 def knee_scan(receipts):
@@ -193,6 +231,7 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
     stack = collect_stack(mx, device, repo_root=repo_root)
     reference, versions = registered_stack(repo_root)
     check = compare_stack(stack, reference, versions)
+    reference_check = checkout_reference_check(repo_root)
 
     data = mx.ones((byte_count,), dtype=mx.uint8)
     mx.eval(data)
@@ -237,7 +276,7 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
             "duration_s": (end - start) / 1_000_000_000,
             "bytes_per_read": byte_count, "repeats": repeats, "bytes_read": byte_count * repeats,
             "boundary": "logical uint8 payload reads; excludes initialization and reduction workspace",
-            "stack": stack, "stack_check": check}
+            "stack": stack, "stack_check": check, "reference_check": reference_check}
 
 
 def main(argv=None):
