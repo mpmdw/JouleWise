@@ -1,0 +1,201 @@
+{
+ "bounds": {
+  "orig": [
+   "0.022708904442849103",
+   "0x1.74100c7a3dddbp-6"
+  ],
+  "ulp_up": [
+   "0.022708904442849107",
+   "0x1.74100c7a3dddcp-6"
+  ],
+  "ulp_down": [
+   "0.0227089044428491",
+   "0x1.74100c7a3dddap-6"
+  ],
+  "up_5e13": [
+   "0.022708904443349102",
+   "0x1.74100c7a610cep-6"
+  ],
+  "down_5e13": [
+   "0.022708904442349104",
+   "0x1.74100c7a1aae8p-6"
+  ]
+ },
+ "uncached": {
+  "orig": [
+   0,
+   "97096adcb86443d33e8f033a02480eb922f87f734af080a68854ad88122240b1",
+   ""
+  ],
+  "ulp_up": [
+   0,
+   "97096adcb86443d33e8f033a02480eb922f87f734af080a68854ad88122240b1",
+   ""
+  ],
+  "ulp_down": [
+   0,
+   "97096adcb86443d33e8f033a02480eb922f87f734af080a68854ad88122240b1",
+   ""
+  ],
+  "up_5e13": [
+   0,
+   "97096adcb86443d33e8f033a02480eb922f87f734af080a68854ad88122240b1",
+   ""
+  ],
+  "down_5e13": [
+   0,
+   "97096adcb86443d33e8f033a02480eb922f87f734af080a68854ad88122240b1",
+   ""
+  ]
+ },
+ "uncached_refits": 5,
+ "shared_forward": {
+  "equal_to_uncached": true,
+  "refits": 5,
+  "partitions": [
+   "0x1.74100c7a1aae8p-6",
+   "0x1.74100c7a3dddap-6",
+   "0x1.74100c7a3dddbp-6",
+   "0x1.74100c7a3dddcp-6",
+   "0x1.74100c7a610cep-6"
+  ],
+  "entries": 5,
+  "values": {
+   "0x1.74100c7a3dddbp-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   },
+   "0x1.74100c7a3dddcp-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849107"
+   },
+   "0x1.74100c7a3dddap-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   },
+   "0x1.74100c7a610cep-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904443349102"
+   },
+   "0x1.74100c7a1aae8p-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   }
+  }
+ },
+ "shared_reversed": {
+  "equal_to_uncached": true,
+  "refits": 5,
+  "partitions": [
+   "0x1.74100c7a1aae8p-6",
+   "0x1.74100c7a3dddap-6",
+   "0x1.74100c7a3dddbp-6",
+   "0x1.74100c7a3dddcp-6",
+   "0x1.74100c7a610cep-6"
+  ],
+  "entries": 5,
+  "values": {
+   "0x1.74100c7a1aae8p-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   },
+   "0x1.74100c7a610cep-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904443349102"
+   },
+   "0x1.74100c7a3dddap-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   },
+   "0x1.74100c7a3dddcp-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849107"
+   },
+   "0x1.74100c7a3dddbp-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   }
+  }
+ },
+ "shared_high_first": {
+  "equal_to_uncached": true,
+  "refits": 5,
+  "partitions": [
+   "0x1.74100c7a1aae8p-6",
+   "0x1.74100c7a3dddap-6",
+   "0x1.74100c7a3dddbp-6",
+   "0x1.74100c7a3dddcp-6",
+   "0x1.74100c7a610cep-6"
+  ],
+  "entries": 5,
+  "values": {
+   "0x1.74100c7a610cep-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904443349102"
+   },
+   "0x1.74100c7a3dddbp-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   },
+   "0x1.74100c7a1aae8p-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   },
+   "0x1.74100c7a3dddcp-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849107"
+   },
+   "0x1.74100c7a3dddap-6": {
+    "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b": "0.022708904442849103"
+   }
+  }
+ },
+ "reduce_orig_after_high_seed": {
+  "exit": 0,
+  "equal_stored": true,
+  "refits": 2
+ },
+ "driver_forward": {
+  "ret": 0,
+  "steps": [
+   [
+    "0",
+    "ok",
+    null
+   ],
+   [
+    "1",
+    "ok",
+    null
+   ],
+   [
+    "2",
+    "ok",
+    null
+   ]
+  ],
+  "refits": 5
+ },
+ "driver_reversed": {
+  "ret": 0,
+  "steps": [
+   [
+    "0",
+    "ok",
+    null
+   ],
+   [
+    "1",
+    "ok",
+    null
+   ],
+   [
+    "2",
+    "ok",
+    null
+   ]
+  ],
+  "refits": 5
+ },
+ "no_monitoring": {
+  "ret": 2,
+  "first": [
+   [
+    "0",
+    "tooling_refusal",
+    "calibration_deadline_observer_unavailable"
+   ],
+   [
+    "1",
+    "not_run",
+    null
+   ]
+  ]
+ }
+}

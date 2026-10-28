@@ -389,7 +389,7 @@ Executed:
 - Whether block 5's real references share the kept members' calibration. This no longer matters for safety, only
   for run time.
 
-FRESH VERDICT at `f059286bc` (report `35e0519e2`): ACCEPT
+FRESH VERDICT at `f059286bc` (report `35e0519e2`, superseded by §8): ACCEPT
 
 - BLOCKER: none
 - MAJOR: none
@@ -397,3 +397,151 @@ FRESH VERDICT at `f059286bc` (report `35e0519e2`): ACCEPT
 - NIT-6 `joulewise/b5_analysis/deadline_observer.py:38`: the observer takes the first free tool id, usually 0 (`DEBUGGER_ID`)
 - NIT-7 `joulewise/b5_analysis/deadline_observer.py`: a firing in a spawned worker is not observed; no dry-run caller spawns refit workers today
 - NIT-1 `joulewise/reduce.py:1526`, NIT-3 `joulewise/cli.py:1949`: kept as dispositioned
+
+## 8. Delta check `f059286bc..2ea99f51f` (answers the Sol review, `review/2026-10-27-l9-sol-rev` @ `46c3f028`)
+
+The lead asked for this on 2026-10-28. The commits are:
+
+- `217094568`: partition the run cache by the metadata bound.
+- `888548f98`: classify observer setup failures.
+- `2ea99f51f`: choose the partition only from metadata a caller already holds.
+
+Executed on worktrees at `2ea99f51f` (new), `f059286bc` (old) and `0576a734d` (base). Scripts and outputs are in
+`l9-rev-1/delta3/`. I did not run the full-size `test_dry_run` with real programs.
+
+**My miss.** Sol's MAJOR-1 is a defect I looked at and dismissed. In §2 I recorded that the cached value is
+`max(metadata b_fiducial, fresh)` and that the metadata bound must only lie within 1e-12 of the evidence value
+(`reduce.py:1400`). I called that "the governed reducer's existing contract, unchanged here". It was unchanged, but
+sharing the dict across bundles and calls made it reachable across bundles. My §3 byte-identity check used
+members whose bounds were identical, so it could not discriminate. Sol's finding stands. My verdicts at `c20fa72`
+and `f059286bc` should have carried it as a MAJOR.
+
+**What changed (runtime).**
+
+- `whole_window.py`: the run store is now `{float.hex(metadata b_fiducial_s): {evidence sha256: bound}}`.
+  - `physics_cache_for(local, metadata)` returns `local` unchanged outside a run, or when the bound is not a finite
+    number.
+  - Inside a run it returns `_RunPhysicsCacheView`: the caller's local dict first, then the run partition for
+    that exact bound. A write goes to both.
+  - The consumption-session (`:1331`, `:1397`) and core re-derivation (`:6187`) loops partition by the metadata
+    each member already verified.
+- `cli._strict_problems` partitions from `reader.raw_metadata()`, both for its own cache and for an explicit
+  caller dict. `strict_validate_bundles` and `bracket.py` share the run store only through that path, and
+  `bracket.py` is back to its BASE_HEAD bytes.
+- `cli reduce` (step 2) and `_reference_energy_evidence_detail` hold no metadata, so they **return to BASE_HEAD
+  code with no run cache** (NIT-8).
+- `deadline_observer.py`: a missing `sys.monitoring`, a lost tool-id race, or a failed registration or event setup
+  now yields `None`. The driver then refuses with `calibration_deadline_observer_unavailable`. Cleanup always frees
+  the tool id.
+
+**Governed files.** `ESTIMATOR_CODE_PATHS` at `2ea99f51f` is (`powermetrics_fiducial.py`, `uncertainty_evidence.py`,
+`adapters/powermetrics.py`, `reduce.py`). Each blob's SHA-256 equals `0576a734d`'s (`bcdfeec0…`, `b583f35a…`,
+`70f47086…`, `7b9c0d28…`), and `git diff --stat 0576a734d 2ea99f51f` over them is empty. The non-report files the
+delta changes are `bracket.py`, `deadline_observer.py`, `cli.py`, `whole_window.py` and two test modules.
+
+**Executed.**
+
+- **Lane tests at `2ea99f51f`:** `tests.b5_analysis.test_shared_physics_cache`, `test_deadline_observer`,
+  `test_deadline_tripwire` and `tests.test_authentication_io` (which includes
+  `test_marked_v2_surface_has_no_direct_readable_io`): **56/56 OK, 558.1 s**.
+- **Sol `cache_metadata_probe.py` at `2ea99f51f`** (`delta3/cache_metadata_probe_2ea99f51f.log`):
+  - strict validation of the high and low bundles under the shared store: `0 0` (at `f059286bc`: `0 2`);
+  - no differing summary keys;
+  - the real step-1 driver comparison returns 0 with step 1 `ok` and every later step `ok`, equal to BASE_HEAD
+    (at `f059286bc`: 2, `kept_bundle_strict_validation_failed`).
+
+  Its `assert differences` now fails, as intended at a fixed head: there are no differences. Its `cache: {}` line
+  is empty because the seed goes through `reduce`, which no longer uses the run store. The strict phase still
+  exercises partitioning, because the high bundle's strict call seeds its own partition before the low one runs.
+- **Sol `missing_monitoring.py` at `2ea99f51f`:**
+  - missing API: return 2, record written (at `f059286bc`: `AttributeError`, no record);
+  - tool-id race: return 2, record written, competing tool preserved (at `f059286bc`: `ValueError`, no record).
+
+  My probe checks the record contents: step 0 is `tooling_refusal` / `calibration_deadline_observer_unavailable`,
+  and step 1 is `not_run` (`partition_probe.json` `no_monitoring`).
+- **My partition probes** (`delta3/partition_probe.py`, `partition_probe.json`). Five bundles share evidence
+  `a638eed8…`, with metadata bounds `orig`, `orig±1 ulp` (`math.nextafter`) and `orig±5e-13`. Each has a stored
+  summary regenerated by an uncached real `reduce`, so each is self-consistent.
+  - **Uncached:** `validate-bundle --strict` on all five gives exit 0 and identical normalized stdout; 5 refits.
+  - **Shared store, three orders** (forward, reversed, highest bound first), each validated twice:
+    - every exit, stdout and stderr equals the uncached run;
+    - 5 refits for 10 calls;
+    - 5 partitions, one per exact bound, 1 entry each.
+  - **Stored values per partition:** `orig`, `ulp_down` and `-5e-13` store the fresh bound `0.022708904442849103`,
+    because at or below the fresh bound `max` picks fresh. `ulp_up` stores `…107` and `+5e-13` stores `…3349102`.
+    The bound-equals-fresh case is `orig`.
+  - **Real `step_1` in `dry_run.run`** with all five kept bundles, forward and reversed (other steps stubbed):
+    return 0, steps 0-2 `ok`, 5 refits.
+  - **`reduce` of `orig` after a `+5e-13` strict seed:** exit 0, bytes equal to the stored summary; refits 2,
+    because `reduce` no longer reads the store.
+- **Read counts and authentication behaviour, no-difference path** (`delta3/readcount_probe.py`; outputs
+  `readcount_old.json` at `f059286bc` and `readcount_new.json` at `2ea99f51f`). Inside one
+  `V2AuthenticationReadSession`, the probe runs strict validation of A and B, `reduce` A, and
+  `strict_validate_bundles([A,B])`, with the run store off and then on. The two JSON files are **identical after
+  path normalization**:
+  - the same 34 authenticated files and 201 reads;
+  - per-file `read_count`, SHA-256, grammar and strict-parse flags are equal;
+  - exits, stdout and reduction bytes (`3a867f60…`) are equal;
+  - in both trees the records are equal with the store on and off.
+- **Within-call sharing** (`delta3/within_call_probe.py`, `within_call_probe.txt`). The probe runs one
+  `strict_validate_bundles` call over `[orig, +5e-13]`; counts are strict problems per bundle.
+
+  | case | `0576a734d` | `f059286bc` | `2ea99f51f` |
+  |---|---|---|---|
+  | low then high, one call | `[0,0]` | `[0,0]` | `[0,0]` |
+  | high then low, one call | **`[0,1]`** | **`[0,1]`** | **`[0,1]`** |
+  | high then low, separate calls in a run | — | **`[0,1]`** (Sol's MAJOR-1) | `[0,0]` |
+
+  So the delta closes the cross-call regression and keeps BASE_HEAD's within-call behaviour byte for byte
+  (OBS-1).
+
+**Review of the code.**
+
+- **Only three operations reach the view.** The reducer touches the cache only through `is not None`, `.get(key)`
+  and `[key] = value` (`reduce.py:1527-1528,1593-1594`). Nothing reaches the view's empty underlying `dict` storage
+  (`bool`, `len`, iteration or copies).
+- **The partition key covers every input of the cached value.** That value is `max(float(metadata b), fresh)`.
+  `fresh` depends only on bytes bound to the evidence hash. The partition is `float.hex` of the same metadata `b`
+  the reducer folds in, so a hit equals what a fresh fit would return.
+- **Edge values.** Distinct JSON spellings of one double share a partition. `-0.0` and `0.0` get separate
+  partitions, which is safe (less sharing). A non-finite or non-numeric bound gets no partition, and the reducer
+  refuses it anyway.
+- **Partition source per site.** In `_strict_problems`, `reduce_bundle` re-reads the same `metadata.json` that
+  `reader.raw_metadata()` returned within the call. In the session and core loops, the partition comes from the
+  very member metadata whose `instrument_calibration` is passed to `_verify_instrument_calibration`.
+- **Observer cleanup** runs in a nested `try/finally`, so a failed `set_local_events` still frees the tool id.
+
+**Findings in this delta.**
+
+- **NIT-8: step 2's `reduce` and the NEG-8 energy re-derivation are uncached again** (`cli.py:1953`,
+  `whole_window.py:4663`). This is BASE_HEAD behaviour, so it is not a regression, but two things follow:
+  - **Runtime:** step 2 refits once per kept member. Only step 1 and the whole-window loops keep the J2 saving.
+  - **Exposure:** warm-cache immunity to step-2 firings (§5) is gone. A step-2 firing is again possible, and the
+    observer and tripwire still turn it into a tooling refusal.
+
+  Passing the reader's metadata into `reduce_bundle`'s call site would need a read the V2 guard forbids, which is
+  why the author dropped it. The lead should weigh the runtime cost on the laptop run.
+- **OBS-1 (pre-existing, not this change): within one caller-owned dict, bundles with the same evidence but
+  metadata bounds that differ within the reducer's 1e-12 tolerance poison each other.** This is so at
+  `0576a734d`. It affects the harvest's per-worker cache (`b5/harvest.py:2418`), one consumption session's member
+  loop, a multi-path `strict_validate_bundles`, and `bracket.py`'s window-inputs dict. On the real archives this
+  needs metadata `b_fiducial_s` to differ from the evidence value by a few ulps, which is unlikely if the writer
+  copies the value. It would already have shown at harvest as `member.strict_validation_failed`, and the dry run
+  reproduces it byte for byte. Suggested check on the laptop: for every kept member, confirm that
+  `metadata.instrument_calibration.b_fiducial_s` has the same bits as its `instrument_evidence.json`
+  `b_fiducial_s`.
+- **NIT-6 stays** (`deadline_observer.py:46` still takes the first free id, usually 0). **NIT-7 stays**
+  (spawned workers are unobserved).
+
+**Not checked.** The full-size `test_dry_run` with real programs (the lead runs it). The N3 per-site fault
+injection on the real driver. OBS-1 on the real archives.
+
+FRESH VERDICT at `2ea99f51f`: ACCEPT
+
+- BLOCKER: none
+- MAJOR: none (Sol MAJOR-1 closed at `2ea99f51f`: cross-call reuse is exact per metadata bound; strict admission and outputs equal uncached in every order tested)
+- MINOR: none (Sol MINOR-1 closed: observer setup failures give `calibration_deadline_observer_unavailable` with a written record)
+- NIT-8 `joulewise/cli.py:1953`, `joulewise/whole_window.py:4663`: step-2 `reduce` and the NEG-8 energy re-derivation are uncached again (BASE_HEAD behaviour; runtime cost and step-2 firing exposure return, and the observer covers them)
+- NIT-6 `joulewise/b5_analysis/deadline_observer.py:46`: first free tool id, usually 0
+- NIT-7 `joulewise/b5_analysis/deadline_observer.py`: spawned workers unobserved
+- OBS-1 `joulewise/b5/harvest.py:2418` (pre-existing at `0576a734d`): same-evidence bundles with metadata bounds that differ within 1e-12 poison one shared caller dict; check metadata and evidence `b_fiducial_s` bits on the real archives

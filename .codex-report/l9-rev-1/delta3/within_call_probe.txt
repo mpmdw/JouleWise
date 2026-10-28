@@ -1,0 +1,6 @@
+== base0
+{"low_then_high": [0, 0], "high_then_low": [0, 1]}
+== old
+{"low_then_high": [0, 0], "low_then_high_in_run": [0, 0], "low_then_high_in_run_separate_calls": [0, 0], "high_then_low": [0, 1], "high_then_low_in_run": [0, 1], "high_then_low_in_run_separate_calls": [0, 1]}
+== new
+{"low_then_high": [0, 0], "low_then_high_in_run": [0, 0], "low_then_high_in_run_separate_calls": [0, 0], "high_then_low": [0, 1], "high_then_low_in_run": [0, 1], "high_then_low_in_run_separate_calls": [0, 0]}

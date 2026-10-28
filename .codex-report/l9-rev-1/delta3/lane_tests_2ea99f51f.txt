@@ -1,0 +1,3 @@
+Ran 56 tests in 558.087s
+OK
+rc=0

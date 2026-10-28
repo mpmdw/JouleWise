@@ -1,0 +1,456 @@
+{
+ "no_run_store": {
+  "records": {
+   "<TREE>/configs/campaign_policies/quiet_mac_exploratory.json": [
+    5,
+    "eb766f939716580e",
+    "json",
+    true
+   ],
+   "<TREE>/configs/campaign_policies/quiet_mac_p2_b5.json": [
+    5,
+    "ba0f7b7f1538fe87",
+    "json",
+    true
+   ],
+   "<TREE>/configs/campaign_policies/quiet_mac_p2_g2a_b3.json": [
+    5,
+    "04bdbec45cf3b609",
+    "json",
+    true
+   ],
+   "<TREE>/configs/campaign_policies/quiet_mac_p2_production.json": [
+    5,
+    "b0d7b228b88bea71",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/config.json": [
+    14,
+    "03e3eabd7332f7f6",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/events.jsonl": [
+    9,
+    "2cb1990ce9bbb125",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/events.jsonl": [
+    6,
+    "dc19cb394d7732a8",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/instrument_evidence.json": [
+    6,
+    "a638eed8bc22bfc4",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/manifest.json": [
+    3,
+    "131880332deddb21",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/power_trace.csv": [
+    3,
+    "5d3b5a2c3a8de63b",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/raw/powermetrics.plist": [
+    6,
+    "951ed3fa0353a416",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json": [
+    10,
+    "e6fb01547e7c6fcb",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/power_trace.csv": [
+    9,
+    "b5118b246fd060c2",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics.plist": [
+    12,
+    "3fa309572e3c2a25",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle.plist": [
+    8,
+    "11df37cd5fe498f2",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle_post.plist": [
+    2,
+    "4f1e9572e926008a",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry.jsonl": [
+    2,
+    "18f859ff28e4d5a3",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry_idle.jsonl": [
+    3,
+    "f69923e41514e726",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/summary_metrics.json": [
+    8,
+    "3a867f6087280d6b",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/config.json": [
+    12,
+    "e8eca4a17fa16312",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/events.jsonl": [
+    8,
+    "d978591717222c75",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/events.jsonl": [
+    4,
+    "dc19cb394d7732a8",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/instrument_evidence.json": [
+    4,
+    "a638eed8bc22bfc4",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/manifest.json": [
+    2,
+    "131880332deddb21",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/power_trace.csv": [
+    2,
+    "5d3b5a2c3a8de63b",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/raw/powermetrics.plist": [
+    4,
+    "951ed3fa0353a416",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/metadata.json": [
+    8,
+    "e77c17f347fb13e1",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/power_trace.csv": [
+    8,
+    "0dfec82ff87f3f4c",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/raw/powermetrics.plist": [
+    10,
+    "4205d9c3b810b79d",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/raw/powermetrics_idle.plist": [
+    6,
+    "4a9ea66d73c98127",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/raw/powermetrics_idle_post.plist": [
+    2,
+    "67ddd2afb56a0b40",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/rich_telemetry.jsonl": [
+    2,
+    "fab681cedfed1e94",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/rich_telemetry_idle.jsonl": [
+    2,
+    "20ef916684ae1811",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/summary_metrics.json": [
+    6,
+    "78e31230efc0fc36",
+    "json",
+    true
+   ]
+  },
+  "reduced": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+  "results": [
+   [
+    0,
+    "16502e552ce83a5ae42e76f8e31b3681a832d5e34b7349d2edba8b855954486d"
+   ],
+   [
+    0,
+    "1781a2d1f46e12a61d40f811ef52258adc5c939686a5cd523773040e89c3427c"
+   ],
+   [
+    0,
+    "f15858c31faa4b4003757de75002a5882bb9188015fd1080e8e5cf61cad06cac"
+   ],
+   [
+    [],
+    []
+   ]
+  ]
+ },
+ "run_store": {
+  "records": {
+   "<TREE>/configs/campaign_policies/quiet_mac_exploratory.json": [
+    5,
+    "eb766f939716580e",
+    "json",
+    true
+   ],
+   "<TREE>/configs/campaign_policies/quiet_mac_p2_b5.json": [
+    5,
+    "ba0f7b7f1538fe87",
+    "json",
+    true
+   ],
+   "<TREE>/configs/campaign_policies/quiet_mac_p2_g2a_b3.json": [
+    5,
+    "04bdbec45cf3b609",
+    "json",
+    true
+   ],
+   "<TREE>/configs/campaign_policies/quiet_mac_p2_production.json": [
+    5,
+    "b0d7b228b88bea71",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/config.json": [
+    14,
+    "03e3eabd7332f7f6",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/events.jsonl": [
+    9,
+    "2cb1990ce9bbb125",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/events.jsonl": [
+    6,
+    "dc19cb394d7732a8",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/instrument_evidence.json": [
+    6,
+    "a638eed8bc22bfc4",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/manifest.json": [
+    3,
+    "131880332deddb21",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/power_trace.csv": [
+    3,
+    "5d3b5a2c3a8de63b",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/raw/powermetrics.plist": [
+    6,
+    "951ed3fa0353a416",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json": [
+    10,
+    "e6fb01547e7c6fcb",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/power_trace.csv": [
+    9,
+    "b5118b246fd060c2",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics.plist": [
+    12,
+    "3fa309572e3c2a25",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle.plist": [
+    8,
+    "11df37cd5fe498f2",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle_post.plist": [
+    2,
+    "4f1e9572e926008a",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry.jsonl": [
+    2,
+    "18f859ff28e4d5a3",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry_idle.jsonl": [
+    3,
+    "f69923e41514e726",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-end-r1/summary_metrics.json": [
+    8,
+    "3a867f6087280d6b",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/config.json": [
+    12,
+    "e8eca4a17fa16312",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/events.jsonl": [
+    8,
+    "d978591717222c75",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/events.jsonl": [
+    4,
+    "dc19cb394d7732a8",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/instrument_evidence.json": [
+    4,
+    "a638eed8bc22bfc4",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/manifest.json": [
+    2,
+    "131880332deddb21",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/power_trace.csv": [
+    2,
+    "5d3b5a2c3a8de63b",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/instrument_calibration/raw/powermetrics.plist": [
+    4,
+    "951ed3fa0353a416",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/metadata.json": [
+    8,
+    "e77c17f347fb13e1",
+    "json",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/power_trace.csv": [
+    8,
+    "0dfec82ff87f3f4c",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/raw/powermetrics.plist": [
+    10,
+    "4205d9c3b810b79d",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/raw/powermetrics_idle.plist": [
+    6,
+    "4a9ea66d73c98127",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/raw/powermetrics_idle_post.plist": [
+    2,
+    "67ddd2afb56a0b40",
+    "raw",
+    false
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/rich_telemetry.jsonl": [
+    2,
+    "fab681cedfed1e94",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/rich_telemetry_idle.jsonl": [
+    2,
+    "20ef916684ae1811",
+    "jsonl",
+    true
+   ],
+   "archive/sources/night-custody/runs_claim/neg8-window-midpoint/summary_metrics.json": [
+    6,
+    "78e31230efc0fc36",
+    "json",
+    true
+   ]
+  },
+  "reduced": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+  "results": [
+   [
+    0,
+    "16502e552ce83a5ae42e76f8e31b3681a832d5e34b7349d2edba8b855954486d"
+   ],
+   [
+    0,
+    "1781a2d1f46e12a61d40f811ef52258adc5c939686a5cd523773040e89c3427c"
+   ],
+   [
+    0,
+    "f54bd4ed2958d7a63c32dbf255eea60e9768f28722f81bc965b5b049858f4838"
+   ],
+   [
+    [],
+    []
+   ]
+  ]
+ }
+}
