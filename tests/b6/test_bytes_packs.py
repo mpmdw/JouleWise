@@ -231,7 +231,11 @@ class BytesPackTests(unittest.TestCase):
         identities = {name: {'path': '/synthetic/' + name, 'sha256': 'a' * 64}
                       for name in ('identity-epoch.json', 't1-bindings.json')}
         self.assertEqual({p for p in sized['packs'] if p.startswith('bytes-')},
-                         {f'bytes-s{n}-p1' for n in range(1, 7)})
+                         {f'bytes-s{n}-p{q}' for n in range(1, 7) for q in (1, 2)})
+        # Registration §21 item 1: each pass-2 row is its pass-1 row with only the pack id changed.
+        for n in range(1, 7):
+            row = dict(sized['packs'][f'bytes-s{n}-p2'], pack_id=f'bytes-s{n}-p1')
+            self.assertEqual(row, sized['packs'][f'bytes-s{n}-p1'])
         for n in range(1, 7):
             for pass_number in (1, 2):
                 p = f'bytes-s{n}-p{pass_number}'

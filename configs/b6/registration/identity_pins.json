@@ -2,7 +2,7 @@
   "bytes_c4": {
     "file_source": {
       "path": "configs/bytes/identity_pins.json",
-      "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+      "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
     },
     "issuer": {
       "path": "scripts/write_b5_identity_pins.py",
@@ -513,7 +513,7 @@
         "pack_id": "bytes-s1-p1",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s1-p1/plan_tree.json",
-          "sha256": "aeaac6feabff0d2a726b0f747484c24c522ac5f2a5c949350f9880b775fe1558"
+          "sha256": "13419745ec07da8fbb6548e1207f1a0b91a8696afd32fedc64b3d1b34a74bbf3"
         },
         "projection_state": "unprojected"
       },
@@ -521,7 +521,7 @@
         "pack_id": "bytes-s1-p2",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s1-p2/plan_tree.json",
-          "sha256": "83cc544ea741aeb766e431efe1cec175797a374108bf15679de2d80bc516e003"
+          "sha256": "a857cd8673d5624ea7643509fddd779de482457f1cda40824ebc5d771a69b029"
         },
         "projection_state": "unprojected"
       },
@@ -529,7 +529,7 @@
         "pack_id": "bytes-s2-p1",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s2-p1/plan_tree.json",
-          "sha256": "997b10b38406ffc357a3e31fb4b1a12ab665c5e27d15c74d1ed1f610ea95359a"
+          "sha256": "b5a4e0c8046387b2353527eaf1f1b0e664989a762ca48789677a232ea349579b"
         },
         "projection_state": "unprojected"
       },
@@ -537,7 +537,7 @@
         "pack_id": "bytes-s2-p2",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s2-p2/plan_tree.json",
-          "sha256": "681edbf9f6a96217044c4e24caeefc48b509a0bdd35d921c9fc7a9284f4964e4"
+          "sha256": "161b3fdb293019239e344da006b658ab53993f178d5931523863a73cd539443b"
         },
         "projection_state": "unprojected"
       },
@@ -545,7 +545,7 @@
         "pack_id": "bytes-s3-p1",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s3-p1/plan_tree.json",
-          "sha256": "3d2d670728e70d8e83f329e42818b1c85d2f0465da7458b70befb15d961d3178"
+          "sha256": "cf263ac92811e627e7f19fd3243b6f593d6a1fdc9fbbd771024683d499b71c34"
         },
         "projection_state": "unprojected"
       },
@@ -553,7 +553,7 @@
         "pack_id": "bytes-s3-p2",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s3-p2/plan_tree.json",
-          "sha256": "d5691bf8ad0e23dd2448c42997d15bb7f40111ac4665cdd8cadcde45879abac1"
+          "sha256": "455166e588e0203291d1caf21b4ee07821fd1abe35e8cb5c6df97c89396b67fd"
         },
         "projection_state": "unprojected"
       },
@@ -561,7 +561,7 @@
         "pack_id": "bytes-s4-p1",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s4-p1/plan_tree.json",
-          "sha256": "430d230a95b0af9d5c8f71aaf4f7ff864346001302996414e8afa349e78f1dfe"
+          "sha256": "a395441b150ca88b9521f4fb5e03023b26f648bfeca22aedf659fcede3385836"
         },
         "projection_state": "unprojected"
       },
@@ -569,7 +569,7 @@
         "pack_id": "bytes-s4-p2",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s4-p2/plan_tree.json",
-          "sha256": "49a57b86796f7444eeb8b16b8ad1ec849addf21c9cee560a8a163b48a47eaa29"
+          "sha256": "3a900d643d77363f3fa45fca07c0a461bce7ad1876c24b2f3038ca50d5a0b2f5"
         },
         "projection_state": "unprojected"
       },
@@ -577,7 +577,7 @@
         "pack_id": "bytes-s5-p1",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s5-p1/plan_tree.json",
-          "sha256": "6b704b1d2710d6bed878fcd967142359d21f2d710f5c3f9b1457d5570d30c86f"
+          "sha256": "2a480c6b371bf54909332034c16d1a5a16766a150573200c3a1030a8c89dd326"
         },
         "projection_state": "unprojected"
       },
@@ -585,7 +585,7 @@
         "pack_id": "bytes-s5-p2",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s5-p2/plan_tree.json",
-          "sha256": "c9537a8794c6ce4900b018bd902c2e445027befd4fb16027578a34bb4529cf10"
+          "sha256": "328e96fbb0bfdc5666b1453a0e58fe4f9aaaebdfa91825ead10129bc38f04765"
         },
         "projection_state": "unprojected"
       },
@@ -593,7 +593,7 @@
         "pack_id": "bytes-s6-p1",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s6-p1/plan_tree.json",
-          "sha256": "d8089df7cd43a35a0655273287fbf8dbfac7877d154c3c6066e1c5d9cb651f94"
+          "sha256": "b0296b93cdf039ba9a0529f9577fb78b6c98fa1448ea5ac3cf85bda46b24cdc0"
         },
         "projection_state": "unprojected"
       },
@@ -601,7 +601,7 @@
         "pack_id": "bytes-s6-p2",
         "plan_tree": {
           "path": "configs/campaigns/bytes-s6-p2/plan_tree.json",
-          "sha256": "a7b15f2eae020ceaec2201324782d5f9fbc56496aee61dfb91e614aca50b9765"
+          "sha256": "37b6fc79894be0a6a1757917d594993c047083a14ee4e1124f983aedb286ec4c"
         },
         "projection_state": "unprojected"
       }
@@ -2909,7 +2909,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "config.json": {
@@ -4230,7 +4230,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -4771,7 +4771,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -5296,7 +5296,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -5821,7 +5821,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -6346,7 +6346,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -6871,7 +6871,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -7396,7 +7396,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -7923,7 +7923,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -8833,7 +8833,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "added_tokens.json": {
@@ -9371,7 +9371,7 @@
         "runtime_stack_observed": true,
         "source": {
           "path": "configs/bytes/identity_pins.json",
-          "sha256": "74551d2adcdcb1b5c12dd4829853306f31f034f0004ca977916af6d6eb12816b"
+          "sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead"
         },
         "tokenizer_and_config_files": {
           "chat_template.jinja": {

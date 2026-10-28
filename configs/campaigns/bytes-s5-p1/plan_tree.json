@@ -760,8 +760,8 @@
     "bytes-llama-70b"
   ],
   "plan": {
-    "actual_sha256": "d020d254be849ecba256314cfbb4e230a12cc2e1d3a7c9e5b4d2a5e5681c8bf4",
-    "declared_sha256": "d020d254be849ecba256314cfbb4e230a12cc2e1d3a7c9e5b4d2a5e5681c8bf4",
+    "actual_sha256": "f6148c16943ee536bc1e2fb5bb85a2d6db0351bbf6d2d2dea248da5dc2000068",
+    "declared_sha256": "f6148c16943ee536bc1e2fb5bb85a2d6db0351bbf6d2d2dea248da5dc2000068",
     "path": "collection_plan.json",
     "plan_id": "bytes-s5-p1"
   },

@@ -83,14 +83,14 @@ class BytesLaunchTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temporary.cleanup()
 
-    def test_all_six_pass1_real_consumers(self):
+    def test_all_twelve_packs_real_consumers(self):
         catalog = load_catalog(ROOT / "configs/b6/flag_catalog_b6.json")
         sized = registration.load_sizing(ROOT / registration.DEFAULT_DIR_RELATIVE)
-        for number in range(1, 7):
-            pack = f"bytes-s{number}-p1"
+        for number, pass_number in ((n, q) for q in (1, 2) for n in range(1, 7)):
+            pack = f"bytes-s{number}-p{pass_number}"
             with self.subTest(pack=pack):
                 reg = load(ROOT / f"configs/b6/packs/{pack}/registration.json")
-                self.assertEqual(reg.status, "registered")  # pass 1 registered (gate 2026-10-25)
+                self.assertEqual(reg.status, "registered")  # pass 1 gate 2026-10-25; pass 2 registration §21
                 self.assertEqual({e["version"] for e in reg.estimators},
                                  {hashlib.sha256((ROOT / "joulewise/bytes_analysis.py").read_bytes()).hexdigest()})
                 self.assertEqual(validate(reg, catalog, root=ROOT), [])
@@ -107,7 +107,7 @@ class BytesLaunchTests(unittest.TestCase):
                 for locator in (record["plan"], record["chain"], record["window_env"]):
                     self.assertTrue(Path(locator["path"]).is_relative_to(self.scratch))
                     self.assertEqual(hashlib.sha256(Path(locator["path"]).read_bytes()).hexdigest(), locator["sha256"])
-                print(f"{pack}: plan_inputs.build PASS; native writer STAGED ({record['member_count']} members, {record['window_max_s']} s); draft registration PASS")
+                print(f"{pack}: plan_inputs.build PASS; native writer STAGED ({record['member_count']} members, {record['window_max_s']} s); registration PASS")
 
     def test_native_writer_refuses_a_missing_binding_before_any_output(self):
         pack = "bytes-s1-p1"

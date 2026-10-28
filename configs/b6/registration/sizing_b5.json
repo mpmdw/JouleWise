@@ -1021,6 +1021,111 @@
         "worktree_changes": true
       }
     },
+    "bytes-s1-p2": {
+      "T_stream_max_s": 96.39069404196925,
+      "disk_derivation": {
+        "B_bytes": 30319753844,
+        "allowances_by_model": {
+          "qwen3-1p7b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 81631781816482540000000000000,
+              "numerator": 10891394915588033884894765753299
+            },
+            "stream_allowance_s": {
+              "denominator": 8163178181648254000000000000000,
+              "numerator": 783145273507629421873856021669061
+            }
+          },
+          "qwen3-4b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 20407945454120635000000000000,
+              "numerator": 2830923851452033592289994193241
+            },
+            "stream_allowance_s": {
+              "denominator": 408158909082412700000000000000,
+              "numerator": 40649626600132261505455935703143
+            }
+          },
+          "reference": {
+            "count": 25,
+            "member_allowance_s": {
+              "denominator": 33162911362946031875000000000,
+              "numerator": 4387056785149491912815318755107
+            },
+            "stream_allowance_s": {
+              "denominator": 106121316361427302000000000000000,
+              "numerator": 9950131301490807394843209820590153
+            }
+          }
+        },
+        "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+        "extra_wait_raw_bytes": 18010999755,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
+        "measured_c": null,
+        "peak_copies": 2,
+        "required_free_bytes": 100708038301,
+        "session_wait_budget_s": 7200,
+        "stream_basis_bytes": 30319753844,
+        "stream_rate_bytes_per_s": {
+          "denominator": 1799796660838183,
+          "numerator": 4502241280000000000000
+        },
+        "stream_seconds": {
+          "denominator": 4244852654457092080000000000000,
+          "numerator": 51449714244757948346400552949620099
+        },
+        "wall_basis_bytes": 21747443215,
+        "wall_rate_bytes_per_s": {
+          "denominator": 12509476685523987,
+          "numerator": 16084172800000000000000
+        },
+        "wall_seconds": {
+          "denominator": 21224263272285460400000000000,
+          "numerator": 358989082740542057907756752923131
+        }
+      },
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": true,
+      "pack_id": "bytes-s1-p2",
+      "programmed_span_s": 19217.679471871463,
+      "source": {
+        "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+        "code_sha256": {
+          ".scratch-SLOTS/by-slots/derive_slots.py": "3b67cf3ca6b35ff6a6e67ec453ae2562b5b19b4c9c569c18071d0f9bb76c7159",
+          ".scratch-SLOTS/by-slots/measure_h2_raw.py": "e607a6095372df196d546483c7a23d39832103540533aceef1bd37c516dda3e0",
+          ".scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/scripts/indep_measure.py": "f27f661aa2a93811b0317b1ae77d3dc7781494a0ed044dd9d02ff28d7e8ab224",
+          "joulewise/b5/chain.py": "bd70623d5e8e903f9a9bf7871289153ebb8c69c6f4c3c3a5ace99791c5f8379b",
+          "joulewise/b5/plan.py": "84102d4cb967231317b7da6764ec23f5b38bb8bfe5b883be9629f14ac1efb4fa",
+          "joulewise/b6/plan_inputs.py": "59064f1c7b87a4ddb4cd2e7c0918249c0e0d10ba3d95ceff58a44f076304f3d4",
+          "joulewise/b6/precheck.py": "bf08b3731ddbe98e0ee5092cdc8839d6ba48580613e36796389ede012ffd00ab",
+          "joulewise/b6/registration.py": "97a8d880b689140be7268ed1c4c632c59f0598eeaf2811eccd151804b1716370",
+          "scripts/bytes_gates.py": "c72975932106a4ae3d514b24bccd040661b962bf39b83d132bc5ca479cc31248"
+        },
+        "derivation_file": ".scratch-SLOTS/by-slots/derivation.json",
+        "sessions": [
+          {
+            "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+            "export": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/export/bytes-h-20261021T185555335572Z-calibration.runs.csv",
+            "label": "H",
+            "measurements": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/MEASUREMENTS.json",
+            "session_id": "bytes-h-20261021T185555335572Z-calibration",
+            "timed_runs": 95
+          },
+          {
+            "data_commit": null,
+            "export": "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv",
+            "label": "BY-H2",
+            "measurements": "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json",
+            "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+            "timed_runs": 73
+          }
+        ],
+        "worktree_changes": true
+      }
+    },
     "bytes-s2-p1": {
       "T_stream_max_s": 102.24723962508142,
       "disk_derivation": {
@@ -1090,6 +1195,111 @@
       "measured_margin": 0.03325233382759357,
       "measured_margin_complete": true,
       "pack_id": "bytes-s2-p1",
+      "programmed_span_s": 20205.635101731605,
+      "source": {
+        "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+        "code_sha256": {
+          ".scratch-SLOTS/by-slots/derive_slots.py": "3b67cf3ca6b35ff6a6e67ec453ae2562b5b19b4c9c569c18071d0f9bb76c7159",
+          ".scratch-SLOTS/by-slots/measure_h2_raw.py": "e607a6095372df196d546483c7a23d39832103540533aceef1bd37c516dda3e0",
+          ".scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/scripts/indep_measure.py": "f27f661aa2a93811b0317b1ae77d3dc7781494a0ed044dd9d02ff28d7e8ab224",
+          "joulewise/b5/chain.py": "bd70623d5e8e903f9a9bf7871289153ebb8c69c6f4c3c3a5ace99791c5f8379b",
+          "joulewise/b5/plan.py": "84102d4cb967231317b7da6764ec23f5b38bb8bfe5b883be9629f14ac1efb4fa",
+          "joulewise/b6/plan_inputs.py": "59064f1c7b87a4ddb4cd2e7c0918249c0e0d10ba3d95ceff58a44f076304f3d4",
+          "joulewise/b6/precheck.py": "bf08b3731ddbe98e0ee5092cdc8839d6ba48580613e36796389ede012ffd00ab",
+          "joulewise/b6/registration.py": "97a8d880b689140be7268ed1c4c632c59f0598eeaf2811eccd151804b1716370",
+          "scripts/bytes_gates.py": "c72975932106a4ae3d514b24bccd040661b962bf39b83d132bc5ca479cc31248"
+        },
+        "derivation_file": ".scratch-SLOTS/by-slots/derivation.json",
+        "sessions": [
+          {
+            "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+            "export": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/export/bytes-h-20261021T185555335572Z-calibration.runs.csv",
+            "label": "H",
+            "measurements": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/MEASUREMENTS.json",
+            "session_id": "bytes-h-20261021T185555335572Z-calibration",
+            "timed_runs": 95
+          },
+          {
+            "data_commit": null,
+            "export": "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv",
+            "label": "BY-H2",
+            "measurements": "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json",
+            "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+            "timed_runs": 73
+          }
+        ],
+        "worktree_changes": true
+      }
+    },
+    "bytes-s2-p2": {
+      "T_stream_max_s": 102.24723962508142,
+      "disk_derivation": {
+        "B_bytes": 31646393595,
+        "allowances_by_model": {
+          "qwen3-30b-a3b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 2400934759308310000000000000,
+              "numerator": 349955922340690594900650014553
+            },
+            "stream_allowance_s": {
+              "denominator": 81631781816482540000000000000,
+              "numerator": 8200756288643801927698276077861
+            }
+          },
+          "qwen3-8b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 5101986363530158750000000000,
+              "numerator": 745597533139678689481931054499
+            },
+            "stream_allowance_s": {
+              "denominator": 816317818164825400000000000000,
+              "numerator": 86264603879409717683237745499413
+            }
+          },
+          "reference": {
+            "count": 25,
+            "member_allowance_s": {
+              "denominator": 33162911362946031875000000000,
+              "numerator": 4387056785149491912815318755107
+            },
+            "stream_allowance_s": {
+              "denominator": 106121316361427302000000000000000,
+              "numerator": 9950131301490807394843209820590153
+            }
+          }
+        },
+        "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+        "extra_wait_raw_bytes": 18010999755,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
+        "measured_c": null,
+        "peak_copies": 2,
+        "required_free_bytes": 103361317803,
+        "session_wait_budget_s": 7200,
+        "stream_basis_bytes": 31646393595,
+        "stream_rate_bytes_per_s": {
+          "denominator": 1799796660838183,
+          "numerator": 4502241280000000000000
+        },
+        "stream_seconds": {
+          "denominator": 4244852654457092080000000000000,
+          "numerator": 53700894660611219004500541452876133
+        },
+        "wall_basis_bytes": 23017716103,
+        "wall_rate_bytes_per_s": {
+          "denominator": 12509476685523987,
+          "numerator": 16084172800000000000000
+        },
+        "wall_seconds": {
+          "denominator": 124848607484032120000000000,
+          "numerator": 2235045371353119299784553328529
+        }
+      },
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": true,
+      "pack_id": "bytes-s2-p2",
       "programmed_span_s": 20205.635101731605,
       "source": {
         "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
@@ -1231,6 +1441,111 @@
         "worktree_changes": true
       }
     },
+    "bytes-s3-p2": {
+      "T_stream_max_s": 112.22990612499416,
+      "disk_derivation": {
+        "B_bytes": 33327461374,
+        "allowances_by_model": {
+          "qwen3-14b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 40815890908241270000000000000,
+              "numerator": 6474217913479255592038768844679
+            },
+            "stream_allowance_s": {
+              "denominator": 408158909082412700000000000000,
+              "numerator": 47330398691245516925420598873141
+            }
+          },
+          "qwen3-next-80b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 35917983999252317600000000000,
+              "numerator": 5816955938215210885497762799263
+            },
+            "stream_allowance_s": {
+              "denominator": 179589919996261588000000000000,
+              "numerator": 18608248854093095925378997192749
+            }
+          },
+          "reference": {
+            "count": 25,
+            "member_allowance_s": {
+              "denominator": 33162911362946031875000000000,
+              "numerator": 4387056785149491912815318755107
+            },
+            "stream_allowance_s": {
+              "denominator": 106121316361427302000000000000000,
+              "numerator": 9950131301490807394843209820590153
+            }
+          }
+        },
+        "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+        "extra_wait_raw_bytes": 18010999755,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
+        "measured_c": null,
+        "peak_copies": 2,
+        "required_free_bytes": 106723453361,
+        "session_wait_budget_s": 7200,
+        "stream_basis_bytes": 33327461374,
+        "stream_rate_bytes_per_s": {
+          "denominator": 1799796660838183,
+          "numerator": 4502241280000000000000
+        },
+        "stream_seconds": {
+          "denominator": 46693379199028012880000000000000,
+          "numerator": 622088559933533485186608097086595203
+        },
+        "wall_basis_bytes": 24861123518,
+        "wall_rate_bytes_per_s": {
+          "denominator": 12509476685523987,
+          "numerator": 16084172800000000000000
+        },
+        "wall_seconds": {
+          "denominator": 233466895995140064400000000000,
+          "numerator": 4514258997361321213765356900237501
+        }
+      },
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": true,
+      "pack_id": "bytes-s3-p2",
+      "programmed_span_s": 21639.34651295436,
+      "source": {
+        "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+        "code_sha256": {
+          ".scratch-SLOTS/by-slots/derive_slots.py": "3b67cf3ca6b35ff6a6e67ec453ae2562b5b19b4c9c569c18071d0f9bb76c7159",
+          ".scratch-SLOTS/by-slots/measure_h2_raw.py": "e607a6095372df196d546483c7a23d39832103540533aceef1bd37c516dda3e0",
+          ".scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/scripts/indep_measure.py": "f27f661aa2a93811b0317b1ae77d3dc7781494a0ed044dd9d02ff28d7e8ab224",
+          "joulewise/b5/chain.py": "bd70623d5e8e903f9a9bf7871289153ebb8c69c6f4c3c3a5ace99791c5f8379b",
+          "joulewise/b5/plan.py": "84102d4cb967231317b7da6764ec23f5b38bb8bfe5b883be9629f14ac1efb4fa",
+          "joulewise/b6/plan_inputs.py": "59064f1c7b87a4ddb4cd2e7c0918249c0e0d10ba3d95ceff58a44f076304f3d4",
+          "joulewise/b6/precheck.py": "bf08b3731ddbe98e0ee5092cdc8839d6ba48580613e36796389ede012ffd00ab",
+          "joulewise/b6/registration.py": "97a8d880b689140be7268ed1c4c632c59f0598eeaf2811eccd151804b1716370",
+          "scripts/bytes_gates.py": "c72975932106a4ae3d514b24bccd040661b962bf39b83d132bc5ca479cc31248"
+        },
+        "derivation_file": ".scratch-SLOTS/by-slots/derivation.json",
+        "sessions": [
+          {
+            "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+            "export": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/export/bytes-h-20261021T185555335572Z-calibration.runs.csv",
+            "label": "H",
+            "measurements": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/MEASUREMENTS.json",
+            "session_id": "bytes-h-20261021T185555335572Z-calibration",
+            "timed_runs": 95
+          },
+          {
+            "data_commit": null,
+            "export": "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv",
+            "label": "BY-H2",
+            "measurements": "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json",
+            "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+            "timed_runs": 73
+          }
+        ],
+        "worktree_changes": true
+      }
+    },
     "bytes-s4-p1": {
       "T_stream_max_s": 142.9448628750397,
       "disk_derivation": {
@@ -1300,6 +1615,111 @@
       "measured_margin": 0.03325233382759357,
       "measured_margin_complete": true,
       "pack_id": "bytes-s4-p1",
+      "programmed_span_s": 23229.354256286348,
+      "source": {
+        "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+        "code_sha256": {
+          ".scratch-SLOTS/by-slots/derive_slots.py": "3b67cf3ca6b35ff6a6e67ec453ae2562b5b19b4c9c569c18071d0f9bb76c7159",
+          ".scratch-SLOTS/by-slots/measure_h2_raw.py": "e607a6095372df196d546483c7a23d39832103540533aceef1bd37c516dda3e0",
+          ".scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/scripts/indep_measure.py": "f27f661aa2a93811b0317b1ae77d3dc7781494a0ed044dd9d02ff28d7e8ab224",
+          "joulewise/b5/chain.py": "bd70623d5e8e903f9a9bf7871289153ebb8c69c6f4c3c3a5ace99791c5f8379b",
+          "joulewise/b5/plan.py": "84102d4cb967231317b7da6764ec23f5b38bb8bfe5b883be9629f14ac1efb4fa",
+          "joulewise/b6/plan_inputs.py": "59064f1c7b87a4ddb4cd2e7c0918249c0e0d10ba3d95ceff58a44f076304f3d4",
+          "joulewise/b6/precheck.py": "bf08b3731ddbe98e0ee5092cdc8839d6ba48580613e36796389ede012ffd00ab",
+          "joulewise/b6/registration.py": "97a8d880b689140be7268ed1c4c632c59f0598eeaf2811eccd151804b1716370",
+          "scripts/bytes_gates.py": "c72975932106a4ae3d514b24bccd040661b962bf39b83d132bc5ca479cc31248"
+        },
+        "derivation_file": ".scratch-SLOTS/by-slots/derivation.json",
+        "sessions": [
+          {
+            "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+            "export": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/export/bytes-h-20261021T185555335572Z-calibration.runs.csv",
+            "label": "H",
+            "measurements": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/MEASUREMENTS.json",
+            "session_id": "bytes-h-20261021T185555335572Z-calibration",
+            "timed_runs": 95
+          },
+          {
+            "data_commit": null,
+            "export": "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv",
+            "label": "BY-H2",
+            "measurements": "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json",
+            "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+            "timed_runs": 73
+          }
+        ],
+        "worktree_changes": true
+      }
+    },
+    "bytes-s4-p2": {
+      "T_stream_max_s": 142.9448628750397,
+      "disk_derivation": {
+        "B_bytes": 38166208818,
+        "allowances_by_model": {
+          "qwen3-32b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 81631781816482540000000000000,
+              "numerator": 16263008657228787896484291177243
+            },
+            "stream_allowance_s": {
+              "denominator": 163263563632965080000000000000,
+              "numerator": 24115037219132903847314523041463
+            }
+          },
+          "qwen3-8b-8bit": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 81631781816482540000000000000,
+              "numerator": 12501684878568190919754877589643
+            },
+            "stream_allowance_s": {
+              "denominator": 81631781816482540000000000000,
+              "numerator": 9024890800101023766671030234691
+            }
+          },
+          "reference": {
+            "count": 25,
+            "member_allowance_s": {
+              "denominator": 33162911362946031875000000000,
+              "numerator": 4387056785149491912815318755107
+            },
+            "stream_allowance_s": {
+              "denominator": 106121316361427302000000000000000,
+              "numerator": 9950131301490807394843209820590153
+            }
+          }
+        },
+        "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+        "extra_wait_raw_bytes": 18010999755,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
+        "measured_c": null,
+        "peak_copies": 2,
+        "required_free_bytes": 116400948249,
+        "session_wait_budget_s": 7200,
+        "stream_basis_bytes": 38166208818,
+        "stream_rate_bytes_per_s": {
+          "denominator": 1799796660838183,
+          "numerator": 4502241280000000000000
+        },
+        "stream_seconds": {
+          "denominator": 4244852654457092080000000000000,
+          "numerator": 64764395766626244189696768384688653
+        },
+        "wall_basis_bytes": 26905490356,
+        "wall_rate_bytes_per_s": {
+          "denominator": 12509476685523987,
+          "numerator": 16084172800000000000000
+        },
+        "wall_seconds": {
+          "denominator": 2122426327228546040000000000,
+          "numerator": 44413392452775259521615429405123
+        }
+      },
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": true,
+      "pack_id": "bytes-s4-p2",
       "programmed_span_s": 23229.354256286348,
       "source": {
         "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
@@ -1430,6 +1850,100 @@
         "worktree_changes": true
       }
     },
+    "bytes-s5-p2": {
+      "T_stream_max_s": 201.49829895899165,
+      "disk_derivation": {
+        "B_bytes": 31729055015,
+        "allowances_by_model": {
+          "llama-70b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 138774029088020318000000000000,
+              "numerator": 38186234252759700880456787802279
+            },
+            "stream_allowance_s": {
+              "denominator": 555096116352081272000000000000,
+              "numerator": 114791929484333816055527828678547
+            }
+          },
+          "reference": {
+            "count": 25,
+            "member_allowance_s": {
+              "denominator": 33162911362946031875000000000,
+              "numerator": 4387056785149491912815318755107
+            },
+            "stream_allowance_s": {
+              "denominator": 106121316361427302000000000000000,
+              "numerator": 9950131301490807394843209820590153
+            }
+          }
+        },
+        "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+        "extra_wait_raw_bytes": 18010999755,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
+        "measured_c": null,
+        "peak_copies": 2,
+        "required_free_bytes": 103526640643,
+        "session_wait_budget_s": 7200,
+        "stream_basis_bytes": 31729055015,
+        "stream_rate_bytes_per_s": {
+          "denominator": 1799796660838183,
+          "numerator": 4502241280000000000000
+        },
+        "stream_seconds": {
+          "denominator": 72162495125770565360000000000000,
+          "numerator": 915299773773513530073265453360588101
+        },
+        "wall_basis_bytes": 21942279904,
+        "wall_rate_bytes_per_s": {
+          "denominator": 12509476685523987,
+          "numerator": 16084172800000000000000
+        },
+        "wall_seconds": {
+          "denominator": 180406237814426413400000000000,
+          "numerator": 3078744949209711457372574557842687
+        }
+      },
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": true,
+      "pack_id": "bytes-s5-p2",
+      "programmed_span_s": 19051.636769862467,
+      "source": {
+        "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+        "code_sha256": {
+          ".scratch-SLOTS/by-slots/derive_slots.py": "3b67cf3ca6b35ff6a6e67ec453ae2562b5b19b4c9c569c18071d0f9bb76c7159",
+          ".scratch-SLOTS/by-slots/measure_h2_raw.py": "e607a6095372df196d546483c7a23d39832103540533aceef1bd37c516dda3e0",
+          ".scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/scripts/indep_measure.py": "f27f661aa2a93811b0317b1ae77d3dc7781494a0ed044dd9d02ff28d7e8ab224",
+          "joulewise/b5/chain.py": "bd70623d5e8e903f9a9bf7871289153ebb8c69c6f4c3c3a5ace99791c5f8379b",
+          "joulewise/b5/plan.py": "84102d4cb967231317b7da6764ec23f5b38bb8bfe5b883be9629f14ac1efb4fa",
+          "joulewise/b6/plan_inputs.py": "59064f1c7b87a4ddb4cd2e7c0918249c0e0d10ba3d95ceff58a44f076304f3d4",
+          "joulewise/b6/precheck.py": "bf08b3731ddbe98e0ee5092cdc8839d6ba48580613e36796389ede012ffd00ab",
+          "joulewise/b6/registration.py": "97a8d880b689140be7268ed1c4c632c59f0598eeaf2811eccd151804b1716370",
+          "scripts/bytes_gates.py": "c72975932106a4ae3d514b24bccd040661b962bf39b83d132bc5ca479cc31248"
+        },
+        "derivation_file": ".scratch-SLOTS/by-slots/derivation.json",
+        "sessions": [
+          {
+            "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+            "export": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/export/bytes-h-20261021T185555335572Z-calibration.runs.csv",
+            "label": "H",
+            "measurements": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/MEASUREMENTS.json",
+            "session_id": "bytes-h-20261021T185555335572Z-calibration",
+            "timed_runs": 95
+          },
+          {
+            "data_commit": null,
+            "export": "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv",
+            "label": "BY-H2",
+            "measurements": "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json",
+            "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+            "timed_runs": 73
+          }
+        ],
+        "worktree_changes": true
+      }
+    },
     "bytes-s6-p1": {
       "T_stream_max_s": 111.53124241600744,
       "disk_derivation": {
@@ -1488,6 +2002,100 @@
       "measured_margin": 0.03325233382759357,
       "measured_margin_complete": true,
       "pack_id": "bytes-s6-p1",
+      "programmed_span_s": 14846.686081818749,
+      "source": {
+        "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",
+        "code_sha256": {
+          ".scratch-SLOTS/by-slots/derive_slots.py": "3b67cf3ca6b35ff6a6e67ec453ae2562b5b19b4c9c569c18071d0f9bb76c7159",
+          ".scratch-SLOTS/by-slots/measure_h2_raw.py": "e607a6095372df196d546483c7a23d39832103540533aceef1bd37c516dda3e0",
+          ".scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/scripts/indep_measure.py": "f27f661aa2a93811b0317b1ae77d3dc7781494a0ed044dd9d02ff28d7e8ab224",
+          "joulewise/b5/chain.py": "bd70623d5e8e903f9a9bf7871289153ebb8c69c6f4c3c3a5ace99791c5f8379b",
+          "joulewise/b5/plan.py": "84102d4cb967231317b7da6764ec23f5b38bb8bfe5b883be9629f14ac1efb4fa",
+          "joulewise/b6/plan_inputs.py": "59064f1c7b87a4ddb4cd2e7c0918249c0e0d10ba3d95ceff58a44f076304f3d4",
+          "joulewise/b6/precheck.py": "bf08b3731ddbe98e0ee5092cdc8839d6ba48580613e36796389ede012ffd00ab",
+          "joulewise/b6/registration.py": "97a8d880b689140be7268ed1c4c632c59f0598eeaf2811eccd151804b1716370",
+          "scripts/bytes_gates.py": "c72975932106a4ae3d514b24bccd040661b962bf39b83d132bc5ca479cc31248"
+        },
+        "derivation_file": ".scratch-SLOTS/by-slots/derivation.json",
+        "sessions": [
+          {
+            "data_commit": "8db1b40d64d8c543e7a9bee4fd9ced0da63d4b0b",
+            "export": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/export/bytes-h-20261021T185555335572Z-calibration.runs.csv",
+            "label": "H",
+            "measurements": "/Users/edr/code/jw-wt/by-slots/.scratch-SLOTS/by-slots/source/bytes-h-desk-20261022/MEASUREMENTS.json",
+            "session_id": "bytes-h-20261021T185555335572Z-calibration",
+            "timed_runs": 95
+          },
+          {
+            "data_commit": null,
+            "export": "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv",
+            "label": "BY-H2",
+            "measurements": "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json",
+            "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+            "timed_runs": 73
+          }
+        ],
+        "worktree_changes": true
+      }
+    },
+    "bytes-s6-p2": {
+      "T_stream_max_s": 111.53124241600744,
+      "disk_derivation": {
+        "B_bytes": 20269084650,
+        "allowances_by_model": {
+          "qwen35-122b": {
+            "count": 50,
+            "member_allowance_s": {
+              "denominator": 8163178181648254000000000000,
+              "numerator": 1559733839460841087328768596701
+            },
+            "stream_allowance_s": {
+              "denominator": 3755061963558196840000000000000,
+              "numerator": 432480699925548737000446392025689
+            }
+          },
+          "reference": {
+            "count": 25,
+            "member_allowance_s": {
+              "denominator": 33162911362946031875000000000,
+              "numerator": 4387056785149491912815318755107
+            },
+            "stream_allowance_s": {
+              "denominator": 106121316361427302000000000000000,
+              "numerator": 9950131301490807394843209820590153
+            }
+          }
+        },
+        "bytes_source": "raw_allocated_bytes: POSIX st_blocks*512, one raw bundle tree, inode-deduplicated",
+        "extra_wait_raw_bytes": 18010999755,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(r_s*sum(count*own stream allowance)), ceil(r_w*sum(count*own member allowance))); WAIT=ceil(r_s*7200); c=2; no reserve",
+        "measured_c": null,
+        "peak_copies": 2,
+        "required_free_bytes": 80606699913,
+        "session_wait_budget_s": 7200,
+        "stream_basis_bytes": 20269084650,
+        "stream_rate_bytes_per_s": {
+          "denominator": 1799796660838183,
+          "numerator": 4502241280000000000000
+        },
+        "stream_seconds": {
+          "denominator": 97631611052513117840000000000000,
+          "numerator": 791077929837501928181974135506969219
+        },
+        "wall_basis_bytes": 16535726522,
+        "wall_rate_bytes_per_s": {
+          "denominator": 12509476685523987,
+          "numerator": 16084172800000000000000
+        },
+        "wall_seconds": {
+          "denominator": 10612131636142730200000000000,
+          "numerator": 136479153846150605978892508826421
+        }
+      },
+      "measured_margin": 0.03325233382759357,
+      "measured_margin_complete": true,
+      "pack_id": "bytes-s6-p2",
       "programmed_span_s": 14846.686081818749,
       "source": {
         "code_commit": "1c458d71d8a048e24b6c3a6b402fe3c34d9f57c3",

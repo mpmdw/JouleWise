@@ -1004,8 +1004,8 @@
     "bytes-qwen3-32b"
   ],
   "plan": {
-    "actual_sha256": "35d73f7d05416bc0f76f430beacada075fc87542d325953c1241527c1b2d60a0",
-    "declared_sha256": "35d73f7d05416bc0f76f430beacada075fc87542d325953c1241527c1b2d60a0",
+    "actual_sha256": "f8c4cde448216a5adb14d0e374f7f40582898707a9a6d9e6c948561bf9daf367",
+    "declared_sha256": "f8c4cde448216a5adb14d0e374f7f40582898707a9a6d9e6c948561bf9daf367",
     "path": "collection_plan.json",
     "plan_id": "bytes-s4-p2"
   },

@@ -1004,8 +1004,8 @@
     "bytes-qwen3-8b"
   ],
   "plan": {
-    "actual_sha256": "0913b87376a60b9ebb785e3222c1fc917c131419c90716f12658614e22dbd252",
-    "declared_sha256": "0913b87376a60b9ebb785e3222c1fc917c131419c90716f12658614e22dbd252",
+    "actual_sha256": "abe8e369180ee546527a902330fc06a06cf36dce837ead578e391191b8bf0bc6",
+    "declared_sha256": "abe8e369180ee546527a902330fc06a06cf36dce837ead578e391191b8bf0bc6",
     "path": "collection_plan.json",
     "plan_id": "bytes-s2-p2"
   },
