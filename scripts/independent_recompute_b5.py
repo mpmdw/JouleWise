@@ -51,7 +51,7 @@ pack_missing calibration_capture_name_fallback excluded_reference_in_screen
 kept_member_outside_verdict_membership neg8_source_not_rescreen harvest_checkout_not_clean
 reference_slot_disagrees roster_pack_not_archived roster_plan_tree_not_sealed
 loo_kept_n_equals_minimum sensitivity_inputs_unavailable meter_stream_malformed
-meter_no_fit meter_span_uncovered meter_offset_from_journal meter_offset_unavailable
+meter_no_fit meter_stream_not_streaming meter_span_uncovered meter_offset_from_journal meter_offset_unavailable
 meter_battery_unavailable meter_request_mismatch meter_baseline_unavailable
 member_pre_bound_missing meter_battery_activity meter_absent
 exclusions_rederivation_mismatch exclusions_rederivation_unavailable""".split())
@@ -1486,8 +1486,27 @@ FIT_BIN_DEVICE_MS = 10_000   # envelope bins about 10 s of device time wide
 FIT_MIN_BINS = 4
 
 
+def parser_line(xs, ys):
+    """(intercept, slope) by the parser's centred least squares, in its operation order."""
+    n = len(xs)
+    if n < 2:
+        return None
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx == 0:
+        return None
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+    return my - slope * mx, slope
+
+
 def meter_clock_fit(points):
-    """Lower-envelope clock fit over (newest device ms, rx ns, RTT ms, n) per poll."""
+    """Lower-envelope clock fit over (newest device ms, rx ns, RTT ms, n) per poll.
+
+    Residuals, bins, envelope and the height above it are taken relative to the
+    first fit point, as the registered parser does: at host uptimes of 1e15 ns
+    and more, absolute coordinates round differently and can pick another
+    envelope point (RC-CMP-3 X4).
+    """
     if len(points) < 2:
         return None
     eligible = [p for p in points if p[3] < FIT_RESPONSE_CAP and p[2] < FIT_MAX_RTT_MS]
@@ -1495,30 +1514,34 @@ def meter_clock_fit(points):
     used = eligible if filtered else points
     if len(used) < 2:
         return None
-    pairs = [(p[0], p[1]) for p in used]
-    initial = fit_line(pairs)
+    x0, y0 = used[0][0], used[0][1]
+    xs, ys = [p[0] - x0 for p in used], [p[1] - y0 for p in used]
+    initial = parser_line(xs, ys)
     if initial is None:
         return None
     a0, b0 = initial
-    origin = pairs[0][0]
-    span = pairs[-1][0] - origin
+    span = xs[-1] - xs[0]
     bins = max(FIT_MIN_BINS, int(span / FIT_BIN_DEVICE_MS))
     width = (span + 1) / bins
     minima = {}
-    for x, y in pairs:
-        residual = y - (a0 + b0 * x)
-        key = min(int((x - origin) / width), bins - 1)
+    for i, x in enumerate(xs):
+        residual = ys[i] - (a0 + b0 * x)
+        key = min(int((x - xs[0]) / width), bins - 1)
         if key not in minima or residual < minima[key][0]:
-            minima[key] = (residual, (x, y))
-    envelope = fit_line([minima[k][1] for k in sorted(minima)]) if len(minima) >= 2 else None
-    a, b = envelope if envelope is not None else initial
-    if b <= 0 or not all(finite(v) for v in (a, b)):
+            minima[key] = (residual, i)
+    # Envelope points in first-seen bin order, the parser's dict order.
+    chosen = [i for _, i in minima.values()]
+    envelope = parser_line([xs[i] for i in chosen], [ys[i] for i in chosen]) if len(chosen) >= 2 else None
+    a1, b1 = envelope if envelope is not None else initial
+    if b1 <= 0 or not all(finite(v) for v in (a1, b1)):
         return None
-    return {"intercept_ns": a, "slope_ns_per_ms": b, "fit_points": len(points),
+    # Back to absolute host ns as the parser does: host = y0 + a1 + b1 (dev - x0).
+    return {"intercept_ns": y0 + a1 - b1 * x0, "slope_ns_per_ms": b1, "fit_points": len(points),
             "points_used": len(used), "filtered": filtered, "bins": bins,
             "minimum_bins": len(minima), "envelope_fallback": envelope is None,
             "bin_origin": "device time of the first fit point", "bin_width_device_ms": width,
-            "max_above_envelope_ns": max(y - (a + b * x) for x, y in pairs)}
+            "envelope_offsets_ms": [xs[i] for i in chosen],
+            "max_above_envelope_ns": max(y - (a1 + b1 * x) for x, y in zip(xs, ys))}
 
 
 class MeterStream:
@@ -1534,6 +1557,10 @@ class MeterStream:
         if len(headers) != 1 or headers[0].get("rate_idx") not in (0, 1, 2, 3):
             reader.flag("meter_stream_malformed", self.name, "need one header with a known rate")
             return
+        # Parser: a header without a status predates the field and streams; any other status is no stream.
+        if headers[0].get("status", "streaming") != "streaming":
+            reader.flag("meter_stream_not_streaming", self.name, "header status is not streaming")
+            return
         self.header = headers[0]
         self.trailer = trailers[-1] if trailers else {}
         device, powers, points = [], [], []
@@ -1544,15 +1571,20 @@ class MeterStream:
             if row.get("k") != "b":
                 continue
             tx, rx, n = row.get("tx"), row.get("rx"), row.get("n")
-            try:
-                if not all(finite(v) for v in (tx, rx, n)) or not isinstance(n, int) or n < 0:
-                    raise ValueError("invalid batch timestamps/count")
-                payload = bytes.fromhex(row.get("p", ""))
-                if len(payload) != n * decoder.size:
-                    raise ValueError("payload length differs from count")
-            except (ValueError, TypeError):
+            if not all(finite(v) for v in (tx, rx, n)) or not isinstance(n, int) or n < 0:
                 reader.flag("meter_stream_malformed", self.name, "invalid batch")
                 continue
+            payload = b""
+            if n:
+                # Parser: a batch with samples decodes its whole payload whatever its count says;
+                # a payload it cannot decode stops the parse, so the stream gives no samples here.
+                try:
+                    payload = bytes.fromhex(row.get("p") or "")
+                    if len(payload) % decoder.size:
+                        raise ValueError("payload is not whole samples")
+                except (ValueError, TypeError):
+                    reader.flag("meter_stream_malformed", self.name, "undecodable batch payload")
+                    return
             polls.append((rx, tx, n, payload, row))
         # Registered parser definition: polls are taken in host receive order
         # (stable for equal rx), so decoding and the fit see one sequence.
@@ -2778,7 +2810,9 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
                         window.member(rid, which)
             for path in sorted(window.bound_root.glob("neg8-refcorpus-r*/metadata.json")):
                 window.member(path.parent.name, "corpus")
-            output.setdefault("members", {})[pack] = {rid: m.detail() for rid, m in sorted(window.members.items())}
+            # selected: a kept run of the registered selection, the runs L9 re-reduces (comparator key set).
+            output.setdefault("members", {})[pack] = {rid: {**m.detail(), "selected": rid in window.compared_run_ids}
+                                                      for rid, m in sorted(window.members.items())}
             for rid, m in sorted(window.members.items()):
                 if m.role == "science":
                     output["members"][pack][rid]["single_step_reconstruction"] = single_step_member(m)

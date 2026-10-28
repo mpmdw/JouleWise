@@ -48,7 +48,8 @@ def l9_files():
     files[f"brackets/{SHA}-gamma.json"] = copy.deepcopy(files[f"brackets/{SHA}-alpha.json"])
     files[f"brackets/{SHA}-block.json"] = {"T": 424, "attained_by_sequence": 396, "value_s": 0.0625}
     files[f"mint/{SHA}-aggregate-floor.json"] = {"cells": [
-        {"cell_id": "d117-qwen3-1p7b-decode-floor-v5", "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}]}
+        {"cell_id": f"d117-{model}-{phase}-floor-v5", "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
+        for model in ("qwen3-1p7b", "qwen3-8b") for phase in ("decode", "prefill-p2048")]}
     files["finalized/outputs/closeout.json"] = {"branch": "B"}
     files["finalized/outputs/closeout.ratio-table.json"] = {"ratios": [
         {"cell_id": "d117-qwen3-1p7b-decode-floor-v5", "component": "absolute", "numerator_field":
@@ -59,7 +60,7 @@ def l9_files():
                      "estimator": {"n": 9, "df": 8, "estimate": -1.25, "s_d": 16.0, "SE_total": 5.25, "t_critical_95": 2.306,
                                    "metrology_aware_CI95": {"lower": -13.5, "upper": 11.0}},
                      "deterministic_bounds": {"total": 2.75, "decision_interval": {"lower": -16.25, "upper": 13.75}},
-                     "floor": {"active_floor_j": 103.5},
+                     "floor": {"active_floor_j": 103.5, "floor_abs_j": 43.0, "floor_cmp_j": 103.5},
                      "multiplicity": {"raw_p": p, "adjusted_p": 1.0, "rejected": False},
                      "claim_evaluation": {"outcome": "not_resolvable", "direction": None, "claim_level_ceiling": "L1"},
                      "loo": {"rows": []},
@@ -69,12 +70,16 @@ def l9_files():
         {"contrast_id": DECODE, "estimate": -1.25, "n": 9}, {"contrast_id": PREFILL, "estimate": -1.25, "n": 9}]}}
     for pack in ("alpha", "beta"):
         files[f"outputs/{SHA}-projection-{pack}.json"] = {"cells": [], "refused_cells": []}
-    files["outputs/" + "1" * 64 + ".json"] = {"label": "sensitivity", "b_max": {"value_s": 0.0625},
-                                              "floor_cells": [], "contrasts": [], "reported_cells": []}
+    files["outputs/" + "1" * 64 + ".json"] = {
+        "label": "sensitivity", "b_max": {"value_s": 0.0625, "T": 424, "attained_by_sequence": 396},
+        "windows": {p: {"plan_id": "plan-" + p, "b_op_s": 0.0375, "b_sens_s": 0.0625, "widened": True}
+                    for p in ("alpha", "beta", "gamma")},
+        "floor_cells": [], "contrasts": [], "reported_cells": []}
     files[f"disclosures/{SHA}.json"] = {"note": "synthetic", "contrasts": [
         {"line": "magnitude_ratio", "contrast_id": DECODE, "ratio": 0.99, "lower": 0.875, "upper": 1.125},
         {"line": "magnitude_per_token", "contrast_id": DECODE, "value_j": -0.002,
-         "metrology": {"lower": -0.025, "upper": 0.02}, "decision": {"lower": -0.03, "upper": 0.025}}]}
+         "metrology": {"lower": -0.025, "upper": 0.02}, "decision": {"lower": -0.03, "upper": 0.025}}]
+        + [{"line": "loo_counts", "contrast_id": cid, "count": 0} for cid in (DECODE, PREFILL)]}
     return files
 
 
@@ -92,14 +97,16 @@ def recompute_output():
                 "floor_gate_j": 103.5, "holm_p": 1.0, "holm_reject": False, "outcome": "not_resolvable",
                 "direction": "negative", "ceiling": "L1", "loo": [], "kept_quads": ["b02"]}
     return {"program_sha256": "f" * 64,
-            "members": {"ALPHA": {"run-a": {"E_j": {"prefill": 2.5, "decode": 97.25, "request": 120.0}}}},
+            "members": {"ALPHA": {"run-a": {"E_j": {"prefill": 2.5, "decode": 97.25, "request": 120.0}, "selected": True},
+                                  "corpus-r1": {"E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}, "selected": False}}},
             "windows": {p: {"b_op_s": 0.0375} for p in ("ALPHA", "BETA", "GAMMA")},
             "disclosures": {"sensitivity_bound": {"B_max_s": 0.0625, "T": 424, "attaining_sequence": 396,
                                                   "windows": {p: {"b_sens_s": 0.0625} for p in ("ALPHA", "BETA", "GAMMA")}}},
             "p42": {"df-ph-prefill-p42-qwen3-1p7b": {"status": "expected_unresolvable"},
                     "df-ph-prefill-p42-qwen3-8b": {"status": "expected_unresolvable"}},
             "floors": floors,
-            "floor_cells": {"Qwen3-1.7B-4bit/decode": {"floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}},
+            "floor_cells": {model + "/" + phase: {"floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
+                            for model in ("Qwen3-1.7B-4bit", "Qwen3-8B-4bit") for phase in ("decode", "prefill")},
             "dominance": {"branch": "B", "ratios": ratios, "common_mode": {}},
             "contrasts": {DECODE: {**contrast, "p": 0.84}, PREFILL: {**contrast, "p": 0.68}},
             "reported_cells": {},
@@ -109,12 +116,18 @@ def recompute_output():
             "exclusions_rederivation": {p: {"status": "agrees"} for p in ("ALPHA", "BETA", "GAMMA")}}
 
 
-RULES = ((r"fill:gamma/contrasts/\*/estimate", "contrast_j"), (r"fill:gamma/contrasts/\*/n", "count"),
+# Key-bound rules (RC-CMP-3 X1): each mapped leaf names the comparison row it copies.
+RULES = ((r"fill:gamma/contrasts/\*/estimate", "contrast_j", "{cid}/dbar_j"),
+         (r"fill:gamma/contrasts/\*/n", "count", "{cid}/n"),
          (r"fill:gamma/contrasts/\*/contrast_id", "uncovered:identifier, compared by key"),
          (r"disclosure:note", "uncovered:synthetic fixture text"),
-         (r"disclosure:contrasts/\*/(line|contrast_id)", "uncovered:labels"),
-         (r"disclosure:contrasts/\*/(ratio|lower|upper)", "descriptive_ratio"),
-         (r"disclosure:contrasts/\*/(value_j|metrology/.*|decision/.*)", "per_token_j"))
+         (r"disclosure:contrasts/[a-z_]+/(line|contrast_id)", "uncovered:labels"),
+         (r"disclosure:contrasts/magnitude_ratio/(?P<field>ratio|lower|upper)", "descriptive_ratio",
+          "disclosure/{cid}/magnitude_ratio/{field}"),
+         (r"disclosure:contrasts/magnitude_per_token/value_j", "per_token_j", "disclosure/{cid}/magnitude_per_token/value_j"),
+         (r"disclosure:contrasts/magnitude_per_token/(?P<name>metrology|decision)/(?P<side>lower|upper)", "per_token_j",
+          "disclosure/{cid}/magnitude_per_token/{name}/{side}"),
+         (r"disclosure:contrasts/loo_counts/count", "count", "disclosure/{cid}/loo_counts/count"))
 
 
 class ComparatorTests(unittest.TestCase):
@@ -173,7 +186,7 @@ class ComparatorTests(unittest.TestCase):
         self.numeric_fault("floor_j", lambda t: t.ours["floors"]["Qwen3-8B-4bit/decode/absolute"].update(prediction_j=38.0 * (1 + 2e-6)))
 
     def test_planted_floor_gate(self):
-        self.numeric_fault("floor_gate_j", lambda t: t.ours["floor_cells"]["Qwen3-1.7B-4bit/decode"].update(floor_cmp_j=103.5 * (1 + 2e-6)))
+        self.numeric_fault("floor_gate_j", lambda t: t.ours["floor_cells"]["Qwen3-1.7B-4bit/decode"].update(floor_cmp_j=103.5 * (1 - 2e-6)))
 
     def test_planted_dominance_ratio(self):
         self.numeric_fault("dominance_ratio", lambda t: t.ours["dominance"]["ratios"]["Qwen3-1.7B-4bit/decode/absolute"].update(R=39.5 / 38.0 * (1 + 2e-6)))
@@ -200,7 +213,7 @@ class ComparatorTests(unittest.TestCase):
         self.assertEqual(result["coverage"]["uncompared"], ["fill:gamma/contrasts/*/estimate"])
         self.assertEqual(self.fails(result), {})
         # Counterfactual: path-only coverage (no value check) passes it.
-        with mock.patch.object(cmp, "scalar_key", lambda value: "any"):
+        with mock.patch.object(cmp, "same", lambda a, b: True):
             self.assertEqual(self.run_compare()["coverage"]["unmapped"], [])
 
     def test_shipped_coverage_map_is_the_default(self):
@@ -208,7 +221,11 @@ class ComparatorTests(unittest.TestCase):
         self.assertTrue(cmp.COVERAGE)
 
     def test_planted_b_op(self):
-        self.numeric_fault("b_op_s", lambda t: t.ours["windows"]["BETA"].update(b_op_s=0.0375 * (1 + 2e-6)))
+        # The bracket row and the sensitivity record's window row both see the moved b_op.
+        self.ours["windows"]["BETA"].update(b_op_s=0.0375 * (1 + 2e-6))
+        self.assertEqual(self.fails(self.run_compare()), {"b_op_s": 2})
+        with mock.patch.object(cmp, "bar_for", return_value=float("inf")):
+            self.assertEqual(self.fails(self.run_compare()), {})
 
     def test_planted_count(self):
         self.numeric_fault("count", lambda t: t.files[f"brackets/{SHA}-block.json"].update(T=425))
@@ -216,8 +233,8 @@ class ComparatorTests(unittest.TestCase):
     def exact_fault(self, family, edit):
         original = cmp.Comparison.exact
 
-        def lenient(c, fam, key, l9, ours):
-            return original(c, fam, key, l9, l9 if fam == family else ours)
+        def lenient(c, fam, key, l9, ours, **raw):
+            return original(c, fam, key, l9, l9 if fam == family else ours, **raw)
         self.planted(family, edit, lambda: mock.patch.object(cmp.Comparison, "exact", lenient))
 
     def test_planted_outcome_word(self):
@@ -291,11 +308,12 @@ class ComparatorTests(unittest.TestCase):
         self.assertEqual((code, err.getvalue()), (2, "refused=step11_outputs_absent\n"))
 
     def test_mapping_to_a_family_with_no_comparison_is_not_coverage(self):
-        rules = ((r"fill:gamma/contrasts/\*/estimate", "reported_cell_j"),) + RULES[1:]
+        rules = ((r"fill:gamma/contrasts/\*/estimate", "reported_cell_j", "{cid}/dbar_j"),) + RULES[1:]
         self.assertEqual(self.run_compare(rules=rules)["coverage"]["unmapped"], ["fill:gamma/contrasts/*/estimate"])
 
     def test_public_stdout_carries_counts_only(self):
-        self.ours["contrasts"][DECODE]["dbar_j"] = -1.2345678
+        # D is not printed by this fixture's fill, so the disagreement is a family failure, not a coverage refusal.
+        self.ours["contrasts"][DECODE]["D_j"] = 2.7512345678
         ours = self.root / "o.json"
         ours.write_text(json.dumps(self.ours))
         out = io.StringIO()
@@ -305,13 +323,13 @@ class ComparatorTests(unittest.TestCase):
                              "--bars", str(BARS["recompute_coded_7e322b76"]), "--restricted-out", str(restricted)])
         self.assertEqual(code, 1)
         text = out.getvalue()
-        self.assertNotIn("1.234", text)
-        self.assertNotIn("1.25", text)
+        self.assertNotIn("2.751", text)
+        self.assertNotIn("2.75", text)
         self.assertNotRegex(text, r"\d\.\d")
         self.assertIn('"contrast_j":{"fail":1', text)
         detail = json.loads(restricted.read_text())
         row = next(r for r in detail["comparisons"] if r["verdict"] == "DISAGREE")
-        self.assertAlmostEqual(row["difference"], -1.2345678 + 1.25)
+        self.assertAlmostEqual(row["difference"], 2.7512345678 - 2.75)
 
     def test_bars_come_from_the_config(self):
         bars = json.loads(BARS["s13_block6"].read_text())
@@ -348,7 +366,7 @@ class ComparatorTests(unittest.TestCase):
         self.assertNotRegex(text, r"(?m)^\s*(from|import)\s+(joulewise|scripts)\b")
         imports = {line.split()[1].split(".")[0] for line in text.splitlines()
                    if line.startswith(("import ", "from "))}
-        self.assertTrue(imports <= {"argparse", "hashlib", "json", "math", "pathlib", "re", "sys"}, imports)
+        self.assertTrue(imports <= {"argparse", "hashlib", "json", "math", "pathlib", "re", "statistics", "sys"}, imports)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from .support import ROOT, run_cli
+from .support import ROOT, recompute as r, run_cli
 from . import test_auditfix, test_comparator
 from .test_comparator import BARS, RULES, SHA, cmp
 
@@ -36,6 +36,8 @@ class ReleaseBarsTests(unittest.TestCase):
         self.assertEqual(bars["rho"], {"relative": 0.0, "absolute": 1e-6})
         for family in ("meter_j", "meter_w", "machine_j"):
             self.assertEqual(bars[family], {"relative": 1e-6, "absolute": 1e-6})
+        # RC-CMP-3 X8: a legacy wall-placed window edge, 1e-6 s on the edge difference (7e322b76).
+        self.assertEqual(bars["window_edge_s"], {"relative": 0.0, "absolute": 1e-6})
         self.assertTrue(all(isinstance(spec.get("derivation"), str) and spec["derivation"]
                             for spec in release["families"].values()))
         cmp.load_bars(RELEASE)
@@ -70,7 +72,13 @@ class MeterLineTests(unittest.TestCase):
         holder = type("Holder", (), {"root": root})()
         archive, cls.rid, cls.recorded, _ = test_auditfix.AuditFixTests.machine_archive(holder)
         _, output, _ = run_cli({"ALPHA": archive}, root / "recompute.json", ("--member-detail",))
-        cls.whole_machine = output["disclosures"]["whole_machine"]
+        whole_machine = output["disclosures"]["whole_machine"]
+        # The fixture's harvest record holds one member; L9's disclosure and the recompute's
+        # window then hold that member too (X3 requires equal member sets).
+        members = whole_machine["windows"]["ALPHA"]["members"]
+        whole_machine["windows"]["ALPHA"]["members"] = {cls.rid: members[cls.rid]}
+        whole_machine["request_cross_check"] = r.request_cross_check(whole_machine["windows"])
+        cls.whole_machine = whole_machine
 
     @classmethod
     def tearDownClass(cls):
@@ -89,7 +97,9 @@ class MeterLineTests(unittest.TestCase):
                   "battery_term_available": row["machine"]["battery_term_available"]},
                  {"line": "machine_summary", "restricted": True, "label": "machine_summary", "text": "synthetic",
                   "model": "qwen3-1p7b", "median": row["rho"], "minimum": row["rho"], "maximum": row["rho"],
-                  "q25": row["rho"], "q75": row["rho"], "spread": 0.0}]
+                  "q25": row["rho"], "q75": row["rho"], "spread": 0.0,
+                  "central_band": {"pack": "alpha", "plan_id": "fixture", "attempt": 1,
+                                   "lower": row["rho"], "upper": row["rho"]}}]
         self.case.files[f"disclosures/{SHA}.json"]["window_lines"] = {"alpha": lines}
         self.case.ours["disclosures"]["whole_machine"] = copy.deepcopy(self.whole_machine)
 
@@ -115,7 +125,7 @@ class MeterLineTests(unittest.TestCase):
         self.assertTrue({prefix + k for k in ("meter/energy_J", "meter/baseline_W", "meter/n", "rho",
                                               "battery/delta_J", "window_ns/start", "window_ns/end")} <= keys)
         self.assertIn(f"machine/alpha/{self.rid}/request/rho", keys)
-        self.assertEqual(result["coverage"]["leaves"]["disclosure:window_lines/alpha/*/rho"], "rho")
+        self.assertEqual(result["coverage"]["leaves"]["disclosure:window_lines/alpha/machine_member/rho"], "rho")
         self.assertEqual(len(result["harvest_meter_sha256"]["alpha"]), 64)
 
     def planted(self, family, edit):
@@ -142,9 +152,10 @@ class MeterLineTests(unittest.TestCase):
 
     def test_planted_rho_on_the_recompute_side(self):
         own = self.case.ours["disclosures"]["whole_machine"]["windows"]["ALPHA"]["members"][self.rid]["phases"]["request"]
-        # Both L9 rows (disclosure and harvest record) see the moved value.
+        # Both L9 member rows (disclosure and harvest record) see the moved value, and so do the
+        # five order statistics and two band bounds re-derived from it (X2); the spread stays 0.
         own["rho"] = self.twice_bar("rho", own["rho"])
-        self.assertEqual(self.fails(self.compare()), {"rho": 2})
+        self.assertEqual(self.fails(self.compare()), {"rho": 9})
         with mock.patch.object(cmp, "bar_for", return_value=float("inf")):
             self.assertEqual(self.fails(self.compare()), {})
 
@@ -167,7 +178,7 @@ class MeterLineTests(unittest.TestCase):
         # Counterfactual for coverage: without compare_machine the mapped rho leaf is not coverage.
         with mock.patch.object(cmp, "compare_machine", lambda *args: None):
             result = self.compare()
-        self.assertIn("disclosure:window_lines/alpha/*/rho", result["coverage"]["uncompared"])
+        self.assertIn("disclosure:window_lines/alpha/machine_member/rho", result["coverage"]["uncompared"])
 
 
 if __name__ == "__main__":
