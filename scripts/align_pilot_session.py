@@ -28,6 +28,11 @@ SCHEMA = 'joulewise.align_pilot_desk.v0'
 # Instrument flags whose presence makes a member's energy unusable for the
 # pilot's checks; each is emitted by joulewise.align (sampler/attribution).
 ENERGY_BLOCKING = ('power_unavailable', 'trace.missing', 'trace.ambiguous', 'clock_anchor_unresolved')
+# Reason code for an estimate the strict JSON writer cannot carry (an
+# unresolved anchor gives an infinite half-width): the value becomes null.
+NONFINITE = 'estimate.nonfinite'
+# Per-turn token counts that define one episode's work (protocol I4).
+TURN_COUNTS = ('context_tokens', 'prefill_tokens', 'decode_tokens', 'hidden_tokens')
 
 
 def prepare(measurement_root, session_root, **kwargs):
@@ -44,6 +49,25 @@ def _member_rows(state):
     return plan['members']
 
 
+def _estimate(values):
+    """Finite floats as is; a nonfinite one as null with its reason under 'unavailable'."""
+    out, unavailable = {}, {}
+    for name, value in values.items():
+        if math.isfinite(value):
+            out[name] = value
+        else:
+            out[name] = None
+            unavailable[name] = f'{NONFINITE}:{value}'
+    if unavailable:
+        out['unavailable'] = unavailable
+    return out
+
+
+def turn_counts(summary):
+    """The per-turn (context, prefill, decode, hidden) token tuples of one summary."""
+    return tuple(zip(*(summary['per_turn_' + name] for name in TURN_COUNTS), strict=True))
+
+
 def episode_summary(bundle):
     """One member's episode, energy per recorded power channel, and flags."""
     from joulewise.align.apple.workload import read_episode_bundle
@@ -54,17 +78,15 @@ def episode_summary(bundle):
     for trace in episode.power_traces:
         result = attribute_episode(episode, source=trace.source, channel=trace.channel)
         energy[f'{trace.source}:{trace.channel}'] = {
-            'joules': result.total.joules, 'half_width_j': result.total.half_width_j,
-            'method': result.total.method, 'segments': len(result.segments),
-            'segment_sum_j': math.fsum(s.energy.joules for s in result.segments),
-            'flags': list(result.flags)}
+            **_estimate({'joules': result.total.joules, 'half_width_j': result.total.half_width_j,
+                         'segment_sum_j': math.fsum(s.energy.joules for s in result.segments)}),
+            'method': result.total.method, 'segments': len(result.segments), 'flags': list(result.flags)}
     totals = episode.totals()
     logged = episode.totals(logged_only=True)
     return {'episode_id': episode.episode_id, 'task_pair': episode.task_pair,
             'condition': episode.condition, 'seed': episode.seed,
             'duration_s': totals['duration_ns'] / 1e9, 'totals': totals, 'logged_totals': logged,
-            'per_turn_decode_tokens': [t.decode_tokens for t in episode.turns],
-            'per_turn_hidden_tokens': [t.hidden_tokens for t in episode.turns],
+            **{'per_turn_' + name: [getattr(t, name) for t in episode.turns] for name in TURN_COUNTS},
             'main_task_score': episode.main_task_score, 'side_task_success': episode.side_task_success,
             'energy': energy, 'flags': list(episode.flags)}
 
@@ -75,13 +97,16 @@ def instrument_checks(members):
     I1 every planned episode has a readable bundle; I2 each has energy on at
     least one channel with no blocking flag; I3 attribution tiles the episode
     (segment sum equals the total within float noise of the sum); I4 greedy
-    repeats of one cell generate identical per-turn token counts. Repeat
-    energy spreads are reported for the lead, with no pass bar.
+    repeats of one cell generate identical per-turn (context, prefill, decode,
+    hidden) token counts. Repeat energy spreads are reported for the lead, with
+    no pass bar, only for cells whose repeats did identical work. A null
+    (nonfinite) estimate is never energy and never tiles.
     """
     readable = [m for m in members if m.get('summary')]
-    usable = [m for m in readable if m['summary']['energy'] and not any(
-        f.startswith(ENERGY_BLOCKING) for f in m['summary']['flags'])]
-    tiled = all(abs(e['segment_sum_j'] - e['joules']) <= 1e-9 * max(1.0, abs(e['joules'])) * max(1, e['segments'])
+    usable = [m for m in readable if any(e['joules'] is not None for e in m['summary']['energy'].values())
+              and not any(f.startswith(ENERGY_BLOCKING) for f in m['summary']['flags'])]
+    tiled = all(e['joules'] is not None and e['segment_sum_j'] is not None
+                and abs(e['segment_sum_j'] - e['joules']) <= 1e-9 * max(1.0, abs(e['joules'])) * max(1, e['segments'])
                 for m in usable for e in m['summary']['energy'].values())
     cells = defaultdict(list)
     for m in readable:
@@ -89,9 +114,12 @@ def instrument_checks(members):
     deterministic, spreads = {}, {}
     for (pair, condition), rows in sorted(cells.items()):
         key = f'{pair}/{condition}'
-        deterministic[key] = len({tuple(r['per_turn_decode_tokens']) for r in rows}) == 1
+        deterministic[key] = len({turn_counts(r) for r in rows}) == 1
+        if not deterministic[key]:
+            continue
         for channel in sorted({c for r in rows for c in r['energy']}):
-            values = [r['energy'][channel]['joules'] for r in rows if channel in r['energy']]
+            values = [r['energy'][channel]['joules'] for r in rows
+                      if channel in r['energy'] and r['energy'][channel]['joules'] is not None]
             if len(values) > 1:
                 mean = math.fsum(values) / len(values)
                 sd = math.sqrt(math.fsum((v - mean) ** 2 for v in values) / (len(values) - 1))

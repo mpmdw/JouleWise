@@ -222,7 +222,8 @@ class SyntheticDeskTests(unittest.TestCase):
 
     def test_checks_fail_for_missing_bundle_and_nondeterministic_repeat(self):
         good = {'energy': {'powermetrics:cpu': {'joules': 10.0, 'segment_sum_j': 10.0, 'segments': 3}},
-                'flags': [], 'per_turn_decode_tokens': [5, 6]}
+                'flags': [], 'per_turn_context_tokens': [0, 9], 'per_turn_prefill_tokens': [4, 2],
+                'per_turn_decode_tokens': [5, 6], 'per_turn_hidden_tokens': [0, 0]}
         rows = [{'task_pair': 'p', 'condition': 'benign', 'summary': good},
                 {'task_pair': 'p', 'condition': 'benign', 'summary': {**good, 'per_turn_decode_tokens': [5, 7]}},
                 {'task_pair': 'p', 'condition': 'sabotage', 'summary': None}]
@@ -233,6 +234,84 @@ class SyntheticDeskTests(unittest.TestCase):
         self.assertFalse(checks['I4_greedy_repeats_identical_tokens'])
         flagged = [{**rows[0], 'summary': {**good, 'flags': ['power_unavailable:no_bundle_trace']}}]
         self.assertFalse(s.instrument_checks(flagged)[0]['I2_energy_on_every_episode'])
+        # A null (nonfinite) total is not energy.
+        null = {**good, 'energy': {'powermetrics:cpu': {**good['energy']['powermetrics:cpu'], 'joules': None}}}
+        self.assertFalse(s.instrument_checks([{**rows[0], 'summary': null}])[0]['I2_energy_on_every_episode'])
+        # Every count of the per-turn tuple defines the work, not decode alone.
+        for name in s.TURN_COUNTS:
+            other = {**good, 'per_turn_' + name: [x + 1 for x in good['per_turn_' + name]]}
+            pair = [rows[0], {**rows[0], 'summary': other}]
+            checks, deterministic, spreads = s.instrument_checks(pair)
+            self.assertFalse(checks['I4_greedy_repeats_identical_tokens'], name)
+            self.assertEqual(spreads, {}, name)
+
+    def test_repeats_with_different_prefill_work_fail_i4_and_report_no_spread(self):
+        # Sol review ALIGN-SOL-REV F2 (probe_checks.py): equal decode counts,
+        # total prefill 5500 / 5600 / 5700.
+        with tempfile.TemporaryDirectory() as directory, fixture_source() as source:
+            runs = Path(directory) / 'runs'
+            rows = []
+            for repeat in (1, 2, 3):
+                spec = fixture_spec(source, 'benign', repeat)
+                turns = [dict(t) for t in spec.mock_turns]
+                turns[0]['prompt_tokens'] += 100 * repeat
+                bundle = self.run_member(runs, replace(spec, mock_turns=tuple(turns)), f'repeat-{repeat}')
+                rows.append({'run_id': bundle.name, 'task_pair': 'ledger_review', 'condition': 'benign',
+                             'repeat': repeat, 'ordinal': repeat, 'summary': s.episode_summary(bundle)})
+            summaries = [r['summary'] for r in rows]
+            self.assertEqual(len({tuple(x['per_turn_decode_tokens']) for x in summaries}), 1)
+            self.assertEqual([x['totals']['prefill_tokens'] for x in summaries], [5500, 5600, 5700])
+            checks, deterministic, spreads = s.instrument_checks(rows)
+            self.assertTrue(checks['I1_all_bundles_readable'] and checks['I2_energy_on_every_episode'])
+            self.assertFalse(checks['I4_greedy_repeats_identical_tokens'])
+            self.assertEqual(deterministic, {'ledger_review/benign': False})
+            self.assertNotIn('ledger_review/benign', spreads)
+            self.assertEqual([x['per_turn_prefill_tokens'][0] for x in summaries], [1600, 1700, 1800])
+
+    def test_unresolved_anchor_still_writes_the_fault_report_and_runs_the_harvest(self):
+        # Sol review ALIGN-SOL-REV F1 (probe_checks.py): the anchor fault gives
+        # an infinite half-width, which the strict writer refused before the
+        # harvest. desk must record the fault and hand off.
+        with tempfile.TemporaryDirectory() as directory, fixture_source() as source:
+            root = Path(directory)
+            runs = root / 'runs'
+            bundle = self.run_member(runs, fixture_spec(source, 'benign', 1), 'anchor-fault')
+            metadata = h.read(bundle / 'metadata.json')
+            metadata['uncertainty_evidence'] = {'clock_anchor': {'status': 'unresolved'}}
+            h.write(bundle / 'metadata.json', metadata)
+            measurement = root / 'measurement'
+            h.write(measurement / s.KIT / 'collection_plan.json', {'members': [
+                {'run_id': 'anchor-fault', 'task_pair': 'ledger_review', 'condition': 'benign',
+                 'repeat': 1, 'ordinal': 1}]})
+            custody = root / 'custody'
+            h.write(custody / 'night/result.json', {})
+            h.write(root / 'plan.json', {'custody_root': str(custody)})
+            session = root / 'session'
+            (session / 'staging').mkdir(parents=True)
+            h.write(session / 'session.json', {
+                'session_id': 'align-pilot-anchor-fault', 'plan_path': str(root / 'plan.json'),
+                'measurement_root': str(measurement), 'registration_dir': str(measurement / s.KIT / 'registration'),
+                'runs_roots': {'claim': str(runs)}, 'inputs': {'runs_parent': str(root)}})
+            calls = []
+
+            def harvest(argv, **kwargs):
+                calls.append(argv)
+                return SimpleNamespace(returncode=0, stdout='{}\n', stderr='')
+
+            with redirect_stdout(io.StringIO()):
+                status = s.desk(session, run=harvest)
+            self.assertEqual(len(calls), 1)
+            self.assertIn('--non-claim', calls[0])
+            self.assertEqual((status['harvest_status'], status['pilot_status']), ('ok', 'instrument_incomplete'))
+            self.assertEqual(h.read(session / 'desk.json')['pilot_status'], 'instrument_incomplete')
+            result = h.read(session / 'PILOT.json')
+            self.assertFalse(result['checks']['I2_energy_on_every_episode'])
+            summary = result['members'][0]['summary']
+            self.assertIn('clock_anchor_unresolved', summary['flags'])
+            nulls = [e for e in summary['energy'].values() if e['half_width_j'] is None]
+            self.assertTrue(nulls, summary['energy'])
+            for e in nulls:
+                self.assertEqual(e['unavailable']['half_width_j'], s.NONFINITE + ':inf')
 
 
 class RealKitStagingTests(unittest.TestCase):
