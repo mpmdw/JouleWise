@@ -205,14 +205,17 @@ class HarvestEntryTests(unittest.TestCase):
         tree = json.loads(tree_path.read_bytes())
         tree.update(bytes_pass=pass_id, blinding_group=group)
         windows.put(tree_path, tree)
-        # Strict-valid production seed bundles have a short sampler hull. Extend
-        # only post_parse: request and raw telemetry bytes remain identical.
+        # Keep the seed's clock-anchor evidence intact. The production hull
+        # also covers the post-request sentinel's controller event stamps.
         for run_id, *_ in windows.MEMBERS:
-            path = window.claim / run_id / "metadata.json"
-            metadata = json.loads(path.read_bytes())
-            stamps = metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"]
-            stamps["post_parse"]["monotonic_after_s"] += 30
-            windows.put(path, metadata)
+            path = window.claim / run_id / "events.jsonl"
+            _start, end = windows.member_span_ns(run_id)
+            with path.open("a") as stream:
+                for event_type, stamp in (("stage_started", end), ("stage_completed", end + 30 * NS)):
+                    stream.write(json.dumps({"timestamp_s": (stamp + windows.WALL_OFFSET_NS) / NS,
+                        "event_type": event_type, "phase": "idle_drift_sentinel",
+                        "message": "synthetic post-request sentinel",
+                        "metadata": {"run_id": run_id, "monotonic_ns": stamp}}) + "\n")
         # Polls are 5 s apart, with one 5.3 s gap; tails contain a level-1 read.
         journal = windows.L1Journal("thermal")
         for run_id, *_ in windows.MEMBERS:
@@ -246,7 +249,7 @@ class HarvestEntryTests(unittest.TestCase):
         records = json.loads((window.archive / "withheld/member-assessments.json").read_bytes())["members"]
         for run_id, *_ in windows.MEMBERS:
             member = records[run_id]
-            self.assertTrue(member["strict_valid"], member.get("strict_errors"))
+            self.assertTrue(member["strict_valid"], member.get("strict_problems"))
             self.assertTrue(member[FIELD]["excluded"])
             self.assertEqual(member[FIELD]["span_monotonic_ns"], member["spans"]["member"])
             self.assertTrue(member[FIELD]["samples"])
