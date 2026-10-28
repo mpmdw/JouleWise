@@ -481,3 +481,38 @@ instructions have the absolute interpreter, generator/README bytes agree,
 `--check` passes, and both touched modules pass all 44 tests. This Linux seat
 uses `/usr/bin/python3.13` (3.13.5); the Mac path is verified as instruction text,
 with the same scan/read entrypoints executed under the available Python 3.13.
+
+Step 4 — final verification. Implementation steps were committed and pushed
+separately: `476a3aaf4`, `c99f11ef5`, `9cfaddf05`. Final focused command:
+`JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3.13 -B -m unittest tests.test_bytes_stream_test tests.test_bytes_mac_kit`
+— 44 tests, OK (86.777 s). Generator `--check`, README byte equality and the
+whole-round `git diff --check` pass; all eight changed files are in WRITE_SCOPE.
+The full repository suite was not run: this bounded standalone non-claim tooling
+round uses the two requested modules and independent reviewer replays.
+The supplied full e2e script was rerun after the fixes, with explicit synthetic
+clock metadata added to its legacy scan inputs. Its real stream receipts and
+read CLI retain DC 0.1929 ± 0.0025 J/GB and share 0.3458 ± 0.0075; all independent
+energy differences remain inside the existing 5.7e-6 J/GB bar. The candidate-check
+script also reran: its obsolete source substitution is a no-op on the final
+rule, and its original seeded cases now exercise that rule. Scratch evidence is
+under `/tmp/kb-round4`, outside both repositories.
+
+PR #593 is open and draft. Read starting-head CI run
+[40759901627](https://github.com/mpmdw/JouleWise/actions/runs/40759901627):
+fences and quick/shard 1 fail on four stale external-manifest pins in the kit
+plan; shard 8 reports 21 `bytes_h_session` errors for a missing external-input
+lookup key. These are CI merge-tree findings; no out-of-scope repair was made
+(`scripts/bytes_h_session.py` is outside WRITE_SCOPE). Build, installed-wheel
+and calibration jobs passed in that snapshot. At final implementation head
+`9cfaddf05`, CI run
+[40769688587](https://github.com/mpmdw/JouleWise/actions/runs/40769688587)
+is pending; gate-ledger 40769688468 is skipped. No claim of final-head CI green.
+
+Decisions I made: apply the consult exactly; use recorded getres alone on
+non-macOS where mach timebase is explicitly not applicable; retain unknown
+integer conversion unless sourced; preserve all duplicate polls and partial
+results; recompute φ from K/B; use two fixed decimals for zero-width intervals;
+keep the existing generated F7 revisions. None changes a rule-defined data
+choice or adds an acceptance tolerance. No scope expansion, approval rejection,
+hardware measurement, unblinding, admission or merge occurred. All execution
+evidence is synthetic. NEEDS_RULING: none.
