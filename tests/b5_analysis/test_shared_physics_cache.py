@@ -93,7 +93,8 @@ class SharedPhysicsCacheTests(unittest.TestCase):
             self.assertEqual(self.refits, 1, 'one verified refit serves both programs')
             warm = self.outputs('warm')
         self.assertEqual(self.refits, 1, 'a warm shared cache refits nothing')
-        self.assertEqual(list(cache), [sha(self.evidence)])
+        # One partition (the member's exact metadata bound), holding one verified fit.
+        self.assertEqual([list(partition) for partition in cache.values()], [[sha(self.evidence)]])
         for other in (cold, warm):
             self.assertEqual(other[0], uncached[0])
             self.assertEqual(other[1][0], uncached[1][0])
@@ -119,11 +120,13 @@ class SharedPhysicsCacheTests(unittest.TestCase):
                     hashlib.sha256(self.evidence.read_bytes() + b' ').hexdigest()):
             with self.subTest(key=key):
                 self.refits = 0
-                cache = {key: bound}
+                partition = ww._effective_bound_partition(
+                    json.loads((self.member / 'metadata.json').read_bytes()))
+                cache = {partition: {key: bound}}
                 with ww.shared_instrument_calibration_physics_cache(cache):
                     self.cli('validate-bundle', '--strict', self.member)
                 self.assertEqual(self.refits, 1)
-                self.assertIn(sha(self.evidence), cache)
+                self.assertIn(sha(self.evidence), cache[partition])
 
     def test_cached_bound_never_admits_changed_capture_bytes(self):
         copy = Path(self.tmp.name) / 'changed' / self.member.name
@@ -186,3 +189,86 @@ class DriverRunCacheScopeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MetadataBoundPartitionTests(unittest.TestCase):
+    """L9-SOL-REV MAJOR-1: the run cache must not carry one bundle's metadata bound into another's.
+
+    The reducer caches max(metadata b_fiducial_s, fresh bound) under the evidence
+    artifact's hash and accepts a metadata bound within 1e-12 of the artifact's.
+    Two bundles with the same calibration evidence and metadata bounds 5e-13 apart
+    must reduce and strict-validate exactly as they do with no run cache.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix='bound-partition-')
+        cls.addClassCleanup(cls.tmp.cleanup)
+        root = Path(cls.tmp.name)
+        with tarfile.open(ARCHIVE) as blob:
+            blob.extractall(root, members=[m for m in blob.getmembers() if m.name.startswith(MEMBER)], filter='data')
+        cls.low = root / MEMBER
+        cls.high = root / 'high'
+        shutil.copytree(cls.low, cls.high)
+        metadata = json.loads((cls.high / 'metadata.json').read_bytes())
+        metadata['instrument_calibration']['b_fiducial_s'] += 5e-13
+        (cls.high / 'metadata.json').write_text(json.dumps(metadata))
+        # The higher-bound bundle's stored summary is its own real re-reduction
+        # (reduce refuses to write inside its input bundle).
+        code, summary = cls.reduce(cls.high, root / 'high-summary.json')
+        assert code == 0
+        (cls.high / 'summary_metrics.json').write_bytes(summary)
+
+    @staticmethod
+    def reduce(bundle, output):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = cli.main(['reduce', str(bundle), '--output', str(output)])
+        return code, Path(output).read_bytes()
+
+    @staticmethod
+    def strict(bundle):
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()):
+            try:
+                code = cli.main(['validate-bundle', '--strict', str(bundle)])
+            except SystemExit as exc:
+                code = exc.code
+        return code
+
+    def test_a_higher_bound_seed_does_not_change_the_other_bundle(self):
+        root = Path(self.tmp.name)
+        plain = self.reduce(self.low, root / 'plain.json')
+        with ww.shared_instrument_calibration_physics_cache({}) as store:
+            self.reduce(self.high, root / 'seed.json')
+            shared = self.reduce(self.low, root / 'shared.json')
+            self.assertEqual((self.strict(self.high), self.strict(self.low)), (0, 0))
+        self.assertEqual(shared, plain)
+        self.assertEqual(len(store), 2, 'one partition per exact metadata bound')
+        self.assertEqual((self.strict(self.high), self.strict(self.low)), (0, 0))
+
+    def test_cross_call_reuse_within_one_bound_still_avoids_refits(self):
+        calls = []
+        original = pf.rederive_detection_from_artifacts
+
+        def counted(*args, **kwargs):
+            calls.append(1)
+            return original(*args, **kwargs)
+        with mock.patch.object(pf, 'rederive_detection_from_artifacts', counted), \
+             ww.shared_instrument_calibration_physics_cache({}):
+            for bundle in (self.low, self.high, self.low, self.high):
+                self.assertEqual(self.strict(bundle), 0)
+        self.assertEqual(len(calls), 2, 'one refit per distinct (evidence, metadata bound)')
+
+    def test_a_call_keeps_its_own_previous_semantics(self):
+        # whole_window/bracket sites shared one dict across a call's members before
+        # the run cache existed; that local dict still decides first.
+        local = {}
+        with ww.shared_instrument_calibration_physics_cache({}):
+            first = ww.physics_cache_for(local, {'instrument_calibration': {'b_fiducial_s': 0.5}})
+            first['key'] = 0.5
+            second = ww.physics_cache_for(local, {'instrument_calibration': {'b_fiducial_s': 0.25}})
+            self.assertEqual(second.get('key'), 0.5)
+            fresh = ww.physics_cache_for(None, {'instrument_calibration': {'b_fiducial_s': 0.25}})
+            self.assertIsNone(fresh.get('key'))
+            self.assertEqual(ww.physics_cache_for({}, {'instrument_calibration': {'b_fiducial_s': 0.5}}).get('key'), 0.5)
+            self.assertIs(ww.physics_cache_for(local, {'instrument_calibration': {}}), local)
+        self.assertIs(ww.physics_cache_for(local, {'instrument_calibration': {'b_fiducial_s': 0.5}}), local)

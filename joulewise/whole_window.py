@@ -1290,7 +1290,7 @@ class AuthenticatedConsumptionSession:
                 for reason in sorted(member_reasons)
             )
 
-        physics_cache: dict[str, float] = _physics_cache_for_call()
+        physics_cache: dict[str, float] = {}
         pending: list[
             tuple[
                 str,
@@ -1328,7 +1328,7 @@ class AuthenticatedConsumptionSession:
                         dict(metadata),
                         dict(calibration),
                         strict_physics=True,
-                        physics_cache=physics_cache,
+                        physics_cache=physics_cache_for(physics_cache, metadata),
                     )
                 except (BundleReadError, OSError, TypeError, ValueError):
                     authenticated = None
@@ -1394,7 +1394,9 @@ class AuthenticatedConsumptionSession:
                         _rederive_summary_for_authenticated_fiducial_bound(
                             path,
                             authenticated_fiducial_bound_s=operative_bound,
-                            _instrument_calibration_physics_cache=physics_cache,
+                            _instrument_calibration_physics_cache=physics_cache_for(
+                                physics_cache, _metadata
+                            ),
                         )
                     )
                 except (
@@ -4661,7 +4663,9 @@ def _reference_energy_evidence_detail(
         reduced = reduce_bundle(
             bundle_path,
             reducer_version=reducer_version,
-            _instrument_calibration_physics_cache=shared_physics_cache(),
+            _instrument_calibration_physics_cache=physics_cache_for(
+                None, bundle_metadata_for_physics_cache(bundle_path)
+            ),
         ).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
@@ -6165,7 +6169,7 @@ def _current_core_rederivation_reasons(
             and not isinstance(bracket_bound, bool)
             and isinstance(bracket_bound, int | float)
         ):
-            physics_cache: dict[str, float] = _physics_cache_for_call()
+            physics_cache: dict[str, float] = {}
             for _bundle_id, _path, member_metadata, _cpu in derived_members:
                 member_calibration = (
                     member_metadata.get("instrument_calibration")
@@ -6186,7 +6190,7 @@ def _current_core_rederivation_reasons(
                             dict(member_metadata),
                             dict(member_calibration),
                             strict_physics=True,
-                            physics_cache=physics_cache,
+                            physics_cache=physics_cache_for(physics_cache, member_metadata),
                         )
                     except (BundleReadError, OSError, TypeError, ValueError):
                         authenticated = None
@@ -7071,12 +7075,17 @@ def whole_window_strict_workers(member_count: int) -> int:
     return max(1, min(workers, member_count))
 
 
-# One caller-owned instrument-calibration physics cache for a whole analysis
-# run (J2).  Unset, every site keeps its own per-call dict as before.  The
-# reducer keys entries by the calibration evidence artifact's SHA-256, reads
-# them only after its own artifact/raw/events hash checks, and stores only
-# verified fits, so a failed or deadline-hit fit is never reused.
-_SHARED_PHYSICS_CACHE: contextvars.ContextVar[dict[str, float] | None] = (
+# One instrument-calibration physics store for a whole analysis run (J2),
+# partitioned by every input to the value the reducer caches.  The reducer
+# keys an entry by the calibration evidence artifact's SHA-256, reads it only
+# after its own artifact/raw/events hash checks, and stores only a verified
+# fit's effective bound, max(metadata b_fiducial_s, fresh bound).  The
+# metadata bound may differ from the artifact's within the reducer's
+# tolerance, so the run store is partitioned by that exact metadata value: a
+# cross-call hit is always the value a fresh fit of the same bundle inputs
+# returns.  Each call keeps its own local dict with its previous semantics;
+# outside a run nothing is shared.
+_SHARED_PHYSICS_CACHE: contextvars.ContextVar[dict[str, dict[str, float]] | None] = (
     contextvars.ContextVar(
         "joulewise_shared_instrument_calibration_physics_cache", default=None
     )
@@ -7084,27 +7093,104 @@ _SHARED_PHYSICS_CACHE: contextvars.ContextVar[dict[str, float] | None] = (
 
 
 @contextlib.contextmanager
-def shared_instrument_calibration_physics_cache(cache: dict[str, float]):
-    """Share ``cache`` with every physics-cache site in this context."""
+def shared_instrument_calibration_physics_cache(store: dict[str, dict[str, float]]):
+    """Share the partitioned ``store`` with every physics-cache site in this context."""
 
-    if not isinstance(cache, dict):
+    if not isinstance(store, dict):
         raise TypeError("shared physics cache must be a dict")
-    token = _SHARED_PHYSICS_CACHE.set(cache)
+    token = _SHARED_PHYSICS_CACHE.set(store)
     try:
-        yield cache
+        yield store
     finally:
         _SHARED_PHYSICS_CACHE.reset(token)
 
 
-def shared_physics_cache() -> dict[str, float] | None:
-    """The run's shared physics cache, or ``None`` outside one."""
+def shared_physics_cache() -> dict[str, dict[str, float]] | None:
+    """The run's partitioned physics store, or ``None`` outside one."""
 
     return _SHARED_PHYSICS_CACHE.get()
 
 
-def _physics_cache_for_call() -> dict[str, float]:
-    shared = _SHARED_PHYSICS_CACHE.get()
-    return shared if shared is not None else {}
+def _effective_bound_partition(metadata: Any) -> str | None:
+    """The exact metadata ``b_fiducial_s`` the reducer folds into a cached bound."""
+
+    calibration = (
+        metadata.get("instrument_calibration")
+        if isinstance(metadata, Mapping)
+        else None
+    )
+    value = calibration.get("b_fiducial_s") if isinstance(calibration, Mapping) else None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        return None
+    return number.hex() if math.isfinite(number) else None
+
+
+class _RunPhysicsCacheView(dict):
+    """A call's own cache first, then the run partition for one bundle's bound."""
+
+    def __init__(self, local: dict[str, float], store: dict[str, dict[str, float]], partition: str):
+        super().__init__()
+        self._local = local
+        self._store = store
+        self._key = partition
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        if key in self._local:
+            return self._local[key]
+        partition = self._store.get(self._key, {})
+        if key in partition:
+            self._local[key] = partition[key]
+            return self._local[key]
+        return default
+
+    def __contains__(self, key: Any) -> bool:
+        return key in self._local or key in self._store.get(self._key, {})
+
+    def __getitem__(self, key: Any) -> float:
+        value = self.get(key, _MISSING_PHYSICS_ENTRY)
+        if value is _MISSING_PHYSICS_ENTRY:
+            raise KeyError(key)
+        return value
+
+    def __setitem__(self, key: Any, value: float) -> None:
+        self._local[key] = value
+        self._store.setdefault(self._key, {})[key] = value
+
+
+_MISSING_PHYSICS_ENTRY = object()
+
+
+def bundle_metadata_for_physics_cache(bundle_path: Path) -> Any:
+    """A bundle's metadata, read only to choose a cache partition.
+
+    A plain read outside any authentication session's read census; on any
+    failure the call gets no run partition and behaves as without a run.
+    """
+
+    try:
+        return json.loads((Path(bundle_path) / "metadata.json").read_bytes())
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+
+
+def physics_cache_for(
+    local: dict[str, float] | None, metadata: Any
+) -> dict[str, float] | None:
+    """The cache one reducer call may use for a bundle with ``metadata``.
+
+    Outside a run this is ``local`` unchanged.  Inside one it adds the run
+    partition for the bundle's exact metadata bound, behind ``local``.
+    """
+
+    store = _SHARED_PHYSICS_CACHE.get()
+    key = _effective_bound_partition(metadata)
+    if store is None or key is None:
+        return local
+    return _RunPhysicsCacheView({} if local is None else local, store, key)
 
 
 def _accepts_physics_cache(validator: Any) -> bool:
@@ -7123,7 +7209,10 @@ def _strict_validation_problems(
 
     try:
         if physics_cache is not None and _accepts_physics_cache(validator):
-            return list(validator(path, strict=True, physics_cache=physics_cache))
+            cache = physics_cache_for(
+                physics_cache, bundle_metadata_for_physics_cache(path)
+            )
+            return list(validator(path, strict=True, physics_cache=cache))
         return list(validator(path, strict=True))
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         return [f"strict validation raised {type(exc).__name__}: {exc}"]
@@ -7183,7 +7272,7 @@ def strict_validate_bundles(
             pass
     # Spawned pool workers keep their own per-process cache; only the
     # in-process fallback below shares the run's cache.
-    cache: dict[Any, Any] = _physics_cache_for_call()
+    cache: dict[Any, Any] = {}
     return [
         result
         if result is not None
