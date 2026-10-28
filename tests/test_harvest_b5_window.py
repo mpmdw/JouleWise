@@ -2319,7 +2319,7 @@ class EmittedCodeTests(unittest.TestCase):
                     if match.split(".", 1)[0] in families and h.CODE_RE.fullmatch(match)}
         built = {f"{module}.unmeasured" for module in ("battery", "thermal", "contention", "clock")} \
             | {f"instrument.{reason}" for reason in h.INSTRUMENT_REASONS}
-        not_codes = {"g3.txt", "roster.json",  # file names
+        not_codes = {"g3.txt", "roster.json", "thermal.jsonl",  # file names
                      "chain.started", "monitor.capture_battery",  # a night record and a collector name
                      "yield.json"}  # a file name
         # The two block-6 arm diagnostics use explicit specs and the block-6 catalog, rather than extending block 5's

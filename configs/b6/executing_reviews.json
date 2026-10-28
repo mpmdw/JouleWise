@@ -1105,4 +1105,24 @@
   }
  ]
 }
+,
+{
+ "commit": "7d67cbd5bed1d1b00a7d9719053ae0b6f11ba861",
+ "number_bearing_paths": [
+  "joulewise/b5/harvest.py"
+ ],
+ "change": "BY-P2-THERM: BYTES pass-2 request-end OS thermal window (registration section 21 item 3)",
+ "executing_reviews": [
+  {
+   "reviewer": "Sol 6.1 xhigh, blind, executing (non-author), 2026-10-28",
+   "covered": "de35f6403..defd9f9a3",
+   "paper": "/Users/edr/night-archive/seats-caa9ff66/p2therm-rev/sol-REPORT.md"
+  },
+  {
+   "reviewer": "Opus 5.5, blind, executing (non-author), 2026-10-28",
+   "covered": "de35f6403..defd9f9a3",
+   "paper": "/Users/edr/night-archive/seats-caa9ff66/p2therm-rev/opus-REPORT.md"
+  }
+ ]
+}
 ]

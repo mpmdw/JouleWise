@@ -997,15 +997,15 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "7bf450d6e534f92422b447c3dd3a0572ba96cdf0fd4fbb24e9e684b0aa2893c3"
+    "sha256": "cd7192b4663928619c364cc1ae300e48ee0b67394bd18e7dcabd335968d7f491"
   },
   "module_order": [
     "bytes-qwen3-1p7b",
     "bytes-qwen3-4b"
   ],
   "plan": {
-    "actual_sha256": "ff3dc465a4397d47fa48183313170881ed2af21bdf5ba599a09bc6d6f7cedcb8",
-    "declared_sha256": "ff3dc465a4397d47fa48183313170881ed2af21bdf5ba599a09bc6d6f7cedcb8",
+    "actual_sha256": "6a87b916e3ce2ceaf438f4edcb8dc2c503464ad790167914f6f8ef63c4689528",
+    "declared_sha256": "6a87b916e3ce2ceaf438f4edcb8dc2c503464ad790167914f6f8ef63c4689528",
     "path": "collection_plan.json",
     "plan_id": "bytes-s1-p1"
   },

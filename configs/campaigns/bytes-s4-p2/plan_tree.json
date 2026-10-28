@@ -775,25 +775,10 @@
   "downstream_contract": {
     "extraction_spec": {
       "path": "configs/campaigns/bytes-s4-p2/extraction_spec.json",
-      "sha256": "97b23b93e4e3770361f8db4ecf7548b8e2de975d21bf950480067e0791faaee6"
+      "sha256": "c1de2244d9ba6fcf987606fc8972e161699af5d8fceb062d952b032c1bdb242e"
     }
   },
-  "draft_notes": [
-    "Ruling: docs/design/bytes_pack_design.md R1-R8 and Addenda 1-8 at 298a292a7. Registration prose: docs/registrations/bytes_pack_v1.md, a draft with Mac and B2 slots open; not registered or armable.",
-    "C6/C7 use blinding_group=bytes. Group keys: <pack_records_root>/bytes/blinding; withheld rows: <pack_records_root>/bytes/withheld/<pack_id>/<session_id>.runs.csv; missing-store flag: bytes.withheld_missing. The stage1-commit interface is validated now; its actual prediction hash is supplied at held-out release (BYTES-P0 ruling 7). Runtime config: configs/b6/loop_bytes.json.",
-    "Lead blinding ruling 2026-10-20 (registration section 11): held-out configuration rows stay out of the analysis export, blinded in a withheld store, until the stage-1 prediction hash is recorded; rows visible before that carry no clock stamps.",
-    "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
-    "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
-    "C5 uses the six H/BY-H2 sizing rows in configs/b6/registration/sizing_b5.json, including measured T_stream_max_s and P = 2(B+WAIT)+fixed without an added reserve. C4 file and installed runtime evidence is in configs/b6/registration/identity_pins.json; full model stacks and frozen projection receipts remain unobserved.",
-    "Estimator versions are null until the twin agrees with joulewise/bytes_analysis.py at the Addendum 8 bar; each version then becomes that file's SHA-256 at the agreeing pin (registration section 13). Cold gate and smoke fingerprints remain before first t0.",
-    "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
-    "Model sources include HF cache snapshot directories; C4 file hashes follow their symlinks and bind tokenizer/config files and checkpoint quantization separately from observed installed packages. model.context_window is unused by the runtime. The desk build does not load a model or freeze an execution stack.",
-    "Qwen3-8B-8bit file evidence, source roster and configs pin revision 48a0b75b1ae72503e21e1558d040bc227510ff06 and verify bits=8, group_size=64. Generated config copies preserve those exact source bytes.",
-    "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
-    "Fixed packs bypass the 265-minute science cap. The native window maximum comes from the C5 programmed span plus the existing stage, pause and session-wait allowances, not the former s4 pilot estimate.",
-    "Module minutes = C5 count * own member_allowance_s / 60, using the exact rational sizing operands and no additional margin. Shared references, calibration and custody stay in the full programmed span. Pass two reuses the same measured model costs in reverse order."
-  ],
-  "draft_status": "draft",
+  "draft_status": "registered",
   "external_inputs": {
     "artifacts": [
       {
@@ -1012,15 +997,15 @@
   },
   "generator": {
     "path": "scripts/bytes_plan_trees.py",
-    "sha256": "7bf450d6e534f92422b447c3dd3a0572ba96cdf0fd4fbb24e9e684b0aa2893c3"
+    "sha256": "cd7192b4663928619c364cc1ae300e48ee0b67394bd18e7dcabd335968d7f491"
   },
   "module_order": [
     "bytes-qwen3-8b-8bit",
     "bytes-qwen3-32b"
   ],
   "plan": {
-    "actual_sha256": "185e3b23e51c8dadfc9bdc7631d65ed548c245a0d1aafee56b4410153ffd8add",
-    "declared_sha256": "185e3b23e51c8dadfc9bdc7631d65ed548c245a0d1aafee56b4410153ffd8add",
+    "actual_sha256": "f8c4cde448216a5adb14d0e374f7f40582898707a9a6d9e6c948561bf9daf367",
+    "declared_sha256": "f8c4cde448216a5adb14d0e374f7f40582898707a9a6d9e6c948561bf9daf367",
     "path": "collection_plan.json",
     "plan_id": "bytes-s4-p2"
   },

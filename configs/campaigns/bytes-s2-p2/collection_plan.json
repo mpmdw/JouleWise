@@ -3,9 +3,6 @@
     "planned": 18,
     "stop_after_valid": 12
   },
-  "draft_notes": [
-    "Draft collection membership and C5 module allowances; estimator versions remain null until the agreeing SHA, registration cold gate and smoke fingerprints remain before first t0."
-  ],
   "minimum_kept_units_per_stratum": 5,
   "modules": [
     {
@@ -18,7 +15,7 @@
       "est_minutes_source": {
         "formula": "count * member_allowance_s / 60; no additional margin",
         "path": "configs/b6/registration/sizing_b5.json",
-        "sha256": "247adc4b54cafa71aebe044b3a0ecaf71430fcfbdc0b56e129f3925a24e15081",
+        "sha256": "fabb2b3f45f02afe10537ce0107f651eab8a2510a0e07826712b8685ade264b0",
         "source_pointer": "/packs/bytes-s2-p1/disk_derivation/allowances_by_model/qwen3-30b-a3b"
       },
       "kind": "floor",
@@ -36,7 +33,7 @@
       "est_minutes_source": {
         "formula": "count * member_allowance_s / 60; no additional margin",
         "path": "configs/b6/registration/sizing_b5.json",
-        "sha256": "247adc4b54cafa71aebe044b3a0ecaf71430fcfbdc0b56e129f3925a24e15081",
+        "sha256": "fabb2b3f45f02afe10537ce0107f651eab8a2510a0e07826712b8685ade264b0",
         "source_pointer": "/packs/bytes-s2-p1/disk_derivation/allowances_by_model/qwen3-8b"
       },
       "kind": "floor",
@@ -1951,5 +1948,5 @@
       "workload": "bytes_synthetic_2048_decode_512"
     }
   ],
-  "status": "draft"
+  "status": "registered"
 }

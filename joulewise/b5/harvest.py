@@ -3059,16 +3059,23 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
     return out
 
 
-def thermal_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
-                         ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    """``thermal.os_level_nonzero`` for any in-force 5 s sample above 0; coverage holes."""
+def _thermal_nonzero_samples(span: Sequence[int], readings: Sequence[Reading]) -> list[dict[str, int]]:
+    """The production numeric-level reads and in-force OS window, without evidence truncation."""
     samples = [(reading.monotonic_ns, _int(reading.values.get("level"))) for reading in readings
                if reading.status == "ok"]
     samples = [(stamp, level) for stamp, level in samples if level is not None]
-    out = []
     times = [stamp for stamp, _level in samples]
-    nonzero = [{"monotonic_ns": samples[index][0], "level": samples[index][1]}
-               for index in in_force(times, span[0], span[1]) if samples[index][1] != 0]
+    return [{"monotonic_ns": samples[index][0], "level": samples[index][1]}
+            for index in in_force(times, span[0], span[1]) if samples[index][1] != 0]
+
+
+def thermal_member_flags(span: Sequence[int], readings: Sequence[Reading], thresholds: Mapping[str, Any]
+                         ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """``thermal.os_level_nonzero`` for any in-force 5 s sample above 0; coverage holes."""
+    times = [reading.monotonic_ns for reading in readings
+             if reading.status == "ok" and _int(reading.values.get("level")) is not None]
+    nonzero = _thermal_nonzero_samples(span, readings)
+    out = []
     if nonzero:
         out.append(("thermal.os_level_nonzero", {"samples": nonzero[:8]},
                     {"monotonic_ns": [nonzero[0]["monotonic_ns"], nonzero[-1]["monotonic_ns"]]}))
@@ -3826,6 +3833,7 @@ class _Harvest:
         self.derived, self.withheld = archive_root / "derived", archive_root / "withheld"
         from joulewise.b6.courier import block_six_plan
         self.block_six = block_six_plan(inputs.plan)
+        self.bytes_pass_two = False
         # The plan declares the lane; the lane declares its exclusion capability.
         # Block 5 retains L4's existing default and seam calling convention.
         self.exclusion_options = {}
@@ -3984,6 +3992,11 @@ class _Harvest:
         pack = repo / pack_relative if pack_relative else self.inputs.pack_root
         self.pack_copy, self.repo_root_copy = pack, repo
         self.roster = build_roster(pack, repo)
+        tree = read_json(pack / "plan_tree.json")
+        # §21: registration values already carried by the preserved pack plan;
+        # neither the pack name nor a separate mutable registration selects it.
+        self.bytes_pass_two = (self.block_six and tree.get("blinding_group") == "bytes"
+                               and tree.get("bytes_pass") == 2)
 
     def roster_dispatch(self) -> None:
         """``roster.duplicate_run_id`` for a run id the plan launches or lists more than once.
@@ -4063,11 +4076,34 @@ class _Harvest:
         for result in early + assess_members(tasks, workers=self.seams.workers):
             self.members[result["run_id"]] = result
             self.spans[result["run_id"]] = result.get("spans") or {"member": None, "request": None}
+        if self.bytes_pass_two:
+            self.record_thermal_hull()
         self.assessments_evidence = [{"path": "withheld/member-assessments.json", "sha256": write_json_once(
             self.withheld / "member-assessments.json",
             {"schema": "joulewise.b5_member_assessments.v1", "members": self.members})}]
         write_json_once(self.withheld / "spans.json", {"schema": "joulewise.b5_member_spans.v1",
                                                        "domain": "time.monotonic_ns", "spans": self.spans})
+
+    def record_thermal_hull(self) -> None:
+        """Seal the §21 descriptive OS outcome in each pass-2 science assessment.
+
+        Assessments are written before monitor flags. Read the same journal now
+        to retain all nonzero samples (flags themselves retain at most eight).
+        Missing observations remain explicit, rather than suggesting a clean hull.
+        """
+        try:
+            readings, _malformed = read_monitor_journal(self.inputs.monitor_dir / "thermal.jsonl", "thermal")
+        except OSError:
+            readings = None
+        roster = {member["run_id"]: member for member in self.roster["members"]}
+        for run_id, result in self.members.items():
+            if roster.get(run_id, {}).get("kind") != "science":
+                continue
+            span = self.spans.get(run_id, {}).get("member")
+            samples = _thermal_nonzero_samples(span, readings) if span is not None and readings is not None else []
+            result["thermal_os_level_nonzero_member_hull"] = {
+                "span_monotonic_ns": span, "excluded": bool(samples) if span is not None else None,
+                "samples": samples, "journal_available": readings is not None}
 
     def member_flags(self) -> None:
         roster = {member["run_id"]: member for member in self.roster["members"]}
@@ -6192,6 +6228,13 @@ class _Harvest:
                     continue
                 try:
                     found = join(span, readings, thresholds)
+                    if (module == "thermal" and self.bytes_pass_two
+                            and roster.get(run_id, {}).get("kind") == "science" and request is not None):
+                        # §21 changes only the OS level exclusion. Coverage
+                        # holes and every other thermal result keep the hull.
+                        os_found = thermal_member_flags([member_span[0], request[1]], readings, thresholds)
+                        found = ([item for item in os_found if item[0] == "thermal.os_level_nonzero"]
+                                 + [item for item in found if item[0] != "thermal.os_level_nonzero"])
                 except Exception as exc:  # the other modules' joins still run
                     self._record_error(f"monitor.{module}", exc, 0.0, fault=True)
                     failed.add(module)

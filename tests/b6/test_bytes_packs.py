@@ -95,7 +95,7 @@ class BytesPackTests(unittest.TestCase):
                 with self.subTest(subpack=n, pass_number=pass_number):
                     reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
                     self.assertEqual(validate(reg, self.catalog, root=ROOT), [])
-                    expected = 'registered' if pass_number == 1 else 'draft'  # pass 1 gate 2026-10-25
+                    expected = 'registered'  # pass 1 gate 2026-10-25; pass 2 §21
                     self.assertEqual((reg.status, reg.kind, reg.session_shape), (expected, 'new', 'fixed'))
                     self.assertEqual((reg.target_sessions, reg.minimum_sessions), (1, 1))
                     self.assertEqual(reg.corpus, {'planned': 18, 'stop_after_valid': 12})
@@ -112,7 +112,7 @@ class BytesPackTests(unittest.TestCase):
                     self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
                     self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
 
-    def test_estimators_name_the_analysis_stage_functions_with_pass_specific_versions_while_draft(self):
+    def test_estimators_name_the_analysis_stage_functions_with_the_agreeing_version(self):
         from joulewise import bytes_analysis
         agreeing_sha = hashlib.sha256((ROOT / 'joulewise/bytes_analysis.py').read_bytes()).hexdigest()
         for n in range(1, 7):
@@ -121,16 +121,13 @@ class BytesPackTests(unittest.TestCase):
                     reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
                     expected = deepcopy(plans.ESTIMATORS)
                     for entry in expected:
-                        entry['version'] = agreeing_sha if pass_number == 1 else None
+                        entry['version'] = agreeing_sha
                     self.assertEqual(reg.data['estimators'], expected)
                     for entry in reg.data['estimators']:
                         self.assertTrue(callable(getattr(bytes_analysis, entry['function'])))
-                        self.assertEqual(entry['version'], agreeing_sha if pass_number == 1 else None)
-                    self.assertEqual(reg.status, 'registered' if pass_number == 1 else 'draft')
-                    if pass_number == 2:
-                        self.assertTrue(any('docs/registrations/bytes_pack_v1.md' in note for note in reg.data['draft_notes']))
-                    else:
-                        self.assertNotIn('draft_notes', reg.data)
+                        self.assertEqual(entry['version'], agreeing_sha)
+                    self.assertEqual(reg.status, 'registered')
+                    self.assertNotIn('draft_notes', reg.data)
 
     def test_registration_prose_lists_every_slot_and_maps_every_ruling_item(self):
         import re
@@ -234,7 +231,11 @@ class BytesPackTests(unittest.TestCase):
         identities = {name: {'path': '/synthetic/' + name, 'sha256': 'a' * 64}
                       for name in ('identity-epoch.json', 't1-bindings.json')}
         self.assertEqual({p for p in sized['packs'] if p.startswith('bytes-')},
-                         {f'bytes-s{n}-p1' for n in range(1, 7)})
+                         {f'bytes-s{n}-p{q}' for n in range(1, 7) for q in (1, 2)})
+        # Registration §21 item 1: each pass-2 row is its pass-1 row with only the pack id changed.
+        for n in range(1, 7):
+            row = dict(sized['packs'][f'bytes-s{n}-p2'], pack_id=f'bytes-s{n}-p1')
+            self.assertEqual(row, sized['packs'][f'bytes-s{n}-p1'])
         for n in range(1, 7):
             for pass_number in (1, 2):
                 p = f'bytes-s{n}-p{pass_number}'
@@ -248,13 +249,6 @@ class BytesPackTests(unittest.TestCase):
                                 **{m['module_id'] + '-absolute': 1 for m in reg.modules},
                                 f'{p}-reference-end': 1}
                     self.assertEqual(compose.smoke_keep(layout), expected)
-                    if pass_number == 2:
-                        # C5 supplies six pass-1 rows; no pass-2 sizing is inferred.
-                        with self.assertRaisesRegex(ValueError, f'pack has no registered sizing: {p}'):
-                            plan_inputs.build(ROOT, sizing_path.parent, p, layout.session_id, identities,
-                                              custody_root='/x', runs_parent='/x', claim_backup='/x',
-                                              bound_backup='/x', head='a' * 40)
-                        continue
                     inputs = plan_inputs.build(ROOT, sizing_path.parent, p, layout.session_id, identities,
                                                custody_root='/x', runs_parent='/x', claim_backup='/x',
                                                bound_backup='/x', head='a' * 40)

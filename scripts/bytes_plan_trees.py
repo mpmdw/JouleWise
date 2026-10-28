@@ -58,13 +58,16 @@ def module_estimate(model_id, number, repo_root):
         "formula": "count * member_allowance_s / 60; no additional margin"}}
 
 
-# Registration section 13: the pass-one twin agrees at Addendum 8's bar at
-# this joulewise/bytes_analysis.py SHA-256. Pass-two versions remain null.
+# Registration section 13: the twin agrees at Addendum 8's bar at this
+# joulewise/bytes_analysis.py SHA-256. The agreement campaigns run both passes
+# (50 runs per model per pass), and pass 2 runs the same file, so a registered
+# pass 2 binds the same version (registration §21).
 AGREED_ESTIMATOR_VERSION = "18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71"
 # Passes whose registration cold gate has passed (pass 1: Fable 5.1 judge and
-# Opus 5.5 refuter, SEAL: ADMIT-WITH-CORRECTIONS on 81c78f79c, 2026-10-25).
+# Opus 5.5 refuter, SEAL: ADMIT-WITH-CORRECTIONS on 81c78f79c, 2026-10-25;
+# pass 2: registration §21, its gate record names the verdicts).
 # A registered pass carries no draft notes (pack_registration refuses them).
-REGISTERED_PASSES = frozenset({1})
+REGISTERED_PASSES = frozenset({1, 2})
 ESTIMATORS = [{"name": name, "library": "joulewise.bytes_analysis", "function": function, "version": None}
               for name, function in (("bytes_phase_cells", "reduce_models"),
                                      ("bytes_frozen_predictions", "frozen_predictions"),
@@ -185,7 +188,7 @@ def registration(number, pass_number, repo_root=ROOT):
                  flag_catalog="configs/b6/flag_catalog_b6.json",
                  stopping={"count": 1, "end_t0_before": "2026-11-05T00:00:00-08:00", "precision": None},
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
-    if pass_number == 1:
+    if pass_number in REGISTERED_PASSES:
         for estimator in value["estimators"]:
             estimator["version"] = AGREED_ESTIMATOR_VERSION
     value["modules"] = [{"module_id": "bytes-" + model_id, "kind": "floor", "phase": "decode",
@@ -386,7 +389,7 @@ def main(argv=None):
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     generate(args.output_root, args.check)
-    print(("verified" if args.check else "generated") + " 12 BYTES registrations (pass 1 registered, pass 2 draft) and 12 fixed pass trees")
+    print(("verified" if args.check else "generated") + " 12 BYTES registrations (passes 1 and 2 registered) and 12 fixed pass trees")
     return 0
 
 
