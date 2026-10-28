@@ -77,6 +77,9 @@ class MeterLineTests(unittest.TestCase):
         # window then hold that member too (X3 requires equal member sets).
         members = whole_machine["windows"]["ALPHA"]["members"]
         whole_machine["windows"]["ALPHA"]["members"] = {cls.rid: members[cls.rid]}
+        # A clean window (no battery activity), so the recompute sets the central band L9's line
+        # prints; the comparator takes the band's window from the recompute (RC-CMP-5 S2).
+        members[cls.rid]["phases"]["request"]["battery_activity"]["active"] = False
         whole_machine["request_cross_check"] = r.request_cross_check(whole_machine["windows"])
         cls.whole_machine = whole_machine
 

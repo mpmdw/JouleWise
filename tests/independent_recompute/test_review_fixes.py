@@ -175,12 +175,13 @@ class UnionTests(Case):
 
     def test_run_on_the_recompute_side_only_p5_sol_missing_l9_run(self):
         del self.files["rereduced/alpha/run-a.rereduced.json"]
-        self.assertEqual(self.fails(self.shipped()), {"run_phase_energy_j": 3})
+        # Three energies, and the run's routing_id row (RC-CMP-5 S3: the key is on one side only).
+        self.assertEqual(self.fails(self.shipped()), {"run_phase_energy_j": 3, "routing_id": 1})
         self.assertEqual(self.exit_code(BARS["recompute_coded_7e322b76"])[0], 1)
 
     def test_extra_recompute_run_sol(self):
         self.ours["members"]["ALPHA"]["extra-run"] = {"E_j": {"prefill": 900., "decode": 900., "request": 900.}}
-        self.assertEqual(self.fails(self.shipped()), {"run_phase_energy_j": 3})
+        self.assertEqual(self.fails(self.shipped()), {"run_phase_energy_j": 3, "routing_id": 1})
 
     def test_unselected_recompute_member_is_not_a_key(self):
         # corpus-r1 is in the member detail with selected false: L9 does not re-reduce it.
@@ -197,7 +198,11 @@ class UnionTests(Case):
     def test_counterfactual_l9_keys_only(self):
         # With the recompute's keys ignored (the 3bf93b25e behaviour), P5 passes.
         del self.files["rereduced/alpha/run-a.rereduced.json"]
-        with mock.patch.object(cmp, "union", lambda l9_keys, our_keys: sorted(l9_keys, key=str)):
+
+        def l9_keys_only(c, scope, *sides):
+            for key in sorted(set().union(*sides[:-1]), key=str):
+                yield (key,) + tuple(side.get(key) for side in sides)
+        with mock.patch.object(cmp.Comparison, "pairs", l9_keys_only):
             self.assertEqual(self.fails(self.shipped()), {})
 
 
@@ -343,8 +348,9 @@ class NonFiniteTests(Case):
         self.files[VERDICTS]["contrasts"][0]["estimator"]["estimate"] = float("nan")
         code, err, restricted = self.exit_code(BARS["recompute_coded_7e322b76"])
         self.assertEqual(code, 2)
-        self.assertEqual(restricted["structure_flags"], [{"code": "nonfinite_value_read_as_null",
-                                                          "count": 1, "source": "l9:" + VERDICTS}])
+        self.assertEqual(restricted["structure_flags"], [{"code": "nonfinite_value_read_as_null", "count": 1,
+                                                          "paths": ["contrasts/*/estimator/estimate"],
+                                                          "source": "l9:" + VERDICTS}])
         row = next(r for r in restricted["comparisons"] if r["key"] == DECODE + "/dbar_j")
         self.assertEqual((row["l9"], row["verdict"], row["reason"]), (None, "DISAGREE", "missing_or_null"))
 

@@ -1,0 +1,373 @@
+"""RC-CMP-5 S1-S4: the comparator's three structural rules, with the round-2 probes as regression tests.
+
+S1 denies numbers by default: a step-11 leaf that is a number, null or read from a
+NaN/Infinity is numeric-class, never matched by an uncovered: rule, and a nonfinite
+step-11 value refuses the run. S2 builds a binding's key only from structure (path,
+the enclosing containers' identity fields, list positions) and compares every routing
+id. S3 pairs every family's collections through one helper and keeps one key space.
+Probe names: Sol round-2 findings 1-3 (probe_new_paths), Opus round-2 N1-N3
+(probe_delta). Every test here fails at e5ccf720b (RC-CMP-5 report).
+"""
+import ast
+import copy
+import json
+from pathlib import Path
+import unittest
+
+from . import test_comparator
+from .test_comparator import BARS, DECODE, PREFILL, ROOT, SHA, cmp
+from .test_review_fixes import DISCLOSURE, FILL, VERDICTS, Case, MeterCase
+
+CODED = BARS["recompute_coded_7e322b76"]
+AGGREGATE = f"mint/{SHA}-aggregate-floor.json"
+RATIO_TABLE = "finalized/outputs/closeout.ratio-table.json"
+SCRIPT = ROOT / "scripts/compare_b5_recompute.py"
+
+
+class NumbersDeniedByDefaultTests(Case):
+    """S1 (Sol finding 1, Opus N1)."""
+    def assert_nonfinite_refusal(self, leaf):
+        code, err, out = self.exit_code(CODED)
+        self.assertEqual((code, err), (2, "refused=step11_nonfinite_value\n"))
+        self.assertEqual(out["coverage"]["nonfinite"], ["fill:" + leaf])
+        flag = next(f for f in out["structure_flags"] if f["source"] == "l9:" + FILL)
+        self.assertEqual(flag["paths"], [leaf])
+        return out
+
+    def test_nan_under_the_identity_catch_all_refuses_sol1_opus_n1b(self):
+        field = self.files[FILL].setdefault("campaigns", {}).setdefault("gamma", {})
+        field["gross_energy_j"] = 123.0
+        self.assertIn("fill:campaigns/gamma/gross_energy_j", self.shipped()["coverage"]["unmapped"])
+        field["gross_energy_j"] = float("nan")
+        out = self.assert_nonfinite_refusal("campaigns/gamma/gross_energy_j")
+        # Numeric-class: the catch-all does not take it, so it is unmapped as well.
+        self.assertIn("fill:campaigns/gamma/gross_energy_j", out["coverage"]["unmapped"])
+        self.assertNotIn("fill:campaigns/gamma/gross_energy_j", out["coverage"]["leaves"])
+
+    def test_infinity_printed_as_a_j_per_token_refuses_opus_n1c(self):
+        self.files[FILL]["gamma"]["contrasts"][0]["j_per_token"] = float("inf")
+        self.assert_nonfinite_refusal("gamma/contrasts/*/j_per_token")
+
+    def test_nan_under_an_uncovered_by_name_rule_is_listed_and_refuses_opus_n1d(self):
+        self.files[FILL]["gamma"]["contrasts"][0]["sampling"] = {"planned_n": float("nan")}
+        out = self.assert_nonfinite_refusal("gamma/contrasts/*/sampling/planned_n")
+        self.assertIn("fill:gamma/contrasts/*/sampling/planned_n", out["coverage"]["uncovered_numeric"])
+
+    def test_null_is_numeric_class_and_no_uncovered_rule_takes_it(self):
+        self.files[FILL]["campaigns"] = {"alpha": {"path": None}}
+        result = self.shipped()
+        self.assertIn("fill:campaigns/alpha/path", result["coverage"]["unmapped"])
+        self.assertEqual(result["coverage"]["nonfinite"], [])
+        self.assertEqual(self.exit_code(CODED)[:2], (2, "refused=step11_unmapped_fill\n"))
+        # A string at the same path is a word: the catch-all takes it.
+        self.files[FILL]["campaigns"] = {"alpha": {"path": "a.json"}}
+        self.assertEqual(self.shipped()["coverage"]["unmapped"], [])
+
+    def test_a_registered_null_is_named_and_listed(self):
+        self.files[FILL]["gamma"]["contrasts"][0]["j_per_token"] = None
+        result = self.shipped()
+        self.assertEqual(result["coverage"]["unmapped"], [])
+        self.assertTrue(result["coverage"]["leaves"]["fill:gamma/contrasts/*/j_per_token"].startswith(cmp.NULL_NAMED))
+        self.assertIn("fill:gamma/contrasts/*/j_per_token", result["coverage"]["uncovered_numeric"])
+        self.assertEqual(self.exit_code(CODED)[0], 0)
+
+
+def v3_floor(case):
+    """A v3 claim floor (arm gates A, B and their resolutions) in the verdict and its fill copy.
+
+    BETA's decode cell gets its own gate (120 J) so the two arms differ.
+    """
+    for cell in case.files[AGGREGATE]["cells"]:
+        if cell["cell_id"] == "d117-qwen3-8b-decode-floor-v5":
+            cell.update(floor_cmp_j=120.0, floor_gate_j=120.0)
+    case.ours["floor_cells"]["Qwen3-8B-4bit/decode"].update(floor_cmp_j=120.0, floor_gate_j=120.0)
+    case.ours["contrasts"][DECODE]["floor_gate_j"] = 120.0
+    floor = {"active_floor_j": 120.0, "floor_abs_j": 43.0, "floor_cmp_j": 120.0,
+             "arm_gates": [{"arm_id": "A", "condition_family_id": "sw-decode-a-qwen3-1p7b", "status": "exact",
+                            "floor_gate_j": 103.5},
+                           {"arm_id": "B", "condition_family_id": "sw-decode-b-qwen3-8b", "status": "exact",
+                            "floor_gate_j": 120.0}],
+             "resolutions": [{"status": "exact", "source_cell_ids": ["d117-qwen3-1p7b-decode-floor-v5"],
+                              "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5},
+                             {"status": "exact", "source_cell_ids": ["d117-qwen3-8b-decode-floor-v5"],
+                              "floor_abs_j": 43.0, "floor_cmp_j": 120.0, "floor_gate_j": 120.0}]}
+    verdict = next(row for row in case.files[VERDICTS]["contrasts"] if row["contrast_id"] == DECODE)
+    verdict["floor"] = floor
+    fill = next(row for row in case.files[FILL]["gamma"]["contrasts"] if row["contrast_id"] == DECODE)
+    fill["floor"] = copy.deepcopy(floor)
+    return verdict["floor"], fill["floor"]
+
+
+class IndependentBindingTests(Case):
+    """S2 (Sol finding 2): a gate or resolution binds by its registered position, never its printed condition."""
+    def test_v3_floor_binds_by_position_and_compares_its_ids(self):
+        v3_floor(self)
+        result = self.shipped()
+        self.assertEqual((self.fails(result), result["coverage"]["unmapped"]), ({}, []))
+        leaves = result["coverage"]["leaves"]
+        base = "fill:gamma/contrasts/*/floor/"
+        self.assertEqual(leaves[base + "arm_gates/*/floor_gate_j"], "floor_gate_j")
+        for leaf in ("arm_gates/*/arm_id", "arm_gates/*/condition_family_id", "resolutions/*/source_cell_ids/*"):
+            self.assertEqual(leaves[base + leaf], "routing_id", leaf)
+        keys = {row["key"] for row in result["comparisons"]}
+        self.assertTrue({f"{DECODE}/arm/1/floor_gate_j", f"contrast/{DECODE}/arm/1/condition_family_id",
+                         f"contrast/{DECODE}/resolution/1/source_cell_ids/0"} <= keys)
+        self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_beta_gate_printed_with_alphas_condition_and_value_refuses_sol2(self):
+        verdict, fill = v3_floor(self)
+        for floor in (verdict, fill):
+            floor["arm_gates"][1].update(condition_family_id="sw-decode-a-qwen3-1p7b", floor_gate_j=103.5)
+        result = self.shipped()
+        self.assertEqual(self.fails(result), {"floor_gate_j": 1, "routing_id": 1})
+        self.assertIn(("fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "row_disagrees"), self.unbound(result))
+        self.assertEqual(self.exit_code(CODED)[0], 2)
+
+    def test_sol2_probe_gate_in_the_fill_only_refuses(self):
+        # The probe verbatim: one ALPHA-labelled gate of 103.5 J printed only in the fill input.
+        v3_floor(self)
+        next(row for row in self.files[VERDICTS]["contrasts"] if row["contrast_id"] == DECODE)["floor"] = {
+            "active_floor_j": 120.0, "floor_abs_j": 43.0, "floor_cmp_j": 120.0}
+        self.files[FILL]["gamma"]["contrasts"][0]["floor"] = {"arm_gates": [
+            {"condition_family_id": "d117-qwen3-1p7b-decode", "floor_gate_j": 103.5}]}
+        result = self.shipped()
+        self.assertIn(("fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "no_row"), self.unbound(result))
+        self.assertEqual(self.exit_code(CODED)[0], 2)
+
+    def test_a_wrong_condition_id_alone_disagrees(self):
+        verdict, fill = v3_floor(self)
+        for floor in (verdict, fill):
+            floor["arm_gates"][0]["condition_family_id"] = "sw-decode-a-qwen3-8b"
+        result = self.shipped()
+        self.assertEqual(self.fails(result), {"routing_id": 1})
+        self.assertIn(("fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "row_disagrees"),
+                      self.unbound(result))
+
+    def test_a_resolution_printing_the_other_arms_source_and_values_refuses(self):
+        verdict, fill = v3_floor(self)
+        for floor in (verdict, fill):
+            floor["resolutions"][1] = copy.deepcopy(floor["resolutions"][0])
+        result = self.shipped()
+        self.assertEqual(self.fails(result), {"floor_gate_j": 2, "routing_id": 1})
+        self.assertIn(("fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j", "row_disagrees"), self.unbound(result))
+        self.assertEqual(self.exit_code(CODED)[0], 2)
+
+    def test_gates_out_of_registered_order_disagree(self):
+        verdict, fill = v3_floor(self)
+        for floor in (verdict, fill):
+            floor["arm_gates"].reverse()
+        self.assertEqual(self.fails(self.shipped()), {"floor_gate_j": 2, "routing_id": 4})
+
+    def test_a_contrast_on_l9s_side_only_routes_no_coverage(self):
+        # contrast_floor_part reads the recompute's floor cells, so this row agrees without the contrast.
+        extra = "ctr-d117-decode-extra"
+        self.files[VERDICTS]["contrasts"].append({"contrast_id": extra, "floor": {"floor_abs_j": 43.0}})
+        self.files[FILL]["gamma"]["contrasts"].append({"contrast_id": extra, "floor": {"floor_abs_j": 43.0}})
+        result = self.shipped()
+        row = next(r for r in result["comparisons"] if r["key"] == extra + "/floor_abs_j")
+        self.assertEqual(row["verdict"], "AGREE")
+        self.assertIn(("fill:gamma/contrasts/*/floor/floor_abs_j", "route_disagrees"), self.unbound(result))
+
+    def test_identity_fields_that_route_are_compared(self):
+        leaves = self.shipped()["coverage"]["leaves"]
+        self.assertEqual(leaves["fill:gamma/contrasts/*/contrast_id"], "routing_id")
+        self.assertEqual(leaves["disclosure:contrasts/magnitude_ratio/contrast_id"], "routing_id")
+
+
+class CentralBandTests(MeterCase):
+    """S2 (Opus N3): the band's window is the recompute's; a band on one side only is DISAGREE."""
+    def models(self):
+        windows = self.case.ours["disclosures"]["whole_machine"]["request_cross_check"]["windows"]
+        return windows["ALPHA"]["models"]
+
+    def summary(self):
+        return next(line for line in self.lines() if line.get("line") == "machine_summary")
+
+    def test_band_pack_is_compared(self):
+        result = self.compare()
+        self.assertEqual((self.fails(result), result["coverage"]["unmapped"]), ({}, []))
+        self.assertEqual(result["coverage"]["leaves"]["disclosure:window_lines/alpha/machine_summary/central_band/pack"],
+                         "routing_id")
+
+    def test_recompute_sets_no_band_l9_prints_one_opus_n3a(self):
+        for model in self.models().values():
+            model["central_band"] = None
+        result = self.compare()
+        self.assertEqual(self.fails(result), {"rho": 2, "routing_id": 1})
+        self.assertIn("disclosure:window_lines/alpha/machine_summary/central_band/pack", result["coverage"]["unmapped"])
+
+    def test_recompute_band_from_another_window_opus_n3b(self):
+        for model in self.models().values():
+            model["central_band"] = {"pack": "BETA", "lower": 0.5, "upper": 0.6}
+        self.assertEqual(self.fails(self.compare()), {"rho": 2, "routing_id": 1})
+
+    def test_band_on_the_recompute_side_only_disagrees(self):
+        self.summary().pop("central_band")
+        self.assertEqual(self.fails(self.compare()), {"rho": 2, "routing_id": 1})
+
+
+class AssistCustody:
+    """Sol's synthetic custody: one disclosure record and nothing else."""
+    def __init__(self, record):
+        self.record = record
+
+    def names(self, pattern):
+        return ["disclosures/" + "0" * 64 + ".json"]
+
+    def read(self, name):
+        return self.record
+
+
+class OneKeySpaceTests(Case):
+    """S3 (Sol finding 3, Opus N2)."""
+    def assist(self, record, ours):
+        c = cmp.Comparison(cmp.load_bars(CODED))
+        cmp.compare_disclosures(c, AssistCustody(record), ours)
+        return {name: n["fail"] for name, n in c.counts().items() if n["fail"]}, c
+
+    def test_assist_members_compare_the_union_of_strata_sol3(self):
+        cid = "ctr-demo"
+        record = {"cells": [], "contrasts": [{"contrast_id": cid, "line": "battery_assist_contrast", "mean_j": 1.0,
+                                              "lower_j": 0.0, "upper_j": 2.0, "s_d": 0.5, "se": 0.2, "t_star": 2.0,
+                                              "n": 9, "assist_quads": 2}], "window_lines": {}}
+        ours = {"disclosures": {"battery_assist": {cid: {
+            "dbar_j": 1.0, "metrology_interval_j": [0.0, 2.0], "s_d_j": 0.5, "se_j": 0.2, "t_star": 2.0, "n": 9,
+            "assist_quads": 2, "assist_members_by_stratum": {"repeat": 3}}}}, "descriptive": {}, "contrasts": {}}
+        fails, c = self.assist(record, ours)
+        self.assertEqual(fails, {"count": 1, "routing_id": 1})
+        row = next(r for r in c.rows if r["key"] == f"disclosure/{cid}/battery_assist_contrast/assist_members/repeat"
+                   and r["family"] == "count")
+        self.assertEqual((row["l9"], row["recompute"], row["reason"]), (None, 3, "missing_or_null"))
+        record["contrasts"][0]["assist_members"] = {"repeat": 3}
+        self.assertEqual(self.assist(record, ours)[0], {})
+
+    def test_cell_assist_members_compare_the_union_of_strata(self):
+        cid = "df-ph-decode-qwen3-1p7b"
+        record = {"cells": [{"line": "battery_assist_cell", "pack": "alpha", "cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b",
+                             "without": {"mean_j": 1.0, "lower_j": 0.0, "upper_j": 2.0, "h_j": 1.0, "B_j": 0.0},
+                             "n_r": 5, "n_b": 5, "assist_members": {"repeat": 1, "quad": 2}}],
+                  "contrasts": [], "window_lines": {}}
+        ours = {"disclosures": {"battery_assist": {cid: {
+            "mean_j": 1.0, "lower_j": 0.0, "upper_j": 2.0, "interval": {"h_j": 1.0, "B_j": 0.0}, "n_r": 5, "n_b": 5,
+            "assist_members_by_stratum": {"repeat": 1, "quad": 2, "extra": 4}}}}}
+        self.assertEqual(self.assist(record, ours)[0], {"count": 1, "routing_id": 1})
+
+    def test_two_rows_under_one_key_refuse(self):
+        c = cmp.Comparison(cmp.load_bars(CODED))
+        c.numeric("count", "Qwen3-1.7B-4bit/decode/absolute/n", 9, 9)
+        with self.assertRaisesRegex(cmp.Refusal, "row_key_duplicated:count"):
+            c.numeric("count", "Qwen3-1.7B-4bit/decode/absolute/n", 7, 7)
+        keys = [(r["family"], r["key"]) for r in self.shipped()["comparisons"]]
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def ratio_line(self, n):
+        row = self.files[RATIO_TABLE]["ratios"][0]
+        self.files[DISCLOSURE]["block_lines"] = [{
+            "line": "dominance_ratio", "cell_id": row["cell_id"], "component": "absolute",
+            "text": "alpha decode: R 1.0395 (synthetic)", "ratio": row["ratio"],
+            "numerator_j": row["numerator_j"], "denominator_j": row["denominator_j"], "n": n}]
+
+    def test_ratio_rows_have_their_own_key_space_opus_n2(self):
+        # The ratio's n is 7 on both sides, its floor cell's n 9.
+        self.files[RATIO_TABLE]["ratios"][0]["n"] = 7
+        self.ours["dominance"]["ratios"]["Qwen3-1.7B-4bit/decode/absolute"]["n"] = 7
+        self.ratio_line(9)
+        code, _, out = self.exit_code(CODED)
+        self.assertEqual(code, 2)
+        self.assertIn(("disclosure:block_lines/dominance_ratio/n", "value_differs"), self.unbound(out))
+        self.ratio_line(7)
+        code, _, out = self.exit_code(CODED)
+        self.assertEqual((code, out["coverage"]["unmapped"]), (0, []))
+        self.assertIn("ratio/Qwen3-1.7B-4bit/decode/absolute/n", {r["key"] for r in out["comparisons"]})
+
+    def test_two_l9_items_under_one_key_refuse(self):
+        self.files[VERDICTS]["contrasts"].append(copy.deepcopy(self.files[VERDICTS]["contrasts"][0]))
+        code, err, out = self.exit_code(CODED)
+        self.assertEqual((code, err, out["refused"]), (2, "refused=item_key_duplicated:contrast\n", "item_key_duplicated:contrast"))
+
+    def test_two_leaves_binding_one_row_refuse(self):
+        contrasts = self.files[FILL]["gamma"]["contrasts"]
+        contrasts.append(copy.deepcopy(contrasts[0]))
+        result = self.shipped()
+        self.assertIn(("fill:gamma/contrasts/*/estimate", "duplicate_binding"), self.unbound(result))
+        self.assertEqual(self.exit_code(CODED)[0], 2)
+
+    def test_loo_magnitude_rows_are_the_union_of_both_selections(self):
+        # The recompute's leave-one-out row moves the estimate by more than a quarter of the floor (103.5 J).
+        self.ours["contrasts"][DECODE]["loo"] = [{"block_number": 3, "dbar_j": -1.25 + 30.0, "n": 8}]
+        row = next(r for r in self.shipped()["comparisons"] if r["key"] == f"disclosure/{DECODE}/loo_magnitude/b03/movement_j")
+        self.assertEqual((row["l9"], row["recompute"], row["verdict"]), (None, 30.0, "DISAGREE"))
+
+
+def iterable_allowed(node, constants):
+    """An iteration source a family function may use: Comparison.pairs, or a constant expression."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "pairs":
+        return True
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "sides":
+        # Two intervals' (lower, upper) bounds: a fixed pairing, not a keyed collection.
+        return True
+    return constant(node, constants)
+
+
+def constant(node, constants):
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, (ast.Tuple, ast.List)):
+        # A literal list of constants, or a literal field table: (field word, value) rows.
+        return all(constant(item, constants) or (isinstance(item, ast.Tuple) and item.elts
+                                                 and isinstance(item.elts[0], ast.Constant)) for item in node.elts)
+    if isinstance(node, ast.Name):
+        return node.id in constants
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in ("sorted", "enumerate", "zip"):
+            return all(constant(arg, constants) for arg in node.args)
+        if isinstance(func, ast.Attribute) and func.attr in ("items", "values", "keys") and not node.args:
+            return constant(func.value, constants)
+    return False
+
+
+class StructureTests(unittest.TestCase):
+    """S3: family functions iterate only Comparison.pairs or constants, and only they build rows."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tree = ast.parse(SCRIPT.read_text())
+        cls.constants = {target.id for node in cls.tree.body if isinstance(node, ast.Assign)
+                         for target in node.targets if isinstance(target, ast.Name) and target.id.isupper()}
+        cls.functions = {node.name: node for node in cls.tree.body if isinstance(node, ast.FunctionDef)}
+
+    def test_family_functions_iterate_only_through_the_union_helper(self):
+        family = {name: node for name, node in self.functions.items() if name.startswith("compare_")}
+        self.assertGreaterEqual(len(family), 12, sorted(family))
+        bad = []
+        for name, node in family.items():
+            for inner in ast.walk(node):
+                sources = [inner.iter] if isinstance(inner, ast.For) else (
+                    [g.iter for g in inner.generators] if isinstance(inner, (ast.ListComp, ast.SetComp, ast.DictComp,
+                                                                            ast.GeneratorExp)) else [])
+                bad += [(name, ast.unparse(s)) for s in sources if not iterable_allowed(s, self.constants)]
+        self.assertEqual(bad, [])
+
+    def test_rows_are_built_only_in_family_functions(self):
+        bad = []
+        for name, node in self.functions.items():
+            for inner in ast.walk(node):
+                if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                        and inner.func.attr in ("numeric", "exact") and not name.startswith("compare_")):
+                    bad.append((name, ast.unparse(inner)[:60]))
+        self.assertEqual(bad, [])
+        comparison = next(n for n in self.tree.body if isinstance(n, ast.ClassDef) and n.name == "Comparison")
+        appends = {method.name for method in comparison.body if isinstance(method, ast.FunctionDef)
+                   for inner in ast.walk(method) if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                   and inner.func.attr == "append" and "rows" in ast.unparse(inner.func.value)}
+        self.assertEqual(appends, {"add"})
+
+    def test_the_checker_catches_a_one_sided_loop(self):
+        # Counterfactual for the checker itself: e5ccf720b's assist-members loop iterates L9's strata only.
+        loop = ast.parse("for stratum in sorted(row.get('assist_members') or {}):\n    pass").body[0]
+        self.assertFalse(iterable_allowed(loop.iter, self.constants))
+        self.assertTrue(iterable_allowed(ast.parse("c.pairs('x/', a, b)").body[0].value, self.constants))
+
+
+if __name__ == "__main__":
+    unittest.main()

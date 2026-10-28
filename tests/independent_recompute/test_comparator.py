@@ -74,12 +74,17 @@ def l9_files():
         "label": "sensitivity", "b_max": {"value_s": 0.0625, "T": 424, "attained_by_sequence": 396},
         "windows": {p: {"plan_id": "plan-" + p, "b_op_s": 0.0375, "b_sens_s": 0.0625, "widened": True}
                     for p in ("alpha", "beta", "gamma")},
-        "floor_cells": [], "contrasts": [], "reported_cells": []}
+        "floor_cells": [], "contrasts": [],
+        # The registered p42 exit: L9's sensitivity record lists each p42 cell as refused (RC-CMP-5 S3 union).
+        "reported_cells": [{"pack": pack, "cell_id": f"d117-reported-mean-ph-prefill-p42-{model}", "status": "refused",
+                            "code": "p42_expected_unresolvable"} for pack, model in (("alpha", "qwen3-1p7b"), ("beta", "qwen3-8b"))]}
     files[f"disclosures/{SHA}.json"] = {"note": "synthetic", "contrasts": [
         {"line": "magnitude_ratio", "contrast_id": DECODE, "ratio": 0.99, "lower": 0.875, "upper": 1.125},
         {"line": "magnitude_per_token", "contrast_id": DECODE, "value_j": -0.002,
          "metrology": {"lower": -0.025, "upper": 0.02}, "decision": {"lower": -0.03, "upper": 0.025}}]
-        + [{"line": "loo_counts", "contrast_id": cid, "count": 0} for cid in (DECODE, PREFILL)]}
+        + [{"line": "loo_counts", "contrast_id": cid, "count": 0} for cid in (DECODE, PREFILL)]
+        # L9 prints a loo_magnitude line for every contrast; no leave-one-out row here raises the trigger.
+        + [{"line": "loo_magnitude", "contrast_id": cid, "rows": []} for cid in (DECODE, PREFILL)]}
     return files
 
 
@@ -244,7 +249,15 @@ class ComparatorTests(unittest.TestCase):
         self.exact_fault("dominance_branch", lambda t: t.ours["dominance"].update(branch="A"))
 
     def test_planted_p42_status(self):
-        self.exact_fault("p42_status", lambda t: t.ours["p42"]["df-ph-prefill-p42-qwen3-8b"].update(status="computed"))
+        # The extraction report and the sensitivity record's refused p42 cell both see the moved status.
+        self.ours["p42"]["df-ph-prefill-p42-qwen3-8b"].update(status="computed")
+        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 2})
+        original = cmp.Comparison.exact
+
+        def lenient(c, fam, key, l9, ours, **raw):
+            return original(c, fam, key, l9, l9 if fam == "p42_status" else ours, **raw)
+        with mock.patch.object(cmp.Comparison, "exact", lenient):
+            self.assertEqual(self.fails(self.run_compare()), {})
 
     def test_planted_holm_order(self):
         # Swapping which contrast has the smaller p changes only the Holm order.
