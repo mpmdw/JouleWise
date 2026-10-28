@@ -313,6 +313,22 @@ Differences from the brief, added to the eight of the block below:
 - **#589 item 4 applied:** BYTES `end_t0_before` is 2026-11-05T00:00:00-08:00 in all 12 packs, set by the generator in one measurement-checkout commit, `e624d67c7` on `264d58d9a`. Sidecars and both identity-pin files were re-issued, and `--check` verifies. The loop was held at NEXT from 20:22 to 20:36 to land it, then resumed. The next session of each pack smokes. Later sessions of packs that already ran carry `registration.after_first_session`, which is DISCLOSE only. CI is draft PR #590: 19 of 20 shards green; shard 10 stalled 53 min in `test_bytes_analysis` `test_twenty_production_shaped_campaigns_per_world` (its own synthetic fixtures, which read no changed file), so it was cancelled and re-run. #589 is closed.
 - **Thermal council round 2, ruled for s5-p1** (both seats proposed the same rule): print the registered result (unavailable) plus a labelled post hoc "request-end OS-window sensitivity". That line applies the same thermal rule with bracketing to [member start, request end]; the battery codes and every other rule stay. **Pass 2 is split** (Fable narrows the window; Sol keeps it and measures a preventive hold first), so a cold Fable judge runs in the cloud: `session_01JActAYFeGjwpHgmnqY4u2d`, report JouleWise-data `claude/by-thermal70-judge*` `reports/by-thermal70-judge.md`. Nothing waits on it while pass 2 is draft.
 
+82. **Readiness reports and lead rulings (laptop lead, 2026-10-28 ~01:00 PDT).**
+- **ALIGN-READY-1** (`lane/2026-10-27-align-ready` `131abcd5`, `.codex-report/ALIGN-READY-1.md`): first agent-monitoring pilot is code-ready for the night of 6 Nov at the earliest; 7 Nov realistic. Kit `configs/campaigns/align_pilot_v0/`, runner `scripts/align_pilot_session.py`, DRAFT protocol `docs/align/pilot_protocol_v0.md`. Unproven: a real SHADE environment and a real MLX + powermetrics episode through the kit. **Lead rulings on its NEEDS_RULING:**
+  - R1: rule 2 (CI plus its tests) **plus one Sol 6.1 xhigh executing review of the lane before the first arm** (non-claim pilot; first non-BYTES workload through item H). The laptop lead runs it once the L9 full-size run is done.
+  - R2: (a), install into the measurement `.venv` after BYTES closes, with `pip freeze` captured before and after. Every package `runtime_versions` pins must be unchanged, or the install is reverted and option (b) built. No API keys for OpenAI or Anthropic in the session environment: the pilot is judge-free, and the packages are import-only.
+  - R3: thinking on (template default) for v0. R4: 12 episodes. R5: keep `--max-failures 1`. R6: keep the full BYTES scaffold.
+  - The SHADE prefetch (about 2.9 MB) and the package install happen at a desk, never inside a session; the session must run with no network fetch.
+  - The lane stays off any BYTES checkout until BYTES closes (it changes `joulewise/adapters/__init__.py`).
+- **DIF-READY-1** (`lane/2026-10-27-difficulty-ready` `cef8388c`): **not ready**. The analysis code is ready, but the collection side does not exist:
+  - the block-6 loop's module shapes cannot carry DIFFICULTY's attempts;
+  - the member runner forces the full token count (`suppress_eos=True`);
+  - the energy adapter and the bench runner are unbuilt;
+  - registration revision 2.4 is unwritten;
+  - the #416 freeze audit has not run.
+
+  Earliest dates: bench (no power) 6 Nov; energy about 13-17 Nov. Per Ed's order (item 81), the pilots take the Mac first. The DIFFICULTY collection build is queued behind L9 acceptance and the pilot lane's review, and is not launched yet: it is claim-path work needing two reviews per item, and the lead's review capacity goes to Paper 1 first.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
