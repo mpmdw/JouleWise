@@ -1,0 +1,371 @@
+{
+  "reduce": {
+    "mutation_refusal": {
+      "code": null,
+      "exception": "V2AuthenticationInputError",
+      "message": "v2_authentication_input_changed: bundle neg8-window-end-r1 metadata.json (/private/tmp/jwsolreview/authdelta/archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json) changed after its first authentication read"
+    },
+    "output": [
+      0,
+      "bundle: /private/tmp/jwsolreview/authdelta/archive/sources/night-custody/runs_claim/neg8-window-end-r1 status=succeeded\nreduction artifact: /private/tmp/jwsolreview/authdelta/auth-reduced.json\n",
+      ""
+    ],
+    "records": {
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_exploratory.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "eb766f939716580e74110af86ad8f31f6f4507d9adf7ed30273e7b049dcc95b6",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_b5.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_g2a_b3.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "04bdbec45cf3b609b33886c1487e9982f030564b3212e636f8cf4631b5d4edc7",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_production.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/config.json": {
+        "grammar": "json",
+        "read_count": 4,
+        "sha256": "03e3eabd7332f7f64cfff3823b737df9a225361e50e07ece84b489b1f3cda10f",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/events.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 2,
+        "sha256": "2cb1990ce9bbb1251a9bbf95e92902d8922904395ce74ef2bc26cd1b25e79f7c",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/events.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 4,
+        "sha256": "dc19cb394d7732a863ab036be6e86e0971fbe61089367a167a99a04bf5372587",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/instrument_evidence.json": {
+        "grammar": "json",
+        "read_count": 4,
+        "sha256": "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/manifest.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "131880332deddb21523054473a9d03dbf0f029731f842aac9b84ab28c2a09de0",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/power_trace.csv": {
+        "grammar": "raw",
+        "read_count": 2,
+        "sha256": "5d3b5a2c3a8de63bf6a91481b514d576faa29c59a524b12a1b3783d4cdac0987",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/raw/powermetrics.plist": {
+        "grammar": "raw",
+        "read_count": 4,
+        "sha256": "951ed3fa0353a4163115c9be1e060bb7f526eba344968bb3e5a38cfbb260179c",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json": {
+        "grammar": "json",
+        "read_count": 4,
+        "sha256": "e6fb01547e7c6fcb02064e8dc3049b45a07aa04f8352afb852e3eaa0eaf905c9",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/power_trace.csv": {
+        "grammar": "raw",
+        "read_count": 2,
+        "sha256": "b5118b246fd060c201a2618a821890aab3d42268ab487cc1c2aea1803545cc5a",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics.plist": {
+        "grammar": "raw",
+        "read_count": 4,
+        "sha256": "3fa309572e3c2a257c1139a7a49a6ddb80ba907d9117dad9a66c050ad76a5466",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle.plist": {
+        "grammar": "raw",
+        "read_count": 4,
+        "sha256": "11df37cd5fe498f2362623860881735a152b8f0cedb948af88ffe2c55269c5ce",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry_idle.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 2,
+        "sha256": "f69923e41514e72647d3e570f017c9b1b29b438feddd16ab5c56aff6686280cd",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/summary_metrics.json": {
+        "grammar": "json",
+        "read_count": 4,
+        "sha256": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+        "strict_parse_succeeded": true
+      }
+    },
+    "summary_sha256": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc"
+  },
+  "strict_explicit": {
+    "mutation_refusal": {
+      "code": null,
+      "exception": "V2AuthenticationInputError",
+      "message": "v2_authentication_input_changed: bundle neg8-window-end-r1 metadata.json (/private/tmp/jwsolreview/authdelta/archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json) changed after its first authentication read"
+    },
+    "output": [],
+    "records": {
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_exploratory.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "eb766f939716580e74110af86ad8f31f6f4507d9adf7ed30273e7b049dcc95b6",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_b5.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_g2a_b3.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "04bdbec45cf3b609b33886c1487e9982f030564b3212e636f8cf4631b5d4edc7",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_production.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/config.json": {
+        "grammar": "json",
+        "read_count": 12,
+        "sha256": "03e3eabd7332f7f64cfff3823b737df9a225361e50e07ece84b489b1f3cda10f",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/events.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 8,
+        "sha256": "2cb1990ce9bbb1251a9bbf95e92902d8922904395ce74ef2bc26cd1b25e79f7c",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/events.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 4,
+        "sha256": "dc19cb394d7732a863ab036be6e86e0971fbe61089367a167a99a04bf5372587",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/instrument_evidence.json": {
+        "grammar": "json",
+        "read_count": 4,
+        "sha256": "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/manifest.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "131880332deddb21523054473a9d03dbf0f029731f842aac9b84ab28c2a09de0",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/power_trace.csv": {
+        "grammar": "raw",
+        "read_count": 2,
+        "sha256": "5d3b5a2c3a8de63bf6a91481b514d576faa29c59a524b12a1b3783d4cdac0987",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/raw/powermetrics.plist": {
+        "grammar": "raw",
+        "read_count": 4,
+        "sha256": "951ed3fa0353a4163115c9be1e060bb7f526eba344968bb3e5a38cfbb260179c",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json": {
+        "grammar": "json",
+        "read_count": 8,
+        "sha256": "e6fb01547e7c6fcb02064e8dc3049b45a07aa04f8352afb852e3eaa0eaf905c9",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/power_trace.csv": {
+        "grammar": "raw",
+        "read_count": 8,
+        "sha256": "b5118b246fd060c201a2618a821890aab3d42268ab487cc1c2aea1803545cc5a",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics.plist": {
+        "grammar": "raw",
+        "read_count": 10,
+        "sha256": "3fa309572e3c2a257c1139a7a49a6ddb80ba907d9117dad9a66c050ad76a5466",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle.plist": {
+        "grammar": "raw",
+        "read_count": 6,
+        "sha256": "11df37cd5fe498f2362623860881735a152b8f0cedb948af88ffe2c55269c5ce",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle_post.plist": {
+        "grammar": "raw",
+        "read_count": 2,
+        "sha256": "4f1e9572e926008ac19067516424ada184bfacbc267ef8c24455d116379c4a46",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 2,
+        "sha256": "18f859ff28e4d5a3ad1d260d7f3dde2b5ce59f930d5ddaa8fc5b3fe7462f0af9",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry_idle.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 2,
+        "sha256": "f69923e41514e72647d3e570f017c9b1b29b438feddd16ab5c56aff6686280cd",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/summary_metrics.json": {
+        "grammar": "json",
+        "read_count": 6,
+        "sha256": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+        "strict_parse_succeeded": true
+      }
+    }
+  },
+  "strict_implicit": {
+    "mutation_refusal": {
+      "code": null,
+      "exception": "V2AuthenticationInputError",
+      "message": "v2_authentication_input_changed: bundle neg8-window-end-r1 metadata.json (/private/tmp/jwsolreview/authdelta/archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json) changed after its first authentication read"
+    },
+    "output": [
+      0,
+      "valid bundle: /private/tmp/jwsolreview/authdelta/archive/sources/night-custody/runs_claim/neg8-window-end-r1\n",
+      ""
+    ],
+    "records": {
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_exploratory.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "eb766f939716580e74110af86ad8f31f6f4507d9adf7ed30273e7b049dcc95b6",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_b5.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_g2a_b3.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "04bdbec45cf3b609b33886c1487e9982f030564b3212e636f8cf4631b5d4edc7",
+        "strict_parse_succeeded": true
+      },
+      "/private/tmp/jwsolrev2/configs/campaign_policies/quiet_mac_p2_production.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/config.json": {
+        "grammar": "json",
+        "read_count": 12,
+        "sha256": "03e3eabd7332f7f64cfff3823b737df9a225361e50e07ece84b489b1f3cda10f",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/events.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 8,
+        "sha256": "2cb1990ce9bbb1251a9bbf95e92902d8922904395ce74ef2bc26cd1b25e79f7c",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/events.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 4,
+        "sha256": "dc19cb394d7732a863ab036be6e86e0971fbe61089367a167a99a04bf5372587",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/instrument_evidence.json": {
+        "grammar": "json",
+        "read_count": 4,
+        "sha256": "a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/manifest.json": {
+        "grammar": "json",
+        "read_count": 2,
+        "sha256": "131880332deddb21523054473a9d03dbf0f029731f842aac9b84ab28c2a09de0",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/power_trace.csv": {
+        "grammar": "raw",
+        "read_count": 2,
+        "sha256": "5d3b5a2c3a8de63bf6a91481b514d576faa29c59a524b12a1b3783d4cdac0987",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/instrument_calibration/raw/powermetrics.plist": {
+        "grammar": "raw",
+        "read_count": 4,
+        "sha256": "951ed3fa0353a4163115c9be1e060bb7f526eba344968bb3e5a38cfbb260179c",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/metadata.json": {
+        "grammar": "json",
+        "read_count": 8,
+        "sha256": "e6fb01547e7c6fcb02064e8dc3049b45a07aa04f8352afb852e3eaa0eaf905c9",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/power_trace.csv": {
+        "grammar": "raw",
+        "read_count": 8,
+        "sha256": "b5118b246fd060c201a2618a821890aab3d42268ab487cc1c2aea1803545cc5a",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics.plist": {
+        "grammar": "raw",
+        "read_count": 10,
+        "sha256": "3fa309572e3c2a257c1139a7a49a6ddb80ba907d9117dad9a66c050ad76a5466",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle.plist": {
+        "grammar": "raw",
+        "read_count": 6,
+        "sha256": "11df37cd5fe498f2362623860881735a152b8f0cedb948af88ffe2c55269c5ce",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/raw/powermetrics_idle_post.plist": {
+        "grammar": "raw",
+        "read_count": 2,
+        "sha256": "4f1e9572e926008ac19067516424ada184bfacbc267ef8c24455d116379c4a46",
+        "strict_parse_succeeded": false
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 2,
+        "sha256": "18f859ff28e4d5a3ad1d260d7f3dde2b5ce59f930d5ddaa8fc5b3fe7462f0af9",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/rich_telemetry_idle.jsonl": {
+        "grammar": "jsonl",
+        "read_count": 2,
+        "sha256": "f69923e41514e72647d3e570f017c9b1b29b438feddd16ab5c56aff6686280cd",
+        "strict_parse_succeeded": true
+      },
+      "archive/sources/night-custody/runs_claim/neg8-window-end-r1/summary_metrics.json": {
+        "grammar": "json",
+        "read_count": 6,
+        "sha256": "3a867f6087280d6b34d2d613419f2dc2044c480345a6cf0a8dc6f75982eaaffc",
+        "strict_parse_succeeded": true
+      }
+    }
+  }
+}

@@ -1,0 +1,193 @@
+origin/main=4a65f742b06dfae4fdcbe81a3476f1fc8220f4d9
+
+# Gate policy (binding, Ed, 2026-10-27)
+
+**Authority.** Ed, Claude Code session 015ASG1T, 2026-10-27. He answered "yes" to items 1, 3, 4, 5 and 6 of the
+pipeline audit's decisions (`docs/process_traces/2026-10-27-pipeline-audit/`), having said: "cut the agent review
+rounds then - especially those that havent produced any meaningful catches - but learn from where they did, and keep
+a minimal second set of eyes where possible, maybe 6.1 sol xhigh fast for speed sake". Directive issue #589 carries it.
+
+This policy was made before any block-5, block-6 or BYTES result was seen. It changes how code and rules are checked,
+never what is computed. Where a registration's own text requires more (the block-5 seal's §10, block-6 §13 and §17,
+BYTES §19), the registration wins until it is amended under its own rule. It supersedes the review-round parts of
+`docs/orchestration.md` and the D-184 four-model council policy.
+
+## What the October record showed
+
+- **Real defects came from executing reviews of number-bearing code, and from running things.** Examples: the #416
+  NEG-8 reference-span blocker (RUN_STATE item 69); a reference silently dropped on a read failure (FIX-416 rounds);
+  the twin diverging on compressed input (#573); machine tests and real-shaped data.
+- **Late rounds** mostly found defects in the previous round's fixes, but some were real HIGHs, so a hard round cap is
+  unsafe.
+- **Councils on process questions, reviews of docs and bookkeeping, and serial re-reviews** added time and little
+  protection.
+
+## The rule
+
+1. **Docs, records, RUN_STATE, briefs, bookkeeping:** CI only.
+2. **Tests, tooling, orchestration, and collection code that cannot change a number:** CI and the change's own
+   regression test. One reviewer only if the author asks.
+3. **Code that can change, select or exclude a claim number** (reduction, calibration, harvest/exclusions,
+   estimators, analysis, blinding, the recompute), and the agent census, stand-down and arm checks:
+   - CI, a regression test, and a counterfactual showing the test fails without the change.
+   - Two executing reviews from different model families, **launched together**, each told to probe and mutate:
+     Sol 6.1 at xhigh, fast (`service_tier = "priority"`), and Opus 5.5. (Fable 5.1 replaces either seat if it is
+     unavailable.)
+   - Together they count as both the independent review and any cold pass a ruling asks for.
+4. **Fix rounds:** both reviewers check only the fix diff, until a round finds nothing above LOW. If the same defect
+   class appears twice, the lead writes a structural rule; a third time, consult Ed.
+5. **Rule changes and registration text:** one executing refuter (Sol 6.1 xhigh fast) plus a recorded lead line. A
+   judge rules only when a registration requires one, or when the refuter's executed result contradicts the lead on
+   a counting or exclusion rule.
+6. **Councils:** only for a genuine science-design fork that changes what is measured or claimed. One seat per family,
+   one round, and the lead or Ed decides. Process questions get no council. Ed can still ask for one.
+7. **Unchanged:** the #416 three-family audit before a claim-bearing run; the agent census and physical-hazard
+   refusals; file hashes and custody manifests; battery float (#421); blinding; the independent recompute and its
+   agreement bars; CI.
+8. **Release:** no cold gate beyond what the registration names (RUN_STATE item 37(ii), 2026-10-14).
+9. **Pruning tally:** each session record ends with a table: gate, ran, caught_number, caught_session_refusal,
+   evidence. A gate with no catch in three sessions is proposed to Ed for removal.
+
+## Amendment, 2026-10-27 evening: who decides, and three lightenings
+
+**Ed's words:** "i want you, the one running, with actual logs and references, deciding sensible but minimal gates, not
+me who's 99% hands off - reading your reports."
+
+1. **Who decides.** The lead (the orchestrator, or the interactive lead session when one is running) picks the gate
+   level for each change under the rules above, and records the choice and its reason in one line in the session
+   record. Ed is told in reports. He is asked only about science-design forks, and about changes to what a
+   registration computes, excludes or counts.
+2. **Refuters on registration text.** One executing refuter only when the text changes what is computed, excluded,
+   counted or printed in a registered result. An addendum that adds a separately labelled result and leaves the
+   registered analysis byte-identical (for example the BYTES extension of 2026-10-27) needs CI and the lead's check
+   only.
+3. **Reviews block only what they cover.** A review of code that cannot change a number runs alongside work and blocks
+   nothing. A pending review of extension packs never holds a registered session.
+4. **The three-family audit (#416)** runs once per freeze of collection code that will produce claim data, not once per
+   pack.
+
+Unchanged: rule 3's two cross-family executing reviews for code that computes or selects a published number, the
+independent recompute and comparator, registration before data, blinding, hashes, physical-hazard refusals, the agent
+check during collection, and CI. October's record supports keeping them (rule "What the October record showed").
+
+# Ed's ruling, 2026-10-27: L9 acceptance without full-size synthetic runs; the blind dry run is the full-size test
+
+**Status: binding (Ed, owner).** Given in Claude Code cloud session 015ASG1T on 2026-10-27, Ed present.
+
+**Ed's words.** Asked whether the full-size synthetic test runs were needed ("do we need to do all this or is this
+excessive caution?"), Ed answered the proposal below: "yes do it ... just get l9 working again - i want to know the
+full front to back results of block 5 and 6 asap". Directive issue #587 carries the scheduling side.
+
+**What it amends.** The Build paragraph of the L9 ruling
+(`docs/process_traces/2026-10-20-magistrate-4b350f47/L9-RULING.md`): "Then the executing review, the J1-J6 and C5-C9
+reruns on the Mac with no conditional seams, and the cold Fable and Opus passes at L9's merge." It amends nothing
+registered or sealed: the block-5 registration, analysis plan, flag catalog, estimators, exclusions, kept counts,
+blinding, the independent recompute and its agreement bars, and the release record are unchanged.
+
+## Why
+
+- The blind dry run reads the real, immutable block-5 archives with every number closed. A tooling refusal there
+  is cured blind and the run restarts in a fresh custody root (scout report
+  `report/2026-10-22-blind-dry-run-scout:.codex-report/BLIND-DRY-RUN-SCOUT.md` §3). So it is already a safe
+  full-size end-to-end test, on the actual data. A full-size synthetic run before it rehearses a rehearsal.
+- The full-size synthetic module takes about 6 h per run on a 5-vCPU cloud VM (J6, two runs, about 13 h), so every
+  fix round costs most of a day. L9 has not reached merge, and block 5 has waited, collected, since 2026-10-12.
+- The real release already refuses when its outputs differ from the dry run's (`release_digest_differs_from_dry_run`),
+  so the full-size double run of the release-equality test duplicates a check the release itself makes.
+
+## The rule
+
+1. **L9 merges** after: its changed code's tests and the J1-J6 / C5-C9 predicates pass on **reduced-size synthetic
+   fixtures** that still drive every registered step (0 to 11, including 3b, 9b and the registered p42 exits) through
+   the real programs; the six short modules pass (`tests.test_authentication_io`, `tests.test_docs_freshness`,
+   `tests.b5_analysis.test_sensitivity_guard`, `tests.b5_analysis.test_mint_kept_units`,
+   `tests.b5_analysis.test_s10_chain_defects`, `tests.test_r4_acceptance_oracle`); one independent executing review
+   finds no blocker (or its blockers are fixed); CI is green. No assertion is weakened to get there; a reduced fixture
+   changes sizes, not checks.
+   **Amended the same day (lead, under Ed's instruction "the only real rule is good science at a speedy cadence").**
+   Seat L9-2 showed reduced fixtures cannot keep every check: L9's own `kept_units.py` refuses
+   (`exclusions_plan_mismatch`) unless each floor cell has its registered 10 repeats and 10 quads. It also measured
+   that 63 % of the joined run's wall time is 82 refits of one calibration's bytes, because the existing
+   caller-owned `physics_cache` (`joulewise/cli.py` `validate_bundle`, already used by `joulewise/b5/harvest.py`) is
+   not shared across the dry-run path. So item 1 becomes:
+   - the six short modules;
+   - one shared `physics_cache` per driver run, keyed by the calibration artifact's content hash, with failures never
+     cached. The wiring stays in non-governed code (`joulewise/whole_window.py`, `joulewise/cli.py`,
+     `joulewise/b5_analysis/`), with a test that cached and uncached outputs are byte-identical;
+   - one full-size `test_dry_run` run with the cache on;
+   - one executing review; CI.
+2. **The full-size end-to-end test is the real block-5 blind dry run on the Mac**, scheduled as directive #587 says.
+3. **The cold Fable and Opus passes** on L9 move from "at merge" to "before the release event". They may run in
+   parallel with the dry run. The release still needs them.
+4. **Release equality** is tested on a reduced fixture; the real release's digest comparison is the full-size check.
+5. **Full-size synthetic runs** of `test_dry_run`, `test_release_equality` and `test_chain_fixture` become optional
+   diagnostics, not merge gates.
+6. **Step 9b's calibration refit goes to a ruling before the real dry run.** The analysis replay refits the pulse
+   calibration under the frozen 120 s host-safety wall deadline, whose firing the code marks non-reproducible; it
+   fired in the full-size synthetic runs (JouleWise-data `codex/l9-joined`, report "Final diagnosis"). Options for
+   the ruling: (a) the analysis replay keeps the refit and the cell budget but does not inherit the wall deadline;
+   (b) the replay checks the harvest-recorded fit by hash binding and leaves arithmetic verification to the
+   independent recompute; (c) keep it as is, with the reason it cannot make the release irreproducible.
+   **Decided by Ed, 2026-10-27: (c)** ("yes, sure, record c as my ruling"). Reason: (a), and also the per-member
+   refit cache seat L9-2 proposed, would edit `joulewise/powermetrics_fiducial.py` or `joulewise/reduce.py`. Those
+   are governed estimator-source pins (`ESTIMATOR_CODE_PATHS`, `joulewise/calibration_bracketing.py`), and the last
+   change to the first one forced a calibration-acceptance reissue (`_r2`). So for block 5's first dry run:
+   - The wall deadline stays. The dry run runs on the quiet Mac, where the same calibration completed at harvest.
+   - A deadline firing is treated as a tooling refusal: cured blind, rerun in a fresh custody root (scout report §3).
+   - **Condition:** seat L9-2 confirms, with executed evidence, that a firing anywhere on the dry-run path stops
+     with a refusal and cannot change a kept unit, a lost-reference list or a printed number. If it cannot confirm
+     that, this choice returns to Ed before the dry run.
+   - (a) and the refit cache follow later as one governed change with its reissue, unless the cache can live
+     entirely in non-governed code with byte-identical outputs (then it is an ordinary L9 change).
+   - **Status, same day.**
+     - The cache landed in non-governed code (`lane/2026-10-27-l9-2` b5df45a): an ordinary L9 change.
+     - The condition first failed. Step 2's `reduce` exited 0 on a forced firing, with 4 calibration-dependent
+       summary keys changed.
+     - Driver tripwire 96f1f1fe6 now refuses at step 2 (`rereduction_calibration_dependent_fields_differ`) when
+       any of those keys differs from the kept bundle's stored summary. Later steps are not run.
+       `tests/b5_analysis/test_deadline_tripwire.py` holds the forced-firing case, the mutation proof and byte
+       identity of the unforced path.
+     - The other refit sites already end in refusals (L9-2 report). The condition is met, subject to the executing
+       review (session L9-REV-1).
+     - Margin: one detection of the 59-pulse calibration took 10.29 s on an idle 4-vCPU VM against the 120 s
+       deadline. The Mac is not yet measured.
+6a. **The Mac goes to analysis first (Ed, 2026-10-27):** "bytes and that work can pause until this is done if you
+   need the quiet mac for analysis". The block-5 blind dry run takes precedence over BYTES sessions, s1-p1 included.
+   BYTES's registered end (no t0 after 2026-11-02 00:00 PDT) still binds. If the dry run would push s1-p1 past it,
+   the lead tells Ed before holding the loop, so he can choose between the fit set and the date, or amend the end
+   date prospectively while BYTES is still blinded.
+6b. **Permission to move the block-5 dry run to the analysis laptop (Ed, 2026-10-27):** "yes you have my ok for both
+   moving the block 5 dry run here, and yes, orchestrator should be allowed to package and upload the archives between
+   sessions", then: "i was giving you permission not a mandate". This is a permission, **not active** until the
+   conditions in `BLOCK5-TRANSFER.md` beside this file hold and that file ends with `B5-TRANSFER: GO`. If it becomes
+   active, the dry run runs on Ed's MacBook Air from hash-verified compressed copies, and BYTES never needs to hold
+   for it. Until then items 6 and 6a stand unchanged.
+8. **Review stage amended (Ed, 2026-10-27, gate policy `docs/process/gate_policy.md` rule 3).** For L9, the
+   "one independent executing review" of item 1 and the cold Fable and Opus passes of item 3 become one stage: two
+   executing reviews launched together, Sol 6.1 xhigh fast and Opus 5.5, each told to probe and mutate. Fix rounds:
+   both check only the fix diff until nothing above LOW remains. Item 4's reduced-fixture release test is infeasible
+   (L9-2 report); release equality is checked by the real release-mode rerun.
+9. **Ruling 6b stays on hold (Ed, 2026-10-27: "hold on 2").** The audit's critique showed plain iCloud tars break
+   custody on the laptop (they land where any agent running as `edr` can read them), the laptop's disk was never
+   sized, and iCloud uploads on the measurement Mac run on into sessions. Until a transfer design closes those, block
+   5's dry run is on the measurement Mac at a BYTES session boundary (items 6 and 6a).
+7. **Block 6** follows the same principle wherever its registration allows. Where the block-6 registration itself
+   requires a synthetic stage chain before its blind run, that requirement stands until amended by a dated entry
+   under its §17 rules.
+
+## Executed evidence
+
+The wall deadline named in item 6 is the frozen constant at `joulewise/powermetrics_fiducial.py:94`, beside the
+reproducible cell budget at `joulewise/powermetrics_fiducial.py:90`. Checked on main at f164bef49:
+
+```
+$ grep -n "DETECTION_PROJECTION_CELL_BUDGET = \|DETECTION_PROJECTION_WALL_BUDGET_S = " joulewise/powermetrics_fiducial.py
+90:DETECTION_PROJECTION_CELL_BUDGET = 1_710_000
+94:DETECTION_PROJECTION_WALL_BUDGET_S = 120.0
+exit 0
+```
+
+The 6 h and 13 h module times are from lane `lane/2026-10-20-l9-ruling-build`, `.codex-report/L9-1.md`, RESULTS
+TABLE (`tests.b5_analysis.test_dry_run` 22,170.927 s; `tests.b5_analysis.test_release_equality` 47,231.364 s), and
+JouleWise-data `codex/l9-joined` (`dry-run-trace-6` 20,950.368 s; `calibration-leaf-1`, the same reference in
+isolation, 24.36 s).

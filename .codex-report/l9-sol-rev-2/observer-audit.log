@@ -1,0 +1,1 @@
+{"exception": "RuntimeError", "first_step": {"refusal": "calibration_deadline_observer_unavailable", "status": "tooling_refusal"}, "later": ["not_run"], "message": "review fixture audit policy denies monitoring callbacks", "tools_after": [null, null, null, null, null, null]}

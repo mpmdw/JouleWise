@@ -1,0 +1,5 @@
+Exact f059286bc versus 2ea99f51f JSON comparison: PASS
+reduce: outputs, all registered paths/digests/grammars/read_counts, mutation refusal IDENTICAL; 17 paths, 50 reads
+strict_explicit: outputs, all registered paths/digests/grammars/read_counts, mutation refusal IDENTICAL; 19 paths, 88 reads
+strict_implicit: outputs, all registered paths/digests/grammars/read_counts, mutation refusal IDENTICAL; 19 paths, 88 reads
+All six runs guarded against ordinary Path.read_bytes(metadata.json); no extra unauthenticated metadata read reached.

@@ -1,0 +1,61 @@
+test_a_higher_bound_seed_does_not_change_the_other_bundle (tests.b5_analysis.test_shared_physics_cache.MetadataBoundPartitionTests.test_a_higher_bound_seed_does_not_change_the_other_bundle) ... FAIL
+test_missing_monitoring_api_yields_none (tests.b5_analysis.test_deadline_observer.ObserverSetupFailureTests.test_missing_monitoring_api_yields_none) ... ERROR
+test_lost_tool_id_race_yields_none_and_keeps_the_winner (tests.b5_analysis.test_deadline_observer.ObserverSetupFailureTests.test_lost_tool_id_race_yields_none_and_keeps_the_winner) ... ERROR
+
+======================================================================
+ERROR: test_missing_monitoring_api_yields_none (tests.b5_analysis.test_deadline_observer.ObserverSetupFailureTests.test_missing_monitoring_api_yields_none)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/jwsolrev2/tests/b5_analysis/test_deadline_observer.py", line 260, in test_missing_monitoring_api_yields_none
+    with observe_wall_deadline() as observer:
+         ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/private/tmp/jwsolrev2/joulewise/b5_analysis/deadline_observer.py", line 39, in observe_wall_deadline
+    Yields None when no observer can be installed (no ``sys.monitoring``, no
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/jwsolrev2/joulewise/b5_analysis/deadline_observer.py", line 39, in <genexpr>
+    Yields None when no observer can be installed (no ``sys.monitoring``, no
+                                        ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get_tool'
+
+======================================================================
+ERROR: test_lost_tool_id_race_yields_none_and_keeps_the_winner (tests.b5_analysis.test_deadline_observer.ObserverSetupFailureTests.test_lost_tool_id_race_yields_none_and_keeps_the_winner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/jwsolrev2/tests/b5_analysis/test_deadline_observer.py", line 276, in test_lost_tool_id_race_yields_none_and_keeps_the_winner
+    with observe_wall_deadline() as observer:
+         ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/private/tmp/jwsolrev2/joulewise/b5_analysis/deadline_observer.py", line 51, in observe_wall_deadline
+    if tool is None:
+  File "/private/tmp/jwsolrev2/tests/b5_analysis/test_deadline_observer.py", line 273, in race
+    return original(tool, name)
+ValueError: tool 0 is already in use
+
+======================================================================
+FAIL: test_a_higher_bound_seed_does_not_change_the_other_bundle (tests.b5_analysis.test_shared_physics_cache.MetadataBoundPartitionTests.test_a_higher_bound_seed_does_not_change_the_other_bundle)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/jwsolrev2/tests/b5_analysis/test_shared_physics_cache.py", line 245, in test_a_higher_bound_seed_does_not_change_the_other_bundle
+    self.assertEqual((self.strict(self.high), self.strict(self.low)), (0, 0))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (0, 2) != (0, 0)
+
+First differing element 1:
+2
+0
+
+- (0, 2)
+?     ^
+
++ (0, 0)
+?     ^
+
+
+----------------------------------------------------------------------
+Ran 3 tests in 17.600s
+
+FAILED (failures=1, errors=2)
+PASS: all three new regressions fail with exact f059286bc production modules; current-head suite passes them

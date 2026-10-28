@@ -1,0 +1,18 @@
+original b: 0.022708904442849103 higher b: 0.022708904443349102
+same calibration evidence SHA: a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b
+CLI statuses plain/seed/shared: 0 0 0
+wall-deadline firings: 0
+cache: {}
+differing summary keys: []
+plain gross anchor_bound_s: 0.023220637521852706 gross max_abs_delta_j: 0.3332955190828386
+shared gross anchor_bound_s: 0.023220637521852706 gross max_abs_delta_j: 0.3332955190828386
+strict uncached high/low: 0 0
+strict shared high/low: 0 0
+shared low strict diagnostic: 'valid bundle: /private/tmp/jwsolreview/sol-bound-key-rnccsn4g/archive/sources/night-custody/runs_claim/neg8-window-end-r1\n' ''
+stderr: '' '' ''
+real step-1 driver comparison: {"0576a734d": {"later": ["ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok"], "return": 0, "step1_refusal": null, "step1_status": "ok"}, "f059286bc": {"later": ["ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok"], "return": 0, "step1_refusal": null, "step1_status": "ok"}}
+Traceback (most recent call last):
+  File "/private/tmp/jwsolrev2/.codex-report/l9-sol-rev-2/cache_metadata_probe.py", line 105, in <module>
+    assert differences
+           ^^^^^^^^^^^
+AssertionError

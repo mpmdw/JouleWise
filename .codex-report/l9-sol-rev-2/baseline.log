@@ -1,0 +1,13 @@
+baseline digest, HEAD and all 13 inherited dirty files match
+ .codex-report/L9-2.md                          | 487 ++++++++++++-------------
+ .codex-report/l9-2/fault_injection.py          |  20 +-
+ .codex-report/l9-2/fault_injection_plan.json   |  50 +++
+ .codex-report/l9-2/run_n3.sh                   |  15 +
+ .codex-report/l9-2/run_short.sh                |   2 +-
+ joulewise/b5_analysis/bracket.py               |   5 +-
+ joulewise/b5_analysis/deadline_observer.py     |  37 +-
+ joulewise/cli.py                               |  18 +-
+ joulewise/whole_window.py                      | 123 +++++--
+ tests/b5_analysis/test_deadline_observer.py    |  50 ++-
+ tests/b5_analysis/test_shared_physics_cache.py |  98 ++++-
+ 11 files changed, 577 insertions(+), 328 deletions(-)

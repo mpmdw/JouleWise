@@ -1,0 +1,3 @@
+strict_implicit registered paths 19 read_count total 88 mutation {'exception': 'V2AuthenticationInputError', 'code': None, 'message': 'v2_authentication_input_changed: bundle neg8-window-end-r1 metadata.json (/private/tmp/jwsolreview/authdelta/a
+strict_explicit registered paths 19 read_count total 88 mutation {'exception': 'V2AuthenticationInputError', 'code': None, 'message': 'v2_authentication_input_changed: bundle neg8-window-end-r1 metadata.json (/private/tmp/jwsolreview/authdelta/a
+reduce registered paths 17 read_count total 50 mutation {'exception': 'V2AuthenticationInputError', 'code': None, 'message': 'v2_authentication_input_changed: bundle neg8-window-end-r1 metadata.json (/private/tmp/jwsolreview/authdelta/a

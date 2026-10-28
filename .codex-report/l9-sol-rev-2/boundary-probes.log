@@ -1,0 +1,6 @@
+fresh/declared: 0.022708904442849103 0.022708904442849103
+bounds hex: ['0x1.74100c7a3dddap-6', '0x1.74100c7a3dddbp-6', '0x1.74100c7a3dddcp-6'] one evidence hash: a638eed8bc22bfc45db110639ac0ac25dfbd39232bd3bb9892a533600973934b
+order (0, 1, 2) six strict outputs identical; partitions 3 refits 3
+order (2, 1, 0) six strict outputs identical; partitions 3 refits 3
+order (1, 2, 0) six strict outputs identical; partitions 3 refits 3
+PASS: last-ULP separation, fresh-bound equality, reversed orders, three bundles, exact reduction bytes, invalid keys
