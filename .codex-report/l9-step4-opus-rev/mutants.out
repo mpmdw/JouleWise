@@ -1,0 +1,19 @@
+KILLED  C1 subset->equality (base rule): Ran 34 tests in 2.143s FAILED (failures=2)
+KILLED  C2 drop empty-refused guard: Ran 34 tests in 2.097s FAILED (failures=2)
+KILLED  C3 drop membership-refusal branch: Ran 34 tests in 2.347s FAILED (failures=3)
+SURVIVED C4 p42 ignores kind: Ran 34 tests in 2.495s OK
+SURVIVED C5 p42 by substring: Ran 34 tests in 4.441s OK
+KILLED  C6 p42 taken from report cells: Ran 34 tests in 3.529s FAILED (failures=2, errors=14)
+KILLED  C7 drop exit!=1 guard: Ran 34 tests in 2.875s FAILED (failures=3)
+KILLED  C8 non-bool check removed: Ran 34 tests in 2.843s FAILED (failures=3)
+KILLED  C9 superset instead of subset: Ran 34 tests in 2.585s FAILED (failures=5)
+KILLED  C10 dup check only report: Ran 34 tests in 2.567s FAILED (failures=1)
+KILLED  C11 malformed spec -> refused: Ran 34 tests in 2.618s FAILED (failures=5)
+KILLED  T1 outcome code registered as tooling: Ran 34 tests in 2.608s FAILED (failures=9)
+KILLED  D1 drop driver pass-through: Ran 34 tests in 2.616s FAILED (failures=2)
+KILLED  D2 pass-through ignores exit status: Ran 34 tests in 1.870s FAILED (failures=15)
+SURVIVED D3 pass-through includes refused: Ran 34 tests in 2.901s OK
+KILLED  D4 no break after non-ok window: Ran 34 tests in 3.355s FAILED (errors=2)
+SURVIVED D5 p42 keeps stderr code: Ran 34 tests in 3.701s OK
+KILLED  D6 outcome treated as p42 exit: Ran 34 tests in 3.250s FAILED (failures=2)
+survivors: 4

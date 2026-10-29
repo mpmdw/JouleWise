@@ -1,0 +1,16 @@
+target_only            run=3 step4-alpha=(outcome_class, outcome-class refusal at step 4, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+target_and_p42         run=3 step4-alpha=(outcome_class, outcome-class refusal at step 4, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+membership             run=2 step4-alpha=(tooling_refusal, extraction_spec_membership_refused, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+report_list            run=2 step4-alpha=(tooling_refusal, extraction_report_malformed, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+report_null            run=2 step4-alpha=(tooling_refusal, extraction_report_malformed, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+cell_missing           run=2 step4-alpha=(tooling_refusal, extraction_cell_set_differs_from_spec, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+dup_id                 run=2 step4-alpha=(tooling_refusal, extraction_cell_ids_duplicated, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+nonbool                run=2 step4-alpha=(tooling_refusal, extraction_extractable_not_boolean, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+nothing_refused        run=2 step4-alpha=(tooling_refusal, extraction_exit_without_refused_cell, registered=None) windows=['alpha'] step5_called=False later=['not_run']
+exit0_target_refused   run=0 step4-alpha=(ok, None, registered=None) windows=['alpha', 'beta'] step5_called=True later=['ok']
+exit0_report_list      run=2 step4-alpha=(ok, None, registered=None) windows=['alpha', 'beta'] step5_called=True later=['not_run', 'ok', 'unclassified_refusal']
+.
+----------------------------------------------------------------------
+Ran 1 test in 1.435s
+
+OK

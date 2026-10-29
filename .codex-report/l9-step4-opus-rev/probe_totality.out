@@ -1,0 +1,6 @@
+codes: {'extraction_cell_ids_duplicated': 2034, 'extraction_cell_set_differs_from_spec': 2619, 'extraction_exit_without_refused_cell': 14044, 'extraction_extractable_not_boolean': 1684, 'extraction_report_malformed': 21987, 'extraction_spec_malformed': 11258, 'extraction_spec_membership_refused': 4659, 'floor_cell_not_extractable': 5837, 'ok': 16623, 'p42_floor_cells_only': 2435, 'refused': 116820}
+oracle-checked well-formed cases: 22316
+tooling codes returned: ['extraction_cell_ids_duplicated', 'extraction_cell_set_differs_from_spec', 'extraction_exit_without_refused_cell', 'extraction_extractable_not_boolean', 'extraction_report_malformed', 'extraction_spec_malformed', 'extraction_spec_membership_refused']
+outcome codes returned: ['floor_cell_not_extractable']
+failures: 0 []
+rc=0
