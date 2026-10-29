@@ -217,7 +217,9 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
    and `packages.mlx-metal` select the reduction kernel and its execution. These differences
    prevent transfer and set UNDETERMINED. A difference in `measurement_boundary_label.rails`
    changes the physical set of measured rails: rails and rest are UNDETERMINED
-   (`measured rails boundary differs`); DC is unaffected. `kernel_library` is recorded as prepare metadata (the actual
+   (`measured rails boundary differs`); DC is unaffected. If the recorded rail set on either
+   side lacks `gpu_power`, GPU is also UNDETERMINED: its integral has no measured source
+   (`gpu_power missing from recorded rail set`). `kernel_library` is recorded as prepare metadata (the actual
    running kernel versions are the two MLX packages). `telemetry_backend` discloses the
    capture metadata; the governed boundary integrations above still have to be supplied. They do not independently
    veto a class. `mlx-lm` loads/generates model text; `transformers` and `tokenizers` supply model/token processing;
@@ -364,7 +366,9 @@ memory-traffic cost must show there; if it does not, the control failed to separ
 and pending fields. Differences in OS build, hardware unit/device, or MLX/MLX-Metal runtime versions set
 UNDETERMINED; §2 gives their physical paths. A different `measurement_boundary_label.rails`
 is a different measured rails boundary: rails and rest are UNDETERMINED with that reason,
-while DC is unaffected. Other differences change no class.
+while DC is unaffected. If either recorded rail set lacks `gpu_power`, GPU is
+UNDETERMINED (`gpu_power missing from recorded rail set`): a GPU integral then has no measured source.
+Other differences change no class.
 The receipt keeps `differences`, `physical_differences` and `disclosure_differences`; harvest completes the
 capture comparison and prints it even for an otherwise undetermined result.
 

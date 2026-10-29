@@ -565,6 +565,146 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(cli.returncode,0,cli.stderr)
             return json.loads(cli.stdout)
 
+    def test_generated_input_leaf_faults_through_real_read_cli(self):
+        # Real stream receipts above, written/reloaded by every CLI invocation.
+        # Compact native support still covers 57.6 s with >=3 bandwidths. Walk
+        # every consumed leaf, including every row, rather than sampling paths.
+        records = deepcopy(self.records)
+        for record in records:
+            h = record['harvest']
+            for span in ('pre', 'post'):
+                start = record['receipt']['idle_'+span+'_start_ns']
+                for kind in probe.NATIVE_INPUTS:
+                    mean = sum(r['power_w'] for r in h['idle'][span][kind])/len(h['idle'][span][kind])
+                    h['idle'][span][kind] = [dict(
+                        {'stamp_ns': start+i*9_600_000_000} if kind in ('meter','battery') else
+                        {'start_ns':start+i*9_600_000_000,'end_ns':start+(i+1)*9_600_000_000},
+                        power_w=mean) for i in range(6)]
+            h['battery_samples'] = deepcopy(h['idle']['pre']['battery']+h['idle']['post']['battery'])
+            h['meter_gaps'] = [{'span':'stream','missing_samples':1}]
+        baseline = self.read_cli(records)
+        specs = {'receipt': {**probe.RECEIPT_INPUTS, 'stack':probe.STACK_INPUTS},
+                 'harvest': {'capture_stack':probe.CAPTURE_INPUTS,
+                    'energy_j': {k:probe.NUMBER for k in probe.NATIVE_INPUTS},
+                    'idle':{span:probe.NATIVE_INPUTS for span in ('pre','post')},
+                    'battery_samples':probe.NATIVE_INPUTS['battery'],
+                    'meter_gaps':[{'span':probe.TEXT,'missing_samples':probe.COUNT}],
+                    'adapter_max_w':probe.POSITIVE,'adapter_source':probe.TEXT,'battery_source':probe.TEXT,
+                    'tau_s':probe.NONNEG,'r_max_s':probe.NONNEG,'anchor_shift_j':probe.NONNEG,
+                    'meter_edge_w':probe.EDGES,'battery_edge_j':probe.EDGES}}
+        def walk(value, spec, path=()):
+            if isinstance(spec, dict):
+                for key, child in spec.items():
+                    yield from walk(value[key], child, path+(key,))
+            elif isinstance(spec, list):
+                for i, row in enumerate(value):
+                    yield from walk(row, spec[0], path+(i,))
+            else:
+                yield path, value, spec
+                if spec == probe.EDGES:
+                    for i, item in enumerate(value):
+                        yield path+(i,), item, probe.NONNEG
+        # All eight positions use the same accessor; exhaust the production
+        # schema in one call, and separately test lost calls in every arm.
+        count = 0
+        for path, value, spec in walk(records[0], specs):
+            modes = ['deleted','null','wrong_type','non_finite','wrong_length']
+            for mode in modes:
+                with self.subTest(path=path, mode=mode):
+                    mutated = deepcopy(records)
+                    parent = mutated[0]
+                    for key in path[:-1]:
+                        parent = parent[key]
+                    key = path[-1]
+                    if mode == 'deleted': del parent[key]
+                    elif mode == 'null': parent[key] = None
+                    elif mode == 'wrong_type': parent[key] = {} if not isinstance(value,dict) else 7
+                    elif mode == 'non_finite': parent[key] = float('nan')
+                    else: parent[key] = value[:1] if isinstance(value,list) else []
+                    with tempfile.TemporaryDirectory() as tmp:
+                        file = Path(tmp)/'read.json'
+                        file.write_text(json.dumps({'records':mutated,'scan':self.scan}))
+                        proc = subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
+                                               'read',str(file)],capture_output=True,text=True)
+                    self.assertEqual(proc.returncode,0,proc.stderr)
+                    result = json.loads(proc.stdout)
+                    self.assertEqual(len(result['calls']),8)
+                    leaf = '.'.join(str(k) for k in path)
+                    leaf_name = next(k for k in reversed(path) if isinstance(k,str))
+                    self.assertTrue(any(leaf_name in reason for reason in result['reasons']),leaf)
+                    undefined = [v for v in result['boundaries'].values() if v['class']=='UNDETERMINED']
+                    self.assertTrue(undefined,leaf)
+                    self.assertTrue(any(leaf_name in v['reason'] for v in undefined),leaf)
+                    self.assertTrue(any('not defined (' in v['description'] for v in undefined))
+                    # No still-defined propagated bound may shrink. Undefined
+                    # widths are deliberately not replaced with numeric zero.
+                    for beta, base in baseline['boundaries'].items():
+                        width = result['boundaries'][beta].get('halfwidth')
+                        if isinstance(width,(float,int)):
+                            self.assertGreaterEqual(width,base['halfwidth'])
+                    for call, original in zip(result['calls'],baseline['calls']):
+                        gap = call.get('meter_gaps',{}).get('bound_j')
+                        if isinstance(gap,(int,float)):
+                            self.assertGreaterEqual(gap,original['meter_gaps']['bound_j'])
+                        for beta, row in call['boundaries'].items():
+                            for field in ('bound_j','edge_bound_j','baseline_bound_j'):
+                                bound = row.get(field)
+                                if isinstance(bound,(int,float)):
+                                    self.assertGreaterEqual(bound,original['boundaries'][beta][field])
+                    count += 1
+        print('generated real read CLI leaf faults:',count)
+
+    def test_null_containers_and_scan_inputs_keep_complete_records(self):
+        paths = [('receipt',),('harvest',),('harvest','idle'),('harvest','idle','pre'),
+                 ('harvest','energy_j'),('harvest','meter_gaps')]
+        for path in paths:
+            for value in (None, 7, 'wrong'):
+                records = deepcopy(self.records)
+                parent = records[0]
+                for key in path[:-1]: parent = parent[key]
+                parent[path[-1]] = value
+                result = self.read_cli(records)
+                self.assertEqual(len(result['calls']),8)
+                self.assertTrue(any(str(path[-1]) in why for why in result['reasons']))
+                self.assertTrue(any(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
+        for key in ('K','B','Bc1','Bc3','Bc2'):
+            scan = deepcopy(self.scan); scan[key] = 'invalid'
+            result = self.read_cli(self.records, scan)
+            self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
+        for path in ('repeats','start_ns','end_ns','bytes_per_read','clock_resolution_s',
+                     'clock_tick_num_ns','clock_tick_den','clock','clock_tick_source'):
+            for value in (None, {}, float('nan')):
+                receipts = [{'bytes_per_read':size,'repeats':1,'start_ns':0,'end_ns':100+size,
+                             **synthetic_clock()} for size in (16,32) for _ in range(3)]
+                receipts[0][path] = value
+                result = probe.knee_scan(receipts)
+                self.assertEqual(result['status'],'knee not found')
+                self.assertIn(path,result['reason'])
+                json.dumps(result, allow_nan=False)
+
+    def test_lost_calls_preserve_other_arm_reductions(self):
+        for i in range(8):
+            for lost in (None, {}):
+                records = deepcopy(self.records)
+                arm = self.result['calls'][i]['arm']
+                if lost is None: records.pop(i)
+                else: records[i] = lost
+                result = self.read_cli(records)
+                for beta in ('rails','gpu','dc','rest'):
+                    arms = result['boundaries'][beta]['arms']
+                    for name in self.payload:
+                        if name != arm:
+                            self.assertEqual(arms[name],self.result['boundaries'][beta]['arms'][name])
+
+    def test_scan_reference_and_negative_place_upper_limit(self):
+        for key in ('cache_reference','dram_reference'):
+            ref = self.scan[key]
+            self.assertEqual(ref,next(p for p in self.scan['pairs'] if p['size']==ref['size']))
+        value = {'delta':5.,'halfwidth':150.,**probe.classify(5.,150.,1/64)}
+        printed = probe.printed_record({'share':{'f':'x'},'stack_comparisons':[],
+                                       'boundaries':{'rails':value}})
+        self.assertIn('upper limit 160 J/GB',printed['claim_lines']['rails'])
+
     def test_missing_prerequisites_print_complete_results_through_cli(self):
         cases=[('adapter_source','',True,'gap power sources must be named'),
                ('battery_source',None,True,'gap power sources must be named'),
@@ -627,6 +767,19 @@ class ReaderTests(unittest.TestCase):
             self.assertIn('delta',result['boundaries'][beta])
         self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
         self.assertEqual(result['boundaries']['gpu']['class'],'RESOLVED')
+
+    def test_gpu_source_must_exist_in_recorded_rail_sets(self):
+        records = deepcopy(self.records)
+        records[0]['harvest']['capture_stack']['measurement_boundary_label']['rails'] = ['cpu_power','ane_power']
+        observed = self.read_cli(records)
+        reference, versions = probe.registered_stack()
+        reference['measurement_boundary_label']['rails'] = ['cpu_power','ane_power']
+        with patch.object(probe,'registered_stack',return_value=(reference,versions)):
+            expected = probe.read_known_bytes(self.records,self.scan)
+        for result in (observed, expected):
+            self.assertEqual(result['boundaries']['gpu']['class'], 'UNDETERMINED')
+            self.assertIn('gpu_power', result['boundaries']['gpu']['reason'])
+            self.assertEqual(result['boundaries']['dc']['class'], 'RESOLVED')
 
     def test_phi_is_recomputed_from_its_defining_sizes(self):
         scan=deepcopy(self.scan);del scan['phi']

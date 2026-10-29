@@ -144,6 +144,101 @@ def compare_stack(stack, reference, versions, *, capture_stack=None):
             "comparison": comparison}
 
 
+# One input accessor for the read and scan paths. Schemas describe prerequisites,
+# not replacement measurements. Invalid collections are unavailable as a whole:
+# dropping a bad sample would silently change support or reduce a bound.
+ABSENT = object()
+NUMBER = ("number", None)
+NONNEG = ("number", 0)
+POSITIVE = ("positive", 0)
+COUNT = ("integer", 0)
+POSCOUNT = ("positive_integer", 0)
+TEXT = ("text", None)
+EDGES = ("edges", 2)
+
+
+def input_value(value, schema, path):
+    """Return (valid value, None), or (None, a leaf-naming missing reason)."""
+    reason = path+" missing or invalid"
+    if value is ABSENT or value is None:
+        return None, reason
+    if isinstance(schema, dict):
+        if not isinstance(value, dict):
+            return None, reason
+        result = dict(value)
+        errors = []
+        for key, spec in schema.items():
+            result[key], error = input_value(value.get(key, ABSENT), spec, path+"."+key)
+            if error:
+                errors.append(error)
+        return (None, "; ".join(errors)) if errors else (result, None)
+    if isinstance(schema, list):
+        if not isinstance(value, list) or not value:
+            return None, reason
+        result = []
+        for i, row in enumerate(value):
+            item, error = input_value(row, schema[0], f"{path}[{i}]")
+            if error:
+                return None, error
+            result.append(item)
+        return result, None
+    kind, limit = schema
+    if kind == "json":
+        if isinstance(value, dict):
+            for key, item in value.items():
+                _, error = input_value(item, schema, path+"."+key)
+                if error:
+                    return None, error
+            return value, None
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                _, error = input_value(item, schema, f"{path}[{i}]")
+                if error:
+                    return None, error
+            return value, None
+        valid = isinstance(value, (str, bool)) or (type(value) in (int,float) and math.isfinite(value))
+    elif kind == "text":
+        valid = isinstance(value, str) and bool(value.strip())
+    elif kind == "edges":
+        valid = isinstance(value, list) and len(value) == limit
+        if valid:
+            for i, item in enumerate(value):
+                _, error = input_value(item, NONNEG, f"{path}[{i}]")
+                if error:
+                    return None, error
+    else:
+        valid = type(value) in (int, float) and math.isfinite(value)
+        if kind in ("integer", "positive_integer"):
+            valid = valid and type(value) is int
+        if limit is not None:
+            valid = valid and (value > limit if kind in ("positive", "positive_integer") else value >= limit)
+    return (value, None) if valid else (None, reason)
+
+
+RECEIPT_INPUTS = {**{k: NONNEG for k in (
+    "start_ns", "end_ns", "idle_pre_start_ns", "idle_pre_end_ns",
+    "idle_post_start_ns", "idle_post_end_ns")},
+    "bytes_per_read": POSCOUNT, "repeats": POSCOUNT, "settle_s": NONNEG}
+STACK_INPUTS = {"os_version": TEXT, "hardware_unit": {"machine": TEXT, "device": TEXT},
+    "runtime_version": {"name": TEXT, "version": TEXT}, "kernel_library": TEXT,
+    "python": TEXT, "packages": {key: TEXT for key in REFERENCE_VERSIONS["packages"]}}
+CAPTURE_INPUTS = {"telemetry_backend": TEXT, "measurement_boundary_label": {"rails": [TEXT]}}
+NATIVE_INPUTS = {stream: [{**({"stamp_ns": COUNT} if stream in ("meter", "battery") else
+    {"start_ns": COUNT, "end_ns": COUNT}), "power_w": NUMBER}]
+    for stream in ("rails", "gpu", "meter", "battery")}
+
+
+def json_evidence(value):
+    """Keep malformed numeric evidence serializable without inventing a number."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: json_evidence(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [json_evidence(v) for v in value]
+    return value
+
+
 def clock_metadata():
     """Record the actual clock, without inferring conversion from its return type."""
     result = {"clock": "CLOCK_MONOTONIC_RAW", "clock_resolution_s": None,
@@ -173,6 +268,10 @@ def clock_metadata():
 
 def clock_duration_bound_ns(receipt):
     """Two endpoints, each within r plus the 1 ns integer conversion unit."""
+    receipt, error = input_value(receipt, {"clock":TEXT, "clock_resolution_s":POSITIVE,
+        "clock_tick_source":TEXT}, "receipt")
+    if error:
+        raise ValueError(error+" (clock resolution missing or clock identity missing)")
     if receipt.get("clock") != "CLOCK_MONOTONIC_RAW":
         raise ValueError("clock identity missing or unsupported")
     res = receipt.get("clock_resolution_s")
@@ -180,7 +279,10 @@ def clock_duration_bound_ns(receipt):
         raise ValueError("clock resolution missing")
     tick = 0
     if receipt.get("clock_tick_source") != "not applicable (non-macOS clock_getres)":
-        num, den = receipt.get("clock_tick_num_ns"), receipt.get("clock_tick_den")
+        num, error = input_value(receipt.get("clock_tick_num_ns", ABSENT), POSCOUNT, "receipt.clock_tick_num_ns")
+        den, den_error = input_value(receipt.get("clock_tick_den", ABSENT), POSCOUNT, "receipt.clock_tick_den")
+        if error or den_error:
+            raise ValueError(error or den_error)
         if type(num) is not int or type(den) is not int or num <= 0 or den <= 0:
             raise ValueError("clock timebase missing")
         tick = num/den
@@ -190,10 +292,14 @@ def clock_duration_bound_ns(receipt):
 def knee_scan(receipts):
     """§1 exact reciprocal intervals; preserve every call, pair and arm check."""
     result = {"status": "knee not found", "K": None, "sizes": {}, "pairs": [],
-              "receipts": receipts, "candidate_K": None, "arm_checks": [],
+              "receipts": json_evidence(receipts), "candidate_K": None, "arm_checks": [],
               "threshold": None, "threshold_uncertainty": None}
     grouped = {}
     try:
+        receipts, error = input_value(receipts, [{"bytes_per_read": POSCOUNT,
+            "repeats": POSCOUNT, "start_ns": NONNEG, "end_ns": NONNEG}], "receipts")
+        if error:
+            raise ValueError(error)
         for receipt in receipts:
             grouped.setdefault(receipt["bytes_per_read"], []).append(receipt)
         sizes = sorted(grouped)
@@ -245,6 +351,7 @@ def knee_scan(receipts):
         pair.update(margin=pair["m_bytes_s"]-threshold,
                     bar=pair["m_bytes_s"]-pair["lower"]+high-threshold,
                     above=pair["lower"] > high)
+    result.update(cache_reference=dict(cache), dram_reference=dict(dram))
     above = [p["size"] for p in pairs if p["above"]]
     k = next((s for s in sizes[1:] if not any(a >= s for a in above)), None)
     result["candidate_K"] = k
@@ -359,7 +466,7 @@ def meter_gap_bound(gaps, *, duration_s, idle_lengths_s, adapter_max_w,
     for gap in gaps:
         n,span = gap.get("missing_samples"),gap.get("span")
         if type(n) is not int or n < 0 or span not in ("stream", "pre", "post"):
-            reason = "gap needs nonnegative integer missing samples and named span"
+            reason = "meter_gaps missing_samples needs a nonnegative integer and span must be stream/pre/post"
             return {**result, "reason":reason,"description":not_defined(reason),"bound_j":None,"terms":terms}
         if span != "stream" and idle_lengths_s.get(span,0) <= 0:
             reason = "gap idle span has no positive duration"
@@ -398,7 +505,7 @@ def reduce_boundary(calls, sizes, boundary):
     arms = {}
     for arm in ("S", "C1", "C3", "C2"):
         rows = [c for c in calls if c["arm"] == arm]
-        if len(rows) != 2 or any(boundary not in c["boundaries"] for c in rows):
+        if len(rows) != 2 or any(boundary not in c["boundaries"] or not c.get("N") for c in rows):
             arms[arm] = {"xi": [c["boundaries"][boundary]["excess_j"]/c["N"] for c in rows
                                 if boundary in c["boundaries"] and c.get("N",0)>0],
                          "description":not_defined("two complete arm calls missing")}
@@ -447,11 +554,75 @@ def reduce_boundary(calls, sizes, boundary):
 
 def read_known_bytes(records, scan):
     """Print every record and all computable values, even with absent prerequisites."""
+    original_records, original_scan = records, scan
+    validation = []
+    def take(value, spec, path, betas, errors, empty=None):
+        valid, reason = input_value(value, spec, path)
+        if reason:
+            labels = {"adapter_max_w":"adapter rating missing", "adapter_source":"gap power sources must be named",
+                "battery_source":"gap power sources must be named", "r_max_s":"r_max missing",
+                "meter_edge_w":"meter edge powers missing", "battery_edge_j":"battery edge energy missing",
+                "anchor_shift_j":"anchor shift bound missing", "tau_s":"tau missing"}
+            label = labels.get(path.rsplit(".",1)[-1])
+            if label:
+                reason += " ("+label+")"
+            errors.append((betas, reason))
+            return empty
+        return valid
     names = ("rails","gpu","dc","rest")
+    scan_errors = []
+    scan = take(scan, {}, "scan", names, scan_errors, {})
+    scan = dict(scan)
+    refused_scan = scan.get("status") == "knee not found" and "K" in scan and scan["K"] is None
+    for key in ("K", "B", "Bc1", "Bc3", "Bc2"):
+        # A missing knee is an ordinary scan refusal, not an invented size.
+        scan[key] = take(scan.get(key, ABSENT), POSITIVE, "scan."+key, names, scan_errors)
+    if refused_scan:
+        # §4 F8: these sizes are unavailable because the scan refused; retain
+        # its established reason rather than relabeling refusal as corruption.
+        scan_errors.clear()
+    records = take(records, [{}], "records", names, scan_errors, []) if not isinstance(records,list) else records
+    normalized = []
+    for i, raw in enumerate(records):
+        errors = list(scan_errors)
+        path = f"records[{i}]"
+        raw = take(raw, {}, path, names, errors, {})
+        r = dict(take(raw.get("receipt", ABSENT), {}, path+".receipt", names, errors, {}))
+        h = dict(take(raw.get("harvest", ABSENT), {}, path+".harvest", names, errors, {}))
+        for key, spec in RECEIPT_INPUTS.items():
+            r[key] = take(r.get(key, ABSENT), spec, path+".receipt."+key, names, errors)
+        r["stack"] = take(r.get("stack", ABSENT), STACK_INPUTS, path+".receipt.stack", names, errors, {})
+        h["capture_stack"] = take(h.get("capture_stack", ABSENT), CAPTURE_INPUTS, path+".harvest.capture_stack", names, errors, {})
+        energy = take(h.get("energy_j", ABSENT), {}, path+".harvest.energy_j", names, errors, {})
+        h["energy_j"] = {k: take(energy.get(k, ABSENT), NUMBER, path+".harvest.energy_j."+k,
+            ("dc",) if k in ("meter","battery") else (k,), errors) for k in NATIVE_INPUTS}
+        idle = take(h.get("idle", ABSENT), {}, path+".harvest.idle", names, errors, {})
+        h["idle"] = {}
+        for span in ("pre", "post"):
+            block = take(idle.get(span, ABSENT), {}, path+".harvest.idle."+span, names, errors, {})
+            h["idle"][span] = {k: take(block.get(k, ABSENT), spec,
+                path+".harvest.idle."+span+"."+k, ("dc",) if k in ("meter","battery") else (k,), errors, [])
+                for k, spec in NATIVE_INPUTS.items()}
+        for key, spec, betas in (("tau_s",NONNEG,names), ("r_max_s",NONNEG,("dc",)),
+            ("meter_edge_w",EDGES,("dc",)), ("battery_edge_j",EDGES,("dc",)),
+            ("anchor_shift_j",NONNEG,("rails","gpu")),
+            ("battery_samples",NATIVE_INPUTS["battery"],("dc",))):
+            h[key] = take(h.get(key, ABSENT), spec, path+".harvest."+key, betas, errors,
+                          [] if key == "battery_samples" else None)
+        gaps = h.get("meter_gaps", ABSENT)
+        if gaps != []:
+            gaps = take(gaps, [{"span":TEXT,"missing_samples":COUNT}], path+".harvest.meter_gaps", ("dc",), errors, [])
+        h["meter_gaps"] = gaps
+        if gaps:
+            for key, spec in (("adapter_max_w",POSITIVE),("adapter_source",TEXT),("battery_source",TEXT)):
+                h[key] = take(h.get(key, ABSENT), spec, path+".harvest."+key, ("dc",), errors)
+        normalized.append({"receipt":r,"harvest":h})
+        validation.append(errors)
+    records = normalized
     sizes = {"S":scan.get("B"),"C1":scan.get("Bc1"),"C3":scan.get("Bc3"),"C2":scan.get("Bc2")}
     phi = scan.get("K")/sizes["S"] if scan.get("K") is not None and sizes["S"] else None
-    output = {"scan":scan,"input_records":records,"calls":[],"boundaries":{},"stack_comparisons":[]}
-    reasons = []
+    output = {"scan":json_evidence(original_scan),"input_records":json_evidence(original_records),"calls":[],"boundaries":{},"stack_comparisons":[]}
+    reasons = [why for _, why in scan_errors]
     affected = {b:[] for b in names}
     if scan.get("K") is None:
         reasons.append("knee not found")
@@ -483,11 +654,24 @@ def read_known_bytes(records, scan):
         def missing(beta, reason):
             call["prerequisites"][beta].append(reason)
             affected[beta].append(reason)
+        for betas, why in validation[i-1]:
+            if tuple(betas) == names:
+                reasons.insert(0, why)
+            for beta in betas:
+                missing(beta, why)
+        rails = _field(h["capture_stack"], "measurement_boundary_label.rails")
+        reference_rails, reference_error = input_value(_field(reference, "measurement_boundary_label.rails"),
+                                                       [TEXT], "reference.measurement_boundary_label.rails")
+        if rails is None or "gpu_power" not in rails or reference_error or "gpu_power" not in reference_rails:
+            missing("gpu", "gpu_power missing from recorded rail set (measurement_boundary_label.rails)")
         try:
+            _, error = input_value(receipt, RECEIPT_INPUTS, f"records[{i-1}].receipt")
+            if error:
+                raise ValueError(error)
             n = receipt["repeats"]
             t = (receipt["end_ns"]-receipt["start_ns"])/1e9
             if n <= 0 or t <= 0:
-                raise ValueError("positive counts and durations required")
+                raise ValueError("positive repeats and end_ns-start_ns required")
             arm = next((a for a,size in sizes.items() if size == receipt["bytes_per_read"]),None)
             call.update(arm=arm,N=n,T=t)
             if h.get("tau_s") is None:
@@ -512,7 +696,9 @@ def read_known_bytes(records, scan):
                    receipt["idle_pre_start_ns"] <= p["stamp_ns"] < receipt["idle_post_end_ns"]]
         if not battery or any(not h.get("idle",{}).get(name,{}).get("battery") for name in ("pre","post")) or energy.get("battery") is None:
             missing("dc",f"battery reading missing in call {i}")
-        gaps = {"bound_j":0,"terms":[]}
+        gap_reason = next((why for _, why in validation[i-1] if ".harvest.meter_gaps" in why), None)
+        gaps = ({"bound_j":None,"reason":gap_reason,"description":not_defined(gap_reason),"terms":[]}
+                if gap_reason else {"bound_j":0,"terms":[]})
         if h.get("meter_gaps"):
             gaps = meter_gap_bound(h["meter_gaps"],duration_s=t,
                 idle_lengths_s={name:(end-start)/1e9 for name,(start,end) in spans.items()},
@@ -562,13 +748,17 @@ def read_known_bytes(records, scan):
                 rest["reason"] = d.get("reason",r.get("reason"))
                 rest["description"] = not_defined(rest["reason"])
             call["boundaries"]["rest"] = rest
-        call["timing"] = {key:h.get(key,not_defined(label)) for key,label in
-                          (("r_max_s","r_max missing"),("tau_s","tau missing"),
-                           ("operative_timing_bound_s","operative timing bound missing"))}
-        call["gpu_state"] = h.get("gpu_state",not_defined("GPU frequency/residency missing"))
-        call["thermal"] = {"source":"hazards/monitor/thermal.jsonl","spans":h.get("thermal_spans",not_defined("thermal journal missing"))}
+        call["timing"] = {}
+        for key in ("r_max_s", "tau_s", "operative_timing_bound_s"):
+            value, error = input_value(h.get(key, ABSENT), NONNEG, "harvest."+key)
+            call["timing"][key] = not_defined(error) if error else value
+        for key, label in (("gpu_state","GPU frequency/residency missing"), ("thermal_spans","thermal journal missing")):
+            value, error = input_value(h.get(key, ABSENT), ("json", None), "harvest."+key)
+            h[key] = (not_defined(label if key not in h else label+": "+error) if error else value)
+        call["gpu_state"] = h["gpu_state"]
+        call["thermal"] = {"source":"hazards/monitor/thermal.jsonl","spans":h["thermal_spans"]}
     for beta in names:
-        if scan.get("K") is not None and all(sizes.values()) and all(c.get("N",0)>0 for c in output["calls"]):
+        if scan.get("K") is not None and all(sizes.values()):
             output["boundaries"][beta] = reduce_boundary(output["calls"],sizes,beta)
     dc = output["boundaries"].get("dc")
     # DC is the common validity prerequisite. Keep other boundaries' numbers.
@@ -582,7 +772,7 @@ def read_known_bytes(records, scan):
     output["reasons"] = list(dict.fromkeys(reasons+[r for rs in affected.values() for r in rs]))
     for beta in names:
         value = output["boundaries"].get(beta)
-        reason = next(iter(reasons+affected[beta]),None)
+        reason = next(iter(affected[beta]+reasons),None)
         if value is None:
             reason = reason or "boundary input missing"
             value = {"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)}
@@ -613,11 +803,14 @@ def read_known_bytes(records, scan):
             output["gpu_power_contrast_w"] = not_defined("GPU spans missing")
     output["sizes"] = sizes if scan.get("K") is not None else {a:not_defined("knee not found") for a in sizes}
     output["phi"] = phi if scan.get("K") is not None else not_defined("knee not found")
-    output["hour_as_run_s"] = records[0].get("harvest",{}).get("hour_as_run_s",not_defined("session endpoints missing")) if records else not_defined("session endpoints missing")
+    hour, error = input_value(records[0]["harvest"].get("hour_as_run_s", ABSENT) if records else ABSENT,
+                              NONNEG, "harvest.hour_as_run_s")
+    output["hour_as_run_s"] = not_defined("session endpoints missing: "+error) if error else hour
     try:
         output["stamped_envelope_s"] = (records[-1]["receipt"]["idle_post_end_ns"]-records[0]["receipt"]["idle_pre_start_ns"])/1e9
     except (IndexError,KeyError,TypeError):
         output["stamped_envelope_s"] = not_defined("session endpoints missing")
+    output = json_evidence(output)
     output["printed"] = printed_record(output)
     return output
 
@@ -626,7 +819,7 @@ def interval_places(halfwidth):
     # Zero has no significant digit; a fixed two-decimal display avoids repr.
     if halfwidth == 0:
         return 2
-    return max(0,1-math.floor(math.log10(float(format(halfwidth,".2g")))))
+    return 1-math.floor(math.log10(float(format(halfwidth,".2g"))))
 
 
 def format_interval(value, halfwidth):
@@ -658,7 +851,7 @@ def printed_record(result):
             # The upper limit uses the estimate's printed decimal place.
             digits = interval_places(value["halfwidth"])
             line = (f"Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({interval} J/GB, "
-                    f"cache-bias-corrected upper limit {value['upper_limit']:.{digits}f} J/GB); "
+                    f"cache-bias-corrected upper limit {round(value['upper_limit'],digits):.{max(0,digits)}f} J/GB); "
                     f"whether {boundary} lines include memory-traffic energy is not established.")
         printed["claim_lines"][boundary] = line
     if isinstance(result["share"]["f"],(float,int)):
@@ -745,7 +938,9 @@ def main(argv=None):
         parser.add_argument("input", type=Path, help="JSON object with scan and records")
         args = parser.parse_args(argv[1:])
         data = json.loads(args.input.read_text())
-        print(json.dumps(read_known_bytes(data.get("records",[]), data.get("scan",{})), allow_nan=False, indent=2))
+        data, error = input_value(data, {}, "input")
+        data = data if error is None else {}
+        print(json.dumps(read_known_bytes(data.get("records"), data.get("scan")), allow_nan=False, indent=2))
         return 0
     if argv and argv[0] == "scan":
         parser = argparse.ArgumentParser(description="Read §1 scan receipts; print full timing comparisons")
