@@ -133,7 +133,16 @@ def transform(mode, archive, output, export=None):
     acceptance_path = archive / "derived/b6-acceptance.json"
     raw_acceptance = read(acceptance_path)
     exclusions = selected(raw_acceptance, "excluding")
-    roster = selected(read(archive / "derived/roster.json"), "members")
+    roster_raw = read(archive / "derived/roster.json")
+    roster = selected(roster_raw, "members")
+    for tree in sorted((archive / "sources/repo").rglob("plan_tree.json")):
+        tree_raw = read(tree)
+        try:
+            pass_id = selected(tree_raw, "bytes_pass")
+        except ValueError:
+            continue
+        if pass_id != (2 if mode == "hull-p2" else 1):
+            raise ValueError("thermal line does not match archived bytes_pass")
     before = {m["run_id"]: set() for m in roster}
     for row in exclusions:
         if row.get("scope") == "member":
@@ -146,8 +155,15 @@ def transform(mode, archive, output, export=None):
         spans = selected(read(archive / "withheld/spans.json"), "spans")
         # This is the exact resolved threshold record the harvest sealed,
         # including explicit overrides. Do not resolve a mutable live plan.
-        thresholds = {"thermal_unmeasured_gap_s": selected(
-            read(archive / "derived/harvest-thresholds.json"), "values", "thermal_unmeasured_gap_s")}
+        thermal_key = "thermal_unmeasured_gap_s"
+        sealed = {thermal_key: selected(
+            read(archive / "derived/harvest-thresholds.json"), "values", thermal_key)}
+        # Replay just the thermal projection through the production resolver.
+        # Missing nonthermal keys concern joins this tool never performs.
+        thresholds, _provenance = h.resolve_thresholds(
+            {h.PLAN_HARVEST_THRESHOLDS_KEY: sealed}, archive)
+        if thermal_key not in thresholds:
+            raise ValueError("sealed thermal threshold rejected by production resolver")
         journal = archive / "sources/night-custody/hazards/monitor/thermal.jsonl"
         if not journal.is_file():
             raise ValueError("archived thermal journal unavailable; no evaluation written")
@@ -164,9 +180,9 @@ def transform(mode, archive, output, export=None):
             record = selected(assessments, "members", run, FIELD)
             if not record["journal_available"]:
                 notices.append({"run_id": run, "code": "thermal.unmeasured"})
-                continue
             if record["excluded"] is None:
                 notices.append({"run_id": run, "code": "member.span_unknown"})
+            if not record["journal_available"] or record["excluded"] is None:
                 continue
             if record["excluded"] is True:
                 after[run].add(CODE)
@@ -243,7 +259,12 @@ def transform(mode, archive, output, export=None):
     if exports:
         (output / "export").mkdir(exist_ok=True)
         for name, content in exports.items():
-            (output / "export" / name).write_bytes(content.encode("utf-8"))
+            destination = output / "export" / name
+            # A transformed input may already contain export links. Never
+            # follow such a link when writing a second-generation copy.
+            if destination.is_symlink():
+                destination.unlink()
+            destination.write_bytes(content.encode("utf-8"))
     (output / "thermal_line.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
 
