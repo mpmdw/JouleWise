@@ -796,6 +796,8 @@ def step_4(s,r):
             classification=classify_step4_exit(exit_status,s.read('extraction_'+pack),s.specs[pack])
             if classification=='p42_floor_cells_only': code,registered=None,classification
             elif classification=='refused' and exit_status==0: exit_status=2
+            # Every other exit-1 branch is a registered tooling or outcome code.
+            elif exit_status==1 and classification!='refused': code=classification
         records.append(s.record('4',window=pack,exit_status=exit_status,code=code,outputs=outputs,registered_exit=registered))
         if records[-1].status!='ok': break
     return records

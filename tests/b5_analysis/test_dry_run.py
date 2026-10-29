@@ -388,7 +388,7 @@ class DriverDouble(d.StepRunner):
                     spec_membership_refusals=[],cells=[{'cell_id':window+'-target','extractable':not self.target_refusal},
                                                      {'cell_id':window+'-p42','extractable':not self.p42}])
                 write(option('--out'),value)
-                if self.p42 or self.target_refusal:return 1
+                if self.p42 or self.target_refusal or getattr(self,'empty_exit',False):return 1
             elif step=='5' and '--out-dir' in argv:
                 directory=Path(option('--out-dir'))
                 for relative in ('floor-mint-pinset.json','floor-mint-inputs.json','alpha/calibration_plan.json','beta/calibration_plan.json',
@@ -536,8 +536,22 @@ class DriverAcceptanceTests(unittest.TestCase):
         DriverDouble.p42=True;result=self.execute();self.assertEqual(result.code,0,result.stderr)
         self.assertTrue(any(step=='5' for step,_,_ in DriverDouble.calls))
         self.assertEqual([r['registered_exit'] for r in result.record['steps'] if r['step']=='4'],['p42_floor_cells_only']*2)
-        DriverDouble.calls=[];DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,2)
+        DriverDouble.calls=[];DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,3)
         self.assertFalse(any(step=='5' for step,_,_ in DriverDouble.calls))
+
+    def test_T8b_step4_exit_names_its_class(self):
+        DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,3,result.stderr)
+        rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
+        self.assertEqual(rows,[('outcome_class','outcome-class refusal at step 4')])
+        self.assertFalse(any(step=='5' for step,_,_ in DriverDouble.calls))
+        self.assertTrue(all(r['status']=='not_run' for r in result.record['steps'] if r['step'] in ('5','8','6','9','9b','10','11')))
+        for name in ('p42','target_refusal'):setattr(DriverDouble,name,False)
+        DriverDouble.calls=[];DriverDouble.empty_exit=True
+        try:result=self.execute()
+        finally:DriverDouble.empty_exit=False
+        self.assertEqual(result.code,2,result.stderr)
+        rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
+        self.assertEqual(rows,[('tooling_refusal','extraction_exit_without_refused_cell')])
 
     def test_T9_strict_validation_stops_and_never_visits_removed_bundle(self):
         result=self.execute();self.assertEqual(result.code,0,result.stderr)
