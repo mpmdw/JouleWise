@@ -116,12 +116,13 @@ def replace(raw, replacements):
 
 
 def transform(mode, archive, output, export=None):
+    output_existed = Path(output).exists() or Path(output).is_symlink()
     archive, output = Path(archive).resolve(), Path(output).resolve()
     export = Path(export).resolve() if export else None
     for source in (archive, export):
         if source and (output.is_relative_to(source) or source.is_relative_to(output)):
             raise ValueError("output overlaps source archive/export")
-    if output.exists() or output.is_symlink():
+    if output_existed or output.exists() or output.is_symlink():
         raise ValueError("output must be a new directory")
     source_roots = [source for source in (archive, export) if source]
     sources = {}

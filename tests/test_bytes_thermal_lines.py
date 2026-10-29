@@ -1035,6 +1035,15 @@ class RecordedFaultTests(unittest.TestCase):
         for name in ('export/s.runs.csv', 'view_manifest.json', 'thermal_line.json', 'derived/b6-acceptance.json'):
             self.assertEqual((first / name).read_bytes(), before[name])
 
+    def test_dangling_output_symlink_is_existing(self):
+        out = self.root / 'dangling'
+        target = self.root / 'absent'
+        out.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'new directory'):
+            t.transform('request-end-p1', self.archive, out)
+        self.assertTrue(out.is_symlink())
+        self.assertFalse(target.exists())
+
     def test_destination_directory_guard(self):
         out = self.root / 'guard'
         out.mkdir()
