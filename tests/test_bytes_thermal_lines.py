@@ -926,7 +926,8 @@ class RecordedFaultTests(unittest.TestCase):
                                         value['excluded'] = int(candidate)
                                     self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: value}}})
                                 else:
-                                    self.put('withheld/spans.json', {} if fault == 'missing-field' else {'spans': []})
+                                    self.put('withheld/spans.json', {'spans': {'a': {'request': [40 * fixtures.NS, 80 * fixtures.NS]}}}
+                                             if fault == 'missing-field' else {'spans': []})
                             elif fault in ('journal-mismatch', 'seal-unavailable'):
                                 if mode == 'request-end-p1':
                                     if fault == 'journal-mismatch':
@@ -965,7 +966,8 @@ class RecordedFaultTests(unittest.TestCase):
                                 else:
                                     reason = {'journal-mismatch': "journal differs from the harvest's",
                                               'seal-unavailable': 'journal provenance unavailable',
-                                              'wrong-type': 'invalid span'}.get(fault, 'archived thermal journal unavailable')
+                                              'wrong-type': 'invalid span',
+                                              'missing-field': 'member span unavailable'}.get(fault, 'archived thermal journal unavailable')
                                 self.assertEqual(status, 'not defined (' + reason + ')')
                             if not undefined:
                                 self.assertEqual(status, 'evaluated' if changed else 'equals registered line')

@@ -249,9 +249,13 @@ def transform(mode, archive, output, export=None):
                 span = spans.get(run, {})
                 if run not in spans or not isinstance(span, dict):
                     raise ValueError("member span unavailable")
-                if span.get("member") is None or span.get("request") is None:
+                if "request" not in span:
+                    raise ValueError("request span field missing")
+                if span["request"] is None:
                     notices.append({"run_id": run, "code": "request_span.absent_keep_hull"})
                 else:
+                    if span.get("member") is None:
+                        raise ValueError("member span unavailable")
                     if any(not isinstance(span[k], list) or len(span[k]) != 2 for k in ("member", "request")):
                         raise ValueError("invalid span")
                     stamps = [span["member"][0], span["request"][1]]
