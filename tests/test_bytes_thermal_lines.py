@@ -993,6 +993,10 @@ class RecordedFaultTests(unittest.TestCase):
         self.assertEqual(t.verify(out), ['view_manifest.json'])
         result = json.loads((out / 'thermal_line.json').read_bytes())
         self.assertIn({'code': 'records.thermal_view_changed'}, result['notices'])
+        manifest.write_text('{}')
+        differing = t.verify(out)
+        self.assertIn('view_manifest.json', differing)
+        self.assertIn('derived/b6-acceptance.json', differing)
 
 
 if __name__ == '__main__':

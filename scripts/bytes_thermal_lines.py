@@ -400,7 +400,7 @@ def verify(output):
         if sha256(manifest_path) != record["view_manifest_sha256"]:
             different.append("view_manifest.json")
         expected = {row["path"]: row for row in json.loads(manifest_path.read_bytes())["files"]}
-    except (OSError, ValueError):
+    except (OSError, ValueError, KeyError, TypeError):
         expected = {}
         different.append("view_manifest.json")
     current = {row["path"]: row for row in view_files(output)}
