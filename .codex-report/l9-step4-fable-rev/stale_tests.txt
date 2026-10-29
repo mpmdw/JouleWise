@@ -1,0 +1,36 @@
+## head a2a0c1419
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec=None)
+AssertionError: 'extraction_spec_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec=[])
+AssertionError: 'extraction_spec_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec={'cells': ['x']})
+AssertionError: 'extraction_spec_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec={'cells': [{'cell_id': 'floor', 'kind': 'absolute', 'condition_family_id': None}]})
+AssertionError: 'extraction_spec_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec={'cells': [{'cell_id': None, 'kind': 'absolute', 'condition_family_id': 'p42'}]})
+AssertionError: 'extraction_spec_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec={'cells': [{'cell_id': [], 'kind': 'absolute', 'condition_family_id': 'p42'}]})
+AssertionError: 'extraction_spec_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (spec={'cells': [{'cell_id': 'floor', 'kind': 'absolute', 'condition_family_id': 'p42'}, {'cell_id': 'floor', 'kind': 'absolute', 'condition_family_id': 'p42'}]})
+AssertionError: 'extraction_cell_ids_duplicated' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (cells=['x'])
+AssertionError: 'extraction_report_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (cells=[{'extractable': False}])
+AssertionError: 'extraction_report_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (cells=[{'cell_id': [], 'extractable': False}])
+AssertionError: 'extraction_report_malformed' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse) (cells=[{'cell_id': 'floor', 'extractable': 0}])
+AssertionError: 'extraction_extractable_not_boolean' != 'refused'
+FAIL: test_review_n1_step4_malformed_spec_and_elements_refuse (tests.b5_analysis.test_archive.ArchiveTests.test_review_n1_step4_malformed_spec_and_elements_refuse)
+AssertionError: 'extraction_report_malformed' != 'refused'
+FAIL: test_review_n2_p42_subset_is_refused (tests.b5_analysis.test_archive.ArchiveTests.test_review_n2_p42_subset_is_refused)
+AssertionError: 'p42_floor_cells_only' != 'refused'
+FAIL: test_step4_p42_exception_and_target_refusal (tests.b5_analysis.test_archive.ArchiveTests.test_step4_p42_exception_and_target_refusal)
+AssertionError: 'floor_cell_not_extractable' != 'refused'
+FAIL: test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit)
+AssertionError: 'floor_cell_not_extractable' != 'refused'
+Ran 79 tests in 58.779s
+FAILED (failures=15, skipped=4)
+## base 49991c73a (worktree)
+Ran 79 tests in 51.167s
+OK (skipped=4)

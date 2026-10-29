@@ -1,0 +1,12 @@
+== 49991c73a
+exit0 report=None  -> refused
+exit0 report=[]    -> refused
+exit0 spec=None    -> refused
+exit1 kind=ratio, p42 family, refused -> refused
+exit1 family p420, refused -> refused
+== a2a0c1419
+exit0 report=None  -> ok
+exit0 report=[]    -> ok
+exit0 spec=None    -> ok
+exit1 kind=ratio, p42 family, refused -> floor_cell_not_extractable
+exit1 family p420, refused -> floor_cell_not_extractable

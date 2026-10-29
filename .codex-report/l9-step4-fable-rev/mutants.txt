@@ -1,0 +1,22 @@
+# Mutants applied to a worktree at a2a0c1419; tests: test_step4_exit_classes + T8, T8b, T18 (16 tests)
+C1 subset->equality                              KILLED    Ran 16 tests in 1.127s | FAILED (failures=2)
+C2 swap p42/outcome                              KILLED    Ran 16 tests in 1.068s | FAILED (failures=9)
+C3 drop empty-refused check                      KILLED    Ran 16 tests in 1.012s | FAILED (failures=2)
+C4 drop membership check                         KILLED    Ran 16 tests in 1.057s | FAILED (failures=3)
+C5 dup ids -> cell-set code                      KILLED    Ran 16 tests in 1.045s | FAILED (failures=1)
+C6 p42 = every spec cell (ignore family)         KILLED    Ran 16 tests in 0.992s | FAILED (failures=6)
+C7 drop kind filter                              SURVIVED  Ran 16 tests in 1.119s | OK
+C8 substring family match                        SURVIVED  Ran 16 tests in 0.870s | OK
+C9 non-bool extractable -> report_malformed      KILLED    Ran 16 tests in 1.121s | FAILED (failures=3)
+C10 spec malformed -> report malformed           KILLED    Ran 16 tests in 0.929s | FAILED (failures=5)
+C11 exit!=1 -> report_malformed                  KILLED    Ran 16 tests in 1.140s | FAILED (failures=3)
+C12 p42 from report cells (truthy any)           KILLED    Ran 16 tests in 1.138s | FAILED (failures=6)
+C13 refused uses truthiness                      SURVIVED  Ran 16 tests in 1.108s | OK
+C14 membership check after p42 test              KILLED    Ran 16 tests in 1.037s | FAILED (failures=3)
+D1 drop driver elif                              KILLED    Ran 16 tests in 1.081s | FAILED (failures=2)
+D2 driver registers every exit-1 as p42          KILLED    Ran 16 tests in 1.253s | FAILED (failures=2)
+D3 driver passes code for p42 too                KILLED    Ran 16 tests in 0.796s | FAILED (failures=1)
+D4 driver drops dead exit-0 branch               SURVIVED  Ran 16 tests in 0.991s | OK
+D5 driver no break after step-4 refusal          KILLED    Ran 16 tests in 0.911s | FAILED (errors=2)
+T1 outcome code moved to tooling                 KILLED    Ran 16 tests in 0.914s | FAILED (failures=8)
+T2 drop exit_without_refused_cell from table     KILLED    Ran 16 tests in 0.932s | FAILED (failures=3)
