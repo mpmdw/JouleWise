@@ -207,6 +207,33 @@ CHECKS = ('input_census', 'window_index', 'harvest_outputs', 'sources_sha256sums
 _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])')
 
 
+def archive_inventory(archive_root, harvest_record_sha256, sources_sha256sums, *, claim_runs_root, custody_root):
+    """Archive inventory names fixed at collection, or nothing.
+
+    The index-pinned harvest record's outputs, the source listing whose digest
+    the census recorded, and that listing's original claim-runs mirror. Such a
+    name may carry a git short hash or a version that reads as a number; it can
+    never carry an L9 result. Any mismatch admits no name.
+    """
+    root=Path(archive_root)
+    try:
+        raw=(root/'harvest.json').read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=harvest_record_sha256:return frozenset()
+        outputs=json.loads(raw)['outputs']
+        sums=(root/'sources/SHA256SUMS').read_bytes()
+        if type(outputs) is not dict or hashlib.sha256(sums).hexdigest()!=sources_sha256sums:return frozenset()
+        names=[re.fullmatch(r'[0-9a-f]{64}  (.+)',line) for line in sums.decode('utf-8').splitlines()]
+    except (OSError,ValueError,KeyError,TypeError):
+        return frozenset()
+    if any(match is None for match in names):return frozenset()
+    names=[match[1] for match in names]
+    # The same prefix rule as ArchiveHandle.compare_runs_root.
+    runs,custody=Path(claim_runs_root),Path(custody_root)
+    prefix='night-custody/'+runs.relative_to(custody).as_posix()+'/' if runs.is_relative_to(custody) else 'claim-runs/'
+    return frozenset({*outputs,*('sources/'+name for name in names),
+                      *('original/claim-runs/'+name.removeprefix(prefix) for name in names if name.startswith(prefix))})
+
+
 def _plain(value):
     from collections.abc import Mapping
     if isinstance(value, Mapping):
@@ -286,9 +313,9 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
         need(type(value) is int and value >= 0)
     def boolean(value):
         need(type(value) is bool)
-    def path(value):
+    def path(value, inventory=frozenset()):
         need(type(value) is str and bool(value) and '\\' not in value and '\x00' not in value
-             and not _FLOAT_TOKEN.search(value) and not Path(value).is_absolute()
+             and (value in inventory or not _FLOAT_TOKEN.search(value)) and not Path(value).is_absolute()
              and all(p not in ('', '.', '..') for p in value.split('/')))
     keys(record, {'schema_version','mode','analysis_commit','window_index_sha256','sealed',
         'attempts','windows','input_census','steps','completed_without_tooling_refusal'} |
@@ -325,10 +352,23 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
         need(set(row['kept_counts']) <= cells)
         for counts in row['kept_counts'].values():
             keys(counts, ('n_r','n_b')); integer(counts['n_r']); integer(counts['n_b'])
+    # A number-like census path is admitted only as an exact inventory entry of
+    # its own analysed window, recomputed here from the index-pinned harvest and
+    # the source listing this record's census pins.
+    inventories = {}
+    for entry in entries:
+        if entry.archive_root is None or not any(row['pack']==entry.pack and row['plan_id']==entry.plan_id
+                and row['harvest_record_sha256']==entry.harvest_record_sha256 for row in record['windows']):
+            continue
+        sums = {row.get('sha256') for row in record['input_census']
+                if type(row) is dict and row.get('window')==entry.pack and row.get('path')=='sources/SHA256SUMS'}
+        if len(sums)==1:
+            inventories[entry.pack] = archive_inventory(entry.archive_root, entry.harvest_record_sha256, sums.pop(),
+                claim_runs_root=entry.claim_runs_root, custody_root=entry.custody_root)
     for row in record['input_census']:
         keys(row, ('window','path','sha256','check'))
         need(row['window'] in PACKS and row['check'] in CHECKS)
-        path(row['path']); digest(row['sha256'])
+        path(row['path'], inventories.get(row['window'], frozenset())); digest(row['sha256'])
         # Source names and original-root names are inventory-relative paths.
         need(row['path'] in census_paths or row['path'].startswith(('sources/','original/claim-runs/','withheld/'))
              or (row['check'] == 'window_index' and row['path'] == 'harvest.json'))
@@ -450,12 +490,18 @@ class RunState:
         self.outputs[role] = item
         return item
 
-    def write(self, role, relative, value=None, *, raw=None, addressed=False):
+    def write(self, role, relative, value=None, *, raw=None, addressed=False, inventory=frozenset()):
+        scanned = None
+        if raw is None and role.startswith('census_') and type(value) is list:
+            # Only an exact authenticated inventory path is withheld from the
+            # scan; every other field and path is scanned in full.
+            scanned = _canonical([{**row,'path':''} if type(row) is dict and type(row.get('path')) is str
+                                  and row['path'] in inventory else row for row in value])
         raw = _canonical(value) if raw is None else raw
         if role.startswith(('attempt_','census_','kept_','tripwire_')):
             # P9 readers' own records are structure only even in restricted
             # custody. Unlike analysis artifacts, they have no float token.
-            if _FLOAT_TOKEN.search(raw.decode('utf-8')):
+            if _FLOAT_TOKEN.search((raw if scanned is None else scanned).decode('utf-8')):
                 raise AnalysisRefusal('reader_record_not_structure_only')
         if addressed:
             original = Path(relative)
@@ -556,8 +602,12 @@ class RunState:
             require_ledger_copies_are_prefixes([archive],live)
             self.ledger_rows.append({'window':pack,'path':'ledger/live/calibration_observation_ledger.jsonl',
                 'sha256':_sha(live),'check':'ledger_prefix_of_live'})
+            census=archive.census()
+            inventory=archive_inventory(window.archive_root,window.harvest_record_sha256,
+                {r.path:r.sha256 for r in census}.get('sources/SHA256SUMS'),
+                claim_runs_root=window.claim_runs_root,custody_root=window.custody_root)
             self.write('census_'+pack,'supply-census/'+pack+'.json',
-                [{'path':r.path,'sha256':r.sha256,'check':r.check} for r in archive.census()])
+                [{'path':r.path,'sha256':r.sha256,'check':r.check} for r in census],inventory=inventory)
         # Deliberately omit the numerical calibration_bracket/yield objects.
         for record in self.records:
             self.write('attempt_'+record.entry.plan_id,'attempts/'+record.entry.plan_id+'.json',
