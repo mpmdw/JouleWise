@@ -532,6 +532,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   A generic test deletes each table entry from L9's side, the recompute's side, and both. joulewise-28 informs Ed under rule 4 without waiting, because the response was registered in advance. RC-CMP-9 launches when the Fable RC-CMP-8 review (asked whether the walk is needed) lands, and folds its findings in.
 - `dry-d` and the merged L9 fixes are unaffected: the comparator gates the release comparison only.
 
+120. **RC-CMP-8 Fable delta: not closed against the class; RC-CMP-9 structural round launched (reported by joulewise-28, 2026-10-29 ~23:40Z).**
+- Fable (`review/2026-10-29-rc-cmp8-fable-rev`): ACCEPT_WITH_FIXES, with answer 4 explicit that the design is **not** closed against the class and the recompute-driven walk is needed.
+  - F1 HIGH: of 1,933 single-leaf deletions, about 290 producer-unconditional values exit 0, including the fill's whole `gamma` object, nested estimator and floor keys, the sensitivity section and `block_lines`.
+  - F2: `arm_gates` and `resolutions` rows exist only if printed.
+  - F3: 13 unpaired disclosure line words.
+  - F4: the p42 projection row.
+  - F5: status-keyed conditional keys.
+  - No over-refusal. Opus and Fable converge on the same structure.
+- 23:42Z: **RC-CMP-9** launched as the structural round (Opus seat `trig_01Uti91FTVyUNpJRdPPrYo41`, MCP cleared, on the comparator lane from `0d317afd4`).
+  - Brief: one expected-check table built from a closed list of registered sources: the two extraction specs, manifest v3, the digest-pinned plan trees, producer constants as pinned literals, the window index, the packs.
+  - A named list of every required entry, with producer-exact nested key sets.
+  - Every Opus and Fable finding as acceptance, plus a generic delete-each-entry test (L9 side, recompute side, both).
+  - WRITE_SCOPE: the script, all of `tests/independent_recompute`, the report. VERIFICATION: discover over the directory plus the earlier reviews' probes.
+  - Stated as the last structural round; a further instance goes to Ed as a design question.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
