@@ -1063,14 +1063,15 @@ class RecordedFaultTests(unittest.TestCase):
                  {'files': [row, row]}, {'files': [dict(row, size=True)]},
                  {'files': [dict(row, sha256=7)]}, {'files': [dict(row, inode=True, mtime_ns=1)]},
                  {'files': [dict(row, inode=1)]}, {'files': [dict(row, extra=1)]}]
-        for index, value in enumerate(cases + ['invalid-json', 'missing-file']):
+        for index, value in enumerate(cases + ['invalid-json', 'deep-json', 'missing-file']):
             with self.subTest(index=index):
                 out = self.root / ('damaged-' + str(index))
                 t.transform('request-end-p1', self.archive, out)
                 path = out / 'view_manifest.json'
                 path.unlink()
                 if value != 'missing-file':
-                    path.write_text('{' if value == 'invalid-json' else json.dumps(value))
+                    path.write_text('[' * 2000 + '0' + ']' * 2000 if value == 'deep-json' else
+                                    '{' if value == 'invalid-json' else json.dumps(value))
                 capture = io.StringIO()
                 with contextlib.redirect_stdout(capture):
                     self.assertIsNone(t.main(['verify', str(out)]))

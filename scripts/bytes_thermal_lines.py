@@ -457,7 +457,7 @@ def verify(output):
             different.append("view_manifest.json")
             reasons.append("manifest SHA-256 differs from recorded binding")
         expected = manifest_entries(json.loads(manifest_path.read_bytes()))
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, RecursionError) as exc:
         expected = {}
         different.append("view_manifest.json")
         reasons.append("manifest invalid: " + (str(exc) if type(exc) is ValueError else type(exc).__name__))
