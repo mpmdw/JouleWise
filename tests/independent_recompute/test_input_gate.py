@@ -409,9 +409,9 @@ class ExemptionTests(GateCase):
                 self.assertNotIn(".*", rule[0], rule)
         broad = [rule[0] for rule in cmp.COVERAGE if len(rule) == 2
                  and rule[1].startswith((cmp.NAMED, cmp.NULL_NAMED)) and ".*" in rule[0]]
-        # The two numeric subtrees no review named (load-correlated values, hazard measurements) stay for the
-        # full-size census (report, open issues).
-        self.assertEqual(len(broad), 2, broad)
+        # The one numeric subtree no review named (load-correlated values) stays for the full-size census
+        # (report, open issues); RC-CMP-7 F2 enumerated the hazard measurements (HAZARD).
+        self.assertEqual(len(broad), 1, broad)
 
     def test_attempt_anywhere_refuses_q5a(self):
         self.files[FILL]["gamma"]["contrasts"][0]["floor_attempt"] = {"attempt": 87.25}
@@ -464,7 +464,19 @@ class NumericWordTests(GateCase):
         self.files[DISCLOSURE]["window_lines"]["alpha"].append(
             {"line": "host_cpu", "restricted": False, "label": "host_cpu", "text": "x", "value_s": 1.5,
              "value_text_s": "0.93"})
+        # RC-CMP-7 F2: the producer writes no value_text_s on a host_cpu line, so the line gate refuses first;
+        # the coverage layer behind it (the gate switched off) still refuses the numeric spelling.
+        with self.assertRaisesRegex(cmp.Refusal, "line_key_unregistered:disclosure:window_lines/host_cpu/value_text_s"):
+            self.shipped()
+        self.enterContext(mock.patch.object(cmp, "gate_lines", lambda record: None))
         self.assertEqual(self.shipped()["coverage"]["unmapped"], ["disclosure:window_lines/alpha/host_cpu/value_text_s"])
+        # RC-CMP-7 F2: no rule names value_text_s now (the window_lines/.* subtree is enumerated), so even read as
+        # a word it stays unmapped. A numeric spelling at an enumerated word leaf still refuses as a number:
+        with mock.patch.object(cmp, "numeric_word", lambda value: False):
+            self.assertEqual(self.shipped()["coverage"]["unmapped"], ["disclosure:window_lines/alpha/host_cpu/value_text_s"])
+        self.setUp()
+        next(r for r in self.files[DISCLOSURE]["window_lines"]["alpha"] if r["line"] == "stored_status")["status"] = "0.93"
+        self.assertEqual(self.shipped()["coverage"]["unmapped"], ["disclosure:window_lines/alpha/stored_status/status"])
         # Counterfactual: by JSON type only (7fede8c7), the string passes as a word.
         with mock.patch.object(cmp, "numeric_word", lambda value: False):
             self.assertEqual(self.shipped()["coverage"]["unmapped"], [])

@@ -344,6 +344,8 @@ class Custody:
                 self.nonfinite.setdefault(name, set())
                 value = strict_loads(raw, label, STEP11_TAILS[label])
                 gate(value, label, self.registry)
+                if label == "disclosure":
+                    gate_lines(value)
                 return value
         try:
             return loads(raw, self.flags, "l9:" + name, self.nonfinite.setdefault(name, set()), "l9_output_duplicate_key")
@@ -562,6 +564,106 @@ ROUTED = {"fill": ((r"gamma/contrasts/\*/contrast_id", ("contrast",)),),
                          (r"sensitivity/floor_cells/\*/cell_id", ("floor",)),
                          (r"(sensitivity/contrasts/\*|block_lines/\*/record)/contrast_id", ("contrast",)),
                          (r"block_lines/\*/record/cell_id", ("reported", "floor")))}
+
+
+# F2 (RC-CMP6-OPUS-REV finding 2): each disclosure section's line words and, for each word, the value keys
+# its producer writes beside line, restricted, label and text (b5_analysis/disclosures.py _item calls and the
+# removed_unit and stored_member_reason dicts). A line word outside its section's table, or a key outside its
+# word's set, refuses line_word_unregistered or line_key_unregistered: a line cannot be relabelled into
+# another word's rules (or another section) and carry its own leaves along.
+LINE_COMMON = ("line", "restricted", "label", "text")
+CELL_LINES_KEYS = {
+    "reported_cell": ("pack", "cell_id", "status", "mean_j", "h_j", "B_j", "lower_j", "upper_j"),
+    "battery_assist_cell": ("pack", "cell_id", "primary", "without", "n_r", "n_b", "assist_members", "removed_unit_ids"),
+    "load_correlated_cell": ("pack", "cell_id", "restored_counts", "families", "values"),
+    "attribution_floor": ("pack", "cell_id", "value_j", "attained_by", "minimum_j"),
+    "cross_window": ("pack", "cell_id", "G_j", "h_G_j", "F_j", "h_F_j", "delta_j", "agree")}
+UNIT_LINES_KEYS = {
+    "kept_units": ("pack", "cell_id", "n_r", "n_b"),
+    "removed_unit": ("pack", "cell_id", "unit_id", "stratum", "families", "codes", "positions", "stage_ids")}
+LINE_KEYS = {
+    "cells": {**CELL_LINES_KEYS, **UNIT_LINES_KEYS},
+    "floors": {"floor_composition": ("pack", "cell_id", "guarded_j", "allowance_j", "source", "drift_widened_j", "minted_j"),
+               **UNIT_LINES_KEYS},
+    "contrasts": {
+        "primary_contrast": ("contrast_id", "estimator", "decision_interval"),
+        "battery_assist_contrast": ("contrast_id", "status", "n", "mean_j", "s_d", "se", "t_star", "lower_j", "upper_j",
+                                    "assist_quads", "assist_members"),
+        "load_correlated_contrast": ("contrast_id", "restored_count", "families", "values"),
+        "magnitude_ratio": ("contrast_id", "log_mean", "log_sd", "ratio", "lower", "upper"),
+        "magnitude_per_token": ("contrast_id", "value_j", "denominator", "metrology", "decision"),
+        "contrast_interval": ("contrast_id", "n", "rounded_t", "exact_t"),
+        "decision_floor": ("contrast_id", "decision_interval", "floor_j", "estimate_j"),
+        "loo_counts": ("contrast_id", "count", "exclusive_block_numbers"),
+        "loo_magnitude": ("contrast_id", "rows"),
+        **UNIT_LINES_KEYS},
+    "fixed_sentences": dict.fromkeys(("floor_drift_ownership", "gross_energy", "conditionality", "config_binding",
+                                      "single_window", "floor_transfer_assumption", "floor_transfer_limit", "order", "p42",
+                                      "separate_windows", "dominance", "d177", "fixed_prompt"), ()),
+    "window_lines": {
+        "machine_absent": (), "machine_boundary": (), "monitor_sentence": (), "lost_midpoint": (), "catalog_path": (),
+        "stored_verdict_boundary": (),
+        "machine_member": ("model", "run_id", "rho", "rail_j", "machine_j", "removed", "plausible", "meter_flags",
+                           "battery_term_available"),
+        "machine_summary": ("model", "median", "minimum", "maximum", "q25", "q75", "spread", "central_band"),
+        "monitor_cost": ("cpu_s", "reader_cpu_s", "probes_inside_target_phases"),
+        "arm_hazards": ("module", "phase", "verdict", "measurements"),
+        "physics_counts": ("counts",), "anchor_counts": ("count",), "anchor_bound": ("value_s",), "host_cpu": ("value_s",),
+        "battery_counts": ("counts",), "battery_phase": ("phase", "measurements"), "battery_discharged": ("value_j",),
+        "neg8_screen": ("decision",), "reference_counts": ("counts", "planned"),
+        "reference_lost": ("run_id", "slot", "reason"), "reference_spare": ("run_id", "slot", "succeeded"),
+        "corpus_counts": ("collected", "in_window", "deciding", "desk_cap", "drop_counts"),
+        "corpus_physics_drop": ("run_id", "codes"), "bound_formula": ("formula",), "neg8_allowance": ("source", "values_j"),
+        "battery_temperature": ("stage_id", "readings_centi_c", "rise_k", "plateau", "harvest_flag", "producer_flag",
+                                "temperature_unmeasured", "differs_from_harvest_flag"),
+        "temperature_disagreement": ("stage_id",), "battery_temperature_sentence": ("stage_id", "rise_k", "neg8"),
+        "flag_count": ("count", "family", "code", "blinding"), "arm_unmeasured": ("modules",), "erratum3_triggers": ("values",),
+        "below_screen_bound": ("b_op_s", "below"), "stored_status": ("status",),
+        "stored_condition": ("condition", "answered_by"),
+        "stored_member_reason": ("pack", "codes", "reason", "count", "all_removed", "families"),
+        "adapter_continuity": ("decision",), "tripwire": ("tripwire", "result"),
+        "deciding_membership": ("writer_excluded_by_family", "writer_excluded_all_removed", "deciding_references",
+                                "deciding_spares", "writer_excluded_count"),
+        "reference_parity": ("result", "harvest_pin"),
+        "ledger_binding": ("sha256sums_sha256", "ledger_copy_sha256", "terminal_sequence", "prefix_result")},
+    "block_lines": {
+        "superseded_history": (), "sensitivity_boundary": (),
+        "attempt_count": ("pack", "superseded", "count", "causes"),
+        "attempt_history": ("pack", "plan_id", "attempt", "verdict", "cause_key", "superseded", "flags_by_family",
+                            "collected", "planned", "catalog_path", "triggers"),
+        "g10": ("pack", "plan_id", "codes", "redraw_cycles"),
+        "harvest_once": ("no_analysed_window_harvested_twice",),
+        "reharvest_account": ("pack", "original_pin", "deciding_pin", "original_harvest_sha256", "deciding_harvest_sha256",
+                              "reason", "survivors_before", "survivors_after"),
+        "sensitivity_bmax": ("value_s", "T", "attained_by_sequence"),
+        "sensitivity_window": ("pack", "plan_id", "b_op_s", "b_sens_s", "widened"),
+        "sensitivity_reported": ("record",), "sensitivity_floor": ("record",), "sensitivity_contrast": ("record",),
+        "dominance_ratio": ("cell_id", "component", "n", "status", "ratio", "numerator_j", "denominator_j"),
+        "dominance_branch": ("branch", "dominance_sentence_licensed")}}
+
+
+def gate_lines(record):
+    """F2: every disclosure line carries a word its section's producer writes, with that word's keys only."""
+    if not isinstance(record, dict):
+        return
+    windows = record.get("window_lines", {})
+    sections = [(name, record.get(name, [])) for name in ("cells", "floors", "contrasts", "fixed_sentences", "block_lines")]
+    if isinstance(windows, dict):
+        for pack, lines in windows.items():
+            if pack not in PACKS:
+                raise Refusal("routing_id_unregistered:disclosure:window_lines/" + str(pack))
+            sections.append(("window_lines", lines))
+    for section, lines in sections:
+        for line in lines if isinstance(lines, list) else ():
+            word = line.get("line") if isinstance(line, dict) else None
+            if not isinstance(word, str) or word not in LINE_KEYS[section]:
+                raise Refusal(f"line_word_unregistered:disclosure:{section}")
+            extra = set(line) - set(LINE_COMMON) - set(LINE_KEYS[section][word])
+            if extra:
+                raise Refusal(f"line_key_unregistered:disclosure:{section}/{word}/{min(extra)}")
+            if LINE_KEYS[section][word] and not set(line) & set(LINE_KEYS[section][word]):
+                # A keyed word's line always carries one of its values: a bare sentence is not one of them.
+                raise Refusal(f"line_keys_absent:disclosure:{section}/{word}")
 
 
 def owns(label, key, star):
@@ -828,6 +930,10 @@ def compare_aggregate(c, custody, ours):
     closeout = custody.one(r"finalized/outputs/closeout\.json")
     ratios = custody.one(r"finalized/outputs/closeout\.ratio-table\.json")
     c.exact("dominance_branch", "branch", get(closeout, "branch"), get(ours, "dominance", "branch"))
+    # F2: the licensed word follows the branch by registration (dominance_closeout: licensed iff branch A).
+    branch = get(ours, "dominance", "branch")
+    c.exact("dominance_branch", "dominance_sentence_licensed", get(closeout, "dominance_sentence_licensed"),
+            branch == "A" if branch in ("A", "B") else None)
     l9_rows, mine_rows = keyed(get(ratios, "ratios", default=[]), lambda row: ratio_label(row, registry), "ratio"), our_ratios(ours)
     if not l9_rows and not mine_rows:
         c.numeric("dominance_ratio", "ratio/none", None, None)
@@ -836,6 +942,9 @@ def compare_aggregate(c, custody, ours):
         row, mine, common = row or {}, mine or {}, label.endswith("/common_mode")
         key = "ratio/" + label
         c.numeric("dominance_ratio", key + "/ratio", row.get("ratio"), mine.get("R_cm" if common else "R"))
+        # F2: the closeout's status word; the recompute's ratio is complete when it is a finite number.
+        c.exact("outcome_word", key + "/status", row.get("status"),
+                "complete" if finite(mine.get("R_cm" if common else "R")) else None)
         c.numeric("floor_j", key + "/numerator_j", row.get("numerator_j"), mine.get("numerator_j"))
         c.numeric("floor_j", key + "/denominator_j", row.get("denominator_j"), mine.get("denominator_j"))
         c.numeric("count", key + "/n", row.get("n"), mine.get("n"))
@@ -1092,10 +1201,12 @@ def compare_sensitivity(c, custody, ours):
               line.get("attaining_sequence"))
     windows = record.get("windows") if isinstance(record.get("windows"), dict) else {}
     for pack, _, _ in c.pairs("sensitivity/windows/", windows, by_pack(ours.get("windows"))):
-        c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_op_s", get(record, "windows", pack, "b_op_s"),
-                  get(ours, "windows", PACKS.get(pack, ""), "b_op_s"))
-        c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_sens_s", get(record, "windows", pack, "b_sens_s"),
-                  get(line, "windows", PACKS.get(pack, ""), "b_sens_s"))
+        b_op, b_sens = get(ours, "windows", PACKS.get(pack, ""), "b_op_s"), get(line, "windows", PACKS.get(pack, ""), "b_sens_s")
+        c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_op_s", get(record, "windows", pack, "b_op_s"), b_op)
+        c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_sens_s", get(record, "windows", pack, "b_sens_s"), b_sens)
+        # F2: "values differ from primary" when the sensitivity bound is not the operative one.
+        c.exact("outcome_word", f"sensitivity/windows/{pack}/widened", get(record, "windows", pack, "widened"),
+                b_sens != b_op if finite(b_sens) and finite(b_op) else None)
     registry = custody.registry
     cells = keyed(record.get("floor_cells", []), lambda cell: cell_key(registry.lookup(
         cell.get("cell_id"), ("floor",), "sensitivity_floor_cell", cell.get("pack"))), "sensitivity_floor_cell")
@@ -1105,6 +1216,13 @@ def compare_sensitivity(c, custody, ours):
             c.numeric("floor_gate_j", f"sensitivity/{key}/{field}", get(cell, "sensitivity", field), mine.get(field))
         c.numeric("floor_j", f"sensitivity/{key}/allowance_j", get(cell, "sensitivity", "allowance_j"),
                   get(line, "floors", key + "/absolute", "allowance_j"))
+        before = dict(get(ours, "floor_cells", key, default={}) or {},
+                      allowance_j=get(ours, "floors", key + "/absolute", "allowance_j"))
+        after = dict(mine, allowance_j=get(line, "floors", key + "/absolute", "allowance_j"))
+        c.exact("outcome_word", f"sensitivity/{key}/equals_primary", cell.get("equals_primary"),
+                relation(before, after, FLOOR_KEYS + ("allowance_j",), lambda a, b: a == b))
+        c.exact("outcome_word", f"sensitivity/{key}/not_below_primary", cell.get("not_below_primary"),
+                relation(before, after, FLOOR_KEYS, lambda a, b: b >= a))
     rows = keyed(record.get("contrasts", []),
                  lambda row: registry.registered(row.get("contrast_id"), ("contrast",), "sensitivity_contrast"),
                  "sensitivity_contrast")
@@ -1117,6 +1235,15 @@ def compare_sensitivity(c, custody, ours):
             c.numeric("floor_gate_j", f"sensitivity/{cid}/{field}", get(row, "sensitivity", field),
                       contrast_floor_part(line.get("floor_cells"), registry.entry(cid, "contrast"), field))
         c.exact("outcome_word", f"sensitivity/{cid}/outcome", get(row, "sensitivity", "outcome"), mine.get("outcome"))
+        c.exact("outcome_word", f"sensitivity/{cid}/outcome_equals_primary", row.get("outcome_equals_primary"),
+                mine.get("outcome_equals_primary"))
+        entry, primary = registry.entry(cid, "contrast"), get(ours, "contrasts", cid, default={}) or {}
+        before = {field: contrast_floor_part(ours.get("floor_cells"), entry, field) for field in ("floor_abs_j", "floor_cmp_j")}
+        before.update(floor_gate_j=primary.get("floor_gate_j"), D_j=primary.get("D_j"))
+        after = {field: contrast_floor_part(line.get("floor_cells"), entry, field) for field in ("floor_abs_j", "floor_cmp_j")}
+        after.update(floor_gate_j=mine.get("floor_gate_j"), D_j=mine.get("D_j"))
+        c.exact("outcome_word", f"sensitivity/{cid}/not_below_primary", row.get("not_below_primary"),
+                relation(before, after, FLOOR_KEYS + ("D_j",), lambda a, b: b >= a))
     reported = sensitivity_reported(record.get("reported_cells", []), registry)
     for (pack, cid), cell, _ in c.pairs("sensitivity/reported_cells/", reported, our_sensitivity_reported(line, ours, registry)):
         cell = cell or {}
@@ -1125,14 +1252,45 @@ def compare_sensitivity(c, custody, ours):
         if cid in registry.families(pack, True):
             # The registered p42 exit: no reported value on either side; compared as a status, not as numbers.
             l9 = "expected_unresolvable" if not any_finite(sens) else "computed"
-            c.exact("p42_status", f"sensitivity/{pack}/{cid}", l9, get(ours, "p42", cid, "status"))
+            own = get(ours, "p42", cid, "status")
+            c.exact("p42_status", f"sensitivity/{pack}/{cid}", l9, own)
+            # F2: the printed status and code words, against the registered exit's words (sensitivity.py).
+            exit_words = P42_EXIT if own == "expected_unresolvable" else (own, None)
+            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"), exit_words[0])
+            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/code", cell.get("code"), exit_words[1])
             continue
+        c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"),
+                "computed" if mine.get("status") == "computed" else mine.get("status"))
+        before, after = reported_values(get(ours, "reported_cells", cid, default={}) or {}), reported_values(mine)
+        c.exact("outcome_word", f"sensitivity/{pack}/{cid}/equals_primary", cell.get("equals_primary"),
+                relation(before, after, tuple(before), lambda a, b: a == b))
+        c.exact("outcome_word", f"sensitivity/{pack}/{cid}/not_below_primary", cell.get("not_below_primary"),
+                relation(before, after, ("attribution_floor_j",), lambda a, b: b >= a))
         for field in ("mean_j", "lower_j", "upper_j"):
             c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/{field}", sens.get(field), mine.get(field))
         c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/h_j", sens.get("h_j"), get(mine, "interval", "h_j"))
         c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/B_j", sens.get("B_j"), get(mine, "interval", "B_j"))
         c.numeric("reported_cell_j", f"sensitivity/{pack}/{cid}/attribution_floor_j", sens.get("attribution_floor_j"),
                   get(mine, "attribution_floor", "value_j"))
+
+
+# The registered p42 exit as L9's sensitivity record prints it (b5_analysis/sensitivity.py: a refused
+# projection cell keeps its status and code); the recompute's word for it is expected_unresolvable.
+P42_EXIT = ("refused", "p42_expected_unresolvable")
+FLOOR_KEYS = ("floor_abs_j", "floor_cmp_j", "floor_gate_j")
+
+
+def reported_values(cell):
+    """A reported cell's six values in L9's sensitivity order (sensitivity._reported_values)."""
+    return {"mean_j": cell.get("mean_j"), "h_j": get(cell, "interval", "h_j"), "B_j": get(cell, "interval", "B_j"),
+            "lower_j": cell.get("lower_j"), "upper_j": cell.get("upper_j"),
+            "attribution_floor_j": get(cell, "attribution_floor", "value_j")}
+
+
+def relation(before, after, keys, test):
+    """F2: a consistency word re-derived from the recompute's primary and sensitivity values (None if any is missing)."""
+    pairs = [(before.get(key), after.get(key)) for key in keys]
+    return all(test(a, b) for a, b in pairs) if all(finite(a) and finite(b) for a, b in pairs) else None
 
 
 def pack_of_model(model):
@@ -1257,6 +1415,18 @@ def compare_disclosures(c, custody, ours):
             l9_rows = keyed(row.get("rows"), lambda item: block_key(item.get("block_number")), "loo_magnitude_row")
             for block, item, moved in c.pairs(key + "/", l9_rows, magnitude_rows(get(ours, "contrasts", cid, default={}) or {})):
                 c.numeric("contrast_j", f"{key}/{block}/movement_j", (item or {}).get("movement_j"), moved)
+    windows = record.get("window_lines") if isinstance(record.get("window_lines"), dict) else {}
+    for pack in PACKS:
+        # F2: the window lines' claim words, against the recompute's own b_op and NEG-8 screen.
+        claims = keyed(windows.get(pack), lambda row: row.get("line"), "window_claim_line",
+                       lambda row: row.get("line") in ("below_screen_bound", "neg8_screen"))
+        b_op = get(ours, "windows", PACKS[pack], "b_op_s")
+        if "below_screen_bound" in claims:
+            c.exact("outcome_word", f"disclosure/{pack}/below_screen_bound/below", claims["below_screen_bound"].get("below"),
+                    b_op < SCREEN_BOUND_S if finite(b_op) else None)
+        if "neg8_screen" in claims:
+            c.exact("outcome_word", f"disclosure/{pack}/neg8_screen/decision", claims["neg8_screen"].get("decision"),
+                    get(ours, "windows", PACKS[pack], "neg8", "screen_decision"))
     l9_windows = window_line_names(record.get("window_lines"))
     for pack, rows, neg8s in c.pairs("disclosure/window_lines/", l9_windows, our_neg8(ours)):
         neg8 = get(ours, "windows", PACKS.get(pack, ""), "neg8", default={}) or {}
@@ -1278,6 +1448,8 @@ def compare_disclosures(c, custody, ours):
 
 
 SHORT_MODELS = {"Qwen3-1.7B-4bit": "qwen3-1p7b", "Qwen3-8B-4bit": "qwen3-8b"}
+# The registered screen bound of the below_screen_bound line (b5_analysis/disclosures.py SCREEN_BOUND_S).
+SCREEN_BOUND_S = 0.03646286164497997
 
 
 def percentile(values, q):
@@ -1351,6 +1523,10 @@ def compare_machine(c, custody, ours, meter_records):
             c.numeric("rho", key + "/rho", row.get("rho"), own.get("rho"))
             c.numeric("machine_j", key + "/rail_delta_J", row.get("rail_j"), own.get("rail_delta_J"))
             c.numeric("machine_j", key + "/delta_J", row.get("machine_j"), own.get("delta_J"))
+            # F2: the member line's words, against the recompute's own member (machine_lines' plausibility rule).
+            c.exact("outcome_word", key + "/plausible", row.get("plausible"), plausible_rho(own) if own else None)
+            c.exact("battery_term", key + "/battery_term_available", row.get("battery_term_available"),
+                    own.get("battery_term_available"))
             if stored is None:
                 continue
             row = rest[0] if isinstance(rest[0], dict) else {}
@@ -1467,7 +1643,18 @@ IDENTITY_NUMBER = NAMED + "attempt numbers, positions and ledger sequences: iden
 STRUCTURE = (UNCOVERED + "window structure the recompute does not re-derive (flag tallies, hazards, monitor, battery, "
              "ledger, tripwires); reader item 2(b)")
 STRUCTURE_NUMBER = NAMED + "window and block structure counts and readings the recompute does not re-derive; reader item 2(b)"
-DERIVED_FLAGS = UNCOVERED + "L9's own consistency booleans and status words over values compared individually here"
+DESCRIPTIVE_STATUS = (UNCOVERED + "a descriptive line's computation status word (computed, one_quad, not_computable, "
+                      "refused) and refusal code; its values are compared where it prints them")
+HARVEST_WORDS = (UNCOVERED + "the harvest's and the window index's own records (stored verdict, tripwires, attempts, "
+                 "re-harvests), read by L9 as data; the recompute re-derives no such word (reader item 2(b))")
+# The measurement keys disclosures._hazard_values keeps (numbers, booleans and status words of monitor readings).
+HAZARD = (r"(current_ma|instant_amperage_ma|amperage_ma|temperature_centi_c|temperature_k|os_level|pressure|"
+          r"thermal_pressure|thermal_level|frequency_ppm|frequency_word|free_bytes|available_bytes|cpu_self_s|"
+          r"cpu_children_s|host_busy_cpu_s_per_s|tree_cpu_s_per_s|outside_tree_cpu_s_per_s|unattributed_cpu_s_per_s|"
+          r"smc_min_ma|smc_reads_negative|smc_reads_below|smc_reads_in_force|smc_duration_below_s|"
+          r"registry_publications_negative|registry_min_ma|accumulator_intervals_over_limit|ACAttached|IsCharging|"
+          r"InstantAmperage|Amperage|Voltage|Temperature|freq|offset|jitter|precision|status|decision|cpu_s_per_s|"
+          r"worst_cpu_s_per_s)")
 NEG8_INTERNALS = (NAMED + "NEG-8 bracket internals (admissible sets, standard errors, idle-subtracted companion, "
                   "drift-bound artifact) that only L9 computes; the seven registered bound terms are compared")
 CONSTANT = NAMED + "registered constant (token denominator, planned reference counts, plan size)"
@@ -1600,8 +1787,8 @@ COVERAGE = (
     (D + r"(cells|contrasts|floors)/[a-z_]+/(codes/\*/(blinding|code|family)|families(/\*)?|stratum|removed_unit_ids(/\*)?|"
      r"attained_by(/\*)?|source)",
      UNCOVERED + "removed-unit codes and families; exclusions are re-derived by the recompute (exclusions_rederivation)"),
-    (D + r"(cells/[a-z_]+/(status|primary/status|without/status|values/status|values/code)|contrasts/[a-z_]+/(status|values/status|values/code))",
-     DERIVED_FLAGS),
+    (D + r"(cells/(reported_cell/status|battery_assist_cell/(primary|without)/status|load_correlated_cell/values/(status|code))|"
+     r"contrasts/(battery_assist_contrast/status|load_correlated_contrast/values/(status|code)))", DESCRIPTIVE_STATUS),
     # Window lines: the NEG-8 terms, b_op, reference and corpus counts and the whole-machine line.
     (W + r"neg8_allowance/values_j/bracket\.claim_families\.gross_energy\.(?P<field>bound_envelope_j|bound_prediction_j|"
      r"start\.mean_j|midpoint\.mean_j|end\.mean_j|trajectory_excursion_max_j|drift_allowance_j)",
@@ -1619,7 +1806,11 @@ COVERAGE = (
     (W + r"machine_summary/central_band/(?P<side>lower|upper)", "rho", "machine_summary/{pack}/{model}/central_band/{side}"),
     (W + r"machine_summary/central_band/pack", "routing_id", "machine_summary/{pack}/{model}/central_band/pack"),
     (W + r"machine_summary/central_band/attempt", IDENTITY_NUMBER),
-    (W + r"(monitor_cost/(cpu_s|reader_cpu_s|probes_inside_target_phases)|(arm_hazards|battery_phase)/measurements/.*|"
+    (W + r"below_screen_bound/below", "outcome_word", "disclosure/{pack}/below_screen_bound/below"),
+    (W + r"(neg8_screen/decision|battery_temperature_sentence/neg8)", "outcome_word", "disclosure/{pack}/neg8_screen/decision"),
+    (W + r"machine_member/plausible", "outcome_word", "machine/{pack}/{run_id}/request/plausible"),
+    (W + r"machine_member/battery_term_available", "battery_term", "machine/{pack}/{run_id}/request/battery_term_available"),
+    (W + r"(monitor_cost/(cpu_s|reader_cpu_s|probes_inside_target_phases)|(arm_hazards|battery_phase)/measurements/" + HAZARD + "|"
      r"(physics_counts|battery_counts)/counts/[A-Za-z0-9_.]+|(anchor_counts|flag_count|stored_member_reason)/count|"
      r"(anchor_bound|host_cpu)/value_s|(battery_temperature|battery_temperature_sentence)/(readings_centi_c/\*|rise_k)|"
      r"erratum3_triggers/values/(doubling_count|systematic_sequences/\*)|"
@@ -1628,18 +1819,38 @@ COVERAGE = (
     (W + r"battery_discharged/value_j", NAMED + "battery-assist discharged energy from the withheld battery record; "
      "the recompute flags battery assist but does not re-derive this energy"),
     (W + r"ledger_binding/terminal_sequence", IDENTITY_NUMBER),
-    (r"disclosure:window_lines/.*", STRUCTURE + "; includes NEG-8 bracket provenance that only L9 computes"),
+    # F2: the window lines' remaining words, each by its enumerated leaf name (disclosures.py _item calls).
+    (W + r"((arm_hazards|battery_phase)/measurements/" + HAZARD + r"|arm_hazards/(module|phase|verdict)|battery_phase/phase|"
+     r"flag_count/(family|code|blinding)|arm_unmeasured/modules/\*|machine_member/(removed|meter_flags/\*)|"
+     r"neg8_allowance/source|corpus_counts/desk_cap/\*|corpus_physics_drop/codes/\*|reference_lost/(slot|reason)|"
+     r"reference_spare/(slot|succeeded)|bound_formula/formula|"
+     r"battery_temperature/(plateau|harvest_flag|producer_flag|temperature_unmeasured|differs_from_harvest_flag)|"
+     r"erratum3_triggers/values/(observed_triggers|recorded_only_triggers)/\*)", STRUCTURE),
+    (W + r"(stored_status/status|stored_condition/(condition|answered_by)|stored_member_reason/(reason|all_removed|families/\*|"
+     r"codes/\*/(code|blinding))|adapter_continuity/decision|tripwire/(tripwire|result)|reference_parity/result|"
+     r"ledger_binding/prefix_result|deciding_membership/writer_excluded_all_removed)", HARVEST_WORDS),
+    (W + r"ledger_binding/(sha256sums_sha256|ledger_copy_sha256)", IDENTITY),
     # Block lines.
     (D + r"block_lines/dominance_ratio/ratio", "dominance_ratio", "ratio/{ratio_label}/ratio"),
     (D + r"block_lines/dominance_ratio/(?P<field>numerator_j|denominator_j)", "floor_j", "ratio/{ratio_label}/{field}"),
     (D + r"block_lines/dominance_ratio/n", "count", "ratio/{ratio_label}/n"),
-    (D + r"block_lines/dominance_ratio/(component|status)", IDENTITY),
+    (D + r"block_lines/dominance_ratio/status", "outcome_word", "ratio/{ratio_label}/status"),
+    (D + r"block_lines/dominance_ratio/component", IDENTITY),
     (D + r"block_lines/dominance_branch/branch", "dominance_branch", "branch"),
-    (D + r"block_lines/dominance_branch/dominance_sentence_licensed", UNCOVERED + "follows from the dominance branch (compared)"),
+    (D + r"block_lines/dominance_branch/dominance_sentence_licensed", "dominance_branch", "dominance_sentence_licensed"),
     (D + r"(block_lines/sensitivity_bmax|sensitivity/b_max)/value_s", "b_op_s", "sensitivity/B_max_s"),
     (D + r"(block_lines/sensitivity_bmax|sensitivity/b_max)/(?P<field>T|attained_by_sequence)", "count", "sensitivity/{field}"),
     (D + r"block_lines/sensitivity_window/(?P<field>b_op_s|b_sens_s)", "b_op_s", "sensitivity/windows/{pack}/{field}"),
     (D + r"sensitivity/windows/(?P<pack>[a-z]+)/(?P<field>b_op_s|b_sens_s)", "b_op_s", "sensitivity/windows/{pack}/{field}"),
+    (D + r"block_lines/sensitivity_window/widened", "outcome_word", "sensitivity/windows/{pack}/widened"),
+    (D + r"sensitivity/windows/(?P<pack>[a-z]+)/widened", "outcome_word", "sensitivity/windows/{pack}/widened"),
+    (SR + r"(?P<field>status|code|equals_primary|not_below_primary)", "outcome_word", "sensitivity/{pack}/{rcid}/{field}"),
+    (SF + r"(?P<field>equals_primary|not_below_primary)", "outcome_word", "sensitivity/{aggregate_cell}/{field}"),
+    (SC + r"(?P<field>outcome_equals_primary|not_below_primary)", "outcome_word", "sensitivity/{cid}/{field}"),
+    (D + r"(sensitivity/(reported_cells|contrasts)/\*|block_lines/sensitivity_(reported|contrast)/record)/"
+     r"(mean_and_half_width_equal_primary|bound_independent_values_equal_primary)",
+     UNCOVERED + "true by construction: L9's sensitivity seat refuses when a bound-independent value differs "
+     "(sensitivity.py sensitivity_changed_bound_independent_value); the values are compared"),
     (SR + r"sensitivity/(?P<field>mean_j|lower_j|upper_j|h_j|B_j|attribution_floor_j)", "reported_cell_j",
      "sensitivity/{pack}/{rcid}/{field}"),
     (SR + r"primary/(?P<field>mean_j|lower_j|upper_j)", "reported_cell_j", "{pack}/{rcid}/{field}"),
@@ -1656,13 +1867,14 @@ COVERAGE = (
     (SC + r"primary/floor_gate_j", "floor_gate_j", "{cid}/active_floor_j"),
     (SC + r"primary/D_j", "contrast_j", "{cid}/D_j"),
     (SC + r"primary/outcome", "outcome_word", "{cid}/outcome"),
-    (D + r"(block_lines/[a-z_]+/record|sensitivity/[a-z_]+/\*|sensitivity/windows/[a-z]+|block_lines/sensitivity_window)/"
-     r"(bound_independent_values_equal_primary|equals_primary|mean_and_half_width_equal_primary|not_below_primary|"
-     r"outcome_equals_primary|widened|status|code)", DERIVED_FLAGS),
     (D + r"block_lines/(attempt_count/count|attempt_history/(attempt|collected|planned|flags_by_family/[A-Za-z0-9_.]+|"
      r"triggers/(doubling_count|systematic_sequences/\*))|g10/(codes/[A-Za-z0-9_.]+|redraw_cycles)|"
      r"reharvest_account/(survivors_before|survivors_after))", STRUCTURE_NUMBER),
-    (D + r"block_lines/(superseded_history|attempt_count|attempt_history|g10|harvest_once|reharvest_account)/.*", STRUCTURE),
+    # F2: the attempt-history and harvest lines' words, by enumerated leaf name (disclosures._history_lines and
+    # the harvest_once and reharvest_account lines).
+    (D + r"block_lines/(attempt_count/(superseded|causes/\*)|attempt_history/(verdict|cause_key|superseded|catalog_path|"
+     r"triggers/(observed_triggers|recorded_only_triggers)/\*)|harvest_once/no_analysed_window_harvested_twice|"
+     r"reharvest_account/(reason|original_pin|deciding_pin|original_harvest_sha256|deciding_harvest_sha256))", HARVEST_WORDS),
     (r"fill:campaigns/(alpha|beta)/attempt|disclosure:(cells|floors|contrasts)/removed_unit/positions/\*", IDENTITY_NUMBER),
     # Identity at the positions L9's producers print it (results_fill_adapter, build_results_fill_input, disclosures).
     (r"fill:(campaigns/(alpha|beta)/(plan_id|claim_usable|exclusions_sha256|harvest_record_sha256)|"

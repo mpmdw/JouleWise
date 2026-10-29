@@ -150,6 +150,11 @@ class CatchAllTests(Case):
 
     def test_numeric_leaves_under_catch_alls_refuse_p12(self):
         self.plant_p12()
+        # RC-CMP-7 F2: a key the producer does not write on a machine_member line now refuses at the input
+        # gate; the coverage layer behind it (switched off the gate here) still leaves the planted leaves unmapped.
+        with self.assertRaisesRegex(cmp.Refusal, "line_key_unregistered:disclosure:window_lines/machine_member/"):
+            self.shipped(RELEASE)
+        self.enterContext(mock.patch.object(cmp, "gate_lines", lambda record: None))
         unmapped = self.shipped(RELEASE)["coverage"]["unmapped"]
         for path in ("disclosure:window_lines/alpha/machine_member/meter_energy_j",
                      "disclosure:window_lines/alpha/machine_member/values/rho",
@@ -159,7 +164,10 @@ class CatchAllTests(Case):
         # campaign and characterization fields are enumerated names now (RC-CMP-6 G5): no rule takes these.
         with mock.patch.object(cmp, "numeric", lambda value: False):
             unmapped = self.shipped(RELEASE)["coverage"]["unmapped"]
-        self.assertFalse({p for p in unmapped if "meter_energy_j" in p or "values/rho" in p})
+        # RC-CMP-7 F2: the window_lines/.* subtree is enumerated, so no word rule remains to swallow them either.
+        self.assertEqual({p for p in unmapped if "meter_energy_j" in p or "values/rho" in p},
+                         {"disclosure:window_lines/alpha/machine_member/meter_energy_j",
+                          "disclosure:window_lines/alpha/machine_member/values/rho"})
         self.assertTrue({"fill:campaigns/gamma/gross_energy_j", "fill:characterization/delta_j"} <= set(unmapped))
 
     def test_words_under_catch_alls_stay_uncovered(self):

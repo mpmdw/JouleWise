@@ -146,10 +146,11 @@ def l9_files():
     files[f"mint/{SHA}-aggregate-floor.json"] = {"cells": [
         {"cell_id": f"d117-{model}-{phase}-floor-v5", "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
         for model in ("qwen3-1p7b", "qwen3-8b") for phase in ("decode", "prefill-p2048")]}
-    files["finalized/outputs/closeout.json"] = {"branch": "B"}
+    files["finalized/outputs/closeout.json"] = {"branch": "B", "dominance_sentence_licensed": False}
     files["finalized/outputs/closeout.ratio-table.json"] = {"ratios": [
         {"cell_id": "d117-qwen3-1p7b-decode-floor-v5", "component": "absolute", "numerator_field":
-         "corner_widened_unguarded_floor_j", "numerator_j": 39.5, "denominator_j": 38.0, "n": 9, "ratio": 39.5 / 38.0}]}
+         "corner_widened_unguarded_floor_j", "numerator_j": 39.5, "denominator_j": 38.0, "n": 9, "ratio": 39.5 / 38.0,
+         "status": "complete"}]}
     rows = [verdict_row(DECODE, 0.84), verdict_row(PREFILL, 0.68)]
     files[f"outputs/{SHA}-claim-verdicts.json"] = {"contrasts": rows}
     windows = {p: {"plan_id": "plan-" + p, "attempt": 1, "harvest_pin": "a1b2c3d" + p, "record_shape": "second_seal"}
@@ -317,10 +318,10 @@ class ComparatorTests(unittest.TestCase):
                 # This fixture has no meter stream; the meter line is in test_comparator_meter.
                 self.assertFalse(set(cmp.METER) & set(result["counts"]))
 
-    def planted(self, family, edit, check):
+    def planted(self, family, edit, check, rows=1):
         """The fault fails its family; with the check disabled it passes (counterfactual)."""
         edit(self)
-        self.assertEqual(self.fails(self.run_compare()), {family: 1})
+        self.assertEqual(self.fails(self.run_compare()), {family: rows})
         with check():
             self.assertEqual(self.fails(self.run_compare()), {})
 
@@ -380,27 +381,29 @@ class ComparatorTests(unittest.TestCase):
     def test_planted_count(self):
         self.numeric_fault("count", lambda t: t.files[f"brackets/{SHA}-block.json"].update(T=425))
 
-    def exact_fault(self, family, edit):
+    def exact_fault(self, family, edit, rows=1):
         original = cmp.Comparison.exact
 
         def lenient(c, fam, key, l9, ours, **raw):
             return original(c, fam, key, l9, l9 if fam == family else ours, **raw)
-        self.planted(family, edit, lambda: mock.patch.object(cmp.Comparison, "exact", lenient))
+        self.planted(family, edit, lambda: mock.patch.object(cmp.Comparison, "exact", lenient), rows)
 
     def test_planted_outcome_word(self):
         self.exact_fault("outcome_word", lambda t: t.ours["contrasts"][DECODE].update(outcome="unresolved"))
 
     def test_planted_dominance_branch(self):
-        self.exact_fault("dominance_branch", lambda t: t.ours["dominance"].update(branch="A"))
+        # The branch and, since RC-CMP-7 F2, the licensed word that follows it (licensed iff branch A).
+        self.exact_fault("dominance_branch", lambda t: t.ours["dominance"].update(branch="A"), rows=2)
 
     def test_planted_p42_status(self):
         # The extraction report and the sensitivity record's refused p42 cell both see the moved status.
+        # Since RC-CMP-7 F2 the sensitivity line's printed status and code words are compared too (outcome_word).
         self.ours["p42"]["df-ph-prefill-p42-qwen3-8b"].update(status="computed")
-        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 2})
+        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 2, "outcome_word": 2})
         original = cmp.Comparison.exact
 
         def lenient(c, fam, key, l9, ours, **raw):
-            return original(c, fam, key, l9, l9 if fam == "p42_status" else ours, **raw)
+            return original(c, fam, key, l9, l9 if fam == "p42_status" or "p42" in key else ours, **raw)
         with mock.patch.object(cmp.Comparison, "exact", lenient):
             self.assertEqual(self.fails(self.run_compare()), {})
 

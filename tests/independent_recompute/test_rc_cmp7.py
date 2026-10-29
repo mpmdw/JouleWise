@@ -236,3 +236,133 @@ class StepTwoUniverseTests(GateCase):
         row = next(r for r in out["comparisons"] if r["key"] == "disclosure/window_lines/alpha/corpus_counts")
         self.assertEqual((row["l9"], row["verdict"]), (None, "DISAGREE"))
         self.assertEqual(copy.deepcopy(self.fails(out)), {"routing_id": 1, "count": 1})
+
+
+# F2: the compared categorical lines (each prints a claim word the recompute re-derives) and every section
+# and line word the exemptions cover (the producer's harvest, history and window structure words).
+COMPARED_LINES = ("dominance_branch", "dominance_ratio", "sensitivity_reported", "sensitivity_window", "below_screen_bound")
+EXEMPT_BLOCK_WORDS = ("superseded_history", "attempt_count", "attempt_history", "g10", "harvest_once", "reharvest_account",
+                      "sensitivity_boundary")
+
+
+def find(case, word):
+    """(section list, index) of the first line with this word in the case's disclosure record."""
+    record = case.files[DISCLOSURE]
+    for lines in [record[s] for s in ("cells", "floors", "contrasts", "block_lines", "fixed_sentences")] + list(
+            record["window_lines"].values()):
+        for index, row in enumerate(lines):
+            if row["line"] == word:
+                return lines, index
+    raise KeyError(word)
+
+
+class LineWordTests(GateCase):
+    """F2: a line word read from the checked document no longer moves compared leaves under an exemption."""
+    def outcome(self):
+        try:
+            return self.exit_code(CODED)[0]
+        except cmp.Refusal:
+            return 2
+
+    def test_opus_relabel_sweep_never_exits_0(self):
+        # probe_cmp6.py relabel(): every floors, contrasts and block_lines line relabelled to every other word of
+        # the fixture. At 1134bbf58 58 of them exit 0 (probe_cmp6.out); here none does.
+        record = self.files[DISCLOSURE]
+        words = sorted({row["line"] for sec in ("cells", "floors", "contrasts", "block_lines", "fixed_sentences")
+                        for row in record[sec]} | {row["line"] for rows in record["window_lines"].values() for row in rows})
+        exits = []
+        for section in ("floors", "contrasts", "block_lines"):
+            for index, row in enumerate(copy.deepcopy(record[section])):
+                for word in words:
+                    if word == row["line"]:
+                        continue
+                    self.setUp()
+                    item = self.files[DISCLOSURE][section][index]
+                    item["line"] = item["label"] = word
+                    if self.outcome() == 0:
+                        exits.append((section, row["line"], word))
+        self.assertEqual(exits, [])
+        # Counterfactual: without the line gate the gate-free relabels of the block lines' claim words exit 0
+        # again only where an exemption still names the leaf; the enumerated exemptions name none of them.
+        with mock.patch.object(cmp, "gate_lines", lambda record: None):
+            self.setUp()
+            line = self.files[DISCLOSURE]["block_lines"][find(self, "dominance_branch")[1]]
+            line.update(branch="A", line="harvest_once", label="harvest_once")
+            self.assertNotEqual(self.outcome(), 0)
+
+    def test_each_compared_line_relabelled_into_every_exempt_section_refuses(self):
+        targets = [("block_lines", word) for word in EXEMPT_BLOCK_WORDS]
+        targets += [("window_lines", word) for word in sorted(cmp.LINE_KEYS["window_lines"])]
+        targets += [(section, word) for section in ("cells", "floors", "contrasts", "fixed_sentences")
+                    for word in sorted(cmp.LINE_KEYS[section])]
+        exits = []
+        for source in COMPARED_LINES:
+            for section, word in targets:
+                if word == source:
+                    continue
+                self.setUp()
+                lines, index = find(self, source)
+                item = lines.pop(index)
+                item["line"] = item["label"] = word
+                record = self.files[DISCLOSURE]
+                (record["window_lines"]["alpha"] if section == "window_lines" else record[section]).append(item)
+                if self.outcome() == 0:
+                    exits.append((source, section, word))
+        self.assertEqual(exits, [])
+
+    def test_wrong_categorical_word_in_its_own_line_disagrees(self):
+        cases = {
+            "branch A": ("dominance_branch", lambda row: row.update(branch="A")),
+            "licensed True": ("dominance_branch", lambda row: row.update(dominance_sentence_licensed=True)),
+            "ratio status refused": ("dominance_ratio", lambda row: row.update(status="refused")),
+            "below True": ("below_screen_bound", lambda row: row.update(below=True)),
+            "widened False": ("sensitivity_window", lambda row: row.update(widened=False)),
+            "p42 status computed": ("sensitivity_reported", lambda row: row["record"].update(status="computed")),
+            "p42 code other": ("sensitivity_reported", lambda row: row["record"].update(code="p42_other")),
+        }
+        for label, (word, edit) in cases.items():
+            with self.subTest(label):
+                self.setUp()
+                lines, index = find(self, word)
+                edit(lines[index])
+                code, err, out = self.exit_code(CODED)
+                self.assertEqual((code, err), (2, "refused=step11_unmapped_fill\n"))
+                self.assertTrue(any(u["reason"] in ("value_differs", "row_disagrees") for u in out["coverage"]["unbound"]))
+
+    def test_licensed_and_p42_words_were_exempt_at_1134bbf58(self):
+        # Counterfactual in place: the 1134bbf58 rules for these two leaves (uncovered:) let the wrong word pass.
+        old = ((r"disclosure:block_lines/dominance_branch/dominance_sentence_licensed", cmp.UNCOVERED + "x"),
+               (r"disclosure:(block_lines/[a-z_]+/record|sensitivity/[a-z_]+/\*)/(status|code)", cmp.UNCOVERED + "x"))
+        for word, edit in (("dominance_branch", lambda row: row.update(dominance_sentence_licensed=True)),
+                           ("sensitivity_reported", lambda row: row["record"].update(status="computed"))):
+            with self.subTest(word):
+                self.setUp()
+                lines, index = find(self, word)
+                edit(lines[index])
+                self.assertEqual(self.outcome(), 2)
+                with mock.patch.object(cmp, "COVERAGE", old + cmp.COVERAGE):
+                    self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_line_gate_refuses_an_unregistered_word_or_key(self):
+        self.files[DISCLOSURE]["block_lines"].append(test_comparator.item("made_up", False, "x"))
+        self.refused("line_word_unregistered:disclosure:block_lines")
+        self.setUp()
+        self.files[DISCLOSURE]["window_lines"]["alpha"].append(test_comparator.item("harvest_once", False, "x"))
+        self.refused("line_word_unregistered:disclosure:window_lines")
+        self.setUp()
+        lines, index = find(self, "harvest_once")
+        lines[index]["branch"] = "B"
+        self.refused("line_key_unregistered:disclosure:block_lines/harvest_once/branch")
+        self.setUp()
+        lines, index = find(self, "sensitivity_boundary")
+        lines[index]["line"] = "dominance_branch"
+        self.refused("line_keys_absent:disclosure:block_lines/dominance_branch")
+        self.setUp()
+        self.files[DISCLOSURE]["window_lines"]["delta"] = []
+        self.refused("routing_id_unregistered:disclosure:window_lines/delta")
+
+    def test_no_exemption_takes_a_window_or_history_subtree(self):
+        for rule in cmp.COVERAGE:
+            if len(rule) == 2:
+                self.assertNotIn("window_lines/.*", rule[0])
+                self.assertNotRegex(rule[0], r"(attempt_history|harvest_once|reharvest_account|g10)\)?/\.\*")
