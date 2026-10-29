@@ -164,6 +164,14 @@ def transform(mode, archive, output, export=None):
             assessments = read(archive / "withheld/member-assessments.json")
         else:
             spans = selected(read(archive / "withheld/spans.json"), "spans")
+            flags = archive / "derived/window_flags.json"
+            try:
+                expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
+            except (OSError, ValueError):
+                expected = None
+            provenance_unavailable = not isinstance(expected, str) or not expected
+            if provenance_unavailable:
+                notices.append({"code": "records.thermal_journal_provenance_unavailable"})
             journal = archive / "sources/night-custody/hazards/monitor/thermal.jsonl"
             if not journal.is_file() and not Path(str(journal) + ".zst").is_file():
                 unavailable = "archived thermal journal unavailable"
@@ -173,15 +181,7 @@ def transform(mode, archive, output, export=None):
                 digest = hashlib.sha256(h.read_bytes(journal)).hexdigest()
                 actual = journal if journal.is_file() else Path(str(journal) + ".zst")
                 sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
-                flags = archive / "derived/window_flags.json"
-                try:
-                    expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
-                except (OSError, ValueError):
-                    expected = None
-                provenance_unavailable = not isinstance(expected, str) or not expected
                 mismatch = not provenance_unavailable and digest != expected
-                if provenance_unavailable:
-                    notices.append({"code": "records.thermal_journal_provenance_unavailable"})
                 if mismatch:
                     notices.append({"code": "records.thermal_journal_mismatch"})
                 readings, malformed = h.read_monitor_journal(journal, "thermal")

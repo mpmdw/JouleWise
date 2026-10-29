@@ -879,7 +879,9 @@ class RecordedFaultTests(unittest.TestCase):
 
     def test_missing_journal_with_and_without_affected_members(self):
         self.journal.unlink()
+        (self.archive / 'derived/window_flags.json').unlink()
         record, _ = self.run_line('missing')
+        self.assertIn({'code': 'records.thermal_journal_provenance_unavailable'}, record['notices'])
         statuses = {r['run_id']: r['status'] for r in record['member_statuses']}
         self.assertEqual(statuses['a'], 'not defined (archived thermal journal unavailable)')
         self.assertEqual(statuses['b'], 'equals registered line')
