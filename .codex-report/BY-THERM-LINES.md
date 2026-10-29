@@ -261,3 +261,46 @@ Analysis SHA-256 unchanged: `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3a
 Harvest SHA-256 unchanged: `2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744`.
 
 Each implementation step was committed and pushed: `7da248861` (V1), `73ccf920d` (V2), `08e66102c` (V3/V5/V6; V4 confirmed already closed). This report is a separate commit. Only the three authorized files changed. No NEEDS_RULING remains. PR #598 stays draft; final-head CI is read after the report push and every job's state is reported in the handoff. No all-green CI claim is made in this section.
+
+
+## Fix round 4
+
+Activation `1cc172c8`, 2026-10-29; continued `574f13d2f` on `codex/2026-10-28-by-therm-lines`, draft PR #598. Implemented W1–W6 in `2017aa309`, the required-span-field refinement in `e59fd06ba`, and invariant-member pass-mismatch disclosure in `8013ce085`, each committed and pushed; this report is a separate committed and pushed step.
+
+- One shared `member_status` predicate now determines every science member from direction, original OS-code presence and evidence trust. Untrusted evidence preserves original codes regardless of candidate agreement. Only the direction-invariant members remain equal. Line equality requires every science member determined and equal.
+- Hull exclusions require actual bool or null; null remains unavailable. Missing, malformed or mismatched pass identity is untrusted in both directions. The five W4 faults write affected-member undefined records and exit 0. Invalid CSV bytes are preserved, and its fault reason survives on changed members.
+- Verification validates all control fields it consumes, reports damaged records as `thermal_line.json` differing, and completes the flag. It reads through resolved output links, writes only outside recorded sources, prints the flag without source writes otherwise, and leaves nonexistent outputs absent with `output missing`. Opus 7 remains unchanged by design.
+
+Decisions I made:
+
+- W1 supersedes the earlier all-member pass-mismatch status and candidate-dependent provenance checks: direction determines the invariant members even for these faults. An informational pass-mismatch notice remains visible even when every member is invariant. W4 structural/export faults still make every affected member undefined.
+- Keep a missing roster identity as null in the record, never invent a run id; inability to join that roster conservatively affects its science members. A missing exclusion code with a known run id affects that member only.
+- Keep §21's full-hull fallback for an explicitly absent (null) request span. A missing per-member span record or required span field is unavailable evidence. Keep the production journal parser and thermal helper's existing interpretation; introduce no estimator or threshold.
+- Hull uses the archived harvest assessment, without reopening a journal or requiring a new seal. The generated hull journal/seal-unavailable cells exercise the assessment's unavailable-journal field; request-end cells damage the actual journal seal.
+- Retain U1's new-output refusal and source-overlap protections. Give analysis-only positive fixtures explicit synthetic pass identities. Preserve and rerun the original review scripts; separately label the W3 positive-fixture ports rather than silently treating their old assumptions as passing.
+
+Inputs: Sol review `d332aefca` and Opus review `3f0b7ce`. Read both complete reviews and their supplied scripts. Reran `independent.py`, `probes_v.py`, and all three `adapted/` Python repros before and after. Baseline reproduces the false equality, integer-bool acceptance, remaining stops and verifier crashes. Final fault repros complete with the ruled statuses/exit codes. The unchanged sealed Sol positive probe now fails its restoration assertion because it has no pass identity; the unchanged sealed census prints eight target/status failures for that same reason, with no census failure. Explicit W3 identity ports give `PROBES_PASS` and `SUMMARY fails []`. The U1-adapted delta probe completes and preserves sources.
+
+Verification: Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`; synthetic only, no hardware or real BYTES data.
+
+- Final `RecordedFaultTests`: 26 tests, OK. Includes 144 real-CLI cells: both directions × both original-code states × candidate agreement/difference × nine fault kinds, each paired with its trusted control. Assert exact status, kept codes, recorded drops and line equality; trusted request-end would-add controls assert the ruled stop before output.
+- The initial `python3.13 -m unittest tests.test_bytes_thermal_lines tests.b6.test_bytes_p2_thermal_window tests.test_harvest_b5_window -q` ran all 234 tests in 1220.782 s (11 skipped). The 198 harvest-module tests had no failures (11 skipped); two thermal assertions failed on intermediate code: missing legacy hull notices and the superseded pass-mismatch assertion. Both were corrected. Final `python3.13 -m unittest tests.test_bytes_thermal_lines -q`: 36 tests in 615.906 s, OK; grouped analysis 30/30 and real harvest/acceptance chain 29/29, including compressed journals.
+- `git diff --check`: passed. The full repository suite is left to PR-head CI for this exclusion-only tooling change.
+
+Census, source equals output on both passes and both blinded stages:
+
+| Sessions | Public + withheld physical rows | Science before release | Science after release / archive |
+|---|---|---|---|
+| s2-p1, s2-p2 | 63 + 50 = 113 | 50 = 50 | 100 = 100 |
+| s5-p1, s5-p2 | 13 + 50 = 63 | 0 = 0 | 50 = 50 |
+
+The W3 census port also checks exact changed codes, all other row fields, model preservation and the withheld-store read gate.
+
+SHA-256 unchanged:
+
+```text
+18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71  joulewise/bytes_analysis.py
+2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744  joulewise/b5/harvest.py
+```
+
+Only the three authorized files changed. The tool reads no energy value; comparisons remain exact on codes, counts, integer stamps and hashes. No tolerance, numerical bar or NEEDS_RULING was needed. Final-head CI is read after this report's push and every job state is reported in the final handoff; no all-green claim is made here.
