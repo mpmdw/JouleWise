@@ -478,6 +478,12 @@ Differences from the brief, added to the eight of the block below:
 - Rule (joulewise-28): a real-data run gets its own worktree, and nothing else edits it.
 - The Fable step-4 review is still pending.
 
+112. **L9-STEP4 Fable delta ACCEPT_WITH_FIXES; both step-4 reviews closed (reported by joulewise-28, 2026-10-29 21:18-21:27Z).**
+- 21:18Z: Fable delta (`review/2026-10-29-l9-step4-fable-rev` `2d500674c`): classifier and driver correct and faithful to item 103. F1 BLOCKING: stale pins of the bare `refused` in `test_archive` (target refused, membership refusal, N2 subset, N1 malformed) and in `test_floor_kept_units` r14. These also failed PR #601's first CI run (shard 3; the other shards were cancelled). F2 and F3 duplicate Opus F1 and F2, already closed by `d27c562f6`.
+- 21:27Z: the stale expectations now name the registered codes (`0d2ff6404`, tests only; `steps.py` unchanged); `test_archive` plus `test_floor_kept_units` 79 OK. N2 becomes a test that a subset is the registered outcome, citing item 103 as superseding N7's stricter equality.
+- Both step-4 reviews are ACCEPT with their fixes applied. PR #601 merges once CI on `0d2ff6404` is green. `dry-d`'s analysis commit `d27c562f6` is an ancestor of it (only tests changed after), so step 5 passes the `origin/main` check after the merge and fetch.
+- **Briefing rule (adopted by the lead):** a seat brief's VERIFICATION runs the whole affected test directory, not only named modules, and its WRITE_SCOPE includes every caller its acceptance items require. Both the NEEDS_SCOPE stall (item 106) and this stale-pin miss came from narrow briefs written by the lead.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
