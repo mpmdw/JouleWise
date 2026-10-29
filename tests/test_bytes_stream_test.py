@@ -701,7 +701,59 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(len(result['calls']),8)
             self.assertTrue(all(v['class']=='UNDETERMINED' and 'scan.status' in v['reason']
                                 for v in result['boundaries'].values()))
-        print('generated real read CLI leaf faults:',count+7)
+        # Native support is a dependency of x as well as dx, at every
+        # palindrome position. All 128 deficient collections use fresh CLIs.
+        support_count = 0
+        for i in range(8):
+            for span in ('pre','post'):
+                for kind in probe.NATIVE_INPUTS:
+                    for length in (1,0):
+                        with self.subTest(call=i, span=span, kind=kind, length=length):
+                            mutated = deepcopy(records)
+                            mutated[i]['harvest']['idle'][span][kind] = mutated[i]['harvest']['idle'][span][kind][:length]
+                            result = self.read_cli(mutated)
+                            self.assertEqual(len(result['calls']),8)
+                            self.assertEqual(result['input_records'],mutated)
+                            betas = ('dc','rest') if kind in ('meter','battery') else ('rails','rest') if kind == 'rails' else ('gpu',)
+                            for beta in betas:
+                                value = result['boundaries'][beta]
+                                self.assertEqual(value['class'],'UNDETERMINED')
+                                self.assertIn(f'records[{i}].harvest.idle.{span}.{kind}',value['reason'])
+                                arm = baseline['calls'][i]['arm']
+                                for key in ('x','dx'):
+                                    self.assertIn('not defined (',value['arms'][arm][key])
+                                for key in ('r','halfwidth','epsilon_flip','epsilon_flip_over_alpha'):
+                                    self.assertIn('not defined (',value[key])
+                                self.assertNotIn('±',result['printed']['contrasts'][beta])
+                                if arm == 'C3':
+                                    for key in ('gamma_c','alpha','gamma_d','delta'):
+                                        self.assertEqual(value[key],baseline['boundaries'][beta][key])
+                            for beta, base in baseline['boundaries'].items():
+                                width = result['boundaries'][beta].get('halfwidth')
+                                if isinstance(width,(int,float)):
+                                    self.assertGreaterEqual(width,base['halfwidth'])
+                            for call, original in zip(result['calls'],baseline['calls']):
+                                for beta, row in call['boundaries'].items():
+                                    for key in ('bound_j','edge_bound_j','baseline_bound_j'):
+                                        if isinstance(row.get(key),(int,float)):
+                                            self.assertGreaterEqual(row[key],original['boundaries'][beta][key])
+                            support_count += 1
+        # Both accepted finite trim leaves are exercised at every position.
+        for i in range(8):
+            for section, key in (('harvest','tau_s'),('receipt','settle_s')):
+                mutated = deepcopy(records)
+                mutated[i][section][key] = 1e308
+                result = self.read_cli(mutated)
+                self.assertEqual(len(result['calls']),8)
+                self.assertEqual(result['input_records'],mutated)
+                if key == 'tau_s':
+                    self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
+                    self.assertTrue(any(f'records[{i}].harvest.tau_s' in r for r in result['reasons']))
+                    self.assertTrue(all(not isinstance(v['halfwidth'],(int,float)) for v in result['boundaries'].values()))
+                else:
+                    # Finite large settle gives zero trim: subtraction is safe.
+                    self.assertEqual(result['printed'],baseline['printed'])
+        print('generated real read CLI leaf faults:',count+7+support_count+16)
 
     def test_null_containers_and_scan_inputs_keep_complete_records(self):
         paths = [('receipt',),('harvest',),('harvest','idle'),('harvest','idle','pre'),
