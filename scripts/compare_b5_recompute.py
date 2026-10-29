@@ -53,6 +53,10 @@ Rules (RC-CMP-1 A1-A4):
   step 2 re-reduces (its kept-units record), applied identically to both sides; a
   member the window's sealed plan tree registers as a NEG-8 reference is compared in
   its NEG-8 family and listed in the restricted output as excluded (compared_in:<family>);
+- line words (RC-CMP-7 F2): a disclosure line is read only with a word its section's
+  producer writes and that word's keys; every printed claim word the recompute re-derives
+  is compared exactly, and an exemption names only enumerated producer leaves (F3: loo
+  rows key on registered block ids, ratio rows on registered numerator fields);
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
@@ -904,10 +908,17 @@ def cell_key(entry):
     return f"{entry['model']}/{entry['phase']}"
 
 
+# F3: the ratio table's registered numerator fields (run_d165_closeout_from_custody.build_ratio_table), read
+# literally: the independent ratio R and the common-mode ratio R_cm.
+NUMERATOR_FIELDS = {"corner_widened_unguarded_floor_j": "", "common_mode_corner_widened_unguarded_floor_j": "/common_mode"}
+
+
 def ratio_label(row, registry):
     entry = registry.lookup(row.get("cell_id"), ("floor",), "ratio")
-    common = str(row.get("numerator_field", "")).startswith("common_mode")
-    return f"{cell_key(entry)}/{row.get('component')}" + ("/common_mode" if common else "")
+    field = row.get("numerator_field")
+    suffix = NUMERATOR_FIELDS.get(field) if isinstance(field, str) else None
+    # An unregistered numerator field is no ratio: its row keys on nothing the recompute holds (DISAGREE).
+    return f"{cell_key(entry)}/{row.get('component')}" + (suffix if suffix is not None else "/unregistered_numerator")
 
 
 def our_ratios(ours):
@@ -971,10 +982,10 @@ def contrast_floor_part(cells, contrast, field):
     return max(values) if all(finite(v) for v in values) else None
 
 
-def loo_key(block_id):
-    """An omitted block id ...-b03 -> b03, the recompute's block numbering."""
-    match = re.search(r"(?:^|-)b(\d+)$", str(block_id))
-    return "b%02d" % int(match[1]) if match else None
+def loo_key(registry, cid, block_id):
+    """F3: an omitted block id -> the recompute's block key (b03), only as the contrast's registered block id
+    (analysis_manifest_v3 contrasts[*].block_ids, in order); any other spelling has no key (None)."""
+    return registry.block(cid, block_id)
 
 
 def block_key(number):
@@ -1069,7 +1080,8 @@ def compare_contrasts(c, custody, ours):
                 raw=evaluation.get("direction") if "direction" in evaluation else MISSING)
         c.exact("outcome_word", f"{cid}/ceiling", evaluation.get("claim_level_ceiling"), mine.get("ceiling"))
         l9_p[cid], our_p[cid] = multiplicity.get("raw_p"), mine.get("p")
-        loo_l9 = keyed(get(row, "loo", "rows", default=[]), lambda r: loo_key(r.get("omitted_block_id")), "loo_row")
+        loo_l9 = keyed(get(row, "loo", "rows", default=[]), lambda r: loo_key(registry, cid, r.get("omitted_block_id")),
+                       "loo_row")
         loo_mine = keyed(mine.get("loo"), lambda r: block_key(r.get("block_number")), "recompute_loo_row")
         for block, l9_loo, mine_loo in c.pairs(f"contrast/{cid}/loo/", loo_l9, loo_mine):
             l9_loo, mine_loo = l9_loo or {}, mine_loo or {}
@@ -1949,7 +1961,7 @@ def binding(context, groups, registry):
         if label and component:
             derive("ratio_label", f"{cell_key(floor)}/{component}" + ("/common_mode" if label[1] == "R_cm" else ""),
                    "cell_id", "component", "text")
-    derive("loo", loo_key(value.get("omitted_block_id")), "omitted_block_id")
+    derive("loo", loo_key(registry, value.get("contrast_id"), value.get("omitted_block_id")), "omitted_block_id")
     derive("loo_number", block_key(value.get("block_number")), "block_number")
     for name, position in POSITIONS.items():
         if position in context:

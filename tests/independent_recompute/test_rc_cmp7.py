@@ -366,3 +366,54 @@ class LineWordTests(GateCase):
             if len(rule) == 2:
                 self.assertNotIn("window_lines/.*", rule[0])
                 self.assertNotRegex(rule[0], r"(attempt_history|harvest_once|reharvest_account|g10)\)?/\.\*")
+
+
+class RegisteredLabelTests(GateCase):
+    """F3 (Opus finding 3, Fable F2): leave-one-out keys and ratio labels from registered ids and fields."""
+    DECODE = test_comparator.DECODE
+
+    def with_loo(self, block_id):
+        """One leave-one-out row on both sides: L9's verdict and fill copy (by block id), the recompute's (b03)."""
+        verdict = next(r for r in self.files[f"outputs/{SHA}-claim-verdicts.json"]["contrasts"] if r["contrast_id"] == self.DECODE)
+        row = {"omitted_block_id": block_id, "estimate": -1.0, "raw_p": 0.9, "adjusted_p": 1.0, "outcome": "not_resolvable",
+               "floor_status": "not_above_floor", "metrology_aware_ci95": {"lower": -13.0, "upper": 11.0},
+               "decision_interval": {"lower": -16.0, "upper": 14.0}, "n_blocks": 8, "df": 7, "influence_triggers": []}
+        verdict["loo"] = {"status": "computed", "rows": [row]}
+        fill = next(r for r in self.files[f"outputs/{SHA}-results-fill-input.json"]["gamma"]["contrasts"]
+                    if r["contrast_id"] == self.DECODE)
+        fill["loo"] = copy.deepcopy(verdict["loo"])
+        self.ours["contrasts"][self.DECODE]["loo"] = [{
+            "block_number": 3, "dbar_j": -1.0, "p": 0.9, "holm_p": 1.0, "outcome": "not_resolvable",
+            "metrology_interval_j": [-13.0, 11.0], "decision_interval_j": [-16.0, 14.0], "n": 8, "above_floor": False}]
+        lines, index = find(self, "loo_counts")
+        lines[index]["count"] = 1
+
+    def test_registered_block_id_binds(self):
+        self.with_loo("d117-decode-contrast-b03")
+        code, err, out = self.exit_code(CODED)
+        self.assertEqual((code, err), (0, ""))
+        self.assertTrue(any(r["key"] == f"{self.DECODE}/loo/b03/dbar_j" and r["verdict"] == "AGREE" for r in out["comparisons"]))
+
+    def test_unregistered_or_other_contrast_block_id_does_not_route_fable_p3b_p3c(self):
+        for block_id in ("TYPO-b03", "b03", "d117-prefill-p2048-contrast-b03", "plan-gamma-b03"):
+            with self.subTest(block_id):
+                self.setUp()
+                self.with_loo(block_id)
+                self.assertNotEqual(self.exit_code(CODED)[0], 0)
+                # Counterfactual: 1134bbf58's parse (a trailing bNN) routes every one of them to b03.
+                def parse(registry, cid, bid):
+                    return "b%02d" % int(bid.rsplit("b", 1)[1]) if isinstance(bid, str) else None
+                with mock.patch.object(cmp, "loo_key", parse):
+                    self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_ratio_label_takes_the_registered_numerator_field(self):
+        ratio = self.files["finalized/outputs/closeout.ratio-table.json"]["ratios"][0]
+        for field in ("common_mode_x", "corner_widened_unguarded_floor_j_v2"):
+            with self.subTest(field):
+                ratio["numerator_field"] = field
+                code, _, out = self.exit_code(CODED)
+                self.assertEqual(code, 2)
+                # The row keys on no recompute ratio: its routing_id row (and the recompute's own ratio) DISAGREE.
+                self.assertGreaterEqual(out["counts"]["routing_id"]["fail"], 2)
+        ratio["numerator_field"] = "corner_widened_unguarded_floor_j"
+        self.assertEqual(self.exit_code(CODED)[0], 0)
