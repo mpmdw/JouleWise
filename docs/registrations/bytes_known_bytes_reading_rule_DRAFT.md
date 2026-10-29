@@ -228,6 +228,17 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
    measured and removed by the cache arms. Each of these differences is printed as a disclosure and changes no
    class. `git_commit` and the five not-applicable model fields have the non-comparison roles in the table.
 
+Validate stack and capture containers leaf by leaf. An absent or invalid disclosure-only leaf prints
+`not recorded (<reason naming the leaf>)` and changes no class; valid siblings, including the rail set,
+remain available. Missing physical leaves charge the same classes as their physical differences.
+
+Each receipt must satisfy `idle_pre_start_ns <= idle_pre_end_ns <= start_ns < end_ns <= idle_post_start_ns <= idle_post_end_ns`.
+Native rails/GPU rows require `start_ns < end_ns`; native rows and meter stamps must respect their
+recorded time order. A violation (including a zero stamp that breaks order) makes the affected interval
+prerequisite missing, with the row named and retained as evidence; never drop it and recompute a bound.
+Rails, GPU and adapter-meter `power_w`, and `energy_j.rails`, must be non-negative. Battery power
+and battery edge energy remain signed; zero is valid.
+
 **Capture and harvest.** One continuous `powermetrics` capture and one continuous meter stream cover all eight
 calls, with one meter clock fit for the test, from the test's own non-claim checkout with the chain extension (reg. §19).
 Integrating rails, the GPU series, DC input and the battery term over the receipt's stamped spans, rather than over
@@ -368,7 +379,8 @@ UNDETERMINED; §2 gives their physical paths. A different `measurement_boundary_
 is a different measured rails boundary: rails and rest are UNDETERMINED with that reason,
 while DC is unaffected. If either recorded rail set lacks `gpu_power`, GPU is
 UNDETERMINED (`gpu_power missing from recorded rail set`): a GPU integral then has no measured source.
-Other differences change no class.
+Other differences change no class. Invalid disclosure-only leaves are printed as `not recorded (<reason>)`
+leaf by leaf, without discarding valid physical siblings or charging a class.
 The receipt keeps `differences`, `physical_differences` and `disclosure_differences`; harvest completes the
 capture comparison and prints it even for an otherwise undetermined result.
 

@@ -157,6 +157,13 @@ TEXT = ("text", None)
 EDGES = ("edges", 2)
 
 
+def finite_number(value):
+    try:
+        return type(value) in (int, float) and math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
 def input_value(value, schema, path):
     """Return (valid value, None), or (None, a leaf-naming missing reason)."""
     reason = path+" missing or invalid"
@@ -171,6 +178,17 @@ def input_value(value, schema, path):
             result[key], error = input_value(value.get(key, ABSENT), spec, path+"."+key)
             if error:
                 errors.append(error)
+        if not errors:
+            pairs = []
+            if all(k in schema for k in RECEIPT_INPUTS):
+                keys = ("idle_pre_start_ns", "idle_pre_end_ns", "start_ns", "end_ns",
+                        "idle_post_start_ns", "idle_post_end_ns")
+                pairs = [(a, b, a == "start_ns") for a, b in zip(keys, keys[1:])]
+            elif "start_ns" in schema and "end_ns" in schema:
+                pairs = [("start_ns", "end_ns", True)]
+            for a, b, strict in pairs:
+                if result[b] < result[a] or (strict and result[b] == result[a]):
+                    errors.append(f"{path}.{a}/{b} invalid time order")
         return (None, "; ".join(errors)) if errors else (result, None)
     if isinstance(schema, list):
         if not isinstance(value, list) or not value:
@@ -183,6 +201,22 @@ def input_value(value, schema, path):
             result.append(item)
         return result, None
     kind, limit = schema
+    if kind == "native":
+        spec, start, end = limit
+        rows, error = input_value(value, spec, path)
+        if error:
+            return None, error
+        stamp = "stamp_ns" if "stamp_ns" in spec[0] else "start_ns"
+        previous = None
+        for i, row in enumerate(rows):
+            v = row[stamp]
+            if ((previous is not None and v < previous) or
+                    (start is not None and end is not None and
+                     ((stamp == "stamp_ns" and not start <= v < end) or
+                      (stamp == "start_ns" and v == 0 and start > 0)))):
+                return None, f"{path}[{i}].{stamp} invalid time order"
+            previous = v
+        return rows, None
     if kind == "json":
         if isinstance(value, dict):
             for key, item in value.items():
@@ -196,18 +230,18 @@ def input_value(value, schema, path):
                 if error:
                     return None, error
             return value, None
-        valid = isinstance(value, (str, bool)) or (type(value) in (int,float) and math.isfinite(value))
+        valid = isinstance(value, (str, bool)) or (finite_number(value))
     elif kind == "text":
         valid = isinstance(value, str) and bool(value.strip())
-    elif kind == "edges":
+    elif kind in ("edges", "signed_edges"):
         valid = isinstance(value, list) and len(value) == limit
         if valid:
             for i, item in enumerate(value):
-                _, error = input_value(item, NONNEG, f"{path}[{i}]")
+                _, error = input_value(item, NUMBER if kind == "signed_edges" else NONNEG, f"{path}[{i}]")
                 if error:
                     return None, error
     else:
-        valid = type(value) in (int, float) and math.isfinite(value)
+        valid = finite_number(value)
         if kind in ("integer", "positive_integer"):
             valid = valid and type(value) is int
         if limit is not None:
@@ -224,7 +258,7 @@ STACK_INPUTS = {"os_version": TEXT, "hardware_unit": {"machine": TEXT, "device":
     "python": TEXT, "packages": {key: TEXT for key in REFERENCE_VERSIONS["packages"]}}
 CAPTURE_INPUTS = {"telemetry_backend": TEXT, "measurement_boundary_label": {"rails": [TEXT]}}
 NATIVE_INPUTS = {stream: [{**({"stamp_ns": COUNT} if stream in ("meter", "battery") else
-    {"start_ns": COUNT, "end_ns": COUNT}), "power_w": NUMBER}]
+    {"start_ns": COUNT, "end_ns": COUNT}), "power_w": NUMBER if stream == "battery" else NONNEG}]
     for stream in ("rails", "gpu", "meter", "battery")}
 
 
@@ -380,6 +414,13 @@ def not_defined(reason):
 
 
 def idle_statistics(rows, start_ns, end_ns, stream):
+    try:
+        return _idle_statistics(rows, start_ns, end_ns, stream)
+    except (OverflowError, ValueError) as exc:
+        return {"reason": stream+" idle arithmetic unavailable: "+str(exc), "sample_count":len(rows)}
+
+
+def _idle_statistics(rows, start_ns, end_ns, stream):
     """Native idle support; polls use arithmetic means, rails clipped intervals.
 
     Poll rows: stamp_ns, power_w. Rails/GPU rows: start_ns, end_ns, power_w.
@@ -522,6 +563,15 @@ def reduce_boundary(calls, sizes, boundary):
                   "description":not_defined("two complete arm calls missing")}
         if "x" in arms["S"]:
             result["raw_stream_j_per_byte"] = arms["S"]["x"]/sizes["S"]
+        undefined = not_defined(result["reason"])
+        result.update({key:undefined for key in ("r", "halfwidth", "epsilon_flip", "epsilon_flip_over_alpha")})
+        if all("x" in arms[a] for a in ("C1", "C2")):
+            gc = (arms["C2"]["x"]-arms["C1"]["x"])/(sizes["C2"]-sizes["C1"])
+            alpha = arms["C1"]["x"]-gc*sizes["C1"]
+            result.update(gamma_c=gc*1e9, alpha=alpha)
+            if "x" in arms["S"]:
+                gd = (arms["S"]["x"]-alpha)/sizes["S"]
+                result.update(gamma_d=gd*1e9, delta=(gd-gc)*1e9)
         return result
     xs,x1,x3,x2 = (arms[a]["x"] for a in ("S","C1","C3","C2"))
     ds,d1,d2 = (arms[a]["dx"] for a in ("S","C1","C2"))
@@ -573,6 +623,7 @@ def read_known_bytes(records, scan):
     scan_errors = []
     scan = take(scan, {}, "scan", names, scan_errors, {})
     scan = dict(scan)
+    scan["status"] = take(scan.get("status", ABSENT), TEXT, "scan.status", names, scan_errors)
     refused_scan = scan.get("status") == "knee not found" and "K" in scan and scan["K"] is None
     for key in ("K", "B", "Bc1", "Bc3", "Bc2"):
         # A missing knee is an ordinary scan refusal, not an invented size.
@@ -591,20 +642,38 @@ def read_known_bytes(records, scan):
         h = dict(take(raw.get("harvest", ABSENT), {}, path+".harvest", names, errors, {}))
         for key, spec in RECEIPT_INPUTS.items():
             r[key] = take(r.get(key, ABSENT), spec, path+".receipt."+key, names, errors)
-        r["stack"] = take(r.get("stack", ABSENT), STACK_INPUTS, path+".receipt.stack", names, errors, {})
-        h["capture_stack"] = take(h.get("capture_stack", ABSENT), CAPTURE_INPUTS, path+".harvest.capture_stack", names, errors, {})
+        def stack_leaves(value, spec, leaf_path, field=""):
+            if isinstance(spec, dict):
+                source = value if isinstance(value, dict) else {}
+                return {k: stack_leaves(source.get(k, ABSENT), child, leaf_path+"."+k,
+                                       field+"."+k if field else k) for k, child in spec.items()}
+            betas = (("rails", "rest", "gpu") if field == "measurement_boundary_label.rails"
+                     else names if field in PHYSICAL_FIELDS else ())
+            valid, error = input_value(value, spec, leaf_path)
+            if error:
+                if betas:
+                    errors.append((betas, error))
+                    return None
+                return "not recorded ("+error+")"
+            return valid
+        _, order_error = input_value(r, RECEIPT_INPUTS, path+".receipt")
+        if order_error:
+            errors.append((names, order_error))
+        r["stack"] = stack_leaves(r.get("stack", ABSENT), STACK_INPUTS, path+".receipt.stack")
+        h["capture_stack"] = stack_leaves(h.get("capture_stack", ABSENT), CAPTURE_INPUTS, path+".harvest.capture_stack")
         energy = take(h.get("energy_j", ABSENT), {}, path+".harvest.energy_j", names, errors, {})
-        h["energy_j"] = {k: take(energy.get(k, ABSENT), NUMBER, path+".harvest.energy_j."+k,
+        h["energy_j"] = {k: take(energy.get(k, ABSENT), NONNEG if k == "rails" else NUMBER, path+".harvest.energy_j."+k,
             ("dc",) if k in ("meter","battery") else (k,), errors) for k in NATIVE_INPUTS}
         idle = take(h.get("idle", ABSENT), {}, path+".harvest.idle", names, errors, {})
         h["idle"] = {}
         for span in ("pre", "post"):
             block = take(idle.get(span, ABSENT), {}, path+".harvest.idle."+span, names, errors, {})
-            h["idle"][span] = {k: take(block.get(k, ABSENT), spec,
+            h["idle"][span] = {k: take(block.get(k, ABSENT), ("native", (spec,
+                r.get("idle_"+span+"_start_ns"), r.get("idle_"+span+"_end_ns"))),
                 path+".harvest.idle."+span+"."+k, ("dc",) if k in ("meter","battery") else (k,), errors, [])
                 for k, spec in NATIVE_INPUTS.items()}
         for key, spec, betas in (("tau_s",NONNEG,names), ("r_max_s",NONNEG,("dc",)),
-            ("meter_edge_w",EDGES,("dc",)), ("battery_edge_j",EDGES,("dc",)),
+            ("meter_edge_w",EDGES,("dc",)), ("battery_edge_j",("signed_edges", 2),("dc",)),
             ("anchor_shift_j",NONNEG,("rails","gpu")),
             ("battery_samples",NATIVE_INPUTS["battery"],("dc",))):
             h[key] = take(h.get(key, ABSENT), spec, path+".harvest."+key, betas, errors,

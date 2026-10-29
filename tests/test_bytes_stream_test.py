@@ -280,10 +280,11 @@ class ReceiptTests(unittest.TestCase):
 
     def test_cli_end_to_end_with_fake_mlx_and_real_identity_sources(self):
         mx = FakeMLX()
+        real_stream = probe.stream
         package = ModuleType("mlx")
         package.core = mx
         with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, {"mlx": package, "mlx.core": mx}), \
-             patch.object(probe.time, "sleep", side_effect=mx.sleep), \
+             patch.object(probe, "stream", side_effect=lambda *a, **kw: real_stream(*a, sleep=mx.sleep, **kw)), \
              patch.object(probe.time, "clock_gettime_ns", side_effect=lambda _: mx.clock()), \
              patch("sys.stdout", new_callable=io.StringIO) as stdout:
             out = Path(tmp) / "receipt.json"
@@ -451,7 +452,9 @@ class ReaderTests(unittest.TestCase):
         for kind,step,se in [('rails',100_000_000,math.sqrt(1.2037e-4)),('gpu',100_000_000,0),
                              ('meter',20_000_000,.05),('battery',200_000_000,.01)]:
             n=57_600_000_000//step
-            values=[(-1)**i for i in range(n)]
+            # Sparse non-negative rails after centering/scaling retain the
+            # registered mean and governed SE; alternating rails went negative.
+            values=[(63 if i%64 == 0 else -1) if kind == 'rails' else (-1)**i for i in range(n)]
             var=nw(values,10_000_000_000//step,[57.6/n]*n).governed_variance_of_mean_w2
             shapes[kind]=(step,[v*se/math.sqrt(var) for v in values])
         for arm in ('S','C1','C3','C2','C2','C3','C1','S'):
@@ -577,15 +580,15 @@ class ReaderTests(unittest.TestCase):
                 for kind in probe.NATIVE_INPUTS:
                     mean = sum(r['power_w'] for r in h['idle'][span][kind])/len(h['idle'][span][kind])
                     h['idle'][span][kind] = [dict(
-                        {'stamp_ns': start+i*9_600_000_000} if kind in ('meter','battery') else
-                        {'start_ns':start+i*9_600_000_000,'end_ns':start+(i+1)*9_600_000_000},
-                        power_w=mean) for i in range(6)]
+                        {'stamp_ns': start+i*14_400_000_000} if kind in ('meter','battery') else
+                        {'start_ns':start+i*14_400_000_000,'end_ns':start+(i+1)*14_400_000_000},
+                        power_w=mean) for i in range(4)]
             h['battery_samples'] = deepcopy(h['idle']['pre']['battery']+h['idle']['post']['battery'])
             h['meter_gaps'] = [{'span':'stream','missing_samples':1}]
         baseline = self.read_cli(records)
         specs = {'receipt': {**probe.RECEIPT_INPUTS, 'stack':probe.STACK_INPUTS},
                  'harvest': {'capture_stack':probe.CAPTURE_INPUTS,
-                    'energy_j': {k:probe.NUMBER for k in probe.NATIVE_INPUTS},
+                    'energy_j': {k:probe.NONNEG if k == 'rails' else probe.NUMBER for k in probe.NATIVE_INPUTS},
                     'idle':{span:probe.NATIVE_INPUTS for span in ('pre','post')},
                     'battery_samples':probe.NATIVE_INPUTS['battery'],
                     'meter_gaps':[{'span':probe.TEXT,'missing_samples':probe.COUNT}],
@@ -609,6 +612,15 @@ class ReaderTests(unittest.TestCase):
         count = 0
         for path, value, spec in walk(records[0], specs):
             modes = ['deleted','null','wrong_type','non_finite','wrong_length']
+            if type(value) in (int,float):
+                modes.append('huge_integer')
+            if ((path[-1] == 'power_w' and 'battery' not in path and 'battery_samples' not in path)
+                    or path == ('harvest','energy_j','rails')):
+                modes.append('negative')
+            receipt_order = ('idle_pre_start_ns','idle_pre_end_ns','start_ns','end_ns','idle_post_start_ns','idle_post_end_ns')
+            if (path[0] == 'receipt' and path[-1] in receipt_order[1:] or
+                    'idle' in path and path[-1] in ('end_ns','stamp_ns')):
+                modes.append('order')
             for mode in modes:
                 with self.subTest(path=path, mode=mode):
                     mutated = deepcopy(records)
@@ -620,6 +632,14 @@ class ReaderTests(unittest.TestCase):
                     elif mode == 'null': parent[key] = None
                     elif mode == 'wrong_type': parent[key] = {} if not isinstance(value,dict) else 7
                     elif mode == 'non_finite': parent[key] = float('nan')
+                    elif mode == 'huge_integer': parent[key] = 10**400
+                    elif mode == 'negative': parent[key] = -abs(value)-1
+                    elif mode == 'order':
+                        if path[0] == 'receipt':
+                            previous = receipt_order[receipt_order.index(key)-1]
+                            parent[key] = parent[previous] if key == 'end_ns' else parent[previous]-1
+                        else:
+                            parent[key] = parent['start_ns'] if key == 'end_ns' else 0
                     else: parent[key] = value[:1] if isinstance(value,list) else []
                     with tempfile.TemporaryDirectory() as tmp:
                         file = Path(tmp)/'read.json'
@@ -631,11 +651,21 @@ class ReaderTests(unittest.TestCase):
                     self.assertEqual(len(result['calls']),8)
                     leaf = '.'.join(str(k) for k in path)
                     leaf_name = next(k for k in reversed(path) if isinstance(k,str))
-                    self.assertTrue(any(leaf_name in reason for reason in result['reasons']),leaf)
+                    stack_field = '.'.join(k for k in path[2:] if isinstance(k,str))
+                    disclosure = (path[:2] in (('receipt','stack'),('harvest','capture_stack'))
+                                  and stack_field not in probe.PHYSICAL_FIELDS)
+                    if disclosure:
+                        self.assertIn('not recorded (records[0].'+'.'.join(str(k) for k in path),
+                                      json.dumps(result['stack_comparisons']))
+                        self.assertEqual({k:v['class'] for k,v in result['boundaries'].items()},
+                                         {k:v['class'] for k,v in baseline['boundaries'].items()})
+                    else:
+                        self.assertTrue(any(leaf_name in reason for reason in result['reasons']),leaf)
                     undefined = [v for v in result['boundaries'].values() if v['class']=='UNDETERMINED']
-                    self.assertTrue(undefined,leaf)
-                    self.assertTrue(any(leaf_name in v['reason'] for v in undefined),leaf)
-                    self.assertTrue(any('not defined (' in v['description'] for v in undefined))
+                    if not disclosure:
+                        self.assertTrue(undefined,leaf)
+                        self.assertTrue(any(leaf_name in v['reason'] for v in undefined),leaf)
+                        self.assertTrue(any('not defined (' in v['description'] for v in undefined))
                     # No still-defined propagated bound may shrink. Undefined
                     # widths are deliberately not replaced with numeric zero.
                     for beta, base in baseline['boundaries'].items():
@@ -652,7 +682,17 @@ class ReaderTests(unittest.TestCase):
                                 if isinstance(bound,(int,float)):
                                     self.assertGreaterEqual(bound,original['boundaries'][beta][field])
                     count += 1
-        print('generated real read CLI leaf faults:',count)
+        for key in ('K','B','Bc1','Bc3','Bc2'):
+            result = self.read_cli(records, {**self.scan, key:10**400})
+            self.assertEqual(len(result['calls']),8)
+            self.assertTrue(all(v['class']=='UNDETERMINED' and key in v['reason']
+                                for v in result['boundaries'].values()))
+        for status in (None, 7):
+            result = self.read_cli(records, {**self.scan, 'status':status})
+            self.assertEqual(len(result['calls']),8)
+            self.assertTrue(all(v['class']=='UNDETERMINED' and 'scan.status' in v['reason']
+                                for v in result['boundaries'].values()))
+        print('generated real read CLI leaf faults:',count+7)
 
     def test_null_containers_and_scan_inputs_keep_complete_records(self):
         paths = [('receipt',),('harvest',),('harvest','idle'),('harvest','idle','pre'),
@@ -673,7 +713,7 @@ class ReaderTests(unittest.TestCase):
             self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
         for path in ('repeats','start_ns','end_ns','bytes_per_read','clock_resolution_s',
                      'clock_tick_num_ns','clock_tick_den','clock','clock_tick_source'):
-            for value in (None, {}, float('nan')):
+            for value in (None, {}, float('nan'), 10**400):
                 receipts = [{'bytes_per_read':size,'repeats':1,'start_ns':0,'end_ns':100+size,
                              **synthetic_clock()} for size in (16,32) for _ in range(3)]
                 receipts[0][path] = value
@@ -681,6 +721,12 @@ class ReaderTests(unittest.TestCase):
                 self.assertEqual(result['status'],'knee not found')
                 self.assertIn(path,result['reason'])
                 json.dumps(result, allow_nan=False)
+
+    def test_idle_arithmetic_overflow_is_reasoned(self):
+        rows = [{'stamp_ns':i*14_400_000_000,'power_w':1e308} for i in range(4)]
+        result = probe.idle_statistics(rows,0,57_600_000_000,'meter')
+        self.assertIn('arithmetic unavailable',result['reason'])
+        self.assertNotIn('mean_w',result)
 
     def test_lost_calls_preserve_other_arm_reductions(self):
         for i in range(8):
@@ -691,7 +737,16 @@ class ReaderTests(unittest.TestCase):
                 else: records[i] = lost
                 result = self.read_cli(records)
                 for beta in ('rails','gpu','dc','rest'):
-                    arms = result['boundaries'][beta]['arms']
+                    value = result['boundaries'][beta]
+                    arms = value['arms']
+                    if arm == 'C3':
+                        for key in ('gamma_c','alpha','gamma_d','delta'):
+                            self.assertEqual(value[key],self.result['boundaries'][beta][key])
+                        for key in ('r','halfwidth','epsilon_flip','epsilon_flip_over_alpha'):
+                            self.assertIn('not defined (',value[key])
+                    elif arm == 'S':
+                        for key in ('gamma_c','alpha'):
+                            self.assertEqual(value[key],self.result['boundaries'][beta][key])
                     for name in self.payload:
                         if name != arm:
                             self.assertEqual(arms[name],self.result['boundaries'][beta]['arms'][name])
