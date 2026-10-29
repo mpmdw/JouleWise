@@ -1449,6 +1449,19 @@ class AuthenticationTests(unittest.TestCase):
             )
 
 
+    def test_legacy_deriver_mint_error_keeps_wrapped_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = self._a10_tree(tmp)
+            with mock.patch.object(mint, "build_stack_identity", return_value=stack_identity()), \
+                 mock.patch.object(mint, "scientific_config_identity", return_value={"synthetic": "same"}), \
+                 self.assertRaisesRegex(mint.MintError,
+                     "^whole-window drift allowance is not derivable from authenticated campaign evidence: MintError: legacy deriver failure$"):
+                mint._authenticate_component(paths, expected_cell_id=mint.A10_CELL_ID,
+                    expected_basis_sha256=mint.A10_EVALUATION_BASIS_SHA256,
+                    strict_validator=lambda *_: (), consumption_authenticator=self._synthetic_consumption,
+                    allowance_deriver=mock.Mock(side_effect=mint.MintError("legacy deriver failure")))
+
+
 class ConstructionTests(unittest.TestCase):
     def test_constructs_exact_cross_window_cell_and_composed_group(self) -> None:
         artifact = make_artifact()
@@ -1868,3 +1881,15 @@ class BinderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5KeptMemberCompatibilityTests(unittest.TestCase):
+    def test_explicit_kept_view_retains_legacy_refusal_default(self):
+        spec = {"members": [{"bundle_id": "kept"}, {"bundle_id": "removed"}]}
+        cell = {"members": [{"bundle_id": "kept", "excluded": False, "reasons": [], "anchor_shift_bound_j": 0.05},
+                            {"bundle_id": "removed", "excluded": True, "reasons": [], "cooldown_verified": False, "cap_hit": False}]}
+        with self.assertRaisesRegex(mint.MintError, "^target extraction cell contains excluded or refused members$"):
+            mint._report_members(cell, spec, "absolute")
+        rows, widths = mint._report_members(cell, spec, "absolute", frozenset({"removed"}))
+        self.assertEqual([row["bundle_id"] for row in rows], ["kept"])
+        self.assertEqual(widths, (0.05,))

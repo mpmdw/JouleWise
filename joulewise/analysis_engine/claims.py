@@ -87,7 +87,7 @@ ENGINE_REASON_CODES = frozenset(
         "bundle_strict_invalid",
         "bundle_status_not_succeeded",
         "metric_missing_or_nonfinite",
-        "paired_block_incomplete",
+        "paired_block_incomplete", "unit_removed_by_exclusion_function",
         "insufficient_complete_blocks",
         "multiplicity_family_incomplete",
         "fixed_n_plan_incomplete",

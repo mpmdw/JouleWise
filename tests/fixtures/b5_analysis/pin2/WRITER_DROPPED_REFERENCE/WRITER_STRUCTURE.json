@@ -1,0 +1,27 @@
+{
+  "claim_licensing": true,
+  "conditions": [
+    "instrument_calibration_bracket_missing",
+    "neg8_drift_bound_underived",
+    "neg8_idle_sub_drift_bound_underived",
+    "whole_window_bundle_invalid"
+  ],
+  "excluded_bundles": [
+    {
+      "bundle_id": "b5t-neg8-end-3",
+      "status": "succeeded",
+      "strict_valid": false,
+      "validation_problems": [
+        "synthetic adapter invalid member"
+      ]
+    }
+  ],
+  "member_failures": [
+    {
+      "detail": "{\"collection_integrity_flags\":[],\"status\":\"succeeded\",\"strict_valid\":false,\"validation_problems\":[\"synthetic adapter invalid member\"]}",
+      "member_id": "b5t-neg8-end-3",
+      "reason_code": "whole_window_bundle_invalid"
+    }
+  ],
+  "status": "failed"
+}

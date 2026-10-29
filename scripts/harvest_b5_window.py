@@ -15,7 +15,9 @@ Nothing here refuses on data.  Exit status:
 
 stdout carries structure only: the verdict, the member counts
 (``members=<raw-valid>/<planned>``), the reasons the window is excluded, any
-runs-root override, and output digests.
+runs-root override, the checkout this program ran from (its commit and
+whether it was clean; registration 11 item 4 pins the harvest program by that
+commit), and output digests.
 """
 from __future__ import annotations
 
@@ -94,6 +96,9 @@ def main(argv: list[str] | None = None) -> int:
     print("exclude_window=" + (",".join(record.get("exclude_window_reasons") or []) or "none"))
     for override in record.get("runs_root_overrides") or []:
         print(f"runs_root_override={override['root']}:{override['used']} planned={override['planned']}")
+    checkout = record.get("harvest_checkout") or {}
+    print(f"harvest_checkout={checkout.get('head') or 'unknown'} "
+          f"clean={str(checkout.get('status_clean')).lower()} root={checkout.get('root')}")
     harvest_json = Path(record["archive_root"]) / "harvest.json"
     print(f"harvest={harvest_json} sha256={h.sha256_file(harvest_json)}")
     for name, digest in record["outputs"].items():

@@ -1,0 +1,35 @@
+{
+  "archive_root": "/private/tmp/b5-s0-beta-pin3-mxq38p77/archive",
+  "attempt": 4,
+  "claim_usable": false,
+  "exclude_window_reasons": [
+    "window.null"
+  ],
+  "faults": [],
+  "flags": 1,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463",
+      "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "0699abbb0881ce64b39c46ba07de568cc3848260",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin3",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_assessed": 0,
+  "outputs": {
+    "derived/exclusions.json": "cb08c6595f2252b5ecd45f2efb7598b6c8f037a90651c9c38ad8e34914d5c08a",
+    "derived/flags.jsonl": "d7270c7f79d7d88d93f173547802b7bab3205fa142fde34665bf5baa7ee1a404",
+    "derived/window_flags.json": "b09fb259c4c266bcabb50234caeb38b9ac92899fc94ed32a8634b5ece43c4614"
+  },
+  "pack_id": "s0_beta_mock_v5",
+  "plan_id": "s0-beta-plan",
+  "runs_root_overrides": [],
+  "schema": "joulewise.harvest_b5_window.v1",
+  "verdict": "NULL",
+  "yield": null
+}

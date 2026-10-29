@@ -1,0 +1,20 @@
+{
+  "archive_root": "/private/tmp/b5-s0-beta-pin3-mxq38p77/archive",
+  "attempt": 2,
+  "bound_runs_root": "/private/tmp/b5-s0-beta-pin3-mxq38p77/bound-runs",
+  "cause_key": null,
+  "claim_runs_root": "/private/tmp/b5-s0-beta-pin3-mxq38p77/claim-runs",
+  "claim_usable": false,
+  "custody_root": "/private/tmp/b5-s0-beta-pin3-mxq38p77/custody",
+  "entry_kind": "harvested",
+  "harvest_pin": "0699abbb0881ce64b39c46ba07de568cc3848260",
+  "harvest_record_sha256": "fb2cf37487b4c9a5f21dd4fd97fe078d09f2746e7b9e2a2b585124e3357db9f0",
+  "measurement_root": "/private/tmp/b5-s0-beta-pin3-mxq38p77/measurement",
+  "pack": "beta",
+  "pack_id": "d117_floor_qwen3-8b_v5",
+  "plan_id": "v5-b5-beta-a2-s10-history",
+  "seal": "second",
+  "superseded_archive_roots": [],
+  "t0_epoch_s": 1791649801,
+  "verdict": "NULL"
+}
