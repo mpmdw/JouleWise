@@ -1556,3 +1556,29 @@ Added:
 Added:
 
 - `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s6-p2/plan_tree.json`
+
+## Round 6 (fix round)
+
+Activation `1cc172c8`, 2026-10-29. Continued `codex/2026-10-28-kb-v2` from `6847502b8`; read the Sol review at `fb477524d` and Opus review at `7d5065f`. Implementation commits, each pushed: `93de6cdab`, `78daeb3ad`, `dfbba204d`.
+
+H1–H8 are implemented. G1 rejects numbers outside finite binary64, validates receipt/native time order and fixed signs, validates scan status, and handles stack leaves separately. Invalid rows remain in `input_records`; their collections do not supply a recomputed smaller bound. Idle overflow, including a non-finite power-duration product, produces a reasoned UNDETERMINED result. Complete prerequisite arms retain their central coefficients when another arm is lost; residuals and uncertainties remain reasoned `not defined`. Disclosure-only failures print `not recorded` without charging a class or discarding a valid rail set. The identity-source test injects only the stream sleep and leaves subprocess sleep alone.
+
+Verification used Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, and `PYTHONDONTWRITEBYTECODE=1`:
+
+- `tests.test_bytes_stream_test` plus `tests.test_bytes_mac_kit`: **50 tests, OK**, 1,979.938 s; 892 generated CLI faults in that run. This is 1.37× the review's Round 5 combined-module time of 1,450.139 s, under the requested approximate 1.5× budget despite concurrent verification.
+- `tests.test_bytes_h_session` plus `tests.test_repin`: **73 tests, OK**, 2,139.197 s.
+- Final generated test: **900 real CLI faults, OK**, 1,279.431 s, including huge integers, interval/native-row order, scan status, fixed signs and disclosure-only class retention. Final arithmetic module: **6 tests, OK**.
+- Sol `extra.py` and `partial.py` were replayed before and after: the two tracebacks disappear, bad scan status is reasoned, and lost C3 retains `gamma_c`, `alpha`, `gamma_d` and Delta. The four named Opus disclosure leaves were independently replayed before/after; final classes remain RESOLVED with leaf-naming disclosures. Opus `probes.py` cases finish without reader tracebacks on the valid nonnegative fixture; only its obsolete numeric-bound display lookup was adapted.
+- Independent Opus walk: **44,816 cases before and after**. Before: 980 crashes; after: **0 crashes, 0 lost calls**, with 450/463 sampled CLI reads respectively exiting 0. The walk process predated the final battery-list follow-up: all **36** affected zero-stamp cases were replayed on the final source, with matching CLI classes, DC UNDETERMINED and no smaller bound; this reconciles its three old-process/new-CLI mismatches. No huge-integer, invalid native-zero-stamp or fixed-sign-negative case shrank a surviving bound. The raw 176 remaining shrink flags are valid zero/signed-measurement changes, changed row/gap collections or record-deletion index comparisons, not these malformed prerequisites.
+- `repin.py --check`: **PASS 16 pin families current**. Kit freshness: **verified non-claim Mac kit**. No regeneration or pinned-digest changes were required. `git diff --check` passes.
+
+Worked output from the final committed reader is unchanged: **rails 0.06672 ± 0.00057, DC 0.1929 ± 0.0025, rest 0.1262 ± 0.0024 J/GB; share 0.3458 ± 0.0075**. The **4.5e-7 GB/s** rational-check and **5.7e-6 J/GB** energy bars are unchanged; no new agreement bar was added.
+
+Decisions I made:
+
+- Keep duplicate poll stamps valid, reject reversed order and zero stamps that break the receipt/native order, and preserve valid flanking support rows. Apply the accessor to the separate native battery poll list as well as idle collections.
+- Keep battery power and battery edge energy signed, while enforcing the signs H6 fixes. Preserve unconsumed stack metadata alongside the validated leaves.
+- Thin generated idle support from six 9.6 s rows to four 14.4 s rows, still covering 57.6 s and at least three bandwidths; walk every retained leaf. Final fault count is 900 versus Round 5's 945.
+- Repair negative-power synthetic fixtures with sparse positive pulses, retaining their means and governed standard errors. The original Opus fixture is still replayed literally and correctly refuses under H6; its nonnegative equivalent supplies the worked-value and physical-order checks. This changes no valid-input estimator or publication number.
+
+No NEEDS_RULING or scope expansion. All repository writes stay within the supplied allowlist. No hardware measurement, admission or merge. Final-head CI is read after pushing this report, and every job's observed state is included in the handoff; this section makes no advance green claim.
