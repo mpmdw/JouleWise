@@ -174,10 +174,10 @@ class ArchiveTests(unittest.TestCase):
                             for row in spec["cells"]], "spec_membership_refusals": []}
         self.assertEqual(classify_step4_exit(1, report, spec), "p42_floor_cells_only")
         report["cells"][-1]["extractable"] = False
-        self.assertEqual(classify_step4_exit(1, report, spec), "refused")
+        self.assertEqual(classify_step4_exit(1, report, spec), "floor_cell_not_extractable")
         report["cells"][-1]["extractable"] = True
         report["spec_membership_refusals"] = [{"reason": "campaign_member_omitted_from_spec"}]
-        self.assertEqual(classify_step4_exit(1, report, spec), "refused")
+        self.assertEqual(classify_step4_exit(1, report, spec), "extraction_spec_membership_refused")
         self.assertEqual(classify_step4_exit(0, report, spec), "ok")
         self.assertEqual(classify_step4_exit(2, report, spec), "refused")
 
@@ -213,16 +213,17 @@ class ArchiveTests(unittest.TestCase):
                     archive._output({"outputs": {"derived/roster.json": digest}}, self.root, "derived/roster.json", {})
                 read.assert_not_called()
 
-    def test_review_n2_p42_subset_is_refused(self):
+    def test_review_n2_p42_subset_is_the_registered_exit(self):
         # p6 uses the real sealed spec, with just one of its two p42 cells
-        # refused. N7's disposition retains the stricter equality for S0.
+        # refused. RUN_STATE item 103 supersedes N7's stricter equality: any
+        # non-empty subset of the p42 floor cells is the registered p42 exit.
         spec = json.loads((fx.ROOT / "configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json").read_bytes())
         p42 = [row["cell_id"] for row in spec["cells"] if "p42" in row["condition_family_id"].split("-")
                and row["kind"] in ("absolute", "comparative")]
         self.assertGreater(len(p42), 1)
         report = {"cells": [{"cell_id": row["cell_id"], "extractable": row["cell_id"] != p42[0]}
                             for row in spec["cells"]], "spec_membership_refusals": []}
-        self.assertEqual(classify_step4_exit(1, report, spec), "refused")
+        self.assertEqual(classify_step4_exit(1, report, spec), "p42_floor_cells_only")
         for row in report["cells"]:
             row["extractable"] = row["cell_id"] not in p42
         self.assertEqual(classify_step4_exit(1, report, spec), "p42_floor_cells_only")
@@ -267,14 +268,18 @@ class ArchiveTests(unittest.TestCase):
                            {"cells": spec["cells"] * 2}]
         for malformed in malformed_specs:
             with self.subTest(spec=malformed):
-                self.assertEqual(classify_step4_exit(1, report, malformed), "refused")
+                self.assertEqual(classify_step4_exit(1, report, malformed),
+                                 "extraction_cell_ids_duplicated" if malformed == {"cells": spec["cells"] * 2}
+                                 else "extraction_spec_malformed")
         for cells in (["x"], [{"extractable": False}], [{"cell_id": [], "extractable": False}],
                       [{"cell_id": "floor", "extractable": 0}]):
             with self.subTest(cells=cells):
-                self.assertEqual(classify_step4_exit(1, {**report, "cells": cells}, spec), "refused")
+                self.assertEqual(classify_step4_exit(1, {**report, "cells": cells}, spec),
+                                 "extraction_extractable_not_boolean" if cells[0] == {"cell_id": "floor", "extractable": 0}
+                                 else "extraction_report_malformed")
         for status in (True, False, "1"):
             self.assertEqual(classify_step4_exit(status, report, spec), "refused")
-        self.assertEqual(classify_step4_exit(1, None, spec), "refused")
+        self.assertEqual(classify_step4_exit(1, None, spec), "extraction_report_malformed")
 
     def test_review_n6_status_lines_must_be_integer_zero(self):
         # p7h: False == 0 and 0.0 == 0 must not authenticate a clean checkout.
