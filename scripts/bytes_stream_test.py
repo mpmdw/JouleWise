@@ -544,14 +544,18 @@ def classify(delta, halfwidth, phi, *, reason=None):
     """§4 ordered classes, in J/GB; undefined descriptions do not enter here."""
     if reason:
         return {"class": "UNDETERMINED", "reason": reason}
-    if delta+halfwidth < 0:
+    upper = arithmetic("delta/halfwidth upper endpoint", lambda: delta+halfwidth)
+    lower = arithmetic("delta/halfwidth lower endpoint", lambda: delta-halfwidth)
+    if upper < 0:
         return {"class": "UNDETERMINED", "reason": "contrast negative"}
-    if delta-halfwidth > 0:
+    if lower > 0:
         return {"class": "RESOLVED"}
     epsilon0 = 1e9/(512*39_852_331_520)
-    if max(abs(delta-halfwidth),abs(delta+halfwidth))/(1-phi) <= epsilon0:
+    level = arithmetic("delta/halfwidth/scan.K/B attribution ratio",
+                       lambda: max(abs(lower),abs(upper))/(1-phi))
+    if level <= epsilon0:
         return {"class": "BELOW ATTRIBUTION LEVEL"}
-    return {"class": "NOT RESOLVED", "upper_limit": (delta+halfwidth)/(1-phi)}
+    return {"class": "NOT RESOLVED", "upper_limit": arithmetic("delta/halfwidth/scan.K/B upper_limit", lambda: upper/(1-phi))}
 
 
 # Executable dependency table: every derived reducer node is evaluated only
@@ -660,7 +664,7 @@ def reduce_boundary(calls, sizes, boundary):
         "dgc": lambda: (v["C1.dx"]+v["C2.dx"]+abs(v["r"]))/(c2-c1),
         "da": lambda: v["C1.dx"]+abs(v["r"])+v["dgc"]*c1,
         "halfwidth": lambda: ((v["S.dx"]+v["da"]+abs(v["alpha"]))/b+v["dgc"])*1e9,
-        "epsilon_flip": lambda: v["halfwidth"]/1e9*(c2-c1)/(1-c1/b),
+        "epsilon_flip": lambda: v["halfwidth"]/1e9*(c2-c1)/(1-arithmetic("scan.Bc1/B", lambda: c1/b)),
         "epsilon_flip_over_alpha": lambda: v["epsilon_flip"]/v["alpha"],
         "raw_stream_j_per_byte": lambda: v["S.x"]/b,
     }

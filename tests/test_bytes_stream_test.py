@@ -933,6 +933,10 @@ class ReaderTests(unittest.TestCase):
         for delta,width,expected in [(2.5e-5,1e-5,'RESOLVED'),(-.0100,.0020,'UNDETERMINED'),
                                      (1e-5,2e-5,'BELOW ATTRIBUTION LEVEL'),(0,.00057,'NOT RESOLVED')]:
             self.assertEqual(probe.classify(delta,width,1/64)['class'],expected)
+        # The attribution ratio overflows although its later upper limit is
+        # zero. Checking only the final returned dictionary would miss it.
+        with self.assertRaisesRegex(ValueError,'scan.K/B attribution ratio'):
+            probe.classify(-8e307,8e307,.99)
         calls=[{'arm':a,'N':1,'boundaries':{'rails':{'excess_j':self.payload[a]*1e-9,'bound_j':.001}}}
                for a in ('S','C1','C3','C2','C2','C3','C1','S')]
         value=probe.reduce_boundary(calls,self.payload,'rails')
