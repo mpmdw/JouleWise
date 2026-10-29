@@ -516,3 +516,991 @@ keep the existing generated F7 revisions. None changes a rule-defined data
 choice or adds an acceptance tolerance. No scope expansion, approval rejection,
 hardware measurement, unblinding, admission or merge occurred. All execution
 evidence is synthetic. NEEDS_RULING: none.
+
+
+## Round 5 (fix round)
+
+Activation bde918c1; synthetic-only Python 3.13, no bytecode. Read both Sol-3 and
+Opus-2 reports and their scripts at the requested refs. Status: **BLOCKED by G3**.
+
+G3 census: `python3.13 -B scripts/repin.py --write registry` changed only the
+registry. Kind-P literals: **32,556 → 33,297**. `repin.py --check` prints
+`PASS 16 pin families current`; kit `--check` also passes without regeneration.
+Registry-only commit `2153f1333` was pushed prematurely: I incorrectly checked
+row ownership against the merge base with main. The corrected comparison with
+PR #593's base `e624d67c7` identifies the 27 exception files below. G3 requires
+stopping on these exceptions. No further implementation commits were made.
+The individual added/removed registry rows are enumerated in the next section.
+Besides 741 new rows, six existing sizing rows (`bytes-s1-p1` through
+`bytes-s6-p1`, `/source/code_sha256/joulewise~1b6~1precheck.py`) lose their
+`file:joulewise/b6/precheck.py` target and instead have a null target.
+
+| Exception file | Changed row locations |
+|---|---|
+| `configs/b6/packs/bytes-s1-p1/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s1-p2/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s2-p1/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s2-p2/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s3-p1/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s3-p2/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s4-p1/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s4-p2/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s5-p1/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s5-p2/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s6-p1/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/packs/bytes-s6-p2/registration.json` | `/flag_catalog_sha256` |
+| `configs/b6/registration/identity_pins.json` | `358 pointers; exact inventory below` |
+| `configs/b6/registration/sizing_b5.json` | `6 pointers; exact inventory below` |
+| `configs/bytes/identity_pins.json` | `359 pointers; exact inventory below` |
+| `configs/campaigns/bytes-s1-p1/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s1-p2/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s2-p1/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s2-p2/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s3-p1/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s3-p2/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s4-p1/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s4-p2/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s5-p1/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s5-p2/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s6-p1/plan_tree.sha256` | `#L1` |
+| `configs/campaigns/bytes-s6-p2/plan_tree.sha256` | `#L1` |
+
+Uncommitted authorized fixes are preserved in the worktree: G1's single
+schema-driven input accessor, reasoned prerequisite failures and finite/exact
+edge validation; G2's independent arm reductions; G4's exact manifest-ID lookup;
+and G5's reference snapshots, negative-place upper-limit rounding and missing
+GPU-source rule in §§2/4. The generated real-stream/disk/CLI test walks one full
+call's consumed leaves with five mutations each, checks complete output and
+leaf-naming UNDETERMINED reasons, and forbids smaller surviving aggregate,
+per-call or gap bounds. Separate tests cover every lost-call position, null
+containers, scan inputs and both sides of the rail-set comparison.
+
+Before/after repros: Sol's null/edge cases originally raised or narrowed bounds;
+they now exit 0 and retain records and complete-arm summaries. Opus's complete
+matrix reproduced the original five tracebacks, negative gap charge, stale
+reference snapshot and 157 upper limit; its replay reports zero reader
+tracebacks, reasoned undefined bounds, matching snapshots and upper limit 160.
+Only its display inspector was adapted to tolerate correctly absent bound keys;
+its scenarios and arithmetic were unchanged. The final malformed-gap replay
+prints `bound_j: null`, never zero. Valid worked values remain rails
+0.06672 ± 0.00057, DC 0.1929 ± 0.0025, rest 0.1262 ± 0.0024 J/GB.
+The baseline session/repin run had 21 errors and one failure.
+
+Verification at handoff: `tests.test_bytes_stream_test`, `tests.test_bytes_mac_kit`
+and `tests.test_repin`: **86 tests, OK** (1292.761 s), including **945 real read CLI
+leaf faults**. Whole `tests.test_bytes_h_session`: **36 tests, OK** (1799.185 s).
+Supplemental no-knee, container/scan and production-shaped tests also pass.
+Kit `--check`, final `repin.py --check` and `git diff --check` pass. The whole
+repository suite was not run; this bounded round ran the requested modules.
+All test results describe the worktree. Final-head CI is reported separately
+after the report push; no green claim is made. The uncommitted fixes are not
+present in that pushed head.
+
+Decisions I made: reject an invalid native collection as a prerequisite, rather
+than drop a row; retain signed measured powers/integrals while requiring physical
+counts, durations, systematic bounds and adapter ratings to have their governed
+sign; preserve ordinary no-knee and absent-description wording; check GPU source
+on the registered-versus-harvested comparison; use compact native support only
+in the exhaustive synthetic fault test. No new agreement bar: 4.5e-7 GB/s and
+5.7e-6 J/GB remain unchanged. No hardware collection, admission or merge.
+
+Required next decision: authorize retaining the census's exception rows, or
+authorize reverting `2153f1333` in a new commit. The G3 instruction is the reason
+for this stop; elapsed time is not authorization. Implementation commits and
+pushes remain blocked pending that answer.
+
+## Round 5 registry exception row inventory
+
+Exact semantic census delta versus `977a5d2df`, restricted to files unchanged
+since PR base `e624d67c7`. Target indices are resolved to target identities.
+
+### `configs/b6/packs/bytes-s1-p1/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s1-p2/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s2-p1/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s2-p2/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s3-p1/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s3-p2/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s4-p1/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s4-p2/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s5-p1/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s5-p2/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s6-p1/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/packs/bytes-s6-p2/registration.json`
+
+Added:
+
+- `/flag_catalog_sha256` — `sealed_registration` — `file:configs/b6/flag_catalog_b6.json`
+
+### `configs/b6/registration/identity_pins.json`
+
+Added:
+
+- `/bytes_c4/issuer/sha256` — `issued_config` — `file:scripts/write_b5_identity_pins.py`
+- `/bytes_c4/runtime_observation_source/sha256` — `issued_config` — `file:docs/process_traces/2026-10-23-magistrate-786c0858/RUNTIME-OBSERVE.txt`
+- `/bytes_c4/stack_evidence/llama-70b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/10/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/11/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/11/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/12/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/12/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/13/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/13/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/14/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/14/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/15/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/15/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/16/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/16/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/17/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/17/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/18/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/18/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/19/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/19/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/20/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/20/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/21/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/21/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/22/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/22/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/23/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/23/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/24/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/24/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/25/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/25/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/26/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/26/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/27/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/27/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/28/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/28/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/29/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/29/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/30/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/30/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/31/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/31/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/32/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/32/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/33/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/33/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/5/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/6/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/7/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/8/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/9/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/llama-70b/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/10/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/11/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/11/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/12/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/12/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/13/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/13/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/14/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/14/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/15/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/15/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/16/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/16/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/17/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/17/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/18/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/18/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/19/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/19/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/20/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/20/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/21/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/21/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/22/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/22/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/23/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/23/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/24/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/24/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/25/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/25/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/26/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/26/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/27/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/27/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/28/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/28/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/29/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/29/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/30/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/30/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/31/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/31/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/32/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/32/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/33/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/33/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/34/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/34/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/35/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/35/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/36/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/36/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/37/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/37/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/38/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/38/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/39/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/39/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/40/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/40/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/41/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/41/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/42/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/42/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/43/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/43/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/44/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/44/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/45/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/45/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/46/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/46/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/47/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/47/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/48/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/48/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/49/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/49/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/5/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/50/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/50/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/51/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/51/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/52/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/52/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/53/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/53/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/54/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/54/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/55/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/55/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/56/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/56/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/57/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/57/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/58/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/58/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/59/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/59/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/6/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/60/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/60/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/61/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/61/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/62/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/62/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/63/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/63/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/64/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/64/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/7/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/8/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/9/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/neg8_reference/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-14b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-1p7b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-30b-a3b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-32b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-4b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b-8bit/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-8b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/10/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/5/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/6/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/7/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/8/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/9/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen3-next-80b/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/0/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/1/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/10/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/11/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/11/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/12/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/12/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/13/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/13/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/14/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/14/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/15/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/15/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/16/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/16/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/17/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/17/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/18/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/18/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/19/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/19/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/2/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/20/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/20/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/21/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/21/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/22/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/22/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/3/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/4/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/5/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/6/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/7/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/8/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/9/metadata_sha256` — `issued_config` — `None`
+- `/bytes_c4/stack_evidence/qwen35-122b/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/llama-70b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/llama-70b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-14b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-14b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-1p7b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-1p7b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-30b-a3b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-30b-a3b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-32b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-32b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-4b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-4b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b-8bit/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b-8bit/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-next-80b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-next-80b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen35-122b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen35-122b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+
+### `configs/b6/registration/sizing_b5.json`
+
+Removed:
+
+- `/packs/bytes-s1-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `file:joulewise/b6/precheck.py`
+- `/packs/bytes-s2-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `file:joulewise/b6/precheck.py`
+- `/packs/bytes-s3-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `file:joulewise/b6/precheck.py`
+- `/packs/bytes-s4-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `file:joulewise/b6/precheck.py`
+- `/packs/bytes-s5-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `file:joulewise/b6/precheck.py`
+- `/packs/bytes-s6-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `file:joulewise/b6/precheck.py`
+
+Added:
+
+- `/packs/bytes-s1-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `None`
+- `/packs/bytes-s2-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `None`
+- `/packs/bytes-s3-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `None`
+- `/packs/bytes-s4-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `None`
+- `/packs/bytes-s5-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `None`
+- `/packs/bytes-s6-p1/source/code_sha256/joulewise~1b6~1precheck.py` — `issued_config` — `None`
+
+### `configs/bytes/identity_pins.json`
+
+Added:
+
+- `/derivation/stack_issuer/sha256` — `issued_config` — `file:scripts/write_b5_identity_pins.py`
+- `/stack_evidence/llama-70b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/10/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/11/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/11/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/12/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/12/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/13/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/13/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/14/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/14/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/15/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/15/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/16/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/16/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/17/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/17/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/18/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/18/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/19/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/19/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/20/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/20/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/21/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/21/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/22/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/22/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/23/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/23/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/24/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/24/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/25/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/25/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/26/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/26/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/27/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/27/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/28/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/28/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/29/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/29/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/30/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/30/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/31/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/31/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/32/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/32/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/33/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/33/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/5/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/6/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/7/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/8/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/9/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/llama-70b/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/10/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/11/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/11/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/12/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/12/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/13/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/13/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/14/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/14/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/15/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/15/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/16/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/16/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/17/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/17/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/18/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/18/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/19/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/19/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/20/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/20/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/21/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/21/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/22/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/22/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/23/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/23/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/24/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/24/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/25/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/25/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/26/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/26/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/27/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/27/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/28/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/28/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/29/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/29/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/30/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/30/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/31/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/31/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/32/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/32/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/33/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/33/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/34/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/34/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/35/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/35/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/36/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/36/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/37/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/37/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/38/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/38/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/39/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/39/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/40/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/40/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/41/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/41/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/42/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/42/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/43/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/43/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/44/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/44/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/45/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/45/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/46/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/46/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/47/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/47/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/48/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/48/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/49/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/49/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/5/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/50/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/50/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/51/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/51/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/52/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/52/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/53/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/53/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/54/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/54/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/55/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/55/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/56/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/56/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/57/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/57/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/58/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/58/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/59/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/59/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/6/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/60/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/60/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/61/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/61/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/62/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/62/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/63/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/63/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/64/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/64/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/7/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/8/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/9/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/neg8_reference/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-14b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-1p7b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-30b-a3b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-32b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-4b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b-8bit/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-8b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/10/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/5/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/6/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/7/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/8/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/9/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen3-next-80b/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/0/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/0/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/1/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/1/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/10/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/10/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/11/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/11/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/12/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/12/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/13/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/13/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/14/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/14/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/15/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/15/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/16/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/16/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/17/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/17/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/18/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/18/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/19/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/19/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/2/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/2/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/20/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/20/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/21/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/21/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/22/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/22/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/3/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/3/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/4/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/4/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/5/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/5/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/6/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/6/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/7/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/7/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/8/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/8/runtime_identity_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/9/metadata_sha256` — `issued_config` — `None`
+- `/stack_evidence/qwen35-122b/9/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/llama-70b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/llama-70b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/neg8_reference/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/neg8_reference/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-14b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-14b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-1p7b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-1p7b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-30b-a3b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-30b-a3b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-32b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-32b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-4b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-4b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b-8bit/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b-8bit/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-8b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen3-next-80b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen3-next-80b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+- `/units/qwen35-122b/runtime_identity_sha256` — `issued_config` — `None`
+- `/units/qwen35-122b/stack_identity/model_artifact_sha256` — `issued_config` — `None`
+
+### `configs/campaigns/bytes-s1-p1/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s1-p1/plan_tree.json`
+
+### `configs/campaigns/bytes-s1-p2/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s1-p2/plan_tree.json`
+
+### `configs/campaigns/bytes-s2-p1/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s2-p1/plan_tree.json`
+
+### `configs/campaigns/bytes-s2-p2/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s2-p2/plan_tree.json`
+
+### `configs/campaigns/bytes-s3-p1/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s3-p1/plan_tree.json`
+
+### `configs/campaigns/bytes-s3-p2/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s3-p2/plan_tree.json`
+
+### `configs/campaigns/bytes-s4-p1/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s4-p1/plan_tree.json`
+
+### `configs/campaigns/bytes-s4-p2/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s4-p2/plan_tree.json`
+
+### `configs/campaigns/bytes-s5-p1/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s5-p1/plan_tree.json`
+
+### `configs/campaigns/bytes-s5-p2/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s5-p2/plan_tree.json`
+
+### `configs/campaigns/bytes-s6-p1/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s6-p1/plan_tree.json`
+
+### `configs/campaigns/bytes-s6-p2/plan_tree.sha256`
+
+Added:
+
+- `#L1` — `pack_config_bytes` — `file:configs/campaigns/bytes-s6-p2/plan_tree.json`
