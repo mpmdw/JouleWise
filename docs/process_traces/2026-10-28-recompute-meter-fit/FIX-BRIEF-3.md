@@ -30,6 +30,18 @@ END_BRIDGE_TASK_V1
 
 # RC-CMP-6 brief
 
+**Amendment 1 (lead, 2026-10-29 ~06:00 UTC; RUN_STATE item 100), G7.** RC-CMP-4 (`report/2026-10-28-rc-cmp-4`
+`de637d4e`) ran the full-size synthetic window at `e5ccf720b`: L9 completed with every step ok and no value
+disagrees, but the comparator refuses for two comparator-side reasons. One is the `cmp-abba` spelling, closed by
+G3. The other is 162 `run_phase_energy_j` rows that are `missing_or_null` on L9's side: the recompute marks NEG-8
+reference members (refcorpus, window-start, midpoint, window-end) as selected, but L9's step 2 re-reduces only
+science runs. **G7:** each family's key universe comes from the registered role table, applied identically to both
+sides, never from either side's output. For `run_phase_energy_j` that universe is the science runs L9's step 2
+re-reduces. Reference members are compared through the NEG-8 families. A reference member that one side omits from
+its NEG-8 computations is still DISAGREE there. The restricted output lists the members excluded from each family,
+with the reason `compared_in:<family>`. Regression: RC-CMP-4's two causes, reproduced on producer-shaped fixtures,
+refuse at `7fede8c7` and pass after; a reference member dropped from a NEG-8 line still DISAGREEs.
+
 **Why.** Three review rounds found the same defect: the comparator decided where a printed number belongs from
 something the checked document asserts about itself. The Fable consult (adopted, RUN_STATE item 99) closes it at the
 input: one unique reading of the bytes, identity only where it belongs, routing only by registered ids. Its
