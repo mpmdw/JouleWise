@@ -98,3 +98,37 @@ fixture-integration and hidden-store limitations above explicitly outstanding.
 Next exact step for complete acceptance: add an uninterrupted real B6 harvest,
 transform, and valid 50-member analysis fixture covering the requested cases;
 confirm the export ingress contract for changed rows held outside `*.runs.csv`.
+
+## Fix round 1
+
+Implemented lead rulings T1–T7 from activation `bde918c1` on the requested branch, starting at `5d80e12cd`. This section supersedes the earlier hidden-store and fixture-coverage limitations.
+
+- Grouped exports now copy their sidecar and already-offset withheld store, rewrite codes and exporter-style `excluded` booleans in both CSVs, and retain opaque measurement bytes. Withheld members carry `not defined at blinded stage (row withheld)`; post-commit analysis retains their models.
+- Former journal, export disagreement, absent-member, and pass-mismatch refusals now write per-line and per-member statuses with exit 0. Independently evaluable members still receive their decisions. Source overlap and request-end-would-add remain stops.
+- Request-end checks the journal against the harvest's sealed SHA-256, accepts compressed journals, and records journal mismatches without restoring affected members. Hull evaluation does not read the journal.
+- Outputs include a payload manifest with relative paths, sizes, and SHA-256 digests. `verify OUTPUT` lists every differing path or prints `view verified`, records `records.thermal_view_changed`, and exits 0. Keep the linked source available and verify the view before analysis. Modified files are copies with mode 0444. Producing commit and tracked-tree dirty state are recorded.
+
+Decisions I made:
+
+- Name the copied private store `SESSION.withheld.csv`: the unchanged analysis recursively discovers `*.runs.csv`, so retaining that suffix would double-load held-out rows before the commit. The expanded census test caught this during the fix.
+- Keep undefined members' archive and CSV codes independently unchanged; never reconcile disagreement with a union or intersection.
+- Supply zero only as the production thermal helper's unused gap argument. It affects solely the discarded `thermal.unmeasured` projection, so missing gap thresholds require no refusal and cannot change OS-code decisions.
+- Exclude the manifest and `thermal_line.json` control files from the payload census to avoid cyclic self-hashing; bind the manifest's exact SHA-256 in `thermal_line.json`. Verification checks that binding as well as every exposed payload file.
+- Record file modification stamps and inode identities as well as size and hash. A deterministic real re-acceptance can replace linked flags with identical bytes; its replacement still needs to be disclosed by `verify`. These are exact integer metadata comparisons and never affect membership.
+- Retain the complete reviewer campaign and all real-harvest variants. There is no existing optional slow-test convention in this module. Counting acceptance is not fabricated: the real chain verifies exact cross-pass codes, while the campaign fixture separately verifies analysis.
+
+Verification (Python 3.13, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`):
+
+- `python3.13 -m unittest tests.test_bytes_thermal_lines -q`: 19 tests, OK. The final damaged-manifest addition was also checked by rerunning all 9 `RecordedFaultTests`, OK.
+- `python3.13 -m unittest tests.b6.test_bytes_p2_thermal_window tests.test_harvest_b5_window -q`: 198 tests, OK (11 skipped). Pass-1, block-5, and alpha byte-identity replays passed.
+- `git diff --check`: passed. JSON/CSV sentinels, including withheld rows, remain opaque; real re-acceptance and changed reductions are reported by the verifier.
+
+Both reviews and all six repro scripts were read and executed before and after the fix. Sol's final campaign censuses match: s2 100/100 and s5 50/50, on both passes. Opus's original chain changes from 23/24 to 22/24 because it still expects pass mismatch to refuse and all linked files to reject writes; the port replaces these with the ruled exit-0 status, modified-copy mode, and manifest checks. Its numerical/code checks still pass. The original linked-mutation probes still demonstrate mutable links; the new verifier detects that drift. The strengthened real-chain port passes 29/29 checks, including a strictly interior integer-stamped read. The grouped analysis port adds real assertions to the reviewers' informational checks, including every-session census at both stages and the s5 held-out line.
+
+No tolerance or new agreement bar was introduced; primary policy, harvest, and analysis remain unchanged. The analysis SHA-256 remains `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`; harvest remains `2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744`. Only the three authorized files changed. No hardware or real BYTES measurements were used. No NEEDS_RULING remains.
+
+Fix commits, each pushed: `22bc6039c`, `338ab1a07`, `3ed2ca65c`, `b904908b8`, `4c04bcda1`, `b4038dc40`; this report is the final separate commit.
+
+Draft PR: https://github.com/mpmdw/JouleWise/pull/598 (target `lane/2026-10-28-bytes-pass2-open`).
+
+CI is running on the PR; build, fences, and installed-wheel checks passed on the implementation head. The whole-suite result remains pending and is not claimed green. The final report push may supersede that run; the PR checks show the current head.
