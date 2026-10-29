@@ -958,7 +958,7 @@ class IndexedCliTests(unittest.TestCase):
 
     def test_r14_real_index_context_composition_with_registered_p42_exit(self):
         self.real_composition = cli.extract_indexed_pack
-        for target_refused, expected in ((False, "p42_floor_cells_only"), (True, "refused")):
+        for target_refused, expected in ((False, "p42_floor_cells_only"), (True, "floor_cell_not_extractable")):
             output = self.real_output(target_refused)
             out = self.fixture.directory / ("target-refused.json" if target_refused else "p42-only.json")
             if out.exists():
