@@ -104,8 +104,9 @@ class KeyBoundCoverageTests(Case):
 
     def test_fill_outcome_words_l1_and_null_refuse_p3(self):
         contrasts = self.files[FILL]["gamma"]["contrasts"]
-        contrasts[0]["claim_evaluation"] = {"outcome": "L1"}
-        contrasts[1]["claim_evaluation"] = {"outcome": None}
+        # RC-CMP-8 F3: the other claim words stay printed (the producer writes each); only the outcome is wrong.
+        contrasts[0]["claim_evaluation"]["outcome"] = "L1"
+        contrasts[1]["claim_evaluation"]["outcome"] = None
         result = self.shipped()
         self.assertEqual(result["coverage"]["unmapped"], ["fill:gamma/contrasts/*/claim_evaluation/outcome"])
         self.assertEqual(self.exit_code()[0], 2)
@@ -113,9 +114,9 @@ class KeyBoundCoverageTests(Case):
     def test_printed_direction_is_the_raw_l9_word(self):
         # L9 prints null for an unsupported direction; the comparison word is "none".
         for row in self.files[FILL]["gamma"]["contrasts"]:
-            row["claim_evaluation"] = {"direction": None}
+            row["claim_evaluation"]["direction"] = None
         self.assertEqual(self.shipped()["coverage"]["unmapped"], [])
-        self.files[FILL]["gamma"]["contrasts"][0]["claim_evaluation"] = {"direction": "none"}
+        self.files[FILL]["gamma"]["contrasts"][0]["claim_evaluation"]["direction"] = "none"
         self.assertEqual(self.shipped()["coverage"]["unmapped"], ["fill:gamma/contrasts/*/claim_evaluation/direction"])
 
     def test_integer_printed_for_a_float_refuses(self):
@@ -143,9 +144,10 @@ class KeyBoundCoverageTests(Case):
 class CatchAllTests(Case):
     """X6: catch-all uncovered rules take non-numeric leaves only; named numeric leaves are listed."""
     def plant_p12(self):
-        self.files[DISCLOSURE]["window_lines"] = {"alpha": [{"line": "machine_member", "run_id": "run-a",
-                                                               "meter_energy_j": 999.0, "values": {"rho": 7.0}}]}
-        self.files[FILL]["campaigns"] = {"gamma": {"gross_energy_j": 12345.0}}
+        self.files[DISCLOSURE]["window_lines"]["alpha"].append({"line": "machine_member", "run_id": "run-a",
+                                                               "meter_energy_j": 999.0, "values": {"rho": 7.0}})
+        # RC-CMP-8 F3: the floor windows' campaigns (claim_usable) stay; the planted gamma campaign is added beside them.
+        self.files[FILL]["campaigns"]["gamma"] = {"gross_energy_j": 12345.0}
         self.files[FILL]["characterization"] = {"delta_j": 5.0}
 
     def test_numeric_leaves_under_catch_alls_refuse_p12(self):
@@ -180,8 +182,11 @@ class CatchAllTests(Case):
         self.assertEqual(self.shipped()["coverage"]["unmapped"], ["fill:campaigns/alpha/path"])
 
     def test_numeric_leaves_uncovered_by_name_are_listed(self):
+        # RC-CMP-8 F3: the line carries its producer's unconditional keys (magnitude_per_token writes all five).
         self.files[DISCLOSURE]["contrasts"].append({"line": "magnitude_per_token", "contrast_id": PREFILL,
-                                                    "denominator": 2048})
+                                                    "value_j": -0.0006, "denominator": 2048,
+                                                    "metrology": {"lower": -0.006, "upper": 0.005},
+                                                    "decision": {"lower": -0.008, "upper": 0.007}})
         self.ours["descriptive"][PREFILL] = {}
         result = self.shipped()
         self.assertIn("disclosure:contrasts/magnitude_per_token/denominator", result["coverage"]["uncovered_numeric"])
@@ -310,7 +315,10 @@ class MeterMembershipTests(MeterCase):
         self.assertGreater(fails.get("battery_term", 0), 0)
 
     def test_meter_line_absent_from_l9_disclosure_p7(self):
-        self.case.files[DISCLOSURE]["window_lines"] = {"alpha": [{"line": "machine_absent", "text": "absent"}]}
+        # RC-CMP-8: the window's other producer lines stay; its machine lines become the absent sentence.
+        alpha = self.case.files[DISCLOSURE]["window_lines"]["alpha"]
+        alpha[:] = [row for row in alpha if not row["line"].startswith("machine_")]
+        alpha.append({"line": "machine_absent", "text": "absent"})
         fails = self.fails(self.compare())
         self.assertGreater(fails.get("rho", 0), 0)
         self.assertGreater(fails.get("machine_j", 0), 0)

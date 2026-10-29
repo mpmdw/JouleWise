@@ -35,20 +35,16 @@ def role_of(rid):
 
 
 def with_neg8(case, packs=("alpha", "beta", "gamma"), start=2, deciding=12):
-    """Both sides' NEG-8 lines (disclosures._reference_lines) for each window."""
-    ours = {"bound_envelope_j": 2.0, "bound_prediction_j": 1.5, "start_mean_j": 10.0, "midpoint_j": 10.5,
-            "end_mean_j": 11.0, "spread_j": 1.0, "allowance_j": 1.25, "n_start": 2, "n_mid": 1, "n_end": 3,
-            "corpus_n": 12}
-    item = test_comparator.item
+    """Both sides' NEG-8 lines (disclosures._reference_lines) for each window.
+
+    RC-CMP-8: the base fixture now carries them (the producer prints them for every registered window), so
+    this replaces each window's NEG-8 lines with the given counts instead of appending a second set.
+    """
     for pack in packs:
-        case.files[DISCLOSURE]["window_lines"][pack] += [
-            item("neg8_allowance", True, f"{pack}: NEG-8 allowance", source="survivor_rescreen",
-                 values_j={BASE + k: v for k, v in NEG8_VALUES.items()}),
-            item("reference_counts", False, f"{pack}: reference counts", counts={"start": start, "midpoint": 1, "end": 3},
-                 planned={"start": 3, "midpoint": 1, "end": 3}),
-            item("corpus_counts", False, f"{pack}: corpus counts", collected=12, in_window=12, deciding=deciding,
-                 desk_cap=[], drop_counts={})]
-        case.ours["windows"][cmp.PACKS[pack]]["neg8"] = dict(ours)
+        lines = case.files[DISCLOSURE]["window_lines"][pack]
+        lines[:] = [row for row in lines if row["line"] not in test_comparator.NEG8_WORDS]
+        lines += test_comparator.neg8_lines(pack, start, deciding)
+        case.ours["windows"][cmp.PACKS[pack]]["neg8"] = test_comparator.neg8_recompute()
 
 
 def with_references(case, packs=("alpha", "beta", "gamma")):
@@ -240,7 +236,9 @@ class StepTwoUniverseTests(GateCase):
 
 # F2: the compared categorical lines (each prints a claim word the recompute re-derives) and every section
 # and line word the exemptions cover (the producer's harvest, history and window structure words).
-COMPARED_LINES = ("dominance_branch", "dominance_ratio", "sensitivity_reported", "sensitivity_window", "below_screen_bound")
+# RC-CMP-8 (Fable F1): neg8_screen too, now that every window prints it.
+COMPARED_LINES = ("dominance_branch", "dominance_ratio", "sensitivity_reported", "sensitivity_window", "below_screen_bound",
+                  "neg8_screen")
 EXEMPT_BLOCK_WORDS = ("superseded_history", "attempt_count", "attempt_history", "g10", "harvest_once", "reharvest_account",
                       "sensitivity_boundary")
 
@@ -317,6 +315,7 @@ class LineWordTests(GateCase):
             "ratio status refused": ("dominance_ratio", lambda row: row.update(status="refused")),
             "below True": ("below_screen_bound", lambda row: row.update(below=True)),
             "widened False": ("sensitivity_window", lambda row: row.update(widened=False)),
+            # RC-CMP-8 F3: a computed record without its values now refuses at the gate (required keys).
             "p42 status computed": ("sensitivity_reported", lambda row: row["record"].update(status="computed")),
             "p42 code other": ("sensitivity_reported", lambda row: row["record"].update(code="p42_other")),
         }
@@ -326,6 +325,10 @@ class LineWordTests(GateCase):
                 lines, index = find(self, word)
                 edit(lines[index])
                 code, err, out = self.exit_code(CODED)
+                if label == "p42 status computed":
+                    self.assertEqual((code, err), (2, "refused=required_key_absent:disclosure:block_lines/"
+                                                      "sensitivity_reported/record/primary\n"))
+                    continue
                 self.assertEqual((code, err), (2, "refused=step11_unmapped_fill\n"))
                 self.assertTrue(any(u["reason"] in ("value_differs", "row_disagrees") for u in out["coverage"]["unbound"]))
 
@@ -340,7 +343,9 @@ class LineWordTests(GateCase):
                 lines, index = find(self, word)
                 edit(lines[index])
                 self.assertEqual(self.outcome(), 2)
-                with mock.patch.object(cmp, "COVERAGE", old + cmp.COVERAGE):
+                # RC-CMP-8 F3's required-key gate is switched off too: it refuses a computed record without values.
+                with mock.patch.object(cmp, "COVERAGE", old + cmp.COVERAGE), \
+                        mock.patch.object(cmp, "sensitivity_row", lambda row, name, where: None):
                     self.assertEqual(self.exit_code(CODED)[0], 0)
 
     def test_line_gate_refuses_an_unregistered_word_or_key(self):
@@ -378,12 +383,13 @@ class RegisteredLabelTests(GateCase):
         row = {"omitted_block_id": block_id, "estimate": -1.0, "raw_p": 0.9, "adjusted_p": 1.0, "outcome": "not_resolvable",
                "floor_status": "not_above_floor", "metrology_aware_ci95": {"lower": -13.0, "upper": 11.0},
                "decision_interval": {"lower": -16.0, "upper": 14.0}, "n_blocks": 8, "df": 7, "influence_triggers": []}
-        verdict["loo"] = {"status": "computed", "rows": [row]}
+        # RC-CMP-8: the engine's word for a leave-one-out block with rows is complete (analysis_engine _contrast_row).
+        verdict["loo"] = {"status": "complete", "rows": [row]}
         fill = next(r for r in self.files[f"outputs/{SHA}-results-fill-input.json"]["gamma"]["contrasts"]
                     if r["contrast_id"] == self.DECODE)
         fill["loo"] = copy.deepcopy(verdict["loo"])
         self.ours["contrasts"][self.DECODE]["loo"] = [{
-            "block_number": 3, "dbar_j": -1.0, "p": 0.9, "holm_p": 1.0, "outcome": "not_resolvable",
+            "block_number": 3, "dbar_j": -1.0, "p": 0.9, "holm_p": 1.0, "holm_reject": False, "outcome": "not_resolvable",
             "metrology_interval_j": [-13.0, 11.0], "decision_interval_j": [-16.0, 14.0], "n": 8, "above_floor": False}]
         lines, index = find(self, "loo_counts")
         lines[index]["count"] = 1

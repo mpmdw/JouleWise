@@ -47,7 +47,8 @@ def verdict_row(cid, p):
                     "transport_rule_id": "exact_stack_only.v1", "floor_abs_j": 43.0, "floor_cmp_j": 103.5,
                     "floor_gate_j": 103.5, "reason_codes": []} for arm, cell in zip("ab", FLOOR_CELLS[cid])]
     return {"contrast_id": cid, "plan_id": "plan-gamma", "family_instance_id": "fam-gamma-primary", "claim_role": "primary",
-            "metric": {"name": f"phase_energy_j.{phase}", "metric_tag": f"phase_{phase}_energy", "window_class": "phase",
+            "metric": {"name": f"phase_energy_j.{phase}", "metric_tag": "phase_decode_energy" if cid == DECODE
+                       else "phase_prefill_p2048_energy", "window_class": "phase",
                        "unit": "J", "ratio_estimand": None},
             "conditions": {"condition_a_id": a, "condition_b_id": b, "cell_a_id": "cell-" + a, "cell_b_id": "cell-" + b,
                            "difference_orientation": "condition_b_minus_condition_a"},
@@ -59,7 +60,7 @@ def verdict_row(cid, p):
                                           "included": False, "reason_codes": ["block_excluded"]}]},
             "sampling": {"confirmatory_status": "confirmatory", "planned_n": 10, "observed_complete_n": 10,
                          "kept_n": 9, "removed_block_ids": ["b01"]},
-            "estimator": {"name": "paired_block_mean", "n": 9, "df": 8, "estimate": -1.25, "s_d": 16.0,
+            "estimator": {"name": "abba_block_arm_mean_difference_t_v1", "n": 9, "df": 8, "estimate": -1.25, "s_d": 16.0,
                           "SE_repeat": 5.0, "SE_metrology": 1.5, "SE_total": 5.25, "t_critical_95": 2.306,
                           "repeat_point_CI95": {"lower": -12.75, "upper": 10.25},
                           "metrology_aware_CI95": {"lower": -13.5, "upper": 11.0},
@@ -116,6 +117,31 @@ def kept_units_record(pack, runs, cell_id=None):
     return {"schema_version": "joulewise.b5_kept_units.v1", "pack": pack, "plan_id": "plan-" + pack, "attempt": 1,
             "harvest_pin": "a1b2c3d" + pack, "exclusions_sha256": "e" * 64, "roster_sha256": "d" * 64,
             "catalog_sha256": "c" * 64, "sensitivity_label": None, "cells": cells}
+
+
+NEG8_BASE = "bracket.claim_families.gross_energy."
+NEG8_VALUES = {"bound_envelope_j": 2.0, "bound_prediction_j": 1.5, "start.mean_j": 10.0, "midpoint.mean_j": 10.5,
+               "end.mean_j": 11.0, "trajectory_excursion_max_j": 1.0, "drift_allowance_j": 1.25}
+NEG8_WORDS = ("neg8_screen", "neg8_allowance", "reference_counts", "corpus_counts")
+
+
+def neg8_lines(pack, start=2, deciding=12):
+    """disclosures._reference_lines: every window's NEG-8 screen and reference lines (RC-CMP-8 F3: the producer
+    prints them for each registered window, so the base fixture carries them)."""
+    return [item("neg8_screen", True, f"{pack}: NEG-8 screen passed", decision="passed"),
+            item("neg8_allowance", True, f"{pack}: NEG-8 allowance", source="survivor_rescreen",
+                 values_j={NEG8_BASE + k: v for k, v in NEG8_VALUES.items()}),
+            item("reference_counts", False, f"{pack}: reference counts", counts={"start": start, "midpoint": 1, "end": 3},
+                 planned={"start": 3, "midpoint": 1, "end": 3}),
+            item("corpus_counts", False, f"{pack}: corpus counts", collected=12, in_window=12, deciding=deciding,
+                 desk_cap=[], drop_counts={})]
+
+
+def neg8_recompute():
+    """The recompute's NEG-8 terms of a window (windows.<PACK>.neg8), matching neg8_lines."""
+    return {"source": "survivor_rescreen", "screen_decision": "passed", "bound_envelope_j": 2.0,
+            "bound_prediction_j": 1.5, "start_mean_j": 10.0, "midpoint_j": 10.5, "end_mean_j": 11.0, "spread_j": 1.0,
+            "allowance_j": 1.25, "n_start": 2, "n_mid": 1, "n_end": 3, "corpus_n": 12}
 
 
 def l9_files():
@@ -216,7 +242,7 @@ def l9_files():
                         item("flag_count", False, p + ": flag x: 0", count=0, family="PHYSICS_IN_SPAN", code="x",
                              blinding="OPEN"),
                         item("below_screen_bound", True, p + ": operative bound below 36.46 ms: no", b_op_s=0.0375,
-                             below=False)]
+                             below=False)] + neg8_lines(p)
                     for p in ("alpha", "beta", "gamma")}
     files[f"disclosures/{SHA}.json"] = {
         "schema_version": "joulewise.b5_disclosures.v1", "windows": windows, "cells": [], "floors": floors,
@@ -242,8 +268,8 @@ def recompute_output():
     return {"program_sha256": "f" * 64,
             "members": {"ALPHA": {"run-a": {"E_j": {"prefill": 2.5, "decode": 97.25, "request": 120.0}, "selected": True},
                                   "corpus-r1": {"E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}, "selected": False}}},
-            "inputs": {p: {"exclusions_sha256": "e" * 64} for p in ("ALPHA", "BETA", "GAMMA")},
-            "windows": {p: {"b_op_s": 0.0375} for p in ("ALPHA", "BETA", "GAMMA")},
+            "inputs": {p: {"exclusions_sha256": "e" * 64, "claim_usable": True} for p in ("ALPHA", "BETA", "GAMMA")},
+            "windows": {p: {"b_op_s": 0.0375, "neg8": neg8_recompute()} for p in ("ALPHA", "BETA", "GAMMA")},
             "disclosures": {"sensitivity_bound": {"B_max_s": 0.0625, "T": 424, "attaining_sequence": 396,
                                                   "windows": {p: {"b_sens_s": 0.0625} for p in ("ALPHA", "BETA", "GAMMA")}}},
             "p42": {"df-ph-prefill-p42-qwen3-1p7b": {"status": "expected_unresolvable"},

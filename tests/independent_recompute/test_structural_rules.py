@@ -79,14 +79,19 @@ def v3_floor(case):
             cell.update(floor_cmp_j=120.0, floor_gate_j=120.0)
     case.ours["floor_cells"]["Qwen3-8B-4bit/decode"].update(floor_cmp_j=120.0, floor_gate_j=120.0)
     case.ours["contrasts"][DECODE]["floor_gate_j"] = 120.0
+    # RC-CMP-8: with the registered rule words a v3 floor always prints (artifact.py v3 checks; the manifest's
+    # floor_selector claim_floor_rule and transport_rule_id).
     floor = {"active_floor_j": 120.0, "floor_abs_j": 43.0, "floor_cmp_j": 120.0,
+             "claim_floor_rule": "cross_stack_armwise_max.v1", "aggregation": "max_never_sum",
              "arm_gates": [{"arm_id": "A", "condition_family_id": "sw-decode-a-qwen3-1p7b", "status": "exact",
                             "floor_gate_j": 103.5},
                            {"arm_id": "B", "condition_family_id": "sw-decode-b-qwen3-8b", "status": "exact",
                             "floor_gate_j": 120.0}],
              "resolutions": [{"status": "exact", "source_cell_ids": ["d117-qwen3-1p7b-decode-floor-v5"],
+                              "transport_rule_id": "exact_stack_only.v1",
                               "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5},
                              {"status": "exact", "source_cell_ids": ["d117-qwen3-8b-decode-floor-v5"],
+                              "transport_rule_id": "exact_stack_only.v1",
                               "floor_abs_j": 43.0, "floor_cmp_j": 120.0, "floor_gate_j": 120.0}]}
     verdict = next(row for row in case.files[VERDICTS]["contrasts"] if row["contrast_id"] == DECODE)
     verdict["floor"] = floor
@@ -211,6 +216,15 @@ class CentralBandTests(MeterCase):
         self.assertEqual(self.fails(self.compare()), {"rho": 2, "routing_id": 1})
 
 
+def window_claims(ours):
+    """RC-CMP-8 F3: every registered window's below_screen_bound and neg8_screen lines, and the recompute's own
+    b_op and NEG-8 screen word, which compare_disclosures pairs per registered pack."""
+    for PACK in cmp.PACKS.values():
+        ours.setdefault("windows", {})[PACK] = {"b_op_s": 0.0375, "neg8": test_comparator.neg8_recompute()}
+    return {pack: [{"line": "below_screen_bound", "b_op_s": 0.0375, "below": False}] + test_comparator.neg8_lines(pack)
+            for pack in cmp.PACKS}
+
+
 class AssistCustody:
     """Sol's synthetic custody: one disclosure record and nothing else."""
     def __init__(self, record):
@@ -235,10 +249,11 @@ class OneKeySpaceTests(Case):
         cid = "ctr-demo"
         record = {"cells": [], "contrasts": [{"contrast_id": cid, "line": "battery_assist_contrast", "mean_j": 1.0,
                                               "lower_j": 0.0, "upper_j": 2.0, "s_d": 0.5, "se": 0.2, "t_star": 2.0,
-                                              "n": 9, "assist_quads": 2}], "window_lines": {}}
+                                              "n": 9, "assist_quads": 2, "status": "computed"}]}
         ours = {"disclosures": {"battery_assist": {cid: {
             "dbar_j": 1.0, "metrology_interval_j": [0.0, 2.0], "s_d_j": 0.5, "se_j": 0.2, "t_star": 2.0, "n": 9,
             "assist_quads": 2, "assist_members_by_stratum": {"repeat": 3}}}}, "descriptive": {}, "contrasts": {}}
+        record["window_lines"] = window_claims(ours)
         fails, c = self.assist(record, ours)
         self.assertEqual(fails, {"count": 1, "routing_id": 1})
         row = next(r for r in c.rows if r["key"] == f"disclosure/{cid}/battery_assist_contrast/assist_members/repeat"
@@ -251,11 +266,13 @@ class OneKeySpaceTests(Case):
         cid = "df-ph-decode-qwen3-1p7b"
         record = {"cells": [{"line": "battery_assist_cell", "pack": "alpha", "cell_id": "d117-reported-mean-ph-decode-qwen3-1p7b",
                              "without": {"mean_j": 1.0, "lower_j": 0.0, "upper_j": 2.0, "h_j": 1.0, "B_j": 0.0},
+                             "primary": {"status": "computed"},
                              "n_r": 5, "n_b": 5, "assist_members": {"repeat": 1, "quad": 2}}],
-                  "contrasts": [], "window_lines": {}}
+                  "contrasts": []}
         ours = {"disclosures": {"battery_assist": {cid: {
             "mean_j": 1.0, "lower_j": 0.0, "upper_j": 2.0, "interval": {"h_j": 1.0, "B_j": 0.0}, "n_r": 5, "n_b": 5,
             "assist_members_by_stratum": {"repeat": 1, "quad": 2, "extra": 4}}}}}
+        record["window_lines"] = window_claims(ours)
         self.assertEqual(self.assist(record, ours)[0], {"count": 1, "routing_id": 1})
 
     def test_two_rows_under_one_key_refuse(self):
@@ -271,7 +288,7 @@ class OneKeySpaceTests(Case):
         self.files[DISCLOSURE]["block_lines"] = [{
             "line": "dominance_ratio", "cell_id": row["cell_id"], "component": "absolute",
             "text": "alpha decode: R 1.0395 (synthetic)", "ratio": row["ratio"],
-            "numerator_j": row["numerator_j"], "denominator_j": row["denominator_j"], "n": n}]
+            "numerator_j": row["numerator_j"], "denominator_j": row["denominator_j"], "n": n, "status": "complete"}]
 
     def test_ratio_rows_have_their_own_key_space_opus_n2(self):
         # The ratio's n is 7 on both sides, its floor cell's n 9.

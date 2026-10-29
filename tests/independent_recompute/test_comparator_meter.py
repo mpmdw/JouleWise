@@ -103,7 +103,9 @@ class MeterLineTests(unittest.TestCase):
                   "q25": row["rho"], "q75": row["rho"], "spread": 0.0,
                   "central_band": {"pack": "alpha", "plan_id": "fixture", "attempt": 1,
                                    "lower": row["rho"], "upper": row["rho"]}}]
-        self.case.files[f"disclosures/{SHA}.json"]["window_lines"] = {"alpha": lines}
+        # RC-CMP-8: placed before the window's other producer lines (below_screen_bound, NEG-8), which every
+        # window prints; the machine lines keep positions 0 and 1.
+        self.case.files[f"disclosures/{SHA}.json"]["window_lines"]["alpha"][:0] = lines
         self.case.ours["disclosures"]["whole_machine"] = copy.deepcopy(self.whole_machine)
 
     def compare(self, bars=RELEASE, meter=True):
