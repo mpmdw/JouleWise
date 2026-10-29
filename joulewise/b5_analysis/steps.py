@@ -21,32 +21,64 @@ def require_primary_context(*objects) -> None:
                 raise AnalysisRefusal("sensitivity_context_on_registered_path")
 
 
+# Every step-4 exit-1 branch names itself through dry_run_refusal_classes.json:
+# the registered p42 exit, one outcome class, or a tooling code (plan section 3.1).
+STEP4_P42_FLOOR_CELLS_ONLY = "p42_floor_cells_only"
+STEP4_FLOOR_CELL_NOT_EXTRACTABLE = "floor_cell_not_extractable"
+STEP4_REPORT_MALFORMED = "extraction_report_malformed"
+STEP4_SPEC_MALFORMED = "extraction_spec_malformed"
+STEP4_SPEC_MEMBERSHIP_REFUSED = "extraction_spec_membership_refused"
+STEP4_CELL_IDS_DUPLICATED = "extraction_cell_ids_duplicated"
+STEP4_CELL_SET_DIFFERS = "extraction_cell_set_differs_from_spec"
+STEP4_EXTRACTABLE_NOT_BOOLEAN = "extraction_extractable_not_boolean"
+STEP4_EXIT_WITHOUT_REFUSED_CELL = "extraction_exit_without_refused_cell"
+
+
 def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mapping[str, Any]) -> str:
-    if type(exit_status) is not int or not isinstance(report, Mapping) or not isinstance(spec, Mapping):
+    """Name a step-4 exit: "ok", the registered p42 exit, a registered code, or "refused".
+
+    "refused" is left only for an exit status other than 0 or 1, whose code
+    the driver takes from the extractor's own refusal line.
+    """
+    if type(exit_status) is not int:
         return "refused"
     if exit_status == 0:
         return "ok"
-    if exit_status != 1 or report.get("spec_membership_refusals") != []:
+    if exit_status != 1:
         return "refused"
-    cells, wanted = report.get("cells"), spec.get("cells")
-    if not isinstance(cells, list) or not isinstance(wanted, list):
-        return "refused"
-    if (any(not isinstance(cell, Mapping) or type(cell.get("cell_id")) is not str or not cell["cell_id"]
-            for cell in cells + wanted)
-            or any(type(cell.get("kind")) is not str or type(cell.get("condition_family_id")) is not str
+    if not isinstance(report, Mapping):
+        return STEP4_REPORT_MALFORMED
+    cells, omitted = report.get("cells"), report.get("spec_membership_refusals")
+    if not isinstance(cells, list) or not isinstance(omitted, list):
+        return STEP4_REPORT_MALFORMED
+    if any(not isinstance(cell, Mapping) or type(cell.get("cell_id")) is not str or not cell["cell_id"]
+           for cell in cells):
+        return STEP4_REPORT_MALFORMED
+    # A kept member omitted from the spec is never the registered p42 outcome.
+    if omitted:
+        return STEP4_SPEC_MEMBERSHIP_REFUSED
+    wanted = spec.get("cells") if isinstance(spec, Mapping) else None
+    if (not isinstance(wanted, list)
+            or any(not isinstance(cell, Mapping) or type(cell.get("cell_id")) is not str or not cell["cell_id"]
+                   or type(cell.get("kind")) is not str or type(cell.get("condition_family_id")) is not str
                    for cell in wanted)):
-        return "refused"
+        return STEP4_SPEC_MALFORMED
     # The sealed spec identifies these non-target floor cells by their p42 family.
-    p42 = {cell["cell_id"] for cell in wanted if cell.get("kind") in ("absolute", "comparative")
-           and "p42" in cell.get("condition_family_id", "").split("-")}
-    ids = [cell.get("cell_id") for cell in cells]
-    spec_ids = [cell.get("cell_id") for cell in wanted]
-    if len(ids) != len(set(ids)) or len(spec_ids) != len(set(spec_ids)) or set(ids) != set(spec_ids):
-        return "refused"
+    p42 = {cell["cell_id"] for cell in wanted if cell["kind"] in ("absolute", "comparative")
+           and "p42" in cell["condition_family_id"].split("-")}
+    ids = [cell["cell_id"] for cell in cells]
+    spec_ids = [cell["cell_id"] for cell in wanted]
+    if len(ids) != len(set(ids)) or len(spec_ids) != len(set(spec_ids)):
+        return STEP4_CELL_IDS_DUPLICATED
+    if set(ids) != set(spec_ids):
+        return STEP4_CELL_SET_DIFFERS
     if any(type(cell.get("extractable")) is not bool for cell in cells):
-        return "refused"
+        return STEP4_EXTRACTABLE_NOT_BOOLEAN
     refused = {cell["cell_id"] for cell in cells if cell["extractable"] is False}
-    return "p42_floor_cells_only" if p42 and refused == p42 else "refused"
+    if not refused:
+        return STEP4_EXIT_WITHOUT_REFUSED_CELL
+    # "Only the p42 floor cells": every refused cell is one, not necessarily all.
+    return STEP4_P42_FLOOR_CELLS_ONLY if refused <= p42 else STEP4_FLOOR_CELL_NOT_EXTRACTABLE
 
 
 @dataclass(frozen=True)

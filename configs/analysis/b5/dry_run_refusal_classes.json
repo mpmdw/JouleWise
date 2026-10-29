@@ -68,7 +68,14 @@
     "exclusions_record_unauthenticated",
     "exclusions_roster_mismatch",
     "exclusions_schema_invalid",
+    "extraction_cell_ids_duplicated",
+    "extraction_cell_set_differs_from_spec",
+    "extraction_exit_without_refused_cell",
+    "extraction_extractable_not_boolean",
+    "extraction_report_malformed",
     "extraction_spec_differs_from_archive",
+    "extraction_spec_malformed",
+    "extraction_spec_membership_refused",
     "finalized_manifest_id_mismatch",
     "flag_blinding_differs_from_catalog",
     "floor_artifact_source_hash_mismatch",
@@ -177,6 +184,7 @@
     "window_index_required"
   ],
   "outcome_class": [
-    "dominance_ratio_zero_denominator"
+    "dominance_ratio_zero_denominator",
+    "floor_cell_not_extractable"
   ]
 }
