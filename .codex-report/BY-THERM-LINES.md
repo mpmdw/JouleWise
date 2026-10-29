@@ -132,3 +132,33 @@ Fix commits, each pushed: `22bc6039c`, `338ab1a07`, `3ed2ca65c`, `b904908b8`, `4
 Draft PR: https://github.com/mpmdw/JouleWise/pull/598 (target `lane/2026-10-28-bytes-pass2-open`).
 
 CI is running on the PR. Earlier implementation runs passed build, fences, and installed-wheel checks. The whole-suite result remains pending and is not claimed green. The final report push may supersede that run; the PR checks show the current head.
+
+
+## Fix round 2
+
+Implemented U1–U4 for activation `bde918c1`, starting at `e23cd1e7b`, using the Sol delta review and nine scripts pinned at `3e95b69a39`.
+
+- U1: require a new output directory, including refusal of dangling output symlinks, before any writes. Check destination directories before creating or replacing payloads; refuse symlinks and paths resolving inside sources. Existing outputs cannot retain or certify stale exports.
+- U2: absent journal provenance records `records.thermal_journal_provenance_unavailable`. Would-be restorations retain their original codes and receive `not defined (journal provenance unavailable)`, with exit 0. Matching and mismatching sealed digests retain their T3 behavior.
+- U3: validate the manifest container, entries, normalized unique relative paths, sizes, hashes and integer identity stamps. Missing, invalid JSON, deeply nested or structurally damaged manifests complete the flag write with `records.thermal_view_changed`, a reason, and exit 0.
+- U4: all four delta findings are fixed. The review's remaining first-round dispositions remain governed by T1–T7. No NEEDS_RULING remains.
+
+Decisions I made:
+
+- Keep inode/mtime checks on linked source payloads, where they detect byte-identical re-acceptance. Copied payloads use exact sizes and SHA-256 hashes, so two fresh outputs from the same inputs produce byte-identical manifests and change lists. The tests compare both byte for byte; no same-output rerun is supported.
+- Bind the deliberately injected campaign journals to explicit synthetic provenance seals in the tests. Keep missing-provenance tests separate; never manufacture provenance in the tool.
+- Replace the verifier's control record without chmodding through a possible file symlink. Measurement fields remain opaque; code, count, integer-stamp and hash comparisons remain exact. No float tolerance or numerical bar was introduced.
+
+All nine pinned review scripts were rerun before and after the fixes: `sol_campaign.py`, `sol_probes.py`, `sol_chain.py`, `opus_chain_test.py`, `opus_chain_analysis.py`, `opus_probe_postcommit_heldout.py`, `campaign_delta.py`, `view_and_gap.py`, and `delta_probes.py`. The optional byte-identical real re-acceptance replay also passes on both implementations. Logs and synthetic fixtures stayed outside the repository.
+
+Before fixing, the delta reproduced source mutation, stale export certification, restoration without provenance and a verifier crash. Afterwards, the original delta script records the required missing-provenance status and then stops at the newly required existing-output refusal. The original Sol probe stops at its obsolete unsealed-restoration assertion. Regression tests independently exercise every subsequent fault, including source byte preservation, stale-output refusal and damaged-manifest exit 0. The original Opus chain remains 22/24 because its pass-mismatch-refusal and linked-file-write-protection expectations were superseded by T1–T7. The other six scripts complete; grouped analysis remains 30/30, censuses and heldout models survive, and the strengthened campaign tests supply matching provenance for their intended restorations. T7's real-chain non-counting limitation remains explicit.
+
+Verification used Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1` and `PYTHONDONTWRITEBYTECODE=1`:
+
+- `python3.13 -m unittest tests.test_bytes_thermal_lines -q`: 24 tests, OK; strengthened real-chain port 29/29 and grouped-analysis port 30/30. Final edge-case refinements were checked with all 15 `RecordedFaultTests`, OK, including the subsequently added dangling-link test.
+- `python3.13 -m unittest tests.b6.test_bytes_p2_thermal_window tests.test_harvest_b5_window -q`: 198 tests, OK (11 skipped). Pass-1, block-5 and alpha byte-identity checks pass exactly.
+- `git diff --check`: passed. The full repository suite is left to CI because this change is confined to the exclusion-only tool and its tests.
+
+Only the three authorized files changed. No hardware or real BYTES measurements were used. Analysis SHA-256 remains `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`; harvest remains `2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744`.
+
+Fix commits, each pushed: `ad3b497d8`, `c9dcee9dd`, `7beee5ed9`, `0f164a1d5`, `cd91fd2c9`, `edafd77e5`. This report is committed and pushed separately. PR #598 remains a draft. The final-head CI job snapshot is read after that push and reported with the handoff; no completed green whole-suite result is claimed.
