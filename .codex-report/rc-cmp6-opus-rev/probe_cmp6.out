@@ -1,0 +1,92 @@
+## G7: key universe of run_phase_energy_j
+G7.0 control (fixture as shipped): exit=0 stderr='' fails={} unbound=[]
+G7.1 NEG-8 refcorpus member selected by the recompute, not re-reduced by L9: exit=1 stderr='' fails={'routing_id': 1, 'run_phase_energy_j': 3} unbound=[]
+    run rows: []
+    compared_in exclusions listed: False
+G7.2 science run omitted by both sides: exit=0 stderr='' fails={} unbound=[]
+    run_phase_energy_j counts: {'fail': 0, 'pass': 0}
+
+## dominance_ratio label read from the line's text (binding(): R vs R_cm)
+text says R_cm on an absolute ratio line: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:block_lines/dominance_ratio/denominator_j', 'no_row'), ('disclosure:block_lines/dominance_ratio/n', 'no_row'), ('disclosure:block_lines/dominance_ratio/numerator_j', 'no_row'), ('disclosure:block_lines/dominance_ratio/ratio', 'no_row')]
+
+## loo_key parses omitted_block_id for its trailing bNN
+    loo_key('plan-gamma-b03') = 'b03'
+    loo_key('b03-b07') = 'b07'
+
+## line word routes the path (step(): a value read from the document)
+    EXIT0 block_lines[4] sensitivity_reported -> below_screen_bound
+    EXIT0 block_lines[4] sensitivity_reported -> contrast_interval
+    EXIT0 block_lines[4] sensitivity_reported -> decision_floor
+    EXIT0 block_lines[4] sensitivity_reported -> dominance_branch
+    EXIT0 block_lines[4] sensitivity_reported -> dominance_ratio
+    EXIT0 block_lines[4] sensitivity_reported -> flag_count
+    EXIT0 block_lines[4] sensitivity_reported -> floor_composition
+    EXIT0 block_lines[4] sensitivity_reported -> harvest_once
+    EXIT0 block_lines[4] sensitivity_reported -> kept_units
+    EXIT0 block_lines[4] sensitivity_reported -> loo_counts
+    EXIT0 block_lines[4] sensitivity_reported -> loo_magnitude
+    EXIT0 block_lines[4] sensitivity_reported -> magnitude_per_token
+    EXIT0 block_lines[4] sensitivity_reported -> magnitude_ratio
+    EXIT0 block_lines[4] sensitivity_reported -> order
+    EXIT0 block_lines[4] sensitivity_reported -> primary_contrast
+    EXIT0 block_lines[4] sensitivity_reported -> sensitivity_bmax
+    EXIT0 block_lines[4] sensitivity_reported -> sensitivity_boundary
+    EXIT0 block_lines[4] sensitivity_reported -> sensitivity_window
+    EXIT0 block_lines[4] sensitivity_reported -> stored_status
+    EXIT0 block_lines[5] sensitivity_reported -> below_screen_bound
+    EXIT0 block_lines[5] sensitivity_reported -> contrast_interval
+    EXIT0 block_lines[5] sensitivity_reported -> decision_floor
+    EXIT0 block_lines[5] sensitivity_reported -> dominance_branch
+    EXIT0 block_lines[5] sensitivity_reported -> dominance_ratio
+    EXIT0 block_lines[5] sensitivity_reported -> flag_count
+    EXIT0 block_lines[5] sensitivity_reported -> floor_composition
+    EXIT0 block_lines[5] sensitivity_reported -> harvest_once
+    EXIT0 block_lines[5] sensitivity_reported -> kept_units
+    EXIT0 block_lines[5] sensitivity_reported -> loo_counts
+    EXIT0 block_lines[5] sensitivity_reported -> loo_magnitude
+    EXIT0 block_lines[5] sensitivity_reported -> magnitude_per_token
+    EXIT0 block_lines[5] sensitivity_reported -> magnitude_ratio
+    EXIT0 block_lines[5] sensitivity_reported -> order
+    EXIT0 block_lines[5] sensitivity_reported -> primary_contrast
+    EXIT0 block_lines[5] sensitivity_reported -> sensitivity_bmax
+    EXIT0 block_lines[5] sensitivity_reported -> sensitivity_boundary
+    EXIT0 block_lines[5] sensitivity_reported -> sensitivity_window
+    EXIT0 block_lines[5] sensitivity_reported -> stored_status
+    EXIT0 block_lines[6] sensitivity_boundary -> below_screen_bound
+    EXIT0 block_lines[6] sensitivity_boundary -> contrast_interval
+    EXIT0 block_lines[6] sensitivity_boundary -> decision_floor
+    EXIT0 block_lines[6] sensitivity_boundary -> dominance_branch
+    EXIT0 block_lines[6] sensitivity_boundary -> dominance_ratio
+    EXIT0 block_lines[6] sensitivity_boundary -> flag_count
+    EXIT0 block_lines[6] sensitivity_boundary -> floor_composition
+    EXIT0 block_lines[6] sensitivity_boundary -> harvest_once
+    EXIT0 block_lines[6] sensitivity_boundary -> kept_units
+    EXIT0 block_lines[6] sensitivity_boundary -> loo_counts
+    EXIT0 block_lines[6] sensitivity_boundary -> loo_magnitude
+    EXIT0 block_lines[6] sensitivity_boundary -> magnitude_per_token
+    EXIT0 block_lines[6] sensitivity_boundary -> magnitude_ratio
+    EXIT0 block_lines[6] sensitivity_boundary -> order
+    EXIT0 block_lines[6] sensitivity_boundary -> primary_contrast
+    EXIT0 block_lines[6] sensitivity_boundary -> sensitivity_bmax
+    EXIT0 block_lines[6] sensitivity_boundary -> sensitivity_reported
+    EXIT0 block_lines[6] sensitivity_boundary -> sensitivity_window
+    EXIT0 block_lines[6] sensitivity_boundary -> stored_status
+    EXIT0 block_lines[9] dominance_branch -> harvest_once
+relabel exit-0 count: 58
+
+## relabel plus a wrong printed word
+dominance_branch printed A (control, own line word): exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:block_lines/dominance_branch/branch', 'value_differs')]
+    rule: {'disclosure:block_lines/dominance_branch/dominance_sentence_licensed': 'uncovered:follows from the dominance branch (compared)'}
+dominance_branch printed A under line word harvest_once: exit=0 stderr='' fails={} unbound=[]
+    rule: {'disclosure:block_lines/harvest_once/branch': 'uncovered:window structure the recompute does not re-derive (flag tall', 'disclosure:block_lines/harvest_once/dominance_sentence_licensed': 'uncovered:window structure the recompute does not re-derive (flag tall'}
+dominance_branch sentence licensed True under harvest_once: exit=0 stderr='' fails={} unbound=[]
+    rule: {'disclosure:block_lines/harvest_once/branch': 'uncovered:window structure the recompute does not re-derive (flag tall', 'disclosure:block_lines/harvest_once/dominance_sentence_licensed': 'uncovered:window structure the recompute does not re-derive (flag tall'}
+sensitivity_reported status computed (control): exit=0 stderr='' fails={} unbound=[]
+    rule: {'disclosure:block_lines/sensitivity_reported/record/status': "uncovered:L9's own consistency booleans and status words over values c"}
+sensitivity_reported status computed under primary_contrast: exit=0 stderr='' fails={} unbound=[]
+    rule: {'disclosure:block_lines/primary_contrast/record/status': "uncovered:L9's own consistency booleans and status words over values c", 'disclosure:block_lines/sensitivity_reported/record/status': "uncovered:L9's own consistency booleans and status words over values c"}
+
+## NEG-8 lines: a reference member dropped on one side
+NEG8.0 control: both sides hold 2 start references, 12 corpus members: exit=0 stderr='' fails={} unbound=[]
+NEG8.1 L9 drops one window-start reference (start 1): exit=2 stderr='refused=step11_unmapped_fill' fails={'count': 1} unbound=[('disclosure:window_lines/alpha/reference_counts/counts/start', 'row_disagrees')]
+NEG8.2 L9 drops one refcorpus member (deciding 11): exit=2 stderr='refused=step11_unmapped_fill' fails={'count': 1} unbound=[('disclosure:window_lines/alpha/corpus_counts/deciding', 'row_disagrees')]
