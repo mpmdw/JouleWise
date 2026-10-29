@@ -1,0 +1,14 @@
+
+## key-set and duplicate-line variants
+K1 duplicate dominance_branch with branch A appended: exit=2 err='refused=step11_unmapped_fill' fails={}
+K2 duplicate dominance_branch with licensed True: exit=2 err='refused=step11_unmapped_fill' fails={}
+K3 duplicate below_screen_bound with below True: exit=2 err='refused=item_key_duplicated:window_claim_line' fails=None
+K4 duplicate sensitivity_window with widened flipped: exit=2 err='refused=step11_unmapped_fill' fails={}
+K5 dominance_branch without branch (licensed only): exit=2 err='refused=required_key_absent:disclosure:block_lines/dominance_branch/branch' fails=None
+K6 dominance_branch without licensed: exit=2 err='refused=required_key_absent:disclosure:block_lines/dominance_branch/dominance_sentence_licensed' fails=None
+K7 below_screen_bound without below: exit=2 err='refused=required_key_absent:disclosure:window_lines/below_screen_bound/below' fails=None
+K8 sensitivity_window without widened: exit=2 err='refused=required_key_absent:disclosure:block_lines/sensitivity_window/widened' fails=None
+K9 neg8_screen line removed from alpha: exit=1 err='' fails={'outcome_word': 1, 'routing_id': 1}
+K10 below_screen_bound lines swapped alpha<->beta: exit=0 err='' fails={}
+K11 wrong below_screen_bound moved into block_lines: exit=2 err='refused=line_word_unregistered:disclosure:block_lines' fails=None
+K12 branch nested in an object: exit=2 err='refused=step11_unmapped_fill' fails={}

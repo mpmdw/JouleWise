@@ -1,0 +1,476 @@
+COMPARED-LEAF-DROP disclosures/<sha>.json:cells/1/primary/mean_j -> ['disclosure:cells/battery_assist_cell/primary/mean_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:cells/1/primary/h_j -> ['disclosure:cells/battery_assist_cell/primary/h_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:cells/1/primary/B_j -> ['disclosure:cells/battery_assist_cell/primary/B_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:cells/1/primary/lower_j -> ['disclosure:cells/battery_assist_cell/primary/lower_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:cells/1/primary/upper_j -> ['disclosure:cells/battery_assist_cell/primary/upper_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:cells/2 -> ['disclosure:cells/attribution_floor/cell_id', 'disclosure:cells/attribution_floor/minimum_j', 'disclosure:cells/attribution_floor/pack', 'disclosure:cells/attribution_floor/value_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0 -> ['disclosure:contrasts/primary_contrast/contrast_id', 'disclosure:contrasts/primary_contrast/decision_interval/lower', 'disclosure:contrasts/primary_contrast/decision_interval/upper', 'disclosure:contrasts/primary_contrast/estimator/SE_total', 'disclosure:contrasts/primary_contrast/estimator/df', 'disclosure:contrasts/primary_contrast/estimator/estimate'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/name -> ['disclosure:contrasts/primary_contrast/estimator/name'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/n -> ['disclosure:contrasts/primary_contrast/estimator/n'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/df -> ['disclosure:contrasts/primary_contrast/estimator/df'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/estimate -> ['disclosure:contrasts/primary_contrast/estimator/estimate'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/s_d -> ['disclosure:contrasts/primary_contrast/estimator/s_d'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/SE_total -> ['disclosure:contrasts/primary_contrast/estimator/SE_total'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/t_critical_95 -> ['disclosure:contrasts/primary_contrast/estimator/t_critical_95'] contrast_p
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/metrology_aware_CI95 -> ['disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/lower', 'disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/metrology_aware_CI95/lower -> ['disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/lower'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/metrology_aware_CI95/upper -> ['disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/estimator/raw_p -> ['disclosure:contrasts/primary_contrast/estimator/raw_p'] contrast_p
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/decision_interval/lower -> ['disclosure:contrasts/primary_contrast/decision_interval/lower'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/0/decision_interval/upper -> ['disclosure:contrasts/primary_contrast/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/1 -> ['disclosure:contrasts/contrast_interval/contrast_id', 'disclosure:contrasts/contrast_interval/n', 'disclosure:contrasts/contrast_interval/rounded_t'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/2 -> ['disclosure:contrasts/decision_floor/contrast_id', 'disclosure:contrasts/decision_floor/decision_interval/lower', 'disclosure:contrasts/decision_floor/decision_interval/upper', 'disclosure:contrasts/decision_floor/estimate_j', 'disclosure:contrasts/decision_floor/floor_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/2/decision_interval/lower -> ['disclosure:contrasts/decision_floor/decision_interval/lower'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/2/decision_interval/upper -> ['disclosure:contrasts/decision_floor/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3 -> ['disclosure:contrasts/primary_contrast/contrast_id', 'disclosure:contrasts/primary_contrast/decision_interval/lower', 'disclosure:contrasts/primary_contrast/decision_interval/upper', 'disclosure:contrasts/primary_contrast/estimator/SE_total', 'disclosure:contrasts/primary_contrast/estimator/df', 'disclosure:contrasts/primary_contrast/estimator/estimate'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/name -> ['disclosure:contrasts/primary_contrast/estimator/name'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/n -> ['disclosure:contrasts/primary_contrast/estimator/n'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/df -> ['disclosure:contrasts/primary_contrast/estimator/df'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/estimate -> ['disclosure:contrasts/primary_contrast/estimator/estimate'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/s_d -> ['disclosure:contrasts/primary_contrast/estimator/s_d'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/SE_total -> ['disclosure:contrasts/primary_contrast/estimator/SE_total'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/t_critical_95 -> ['disclosure:contrasts/primary_contrast/estimator/t_critical_95'] contrast_p
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/metrology_aware_CI95 -> ['disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/lower', 'disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/metrology_aware_CI95/lower -> ['disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/lower'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/metrology_aware_CI95/upper -> ['disclosure:contrasts/primary_contrast/estimator/metrology_aware_CI95/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/estimator/raw_p -> ['disclosure:contrasts/primary_contrast/estimator/raw_p'] contrast_p
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/decision_interval/lower -> ['disclosure:contrasts/primary_contrast/decision_interval/lower'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/3/decision_interval/upper -> ['disclosure:contrasts/primary_contrast/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/4 -> ['disclosure:contrasts/contrast_interval/contrast_id', 'disclosure:contrasts/contrast_interval/n', 'disclosure:contrasts/contrast_interval/rounded_t'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/5 -> ['disclosure:contrasts/decision_floor/contrast_id', 'disclosure:contrasts/decision_floor/decision_interval/lower', 'disclosure:contrasts/decision_floor/decision_interval/upper', 'disclosure:contrasts/decision_floor/estimate_j', 'disclosure:contrasts/decision_floor/floor_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/5/decision_interval/lower -> ['disclosure:contrasts/decision_floor/decision_interval/lower'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:contrasts/5/decision_interval/upper -> ['disclosure:contrasts/decision_floor/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines -> ['disclosure:block_lines/dominance_branch/branch', 'disclosure:block_lines/dominance_branch/dominance_sentence_licensed', 'disclosure:block_lines/dominance_ratio/cell_id', 'disclosure:block_lines/dominance_ratio/component', 'disclosure:block_lines/dominance_ratio/denominator_j', 'disclosure:block_lines/dominance_ratio/n'] dominance_branch
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/0 -> ['disclosure:block_lines/sensitivity_bmax/T', 'disclosure:block_lines/sensitivity_bmax/attained_by_sequence', 'disclosure:block_lines/sensitivity_bmax/value_s'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/1 -> ['disclosure:block_lines/sensitivity_window/b_op_s', 'disclosure:block_lines/sensitivity_window/b_sens_s', 'disclosure:block_lines/sensitivity_window/pack', 'disclosure:block_lines/sensitivity_window/widened'] b_op_s
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/2 -> ['disclosure:block_lines/sensitivity_window/b_op_s', 'disclosure:block_lines/sensitivity_window/b_sens_s', 'disclosure:block_lines/sensitivity_window/pack', 'disclosure:block_lines/sensitivity_window/widened'] b_op_s
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/3 -> ['disclosure:block_lines/sensitivity_window/b_op_s', 'disclosure:block_lines/sensitivity_window/b_sens_s', 'disclosure:block_lines/sensitivity_window/pack', 'disclosure:block_lines/sensitivity_window/widened'] b_op_s
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/4 -> ['disclosure:block_lines/sensitivity_reported/record/cell_id', 'disclosure:block_lines/sensitivity_reported/record/code', 'disclosure:block_lines/sensitivity_reported/record/equals_primary', 'disclosure:block_lines/sensitivity_reported/record/mean_and_half_width_equal_primary', 'disclosure:block_lines/sensitivity_reported/record/not_below_primary', 'disclosure:block_lines/sensitivity_reported/record/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/5 -> ['disclosure:block_lines/sensitivity_reported/record/cell_id', 'disclosure:block_lines/sensitivity_reported/record/code', 'disclosure:block_lines/sensitivity_reported/record/equals_primary', 'disclosure:block_lines/sensitivity_reported/record/mean_and_half_width_equal_primary', 'disclosure:block_lines/sensitivity_reported/record/not_below_primary', 'disclosure:block_lines/sensitivity_reported/record/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/8 -> ['disclosure:block_lines/dominance_ratio/cell_id', 'disclosure:block_lines/dominance_ratio/component', 'disclosure:block_lines/dominance_ratio/denominator_j', 'disclosure:block_lines/dominance_ratio/n', 'disclosure:block_lines/dominance_ratio/numerator_j', 'disclosure:block_lines/dominance_ratio/ratio'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/8/ratio -> ['disclosure:block_lines/dominance_ratio/ratio'] dominance_ratio
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/8/numerator_j -> ['disclosure:block_lines/dominance_ratio/numerator_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/8/denominator_j -> ['disclosure:block_lines/dominance_ratio/denominator_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/9 -> ['disclosure:block_lines/dominance_branch/branch', 'disclosure:block_lines/dominance_branch/dominance_sentence_licensed'] dominance_branch
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10 -> ['disclosure:block_lines/sensitivity_reported/record/cell_id', 'disclosure:block_lines/sensitivity_reported/record/code', 'disclosure:block_lines/sensitivity_reported/record/equals_primary', 'disclosure:block_lines/sensitivity_reported/record/mean_and_half_width_equal_primary', 'disclosure:block_lines/sensitivity_reported/record/not_below_primary', 'disclosure:block_lines/sensitivity_reported/record/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/primary/mean_j -> ['disclosure:block_lines/sensitivity_reported/record/primary/mean_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/primary/h_j -> ['disclosure:block_lines/sensitivity_reported/record/primary/h_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/primary/B_j -> ['disclosure:block_lines/sensitivity_reported/record/primary/B_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/primary/lower_j -> ['disclosure:block_lines/sensitivity_reported/record/primary/lower_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/primary/upper_j -> ['disclosure:block_lines/sensitivity_reported/record/primary/upper_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/primary/attribution_floor_j -> ['disclosure:block_lines/sensitivity_reported/record/primary/attribution_floor_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/sensitivity/mean_j -> ['disclosure:block_lines/sensitivity_reported/record/sensitivity/mean_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/sensitivity/h_j -> ['disclosure:block_lines/sensitivity_reported/record/sensitivity/h_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/sensitivity/B_j -> ['disclosure:block_lines/sensitivity_reported/record/sensitivity/B_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/sensitivity/lower_j -> ['disclosure:block_lines/sensitivity_reported/record/sensitivity/lower_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/sensitivity/upper_j -> ['disclosure:block_lines/sensitivity_reported/record/sensitivity/upper_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/10/record/sensitivity/attribution_floor_j -> ['disclosure:block_lines/sensitivity_reported/record/sensitivity/attribution_floor_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11 -> ['disclosure:block_lines/sensitivity_floor/record/cell_id', 'disclosure:block_lines/sensitivity_floor/record/equals_primary', 'disclosure:block_lines/sensitivity_floor/record/not_below_primary', 'disclosure:block_lines/sensitivity_floor/record/primary/allowance_j', 'disclosure:block_lines/sensitivity_floor/record/primary/floor_abs_j', 'disclosure:block_lines/sensitivity_floor/record/primary/floor_cmp_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/primary/floor_abs_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/primary/floor_cmp_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/primary/floor_gate_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/primary/allowance_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/sensitivity/floor_abs_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/sensitivity/floor_cmp_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/sensitivity/floor_gate_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/11/record/sensitivity/allowance_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12 -> ['disclosure:block_lines/sensitivity_floor/record/cell_id', 'disclosure:block_lines/sensitivity_floor/record/equals_primary', 'disclosure:block_lines/sensitivity_floor/record/not_below_primary', 'disclosure:block_lines/sensitivity_floor/record/primary/allowance_j', 'disclosure:block_lines/sensitivity_floor/record/primary/floor_abs_j', 'disclosure:block_lines/sensitivity_floor/record/primary/floor_cmp_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/primary/floor_abs_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/primary/floor_cmp_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/primary/floor_gate_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/primary/allowance_j -> ['disclosure:block_lines/sensitivity_floor/record/primary/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/sensitivity/floor_abs_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/sensitivity/floor_cmp_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/sensitivity/floor_gate_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/12/record/sensitivity/allowance_j -> ['disclosure:block_lines/sensitivity_floor/record/sensitivity/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13 -> ['disclosure:block_lines/sensitivity_contrast/record/bound_independent_values_equal_primary', 'disclosure:block_lines/sensitivity_contrast/record/contrast_id', 'disclosure:block_lines/sensitivity_contrast/record/not_below_primary', 'disclosure:block_lines/sensitivity_contrast/record/outcome_equals_primary', 'disclosure:block_lines/sensitivity_contrast/record/primary/D_j', 'disclosure:block_lines/sensitivity_contrast/record/primary/floor_abs_j'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/primary/floor_abs_j -> ['disclosure:block_lines/sensitivity_contrast/record/primary/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/primary/floor_cmp_j -> ['disclosure:block_lines/sensitivity_contrast/record/primary/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/primary/floor_gate_j -> ['disclosure:block_lines/sensitivity_contrast/record/primary/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/primary/D_j -> ['disclosure:block_lines/sensitivity_contrast/record/primary/D_j'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/primary/outcome -> ['disclosure:block_lines/sensitivity_contrast/record/primary/outcome'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/sensitivity/floor_abs_j -> ['disclosure:block_lines/sensitivity_contrast/record/sensitivity/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/sensitivity/floor_cmp_j -> ['disclosure:block_lines/sensitivity_contrast/record/sensitivity/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/sensitivity/floor_gate_j -> ['disclosure:block_lines/sensitivity_contrast/record/sensitivity/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/sensitivity/D_j -> ['disclosure:block_lines/sensitivity_contrast/record/sensitivity/D_j'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:block_lines/13/record/sensitivity/outcome -> ['disclosure:block_lines/sensitivity_contrast/record/sensitivity/outcome'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity -> ['disclosure:sensitivity/b_max/T', 'disclosure:sensitivity/b_max/attained_by_sequence', 'disclosure:sensitivity/b_max/value_s', 'disclosure:sensitivity/contrasts/*/bound_independent_values_equal_primary', 'disclosure:sensitivity/contrasts/*/contrast_id', 'disclosure:sensitivity/contrasts/*/not_below_primary'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/b_max -> ['disclosure:sensitivity/b_max/T', 'disclosure:sensitivity/b_max/attained_by_sequence', 'disclosure:sensitivity/b_max/value_s'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/b_max/value_s -> ['disclosure:sensitivity/b_max/value_s'] b_op_s
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/b_max/T -> ['disclosure:sensitivity/b_max/T'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/b_max/attained_by_sequence -> ['disclosure:sensitivity/b_max/attained_by_sequence'] count
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells -> ['disclosure:sensitivity/floor_cells/*/cell_id', 'disclosure:sensitivity/floor_cells/*/equals_primary', 'disclosure:sensitivity/floor_cells/*/not_below_primary', 'disclosure:sensitivity/floor_cells/*/primary/allowance_j', 'disclosure:sensitivity/floor_cells/*/primary/floor_abs_j', 'disclosure:sensitivity/floor_cells/*/primary/floor_cmp_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0 -> ['disclosure:sensitivity/floor_cells/*/cell_id', 'disclosure:sensitivity/floor_cells/*/equals_primary', 'disclosure:sensitivity/floor_cells/*/not_below_primary', 'disclosure:sensitivity/floor_cells/*/primary/allowance_j', 'disclosure:sensitivity/floor_cells/*/primary/floor_abs_j', 'disclosure:sensitivity/floor_cells/*/primary/floor_cmp_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/primary/floor_abs_j -> ['disclosure:sensitivity/floor_cells/*/primary/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/primary/floor_cmp_j -> ['disclosure:sensitivity/floor_cells/*/primary/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/primary/floor_gate_j -> ['disclosure:sensitivity/floor_cells/*/primary/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/primary/allowance_j -> ['disclosure:sensitivity/floor_cells/*/primary/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/sensitivity/floor_abs_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/sensitivity/floor_cmp_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/sensitivity/floor_gate_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/0/sensitivity/allowance_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1 -> ['disclosure:sensitivity/floor_cells/*/cell_id', 'disclosure:sensitivity/floor_cells/*/equals_primary', 'disclosure:sensitivity/floor_cells/*/not_below_primary', 'disclosure:sensitivity/floor_cells/*/primary/allowance_j', 'disclosure:sensitivity/floor_cells/*/primary/floor_abs_j', 'disclosure:sensitivity/floor_cells/*/primary/floor_cmp_j'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/primary/floor_abs_j -> ['disclosure:sensitivity/floor_cells/*/primary/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/primary/floor_cmp_j -> ['disclosure:sensitivity/floor_cells/*/primary/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/primary/floor_gate_j -> ['disclosure:sensitivity/floor_cells/*/primary/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/primary/allowance_j -> ['disclosure:sensitivity/floor_cells/*/primary/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/sensitivity/floor_abs_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/sensitivity/floor_cmp_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/sensitivity/floor_gate_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/floor_cells/1/sensitivity/allowance_j -> ['disclosure:sensitivity/floor_cells/*/sensitivity/allowance_j'] floor_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts -> ['disclosure:sensitivity/contrasts/*/bound_independent_values_equal_primary', 'disclosure:sensitivity/contrasts/*/contrast_id', 'disclosure:sensitivity/contrasts/*/not_below_primary', 'disclosure:sensitivity/contrasts/*/outcome_equals_primary', 'disclosure:sensitivity/contrasts/*/primary/D_j', 'disclosure:sensitivity/contrasts/*/primary/floor_abs_j'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0 -> ['disclosure:sensitivity/contrasts/*/bound_independent_values_equal_primary', 'disclosure:sensitivity/contrasts/*/contrast_id', 'disclosure:sensitivity/contrasts/*/not_below_primary', 'disclosure:sensitivity/contrasts/*/outcome_equals_primary', 'disclosure:sensitivity/contrasts/*/primary/D_j', 'disclosure:sensitivity/contrasts/*/primary/floor_abs_j'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/primary/floor_abs_j -> ['disclosure:sensitivity/contrasts/*/primary/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/primary/floor_cmp_j -> ['disclosure:sensitivity/contrasts/*/primary/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/primary/floor_gate_j -> ['disclosure:sensitivity/contrasts/*/primary/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/primary/D_j -> ['disclosure:sensitivity/contrasts/*/primary/D_j'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/primary/outcome -> ['disclosure:sensitivity/contrasts/*/primary/outcome'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/sensitivity/floor_abs_j -> ['disclosure:sensitivity/contrasts/*/sensitivity/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/sensitivity/floor_cmp_j -> ['disclosure:sensitivity/contrasts/*/sensitivity/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/sensitivity/floor_gate_j -> ['disclosure:sensitivity/contrasts/*/sensitivity/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/sensitivity/D_j -> ['disclosure:sensitivity/contrasts/*/sensitivity/D_j'] contrast_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/contrasts/0/sensitivity/outcome -> ['disclosure:sensitivity/contrasts/*/sensitivity/outcome'] outcome_word
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells -> ['disclosure:sensitivity/reported_cells/*/cell_id', 'disclosure:sensitivity/reported_cells/*/code', 'disclosure:sensitivity/reported_cells/*/equals_primary', 'disclosure:sensitivity/reported_cells/*/mean_and_half_width_equal_primary', 'disclosure:sensitivity/reported_cells/*/not_below_primary', 'disclosure:sensitivity/reported_cells/*/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/0 -> ['disclosure:sensitivity/reported_cells/*/cell_id', 'disclosure:sensitivity/reported_cells/*/code', 'disclosure:sensitivity/reported_cells/*/equals_primary', 'disclosure:sensitivity/reported_cells/*/mean_and_half_width_equal_primary', 'disclosure:sensitivity/reported_cells/*/not_below_primary', 'disclosure:sensitivity/reported_cells/*/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/1 -> ['disclosure:sensitivity/reported_cells/*/cell_id', 'disclosure:sensitivity/reported_cells/*/code', 'disclosure:sensitivity/reported_cells/*/equals_primary', 'disclosure:sensitivity/reported_cells/*/mean_and_half_width_equal_primary', 'disclosure:sensitivity/reported_cells/*/not_below_primary', 'disclosure:sensitivity/reported_cells/*/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2 -> ['disclosure:sensitivity/reported_cells/*/cell_id', 'disclosure:sensitivity/reported_cells/*/code', 'disclosure:sensitivity/reported_cells/*/equals_primary', 'disclosure:sensitivity/reported_cells/*/mean_and_half_width_equal_primary', 'disclosure:sensitivity/reported_cells/*/not_below_primary', 'disclosure:sensitivity/reported_cells/*/pack'] routing_id
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/primary/mean_j -> ['disclosure:sensitivity/reported_cells/*/primary/mean_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/primary/h_j -> ['disclosure:sensitivity/reported_cells/*/primary/h_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/primary/B_j -> ['disclosure:sensitivity/reported_cells/*/primary/B_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/primary/lower_j -> ['disclosure:sensitivity/reported_cells/*/primary/lower_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/primary/upper_j -> ['disclosure:sensitivity/reported_cells/*/primary/upper_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/primary/attribution_floor_j -> ['disclosure:sensitivity/reported_cells/*/primary/attribution_floor_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/sensitivity/mean_j -> ['disclosure:sensitivity/reported_cells/*/sensitivity/mean_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/sensitivity/h_j -> ['disclosure:sensitivity/reported_cells/*/sensitivity/h_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/sensitivity/B_j -> ['disclosure:sensitivity/reported_cells/*/sensitivity/B_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/sensitivity/lower_j -> ['disclosure:sensitivity/reported_cells/*/sensitivity/lower_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/sensitivity/upper_j -> ['disclosure:sensitivity/reported_cells/*/sensitivity/upper_j'] reported_cell_j
+COMPARED-LEAF-DROP disclosures/<sha>.json:sensitivity/reported_cells/2/sensitivity/attribution_floor_j -> ['disclosure:sensitivity/reported_cells/*/sensitivity/attribution_floor_j'] reported_cell_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma -> ['fill:gamma/contrasts/*/claim_evaluation/claim_level_ceiling', 'fill:gamma/contrasts/*/claim_evaluation/claim_ready_for_l2_l3', 'fill:gamma/contrasts/*/claim_evaluation/direction', 'fill:gamma/contrasts/*/claim_evaluation/outcome', 'fill:gamma/contrasts/*/claim_role', 'fill:gamma/contrasts/*/conditions/condition_a_id'] outcome_word
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts -> ['fill:gamma/contrasts/*/claim_evaluation/claim_level_ceiling', 'fill:gamma/contrasts/*/claim_evaluation/claim_ready_for_l2_l3', 'fill:gamma/contrasts/*/claim_evaluation/direction', 'fill:gamma/contrasts/*/claim_evaluation/outcome', 'fill:gamma/contrasts/*/claim_role', 'fill:gamma/contrasts/*/conditions/condition_a_id'] outcome_word
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0 -> ['fill:gamma/contrasts/*/claim_evaluation/claim_level_ceiling', 'fill:gamma/contrasts/*/claim_evaluation/claim_ready_for_l2_l3', 'fill:gamma/contrasts/*/claim_evaluation/direction', 'fill:gamma/contrasts/*/claim_evaluation/outcome', 'fill:gamma/contrasts/*/claim_role', 'fill:gamma/contrasts/*/conditions/condition_a_id'] outcome_word
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/metric -> ['fill:gamma/contrasts/*/metric/metric_tag', 'fill:gamma/contrasts/*/metric/name', 'fill:gamma/contrasts/*/metric/window_class'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/metric/name -> ['fill:gamma/contrasts/*/metric/name'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/metric/metric_tag -> ['fill:gamma/contrasts/*/metric/metric_tag'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/metric/window_class -> ['fill:gamma/contrasts/*/metric/window_class'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/conditions -> ['fill:gamma/contrasts/*/conditions/condition_a_id', 'fill:gamma/contrasts/*/conditions/condition_b_id', 'fill:gamma/contrasts/*/conditions/difference_orientation'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/conditions/condition_a_id -> ['fill:gamma/contrasts/*/conditions/condition_a_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/conditions/condition_b_id -> ['fill:gamma/contrasts/*/conditions/condition_b_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/conditions/difference_orientation -> ['fill:gamma/contrasts/*/conditions/difference_orientation'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/estimate -> ['fill:gamma/contrasts/*/estimate'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/interval -> ['fill:gamma/contrasts/*/interval/lower', 'fill:gamma/contrasts/*/interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/interval/lower -> ['fill:gamma/contrasts/*/interval/lower'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/interval/upper -> ['fill:gamma/contrasts/*/interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/decision_interval -> ['fill:gamma/contrasts/*/decision_interval/lower', 'fill:gamma/contrasts/*/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/decision_interval/lower -> ['fill:gamma/contrasts/*/decision_interval/lower'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/decision_interval/upper -> ['fill:gamma/contrasts/*/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/deterministic_widening_total -> ['fill:gamma/contrasts/*/deterministic_widening_total'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/n -> ['fill:gamma/contrasts/*/n'] count
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor -> ['fill:gamma/contrasts/*/floor/active_floor_j', 'fill:gamma/contrasts/*/floor/aggregation', 'fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/claim_floor_rule'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/floor_abs_j -> ['fill:gamma/contrasts/*/floor/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/floor_cmp_j -> ['fill:gamma/contrasts/*/floor/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/active_floor_j -> ['fill:gamma/contrasts/*/floor/active_floor_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*', 'fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/0/source_cell_ids -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/0/source_cell_ids/0 -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/0/transport_rule_id -> ['fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/0/floor_abs_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/0/floor_cmp_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/0/floor_gate_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1 -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*', 'fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1/source_cell_ids -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1/source_cell_ids/0 -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1/transport_rule_id -> ['fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1/floor_abs_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1/floor_cmp_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/resolutions/1/floor_gate_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/claim_floor_rule -> ['fill:gamma/contrasts/*/floor/claim_floor_rule'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/aggregation -> ['fill:gamma/contrasts/*/floor/aggregation'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/0/arm_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/0/condition_family_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/0/floor_gate_j -> ['fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/1 -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/1/arm_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/1/condition_family_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/floor/arm_gates/1/floor_gate_j -> ['fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/sampling/kept_n -> ['fill:gamma/contrasts/*/sampling/kept_n'] count
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/df -> ['fill:gamma/contrasts/*/df'] count
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/0/t_critical_95 -> ['fill:gamma/contrasts/*/t_critical_95'] contrast_p
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1 -> ['fill:gamma/contrasts/*/claim_evaluation/claim_level_ceiling', 'fill:gamma/contrasts/*/claim_evaluation/claim_ready_for_l2_l3', 'fill:gamma/contrasts/*/claim_evaluation/direction', 'fill:gamma/contrasts/*/claim_evaluation/outcome', 'fill:gamma/contrasts/*/claim_role', 'fill:gamma/contrasts/*/conditions/condition_a_id'] outcome_word
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/metric -> ['fill:gamma/contrasts/*/metric/metric_tag', 'fill:gamma/contrasts/*/metric/name', 'fill:gamma/contrasts/*/metric/window_class'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/metric/name -> ['fill:gamma/contrasts/*/metric/name'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/metric/metric_tag -> ['fill:gamma/contrasts/*/metric/metric_tag'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/metric/window_class -> ['fill:gamma/contrasts/*/metric/window_class'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/conditions -> ['fill:gamma/contrasts/*/conditions/condition_a_id', 'fill:gamma/contrasts/*/conditions/condition_b_id', 'fill:gamma/contrasts/*/conditions/difference_orientation'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/conditions/condition_a_id -> ['fill:gamma/contrasts/*/conditions/condition_a_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/conditions/condition_b_id -> ['fill:gamma/contrasts/*/conditions/condition_b_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/conditions/difference_orientation -> ['fill:gamma/contrasts/*/conditions/difference_orientation'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/estimate -> ['fill:gamma/contrasts/*/estimate'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/interval -> ['fill:gamma/contrasts/*/interval/lower', 'fill:gamma/contrasts/*/interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/interval/lower -> ['fill:gamma/contrasts/*/interval/lower'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/interval/upper -> ['fill:gamma/contrasts/*/interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/decision_interval -> ['fill:gamma/contrasts/*/decision_interval/lower', 'fill:gamma/contrasts/*/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/decision_interval/lower -> ['fill:gamma/contrasts/*/decision_interval/lower'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/decision_interval/upper -> ['fill:gamma/contrasts/*/decision_interval/upper'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/deterministic_widening_total -> ['fill:gamma/contrasts/*/deterministic_widening_total'] contrast_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/n -> ['fill:gamma/contrasts/*/n'] count
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor -> ['fill:gamma/contrasts/*/floor/active_floor_j', 'fill:gamma/contrasts/*/floor/aggregation', 'fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/claim_floor_rule'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/floor_abs_j -> ['fill:gamma/contrasts/*/floor/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/floor_cmp_j -> ['fill:gamma/contrasts/*/floor/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/active_floor_j -> ['fill:gamma/contrasts/*/floor/active_floor_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*', 'fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/0/source_cell_ids -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/0/source_cell_ids/0 -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/0/transport_rule_id -> ['fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/0/floor_abs_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/0/floor_cmp_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/0/floor_gate_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1 -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*', 'fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1/source_cell_ids -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1/source_cell_ids/0 -> ['fill:gamma/contrasts/*/floor/resolutions/*/source_cell_ids/*'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1/transport_rule_id -> ['fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1/floor_abs_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1/floor_cmp_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/resolutions/1/floor_gate_j -> ['fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/claim_floor_rule -> ['fill:gamma/contrasts/*/floor/claim_floor_rule'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/aggregation -> ['fill:gamma/contrasts/*/floor/aggregation'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/0/arm_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/0/condition_family_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/0/floor_gate_j -> ['fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/1 -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/1/arm_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/arm_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/1/condition_family_id -> ['fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id'] routing_id
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/floor/arm_gates/1/floor_gate_j -> ['fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] floor_gate_j
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/sampling/kept_n -> ['fill:gamma/contrasts/*/sampling/kept_n'] count
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/df -> ['fill:gamma/contrasts/*/df'] count
+COMPARED-LEAF-DROP outputs/<sha>-results-fill-input.json:gamma/contrasts/1/t_critical_95 -> ['fill:gamma/contrasts/*/t_critical_95'] contrast_p
+
+non-step-11 exit-0 drops: 226
+   kept-units/<sha>-alpha.json:schema_version
+   kept-units/<sha>-alpha.json:pack
+   kept-units/<sha>-alpha.json:plan_id
+   kept-units/<sha>-alpha.json:attempt
+   kept-units/<sha>-alpha.json:harvest_pin
+   kept-units/<sha>-alpha.json:roster_sha256
+   kept-units/<sha>-alpha.json:catalog_sha256
+   kept-units/<sha>-alpha.json:sensitivity_label
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/target
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/planned
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/planned/repeat
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/minimum
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/minimum/repeat
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/n_r
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/n_b
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/cell_id
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/stratum
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/unit_id
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/positions
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/positions/0
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/stage_ids
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/kept/repeat/0/stage_ids/0
+   kept-units/<sha>-alpha.json:cells/d117-df-ph-decode-qwen3-1p7b-absolute/dropped
+   kept-units/<sha>-beta.json:schema_version
+   kept-units/<sha>-beta.json:pack
+   kept-units/<sha>-beta.json:plan_id
+   kept-units/<sha>-beta.json:attempt
+   kept-units/<sha>-beta.json:harvest_pin
+   kept-units/<sha>-beta.json:roster_sha256
+   kept-units/<sha>-beta.json:catalog_sha256
+   kept-units/<sha>-beta.json:sensitivity_label
+   kept-units/<sha>-beta.json:cells
+   kept-units/<sha>-gamma.json:schema_version
+   kept-units/<sha>-gamma.json:pack
+   kept-units/<sha>-gamma.json:plan_id
+   kept-units/<sha>-gamma.json:attempt
+   kept-units/<sha>-gamma.json:harvest_pin
+   kept-units/<sha>-gamma.json:roster_sha256
+   kept-units/<sha>-gamma.json:catalog_sha256
+   kept-units/<sha>-gamma.json:sensitivity_label
+   kept-units/<sha>-gamma.json:cells
+   mint/<sha>-extraction-alpha.json:cells/0/kind
+   mint/<sha>-extraction-alpha.json:cells/0/extractable
+   mint/<sha>-extraction-alpha.json:cells/1/kind
+   mint/<sha>-extraction-alpha.json:cells/1/extractable
+   mint/<sha>-extraction-alpha.json:cells/2/kind
+   mint/<sha>-extraction-beta.json:cells/0/kind
+   mint/<sha>-extraction-beta.json:cells/0/extractable
+   mint/<sha>-extraction-beta.json:cells/1/kind
+   mint/<sha>-extraction-beta.json:cells/1/extractable
+   mint/<sha>-extraction-beta.json:cells/2/kind
+   outputs/<sha>-claim-verdicts.json:contrasts/0/plan_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/family_instance_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/metric/unit
+   outputs/<sha>-claim-verdicts.json:contrasts/0/metric/ratio_estimand
+   outputs/<sha>-claim-verdicts.json:contrasts/0/conditions/cell_a_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/conditions/cell_b_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/equivalence
+   outputs/<sha>-claim-verdicts.json:contrasts/0/mde
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/planned_block_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/planned_block_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/planned_block_ids/1
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/included_bundle_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/included_bundle_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/included_bundle_ids/1
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/0/bundle_a_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/0/bundle_b_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/0/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1/block_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1/bundle_a_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1/bundle_b_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1/included
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/0/bundle_blocks/blocks/1/reason_codes/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/sampling/planned_n
+   outputs/<sha>-claim-verdicts.json:contrasts/0/sampling/observed_complete_n
+   outputs/<sha>-claim-verdicts.json:contrasts/0/sampling/kept_n
+   outputs/<sha>-claim-verdicts.json:contrasts/0/sampling/removed_block_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/0/sampling/removed_block_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/SE_repeat
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/SE_metrology
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/repeat_point_CI95
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/repeat_point_CI95/lower
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/repeat_point_CI95/upper
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/variance_contributions
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/variance_contributions/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/variance_contributions/0/name
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/variance_contributions/0/summed_paired_variance
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/variance_contributions/0/squared_standard_error
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/excluded_stochastic_terms
+   outputs/<sha>-claim-verdicts.json:contrasts/0/estimator/raw_p
+   outputs/<sha>-claim-verdicts.json:contrasts/0/deterministic_bounds/terms
+   outputs/<sha>-claim-verdicts.json:contrasts/0/deterministic_bounds/terms/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/deterministic_bounds/terms/0/name
+   outputs/<sha>-claim-verdicts.json:contrasts/0/deterministic_bounds/terms/0/bound
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/floor_row_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/floor_row_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/floor_row_ids/1
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/transport_verdict
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/resolutions/0/status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/resolutions/0/transport_group_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/resolutions/0/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/resolutions/1/status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/resolutions/1/transport_group_id
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/resolutions/1/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/arm_gates/0/status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/floor/arm_gates/1/status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/randomization_check
+   outputs/<sha>-claim-verdicts.json:contrasts/0/randomization_check/status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/randomization_check/reason
+   outputs/<sha>-claim-verdicts.json:contrasts/0/randomization_check/n_blocks
+   outputs/<sha>-claim-verdicts.json:contrasts/0/randomization_check/exact_two_sided_p
+   outputs/<sha>-claim-verdicts.json:contrasts/0/randomization_check/rejects
+   outputs/<sha>-claim-verdicts.json:contrasts/0/loo/rows
+   outputs/<sha>-claim-verdicts.json:contrasts/0/sensitivity_status
+   outputs/<sha>-claim-verdicts.json:contrasts/0/claim_evaluation/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/0/claim_evaluation/reason_codes/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/plan_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/family_instance_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/metric/unit
+   outputs/<sha>-claim-verdicts.json:contrasts/1/metric/ratio_estimand
+   outputs/<sha>-claim-verdicts.json:contrasts/1/conditions/cell_a_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/conditions/cell_b_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/equivalence
+   outputs/<sha>-claim-verdicts.json:contrasts/1/mde
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/planned_block_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/planned_block_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/planned_block_ids/1
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/included_bundle_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/included_bundle_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/included_bundle_ids/1
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/0/bundle_a_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/0/bundle_b_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/0/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1/block_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1/bundle_a_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1/bundle_b_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1/included
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/1/bundle_blocks/blocks/1/reason_codes/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/sampling/planned_n
+   outputs/<sha>-claim-verdicts.json:contrasts/1/sampling/observed_complete_n
+   outputs/<sha>-claim-verdicts.json:contrasts/1/sampling/kept_n
+   outputs/<sha>-claim-verdicts.json:contrasts/1/sampling/removed_block_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/1/sampling/removed_block_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/SE_repeat
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/SE_metrology
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/repeat_point_CI95
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/repeat_point_CI95/lower
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/repeat_point_CI95/upper
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/variance_contributions
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/variance_contributions/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/variance_contributions/0/name
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/variance_contributions/0/summed_paired_variance
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/variance_contributions/0/squared_standard_error
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/excluded_stochastic_terms
+   outputs/<sha>-claim-verdicts.json:contrasts/1/estimator/raw_p
+   outputs/<sha>-claim-verdicts.json:contrasts/1/deterministic_bounds/terms
+   outputs/<sha>-claim-verdicts.json:contrasts/1/deterministic_bounds/terms/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/deterministic_bounds/terms/0/name
+   outputs/<sha>-claim-verdicts.json:contrasts/1/deterministic_bounds/terms/0/bound
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/floor_row_ids
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/floor_row_ids/0
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/floor_row_ids/1
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/transport_verdict
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/resolutions/0/status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/resolutions/0/transport_group_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/resolutions/0/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/resolutions/1/status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/resolutions/1/transport_group_id
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/resolutions/1/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/arm_gates/0/status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/floor/arm_gates/1/status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/randomization_check
+   outputs/<sha>-claim-verdicts.json:contrasts/1/randomization_check/status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/randomization_check/reason
+   outputs/<sha>-claim-verdicts.json:contrasts/1/randomization_check/n_blocks
+   outputs/<sha>-claim-verdicts.json:contrasts/1/randomization_check/exact_two_sided_p
+   outputs/<sha>-claim-verdicts.json:contrasts/1/randomization_check/rejects
+   outputs/<sha>-claim-verdicts.json:contrasts/1/loo/rows
+   outputs/<sha>-claim-verdicts.json:contrasts/1/sensitivity_status
+   outputs/<sha>-claim-verdicts.json:contrasts/1/claim_evaluation/reason_codes
+   outputs/<sha>-claim-verdicts.json:contrasts/1/claim_evaluation/reason_codes/0
+   outputs/<sha>-projection-alpha.json:cells/0/attribution_floor/attained_by
+   outputs/<sha>-projection-alpha.json:refused_cells
+   outputs/<sha>-projection-beta.json:cells
+   outputs/<sha>-projection-beta.json:refused_cells
+   outputs/<sens>.json:schema_version
+   outputs/<sens>.json:windows/alpha/plan_id
+   outputs/<sens>.json:windows/beta/plan_id
+   outputs/<sens>.json:windows/gamma/plan_id
+   outputs/<sens>.json:floor_cells/0/pack
+   outputs/<sens>.json:floor_cells/0/primary
+   outputs/<sens>.json:floor_cells/0/primary/floor_abs_j
+   outputs/<sens>.json:floor_cells/0/primary/floor_cmp_j
+   outputs/<sens>.json:floor_cells/0/primary/floor_gate_j
+   outputs/<sens>.json:floor_cells/0/primary/allowance_j
+   outputs/<sens>.json:floor_cells/1/pack
+   outputs/<sens>.json:floor_cells/1/primary
+   outputs/<sens>.json:floor_cells/1/primary/floor_abs_j
+   outputs/<sens>.json:floor_cells/1/primary/floor_cmp_j
+   outputs/<sens>.json:floor_cells/1/primary/floor_gate_j
+   outputs/<sens>.json:floor_cells/1/primary/allowance_j
+   outputs/<sens>.json:contrasts/0/floor_cell_ids
+   outputs/<sens>.json:contrasts/0/floor_cell_ids/0
+   outputs/<sens>.json:contrasts/0/floor_cell_ids/1
+   outputs/<sens>.json:contrasts/0/primary
+   outputs/<sens>.json:contrasts/0/primary/floor_abs_j
+   outputs/<sens>.json:contrasts/0/primary/floor_cmp_j
+   outputs/<sens>.json:contrasts/0/primary/floor_gate_j
+   outputs/<sens>.json:contrasts/0/primary/D_j
+   outputs/<sens>.json:contrasts/0/primary/outcome
+   outputs/<sens>.json:reported_cells/0/pack
+   outputs/<sens>.json:reported_cells/1/pack
+   outputs/<sens>.json:reported_cells/2/pack
+   outputs/<sens>.json:reported_cells/2/primary
+   outputs/<sens>.json:reported_cells/2/primary/mean_j
+   outputs/<sens>.json:reported_cells/2/primary/h_j
+   outputs/<sens>.json:reported_cells/2/primary/B_j
+   outputs/<sens>.json:reported_cells/2/primary/lower_j
+   outputs/<sens>.json:reported_cells/2/primary/upper_j
+   outputs/<sens>.json:reported_cells/2/primary/attribution_floor_j

@@ -1,0 +1,60 @@
+## base widened=True: (0, '')
+FILL gamma/contrasts/0 (decode contrast) removed: exit=0 err='' fails=0
+FILL gamma/contrasts emptied: exit=0 err='' fails=0
+FILL gamma removed: exit=0 err='' fails=0
+FILL contrast estimate removed: exit=0 err='' fails=0
+FILL contrast decision_interval removed: exit=0 err='' fails=0
+FILL contrast conditions/difference_orientation removed: exit=0 err='' fails=0
+FILL contrast floor/claim_floor_rule removed: exit=0 err='' fails=0
+FILL contrast floor removed: exit=0 err='' fails=0
+DISC primary_contrast line removed: exit=0 err='' fails=0
+DISC primary_contrast estimator/estimate removed: exit=0 err='' fails=0
+DISC decision_floor line removed: exit=0 err='' fails=0
+DISC contrast_interval line removed: exit=0 err='' fails=0
+DISC attribution_floor line removed: exit=0 err='' fails=0
+DISC dominance_branch line removed: exit=0 err='' fails=0
+DISC dominance_ratio line removed: exit=0 err='' fails=0
+DISC sensitivity_bmax line removed: exit=0 err='' fails=0
+DISC sensitivity_window (alpha) line removed: exit=0 err='' fails=0
+DISC sensitivity_contrast line removed: exit=0 err='' fails=0
+DISC sensitivity_reported (computed) line removed: exit=0 err='' fails=0
+DISC sensitivity copy: contrasts emptied: exit=0 err='' fails=0
+DISC sensitivity copy removed: exit=0 err='' fails=0
+DISC block_lines removed: exit=0 err='' fails=0
+CONTROL DISC reported_cell line removed: exit=1 err='' fails=2
+CONTROL DISC magnitude_per_token line removed: exit=1 err='' fails=6
+CONTROL DISC neg8_screen alpha removed: exit=1 err='' fails=2
+CONTROL DISC sensitivity_window widened flipped: exit=2 err='refused=step11_unmapped_fill' fails=0
+RELABEL FILL floor_source_cell_ids/0 decode->prefill floor: exit=0 err='' fails=0
+RELABEL VERDICT floor/floor_row_ids swapped to prefill floors: exit=0 err='' fails=0
+RELABEL SENS record contrasts/0/floor_cell_ids swapped: exit=0 err='' fails=0
+## base widened=False: (0, '')
+FILL gamma/contrasts/0 (decode contrast) removed: exit=0 err='' fails=0
+FILL gamma/contrasts emptied: exit=0 err='' fails=0
+FILL gamma removed: exit=0 err='' fails=0
+FILL contrast estimate removed: exit=0 err='' fails=0
+FILL contrast decision_interval removed: exit=0 err='' fails=0
+FILL contrast conditions/difference_orientation removed: exit=0 err='' fails=0
+FILL contrast floor/claim_floor_rule removed: exit=0 err='' fails=0
+FILL contrast floor removed: exit=0 err='' fails=0
+DISC primary_contrast line removed: exit=0 err='' fails=0
+DISC primary_contrast estimator/estimate removed: exit=0 err='' fails=0
+DISC decision_floor line removed: exit=0 err='' fails=0
+DISC contrast_interval line removed: exit=0 err='' fails=0
+DISC attribution_floor line removed: exit=0 err='' fails=0
+DISC dominance_branch line removed: exit=0 err='' fails=0
+DISC dominance_ratio line removed: exit=0 err='' fails=0
+DISC sensitivity_bmax line removed: exit=0 err='' fails=0
+DISC sensitivity_window (alpha) line removed: exit=0 err='' fails=0
+DISC sensitivity_contrast line removed: exit=0 err='' fails=0
+DISC sensitivity_reported (computed) line removed: exit=0 err='' fails=0
+DISC sensitivity copy: contrasts emptied: exit=0 err='' fails=0
+DISC sensitivity copy removed: exit=0 err='' fails=0
+DISC block_lines removed: exit=0 err='' fails=0
+CONTROL DISC reported_cell line removed: exit=1 err='' fails=2
+CONTROL DISC magnitude_per_token line removed: exit=1 err='' fails=6
+CONTROL DISC neg8_screen alpha removed: exit=1 err='' fails=2
+CONTROL DISC sensitivity_window widened flipped: exit=2 err='refused=step11_unmapped_fill' fails=0
+RELABEL FILL floor_source_cell_ids/0 decode->prefill floor: exit=0 err='' fails=0
+RELABEL VERDICT floor/floor_row_ids swapped to prefill floors: exit=0 err='' fails=0
+RELABEL SENS record contrasts/0/floor_cell_ids swapped: exit=0 err='' fails=0

@@ -1,0 +1,16 @@
+## joint drops (same routing key dropped on both sides)
+   joint ('run/alpha/kept_units/exclusions_sha256',) | kept-units/<sha>-alpha.json:exclusions_sha256 + ours:inputs/ALPHA/exclusions_sha256: exit=1 err='' fails=1
+   joint ('run/alpha/run-a',) | kept-units/<sha>-alpha.json:cells + ours:members/ALPHA: exit=1 err='' fails=4
+   joint ('run/beta/kept_units/exclusions_sha256',) | kept-units/<sha>-beta.json:exclusions_sha256 + ours:inputs/BETA/exclusions_sha256: exit=1 err='' fails=1
+   joint ('run/gamma/kept_units/exclusions_sha256',) | kept-units/<sha>-gamma.json:exclusions_sha256 + ours:inputs/GAMMA: exit=1 err='' fails=1
+joint tried: 4
+JOINT decode contrast widened=True: exit=0 err='' fails=[]
+JOINT decode contrast widened=False: exit=0 err='' fails=[]
+JOINT alpha decode reported cell widened=True: exit=0 err='' fails=[]
+JOINT alpha decode reported cell widened=False: exit=0 err='' fails=[]
+JOINT alpha decode sensitivity floor cell widened=True: exit=2 err='refused=step11_unmapped_fill' fails=[('floor_gate_j', 'sensitivity/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor_abs_j', 45.0, None), ('floor_gate_j', 'sensitivity/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor_cmp_j', 105.0, None), ('outcome_word', 'sensitivity/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/not_below_primary', True, None)]
+JOINT alpha decode sensitivity floor cell widened=False: exit=2 err='refused=step11_unmapped_fill' fails=[('floor_gate_j', 'sensitivity/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor_abs_j', 43.0, None), ('floor_gate_j', 'sensitivity/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor_cmp_j', 103.5, None), ('outcome_word', 'sensitivity/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/not_below_primary', True, None)]
+JOINT alpha extraction cell 0 (+its floor_composition line) widened=True: exit=2 err='refused=step11_unmapped_fill' fails=[('outcome_word', 'sensitivity/Qwen3-1.7B-4bit/decode/equals_primary', False, None)]
+JOINT alpha extraction cell 0 (+its floor_composition line) widened=False: exit=2 err='refused=step11_unmapped_fill' fails=[('outcome_word', 'sensitivity/Qwen3-1.7B-4bit/decode/equals_primary', True, None)]
+JOINT ratio row 0 (+its dominance_ratio line) widened=True: exit=1 err='' fails=[('dominance_ratio', 'ratio/none', None, None)]
+JOINT ratio row 0 (+its dominance_ratio line) widened=False: exit=1 err='' fails=[('dominance_ratio', 'ratio/none', None, None)]
