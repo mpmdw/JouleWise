@@ -11,7 +11,7 @@ from joulewise.b5_analysis.windows import ROOT, SealPins
 
 SEALED_DIR = "configs/campaigns/v5_claim_25g83/"
 SEAL = ROOT / "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
-# The accepted block-5 analysis commit (RUN_STATE items 83, 88, 92): the dry run and the release run
+# The accepted block-5 analysis commit (RUN_STATE items 83, 88, 93): the dry run and the release run
 # there. Main may evolve a collection file after L9's acceptance; for such a file the freeze binds the
 # analysis commit's bytes, not main's working tree.
 B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
