@@ -58,6 +58,16 @@ class Step4ExitClassTests(unittest.TestCase):
                 self.assertClass(report(refused), 'floor_cell_not_extractable', 'outcome_class')
         self.assertIn('floor_cell_not_extractable', d.refusal_classes()['outcome_class'])
 
+    def test_S2_p42_floor_cells_are_absolute_or_comparative_cells_of_the_p42_family_token(self):
+        spec = copy.deepcopy(SPEC)
+        spec['cells'] += [{'cell_id': 'syn-p42-reported', 'kind': 'reported', 'condition_family_id': 'cell-p42'},
+                          {'cell_id': 'syn-p420', 'kind': 'absolute', 'condition_family_id': 'cell-p420'}]
+        for refused in (('syn-p42-reported',), ('syn-p420',), ('syn-p420', *P42)):
+            with self.subTest(refused=refused):
+                rep = {'spec_membership_refusals': [], 'cells': [
+                    {'cell_id': c['cell_id'], 'extractable': c['cell_id'] not in refused} for c in spec['cells']]}
+                self.assertClass(rep, 'floor_cell_not_extractable', 'outcome_class', spec)
+
     def test_S2_a_refused_cell_in_a_spec_without_p42_cells_is_an_outcome_class(self):
         spec = {'cells': SPEC['cells'][:2]}
         rep = {'spec_membership_refusals': [],
@@ -109,6 +119,9 @@ class Step4ExitClassTests(unittest.TestCase):
 
     def test_S3_other_exit_statuses_keep_their_handling(self):
         self.assertEqual(classify_step4_exit(0, report(), SPEC), 'ok')
+        for rep, spec in ((None, SPEC), ([], SPEC), (report(), None), (report(), [])):
+            with self.subTest(report=rep, spec=spec):
+                self.assertEqual(classify_step4_exit(0, rep, spec), 'refused')
         for status in (2, 3, -1, True, None, '1'):
             with self.subTest(status=status):
                 self.assertEqual(classify_step4_exit(status, report(P42), SPEC), 'refused')

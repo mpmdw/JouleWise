@@ -43,7 +43,7 @@ def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mappi
     if type(exit_status) is not int:
         return "refused"
     if exit_status == 0:
-        return "ok"
+        return "ok" if isinstance(report, Mapping) and isinstance(spec, Mapping) else "refused"
     if exit_status != 1:
         return "refused"
     if not isinstance(report, Mapping):
