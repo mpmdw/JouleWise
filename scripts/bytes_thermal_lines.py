@@ -122,7 +122,7 @@ def transform(mode, archive, output, export=None):
         if source and (output.is_relative_to(source) or source.is_relative_to(output)):
             raise ValueError("output overlaps source archive/export")
     if output.exists():
-        raise ValueError("output must be a new directory")
+        raise ValueError("output overlaps an existing output")
     sources = {}
 
     def read(path):
@@ -135,6 +135,7 @@ def transform(mode, archive, output, export=None):
     exclusions = selected(raw_acceptance, "excluding")
     roster_raw = read(archive / "derived/roster.json")
     roster = selected(roster_raw, "members")
+    pass_mismatch = False
     for tree in sorted((archive / "sources/repo").rglob("plan_tree.json")):
         tree_raw = read(tree)
         try:
@@ -142,42 +143,68 @@ def transform(mode, archive, output, export=None):
         except ValueError:
             continue
         if pass_id != (2 if mode == "hull-p2" else 1):
-            raise ValueError("thermal line does not match archived bytes_pass")
+            pass_mismatch = True
     before = {m["run_id"]: set() for m in roster}
     for row in exclusions:
         if row.get("scope") == "member":
             before.setdefault(row["run_id"], set()).add(row["code"])
     after = {run: set(codes) for run, codes in before.items()}
-    notices, changes = [], []
-    if mode == "hull-p2":
-        assessments = read(archive / "withheld/member-assessments.json")
-    else:
-        spans = selected(read(archive / "withheld/spans.json"), "spans")
-        # This is the exact resolved threshold record the harvest sealed,
-        # including explicit overrides. Do not resolve a mutable live plan.
-        thermal_key = "thermal_unmeasured_gap_s"
-        sealed = {thermal_key: selected(
-            read(archive / "derived/harvest-thresholds.json"), "values", thermal_key)}
-        # Replay just the thermal projection through the production resolver.
-        # Missing nonthermal keys concern joins this tool never performs.
-        thresholds, _provenance = h.resolve_thresholds(
-            {h.PLAN_HARVEST_THRESHOLDS_KEY: sealed}, archive)
-        if thermal_key not in thresholds:
-            raise ValueError("sealed thermal threshold rejected by production resolver")
-        journal = archive / "sources/night-custody/hazards/monitor/thermal.jsonl"
-        if not journal.is_file():
-            raise ValueError("archived thermal journal unavailable; no evaluation written")
-        sources[str(journal)] = hashlib.sha256(journal.read_bytes()).hexdigest()
-        readings, malformed = h.read_monitor_journal(journal, "thermal")
-        if malformed:
-            notices.append({"code": "records.monitor_line_malformed"})
+    notices, changes, statuses = [], [], {}
+    unavailable = None
+    mismatch = False
+    assessments, spans, readings = None, {}, []
+    # The gap threshold affects only thermal.unmeasured. This projection never
+    # consumes that flag, so the production function's gap argument is immaterial.
+    thresholds = {"thermal_unmeasured_gap_s": 0}
+    try:
+        if mode == "hull-p2":
+            assessments = read(archive / "withheld/member-assessments.json")
+        else:
+            spans = selected(read(archive / "withheld/spans.json"), "spans")
+            journal = archive / "sources/night-custody/hazards/monitor/thermal.jsonl"
+            if not journal.is_file() and not Path(str(journal) + ".zst").is_file():
+                unavailable = "archived thermal journal unavailable"
+            else:
+                # read_bytes has the harvest's plain/.zst decompression semantics;
+                # the sealed digest binds decompressed journal bytes too.
+                digest = hashlib.sha256(h.read_bytes(journal)).hexdigest()
+                actual = journal if journal.is_file() else Path(str(journal) + ".zst")
+                sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
+                flags = archive / "derived/window_flags.json"
+                if flags.is_file():
+                    try:
+                        expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
+                        mismatch = digest != expected
+                    except ValueError:
+                        mismatch = True
+                if mismatch:
+                    notices.append({"code": "records.thermal_journal_mismatch"})
+                readings, malformed = h.read_monitor_journal(journal, "thermal")
+                if malformed:
+                    notices.append({"code": "records.monitor_line_malformed"})
+    except (OSError, ValueError):
+        unavailable = "archived thermal journal unavailable" if mode == "request-end-p1" else "hull assessment unavailable"
+
+    def undefined(run, reason):
+        statuses[run] = "not defined (" + reason + ")"
+        notices.append({"run_id": run, "code": "records.thermal_line_undefined", "reason": reason})
+
     for member in roster:
         run = member["run_id"]
         if member.get("kind") != "science":
             notices.append({"run_id": run, "code": "reference.unchanged"})
             continue
+        statuses[run] = "equals registered line"
+        if pass_mismatch or unavailable:
+            if CODE in before[run]:
+                undefined(run, "pass mismatch" if pass_mismatch else unavailable)
+            continue
         if mode == "hull-p2":
-            record = selected(assessments, "members", run, FIELD)
+            try:
+                record = selected(assessments, "members", run, FIELD)
+            except ValueError:
+                undefined(run, "hull assessment unavailable")
+                continue
             if not record["journal_available"]:
                 notices.append({"run_id": run, "code": "thermal.unmeasured"})
             if record["excluded"] is None:
@@ -193,16 +220,78 @@ def transform(mode, archive, output, export=None):
                 continue
             stamps = [span["member"][0], span["request"][1]]
             if any(type(v) is not int for v in stamps):
-                raise ValueError(f"noninteger span: {run}")
+                undefined(run, "noninteger span")
+                continue
             found = {code for code, *_ in h.thermal_member_flags(stamps, readings, thresholds)}
             if CODE in found and CODE not in before[run]:
                 raise ValueError(f"request-end would add {CODE}: {run}")
             if CODE not in found:
+                if mismatch and CODE in before[run]:
+                    undefined(run, "journal differs from the harvest's")
+                    continue
                 after[run].discard(CODE)
         if after[run] != before[run]:
+            statuses[run] = "evaluated"
             changes.append({"run_id": run, "code": CODE,
                             "action": "added" if CODE in after[run] else "removed",
                             "reason": LABELS[mode]})
+    exports = {}
+    withheld_runs = set()
+    if export:
+        session = selected(raw_acceptance, "session_id")
+        path = export / (session + ".runs.csv")
+        inputs = [(path, Path(path.name), False)]
+        sidecar = export / (session + ".session.json")
+        if sidecar.is_file():
+            raw_sidecar = read(sidecar)
+            try:
+                locator = selected(raw_sidecar, "blinding", "withheld", "path")
+            except ValueError:
+                locator = None
+            if locator:
+                store_rel = Path("withheld") / path.name
+                inputs.append((export / locator, store_rel, True))
+                a, z = field_span(raw_sidecar, ("blinding", "withheld", "path"))
+                raw_sidecar = replace(raw_sidecar, [(a, z, json.dumps(store_rel.as_posix()))])
+            exports[Path(sidecar.name)] = raw_sidecar
+        tables, seen, bad = [], set(), set()
+        for source, relative, withheld in inputs:
+            try:
+                raw = read(source)
+            except OSError:
+                continue
+            rows = csv_fields(raw)
+            header = [decode_field(raw, span) for span in rows[0]]
+            rid, codes = header.index("run_id"), header.index("exclusion_codes")
+            for row in rows[1:]:
+                run = decode_field(raw, row[rid])
+                original = set(filter(None, decode_field(raw, row[codes]).split(";")))
+                if run not in before or original != before[run] or run in seen:
+                    bad.add(run)
+                    undefined(run, "CSV/archive code disagreement: " + run)
+                seen.add(run)
+                if withheld:
+                    withheld_runs.add(run)
+            tables.append((relative, raw, rows, header))
+        for change in changes:
+            run = change["run_id"]
+            if run not in seen:
+                bad.add(run)
+                undefined(run, "changed member absent from export")
+        for run in bad:
+            if run in before:
+                after[run] = set(before[run])
+        changes = [c for c in changes if c["run_id"] not in bad]
+        for relative, raw, rows, header in tables:
+            rid, codes = header.index("run_id"), header.index("exclusion_codes")
+            edits = []
+            for row in rows[1:]:
+                run = decode_field(raw, row[rid])
+                if run not in bad and after[run] != before[run]:
+                    edits.append((*row[codes], encode_field(";".join(sorted(after[run])))))
+                    if "excluded" in header:
+                        edits.append((*row[header.index("excluded")], str(bool(after[run]))))
+            exports[relative] = replace(raw, edits)
     new_exclusions = [row for row in exclusions if not (
         row.get("scope") == "member" and row["code"] not in after[row["run_id"]])]
     for change in changes:
@@ -211,26 +300,6 @@ def transform(mode, archive, output, export=None):
     a, z = field_span(raw_acceptance, ("excluding",))
     new_acceptance = (raw_acceptance if not changes else
                       replace(raw_acceptance, [(a, z, json.dumps(new_exclusions, ensure_ascii=False))]))
-    exports = {}
-    if export:
-        session = selected(raw_acceptance, "session_id")
-        path = export / (session + ".runs.csv")
-        raw = read(path)
-        rows = csv_fields(raw)
-        header = [decode_field(raw, s) for s in rows[0]]
-        rid, codes = header.index("run_id"), header.index("exclusion_codes")
-        edits, seen = [], set()
-        for row in rows[1:]:
-            run = decode_field(raw, row[rid])
-            original = set(filter(None, decode_field(raw, row[codes]).split(";")))
-            if run not in before or original != before[run] or run in seen:
-                raise ValueError(f"CSV/archive exclusion mismatch or duplicate: {run}")
-            seen.add(run)
-            if after[run] != original:
-                edits.append((*row[codes], encode_field(";".join(sorted(after[run])))))
-        if any(c["run_id"] not in seen for c in changes):
-            raise ValueError("changed member absent from CSV")
-        exports[path.name] = replace(raw, edits)
     units = {}
     for member in roster:
         for unit in member.get("units", []):
@@ -239,6 +308,16 @@ def transform(mode, archive, output, export=None):
     record = {"label": LABELS[mode], "source_sha256": sources,
               "producing_commit": subprocess.check_output(
                   ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True).strip(),
+              "producing_tree_dirty": bool(subprocess.check_output(
+                  ["git", "status", "--porcelain", "--untracked-files=no"],
+                  cwd=Path(__file__).resolve().parents[1], text=True).strip()),
+              "status": ("not defined (see member statuses)" if any(v.startswith("not defined") for v in statuses.values())
+                         else "evaluated" if changes else "equals registered line"),
+              "member_statuses": [{"run_id": m["run_id"],
+                  "status": statuses.get(m["run_id"], "equals registered line"),
+                  "blinded_status": "not defined at blinded stage (row withheld)"
+                      if m["run_id"] in withheld_runs else statuses.get(m["run_id"], "equals registered line")}
+                  for m in roster],
               "changes": changes, "notices": notices, "equals_registered_line": not changes,
               "restored_members": sorted(r for r in before if before[r] and not after[r]),
               "dropped_members": [{"run_id": r, "codes": sorted(c)} for r, c in sorted(after.items()) if c],
@@ -253,9 +332,9 @@ def transform(mode, archive, output, export=None):
         dest = output / rel
         if path.is_dir():
             dest.mkdir(exist_ok=True)
-        elif rel != Path("derived/b6-acceptance.json") and rel != Path("thermal_line.json"):
+        elif rel != Path("derived/b6-acceptance.json") and rel not in (Path("thermal_line.json"), Path("view_manifest.json")):
             dest.symlink_to(path.resolve())
-    (output / "derived/b6-acceptance.json").write_bytes(new_acceptance.encode("utf-8"))
+    write_copy(output / "derived/b6-acceptance.json", new_acceptance)
     if exports:
         (output / "export").mkdir(exist_ok=True)
         for name, content in exports.items():
@@ -264,9 +343,64 @@ def transform(mode, archive, output, export=None):
             # follow such a link when writing a second-generation copy.
             if destination.is_symlink():
                 destination.unlink()
-            destination.write_bytes(content.encode("utf-8"))
-    (output / "thermal_line.json").write_text(json.dumps(record, indent=2) + "\n")
+            write_copy(destination, content)
+    manifest = {"files": view_files(output)}
+    write_copy(output / "view_manifest.json", json.dumps(manifest, indent=2) + "\n")
+    record["view_manifest_sha256"] = sha256(output / "view_manifest.json")
+    write_copy(output / "thermal_line.json", json.dumps(record, indent=2) + "\n")
     return record
+
+
+# Control files cannot hash themselves. The manifest covers every exposed payload
+# file; thermal_line binds the manifest. verify checks both in that order.
+CONTROL = {"view_manifest.json", "thermal_line.json"}
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_copy(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        path.unlink()
+    path.write_bytes(content.encode("utf-8"))
+    path.chmod(0o444)
+
+
+def view_files(output):
+    files = []
+    for path in sorted(output.rglob("*")):
+        relative = path.relative_to(output).as_posix()
+        if relative not in CONTROL and (path.is_file() or path.is_symlink()):
+            try:
+                files.append({"path": relative, "size": path.stat().st_size, "sha256": sha256(path)})
+            except OSError:
+                files.append({"path": relative, "size": None, "sha256": None})
+    return files
+
+
+def verify(output):
+    output = Path(output)
+    record_path = output / "thermal_line.json"
+    record = json.loads(record_path.read_bytes())
+    manifest_path = output / "view_manifest.json"
+    different = []
+    try:
+        if sha256(manifest_path) != record["view_manifest_sha256"]:
+            different.append("view_manifest.json")
+        expected = {row["path"]: row for row in json.loads(manifest_path.read_bytes())["files"]}
+    except (OSError, ValueError):
+        expected = {}
+        different.append("view_manifest.json")
+    current = {row["path"]: row for row in view_files(output)}
+    different.extend(path for path in sorted(expected.keys() | current.keys())
+                     if expected.get(path) != current.get(path))
+    record["records.thermal_view_changed"] = bool(different)
+    record["view_differing_paths"] = sorted(set(different))
+    record_path.chmod(0o644)
+    write_copy(record_path, json.dumps(record, indent=2) + "\n")
+    return record["view_differing_paths"]
 
 
 def main(argv=None):
@@ -277,7 +411,13 @@ def main(argv=None):
         cmd.add_argument("archive", type=Path)
         cmd.add_argument("output", type=Path)
         cmd.add_argument("--export", type=Path)
+    cmd = sub.add_parser("verify")
+    cmd.add_argument("output", type=Path)
     args = parser.parse_args(argv)
+    if args.mode == "verify":
+        different = verify(args.output)
+        print("\n".join(different) if different else "view verified")
+        return
     try:
         record = transform(args.mode, args.archive, args.output, args.export)
     except (ValueError, OSError) as exc:
