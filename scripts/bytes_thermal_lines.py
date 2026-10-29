@@ -200,21 +200,30 @@ def transform(mode, archive, output, export=None):
             notices.append({"run_id": run, "code": "reference.unchanged"})
             continue
         statuses[run] = "equals registered line"
-        if pass_mismatch or unavailable:
-            if CODE in before[run]:
-                undefined(run, "pass mismatch" if pass_mismatch else unavailable)
+        if pass_mismatch:
+            undefined(run, "pass mismatch")
+            continue
+        if unavailable:
+            if (CODE not in before[run]) if mode == "hull-p2" else (CODE in before[run]):
+                undefined(run, unavailable)
             continue
         if mode == "hull-p2":
             try:
                 record = selected(assessments, "members", run, FIELD)
-            except ValueError:
-                undefined(run, "hull assessment unavailable")
+                if (not isinstance(record, dict) or type(record.get("journal_available")) is not bool
+                        or "excluded" not in record or record["excluded"] not in (True, False, None)):
+                    raise ValueError("invalid hull assessment")
+            except (ValueError, TypeError, IndexError):
+                if CODE not in before[run]:
+                    undefined(run, "hull assessment unavailable")
                 continue
             if not record["journal_available"]:
                 notices.append({"run_id": run, "code": "thermal.unmeasured"})
             if record["excluded"] is None:
                 notices.append({"run_id": run, "code": "member.span_unknown"})
             if not record["journal_available"] or record["excluded"] is None:
+                if CODE not in before[run]:
+                    undefined(run, "hull assessment unavailable")
                 continue
             if record["excluded"] is True:
                 after[run].add(CODE)

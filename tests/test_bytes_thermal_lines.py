@@ -908,6 +908,38 @@ class RecordedFaultTests(unittest.TestCase):
         record, _ = self.run_line('pass')
         self.assertIn('not defined (pass mismatch)', [r['status'] for r in record['member_statuses']])
 
+    def test_fault_direction_and_pass_mismatch_for_both_lines(self):
+        for mode in t.LABELS:
+            with self.subTest(mode=mode):
+                (self.archive / 'sources/repo/plan_tree.json').unlink(missing_ok=True)
+                self.journal.unlink(missing_ok=True)
+                record = t.transform(mode, self.archive, self.root / (mode + '-unavailable'))
+                statuses = [m['status'] for m in record['member_statuses']]
+                reason = 'hull assessment unavailable' if mode == 'hull-p2' else 'archived thermal journal unavailable'
+                expected = ['equals registered line', 'not defined (' + reason + ')']
+                self.assertEqual(statuses, expected if mode == 'hull-p2' else expected[::-1])
+                self.assertFalse(record['equals_registered_line'])
+                self.assertEqual(record['changes'], [])
+                self.put('sources/repo/plan_tree.json', {'bytes_pass': 1 if mode == 'hull-p2' else 2})
+                record = t.transform(mode, self.archive, self.root / (mode + '-wrong-pass'))
+                self.assertEqual([m['status'] for m in record['member_statuses']],
+                                 ['not defined (pass mismatch)'] * 2)
+                self.assertFalse(record['equals_registered_line'])
+                self.assertEqual(record['changes'], [])
+
+    def test_hull_record_faults_keep_existing_code_only(self):
+        for index, value in enumerate(({}, {'excluded': True},
+                {'excluded': None, 'journal_available': True},
+                {'excluded': False, 'journal_available': False})):
+            with self.subTest(value=value):
+                self.put('withheld/member-assessments.json', {'members': {
+                    r: {t.FIELD: value} for r in ('a', 'b')}})
+                record = t.transform('hull-p2', self.archive, self.root / ('hull-fault-' + str(index)))
+                self.assertEqual([m['status'] for m in record['member_statuses']],
+                                 ['equals registered line', 'not defined (hull assessment unavailable)'])
+                self.assertFalse(record['equals_registered_line'])
+                self.assertEqual(record['changes'], [])
+
     def test_export_disagreement_and_missing_member(self):
         export = self.root / 'export'
         export.mkdir()
