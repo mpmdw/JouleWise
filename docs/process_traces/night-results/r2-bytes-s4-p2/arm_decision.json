@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1793262060.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-b6/sessions/r2-bytes-s4-p2/custody/hazards/arm.json",
+    "sha256": "d632e6efc33131751b77c6e9a3d3b2eadf4fae9bfcf9ba5f20c8d4c19caaff73"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 1243097172632458,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 1243330497444500,
+    "monotonic_raw_ns": 1243330497444083,
+    "wall_s": 1793258993.513661
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "r2-bytes-s4-p2",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 1243097206349333,
+    "monotonic_raw_ns": 1243097206349083,
+    "wall_s": 1793258760.222566
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
