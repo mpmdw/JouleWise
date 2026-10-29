@@ -5,7 +5,7 @@ bridge-report/v1 · brief `main:docs/process_traces/2026-10-29-l9-census-path/BR
 
 ## SUMMARY
 
-IN PROGRESS (milestone 1: fix and regression tests committed; wider short-module run pending).
+IN PROGRESS (milestone 2: the full short-module suite at the fix head ran 993 tests with 1 order-dependent failure, outside this change; a base-commit comparison run is in progress).
 Attempt A's step-0 refusal is reproduced on synthetic archives and repaired in the narrow form the brief asks for.
 A census path that carries a number-like token is admitted only when it is an exact entry of its own analysed
 window's authenticated archive inventory. That inventory is recomputed from disk by one helper,
@@ -28,7 +28,7 @@ Lead: session 015ASG1T only. No other session has messaged this seat.
 | P1 diagnosis reproduced | MET | `test_census_path_token`: each synthetic archive's listing gets `sources/night-custody/results-clone/docs/process_traces/x/{replay-branch-82622e70-summary.txt, 21e2-delta2-final-head-opus.md, claude-help-2.1.260.txt}` (gamma also gets `gamma-only-4158e658.md`). | At `b13a510dc`: real `step_0` returns `tooling_refusal reader_record_not_structure_only`. The attempt-A-shaped run record (step 0 refused, later steps `not_run`) then fails `validate_dry_run_record` with `dry_run_record_invalid`. Dropping only the number-like inventory rows from that record makes the base validator pass, which locates the refusal at the `input_census` path check. |
 | P2 narrow admission | MET | Writer: for `census_<pack>` only, a row's `path` is withheld from the scan only when it is in the inventory; `sha256`, `check`, any extra key, a dict-shaped value, a caller-supplied `raw`, and the `attempt_`/`kept_`/`tripwire_` roles are all scanned in full (7 refused subcases). Validator: refuses an unlisted name, another window's inventory name, a `sources/attempts/<plan>/` history-prefixed name, a record whose `sources/SHA256SUMS` row digest is not the bytes on disk, a non-index-pinned `harvest.json`, and an inventory name used as `release_difference.path`. The existing `ReaderRecordGuardTests` case `census_gamma {'path':'sources/1e-100.json'}` is unchanged and still refuses. | The same tests at base fail or error (no exemption, no `inventory` argument, no `archive_inventory`). |
 | P3 no other change | MET | `git diff --name-only b13a510dc HEAD` lists only `joulewise/b5_analysis/dry_run.py`, `tests/b5_analysis/test_census_path_token.py` and this report. No arithmetic, step order or refusal class changed. Governed estimator files are untouched, so they are byte-identical. | - |
-| P4 tests | PARTLY MET | `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest tests.b5_analysis.test_census_path_token tests.b5_analysis.test_dry_run`: Ran 61, OK (skipped=3; the full-size joined run is skipped and is the lead's laptop check). The wider short-module run is pending. | New tests at base: 3 failures and 10 errors (listed under P1/P2). |
+| P4 tests | MET (one unrelated order-dependent failure, OPEN ISSUES 4) | `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest tests.b5_analysis.test_census_path_token tests.b5_analysis.test_dry_run`: Ran 61, OK (skipped=3; the full-size joined run is skipped and is the lead's laptop check). Full `discover -s tests/b5_analysis` at the fix head: Ran 993, FAILED (failures=1, skipped=14). The failure is `test_sensitivity_guard.SensitivityGuardTests.test_G6_finalizer_main` (`assertFalse(output.exists())`). That module passes alone at both the fix head and `b13a510dc` (12 OK), and also when run right after `test_census_path_token` (18 OK). | New tests at base: 3 failures and 10 errors (listed under P1/P2). |
 
 ## FILES CHANGED
 
@@ -65,6 +65,11 @@ Lead: session 015ASG1T only. No other session has messaged this seat.
    files) keep the full guard. The synthetic packs have no number-like names there. If a real pack config file name
    had one, a later step would refuse in the same way. The lead's full-size laptop run and attempt B will show this.
 3. `role_census_<pack>` custody documents have no float guard at the base and are unchanged.
+
+4. **Order-dependent failure in the full discover run.** `test_G6_finalizer_main` finds a finalized manifest
+   already present in the `fixtures_s5.finalization_case` root, but only in the full 993-test run. The finalizer
+   never calls `RunState.write` or the dry-run validator, and the module passes alone and right after the new tests.
+   A full discover run at `b13a510dc` is in progress to settle whether this predates the change.
 
 ## NEEDS_RULING
 
