@@ -1,0 +1,28 @@
+Q0 baseline: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q1a control: number under fill:campaigns catch-all: exit=2 stderr='refused=step11_unmapped_fill' fails={} unmapped=['fill:campaigns/gamma/gross_energy_j'] unbound=[] uncovered_numeric=[]
+Q1b same number as a string: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q1c control: number under uncovered-by-name (battery_discharged/value_j): exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=['disclosure:window_lines/alpha/battery_discharged/value_j']
+Q1d same number as a string (listed?): exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q1e new string field under window_lines/.* (STRUCTURE catch-all): exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=['disclosure:window_lines/alpha/host_cpu/value_s']
+Q2a boolean under fill:campaigns catch-all: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q2b nested list of a number under fill:campaigns: exit=2 stderr='refused=step11_unmapped_fill' fails={} unmapped=['fill:campaigns/gamma/gross_energy_j/*/*'] unbound=[] uncovered_numeric=[]
+Q2c nested empty list: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q2d fill prints no contrast at all (completeness): exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q2e fill contrast replaced by an empty object: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q3a control: each fill contrast prints its own active floor: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q3b control: floors swapped between contrasts: exit=2 stderr='refused=step11_unmapped_fill' fails={} unmapped=['fill:gamma/contrasts/*/floor/active_floor_j'] unbound=[('fill:gamma/contrasts/*/floor/active_floor_j', 'value_differs'), ('fill:gamma/contrasts/*/floor/active_floor_j', 'value_differs')] uncovered_numeric=[]
+Q3c floors swapped, each floor object naming the other contrast: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+    leaves: {'fill:gamma/contrasts/*/floor/active_floor_j': 'floor_gate_j', 'fill:gamma/contrasts/*/floor/contrast_id': 'routing_id'}
+Q4 fill object with estimate printed twice (999.0 then the agreeing value): exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=[]
+Q5a any field named 'attempt' anywhere (IDENTITY_NUMBER): exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=['fill:gamma/contrasts/*/floor_attempt/attempt']
+Q5b any number under a fill contrast's equivalence/metric/conditions: exit=0 stderr='' fails={} unmapped=[] unbound=[] uncovered_numeric=['fill:gamma/contrasts/*/equivalence/anything/x', 'fill:gamma/contrasts/*/equivalence/margin_j']
+Q5c control: a null outside the named j_per_token rule: exit=2 stderr='refused=step11_unmapped_fill' fails={} unmapped=['fill:gamma/contrasts/*/claim_evaluation/outcome'] unbound=[('fill:gamma/contrasts/*/claim_evaluation/outcome', 'value_differs')] uncovered_numeric=['fill:gamma/contrasts/*/j_per_token']
+Q6 refused arm gate B printed as null on both sides: exit=2 stderr='refused=step11_unmapped_fill' fails={'floor_gate_j': 3} unmapped=['fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j'] unbound=[('fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'row_disagrees'), ('fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'row_disagrees')] uncovered_numeric=[]
+----------------------------------------------------------------------
+Ran 1 test in 0.249s
+
+OK
+AST control_one_sided_for: StructureTests failures=1 errors=0 (0 means the shape is not caught)
+AST while_loop: StructureTests failures=0 errors=0 (0 means the shape is not caught)
+AST helper_add: StructureTests failures=0 errors=0 (0 means the shape is not caught)
+AST helper_calls_family: StructureTests failures=0 errors=0 (0 means the shape is not caught)

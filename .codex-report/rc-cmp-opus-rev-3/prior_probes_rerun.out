@@ -1,0 +1,171 @@
+=== .codex-report/rc-cmp-sol-rev/probe_archive_shapes.py
+compressed_plist rc= 0 comparison_stopped= True member= {'compressed_input': 'raw/powermetrics.plist.zst', 'input': 'raw/powermetrics.plist', 'input_status': 'compressed', 'reason': 'trace_plist_missing', 'restore_tool': 'scripts/restore_run_to_scratch.py', 'status': 'not_compared'} not_compared= 1
+rc=0
+=== .codex-report/rc-cmp-sol-rev/probe_comparator.py
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+Traceback (most recent call last):
+  File "/home/user/JouleWise/.codex-report/rc-cmp-sol-rev/probe_comparator.py", line 70, in <module>
+    result = tc.cmp.run(case.custody(), ours, path, tc.RULES)
+  File "/home/user/JouleWise/scripts/compare_b5_recompute.py", line 1450, in run
+    bars = load_bars(bars_path)
+  File "/home/user/JouleWise/scripts/compare_b5_recompute.py", line 133, in load_bars
+    raise Refusal("bars_invalid:" + family)
+compare_b5_recompute_test_subject.Refusal: bars_invalid:contrast_j
+rc=1
+=== .codex-report/rc-cmp-opus-rev-2/sol_probe_comparator_guarded.py
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+infinite_override REFUSED bars_invalid:contrast_j
+family_absent bars_family_missing:contrast_j
+public_counts_before (0, {'fail': 0, 'pass': 3}, '')
+public_counts_after (1, {'fail': 1, 'pass': 2}, '')
+meter_baseline {} []
+wrong_machine_median {'rho': 1} ['disclosure:window_lines/alpha/machine_summary/median'] None median= 1.1732986735986135 member_rho= 0.1732986735986136
+wrong_machine_median_cli 2 stderr= refused=step11_unmapped_fill
+missing_harvest_member {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 2, 'rho': 2, 'battery_term': 1, 'routing_id': 1} {'pass': 0, 'fail': 2} disclosed_members= 2
+missing_harvest_member_cli 2
+missing_harvest_machine {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 1, 'rho': 1, 'battery_term': 1} {'pass': 0, 'fail': 2}
+no_harvest_meter {'meter_j': 1, 'rho': 1}
+rc=0
+=== .codex-report/rc-cmp-sol-rev/probe_meter_fit.py
+largest 0 base_trial= None
+rc=0
+=== .codex-report/rc-cmp-sol-rev/probe_meter_short.py
+base_max 1000000000000000 0
+base_max 10000000000000000 0
+base_max 100000000000000000 0
+rc=0
+=== .codex-report/rc-cmp-sol-rev/probe_meter_stream.py
+own= [10000000001257250, 10000010001119820, 10000020000982388]
+parser= [10000000001257250, 10000010001119820, 10000020000982388]
+differences_ns= [0, 0, 0]
+max_abs_ns= 0
+rc=0
+=== .codex-report/rc-cmp-opus-rev/probe_comparator.py
+baseline: exit0=True fails={} unmapped=[]
+baseline, shipped COVERAGE: exit0=True fails={} unmapped=[]
+P1 fill swaps two contrasts' estimates (test RULES): exit0=False fails={} unmapped=['fill:gamma/contrasts/*/estimate']
+P1b same, shipped COVERAGE rules: exit0=False fails={} unmapped=['fill:gamma/contrasts/*/estimate']
+P2 fill prints another field's value (s_d) as the estimate, COVERAGE: exit0=False fails={} unmapped=['fill:gamma/contrasts/*/estimate']
+P3 fill outcome words 'L1' and null (truth not_resolvable), COVERAGE: exit0=False fails={} unmapped=['fill:gamma/contrasts/*/claim_evaluation/outcome']
+P4 contrast present on the recompute side only: exit0=False fails={'floor_gate_j': 3, 'contrast_j': 8, 'contrast_p': 3, 'count': 2, 'outcome_word': 4, 'holm_order': 1, 'kept_units': 1, 'routing_id': 1} unmapped=[]
+P5 run present on the recompute side only (no L9 rereduced file): exit0=False fails={'run_phase_energy_j': 3, 'routing_id': 1} unmapped=[]
+P6 L9 extraction report with no cells (recompute has floors): exit0=False fails={'floor_j': 24, 'count': 4, 'p42_status': 1, 'routing_id': 2} unmapped=[]
+P7 meter line on recompute + harvest record, none in L9 disclosure, --harvest-meter given: REFUSED bars_family_missing:rho
+P8 per-key override absolute=Infinity accepted by load_bars (planted D_j=1e9): REFUSED bars_invalid:contrast_j
+P8b per-key override printed_decimals=-9 accepted (planted D_j=1e8): REFUSED bars_invalid:contrast_j
+P8c control: family-level Infinity: REFUSED bars_invalid:contrast_j
+P9 exact(): L9 True vs recompute 1 / 1.0: exit0=False fails={'outcome_word': 2} unmapped=[]
+P10 NaN on the recompute side (run() level): exit0=False fails={'contrast_j': 1} unmapped=[]
+P11 numeric family absent from bar file: REFUSED bars_family_missing:count
+P12 energy leaves under window_lines/*, fill:campaigns/*, fill:characterization/* (COVERAGE): exit0=False fails={'meter_j': 1, 'machine_j': 2, 'rho': 1, 'routing_id': 1} unmapped=['disclosure:window_lines/alpha/machine_member/meter_energy_j', 'disclosure:window_lines/alpha/machine_member/values/rho', 'fill:campaigns/gamma/gross_energy_j', 'fill:characterization/delta_j']
+rc=0
+=== .codex-report/rc-cmp-opus-rev/probe_meter_fit.py
+A offset=0e+00ns: max|host diff|=0 ns; seeds >1ns or refused: 0 []
+A offset=1e+15ns: max|host diff|=0 ns; seeds >1ns or refused: 0 []
+A offset=4e+15ns: max|host diff|=0 ns; seeds >1ns or refused: 0 []
+B planted near-ties: 0 streams with |host diff| > 1 ns
+B hits by base: {} of 200 streams per base
+B with relative coordinates in the recompute fit: 0 of 0 still differ by > 1 ns
+rc=0
+=== .codex-report/rc-cmp-opus-rev/probe_streams.py
+recompute: exit=0 decimal_tokens_on_streams=[] l9_or_parser_touched=[]
+   stdout: sha256=c229bddccdca8eccc76488006dcefb38f41afc9b7b3a9c4537486a811857476f python=3.13.17 flags={"exclusions_rederivation_unavailable":1} exclusions_rederivation={"ALPHA":"not_computed"} comparison={"compared_runs":69,"not_compared_by_reason":{},"not_compared_runs":0} comparison_stopped=false
+   stderr: 
+recompute-exception: exit=2 decimal_tokens_on_streams=[] l9_or_parser_touched=[]
+   stdout: 
+   stderr: error: internal ValueError
+comparator: exit=2 decimal_tokens_on_streams=['7e322'] l9_or_parser_touched=[]
+   stdout: bar_set=b5_release_recompute_coded_7e322b76 families={"b_op_s":{"fail":0,"pass":14},"battery_term":{"fail":0,"pass":0},"contrast_j":{"fail":0,"pass":16},"contrast_p":{"fail":0,"pass":6},"count":{"fail":0,"pass":19},"descriptive_ratio":{"fail":0,"pass":3},"dominance_branch":{"fail":0,"pass":1},"dominance_ratio":{"fail":0,"pass":1},"exclusions_rederivation":{"fail":0,"pass":3},"floor_gate_j":{"fail"
+   stderr: refused=step11_unmapped_fill
+comparator-l9-nan: exit=2 decimal_tokens_on_streams=['7e322'] l9_or_parser_touched=[]
+   stdout: bar_set=b5_release_recompute_coded_7e322b76 families={"b_op_s":{"fail":0,"pass":14},"battery_term":{"fail":0,"pass":0},"contrast_j":{"fail":1,"pass":15},"contrast_p":{"fail":0,"pass":6},"count":{"fail":0,"pass":19},"descriptive_ratio":{"fail":0,"pass":3},"dominance_branch":{"fail":0,"pass":1},"dominance_ratio":{"fail":0,"pass":1},"exclusions_rederivation":{"fail":0,"pass":3},"floor_gate_j":{"fail"
+   stderr: refused=step11_unmapped_fill
+restricted written for NaN case: True
+rc=0
+=== .codex-report/rc-cmp-sol-rev-2/probe_archive_shapes.py
+compressed_plist rc= 0 comparison_stopped= True member= {'compressed_input': 'raw/powermetrics.plist.zst', 'input': 'raw/powermetrics.plist', 'input_status': 'compressed', 'reason': 'trace_plist_missing', 'restore_tool': 'scripts/restore_run_to_scratch.py', 'status': 'not_compared'} not_compared= 1
+rc=0
+=== .codex-report/rc-cmp-sol-rev-2/probe_comparator.py
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+infinite_override REFUSED bars_invalid:contrast_j
+family_absent bars_family_missing:contrast_j
+public_counts_before (0, {'fail': 0, 'pass': 3}, '')
+public_counts_after (1, {'fail': 1, 'pass': 2}, '')
+meter_baseline {} []
+wrong_machine_median {'rho': 1} ['disclosure:window_lines/alpha/machine_summary/median'] None median= 1.1732986735986135 member_rho= 0.1732986735986136
+wrong_machine_median_cli 2 stderr= refused=step11_unmapped_fill
+missing_harvest_member {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 2, 'rho': 2, 'battery_term': 1, 'routing_id': 1} {'pass': 0, 'fail': 2} disclosed_members= 2
+missing_harvest_member_cli 2
+missing_harvest_machine {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 1, 'rho': 1, 'battery_term': 1} {'pass': 0, 'fail': 2}
+no_harvest_meter {'meter_j': 1, 'rho': 1}
+rc=0
+=== .codex-report/rc-cmp-sol-rev-2/probe_meter_fit.py
+largest 0 base_trial= None
+rc=0
+=== .codex-report/rc-cmp-sol-rev-2/probe_meter_short.py
+base_max 1000000000000000 0
+base_max 10000000000000000 0
+base_max 100000000000000000 0
+rc=0
+=== .codex-report/rc-cmp-sol-rev-2/probe_meter_stream.py
+own= [10000000001257250, 10000010001119820, 10000020000982388]
+parser= [10000000001257250, 10000010001119820, 10000020000982388]
+differences_ns= [0, 0, 0]
+max_abs_ns= 0
+rc=0
+=== .codex-report/rc-cmp-sol-rev-2/probe_new_paths.py
+arm_wrong_id {} ['fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] cli 2
+arm_correct_id {} [{'path': 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'family': 'routing_id', 'key': 'contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id', 'reason': 'no_row'}, {'path': 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'family': 'floor_gate_j', 'key': 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/floor_gate_j', 'reason': 'no_row'}] cli 2
+new_finite_leaf {} ['fill:campaigns/gamma/gross_energy_j']
+new_nonfinite_leaf {} ['fill:campaigns/gamma/gross_energy_j'] None [{'code': 'nonfinite_value_read_as_null', 'source': 'l9:outputs/0000000000000000000000000000000000000000000000000000000000000000-results-fill-input.json', 'count': 1, 'paths': ['campaigns/gamma/gross_energy_j']}] cli 2
+assist_recompute_only ({'count': 1, 'routing_id': 1}, [{'family': 'routing_id', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': None, 'recompute': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'verdict': 'DISAGREE', 'reason': 'missing_or_null', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast']}, {'family': 'count', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': None, 'recompute': 3, 'verdict': 'DISAGREE', 'reason': 'missing_or_null', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast', 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat']}])
+assist_stratum_present ({'count': 1}, [{'family': 'routing_id', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'recompute': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'verdict': 'AGREE', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast']}, {'family': 'count', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': 0, 'recompute': 3, 'difference': 3, 'bar': 0.0, 'verdict': 'DISAGREE', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast', 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat']}])
+rc=0
+=== .codex-report/rc-cmp-opus-rev-2/probe_delta.py
+N0 baseline: exit=0 stderr='' fails={} unbound=[] flags=[]
+N1a control: number under fill:campaigns catch-all: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[] flags=[]
+N1b NaN under fill:campaigns catch-all: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+N1c Infinity printed as a J contrast's j_per_token: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[('fill:gamma/contrasts/*/j_per_token', 'value_differs')] flags=['nonfinite_value_read_as_null']
+N1d NaN under an uncovered-by-name rule: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+    uncovered_numeric lists it: True leaf report: uncovered-by-name:registered c
+N2 duplicated row keys: []
+N2a ratio line prints the floor cell's n=9 (ratio n is 7 on both sides): exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:block_lines/dominance_ratio/n', 'value_differs')] flags=[]
+N2b ratio line prints the correct ratio n=7: exit=0 stderr='' fails={} unbound=[] flags=[]
+N3 baseline meter fixture: {} []
+    L9 band: {'pack': 'alpha'}
+    recompute's own band rows: {"Qwen3-1.7B-4bit": {"n_members": 1, "rho_n": 1, "rho_median": 0.1732986735986136, "rail_delta_median_J": 18.2, "machine_delta_median_J": 105.02100000000002, "rho_min": 0.1732986735986136, "rho_max": 
+N3a recompute sets no central band, L9 prints one: {'rho': 2, 'routing_id': 1} ['disclosure:window_lines/alpha/machine_summary/central_band/lower', 'disclosure:window_lines/alpha/machine_summary/central_band/pack', 'disclosure:window_lines/alpha/machine_summary/central_band/upper']
+N3b recompute's band is BETA's, L9's is alpha's: {'rho': 2, 'routing_id': 1} ['disclosure:window_lines/alpha/machine_summary/central_band/lower', 'disclosure:window_lines/alpha/machine_summary/central_band/pack', 'disclosure:window_lines/alpha/machine_summary/central_band/upper']
+rc=0
+=== .codex-report/rc-cmp-opus-rev-2/probe_meter_adversarial.py
+int64_scale_origin_9e18: streams=60 max_host_diff_ns=0 {'same_env': 60}
+origin_2p53_plus: streams=60 max_host_diff_ns=0 {'same_env': 60}
+exact_ties_no_jitter_1e16: streams=30 max_host_diff_ns=0 {'same_env': 30}
+rtt_at_3ms_cap: streams=60 max_host_diff_ns=0 {'same_env': 60}
+n_at_63_cap: streams=40 max_host_diff_ns=0 {'same_env': 40}
+negative_rtt: streams=60 max_host_diff_ns=0 {'same_env': 60}
+rx_out_of_order: streams=60 max_host_diff_ns=0 {'same_env': 60}
+duplicated_polls: streams=40 max_host_diff_ns=0 {'same_env': 40}
+device_wrap_gaps: streams=40 max_host_diff_ns=0 {'same_env': 40}
+fallback_19_eligible: streams=60 max_host_diff_ns=0 {'same_env': 60}
+two_polls: streams=30 max_host_diff_ns=0 {'same_env': 30}
+negative_drift_ppm: streams=40 max_host_diff_ns=0 {'same_env': 40}
+rc=0
