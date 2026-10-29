@@ -382,7 +382,9 @@ def view_files(output):
         relative = path.relative_to(output).as_posix()
         if relative not in CONTROL and (path.is_file() or path.is_symlink()):
             try:
-                files.append({"path": relative, "size": path.stat().st_size, "sha256": sha256(path)})
+                stat = path.stat()
+                files.append({"path": relative, "size": stat.st_size, "sha256": sha256(path),
+                              "mtime_ns": stat.st_mtime_ns, "inode": stat.st_ino})
             except OSError:
                 files.append({"path": relative, "size": None, "sha256": None})
     return files
