@@ -520,6 +520,8 @@ evidence is synthetic. NEEDS_RULING: none.
 
 ## Round 5 (fix round)
 
+### Initial G3 stop (historical; resolved by R-G3 below)
+
 Activation bde918c1; synthetic-only Python 3.13, no bytecode. Read both Sol-3 and
 Opus-2 reports and their scripts at the requested refs. Status: **BLOCKED by G3**.
 
@@ -608,6 +610,56 @@ Required next decision: authorize retaining the census's exception rows, or
 authorize reverting `2153f1333` in a new commit. The G3 instruction is the reason
 for this stop; elapsed time is not authorization. Implementation commits and
 pushes remain blocked pending that answer.
+
+
+### Outcome after lead ruling R-G3
+
+R-G3 resolves the stop. **Completed and pushed** the preserved G1, G2, G4 and
+G5 fixes and the narrow G3 repair. No ruling remains pending.
+
+Commit sequence (each pushed separately):
+
+- `013a8e99d`: `git revert --no-edit 2153f1333`, restoring the pre-census registry
+  in a new history-preserving commit.
+- `0c513a7c3`: rebuild only the four authorized registry rows.
+- `d2ead5f2b`: G1/G2/G5 reader, rule and regression tests.
+- `70e085230`: G4 template roles keyed and looked up by existing `manifest_id`.
+
+The one-off repair calls `scripts.repin.census`'s `literals_in`, `build_index`,
+`_best_target`, `classify` and `render`, using the same literal-to-target-to-family
+indexed row construction as the census writer. It reads current targets from
+the kit plan and reuses their existing target indices; no JSON was hand-edited
+and no full census was retained. The four target bindings are:
+
+| Pointer in `configs/campaigns/bytes_mac_check/plan_tree.json` | Current target |
+|---|---|
+| `/stage_graph/2/input/sha256` | `configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-bound-collection/order_manifest.json` |
+| `/stage_graph/4/input/sha256` | `configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-start/order_manifest.json` |
+| `/stage_graph/18/input/sha256` | `configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-midpoint/order_manifest.json` |
+| `/stage_graph/24/input/sha256` | `configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-end/order_manifest.json` |
+
+Proof: both against the reverted registry and against `977a5d2df`, the registry
+diff contains **exactly four removed and four added row lines**. Assertions
+verified the four pointers, unchanged row families, zero stale rows, and equality
+of every other row, target, metadata field and summary. Kind-P remains
+**32,556 → 32,556** for this narrow repair. The six sizing `precheck.py` target
+bindings are preserved, and the 741 other-lane literals remain unregistered.
+The exception inventory below records the rejected census only; none of its
+exception-row changes remains in the final registry.
+
+After the narrow repair, `python3.13 -B scripts/repin.py --check` prints
+**PASS 16 pin families current** and `python3.13 -B -m unittest tests.test_repin`
+passes **37 tests in 13.723 s**. The unchanged preserved implementation already
+passed all **122 requested local tests**: reader/kit/repin 86 (including 945
+real-CLI leaf mutations), plus the whole session module's 36 tests. No source
+edits were made between those passing checks and the implementation commits.
+Kit verification required no regeneration. Final diff and scope checks pass.
+All execution remains synthetic-only under Python 3.13 with bytecode disabled;
+no acceptance bars changed and no out-of-scope file was edited.
+
+PR #593 remains draft. Its exact final head and every available CI job state
+are read after this report is pushed and reported in the final handoff. A pending
+run or missing jobs is not a green result.
 
 ## Round 5 registry exception row inventory
 
