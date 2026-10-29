@@ -30,7 +30,7 @@ END_BRIDGE_TASK_V1
 
 # RC-CMP-6 brief
 
-**Amendment 1 (lead, 2026-10-29 ~06:00 UTC; RUN_STATE item 100), G7.** RC-CMP-4 (`report/2026-10-28-rc-cmp-4`
+**Amendment 1 (lead, 2026-10-29 ~06:00 UTC; RUN_STATE item 101), G7.** RC-CMP-4 (`report/2026-10-28-rc-cmp-4`
 `de637d4e`) ran the full-size synthetic window at `e5ccf720b`: L9 completed with every step ok and no value
 disagrees, but the comparator refuses for two comparator-side reasons. One is the `cmp-abba` spelling, closed by
 G3. The other is 162 `run_phase_energy_j` rows that are `missing_or_null` on L9's side: the recompute marks NEG-8
