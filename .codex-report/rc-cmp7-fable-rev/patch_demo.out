@@ -1,0 +1,5 @@
+patched control: exit=0 err='' fails={}
+patched F2.b wrong word: exit=2 err='refused=step11_unmapped_fill' fails={'outcome_word': 1}
+patched F2.c relabelled as adapter_continuity: exit=1 err='' fails={'outcome_word': 1}
+patched F2.d neg8_screen dropped: exit=1 err='' fails={'outcome_word': 1}
+patched F2.e below_screen_bound dropped: exit=1 err='' fails={'outcome_word': 1}
