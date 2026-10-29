@@ -1,0 +1,14 @@
+test_A_appended_value_after_inventory_prefix_refused (__main__.Probes.test_A_appended_value_after_inventory_prefix_refused) ... ok
+test_B_listing_is_trusted_from_disk_not_from_the_index_pin (__main__.Probes.test_B_listing_is_trusted_from_disk_not_from_the_index_pin) ... ok
+test_C_listing_changed_after_write_fails_closed (__main__.Probes.test_C_listing_changed_after_write_fails_closed) ... ok
+test_D_symlinked_listing_same_bytes_is_not_a_separate_bypass (__main__.Probes.test_D_symlinked_listing_same_bytes_is_not_a_separate_bypass) ... ok
+test_E_no_index_no_exemption (__main__.Probes.test_E_no_index_no_exemption) ... ok
+test_F_write_and_validate_inventories_identical (__main__.Probes.test_F_write_and_validate_inventories_identical) ... alpha inventory 2368 number-like ['21e2-delta2-final-head-opus.md', 'claude-help-2.1.260.txt', 'replay-branch-82622e70-summary.txt']
+beta inventory 2370 number-like ['21e2-delta2-final-head-opus.md', 'claude-help-2.1.260.txt', 'replay-branch-82622e70-summary.txt']
+gamma inventory 2370 number-like ['21e2-delta2-final-head-opus.md', 'claude-help-2.1.260.txt', 'gamma-only-4158e658.md', 'replay-branch-82622e70-summary.txt']
+ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 66.736s
+
+OK
