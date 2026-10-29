@@ -270,6 +270,8 @@ class BoundAnalysisReplayTests(unittest.TestCase):
                     journal = source / 'sources/night-custody/hazards/monitor/thermal.jsonl'
                     journal.parent.mkdir(parents=True, exist_ok=True)
                     fixtures.thermal_journal(range(0, 126, 5), {90}).dump(journal)
+                    (source / 'derived/window_flags.json').write_text(json.dumps({'hazards': {'thermal': {'continuous': {
+                        'journal': {'sha256': hashlib.sha256(journal.read_bytes()).hexdigest()}}}}}))
                 csv_path = root / 'export/bytes' / (session['session_id'] + '.runs.csv')
                 if session['pass_id'] == 1:
                     with csv_path.open(newline='') as stream:
@@ -755,6 +757,8 @@ class ReviewerGroupedAnalysisTests(unittest.TestCase):
                         j = arch / "sources/night-custody/hazards/monitor/thermal.jsonl"
                         j.parent.mkdir(parents=True, exist_ok=True)
                         fx.thermal_journal(range(0, 126, 5), {90}).dump(j)  # s5-p1 shape: first nonzero 10 s after request end
+                        (arch / 'derived/window_flags.json').write_text(json.dumps({'hazards': {'thermal': {'continuous': {
+                            'journal': {'sha256': hashlib.sha256(j.read_bytes()).hexdigest()}}}}}))
                         csv_hit = rewrite_csv(work / "export" / (sid + ".runs.csv"), run, t.CODE)
                         if not csv_hit and wstore.is_file():
                             rewrite_csv(wstore, run, t.CODE)
@@ -854,6 +858,8 @@ class RecordedFaultTests(unittest.TestCase):
         self.journal = self.archive / 'sources/night-custody/hazards/monitor/thermal.jsonl'
         self.journal.parent.mkdir(parents=True)
         fixtures.thermal_journal(range(0, 126, 5), {90}).dump(self.journal)
+        self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {
+            'journal': {'sha256': hashlib.sha256(self.journal.read_bytes()).hexdigest()}}}}})
 
     def put(self, name, data):
         path = self.archive / name
@@ -880,6 +886,20 @@ class RecordedFaultTests(unittest.TestCase):
         self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': []})
         record, _ = self.run_line('clean')
         self.assertEqual(record['status'], 'equals registered line')
+
+    def test_missing_journal_provenance_preserves_original_codes(self):
+        flags = self.archive / 'derived/window_flags.json'
+        flags.unlink()
+        for name, value in [('absent', None), ('no-sha', {'hazards': {'thermal': {'continuous': {'journal': {}}}}})]:
+            if value is not None:
+                self.put('derived/window_flags.json', value)
+            original = (self.archive / 'derived/b6-acceptance.json').read_bytes()
+            record, out = self.run_line('provenance-' + name)
+            self.assertEqual(record['changes'], [])
+            self.assertEqual(record['member_statuses'][0]['status'], 'not defined (journal provenance unavailable)')
+            self.assertEqual(record['member_statuses'][1]['status'], 'equals registered line')
+            self.assertIn({'code': 'records.thermal_journal_provenance_unavailable'}, record['notices'])
+            self.assertEqual((out / 'derived/b6-acceptance.json').read_bytes(), original)
 
     def test_pass_mismatch_is_recorded(self):
         self.put('sources/repo/plan_tree.json', {'bytes_pass': 2})

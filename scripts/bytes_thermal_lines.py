@@ -153,6 +153,7 @@ def transform(mode, archive, output, export=None):
     notices, changes, statuses = [], [], {}
     unavailable = None
     mismatch = False
+    provenance_unavailable = False
     assessments, spans, readings = None, {}, []
     # The gap threshold affects only thermal.unmeasured. This projection never
     # consumes that flag, so the production function's gap argument is immaterial.
@@ -172,12 +173,14 @@ def transform(mode, archive, output, export=None):
                 actual = journal if journal.is_file() else Path(str(journal) + ".zst")
                 sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
                 flags = archive / "derived/window_flags.json"
-                if flags.is_file():
-                    try:
-                        expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
-                        mismatch = digest != expected
-                    except ValueError:
-                        mismatch = True
+                try:
+                    expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
+                except (OSError, ValueError):
+                    expected = None
+                provenance_unavailable = not isinstance(expected, str) or not expected
+                mismatch = not provenance_unavailable and digest != expected
+                if provenance_unavailable:
+                    notices.append({"code": "records.thermal_journal_provenance_unavailable"})
                 if mismatch:
                     notices.append({"code": "records.thermal_journal_mismatch"})
                 readings, malformed = h.read_monitor_journal(journal, "thermal")
@@ -227,8 +230,9 @@ def transform(mode, archive, output, export=None):
             if CODE in found and CODE not in before[run]:
                 raise ValueError(f"request-end would add {CODE}: {run}")
             if CODE not in found:
-                if mismatch and CODE in before[run]:
-                    undefined(run, "journal differs from the harvest's")
+                if (mismatch or provenance_unavailable) and CODE in before[run]:
+                    undefined(run, "journal provenance unavailable" if provenance_unavailable
+                              else "journal differs from the harvest's")
                     continue
                 after[run].discard(CODE)
         if after[run] != before[run]:
