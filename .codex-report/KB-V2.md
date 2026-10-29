@@ -1582,3 +1582,29 @@ Decisions I made:
 - Repair negative-power synthetic fixtures with sparse positive pulses, retaining their means and governed standard errors. The original Opus fixture is still replayed literally and correctly refuses under H6; its nonnegative equivalent supplies the worked-value and physical-order checks. This changes no valid-input estimator or publication number.
 
 No NEEDS_RULING or scope expansion. All repository writes stay within the supplied allowlist. No hardware measurement, admission or merge. Final-head CI is read after pushing this report, and every job's observed state is included in the handoff; this section makes no advance green claim.
+## Round 7 (fix round)
+
+Activation `1cc172c8`, 2026-10-29. Continued `codex/2026-10-28-kb-v2` from `840137268`; used Sol review `471bbc79b` on `codex/2026-10-29-kb-v2-rev-sol-5`. Implementation/test commits pushed: `5252e4e91`, `1cbf35c30`, `ad0ec9340`, `4dad3f7df`, `2e3b1ed31`, `32e91f9bd`. Did not wait for the parallel Opus review.
+
+J1–J3 are implemented. One executable dependency table governs every arm's x/dx, coefficients, residual, propagated half-width and upper-limit prerequisites. Failed native support makes that arm's x/dx, the residual and dependent widths reasoned `not defined`; complete-arm coefficients remain available. The rule now states the all-arm native-support dependency explicitly. Round 6's classification of all 176 shrink flags as benign was incorrect: the four deficient C3-support cases are fixed here.
+
+Arithmetic guards cover trim rounding, native aggregation, gaps, per-call calculations, reducer quantities, class/upper-limit ratios and print conversions. Failures retain all calls/evidence and name input leaves. Reducer arithmetic reasons survive common DC classification. A regression also checks an overflowing intermediate attribution ratio whose later upper limit would otherwise be finite.
+
+Verification used Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`:
+
+- Reader/kit: **50 tests, OK, 1,113.923 s; 1,048 generated real-CLI faults**. This is **0.56×** Round 6's reported 1,979.938 s, within the approximate 1.5× budget.
+- Session/repin: **73 tests, OK, 1,409.429 s**. All **123 requested tests pass**. The final class/epsilon follow-up additionally passed **7 focused tests, 18.349 s**.
+- Both supplied scripts ran before and after the fixes, with a final-source replay. Before: short C3 support retained/shrank numeric widths; finite float/int tau overflow exited 1. After: all six short-support scenarios retain eight calls and remove dependent numeric widths; both extreme tau variants exit 0. Thinned, full-cadence and jittered fixtures were exercised.
+- The generated test adds **128** deficient native-support collections across all eight calls, both spans, all four native families and lengths one/zero; **16** extreme tau/settle cases; and **4** aggregate-overflow cases. It checks class reasons, absent dependent widths, unchanged complete-arm coefficients, retained evidence and no smaller surviving width. Another **13** finite-arithmetic probes passed across integrals, idle powers, edge bounds and gaps.
+- `repin.py --check`: **PASS 16 pin families current**. `git diff --check` passes. The four requested modules plus focused checks cover this bounded standalone tooling change; the whole repository suite was not run.
+
+Worked output is unchanged: **rails 0.06672 ± 0.00057, DC 0.1929 ± 0.0025, rest 0.1262 ± 0.0024 J/GB; share 0.3458 ± 0.0075**. The **4.5e-7 GB/s** and **5.7e-6 J/GB** agreement bars are unchanged; no new acceptance bar was added.
+
+Decisions I made:
+
+- Apply J1's residual support gate to all four arms, including S; preserve coefficients whose own arms remain complete.
+- Test the consumed `receipt.settle_s` leaf. At `1e308`, its subtraction safely yields zero trim and unchanged output; do not invent an arithmetic failure.
+- Keep all existing generated repetitions and four-row native support. Discover the unchanged registered stack once per read instead of eight times; no further thinning was needed.
+- Run review scripts in a temporary mirror because they write evidence; preserve the review branch's evidence and the repository allowlist.
+
+No NEEDS_RULING or scope expansion. Only the four authorized files changed. No hardware measurement, admission or merge. Final-head CI is read after pushing this section; every observed job state is reported separately in the final handoff, without an advance green claim.
