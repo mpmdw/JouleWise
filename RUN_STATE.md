@@ -521,6 +521,17 @@ Differences from the brief, added to the eight of the block below:
 
 Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta reviews of `c372211bf..0d317afd4`: Opus `trig_013eEyFd8PHq7RhwqyDew8iz` -> `review/2026-10-29-rc-cmp8-opus-rev`, Fable `trig_01QT53CyhjPm9vwjv8ZfZPaQ` -> `review/2026-10-29-rc-cmp8-fable-rev`, MCP cleared. Both include item 116's sweep: a table of every row constructor with its key source, and a drop and a relabel probe for each output-derived one. Fable is also asked whether the design is now closed against the class or needs the recompute-driven walk.
 
+119. **RC-CMP-8 Opus delta REJECT: the one-side-keyed class is still open; RC-CMP-9 is the pre-registered structural fallback (reported by joulewise-28, 2026-10-29 22:59Z).**
+- Opus (`review/2026-10-29-rc-cmp8-opus-rev` `256b834d5`): every RC-CMP-8 closure reproduces, and the required-key sets do not over-refuse. But item 116's sweep found the class still open: of 36 row-constructor sites, 13 are keyed by registered inputs and the rest by one side's output.
+- 22 single-output drops of unconditional claim lines exit 0: `primary_contrast`, `contrast_interval`, `decision_floor`, `attribution_floor`, `dominance_branch`/`ratio`, `sensitivity_*`, `block_lines`, fill contrast rows, nested estimator keys. Joint drops of the registered decode contrast, the ALPHA reported cell and the leave-one-out rows also exit 0. LOW: relabels of `floor_source_cell_ids`/`floor_row_ids` exit 0.
+- **Block-5 lead decision (joulewise-28; the lead concurs):** the same class again (gate policy rule 4). FIX-BRIEF-3's Rules pre-registered the response, the consult's fallback walk, "not another patch". **RC-CMP-9 is that structural round:**
+  - one table of expected checks, built only from registered inputs;
+  - every expected check must find its item on both sides, and a missing item is DISAGREE;
+  - an output item can only confirm a check, never create one;
+  - G7's run family stays as accepted.
+  A generic test deletes each table entry from L9's side, the recompute's side, and both. joulewise-28 informs Ed under rule 4 without waiting, because the response was registered in advance. RC-CMP-9 launches when the Fable RC-CMP-8 review (asked whether the walk is needed) lands, and folds its findings in.
+- `dry-d` and the merged L9 fixes are unaffected: the comparator gates the release comparison only.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
