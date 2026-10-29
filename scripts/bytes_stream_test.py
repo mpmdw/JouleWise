@@ -471,20 +471,28 @@ def combined_idle(pre, post):
     for stream in ("rails", "gpu", "meter", "battery"):
         a,b = pre[stream],post[stream]
         stats = result[stream] = {}
-        if "mean_w" in a and "mean_w" in b:
-            stats.update(pre_w=a["mean_w"],post_w=b["mean_w"])
-        if "reason" in a or "reason" in b:
-            stats["reason"] = a.get("reason",b.get("reason"))
-        else:
-            stats["se_w"] = math.sqrt(a["variance_w2"]+b["variance_w2"])/2
+        try:
+            if "mean_w" in a and "mean_w" in b:
+                stats.update(pre_w=a["mean_w"],post_w=b["mean_w"])
+            if "reason" in a or "reason" in b:
+                stats["reason"] = a.get("reason",b.get("reason"))
+            else:
+                stats["se_w"] = math.sqrt(a["variance_w2"]+b["variance_w2"])/2
+            arithmetic(stream+" idle pre/post", lambda: stats)
+        except (ValueError, OverflowError) as exc:
+            result[stream] = {"reason":stream+" idle power_w arithmetic unavailable: "+str(exc)}
     m,b = result["meter"],result["battery"]
     dc = result["dc"] = {}
-    if "pre_w" in m and "pre_w" in b:
-        dc.update(pre_w=m["pre_w"]+b["pre_w"],post_w=m["post_w"]+b["post_w"])
-    if "reason" in m or "reason" in b:
-        dc["reason"] = m.get("reason",b.get("reason"))
-    else:
-        dc["se_w"] = m["se_w"]+b["se_w"]
+    try:
+        if "pre_w" in m and "pre_w" in b:
+            dc.update(pre_w=m["pre_w"]+b["pre_w"],post_w=m["post_w"]+b["post_w"])
+        if "reason" in m or "reason" in b:
+            dc["reason"] = m.get("reason",b.get("reason"))
+        else:
+            dc["se_w"] = m["se_w"]+b["se_w"]
+        arithmetic("meter/battery idle pre/post", lambda: dc)
+    except (ValueError, OverflowError) as exc:
+        result["dc"] = {"reason":"meter/battery idle power_w arithmetic unavailable: "+str(exc)}
     return result
 
 
@@ -524,8 +532,12 @@ def describe_share(rails, dc):
         return {"f": not_defined("DC contrast not valid"), "df": not_defined("DC contrast not valid")}
     if rails is None or not isinstance(rails.get("halfwidth"),(int,float)):
         return {"f": not_defined("rails contrast missing"), "df": not_defined("rails contrast missing")}
-    f = rails["delta"]/dc["delta"]
-    return {"f": f, "df": (rails["halfwidth"]+abs(f)*dc["halfwidth"])/abs(dc["delta"])}
+    try:
+        f = arithmetic("rails/DC delta share", lambda: rails["delta"]/dc["delta"])
+        return arithmetic("rails/DC halfwidth share", lambda: {"f":f,
+            "df": (rails["halfwidth"]+abs(f)*dc["halfwidth"])/abs(dc["delta"])})
+    except ValueError as exc:
+        return {key:not_defined(str(exc)) for key in ("f","df")}
 
 
 def classify(delta, halfwidth, phi, *, reason=None):
@@ -542,65 +554,114 @@ def classify(delta, halfwidth, phi, *, reason=None):
     return {"class": "NOT RESOLVED", "upper_limit": (delta+halfwidth)/(1-phi)}
 
 
+# Executable dependency table: every derived reducer node is evaluated only
+# after these exact parents are numeric. Arm nodes are expanded uniformly below.
+REDUCER_DEPENDENCIES = {
+    "{arm}.xi": ("{arm}.e0", "{arm}.e1", "{arm}.n0", "{arm}.n1"),
+    "{arm}.x": ("{arm}.e0", "{arm}.e1", "{arm}.n0", "{arm}.n1"),
+    "{arm}.rep": ("{arm}.xi", "{arm}.n0", "{arm}.n1"),
+    "{arm}.dx": ("{arm}.u0", "{arm}.u1", "{arm}.n0", "{arm}.n1", "{arm}.rep"),
+    "gc": ("C1.x", "C2.x"),
+    "gamma_c": ("gc",),
+    "alpha": ("C1.x", "gc"),
+    "gd": ("S.x", "alpha"),
+    "gamma_d": ("gd",),
+    "delta": ("gd", "gc", "gamma_d", "gamma_c"),
+    "r": ("C3.x", "alpha", "gc"),
+    "dgc": ("C1.dx", "C2.dx", "C3.dx", "r"),
+    "da": ("C1.dx", "r", "dgc"),
+    "halfwidth": ("S.dx", "da", "alpha", "dgc", "delta"),
+    "upper_limit": ("delta", "halfwidth", "phi"),
+    "epsilon_flip": ("halfwidth",),
+    "epsilon_flip_over_alpha": ("epsilon_flip", "alpha"),
+    "raw_stream_j_per_byte": ("S.x",),
+}
+
+
+def arithmetic(path, operation):
+    """Guard a calculation and its numeric output; retain the input leaf path."""
+    try:
+        value = operation()
+        def check(v):
+            if isinstance(v, dict):
+                for child in v.values(): check(child)
+            elif isinstance(v, (list, tuple)):
+                for child in v: check(child)
+            elif type(v) in (int, float) and not finite_number(v):
+                raise ValueError("non-finite arithmetic")
+        check(value)
+        return value
+    except (OverflowError, ValueError, ZeroDivisionError) as exc:
+        raise ValueError(path+" arithmetic unavailable: "+str(exc)) from exc
+
+
 def reduce_boundary(calls, sizes, boundary):
-    """§3 excess/dispatch, repeatability, residual and worst-case propagation."""
-    arms = {}
+    """§3: evaluate the dependency graph, retaining independent H4 nodes."""
+    nodes, arms, errors = {}, {}, {}
+    def node(key, dependencies, operation, reason):
+        failure = next((errors[d] for d in dependencies if not finite_number(nodes.get(d))), None)
+        try:
+            if failure:
+                raise ValueError(failure)
+            nodes[key] = arithmetic(reason, operation)
+        except ValueError as exc:
+            errors[key] = str(exc)
+            nodes[key] = not_defined(str(exc))
     for arm in ("S", "C1", "C3", "C2"):
         rows = [c for c in calls if c["arm"] == arm]
-        if len(rows) != 2 or any(boundary not in c["boundaries"] or not c.get("N") for c in rows):
-            arms[arm] = {"xi": [c["boundaries"][boundary]["excess_j"]/c["N"] for c in rows
-                                if boundary in c["boundaries"] and c.get("N",0)>0],
-                         "description":not_defined("two complete arm calls missing")}
-            continue
-        n = sum(c["N"] for c in rows)
-        xi = [c["boundaries"][boundary]["excess_j"]/c["N"] for c in rows]
-        rep = abs(xi[0]-xi[1])*max(c["N"] for c in rows)/n
-        arms[arm] = {"x": sum(c["boundaries"][boundary]["excess_j"] for c in rows)/n,
-                     "dx": (sum(c["boundaries"][boundary]["bound_j"] for c in rows)/n+rep
-                            if all(c["boundaries"][boundary].get("bound_j") is not None for c in rows) else None),
-                     "xi": xi, "rep": rep}
-    if any("x" not in a for a in arms.values()):
-        result = {"arms":arms,"reason":"two complete arm calls missing",
-                  "description":not_defined("two complete arm calls missing")}
-        if "x" in arms["S"]:
-            result["raw_stream_j_per_byte"] = arms["S"]["x"]/sizes["S"]
-        undefined = not_defined(result["reason"])
-        result.update({key:undefined for key in ("r", "halfwidth", "epsilon_flip", "epsilon_flip_over_alpha")})
-        if all("x" in arms[a] for a in ("C1", "C2")):
-            gc = (arms["C2"]["x"]-arms["C1"]["x"])/(sizes["C2"]-sizes["C1"])
-            alpha = arms["C1"]["x"]-gc*sizes["C1"]
-            result.update(gamma_c=gc*1e9, alpha=alpha)
-            if "x" in arms["S"]:
-                gd = (arms["S"]["x"]-alpha)/sizes["S"]
-                result.update(gamma_d=gd*1e9, delta=(gd-gc)*1e9)
-        return result
-    xs,x1,x3,x2 = (arms[a]["x"] for a in ("S","C1","C3","C2"))
-    ds,d1,d2 = (arms[a]["dx"] for a in ("S","C1","C2"))
+        prefix = arm+"."
+        for j in range(2):
+            row = rows[j] if j < len(rows) else {}
+            data = row.get("boundaries", {}).get(boundary, {})
+            why = data.get("reason") or next(iter(row.get("prerequisites",{}).get(boundary,[])),
+                                             "two complete arm calls missing")
+            for key, value in (("e", data.get("excess_j")), ("u", data.get("bound_j")), ("n", row.get("N"))):
+                name = prefix+key+str(j)
+                nodes[name] = value if finite_number(value) else not_defined(why)
+                if not finite_number(value): errors[name] = why
+        e0,e1,u0,u1,n0,n1 = (prefix+k for k in ("e0","e1","u0","u1","n0","n1"))
+        # These arm dependencies are instantiated identically for all four arms.
+        deps = {key.split(".")[1]:tuple(d.format(arm=arm) for d in parents)
+                for key, parents in REDUCER_DEPENDENCIES.items() if "{arm}" in key}
+        # xi is a pair, so register it separately from scalar graph parents.
+        try:
+            why = next((errors[d] for d in deps["xi"] if d in errors), None)
+            if why: raise ValueError(why)
+            xi = arithmetic(arm+" excess/N", lambda: [nodes[e0]/nodes[n0],nodes[e1]/nodes[n1]])
+            nodes[prefix+"xi"] = 1  # pair availability prerequisite
+        except ValueError as exc:
+            xi = not_defined(str(exc)); nodes[prefix+"xi"] = xi; errors[prefix+"xi"] = str(exc)
+        node(prefix+"x", deps["x"], lambda: (nodes[e0]+nodes[e1])/(nodes[n0]+nodes[n1]), arm+" excess/N")
+        node(prefix+"rep", deps["rep"], lambda: abs(xi[0]-xi[1])*max(nodes[n0],nodes[n1])/(nodes[n0]+nodes[n1]), arm+" repeatability")
+        node(prefix+"dx", deps["dx"], lambda: (nodes[u0]+nodes[u1])/(nodes[n0]+nodes[n1])+nodes[prefix+"rep"], arm+" bound/N")
+        arms[arm] = {k:nodes[prefix+k] for k in ("x","dx","rep")}
+        arms[arm]["xi"] = xi
     b,c1,c3,c2 = (sizes[a] for a in ("S","C1","C3","C2"))
-    gc = (x2-x1)/(c2-c1)
-    alpha = x1-gc*c1
-    residual = x3-alpha-gc*c3
-    gd = (xs-alpha)/b
-    central = {"delta": (gd-gc)*1e9, "alpha":alpha,"gamma_c":gc*1e9,"gamma_d":gd*1e9,
-               "r":residual,"arms":arms,
-               "raw_stream_j_per_byte": arms["S"]["x"]/b}
-    if any(v is None for v in (ds,d1,d2)):
-        reason = next((c["boundaries"][boundary]["reason"] for c in calls
-                       if "reason" in c["boundaries"].get(boundary,{})),"bound input missing")
-        undefined = not_defined(reason)
-        return {**central,"halfwidth":undefined,"epsilon_flip":undefined,
-                "epsilon_flip_over_alpha":undefined,"description":undefined,"reason":reason}
-    dgc = (d1+d2+abs(residual))/(c2-c1)
-    da = d1+abs(residual)+dgc*c1
-    delta = (gd-gc)*1e9
-    width = ((ds+da+abs(alpha))/b+dgc)*1e9
-    eps = width/1e9*(c2-c1)/(1-c1/b)
-    return {"delta": delta, "halfwidth": width, "alpha": alpha, "gamma_c": gc*1e9,
-            "gamma_d": gd*1e9, "r": residual, "epsilon_flip": eps,
-            "epsilon_flip_over_alpha": eps/alpha if alpha else not_defined("alpha is zero"),
-            "arms": arms,
-            "raw_stream_j_per_byte": sum(c["boundaries"][boundary]["excess_j"] for c in calls if c["arm"]=="S")/
-                                      (sum(c["N"] for c in calls if c["arm"]=="S")*b)}
+    v = nodes
+    operations = {
+        "gc": lambda: (v["C2.x"]-v["C1.x"])/(c2-c1),
+        "gamma_c": lambda: v["gc"]*1e9,
+        "gamma_d": lambda: v["gd"]*1e9,
+        "alpha": lambda: v["C1.x"]-v["gc"]*c1,
+        "gd": lambda: (v["S.x"]-v["alpha"])/b,
+        "delta": lambda: (v["gd"]-v["gc"])*1e9,
+        "r": lambda: v["C3.x"]-v["alpha"]-v["gc"]*c3,
+        "dgc": lambda: (v["C1.dx"]+v["C2.dx"]+abs(v["r"]))/(c2-c1),
+        "da": lambda: v["C1.dx"]+abs(v["r"])+v["dgc"]*c1,
+        "halfwidth": lambda: ((v["S.dx"]+v["da"]+abs(v["alpha"]))/b+v["dgc"])*1e9,
+        "epsilon_flip": lambda: v["halfwidth"]/1e9*(c2-c1)/(1-c1/b),
+        "epsilon_flip_over_alpha": lambda: v["epsilon_flip"]/v["alpha"],
+        "raw_stream_j_per_byte": lambda: v["S.x"]/b,
+    }
+    for key, deps in REDUCER_DEPENDENCIES.items():
+        if "{arm}" in key or key == "upper_limit": continue
+        node(key, deps, operations[key], boundary+" "+key+" from records receipt/harvest")
+    result = {key:v[key] for key in REDUCER_DEPENDENCIES if "{arm}" not in key and key not in ("gc","gd","dgc","da","upper_limit")}
+    result["arms"] = arms
+    if "halfwidth" in errors:
+        result.update(reason=errors["halfwidth"], description=not_defined(errors["halfwidth"]),
+                      upper_limit=not_defined(errors["halfwidth"]))
+    return result
 
 
 def read_known_bytes(records, scan):
@@ -691,7 +752,11 @@ def read_known_bytes(records, scan):
         validation.append(errors)
     records = normalized
     sizes = {"S":scan.get("B"),"C1":scan.get("Bc1"),"C3":scan.get("Bc3"),"C2":scan.get("Bc2")}
-    phi = scan.get("K")/sizes["S"] if scan.get("K") is not None and sizes["S"] else None
+    try:
+        phi = arithmetic("scan.K/B", lambda: scan["K"]/sizes["S"]) if scan.get("K") is not None and sizes["S"] else None
+    except ValueError as exc:
+        scan_errors.append((names,str(exc)))
+        phi = None
     output = {"scan":json_evidence(original_scan),"input_records":json_evidence(original_records),"calls":[],"boundaries":{},"stack_comparisons":[]}
     reasons = [why for _, why in scan_errors]
     affected = {b:[] for b in names}
@@ -707,9 +772,9 @@ def read_known_bytes(records, scan):
         stamps = [r.get("receipt",{}).get("start_ns") for r in records]
         if any(v is None for v in stamps) or any(b <= a for a,b in zip(stamps,stamps[1:])):
             reasons.append("records must be in stamped call order")
+    reference,versions = registered_stack()
     for i,record in enumerate(records,1):
         receipt,h = record.get("receipt",{}),record.get("harvest",{})
-        reference,versions = registered_stack()
         check = compare_stack((receipt.get("stack") or {}),reference,versions,capture_stack=h.get("capture_stack"))
         output["stack_comparisons"].append(check)
         fields = [f for f in check["physical_differences"] if f != "measurement_boundary_label.rails"]
@@ -744,19 +809,25 @@ def read_known_bytes(records, scan):
             if n <= 0 or t <= 0:
                 raise ValueError("positive repeats and end_ns-start_ns required")
             arm = next((a for a,size in sizes.items() if size == receipt["bytes_per_read"]),None)
+            arithmetic(f"records[{i-1}].receipt.end_ns/start_ns", lambda: t)
             call.update(arm=arm,N=n,T=t)
             if h.get("tau_s") is None:
                 raise ValueError("tau missing")
-            trim_ns = round(max(0,h["tau_s"]-receipt["settle_s"])*1e9)
+            trim_ns = arithmetic(f"records[{i-1}].harvest.tau_s / records[{i-1}].receipt.settle_s",
+                                 lambda: round(max(0,h["tau_s"]-receipt["settle_s"])*1e9))
             spans = {name:(receipt["idle_"+name+"_start_ns"]+trim_ns,receipt["idle_"+name+"_end_ns"])
                      for name in ("pre","post")}
-        except (KeyError,TypeError,ValueError) as exc:
+        except (KeyError,TypeError,ValueError,OverflowError) as exc:
             why = "call prerequisite missing in call "+str(i)+": "+str(exc)
             reasons.append(why)
             call["description"] = not_defined(why)
             continue
         prepost = {name:{stream:idle_statistics(h.get("idle",{}).get(name,{}).get(stream,[]),*span,stream)
                          for stream in ("rails","gpu","meter","battery")} for name,span in spans.items()}
+        for span, streams in prepost.items():
+            for stream, stats in streams.items():
+                if "reason" in stats:
+                    stats["reason"] = f"records[{i-1}].harvest.idle.{span}.{stream}: "+stats["reason"]
         idle = combined_idle(prepost["pre"],prepost["post"])
         call.update(idle=idle,native_idle=prepost)
         energy = h.get("energy_j",{})
@@ -771,54 +842,76 @@ def read_known_bytes(records, scan):
         gaps = ({"bound_j":None,"reason":gap_reason,"description":not_defined(gap_reason),"terms":[]}
                 if gap_reason else {"bound_j":0,"terms":[]})
         if h.get("meter_gaps"):
-            gaps = meter_gap_bound(h["meter_gaps"],duration_s=t,
-                idle_lengths_s={name:(end-start)/1e9 for name,(start,end) in spans.items()},
-                adapter_max_w=h.get("adapter_max_w"),adapter_source=h.get("adapter_source"),
-                battery_max_w=max((p["power_w"] for p in battery),default=None),battery_source=h.get("battery_source"))
+            try:
+                gaps = meter_gap_bound(h["meter_gaps"],duration_s=t,
+                    idle_lengths_s={name:(end-start)/1e9 for name,(start,end) in spans.items()},
+                    adapter_max_w=h.get("adapter_max_w"),adapter_source=h.get("adapter_source"),
+                    battery_max_w=max((p["power_w"] for p in battery),default=None),battery_source=h.get("battery_source"))
+                arithmetic(f"records[{i-1}].harvest.meter_gaps/adapter_max_w/battery_samples.power_w", lambda: gaps)
+            except (ValueError, OverflowError) as exc:
+                why = f"records[{i-1}].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: {exc}"
+                gaps = {"bound_j":None,"reason":why,"description":not_defined(why),"terms":[]}
             if "reason" in gaps:
                 missing("dc",gaps["reason"])
         call["meter_gaps"] = gaps
         for beta in ("rails","gpu","dc"):
-            stats = idle[beta]
-            if "reason" in stats:
-                missing(beta,"idle variance not defined ("+stats["reason"]+")")
-            if beta == "dc":
-                e = None if any(energy.get(k) is None for k in ("meter","battery")) else energy["meter"]+energy["battery"]
-                for key in ("meter","battery"):
-                    if energy.get(key) is None:
-                        missing(beta,key+" stream integral missing")
-                for key,label in (("r_max_s","r_max missing"),("meter_edge_w","meter edge powers missing"),
-                                  ("battery_edge_j","battery edge energy missing")):
-                    if h.get(key) is None:
-                        missing(beta,label)
-                if not call["prerequisites"][beta]:
-                    edge = sum(h["meter_edge_w"])*(h["r_max_s"]+.020)+sum(h["battery_edge_j"])+gaps["bound_j"]
-            else:
-                e = energy.get(beta)
-                if e is None:
-                    missing(beta,beta+" stream integral missing")
-                if h.get("anchor_shift_j") is None:
-                    missing(beta,"anchor shift bound missing")
-                edge = h.get("anchor_shift_j")
-            if e is None or "pre_w" not in stats:
-                continue
-            row = {"excess_j":e-t*(stats["pre_w"]+stats["post_w"])/2,"bound_j":None}
-            if call["prerequisites"][beta]:
-                row["reason"] = call["prerequisites"][beta][0]
-                row["description"] = not_defined(row["reason"])
-            else:
-                baseline = t*(abs(stats["pre_w"]-stats["post_w"])/2+2*stats["se_w"])
-                row.update(bound_j=edge+baseline,edge_bound_j=edge,baseline_bound_j=baseline)
-            call["boundaries"][beta] = row
+            try:
+                stats = idle[beta]
+                if "reason" in stats:
+                    missing(beta,"idle variance not defined ("+stats["reason"]+")")
+                if beta == "dc":
+                    e = None if any(energy.get(k) is None for k in ("meter","battery")) else energy["meter"]+energy["battery"]
+                    for key in ("meter","battery"):
+                        if energy.get(key) is None:
+                            missing(beta,key+" stream integral missing")
+                    for key,label in (("r_max_s","r_max missing"),("meter_edge_w","meter edge powers missing"),
+                                      ("battery_edge_j","battery edge energy missing")):
+                        if h.get(key) is None:
+                            missing(beta,label)
+                    if not call["prerequisites"][beta]:
+                        edge = sum(h["meter_edge_w"])*(h["r_max_s"]+.020)+sum(h["battery_edge_j"])+gaps["bound_j"]
+                else:
+                    e = energy.get(beta)
+                    if e is None:
+                        missing(beta,beta+" stream integral missing")
+                    if h.get("anchor_shift_j") is None:
+                        missing(beta,"anchor shift bound missing")
+                    edge = h.get("anchor_shift_j")
+                if e is None or "pre_w" not in stats:
+                    continue
+                row = {"excess_j": (not_defined(stats["reason"]) if "reason" in stats else
+                        arithmetic(f"records[{i-1}].harvest.energy_j/idle.{beta}",
+                                   lambda: e-t*(stats["pre_w"]+stats["post_w"])/2)), "bound_j":None}
+                if call["prerequisites"][beta]:
+                    row["reason"] = call["prerequisites"][beta][0]
+                    row["description"] = not_defined(row["reason"])
+                else:
+                    baseline = t*(abs(stats["pre_w"]-stats["post_w"])/2+2*stats["se_w"])
+                    row.update(bound_j=edge+baseline,edge_bound_j=edge,baseline_bound_j=baseline)
+                call["boundaries"][beta] = row
+                arithmetic(f"records[{i-1}].harvest energy_j/idle/edges.{beta}",
+                           lambda: call["boundaries"].get(beta, {}))
+            except (OverflowError, ValueError) as exc:
+                why = f"records[{i-1}].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.{beta} arithmetic unavailable: {exc}"
+                missing(beta, why)
+                call["boundaries"][beta] = {"excess_j":not_defined(why), "bound_j":None,
+                                            "reason":why, "description":not_defined(why)}
         if all(b in call["boundaries"] for b in ("rails","dc")):
             r,d = (call["boundaries"][b] for b in ("rails","dc"))
-            rest = {"excess_j":d["excess_j"]-r["excess_j"],"bound_j":None}
-            if r["bound_j"] is not None and d["bound_j"] is not None:
-                rest["bound_j"] = d["bound_j"]+r["bound_j"]
-            else:
-                rest["reason"] = d.get("reason",r.get("reason"))
-                rest["description"] = not_defined(rest["reason"])
-            call["boundaries"]["rest"] = rest
+            try:
+                rest = {"excess_j": (d["excess_j"]-r["excess_j"] if all(finite_number(v["excess_j"]) for v in (d,r))
+                                         else not_defined(d.get("reason",r.get("reason","excess missing")))),"bound_j":None}
+                if r["bound_j"] is not None and d["bound_j"] is not None:
+                    rest["bound_j"] = d["bound_j"]+r["bound_j"]
+                else:
+                    rest["reason"] = d.get("reason",r.get("reason"))
+                    rest["description"] = not_defined(rest["reason"])
+                call["boundaries"]["rest"] = rest
+                arithmetic(f"records[{i-1}].harvest.energy_j/idle rails/dc rest", lambda: rest)
+            except (ValueError, OverflowError) as exc:
+                why = f"records[{i-1}].harvest.energy_j/idle rails/dc rest arithmetic unavailable: {exc}"
+                missing("rest",why)
+                call["boundaries"]["rest"] = {"excess_j":not_defined(why),"bound_j":None,"reason":why,"description":not_defined(why)}
         call["timing"] = {}
         for key in ("r_max_s", "tau_s", "operative_timing_bound_s"):
             value, error = input_value(h.get(key, ABSENT), NONNEG, "harvest."+key)
@@ -856,7 +949,18 @@ def read_known_bytes(records, scan):
             reason = reason or value.get("reason","bound input missing")
             value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)})
         else:
-            value.update(classify(value["delta"],value["halfwidth"],phi,reason=reason))
+            try:
+                arithmetic(beta+" delta/halfwidth/scan.K/B class", lambda:
+                           [value["delta"]+value["halfwidth"],value["delta"]-value["halfwidth"]])
+                upper_inputs = {**value,"phi":phi}
+                if not reason and not all(finite_number(upper_inputs.get(k))
+                                          for k in REDUCER_DEPENDENCIES["upper_limit"]):
+                    raise ValueError(beta+" delta/halfwidth/scan.K/B upper_limit prerequisite missing")
+                value.update(arithmetic(beta+" delta/halfwidth/scan.K/B upper_limit", lambda:
+                    classify(value["delta"],value["halfwidth"],phi,reason=reason)))
+            except (ValueError, TypeError) as exc:
+                reason = str(exc)
+                value.update({"class":"UNDETERMINED","reason":reason,"upper_limit":not_defined(reason)})
             if reason:
                 value["description"] = not_defined(reason)
     if scan.get("K") is None:
@@ -866,7 +970,7 @@ def read_known_bytes(records, scan):
         rails = output["boundaries"]["rails"]
         output["share"] = describe_share(rails if "delta" in rails else None,dc)
         gpu = [c for c in output["calls"] if c["arm"] in ("S","C2")]
-        if len(gpu)==4 and all("gpu" in c["boundaries"] for c in gpu):
+        if len(gpu)==4 and all(finite_number(c["boundaries"].get("gpu",{}).get("excess_j")) for c in gpu):
             power = {arm:sum(c["boundaries"]["gpu"]["excess_j"] for c in gpu if c["arm"]==arm)/
                          sum(c["T"] for c in gpu if c["arm"]==arm) for arm in ("S","C2")}
             output["gpu_power_contrast_w"] = power["S"]-power["C2"]
