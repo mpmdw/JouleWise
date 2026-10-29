@@ -940,6 +940,9 @@ def read_known_bytes(records, scan):
     for beta in names:
         if scan.get("K") is not None and all(sizes.values()):
             output["boundaries"][beta] = reduce_boundary(output["calls"],sizes,beta)
+            why = output["boundaries"][beta].get("reason", "")
+            if "arithmetic unavailable" in why:
+                affected[beta].append(why)
     dc = output["boundaries"].get("dc")
     # DC is the common validity prerequisite. Keep other boundaries' numbers.
     if affected["dc"]:
