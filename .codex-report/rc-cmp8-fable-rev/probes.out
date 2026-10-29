@@ -1,0 +1,128 @@
+======== S1: output-derived row constructors
+S1.0 control (base + with_sensitivity widened): exit=0 err='' fails={} rows[contrast/ctr-*]=30
+S1.a arm_gates dropped from the verdict and the fill (both contrasts): exit=0 err='' fails={} row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id]=None row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/resolution/0/transport_rule_id]=('exact_stack_only.v1', 'exact_stack_only.v1', 'AGREE') rows[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/*]=0
+S1.b arm_gates dropped from the verdict only (fill keeps its copy): exit=2 err='refused=step11_unmapped_fill' fails={} unbound=[('fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'no_row'), ('fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'no_row'), ('fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'no_row')]
+S1.c arm_gates dropped from the fill only (verdict keeps it): exit=0 err='' fails={}
+S1.d arm_gates relabelled arm_gates_x in the verdict and the fill: exit=2 err='refused=step11_unmapped_fill' fails={}
+S1.e arm_gates relabelled in the verdict only: exit=2 err='refused=step11_unmapped_fill' fails={} unbound=[('fill:gamma/contrasts/*/floor/arm_gates/*/arm_id', 'no_row'), ('fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'no_row'), ('fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'no_row')]
+S1.a resolutions dropped from the verdict and the fill (both contrasts): exit=0 err='' fails={} row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id]=('sw-decode-a-qwen3-1p7b', 'sw-decode-a-qwen3-1p7b', 'AGREE') row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/resolution/0/transport_rule_id]=None rows[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/resolution/*]=0
+S1.b resolutions dropped from the verdict only (fill keeps its copy): exit=2 err='refused=step11_unmapped_fill' fails={} unbound=[('fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j', 'no_row'), ('fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j', 'no_row'), ('fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'no_row')]
+S1.c resolutions dropped from the fill only (verdict keeps it): exit=0 err='' fails={}
+S1.d resolutions relabelled resolutions_x in the verdict and the fill: exit=2 err='refused=step11_unmapped_fill' fails={}
+S1.e resolutions relabelled in the verdict only: exit=2 err='refused=step11_unmapped_fill' fails={} unbound=[('fill:gamma/contrasts/*/floor/resolutions/*/floor_abs_j', 'no_row'), ('fill:gamma/contrasts/*/floor/resolutions/*/floor_cmp_j', 'no_row'), ('fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'no_row')]
+S1.f control: a wrong arm-gate condition on both copies: exit=2 err='refused=step11_unmapped_fill' fails={'routing_id': 1} unbound=[('fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'row_disagrees')] row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id]=('wrong-condition', 'sw-decode-a-qwen3-1p7b', 'DISAGREE')
+S1.g control: a wrong transport_rule_id on both copies: exit=2 err='refused=step11_unmapped_fill' fails={'routing_id': 1} unbound=[('fill:gamma/contrasts/*/floor/resolutions/*/transport_rule_id', 'row_disagrees')] row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/resolution/0/transport_rule_id]=('other_rule.v9', 'exact_stack_only.v1', 'DISAGREE')
+S1.h resolutions emptied on both copies (list present, no rows): exit=1 err='' fails={'floor_gate_j': 6, 'routing_id': 8} rows[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/resolution/*]=8
+S1.i arm_gates emptied on both copies: exit=1 err='' fails={'floor_gate_j': 2, 'routing_id': 6} row[contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id]=(None, 'sw-decode-a-qwen3-1p7b', 'DISAGREE')
+---- refused p42 cells of the projection
+S1.j control: alpha projection lists its refused p42 cell: exit=0 err='' fails={} row[alpha/projection/p42]=('expected_unresolvable', 'expected_unresolvable', 'AGREE')
+S1.k recompute p42 computed, projection refused: the row disagrees (and the extraction row): exit=2 err='refused=step11_unmapped_fill' fails={'outcome_word': 2, 'p42_status': 3} unbound=[('disclosure:block_lines/sensitivity_reported/record/code', 'row_disagrees'), ('disclosure:block_lines/sensitivity_reported/record/status', 'row_disagrees'), ('disclosure:sensitivity/reported_cells/*/code', 'row_disagrees')] row[alpha/projection/p42]=('expected_unresolvable', 'computed', 'DISAGREE')
+S1.l refused_cells key dropped from the projection: exit=0 err='' fails={} row[alpha/projection/p42]=None
+S1.m refused cell relabelled to the decode reported cell id (no p42 cell listed): exit=0 err='' fails={} row[alpha/projection/p42]=None
+S1.n refused_cells as an object: exit=0 err='' fails={} row[alpha/projection/p42]=None
+---- disclosure lines dropped whole (every line of a word), base + with_sensitivity
+  drop block_lines/dominance_branch: exit=0 err='' fails={}
+  drop block_lines/dominance_ratio: exit=0 err='' fails={}
+  drop block_lines/harvest_once: exit=0 err='' fails={}
+  drop block_lines/sensitivity_bmax: exit=0 err='' fails={}
+  drop block_lines/sensitivity_boundary: exit=0 err='' fails={}
+  drop block_lines/sensitivity_contrast: exit=0 err='' fails={}
+  drop block_lines/sensitivity_floor: exit=0 err='' fails={}
+  drop block_lines/sensitivity_reported: exit=0 err='' fails={}
+  drop block_lines/sensitivity_window: exit=0 err='' fails={}
+  drop cells/attribution_floor: exit=0 err='' fails={}
+  drop cells/battery_assist_cell: exit=1 err='' fails={'count': 2, 'outcome_word': 1, 'reported_cell_j': 5, 'routing_id': 1}
+  drop cells/reported_cell: exit=1 err='' fails={'outcome_word': 1, 'routing_id': 1}
+  drop contrasts/contrast_interval: exit=0 err='' fails={}
+  drop contrasts/decision_floor: exit=0 err='' fails={}
+  drop contrasts/loo_counts: exit=1 err='' fails={'count': 2, 'routing_id': 2}
+  drop contrasts/loo_magnitude: exit=1 err='' fails={'routing_id': 2}
+  drop contrasts/magnitude_per_token: exit=1 err='' fails={'per_token_j': 5, 'routing_id': 1}
+  drop contrasts/magnitude_ratio: exit=1 err='' fails={'descriptive_ratio': 3, 'routing_id': 1}
+  drop contrasts/primary_contrast: exit=0 err='' fails={}
+  drop fixed_sentences/order: exit=0 err='' fails={}
+  drop floors/floor_composition: exit=1 err='' fails={'outcome_word': 4, 'routing_id': 4}
+  drop floors/kept_units: exit=0 err='' fails={}
+  drop window_lines/below_screen_bound: exit=1 err='' fails={'outcome_word': 3, 'routing_id': 3}
+  drop window_lines/corpus_counts: exit=1 err='' fails={'count': 3, 'routing_id': 3}
+  drop window_lines/flag_count: exit=0 err='' fails={}
+  drop window_lines/neg8_allowance: exit=1 err='' fails={'floor_j': 21, 'outcome_word': 3, 'routing_id': 3}
+  drop window_lines/neg8_screen: exit=1 err='' fails={'outcome_word': 3, 'routing_id': 3}
+  drop window_lines/reference_counts: exit=1 err='' fails={'count': 9, 'routing_id': 3}
+  drop window_lines/stored_status: exit=0 err='' fails={}
+line words whose whole-line drop exits 0: [('block_lines', 'dominance_branch'), ('block_lines', 'dominance_ratio'), ('block_lines', 'harvest_once'), ('block_lines', 'sensitivity_bmax'), ('block_lines', 'sensitivity_boundary'), ('block_lines', 'sensitivity_contrast'), ('block_lines', 'sensitivity_floor'), ('block_lines', 'sensitivity_reported'), ('block_lines', 'sensitivity_window'), ('cells', 'attribution_floor'), ('contrasts', 'contrast_interval'), ('contrasts', 'decision_floor'), ('contrasts', 'primary_contrast'), ('fixed_sentences', 'order'), ('floors', 'kept_units'), ('window_lines', 'flag_count'), ('window_lines', 'stored_status')]
+======== S2: the RC-CMP-7 probes at this head
+G7.0 control (fixture): exit=0 err='' fails={}
+G7.a L9-only drop: kept-units omits run-a, no re-reduced file, recompute selects it: exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3} row[run/alpha/run-a]=(None, 'run/alpha/run-a', 'DISAGREE')
+G7.b joint drop (shared exclusions): exit=0 err='' fails={} row[run/alpha/run-a]=None
+G7.b2 joint drop, recompute member absent entirely: exit=0 err='' fails={}
+G7.b3 joint drop but the recompute's re-derivation disagrees: exit=1 err='' fails={'exclusions_rederivation': 1}
+G7.c kept-units wrongly adds a registered science run neither side holds: exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3} row[run/alpha/d117fq31p7-df-ph-decode-abs-r02]=(None, None, 'DISAGREE')
+G7.d kept-units record with cells as a list (malformed): exit=1 err='' fails={'routing_id': 1} row[run/alpha/run-a]=(None, 'run/alpha/run-a', 'DISAGREE')
+G7.e kept unit run_ids as a string: exit=1 err='' fails={'routing_id': 6, 'run_phase_energy_j': 15}
+G7.f recompute member absent, L9 keeps and re-reduces: exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3} row[run/alpha/run-a]=('run/alpha/run-a', None, 'DISAGREE')
+G7.g counterfactual: universe = the sealed plan trees' science/*: exit=1 err='' fails={'routing_id': 281, 'run_phase_energy_j': 840}
+   routing_id DISAGREE rows: 281 of which both sides None: 280
+---- F2: window claim words (RC-CMP-7 F1, fixed in RC-CMP-8)
+F2.a control: neg8_screen passed on both sides: exit=0 err='' fails={} row[disclosure/alpha/neg8_screen/decision]=('passed', 'passed', 'AGREE')
+F2.b wrong word: L9 prints failed, recompute passed: exit=2 err='refused=step11_unmapped_fill' fails={'outcome_word': 1} unbound=[('disclosure:window_lines/alpha/neg8_screen/decision', 'row_disagrees')]
+F2.c wrong word relabelled as adapter_continuity: exit=1 err='' fails={'outcome_word': 1, 'routing_id': 1} row[disclosure/alpha/neg8_screen/decision]=(None, 'passed', 'DISAGREE')
+F2.d neg8_screen line dropped, recompute has a screen decision: exit=1 err='' fails={'outcome_word': 1, 'routing_id': 1} row[disclosure/alpha/neg8_screen/decision]=(None, 'passed', 'DISAGREE')
+F2.e below_screen_bound line dropped (alpha), recompute has b_op: exit=1 err='' fails={'outcome_word': 1, 'routing_id': 1} row[disclosure/alpha/below_screen_bound/below]=(None, False, 'DISAGREE')
+F2.f battery_temperature_sentence/neg8 differs from the neg8_screen word: exit=2 err='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:window_lines/alpha/battery_temperature_sentence/neg8', 'value_differs')]
+F2.f2 control: battery_temperature_sentence/neg8 equal: exit=0 err='' fails={}
+---- F2.g: by-construction booleans (RC-CMP-7 F2, fixed in RC-CMP-8)
+F2.g mean_and_half_width_equal_primary=False in the record, the disclosure copy and the block line: exit=2 err='refused=step11_unmapped_fill' fails={'outcome_word': 1} unbound=[('disclosure:block_lines/sensitivity_reported/record/mean_and_half_width_equal_primary', 'no_row'), ('disclosure:block_lines/sensitivity_reported/record/mean_and_half_width_equal_primary', 'value_differs'), ('disclosure:sensitivity/reported_cells/*/mean_and_half_width_equal_primary', 'row_disagrees')]
+F2.g bound_independent_values_equal_primary=False in the record, the disclosure copy and the block line: exit=2 err='refused=step11_unmapped_fill' fails={'outcome_word': 1} unbound=[('disclosure:block_lines/sensitivity_contrast/record/bound_independent_values_equal_primary', 'row_disagrees'), ('disclosure:sensitivity/contrasts/*/bound_independent_values_equal_primary', 'row_disagrees')]
+---- gate-passing relabel sweep (every fixture line into every word whose producer key set admits it)
+sweep base exit: 0
+sweep: 70 gate-passing relabels tried; exit-0 relabels: 40
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'floor_drift_ownership', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'gross_energy', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'conditionality', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'config_binding', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'single_window', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'floor_transfer_assumption', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'floor_transfer_limit', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'p42', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'separate_windows', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'dominance', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'd177', [])
+   exit 0: ('fixed_sentences', 'order', 'fixed_sentences', 'fixed_prompt', [])
+   exit 0: ('fixed_sentences', 'order', 'window_lines', 'machine_absent', [])
+   exit 0: ('fixed_sentences', 'order', 'window_lines', 'machine_boundary', [])
+   exit 0: ('fixed_sentences', 'order', 'window_lines', 'monitor_sentence', [])
+   exit 0: ('fixed_sentences', 'order', 'window_lines', 'lost_midpoint', [])
+   exit 0: ('fixed_sentences', 'order', 'window_lines', 'catalog_path', [])
+   exit 0: ('fixed_sentences', 'order', 'window_lines', 'stored_verdict_boundary', [])
+   exit 0: ('fixed_sentences', 'order', 'block_lines', 'superseded_history', [])
+   exit 0: ('fixed_sentences', 'order', 'block_lines', 'sensitivity_boundary', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'floor_drift_ownership', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'gross_energy', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'conditionality', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'config_binding', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'single_window', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'floor_transfer_assumption', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'floor_transfer_limit', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'order', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'p42', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'separate_windows', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'dominance', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'd177', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'fixed_sentences', 'fixed_prompt', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'window_lines', 'machine_absent', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'window_lines', 'machine_boundary', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'window_lines', 'monitor_sentence', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'window_lines', 'lost_midpoint', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'window_lines', 'catalog_path', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'window_lines', 'stored_verdict_boundary', [])
+   exit 0: ('block_lines', 'sensitivity_boundary', 'block_lines', 'superseded_history', [])
+======== S3: over-refusal on sound producer-shaped windows
+S3.a with_sensitivity(widened=True): exit=0 err='' fails={}
+   sensitivity outcome_word rows: 19 non-AGREE: []
+S3.a with_sensitivity(widened=False): exit=0 err='' fails={}
+   sensitivity outcome_word rows: 19 non-AGREE: []
+S3.b refused dominance ratios without ratio keys on the line and the table (gate must pass; OPEN ISSUE 2 over-refusal expected): exit=2 err='refused=step11_unmapped_fill' fails={'dominance_ratio': 1, 'floor_j': 2, 'outcome_word': 1} unbound=[('disclosure:block_lines/dominance_ratio/status', 'row_disagrees')]
+S3.c battery_assist_contrast not_computable (n=0) without estimates: exit=1 err='' fails={'contrast_j': 5, 'contrast_p': 1, 'count': 2, 'outcome_word': 1, 'routing_id': 1}
+S3.d machine_summary with model only (no finite rho) [no-op if the base has no such line]: exit=0 err='' fails={}
+exit=0

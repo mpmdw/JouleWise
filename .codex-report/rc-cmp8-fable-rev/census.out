@@ -1,0 +1,42 @@
+producer _item calls found: 72
+block_lines/dominance_branch: required=['branch', 'dominance_sentence_licensed'] producer_unconditional=['branch', 'dominance_sentence_licensed'] lines=[1159] -> OK
+block_lines/dominance_ratio: required=['cell_id', 'component', 'n', 'status'] producer_unconditional=['cell_id', 'component', 'n', 'status'] lines=[1157] -> OK
+block_lines/sensitivity_bmax: required=['value_s', 'T', 'attained_by_sequence'] producer_unconditional=['T', 'attained_by_sequence', 'value_s'] lines=[1245] -> OK
+block_lines/sensitivity_window: required=['pack', 'plan_id', 'b_op_s', 'b_sens_s', 'widened'] producer_unconditional=['b_op_s', 'b_sens_s', 'pack', 'plan_id', 'widened'] lines=[1250] -> OK
+cells/attribution_floor: required=['pack', 'cell_id', 'value_j', 'attained_by', 'minimum_j'] producer_unconditional=['attained_by', 'cell_id', 'minimum_j', 'pack', 'value_j'] lines=[429] -> OK
+cells/battery_assist_cell: required=['pack', 'cell_id', 'primary', 'without', 'n_r', 'n_b', 'assist_members', 'removed_unit_ids'] producer_unconditional=['assist_members', 'cell_id', 'n_b', 'n_r', 'pack', 'primary', 'removed_unit_ids', 'without'] lines=[403] -> OK
+cells/cross_window: required=['pack', 'cell_id', 'G_j', 'h_G_j', 'F_j', 'h_F_j', 'delta_j', 'agree'] producer_unconditional=['F_j', 'G_j', 'agree', 'cell_id', 'delta_j', 'h_F_j', 'h_G_j', 'pack'] lines=[442] -> OK
+cells/reported_cell: required=['pack', 'cell_id', 'status', 'mean_j', 'h_j', 'B_j', 'lower_j', 'upper_j'] producer_unconditional=['B_j', 'cell_id', 'h_j', 'lower_j', 'mean_j', 'pack', 'status', 'upper_j'] lines=[390] -> OK
+contrasts/battery_assist_contrast: required=['contrast_id', 'status', 'n', 'assist_quads', 'assist_members'] producer_unconditional=['assist_members', 'assist_quads', 'contrast_id', 'n', 'status'] lines=[492] -> OK
+contrasts/contrast_interval: required=['contrast_id', 'n', 'rounded_t', 'exact_t'] producer_unconditional=['contrast_id', 'exact_t', 'n', 'rounded_t'] lines=[537] -> OK
+contrasts/decision_floor: required=['contrast_id', 'decision_interval', 'floor_j', 'estimate_j'] producer_unconditional=['contrast_id', 'decision_interval', 'estimate_j', 'floor_j'] lines=[546] -> OK
+contrasts/loo_counts: required=['contrast_id', 'count', 'exclusive_block_numbers'] producer_unconditional=['contrast_id', 'count', 'exclusive_block_numbers'] lines=[552] -> OK
+contrasts/loo_magnitude: required=['contrast_id', 'rows'] producer_unconditional=['contrast_id', 'rows'] lines=[567] -> OK
+contrasts/magnitude_per_token: required=['contrast_id', 'value_j', 'denominator', 'metrology', 'decision'] producer_unconditional=['contrast_id', 'decision', 'denominator', 'metrology', 'value_j'] lines=[529] -> OK
+contrasts/magnitude_ratio: required=['contrast_id'] producer_unconditional=['contrast_id'] lines=[517, 522] -> OK
+contrasts/primary_contrast: required=['contrast_id', 'estimator', 'decision_interval'] producer_unconditional=['contrast_id', 'decision_interval', 'estimator'] lines=[482] -> OK
+floors/floor_composition: required=['pack', 'cell_id', 'guarded_j', 'allowance_j', 'source', 'drift_widened_j', 'minted_j'] producer_unconditional=['allowance_j', 'cell_id', 'drift_widened_j', 'guarded_j', 'minted_j', 'pack', 'source'] lines=[465] -> OK
+window_lines/battery_temperature_sentence: required=['stage_id', 'rise_k', 'neg8'] producer_unconditional=['neg8', 'rise_k', 'stage_id'] lines=[1068] -> OK
+window_lines/below_screen_bound: required=['b_op_s', 'below'] producer_unconditional=['b_op_s', 'below'] lines=[1100] -> OK
+window_lines/corpus_counts: required=['collected', 'in_window', 'deciding', 'desk_cap', 'drop_counts'] producer_unconditional=['collected', 'deciding', 'desk_cap', 'drop_counts', 'in_window'] lines=[1001] -> OK
+window_lines/machine_member: required=['model', 'run_id', 'rho', 'rail_j', 'machine_j', 'removed', 'plausible', 'meter_flags', 'battery_term_available'] producer_unconditional=['battery_term_available', 'machine_j', 'meter_flags', 'model', 'plausible', 'rail_j', 'removed', 'rho', 'run_id'] lines=[657] -> OK
+window_lines/machine_summary: required=['model'] producer_unconditional=['model'] lines=[689] -> OK
+window_lines/neg8_allowance: required=['source', 'values_j'] producer_unconditional=['source', 'values_j'] lines=[1022] -> OK
+window_lines/neg8_screen: required=['decision'] producer_unconditional=['decision'] lines=[952] -> OK
+window_lines/reference_counts: required=['counts', 'planned'] producer_unconditional=['counts', 'planned'] lines=[970] -> OK
+NOTE: block_lines/sensitivity_contrast: no _item call found under result['block_lines']
+NOTE: block_lines/sensitivity_floor: no _item call found under result['block_lines']
+NOTE: block_lines/sensitivity_reported: no _item call found under result['block_lines']
+
+fixed-size producer lines never required by any pairing (unconditional per key in the producer, see report):
+  contrasts/primary_contrast :482
+  contrasts/contrast_interval :537
+  contrasts/decision_floor :546
+  cells/attribution_floor :429
+  block_lines/sensitivity_bmax :1245
+  block_lines/sensitivity_window :1250
+  block_lines/sensitivity_reported :1266
+  block_lines/sensitivity_floor :1266
+  block_lines/sensitivity_contrast :1266
+  block_lines/dominance_ratio :1157
+  block_lines/dominance_branch :1159 (if branch in closeout)
