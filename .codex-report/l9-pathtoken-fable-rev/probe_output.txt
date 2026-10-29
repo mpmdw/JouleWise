@@ -1,0 +1,50 @@
+$ JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR=<scratch>/tmp-head python3.13 .codex-report/l9-pathtoken-fable-rev/probe_fable.py   (at 49991c73a)
+writer prefix+appended: reader_record_not_structure_only
+validator prefix+appended: dry_run_record_invalid
+writer prefix-suffix: reader_record_not_structure_only
+validator prefix-suffix: dry_run_record_invalid
+writer prefix+e: reader_record_not_structure_only
+validator prefix+e: dry_run_record_invalid
+writer trailing-slash: reader_record_not_structure_only
+validator trailing-slash: dry_run_record_invalid
+writer leading-dot: reader_record_not_structure_only
+validator leading-dot: dry_run_record_invalid
+writer case: reader_record_not_structure_only
+validator case: dry_run_record_invalid
+validator symlinked listing, extra name, legit record: dry_run_record_invalid
+validator symlinked listing, planted name: dry_run_record_invalid
+step0 with listing symlinked outside archive: ('tooling_refusal', 'archive_path_invalid')
+inventory(gamma root, alpha harvest digest): 0
+validator index=None (tracked index, roots absent): dry_run_record_invalid
+validator step output named like inventory file: dry_run_record_invalid
+write/validate inventories identical: (True, {'alpha': 2368, 'beta': 2370, 'gamma': 2370})
+float-like census rows all in own inventory: (10, True)
+.
+Ran 1 test in 44.449s
+OK
+
+$ JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR=<scratch>/tmp-head python3.13 -m unittest tests.b5_analysis.test_census_path_token tests.b5_analysis.test_dry_run   (at 49991c73a)
+Ran 61 tests in 284.279s
+OK (skipped=3)
+
+$ (same command, worktree at b13a510dc with tests/b5_analysis/test_census_path_token.py copied in)
+FAIL: test_P1_step0_admits_authenticated_inventory_names_with_number_like_tokens
+FAIL: test_P2_validator_keeps_the_guard_outside_the_exact_window_inventory
+FAIL: test_P2_validator_requires_the_index_pinned_harvest
+ERROR: test_P1_run_record_validates_inventory_census_paths
+ERROR: test_P2_inventory_is_empty_unless_harvest_and_listing_authenticate
+ERROR: test_P2_writer_exempts_only_exact_census_paths (+7 subtests)
+Ran 61 tests in 270.461s
+FAILED (failures=3, errors=10, skipped=3)
+(all 55 pre-existing test_dry_run cases pass at base; only the 6 new tests fail)
+
+$ JW_B5_SYNTHETIC_ONLY=1 ... python3.13 -m unittest -v tests.b5_analysis.test_dry_run.ReaderRecordGuardTests tests.b5_analysis.test_census_path_token   (at 49991c73a)
+test_T19_reader_output_rejects_float_before_any_file_is_written ... ok
+(+6 new tests ok)
+Ran 7 tests in 57.699s
+OK
+
+$ committed transfer manifests on main (paths only), float-like names per _FLOAT_TOKEN:
+v5-b5-alpha-a1-20261009T2312Z.json paths 23163 float-like 68 (all under sources/night-custody/results-clone/docs/process_traces)
+v5-b5-beta-a6-20261011T2011Z.json  paths 23816 float-like 68 (same)
+v5-b5-gamma-a1-20261012T0420Z.json paths 22811 float-like 68 (same)
