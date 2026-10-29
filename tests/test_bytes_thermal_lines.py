@@ -1038,6 +1038,37 @@ class RecordedFaultTests(unittest.TestCase):
         self.assertEqual(record['member_statuses'][0]['blinded_status'],
                          'not defined at blinded stage (row withheld)')
 
+    def test_empty_code_bytes_match_exporters_dictwriter(self):
+        from joulewise.b6 import export_runs
+        fields = ['run_id', 'exclusion_codes', 'excluded', 'opaque']
+        rows = [dict(zip(fields, ['a', t.CODE, 'True', 'opaque,"\r\ntext'])),
+                dict(zip(fields, ['b', '', 'False', 'unchanged']))]
+        def fresh_export():
+            stream = io.StringIO(newline='')
+            writer = export_runs.csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+            return stream.getvalue().encode()
+        export = self.root / 'writer-export'
+        export.mkdir()
+        (export / 's.runs.csv').write_text('run_id,exclusion_codes,excluded,opaque\r\nb,,False,unchanged\r\n', newline='')
+        store = export / 'store.csv'
+        # Same DictWriter and parameters used by export_runs.write_withheld.
+        original = fresh_export()
+        store.write_bytes(original)
+        # Public b is already present; keep only the withheld a row here.
+        parsed = t.csv_fields(original.decode())
+        store.write_bytes(original[:parsed[2][0][0]])
+        (export / 's.session.json').write_text(json.dumps({
+            'blinding': {'withheld': {'path': 'store.csv', 'row_count': 1}}}))
+        record, out = self.run_line('writer-output', export)
+        self.assertEqual([c['run_id'] for c in record['changes']], ['a'])
+        rows[0].update(exclusion_codes='', excluded='False')
+        expected = fresh_export()
+        parsed = t.csv_fields(expected.decode())
+        self.assertEqual((out / 'export/withheld/s.withheld.csv').read_bytes(),
+                         expected[:parsed[2][0][0]])
+
     def test_verify_reduction_changes_and_all_differing_paths(self):
         self.put('withheld/reductions/a.json', {'energy': 'opaque'})
         record, out = self.run_line('view')
@@ -1048,7 +1079,8 @@ class RecordedFaultTests(unittest.TestCase):
         with contextlib.redirect_stdout(capture):
             self.assertIsNone(t.main(['verify', str(out)]))
         self.assertEqual(capture.getvalue().splitlines(),
-                         ['withheld/reductions/a.json', 'withheld/spans.json'])
+                         ['withheld/reductions/a.json', 'withheld/spans.json',
+                          'source changed since transform: ' + str(self.archive / 'withheld/spans.json')])
         self.assertTrue(json.loads((out / 'thermal_line.json').read_text())['records.thermal_view_changed'])
         self.assertIsInstance(record['producing_tree_dirty'], bool)
 
@@ -1151,6 +1183,47 @@ class RecordedFaultTests(unittest.TestCase):
                 self.assertIs(record['records.thermal_view_changed'], True)
                 self.assertIn('view_manifest.json', record['view_differing_paths'])
                 self.assertTrue(any(n['code'] == 'records.thermal_view_changed' and n['reason'] for n in record['notices']))
+
+    def test_missing_or_invalid_thermal_record_flags_and_exits_zero(self):
+        for index, value in enumerate((None, '{bad', 'null', '[]')):
+            with self.subTest(value=value):
+                _, out = self.run_line('bad-record-' + str(index))
+                path = out / 'thermal_line.json'
+                path.unlink()
+                if value is not None:
+                    path.write_text(value)
+                capture = io.StringIO()
+                with contextlib.redirect_stdout(capture):
+                    self.assertIsNone(t.main(['verify', str(out)]))
+                self.assertIn('thermal_line.json', capture.getvalue().splitlines())
+                record = json.loads(path.read_bytes())
+                self.assertTrue(record['records.thermal_view_changed'])
+                self.assertIn('thermal_line.json', record['view_differing_paths'])
+
+    def test_verify_rechecks_every_recorded_source_digest(self):
+        export = self.root / 'fresh-export'
+        export.mkdir()
+        csv_path = export / 's.runs.csv'
+        csv_path.write_text('run_id,exclusion_codes,excluded\na,' + t.CODE + ',True\nb,,False\n')
+        record, out = self.run_line('source-freshness', export)
+        sources = record['source_sha256']
+        for index, source in enumerate(sources):
+            path = Path(source)
+            original = path.read_bytes()
+            path.write_bytes(original + b'\n')
+            capture = io.StringIO()
+            with contextlib.redirect_stdout(capture):
+                self.assertIsNone(t.main(['verify', str(out)]))
+            self.assertIn('source changed since transform: ' + source, capture.getvalue().splitlines())
+            result = json.loads((out / 'thermal_line.json').read_bytes())
+            self.assertTrue(result['records.thermal_view_changed'])
+            self.assertEqual(result['source_differing_paths'], [source])
+            path.write_bytes(original)
+        Path(next(iter(sources))).unlink()
+        capture = io.StringIO()
+        with contextlib.redirect_stdout(capture):
+            self.assertIsNone(t.main(['verify', str(out)]))
+        self.assertIn('source changed since transform: ', capture.getvalue())
 
     def test_existing_output_and_manifest_binding(self):
         existing = self.root / 'existing'

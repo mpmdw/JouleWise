@@ -104,6 +104,9 @@ def decode_field(raw, span):
 
 
 def encode_field(value):
+    if value == "":
+        # DictWriter writes this field within a multi-column exporter row.
+        return ""
     out = io.StringIO(newline="")
     csv.writer(out, lineterminator="\r\n").writerow([value])
     return out.getvalue()[:-2]
@@ -478,9 +481,16 @@ def manifest_entries(value):
 def verify(output):
     output = Path(output)
     record_path = output / "thermal_line.json"
-    record = json.loads(record_path.read_bytes())
-    manifest_path = output / "view_manifest.json"
     different, reasons = [], []
+    try:
+        record = json.loads(record_path.read_bytes())
+        if not isinstance(record, dict) or not isinstance(record.get("notices"), list):
+            raise ValueError("invalid thermal line record")
+    except (OSError, ValueError, TypeError, RecursionError):
+        record = {"notices": []}
+        different.append("thermal_line.json")
+        reasons.append("thermal line record missing or invalid")
+    manifest_path = output / "view_manifest.json"
     try:
         if sha256(manifest_path) != record["view_manifest_sha256"]:
             different.append("view_manifest.json")
@@ -493,10 +503,21 @@ def verify(output):
     current = {row["path"]: row for row in view_files(output)}
     different.extend(path for path in sorted(expected.keys() | current.keys())
                      if expected.get(path) != current.get(path))
-    record["records.thermal_view_changed"] = bool(different)
+    changed_sources = []
+    for source, digest in record.get("source_sha256", {}).items():
+        try:
+            changed = sha256(Path(source)) != digest
+        except OSError:
+            changed = True
+        if changed:
+            changed_sources.append(source)
+    record["source_differing_paths"] = sorted(changed_sources)
+    record["records.thermal_view_changed"] = bool(different or changed_sources)
     record["notices"] = [notice for notice in record["notices"]
                          if notice["code"] != "records.thermal_view_changed"]
-    if different:
+    if different or changed_sources:
+        if changed_sources:
+            reasons.append("source changed since transform")
         record["notices"].append({"code": "records.thermal_view_changed",
                                   "reason": "; ".join(reasons) if reasons else "payload differs from manifest"})
     record["view_differing_paths"] = sorted(set(different))
@@ -517,7 +538,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.mode == "verify":
         different = verify(args.output)
-        print("\n".join(different) if different else "view verified")
+        record = json.loads((args.output / "thermal_line.json").read_bytes())
+        flags = different + ["source changed since transform: " + path
+                             for path in record["source_differing_paths"]]
+        print("\n".join(flags) if flags else "view verified")
         return
     try:
         record = transform(args.mode, args.archive, args.output, args.export)
