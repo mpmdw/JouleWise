@@ -305,6 +305,27 @@ class OneKeySpaceTests(Case):
         self.assertEqual((row["l9"], row["recompute"], row["verdict"]), (None, 30.0, "DISAGREE"))
 
 
+def guard_faults(tree):
+    """RC-CMP-6 (Opus round 3 F4): no while loop in a family function, no row built by .add outside the
+    Comparison class, and no family function called from anywhere but run and the family functions."""
+    faults = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        family = node.name.startswith("compare_")
+        for inner in ast.walk(node):
+            if family and isinstance(inner, ast.While):
+                faults.append((node.name, "while"))
+            if (not family and isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == "add" and isinstance(inner.func.value, ast.Name)
+                    and inner.func.value.id in ("c", "comparison")):
+                faults.append((node.name, "add"))
+            if (not family and node.name != "run" and isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                    and inner.func.id.startswith("compare_")):
+                faults.append((node.name, "family call"))
+    return faults
+
+
 def iterable_allowed(node, constants):
     """An iteration source a family function may use: Comparison.pairs, or a constant expression."""
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "pairs":
@@ -367,6 +388,30 @@ class StructureTests(unittest.TestCase):
                    for inner in ast.walk(method) if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
                    and inner.func.attr == "append" and "rows" in ast.unparse(inner.func.value)}
         self.assertEqual(appends, {"add"})
+
+    def test_family_functions_have_no_while_loop_and_are_called_only_by_family_functions(self):
+        self.assertEqual(guard_faults(self.tree), [])
+
+    def test_the_extended_guard_catches_opus_f4_and_sol_while_mutants(self):
+        # RC-CMP-OPUS-REV-3 F4 and RC-CMP-SOL-REV-3 (AST answer): at 7fede8c7 the two tests above it
+        # passed all four appended shapes; the control (a one-sided for loop) failed.
+        base = SCRIPT.read_text()
+        shapes = {
+            "control_one_sided_for": "def compare_for(c, l9):\n    for k in l9:\n        c.numeric('count', k, l9[k], None)\n",
+            "while_loop": ("def compare_while(c, l9):\n    it = iter(l9)\n    while True:\n        k = next(it, None)\n"
+                           "        if k is None:\n            break\n        c.numeric('count', k, l9[k], None)\n"),
+            "helper_add": "def helper_add(c, l9):\n    for k in l9:\n        c.add({'family': 'count', 'key': k, 'verdict': 'AGREE'})\n",
+            "helper_calls_family": "def helper_loop(c, l9):\n    for k in l9:\n        compare_one(c, k)\n"}
+        for name, extra in shapes.items():
+            with self.subTest(name):
+                tree = ast.parse(base + "\n\n" + extra)
+                constants = {target.id for node in tree.body if isinstance(node, ast.Assign)
+                             for target in node.targets if isinstance(target, ast.Name) and target.id.isupper()}
+                faults = guard_faults(tree) + [
+                    (node.name, "iterates") for node in tree.body if isinstance(node, ast.FunctionDef)
+                    and node.name.startswith("compare_") for inner in ast.walk(node)
+                    if isinstance(inner, ast.For) and not iterable_allowed(inner.iter, constants)]
+                self.assertTrue(faults, name)
 
     def test_the_checker_catches_a_one_sided_loop(self):
         # Counterfactual for the checker itself: e5ccf720b's assist-members loop iterates L9's strata only.

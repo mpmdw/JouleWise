@@ -1320,14 +1320,15 @@ def compare_exclusions(c, ours):
         c.exact("exclusions_rederivation", pack, "agrees", get(ours, "exclusions_rederivation", pack, "status"))
 
 
-# Step-11 coverage (RC-CMP-3 X1, X6; RC-CMP-5 S1, S2). Each leaf of the fill input and the
-# disclosure record has a path like fill:gamma/contrasts/*/estimate: a list item becomes *,
+# Step-11 coverage (RC-CMP-3 X1, X6; RC-CMP-5 S1, S2; RC-CMP-6 G5). Each leaf of the fill input and
+# the disclosure record has a path like fill:gamma/contrasts/*/estimate: a list item becomes *,
 # or its line word when the item is a disclosure line (window_lines/alpha/machine_member/rho).
-# A leaf is numeric-class when it is a number, null, or was read from a NaN or Infinity.
+# A leaf is numeric-class when it is a number, null, or was read from a NaN or Infinity; a string
+# spelling a number is numeric-class too, except under the text and identity rules.
 # A rule is (pattern, target) or (pattern, family, key). The first rule that matches wins:
 # - (pattern, family, key): the leaf copies the comparison row (family, key). The key
 #   template is filled from the pattern's named groups, the identity fields of the objects
-#   enclosing the leaf (its contrast, cell, run or line) and list positions, never from an
+#   that own them (its contrast, cell, run or line; G2) and list positions, never from an
 #   attribute (see binding()). The leaf is covered only if that row exists, its L9 value
 #   equals the leaf in type and value, it is AGREE, each item routing it (its routing_id
 #   rows) is AGREE, and no other leaf at its path binds that row; otherwise the run refuses;
@@ -1651,7 +1652,7 @@ def admits(rule, value, number, nonfinite, word=False):
     if len(rule) == 3:
         return True
     if rule[1].startswith(UNCOVERED):
-        return not number and (not word or rule[1] in (TEXT, IDENTITY))
+        return not number and (not word or rule[1].startswith((TEXT, IDENTITY)))
     if rule[1].startswith(NULL_NAMED):
         return value is None and not nonfinite
     return True
