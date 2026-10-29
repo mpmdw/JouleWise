@@ -753,7 +753,21 @@ class ReaderTests(unittest.TestCase):
                 else:
                     # Finite large settle gives zero trim: subtraction is safe.
                     self.assertEqual(result['printed'],baseline['printed'])
-        print('generated real read CLI leaf faults:',count+7+support_count+16)
+        for native in probe.NATIVE_INPUTS:
+            mutated = deepcopy(records)
+            for i in (0,7):
+                mutated[i]['harvest']['energy_j'][native] = 1.79e308
+            result = self.read_cli(mutated)
+            beta = 'dc' if native in ('meter','battery') else native
+            value = result['boundaries'][beta]
+            self.assertEqual(len(result['calls']),8)
+            self.assertEqual(result['input_records'],mutated)
+            self.assertEqual(value['class'],'UNDETERMINED')
+            self.assertIn('arithmetic unavailable',value['reason'])
+            self.assertIn('harvest.energy_j.'+native,value['reason'])
+            self.assertIn('not defined (',value['halfwidth'])
+            self.assertNotIn('±',result['printed']['contrasts'][beta])
+        print('generated real read CLI leaf faults:',count+7+support_count+16+4)
 
     def test_null_containers_and_scan_inputs_keep_complete_records(self):
         paths = [('receipt',),('harvest',),('harvest','idle'),('harvest','idle','pre'),
