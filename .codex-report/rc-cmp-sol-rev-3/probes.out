@@ -1,0 +1,291 @@
+HEAD 7fede8c7647001e2679b10246bae832244538e05
+BASELINE_DIGEST_VERIFIED sha256:9ca78d5fc5cc68fa267ad513aeedf69d299d77da3d8425f739378eca0592ee86
+
+PRIOR sol-rev probe_archive_shapes.py sha256=664046b546d6bf1121773f51633934de0626cedb812a36623e322a2adc889eef
+compressed_plist rc= 0 comparison_stopped= True member= {'compressed_input': 'raw/powermetrics.plist.zst', 'input': 'raw/powermetrics.plist', 'input_status': 'compressed', 'reason': 'trace_plist_missing', 'restore_tool': 'scripts/restore_run_to_scratch.py', 'status': 'not_compared'} not_compared= 1
+PROCESS_EXIT 0
+
+PRIOR sol-rev probe_comparator.py sha256=9967d3e17914ae725b1c72e4d811a10b4a235fd8e1716afca536f590451d5f33
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+Traceback (most recent call last):
+  File "/private/tmp/jwrc3-tmp/rc-cmp-sol-rev-3-prior/sol-rev/.codex-report/rc-cmp-sol-rev/probe_comparator.py", line 70, in <module>
+    result = tc.cmp.run(case.custody(), ours, path, tc.RULES)
+  File "/private/tmp/jwrc3/scripts/compare_b5_recompute.py", line 1450, in run
+    bars = load_bars(bars_path)
+  File "/private/tmp/jwrc3/scripts/compare_b5_recompute.py", line 133, in load_bars
+    raise Refusal("bars_invalid:" + family)
+compare_b5_recompute_test_subject.Refusal: bars_invalid:contrast_j
+PROCESS_EXIT 1
+PRIOR sol-rev probe_comparator.py guarded continuation
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+infinite_override REFUSED bars_invalid:contrast_j
+family_absent bars_family_missing:contrast_j
+public_counts_before (0, {'fail': 0, 'pass': 3}, '')
+public_counts_after (1, {'fail': 1, 'pass': 2}, '')
+meter_baseline {} []
+wrong_machine_median {'rho': 1} ['disclosure:window_lines/alpha/machine_summary/median'] None median= 1.1732986735986135 member_rho= 0.1732986735986136
+wrong_machine_median_cli 2 stderr= refused=step11_unmapped_fill
+missing_harvest_member {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 2, 'rho': 2, 'battery_term': 1, 'routing_id': 1} {'pass': 0, 'fail': 2} disclosed_members= 2
+missing_harvest_member_cli 2
+missing_harvest_machine {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 1, 'rho': 1, 'battery_term': 1} {'pass': 0, 'fail': 2}
+no_harvest_meter {'meter_j': 1, 'rho': 1}
+GUARDED_PROCESS_EXIT 0
+
+PRIOR sol-rev probe_meter_fit.py sha256=47b754d175d230b20a8ce40ec26537d27c2196feaf90544952630356a18452f1
+largest 0 base_trial= None
+PROCESS_EXIT 0
+
+PRIOR sol-rev probe_meter_short.py sha256=99315aeecc0069ff69ceb25451db25f14e225c88c7377dff25488d6947177e50
+base_max 1000000000000000 0
+base_max 10000000000000000 0
+base_max 100000000000000000 0
+PROCESS_EXIT 0
+
+PRIOR sol-rev probe_meter_stream.py sha256=1ed3ea9a0246496b2e8d85a51e6bf4644707a3f9f76b98dc06e734a76448bb71
+own= [10000000001257250, 10000010001119820, 10000020000982388]
+parser= [10000000001257250, 10000010001119820, 10000020000982388]
+differences_ns= [0, 0, 0]
+max_abs_ns= 0
+PROCESS_EXIT 0
+
+PRIOR sol-rev-2 probe_archive_shapes.py sha256=664046b546d6bf1121773f51633934de0626cedb812a36623e322a2adc889eef
+compressed_plist rc= 0 comparison_stopped= True member= {'compressed_input': 'raw/powermetrics.plist.zst', 'input': 'raw/powermetrics.plist', 'input_status': 'compressed', 'reason': 'trace_plist_missing', 'restore_tool': 'scripts/restore_run_to_scratch.py', 'status': 'not_compared'} not_compared= 1
+PROCESS_EXIT 0
+
+PRIOR sol-rev-2 probe_comparator.py sha256=dc1a992dd3c1774ba8a018e4a451b57355e5d927318899b2abda42d26e55d90d
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+infinite_override REFUSED bars_invalid:contrast_j
+family_absent bars_family_missing:contrast_j
+public_counts_before (0, {'fail': 0, 'pass': 3}, '')
+public_counts_after (1, {'fail': 1, 'pass': 2}, '')
+meter_baseline {} []
+wrong_machine_median {'rho': 1} ['disclosure:window_lines/alpha/machine_summary/median'] None median= 1.1732986735986135 member_rho= 0.1732986735986136
+wrong_machine_median_cli 2 stderr= refused=step11_unmapped_fill
+missing_harvest_member {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 2, 'rho': 2, 'battery_term': 1, 'routing_id': 1} {'pass': 0, 'fail': 2} disclosed_members= 2
+missing_harvest_member_cli 2
+missing_harvest_machine {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 1, 'rho': 1, 'battery_term': 1} {'pass': 0, 'fail': 2}
+no_harvest_meter {'meter_j': 1, 'rho': 1}
+PROCESS_EXIT 0
+
+PRIOR sol-rev-2 probe_meter_fit.py sha256=47b754d175d230b20a8ce40ec26537d27c2196feaf90544952630356a18452f1
+largest 0 base_trial= None
+PROCESS_EXIT 0
+
+PRIOR sol-rev-2 probe_meter_short.py sha256=99315aeecc0069ff69ceb25451db25f14e225c88c7377dff25488d6947177e50
+base_max 1000000000000000 0
+base_max 10000000000000000 0
+base_max 100000000000000000 0
+PROCESS_EXIT 0
+
+PRIOR sol-rev-2 probe_meter_stream.py sha256=1ed3ea9a0246496b2e8d85a51e6bf4644707a3f9f76b98dc06e734a76448bb71
+own= [10000000001257250, 10000010001119820, 10000020000982388]
+parser= [10000000001257250, 10000010001119820, 10000020000982388]
+differences_ns= [0, 0, 0]
+max_abs_ns= 0
+PROCESS_EXIT 0
+
+PRIOR sol-rev-2 probe_new_paths.py sha256=bd57426f40e734c6a8f4e7429a27601a28c0a026ec6bb707a2e4069085dcb79d
+arm_wrong_id {} ['fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j'] cli 2
+arm_correct_id {} [{'path': 'fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id', 'family': 'routing_id', 'key': 'contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id', 'reason': 'no_row'}, {'path': 'fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'family': 'floor_gate_j', 'key': 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/floor_gate_j', 'reason': 'no_row'}] cli 2
+new_finite_leaf {} ['fill:campaigns/gamma/gross_energy_j']
+new_nonfinite_leaf {} ['fill:campaigns/gamma/gross_energy_j'] None [{'code': 'nonfinite_value_read_as_null', 'source': 'l9:outputs/0000000000000000000000000000000000000000000000000000000000000000-results-fill-input.json', 'count': 1, 'paths': ['campaigns/gamma/gross_energy_j']}] cli 2
+assist_recompute_only ({'count': 1, 'routing_id': 1}, [{'family': 'routing_id', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': None, 'recompute': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'verdict': 'DISAGREE', 'reason': 'missing_or_null', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast']}, {'family': 'count', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': None, 'recompute': 3, 'verdict': 'DISAGREE', 'reason': 'missing_or_null', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast', 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat']}])
+assist_stratum_present ({'count': 1}, [{'family': 'routing_id', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'recompute': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'verdict': 'AGREE', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast']}, {'family': 'count', 'key': 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat', 'l9': 0, 'recompute': 3, 'difference': 3, 'bar': 0.0, 'verdict': 'DISAGREE', 'items': ['disclosure/contrasts/ctr-demo/battery_assist_contrast', 'disclosure/ctr-demo/battery_assist_contrast/assist_members/repeat']}])
+PROCESS_EXIT 0
+
+PRIOR opus-rev probe_comparator.py sha256=b0094abbaa03503327d4671fb24e296dd17fcb055ad50473d4339d601289e3ad
+baseline: exit0=True fails={} unmapped=[]
+baseline, shipped COVERAGE: exit0=True fails={} unmapped=[]
+P1 fill swaps two contrasts' estimates (test RULES): exit0=False fails={} unmapped=['fill:gamma/contrasts/*/estimate']
+P1b same, shipped COVERAGE rules: exit0=False fails={} unmapped=['fill:gamma/contrasts/*/estimate']
+P2 fill prints another field's value (s_d) as the estimate, COVERAGE: exit0=False fails={} unmapped=['fill:gamma/contrasts/*/estimate']
+P3 fill outcome words 'L1' and null (truth not_resolvable), COVERAGE: exit0=False fails={} unmapped=['fill:gamma/contrasts/*/claim_evaluation/outcome']
+P4 contrast present on the recompute side only: exit0=False fails={'floor_gate_j': 3, 'contrast_j': 8, 'contrast_p': 3, 'count': 2, 'outcome_word': 4, 'holm_order': 1, 'kept_units': 1, 'routing_id': 1} unmapped=[]
+P5 run present on the recompute side only (no L9 rereduced file): exit0=False fails={'run_phase_energy_j': 3, 'routing_id': 1} unmapped=[]
+P6 L9 extraction report with no cells (recompute has floors): exit0=False fails={'floor_j': 24, 'count': 4, 'p42_status': 1, 'routing_id': 2} unmapped=[]
+P7 meter line on recompute + harvest record, none in L9 disclosure, --harvest-meter given: REFUSED bars_family_missing:rho
+P8 per-key override absolute=Infinity accepted by load_bars (planted D_j=1e9): REFUSED bars_invalid:contrast_j
+P8b per-key override printed_decimals=-9 accepted (planted D_j=1e8): REFUSED bars_invalid:contrast_j
+P8c control: family-level Infinity: REFUSED bars_invalid:contrast_j
+P9 exact(): L9 True vs recompute 1 / 1.0: exit0=False fails={'outcome_word': 2} unmapped=[]
+P10 NaN on the recompute side (run() level): exit0=False fails={'contrast_j': 1} unmapped=[]
+P11 numeric family absent from bar file: REFUSED bars_family_missing:count
+P12 energy leaves under window_lines/*, fill:campaigns/*, fill:characterization/* (COVERAGE): exit0=False fails={'meter_j': 1, 'machine_j': 2, 'rho': 1, 'routing_id': 1} unmapped=['disclosure:window_lines/alpha/machine_member/meter_energy_j', 'disclosure:window_lines/alpha/machine_member/values/rho', 'fill:campaigns/gamma/gross_energy_j', 'fill:characterization/delta_j']
+PROCESS_EXIT 0
+
+PRIOR opus-rev probe_meter_fit.py sha256=2ce346f86d75153608104152fccff78c60d9b5764ef37f87de8ecf2e386faae5
+A offset=0e+00ns: max|host diff|=0 ns; seeds >1ns or refused: 0 []
+A offset=1e+15ns: max|host diff|=0 ns; seeds >1ns or refused: 0 []
+A offset=4e+15ns: max|host diff|=0 ns; seeds >1ns or refused: 0 []
+B planted near-ties: 0 streams with |host diff| > 1 ns
+B hits by base: {} of 200 streams per base
+B with relative coordinates in the recompute fit: 0 of 0 still differ by > 1 ns
+PROCESS_EXIT 0
+
+PRIOR opus-rev probe_streams.py sha256=d4cab270c7464297c807c79134535b3998d862ae2766d2ce67aca472b4a50dbb
+ADAPTATION checkout ROOT only; probe logic unchanged
+recompute: exit=0 decimal_tokens_on_streams=[] l9_or_parser_touched=[]
+   stdout: sha256=53a7053f43ddc0ad186041da6a4a8cef6acd92c13dcbf4596cb7da47064a1b85 python=3.13.18 flags={"exclusions_rederivation_unavailable":1} exclusions_rederivation={"ALPHA":"not_computed"} comparison={"compared_runs":69,"not_compared_by_reason":{},"not_compared_runs":0} comparison_stopped=false
+   stderr: 
+recompute-exception: exit=2 decimal_tokens_on_streams=[] l9_or_parser_touched=[]
+   stdout: 
+   stderr: error: internal ValueError
+comparator: exit=2 decimal_tokens_on_streams=['7e322'] l9_or_parser_touched=[]
+   stdout: bar_set=b5_release_recompute_coded_7e322b76 families={"b_op_s":{"fail":0,"pass":14},"battery_term":{"fail":0,"pass":0},"contrast_j":{"fail":0,"pass":16},"contrast_p":{"fail":0,"pass":6},"count":{"fail":0,"pass":19},"descriptive_ratio":{"fail":0,"pass":3},"dominance_branch":{"fail":0,"pass":1},"dominance_ratio":{"fail":0,"pass":1},"exclusions_rederivation":{"fail":0,"pass":3},"floor_gate_j":{"fail"
+   stderr: refused=step11_unmapped_fill
+comparator-l9-nan: exit=2 decimal_tokens_on_streams=['7e322'] l9_or_parser_touched=[]
+   stdout: bar_set=b5_release_recompute_coded_7e322b76 families={"b_op_s":{"fail":0,"pass":14},"battery_term":{"fail":0,"pass":0},"contrast_j":{"fail":1,"pass":15},"contrast_p":{"fail":0,"pass":6},"count":{"fail":0,"pass":19},"descriptive_ratio":{"fail":0,"pass":3},"dominance_branch":{"fail":0,"pass":1},"dominance_ratio":{"fail":0,"pass":1},"exclusions_rederivation":{"fail":0,"pass":3},"floor_gate_j":{"fail"
+   stderr: refused=step11_unmapped_fill
+restricted written for NaN case: True
+PROCESS_EXIT 0
+
+PRIOR opus-rev-2 probe_delta.py sha256=669b58585a1e5e9286c08493610d511dedb0a4416c3b2b09a8d30fab3b4f30ef
+N0 baseline: exit=0 stderr='' fails={} unbound=[] flags=[]
+N1a control: number under fill:campaigns catch-all: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[] flags=[]
+N1b NaN under fill:campaigns catch-all: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+N1c Infinity printed as a J contrast's j_per_token: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[('fill:gamma/contrasts/*/j_per_token', 'value_differs')] flags=['nonfinite_value_read_as_null']
+N1d NaN under an uncovered-by-name rule: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[] flags=['nonfinite_value_read_as_null']
+    uncovered_numeric lists it: True leaf report: uncovered-by-name:registered c
+N2 duplicated row keys: []
+N2a ratio line prints the floor cell's n=9 (ratio n is 7 on both sides): exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:block_lines/dominance_ratio/n', 'value_differs')] flags=[]
+N2b ratio line prints the correct ratio n=7: exit=0 stderr='' fails={} unbound=[] flags=[]
+N3 baseline meter fixture: {} []
+    L9 band: {'pack': 'alpha'}
+    recompute's own band rows: {"Qwen3-1.7B-4bit": {"n_members": 1, "rho_n": 1, "rho_median": 0.1732986735986136, "rail_delta_median_J": 18.2, "machine_delta_median_J": 105.02100000000002, "rho_min": 0.1732986735986136, "rho_max": 
+N3a recompute sets no central band, L9 prints one: {'rho': 2, 'routing_id': 1} ['disclosure:window_lines/alpha/machine_summary/central_band/lower', 'disclosure:window_lines/alpha/machine_summary/central_band/pack', 'disclosure:window_lines/alpha/machine_summary/central_band/upper']
+N3b recompute's band is BETA's, L9's is alpha's: {'rho': 2, 'routing_id': 1} ['disclosure:window_lines/alpha/machine_summary/central_band/lower', 'disclosure:window_lines/alpha/machine_summary/central_band/pack', 'disclosure:window_lines/alpha/machine_summary/central_band/upper']
+PROCESS_EXIT 0
+
+PRIOR opus-rev-2 probe_meter_adversarial.py sha256=3e93759b3a2657572f319309693e3505fd1440baef9ec6c5f36efcb9e4fde526
+int64_scale_origin_9e18: streams=60 max_host_diff_ns=0 {'same_env': 60}
+origin_2p53_plus: streams=60 max_host_diff_ns=0 {'same_env': 60}
+exact_ties_no_jitter_1e16: streams=30 max_host_diff_ns=0 {'same_env': 30}
+rtt_at_3ms_cap: streams=60 max_host_diff_ns=0 {'same_env': 60}
+n_at_63_cap: streams=40 max_host_diff_ns=0 {'same_env': 40}
+negative_rtt: streams=60 max_host_diff_ns=0 {'same_env': 60}
+rx_out_of_order: streams=60 max_host_diff_ns=0 {'same_env': 60}
+duplicated_polls: streams=40 max_host_diff_ns=0 {'same_env': 40}
+device_wrap_gaps: streams=40 max_host_diff_ns=0 {'same_env': 40}
+fallback_19_eligible: streams=60 max_host_diff_ns=0 {'same_env': 60}
+two_polls: streams=30 max_host_diff_ns=0 {'same_env': 30}
+negative_drift_ppm: streams=40 max_host_diff_ns=0 {'same_env': 40}
+PROCESS_EXIT 0
+
+PRIOR opus-rev-2 sol_probe_comparator_guarded.py sha256=40f4373bd021d21c88d7c8fe91e23f162324ad584de0c3dd2b245e6e1625cc13
+baseline {} []
+nonfinite_or_null [('None', 'DISAGREE'), ('nan', 'DISAGREE'), ('inf', 'DISAGREE'), ('-inf', 'DISAGREE')]
+missing_l9_run_output {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 0, 'fail': 3} recompute_request= 120.0
+missing_l9_run_cli 1
+extra_recompute_run {'run_phase_energy_j': 3, 'routing_id': 1} {'pass': 3, 'fail': 3}
+wrong_fill_estimate {} ['fill:gamma/contrasts/*/estimate'] None fill= -13.5 recompute= -1.25
+wrong_fill_cli 2 stderr= refused=step11_unmapped_fill
+infinite_override REFUSED bars_invalid:contrast_j
+family_absent bars_family_missing:contrast_j
+public_counts_before (0, {'fail': 0, 'pass': 3}, '')
+public_counts_after (1, {'fail': 1, 'pass': 2}, '')
+meter_baseline {} []
+wrong_machine_median {'rho': 1} ['disclosure:window_lines/alpha/machine_summary/median'] None median= 1.1732986735986135 member_rho= 0.1732986735986136
+wrong_machine_median_cli 2 stderr= refused=step11_unmapped_fill
+missing_harvest_member {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 2, 'rho': 2, 'battery_term': 1, 'routing_id': 1} {'pass': 0, 'fail': 2} disclosed_members= 2
+missing_harvest_member_cli 2
+missing_harvest_machine {'count': 4, 'meter_j': 2, 'meter_w': 1, 'machine_j': 1, 'rho': 1, 'battery_term': 1} {'pass': 0, 'fail': 2}
+no_harvest_meter {'meter_j': 1, 'rho': 1}
+PROCESS_EXIT 0
+
+SECTION attack_shapes
+NEW unknown_energy_shape=999.0 {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:campaigns/alpha/gross_energy_j"]}
+NEW unknown_energy_shape='999.0' {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW unknown_energy_shape=True {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW unknown_energy_shape=None {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:campaigns/alpha/gross_energy_j"]}
+NEW unknown_energy_shape=[999.0] {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:campaigns/alpha/gross_energy_j/*"]}
+NEW unknown_energy_shape=[['999.0']] {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW unknown_energy_shape=[[999.0]] {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:campaigns/alpha/gross_energy_j/*/*"]}
+NEW unknown_energy_shape=[] {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW unknown_energy_shape={} {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW registered_estimate_shape='-1.25' {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "fill:gamma/contrasts/*/estimate", "reason": "value_differs"}], "unmapped": ["fill:gamma/contrasts/*/estimate"]}
+NEW registered_estimate_shape=True {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "fill:gamma/contrasts/*/estimate", "reason": "value_differs"}], "unmapped": ["fill:gamma/contrasts/*/estimate"]}
+NEW registered_estimate_shape=[-1.25] {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:gamma/contrasts/*/estimate/*"]}
+NEW registered_estimate_shape=[[-1.25]] {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:gamma/contrasts/*/estimate/*/*"]}
+NEW registered_estimate_shape={} {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "fill:gamma/contrasts/*/estimate", "reason": "value_differs"}], "unmapped": ["fill:gamma/contrasts/*/estimate"]}
+NEW registered_estimate_shape=[] {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "fill:gamma/contrasts/*/estimate", "reason": "value_differs"}], "unmapped": ["fill:gamma/contrasts/*/estimate"]}
+NEW named_broad_subtree=point_floor_diagnostics {"exit": 0, "fails": {}, "named": ["fill:gamma/contrasts/*/floor/point_floor_diagnostics/active_floor_j"], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW named_broad_subtree=single_count_discipline {"exit": 0, "fails": {}, "named": ["fill:gamma/contrasts/*/floor/single_count_discipline/estimate"], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW registered_null_shape=None {"exit": 0, "fails": {}, "named": ["fill:gamma/contrasts/*/j_per_token"], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW registered_null_shape=999.0 {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "fill:gamma/contrasts/*/j_per_token", "reason": "value_differs"}], "unmapped": ["fill:gamma/contrasts/*/j_per_token"]}
+NEW registered_null_shape={'estimate': 999.0} {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:gamma/contrasts/*/j_per_token/estimate"]}
+NEW registered_null_shape=[999.0] {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [], "unmapped": ["fill:gamma/contrasts/*/j_per_token/*"]}
+
+SECTION attack_nested_identity
+NEW wrong_decode_disclosure_estimate_control {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "disclosure:contrasts/primary_contrast/estimator/estimate", "reason": "value_differs"}], "unmapped": ["disclosure:contrasts/primary_contrast/estimator/estimate"]}
+NEW nested_estimator_contrast_id_redirects_wrong_decode_estimate {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NESTED_ID_COVERAGE {'disclosure:contrasts/primary_contrast/contrast_id': "uncovered:identity, label or provenance (ids, digests, pins, stage names); bound by L9's record, not a computed quantity", 'disclosure:contrasts/primary_contrast/estimator/contrast_id': 'routing_id', 'disclosure:contrasts/primary_contrast/estimator/estimate': 'contrast_j', 'disclosure:contrasts/primary_contrast/line': 'uncovered:rendered text and labels; checked against issued values by the post-release reader (synthesis 2(b)(iii))'}
+NEW nested_identity_counterfactual_no_shadow {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "contrast_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j", "path": "disclosure:contrasts/primary_contrast/estimator/estimate", "reason": "value_differs"}], "unmapped": ["disclosure:contrasts/primary_contrast/estimator/estimate"]}
+
+SECTION attack_duplicates
+RAW duplicate_json_estimate_bad_first exit 0 stderr  fails {} unmapped []
+RAW duplicate_json_estimate_bad_last exit 2 stderr refused=step11_unmapped_fill fails {} unmapped ['fill:gamma/contrasts/*/estimate']
+RAW duplicate_json_nan_discarded exit 0 stderr  fails {} unmapped []
+KEY_SPACE cross_family [('contrast_j', 'same-key', 'AGREE'), ('floor_j', 'same-key', 'AGREE')]
+KEY_SPACE same_family_refusal row_key_duplicated:floor_j
+
+SECTION attack_collections_and_ast
+NEW projection_p42_present {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW projection_p42_omitted {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+ONE_SIDED_P42 row_counts {'pass': 4, 'fail': 0} {'pass': 5, 'fail': 0}
+
+SECTION ast_guard_scope
+AST iterable_allowed [(k, v) for k, v in a.items()] False
+AST iterable_allowed c.pairs('x/', a, b) True
+AST iterable_allowed zip(('only',), a.values()) False
+AST iterable_allowed [('x', row.get('items'))] True
+AST helpers_uninspected ['same', 'get', 'bar_spec_valid', 'load_bars', 'family_spec', 'scrub', 'items', 'keyed', 'rereduced_names', 'selected_runs', 'floor_kind', 'p42_word', 'our_ratios', 'holm_order', 'contrast_floor_part', 'kept_blocks', 'unit_list', 'our_units', 'refused_p42', 'any_finite', 'labelled', 'by_pack', 'our_sensitivity_reported', 'pack_of_model', 'pack_of_cell', 'our_cell_lines', 'our_contrast_lines', 'magnitude_rows', 'window_line_names', 'our_neg8', 'plausible_rho', 'model_groups', 'machine_summary', 'checked_models', 'load_meter_records', 'leaves', 'binding', 'key_for', 'coverage', 'run', 'main']
+AST direct_hidden_comprehension caught
+
+SECTION ast_counterfactuals
+AST_MUTANT one_sided_while both_AST_gates=PASS
+AST_MUTANT_ROWS one_sided_while [('ALPHA', 'AGREE')] BETA/GAMMA absent
+AST_MUTANT helper_drops_all_selected_runs both_AST_gates=PASS
+AST_MUTANT_ROWS helper_drops_all_selected_runs {}
+
+SECTION clean_variants
+NEW clean_baseline {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW clean_keyed_lists_reordered {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW clean_registered_null {"exit": 0, "fails": {}, "named": ["fill:gamma/contrasts/*/j_per_token"], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW clean_v3_arms {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW v3_arms_reordered {"exit": 2, "fails": {"floor_gate_j": 2, "routing_id": 4}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/arm_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/arm_id", "reason": "row_disagrees"}, {"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/1/arm_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/arm_id", "reason": "row_disagrees"}, {"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "reason": "row_disagrees"}, {"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/1/condition_family_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "reason": "row_disagrees"}, {"family": "floor_gate_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/floor_gate_j", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "reason": "row_disagrees"}, {"family": "floor_gate_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/1/floor_gate_j", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "reason": "row_disagrees"}], "unmapped": ["fill:gamma/contrasts/*/floor/arm_gates/*/arm_id", "fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j"]}
+NEW clean_raw_floor_cell_id {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW bad_raw_floor_cell_id {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "floor_j", "key": "None", "path": "disclosure:floors/floor_composition/guarded_j", "reason": "key_unresolved"}], "unmapped": ["disclosure:floors/floor_composition/guarded_j"]}
+NEW bad_raw_floor_cell_id_prefix {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+RAW_ID_COVERAGE routing_id
+ALL_PROBES_COMPLETED
+NEW clean_registered_null_direction {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+CLEAN_MODEL_ALIAS qwen3-1p7b fails {} unbound [] routing [('machine_summary/alpha/qwen3-1p7b', 'AGREE'), ('machine_summary/alpha/qwen3-1p7b/central_band/pack', 'AGREE')]
+CLEAN_MODEL_ALIAS Qwen3-1.7B-4bit fails {'rho': 16, 'routing_id': 4} unbound [{'path': 'disclosure:window_lines/alpha/machine_summary/central_band/lower', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/central_band/lower', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/central_band/pack', 'family': 'routing_id', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/central_band/pack', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/central_band/upper', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/central_band/upper', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/maximum', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/maximum', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/median', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/median', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/minimum', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/minimum', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/q25', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/q25', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/q75', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/q75', 'reason': 'row_disagrees'}, {'path': 'disclosure:window_lines/alpha/machine_summary/spread', 'family': 'rho', 'key': 'machine_summary/alpha/Qwen3-1.7B-4bit/spread', 'reason': 'row_disagrees'}] routing [('machine_summary/alpha/Qwen3-1.7B-4bit', 'DISAGREE'), ('machine_summary/alpha/Qwen3-1.7B-4bit/central_band/pack', 'DISAGREE'), ('machine_summary/alpha/qwen3-1p7b', 'DISAGREE'), ('machine_summary/alpha/qwen3-1p7b/central_band/pack', 'DISAGREE')]
+NEW clean_v3_arms {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW v3_arms_reordered {"exit": 2, "fails": {"floor_gate_j": 2, "routing_id": 4}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/arm_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/arm_id", "reason": "row_disagrees"}, {"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/1/arm_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/arm_id", "reason": "row_disagrees"}, {"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/condition_family_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "reason": "row_disagrees"}, {"family": "routing_id", "key": "contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/1/condition_family_id", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "reason": "row_disagrees"}, {"family": "floor_gate_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/0/floor_gate_j", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "reason": "row_disagrees"}, {"family": "floor_gate_j", "key": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/arm/1/floor_gate_j", "path": "fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "reason": "row_disagrees"}], "unmapped": ["fill:gamma/contrasts/*/floor/arm_gates/*/arm_id", "fill:gamma/contrasts/*/floor/arm_gates/*/condition_family_id", "fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j"]}
+NEW clean_raw_floor_cell_id {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+NEW bad_raw_floor_cell_id {"exit": 2, "fails": {}, "named": [], "refused": null, "stderr": "refused=step11_unmapped_fill", "unbound": [{"family": "floor_j", "key": "None", "path": "disclosure:floors/floor_composition/guarded_j", "reason": "key_unresolved"}], "unmapped": ["disclosure:floors/floor_composition/guarded_j"]}
+NEW bad_raw_floor_cell_id_prefix {"exit": 0, "fails": {}, "named": [], "refused": null, "stderr": "", "unbound": [], "unmapped": []}
+RAW_ID_COVERAGE routing_id
+EXTRA_COMPLETED
+RC_CMP5_NAMED_COUNTERFACTUAL e5ccf720b {"tests": 27, "failures": 23, "errors": 3, "skipped": 0}
+COUNTERFACTUAL_NONPASS_TESTS ['tests.independent_recompute.test_structural_rules.CentralBandTests.test_band_on_the_recompute_side_only_disagrees', 'tests.independent_recompute.test_structural_rules.CentralBandTests.test_band_pack_is_compared', 'tests.independent_recompute.test_structural_rules.CentralBandTests.test_recompute_band_from_another_window_opus_n3b', 'tests.independent_recompute.test_structural_rules.CentralBandTests.test_recompute_sets_no_band_l9_prints_one_opus_n3a', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_a_contrast_on_l9s_side_only_routes_no_coverage', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_a_resolution_printing_the_other_arms_source_and_values_refuses', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_a_wrong_condition_id_alone_disagrees', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_beta_gate_printed_with_alphas_condition_and_value_refuses_sol2', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_gates_out_of_registered_order_disagree', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_identity_fields_that_route_are_compared', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_sol2_probe_gate_in_the_fill_only_refuses', 'tests.independent_recompute.test_structural_rules.IndependentBindingTests.test_v3_floor_binds_by_position_and_compares_its_ids', 'tests.independent_recompute.test_structural_rules.NumbersDeniedByDefaultTests.test_infinity_printed_as_a_j_per_token_refuses_opus_n1c', 'tests.independent_recompute.test_structural_rules.NumbersDeniedByDefaultTests.test_nan_under_an_uncovered_by_name_rule_is_listed_and_refuses_opus_n1d', 'tests.independent_recompute.test_structural_rules.NumbersDeniedByDefaultTests.test_nan_under_the_identity_catch_all_refuses_sol1_opus_n1b', 'tests.independent_recompute.test_structural_rules.NumbersDeniedByDefaultTests.test_null_is_numeric_class_and_no_uncovered_rule_takes_it', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_assist_members_compare_the_union_of_strata_sol3', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_cell_assist_members_compare_the_union_of_strata', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_ratio_rows_have_their_own_key_space_opus_n2', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_two_leaves_binding_one_row_refuse', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_two_rows_under_one_key_refuse', 'tests.independent_recompute.test_structural_rules.StructureTests.test_family_functions_iterate_only_through_the_union_helper', 'tests.independent_recompute.test_structural_rules.StructureTests.test_rows_are_built_only_in_family_functions', 'tests.independent_recompute.test_structural_rules.NumbersDeniedByDefaultTests.test_a_registered_null_is_named_and_listed', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_loo_magnitude_rows_are_the_union_of_both_selections', 'tests.independent_recompute.test_structural_rules.OneKeySpaceTests.test_two_l9_items_under_one_key_refuse']
+COUNTERFACTUAL_COMPLETED
