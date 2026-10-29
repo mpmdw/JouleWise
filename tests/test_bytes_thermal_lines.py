@@ -437,10 +437,16 @@ class ReviewerRealChainTests(unittest.TestCase):
             def inside(win):
                 path, rows = journal_rows(win)
                 start, end = w.request_span_ns(first)
-                hit = next(r for r in rows if start < r["finished"]["monotonic_ns"] < end) if any(
-                    start < r["finished"]["monotonic_ns"] < end for r in rows) else next(
-                    r for r in rows if r["finished"]["monotonic_ns"] >= end)
+                hit = json.loads(json.dumps(rows[0]))
+                stamp = (start + end) // 2
+                assert start < stamp < end
+                hit["finished"]["monotonic_ns"] = stamp
+                hit["started"]["monotonic_ns"] = stamp - 1000
                 hit["values"]["level"] = 2
+                rows.append(hit)
+                rows.sort(key=lambda row: row["finished"]["monotonic_ns"])
+                for seq, row in enumerate(rows, 1):
+                    row["seq"] = seq
                 put_rows(path, rows)
             wi1, _ = c.archive(1, "in1", inside)
             wi2, _ = c.archive(2, "in2", inside)
