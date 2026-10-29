@@ -202,7 +202,7 @@ def input_value(value, schema, path):
         return result, None
     kind, limit = schema
     if kind == "native":
-        spec, start, end = limit
+        spec, start = limit
         rows, error = input_value(value, spec, path)
         if error:
             return None, error
@@ -211,9 +211,7 @@ def input_value(value, schema, path):
         for i, row in enumerate(rows):
             v = row[stamp]
             if ((previous is not None and v < previous) or
-                    (start is not None and end is not None and
-                     ((stamp == "stamp_ns" and not start <= v < end) or
-                      (stamp == "start_ns" and v == 0 and start > 0)))):
+                    (start is not None and v == 0 and start > 0)):
                 return None, f"{path}[{i}].{stamp} invalid time order"
             previous = v
         return rows, None
@@ -415,7 +413,10 @@ def not_defined(reason):
 
 def idle_statistics(rows, start_ns, end_ns, stream):
     try:
-        return _idle_statistics(rows, start_ns, end_ns, stream)
+        result = _idle_statistics(rows, start_ns, end_ns, stream)
+        if any(not finite_number(result[key]) for key in ("mean_w", "variance_w2") if key in result):
+            raise ValueError("non-finite idle mean or variance")
+        return result
     except (OverflowError, ValueError) as exc:
         return {"reason": stream+" idle arithmetic unavailable: "+str(exc), "sample_count":len(rows)}
 
@@ -669,13 +670,14 @@ def read_known_bytes(records, scan):
         for span in ("pre", "post"):
             block = take(idle.get(span, ABSENT), {}, path+".harvest.idle."+span, names, errors, {})
             h["idle"][span] = {k: take(block.get(k, ABSENT), ("native", (spec,
-                r.get("idle_"+span+"_start_ns"), r.get("idle_"+span+"_end_ns"))),
+                r.get("idle_"+span+"_start_ns"))),
                 path+".harvest.idle."+span+"."+k, ("dc",) if k in ("meter","battery") else (k,), errors, [])
                 for k, spec in NATIVE_INPUTS.items()}
         for key, spec, betas in (("tau_s",NONNEG,names), ("r_max_s",NONNEG,("dc",)),
             ("meter_edge_w",EDGES,("dc",)), ("battery_edge_j",("signed_edges", 2),("dc",)),
             ("anchor_shift_j",NONNEG,("rails","gpu")),
-            ("battery_samples",NATIVE_INPUTS["battery"],("dc",))):
+            ("battery_samples",("native", (NATIVE_INPUTS["battery"],
+                r.get("idle_pre_start_ns"))),("dc",))):
             h[key] = take(h.get(key, ABSENT), spec, path+".harvest."+key, betas, errors,
                           [] if key == "battery_samples" else None)
         gaps = h.get("meter_gaps", ABSENT)

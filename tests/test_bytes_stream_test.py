@@ -370,6 +370,15 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
         # Bit-identity: the same estimator receives the identical native inputs.
         self.assertEqual(b['variance_w2'],expected)
 
+    def test_idle_arithmetic_overflow_is_reasoned(self):
+        for stream in ('meter','rails'):
+            rows = [dict({'stamp_ns':i*14_400_000_000} if stream == 'meter' else
+                         {'start_ns':i*14_400_000_000,'end_ns':(i+1)*14_400_000_000},
+                         power_w=1e308) for i in range(4)]
+            result = probe.idle_statistics(rows,0,57_600_000_000,stream)
+            self.assertIn('arithmetic unavailable',result['reason'])
+            self.assertNotIn('mean_w',result)
+
     def test_revised_worked_energy_publication_digits_and_bounded_gap(self):
         # Recompute §3 directly from §5 input ratios. Compare publication
         # strings; these are rounding properties, not new acceptance bars.
@@ -619,7 +628,7 @@ class ReaderTests(unittest.TestCase):
                 modes.append('negative')
             receipt_order = ('idle_pre_start_ns','idle_pre_end_ns','start_ns','end_ns','idle_post_start_ns','idle_post_end_ns')
             if (path[0] == 'receipt' and path[-1] in receipt_order[1:] or
-                    'idle' in path and path[-1] in ('end_ns','stamp_ns')):
+                    'idle' in path and path[-1] == 'end_ns' or path[-1] == 'stamp_ns'):
                 modes.append('order')
             for mode in modes:
                 with self.subTest(path=path, mode=mode):
@@ -721,12 +730,6 @@ class ReaderTests(unittest.TestCase):
                 self.assertEqual(result['status'],'knee not found')
                 self.assertIn(path,result['reason'])
                 json.dumps(result, allow_nan=False)
-
-    def test_idle_arithmetic_overflow_is_reasoned(self):
-        rows = [{'stamp_ns':i*14_400_000_000,'power_w':1e308} for i in range(4)]
-        result = probe.idle_statistics(rows,0,57_600_000_000,'meter')
-        self.assertIn('arithmetic unavailable',result['reason'])
-        self.assertNotIn('mean_w',result)
 
     def test_lost_calls_preserve_other_arm_reductions(self):
         for i in range(8):
