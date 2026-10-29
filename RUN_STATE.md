@@ -511,6 +511,16 @@ Differences from the brief, added to the eight of the block below:
 
 117. **PR #601 merged; attempt B passes the step-5 containment check (reported by joulewise-28, 2026-10-29 ~22:30Z).** PR #601 (`lane/2026-10-29-l9-census-path`, head `0d2ff6404`: L9-PATHTOKEN-1 plus L9-STEP4-1) was merged by joulewise-28 with a merge commit, giving main `6bf1c72f0`. CI at `0d2ff6404`: all 12 test shards, quick, fences, build, wheel and the calibration matrices green; gate-ledger passed (full tier). Reviews: PATHTOKEN Opus ACCEPT and Fable ACCEPT; STEP4 Opus and Fable ACCEPT_WITH_FIXES, all fixes applied (`d27c562f6`, `0d2ff6404`); dispositions in the PR body. **Attempt B (`dry-d`, at `d27c562f6`):** that commit is contained in `origin/main`, and its checkout's refs show it with a clean tree, so step 5's `require_origin_main` check will pass. No action is needed before step 5.
 
+118. **RC-CMP-8 done; its delta reviews launched (reported by joulewise-28, 2026-10-29 22:35-22:36Z).** RC-CMP-8 DONE at `0d317afd4` (`lane/2026-10-27-recompute-comparator`), 330 tests OK. It closes Opus F1-F5 and Fable F1-F2 of RC-CMP-7:
+- `claim_ready_for_l2_l3` and `claim_usable` are compared;
+- `hypothesized_direction`, `claim_role`, `confirmatory_status` and the manifest words are compared literally;
+- the by-construction booleans are checked against True, and the fixed status words against the producer's rules;
+- claim lines must carry their required key sets;
+- `neg8_screen` and `below_screen_bound` rows are paired per registered pack;
+- a producer-shaped sensitivity fixture catches all 48 flips.
+
+Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta reviews of `c372211bf..0d317afd4`: Opus `trig_013eEyFd8PHq7RhwqyDew8iz` -> `review/2026-10-29-rc-cmp8-opus-rev`, Fable `trig_01QT53CyhjPm9vwjv8ZfZPaQ` -> `review/2026-10-29-rc-cmp8-fable-rev`, MCP cleared. Both include item 116's sweep: a table of every row constructor with its key source, and a drop and a relabel probe for each output-derived one. Fable is also asked whether the design is now closed against the class or needs the recompute-driven walk.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
