@@ -1,0 +1,87 @@
+# RC-CMP-FABLE-CONSULT prototype gate on the lane fixtures (synthetic only)
+
+## A. Controls (the gate must accept what L9 writes)
+A1 baseline fixture, canonical bytes
+    gate=accepted
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate accept: OK
+A2 registered null (j_per_token) on a J contrast
+    gate=accepted
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate accept: OK
+A3 keyed lists in the other order (list order is content, still canonical)
+    gate=accepted
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate accept: OK
+A4 v3 floor with arm gates and resolutions (attributes, not identities)
+    gate=accepted
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate accept: OK
+A5 refused arm gate printed null on both sides (Opus Q6; the comparator's refusal is a ruling, not the gate's)
+    gate=accepted
+    comparator alone: exit=2 stderr='refused=step11_unmapped_fill' fails={'floor_gate_j': 3} unbound=[('fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j', 'row_disagrees'), ('fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j', 'row_disagrees')]
+    expected gate accept: OK
+A6 a band's pack is a declared attribute (ATTRIBUTES), accepted by G2; no meter in this fixture so the comparator refuses
+    gate=accepted
+    comparator alone: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:window_lines/alpha/machine_summary/central_band/lower', 'no_row'), ('disclosure:window_lines/alpha/machine_summary/central_band/pack', 'no_row'), ('disclosure:window_lines/alpha/machine_summary/central_band/upper', 'no_row')]
+    expected gate accept: OK
+A7 floor_composition line with the registered absolute cell id
+    gate=accepted
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate accept: OK
+A8 floor_composition line with the REGISTERED comparative spelling (extraction_spec.json): the gate accepts; the comparator's suffix parser (floor_kind) cannot resolve it
+    gate=accepted
+    comparator alone: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('disclosure:floors/floor_composition/guarded_j', 'key_unresolved')]
+    expected gate accept: OK
+
+## B. Round-3 witnesses (a wrong printed number passed the comparator with exit 0)
+B1 Opus F1 / Q3c: floors swapped, each floor object naming the other contrast
+    gate=REFUSED identity_field_misplaced:gamma/contrasts/*/floor/contrast_id
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+B2 Sol 1: a decode primary_contrast line printing prefill's estimate, re-routed by a nested contrast_id
+    gate=REFUSED identity_field_misplaced:contrasts/*/estimator/contrast_id
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+B3 Opus F2 / Sol 2: duplicate member, wrong value first, agreeing value last
+    gate=REFUSED l9_output_duplicate_key:estimate
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+B4 Sol 2: duplicate member, agreeing value first, wrong value last (the comparator already refuses this one)
+    gate=REFUSED l9_output_duplicate_key:estimate
+    comparator alone: exit=2 stderr='refused=step11_unmapped_fill' fails={} unbound=[('fill:gamma/contrasts/*/estimate', 'value_differs')]
+    expected gate refuse: OK
+B5 Sol 2: NaN erased by a later duplicate member
+    gate=REFUSED l9_output_nonfinite:NaN
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+B6 a lone NaN (today read as null and flagged; the gate refuses at load)
+    gate=REFUSED l9_output_nonfinite:NaN
+    comparator alone: exit=2 stderr='refused=step11_nonfinite_value' fails={} unbound=[('fill:gamma/contrasts/*/estimate', 'value_differs')]
+    expected gate refuse: OK
+B7 Sol 3: a typo'd cell_id that substring parsing still routes
+    gate=REFUSED routing_id_unregistered:floors/*/cell_id:TYPO-d117-df-ph-decode-qwen3-1p7b-absolute
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+
+## C. Shapes no producer emits, refused at the shape
+C1 a nested object repeating its owner's own contrast_id (harmless today, refused by G2)
+    gate=REFUSED identity_field_misplaced:gamma/contrasts/*/floor/contrast_id
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+C2 the same fill pretty-printed by another writer
+    gate=REFUSED l9_output_not_canonical
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+C3 keys out of sorted order
+    gate=REFUSED l9_output_not_canonical
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+C4 a number spelled 1E0 (L9's writer spells 1.0)
+    gate=REFUSED l9_output_not_canonical
+    comparator alone: exit=0 stderr='' fails={} unbound=[]
+    expected gate refuse: OK
+
+## D. The fill's exact field set, from the producer (results_fill_adapter.adapt_claim_verdicts)
+    adapter row keys: 24; fixture row keys: ['contrast_id', 'estimate', 'n']
+    an exact-key schema refuses the lane's own fixture: missing 21 keys (the only real-shaped data is the full-size synthetic dry run, RC-CMP-4)
