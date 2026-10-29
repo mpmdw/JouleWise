@@ -27,11 +27,11 @@ SCRIPT = ROOT / "scripts/compare_b5_recompute.py"
 class NumbersDeniedByDefaultTests(Case):
     """S1 (Sol finding 1, Opus N1)."""
     def assert_nonfinite_refusal(self, leaf):
+        # RC-CMP-6 G1: a NaN or Infinity in a step-11 output refuses at the load, before coverage reads it
+        # (RC-CMP-5 refused it at coverage as step11_nonfinite_value).
         code, err, out = self.exit_code(CODED)
-        self.assertEqual((code, err), (2, "refused=step11_nonfinite_value\n"))
-        self.assertEqual(out["coverage"]["nonfinite"], ["fill:" + leaf])
-        flag = next(f for f in out["structure_flags"] if f["source"] == "l9:" + FILL)
-        self.assertEqual(flag["paths"], [leaf])
+        self.assertEqual((code, err, out), (2, "refused=l9_output_nonfinite:fill\n",
+                                            {"schema": cmp.SCHEMA, "refused": "l9_output_nonfinite:fill"}))
         return out
 
     def test_nan_under_the_identity_catch_all_refuses_sol1_opus_n1b(self):
@@ -39,28 +39,25 @@ class NumbersDeniedByDefaultTests(Case):
         field["gross_energy_j"] = 123.0
         self.assertIn("fill:campaigns/gamma/gross_energy_j", self.shipped()["coverage"]["unmapped"])
         field["gross_energy_j"] = float("nan")
-        out = self.assert_nonfinite_refusal("campaigns/gamma/gross_energy_j")
-        # Numeric-class: the catch-all does not take it, so it is unmapped as well.
-        self.assertIn("fill:campaigns/gamma/gross_energy_j", out["coverage"]["unmapped"])
-        self.assertNotIn("fill:campaigns/gamma/gross_energy_j", out["coverage"]["leaves"])
+        self.assert_nonfinite_refusal("campaigns/gamma/gross_energy_j")
 
     def test_infinity_printed_as_a_j_per_token_refuses_opus_n1c(self):
         self.files[FILL]["gamma"]["contrasts"][0]["j_per_token"] = float("inf")
         self.assert_nonfinite_refusal("gamma/contrasts/*/j_per_token")
 
     def test_nan_under_an_uncovered_by_name_rule_is_listed_and_refuses_opus_n1d(self):
+        self.assertIn("fill:gamma/contrasts/*/sampling/planned_n", self.shipped()["coverage"]["uncovered_numeric"])
         self.files[FILL]["gamma"]["contrasts"][0]["sampling"] = {"planned_n": float("nan")}
-        out = self.assert_nonfinite_refusal("gamma/contrasts/*/sampling/planned_n")
-        self.assertIn("fill:gamma/contrasts/*/sampling/planned_n", out["coverage"]["uncovered_numeric"])
+        self.assert_nonfinite_refusal("gamma/contrasts/*/sampling/planned_n")
 
     def test_null_is_numeric_class_and_no_uncovered_rule_takes_it(self):
-        self.files[FILL]["campaigns"] = {"alpha": {"path": None}}
+        self.files[FILL]["campaigns"]["alpha"]["plan_id"] = None
         result = self.shipped()
-        self.assertIn("fill:campaigns/alpha/path", result["coverage"]["unmapped"])
+        self.assertIn("fill:campaigns/alpha/plan_id", result["coverage"]["unmapped"])
         self.assertEqual(result["coverage"]["nonfinite"], [])
         self.assertEqual(self.exit_code(CODED)[:2], (2, "refused=step11_unmapped_fill\n"))
-        # A string at the same path is a word: the catch-all takes it.
-        self.files[FILL]["campaigns"] = {"alpha": {"path": "a.json"}}
+        # A string at the same path is a word: the identity rule takes it.
+        self.files[FILL]["campaigns"]["alpha"]["plan_id"] = "plan-alpha"
         self.assertEqual(self.shipped()["coverage"]["unmapped"], [])
 
     def test_a_registered_null_is_named_and_listed(self):
@@ -95,6 +92,14 @@ def v3_floor(case):
     verdict["floor"] = floor
     fill = next(row for row in case.files[FILL]["gamma"]["contrasts"] if row["contrast_id"] == DECODE)
     fill["floor"] = copy.deepcopy(floor)
+    # The producer-shaped disclosure prints the active floor on the decision_floor line, and the
+    # minted comparative floor of BETA's decode cell on its floor_composition line.
+    for line in case.files[DISCLOSURE]["contrasts"]:
+        if line["line"] == "decision_floor" and line["contrast_id"] == DECODE:
+            line["floor_j"] = 120.0
+    for line in case.files[DISCLOSURE]["floors"]:
+        if line["line"] == "floor_composition" and line["cell_id"] == "d117-df-cmp-abba-ph-decode-qwen3-8b":
+            line["minted_j"] = 120.0
     return verdict["floor"], fill["floor"]
 
 
@@ -159,14 +164,14 @@ class IndependentBindingTests(Case):
         self.assertEqual(self.fails(self.shipped()), {"floor_gate_j": 2, "routing_id": 4})
 
     def test_a_contrast_on_l9s_side_only_routes_no_coverage(self):
-        # contrast_floor_part reads the recompute's floor cells, so this row agrees without the contrast.
+        # RC-CMP-5: contrast_floor_part read the recompute's floor cells, so this row agreed without the
+        # contrast and only its routing_id row kept it from coverage. RC-CMP-6 G3: an id the manifest does
+        # not register refuses before any row is built.
         extra = "ctr-d117-decode-extra"
         self.files[VERDICTS]["contrasts"].append({"contrast_id": extra, "floor": {"floor_abs_j": 43.0}})
         self.files[FILL]["gamma"]["contrasts"].append({"contrast_id": extra, "floor": {"floor_abs_j": 43.0}})
-        result = self.shipped()
-        row = next(r for r in result["comparisons"] if r["key"] == extra + "/floor_abs_j")
-        self.assertEqual(row["verdict"], "AGREE")
-        self.assertIn(("fill:gamma/contrasts/*/floor/floor_abs_j", "route_disagrees"), self.unbound(result))
+        with self.assertRaisesRegex(cmp.Refusal, "routing_id_unregistered:contrast"):
+            self.shipped()
 
     def test_identity_fields_that_route_are_compared(self):
         leaves = self.shipped()["coverage"]["leaves"]
@@ -210,6 +215,7 @@ class AssistCustody:
     """Sol's synthetic custody: one disclosure record and nothing else."""
     def __init__(self, record):
         self.record = record
+        self.registry = cmp.load_registry()
 
     def names(self, pattern):
         return ["disclosures/" + "0" * 64 + ".json"]

@@ -41,6 +41,14 @@ Rules (RC-CMP-1 A1-A4):
   leaf refuses the run;
 - a NaN or Infinity in an input becomes null with a structure flag naming its
   leaf paths (X7); one in a step-11 output refuses the run (S1);
+- the input gate (RC-CMP-6, from L9's own writer and registered ids). G1: a
+  step-11 output is read only if its bytes are the canonical serialisation of
+  its strict parse (L9's writer flags; no repeated member, no NaN or Infinity);
+  every other input refuses a repeated member. G2: an identity field is read
+  only on the object it names (IDENTITY_OWNERS); anywhere else refuses, and a
+  nested object never re-routes its parent's leaves. G3: every L9 id that
+  routes a binding is looked up literally in the sealed campaign configs
+  (Registry); an id they do not register refuses; no id is parsed for its parts;
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
@@ -114,7 +122,7 @@ def bar_spec_valid(spec):
 
 def load_bars(path):
     try:
-        bars = json.loads(Path(path).read_bytes())
+        bars = json.loads(Path(path).read_bytes(), object_pairs_hook=unique("bars_duplicate_key"))
     except (OSError, ValueError):
         raise Refusal("bars_unreadable") from None
     if not isinstance(bars, dict) or bars.get("schema") != BARS_SCHEMA or not isinstance(bars.get("families"), dict):
@@ -245,10 +253,44 @@ def scrub(value, path, found):
     return value
 
 
-def loads(raw, flags, source, paths=None):
-    """JSON with NaN and Infinity read as null; the flag names each such leaf path (RC-CMP-3 X7, S1)."""
+def unique(code):
+    """An object_pairs_hook: a repeated member refuses, so no reader can pick another of two values (G1)."""
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise Refusal(code)
+            result[key] = value
+        return result
+    return pairs
+
+
+def canonical(value):
+    """L9's writer: results_fill_adapter.render_results_fill_input and calibration_ledger.canonical_json_bytes."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+
+
+def strict_loads(raw, label, tail):
+    """A step-11 output (G1): the unique reading of its bytes, or a refusal naming the shape."""
+    def nonfinite(word):
+        raise Refusal("l9_output_nonfinite:" + label)
+    try:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique("l9_output_duplicate_key:" + label),
+                           parse_constant=nonfinite)
+    except (UnicodeDecodeError, ValueError):
+        raise Refusal("l9_output_unreadable") from None
+    if canonical(value) + tail != raw:
+        raise Refusal("l9_output_not_canonical:" + label)
+    return value
+
+
+def loads(raw, flags, source, paths=None, duplicate="input_duplicate_key"):
+    """JSON with NaN and Infinity read as null; the flag names each such leaf path (RC-CMP-3 X7, S1).
+
+    A repeated member refuses with the code duplicate (G1).
+    """
     found = []
-    value = scrub(json.loads(raw, parse_constant=lambda word: NONFINITE), "", found)
+    value = scrub(json.loads(raw, parse_constant=lambda word: NONFINITE, object_pairs_hook=unique(duplicate)), "", found)
     flag = {"code": "nonfinite_value_read_as_null", "source": source, "count": len(found), "paths": sorted(set(found))}
     if found and flag not in flags:
         flags.append(flag)
@@ -258,13 +300,17 @@ def loads(raw, flags, source, paths=None):
 
 
 class Custody:
-    """L9's dry-run custody: every file used must be listed in the record with its digest."""
-    def __init__(self, root, flags=None):
+    """L9's dry-run custody: every file used must be listed in the record with its digest.
+
+    A step-11 output is read through the input gate (G1-G3) before anything sees it.
+    """
+    def __init__(self, root, flags=None, registry=None):
         self.root = Path(root)
         self.restricted = self.root / RESTRICTED
         self.flags = [] if flags is None else flags
+        self.registry = load_registry() if registry is None else registry
         try:
-            self.record = json.loads((self.root / RECORD).read_bytes())
+            self.record = json.loads((self.root / RECORD).read_bytes(), object_pairs_hook=unique("l9_record_duplicate_key"))
         except (OSError, ValueError):
             raise Refusal("l9_record_unreadable") from None
         self.listed, self.status, self.nonfinite = {}, {}, {}
@@ -289,8 +335,14 @@ class Custody:
             raise Refusal("l9_output_unreadable") from None
         if hashlib.sha256(raw).hexdigest() != self.listed[name]:
             raise Refusal("l9_output_digest_differs")
+        for label, pattern in STEP11_SOURCES:
+            if re.fullmatch(pattern, name):
+                self.nonfinite.setdefault(name, set())
+                value = strict_loads(raw, label, STEP11_TAILS[label])
+                gate(value, label, self.registry)
+                return value
         try:
-            return loads(raw, self.flags, "l9:" + name, self.nonfinite.setdefault(name, set()))
+            return loads(raw, self.flags, "l9:" + name, self.nonfinite.setdefault(name, set()), "l9_output_duplicate_key")
         except ValueError:
             raise Refusal("l9_output_unreadable") from None
 
@@ -299,6 +351,192 @@ class Custody:
         if len(names) > 1:
             raise Refusal("l9_output_ambiguous")
         return self.read(names[0]) if names else None
+
+
+# The registered ids (G3): the sealed v5 campaign configs, read as data and pinned by digest
+# (the contrast campaign's plan tree binds the consumer declaration by the same digest).
+CAMPAIGNS = Path(__file__).resolve().parents[1] / "configs/campaigns"
+EXTRACTION_SPECS = {"alpha": "d117_floor_qwen3-1p7b_v5/extraction_spec.json",
+                    "beta": "d117_floor_qwen3-8b_v5/extraction_spec.json"}
+MANIFEST = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json"
+DECLARATION = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json"
+REGISTRY_PINS = {
+    EXTRACTION_SPECS["alpha"]: "a6498f56469448fd422e6ca2e0787b362a4fd6957bffab7d477ac7f30db38df6",
+    EXTRACTION_SPECS["beta"]: "2c0ee7189f9aa7e8f534be3cca3bf6f4125c23b5e7bf7ee1e600c7edf9d81ddc",
+    MANIFEST: "4342ea609ec7f57fbb21860440995ac8f2038d93ed508f8d7bb72a540c86050d",
+    DECLARATION: "2875c95356812799553614b95dfc5c3237fa396dc70c03c71a91c2a764f3e464"}
+
+
+class Registry:
+    """Each registered id and what it names, from the configs' own fields, never from the id's spelling.
+
+    extraction: a floor extraction cell (its window's model, target phase, kind, condition family);
+    reported: a reported energy cell (its window's model and target phase, and the condition family of
+      the extraction cells over the same members, which is the recompute's cell id);
+    floor: an aggregate floor cell (the consumer declaration's arm A and B cells of each phase);
+    contrast: a registered contrast (target phase; floor_selector condition family ids in [A, B] order).
+    A p42 cell is a prefill cell whose workload has 42 prompt tokens.
+    """
+    def __init__(self, root=CAMPAIGNS, pins=None):
+        pins = REGISTRY_PINS if pins is None else pins
+        self.digests, self.tables = {}, {"extraction": {}, "reported": {}, "floor": {}, "contrast": {}}
+        try:
+            for pack, name in EXTRACTION_SPECS.items():
+                spec = self.read(root, name, pins)
+                members = {}
+                for cell in spec["cells"]:
+                    phase = cell["target_precheck_path"][-1]
+                    tokens = {d["condition_family_definition"]["workload_profile"]["prompt_tokens"]
+                              for d in cell["condition_family_definitions"].values()}
+                    if cell["kind"] not in ("absolute", "comparative"):
+                        raise ValueError(cell["kind"])
+                    self.register("extraction", cell["cell_id"], pack=pack, model=MODELS[pack], phase=phase,
+                                  form=cell["kind"], family=cell["condition_family_id"], p42=phase == "prefill" and tokens == {42})
+                    members[cell["cell_id"]] = {m["bundle_id"] for m in cell["member_config_sha256"]}
+                for cell in spec["reported_energy_cells"]:
+                    phase, own = cell["target_precheck_path"][-1], {m["bundle_id"] for m in cell["members"]}
+                    over = [self.tables["extraction"][cid] for cid, ids in members.items()
+                            if self.tables["extraction"][cid]["phase"] == phase and ids <= own]
+                    (family,), (p42,) = {e["family"] for e in over}, {e["p42"] for e in over}
+                    self.register("reported", cell["cell_id"], pack=pack, model=MODELS[pack], phase=phase,
+                                  family=family, p42=p42)
+            for contrast in self.read(root, MANIFEST, pins)["contrasts"]:
+                a, b = contrast["floor_dependency"]["floor_selector"]["condition_family_ids"]
+                self.register("contrast", contrast["contrast_id"], phase=contrast["target_precheck_path"][-1],
+                              conditions=(a, b))
+            declaration = self.read(root, DECLARATION, pins)
+            decode = declaration["decode_floor_cells"]
+            for phase, (a, b) in (("decode", (decode["condition_a"], decode["condition_b"])),
+                                  ("prefill", declaration["prefill_p2048_floor_dependency"]["cell_ids"])):
+                for index, cid in enumerate((a, b)):
+                    self.register("floor", cid, pack=ARMS[index], model=MODELS[ARMS[index]], phase=phase)
+        except (KeyError, TypeError, ValueError, IndexError, AttributeError):
+            raise Refusal("routing_registry_invalid") from None
+
+    def read(self, root, name, pins):
+        try:
+            raw = (Path(root) / name).read_bytes()
+        except OSError:
+            raise Refusal("routing_registry_unreadable") from None
+        self.digests[name] = hashlib.sha256(raw).hexdigest()
+        if pins.get(name) != self.digests[name]:
+            raise Refusal("routing_registry_digest_differs")
+        return json.loads(raw, object_pairs_hook=unique("routing_registry_duplicate_key"))
+
+    def register(self, kind, cid, **entry):
+        if not isinstance(cid, str) or any(cid in table for table in self.tables.values()):
+            raise ValueError(cid)
+        if entry.get("phase", "decode") not in ("decode", "prefill"):
+            raise ValueError(entry["phase"])
+        self.tables[kind][cid] = dict(entry, kind=kind)
+
+    def entry(self, cid, *kinds):
+        """The registered entry of an L9 id, or None when no table of these kinds lists it literally."""
+        return next((self.tables[kind][cid] for kind in kinds if isinstance(cid, str) and cid in self.tables[kind]), None)
+
+    def lookup(self, cid, kinds, where, pack=None):
+        """An id that routes: registered under these kinds (and, given a window, for that window), or refuse."""
+        found = self.entry(cid, *kinds)
+        if found is None or pack is not None and found.get("pack") != pack:
+            raise Refusal("routing_id_unregistered:" + where)
+        return found
+
+    def registered(self, cid, kinds, where):
+        """A routing id, after lookup refused it unless registered."""
+        self.lookup(cid, kinds, where)
+        return cid
+
+    def families(self, pack, p42):
+        """The recompute's reported cell ids (condition families) of a window."""
+        return {e["family"] for e in self.tables["reported"].values() if e["pack"] == pack and e["p42"] is p42}
+
+    def reported_family(self, pack, phase):
+        """The one non-p42 reported cell id of a window and phase (the cross-window line's cell)."""
+        found = {e["family"] for e in self.tables["reported"].values()
+                 if e["pack"] == pack and e["phase"] == phase and not e["p42"]}
+        return found.pop() if len(found) == 1 else None
+
+    def phase_of_family(self, family):
+        """The target phase of a recompute reported cell id (a registered condition family)."""
+        found = {e["phase"] for e in self.tables["reported"].values() if e["family"] == family}
+        return found.pop() if len(found) == 1 else None
+
+
+_REGISTRY = {}
+
+
+def load_registry(root=CAMPAIGNS, pins=None):
+    """The sealed registry, read once per root (tests pass an edited copy with its own pins)."""
+    if pins is not None:
+        return Registry(root, pins)
+    if root not in _REGISTRY:
+        _REGISTRY[root] = Registry(root)
+    return _REGISTRY[root]
+
+
+# G2: each identity field and the objects that own it, taken from the producers (paths with * per list
+# item): the fill's contrast rows and their leave-one-out rows (results_fill_adapter.adapt_claim_verdicts);
+# the disclosure record's _item lines (and removed_unit and stored_member_reason lines), the
+# loo_magnitude rows, the sensitivity record's rows and their block_lines copies (b5_analysis/disclosures.py).
+LINE = r"(cells|floors|contrasts|block_lines|window_lines/[a-z]+)/\*"
+IDENTITY_OWNERS = {
+    "fill": {"contrast_id": r"gamma/contrasts/\*", "omitted_block_id": r"gamma/contrasts/\*/loo/rows/\*"},
+    "disclosure": {
+        "text": r"(cells|floors|contrasts|block_lines|fixed_sentences|window_lines/[a-z]+)/\*",
+        "contrast_id": r"contrasts/\*|sensitivity/contrasts/\*|block_lines/\*/record",
+        "cell_id": r"(cells|floors|contrasts|block_lines)/\*|sensitivity/(reported_cells|floor_cells)/\*|block_lines/\*/record",
+        "pack": LINE + r"|sensitivity/(reported_cells|floor_cells)/\*|block_lines/\*/record",
+        "run_id": r"window_lines/[a-z]+/\*", "model": r"window_lines/[a-z]+/\*", "component": r"block_lines/\*",
+        "block_number": r"contrasts/\*/rows/\*"}}
+# Identity-named fields that are an attribute of another object and never route: a band's window.
+IDENTITY_ATTRIBUTES = {"fill": r"(?!)", "disclosure": r"window_lines/[a-z]+/\*/central_band/pack"}
+# G3: where an L9 id routes a binding, and the registered tables it must be listed in.
+ROUTED = {"fill": ((r"gamma/contrasts/\*/contrast_id", ("contrast",)),),
+          "disclosure": ((r"cells/\*/cell_id", ("reported",)), (r"floors/\*/cell_id", ("extraction",)),
+                         (r"contrasts/\*/(contrast_id|cell_id)", ("contrast",)), (r"block_lines/\*/cell_id", ("floor",)),
+                         (r"sensitivity/reported_cells/\*/cell_id", ("reported",)),
+                         (r"sensitivity/floor_cells/\*/cell_id", ("floor",)),
+                         (r"(sensitivity/contrasts/\*|block_lines/\*/record)/contrast_id", ("contrast",)),
+                         (r"block_lines/\*/record/cell_id", ("reported", "floor")))}
+
+
+def owns(label, key, star):
+    """Whether the object at star path owns identity field key (G2)."""
+    pattern = IDENTITY_OWNERS[label].get(key)
+    return pattern is not None and re.fullmatch(pattern, star) is not None
+
+
+def gate(value, label, registry, star="", seen=frozenset()):
+    """G2 and G3 over one step-11 output, before any comparison or binding reads it.
+
+    An identity field anywhere but on the object it names, or repeating one an enclosing
+    owner set, refuses identity_field_misplaced; a routing id the registry does not list
+    (or lists for another window) refuses routing_id_unregistered.
+    """
+    if isinstance(value, list):
+        for item in value:
+            gate(item, label, registry, star + "/*" if star else "*", seen)
+        return
+    if not isinstance(value, dict):
+        return
+    named = set()
+    for key, item in value.items():
+        where = join(star, key)
+        if key not in IDENTITY_FIELDS or re.fullmatch(IDENTITY_ATTRIBUTES[label], where):
+            continue
+        if not owns(label, key, star) or key in seen or not isinstance(item, str):
+            raise Refusal(f"identity_field_misplaced:{label}:{where}")
+        named.add(key)
+        if key == "pack" and item not in PACKS:
+            raise Refusal(f"routing_id_unregistered:{label}:{where}")
+        for pattern, kinds in ROUTED[label]:
+            if re.fullmatch(pattern, where):
+                found = registry.lookup(item, kinds, f"{label}:{where}")
+                if "pack" in found and isinstance(value.get("pack"), str) and found["pack"] != value["pack"]:
+                    # A cell registered for another window than the line prints.
+                    raise Refusal(f"routing_id_unregistered:{label}:{where}")
+    for key, item in value.items():
+        gate(item, label, registry, join(star, key), seen | named)
 
 
 def items(value, keep=lambda key, item: True):
@@ -390,40 +628,34 @@ def times(a, b):
     return a * b if finite(a) and finite(b) else None
 
 
-def tag(pack):
-    return "qwen3-1p7b" if pack == "alpha" else "qwen3-8b"
-
-
-def cell_phase(cell_id):
-    return "decode" if "decode" in str(cell_id) else "prefill"
-
-
-def cell_model(cell_id):
-    cell_id = str(cell_id)
-    return MODELS["alpha"] if "qwen3-1p7b" in cell_id else MODELS["beta"] if "qwen3-8b" in cell_id else None
-
-
-def floor_kind(cell_id):
-    return next((kind for kind in ("absolute", "comparative") if str(cell_id).endswith("-" + kind)), None)
-
-
-def p42_word(cells):
-    """L9's p42 status from its p42 cells: the registered exit when none is extractable; None when L9 lists none."""
-    cells = [cell for cell in cells if isinstance(cell, dict) and "p42" in str(cell.get("cell_id"))]
+def p42_word(cells, registry, where):
+    """L9's p42 status from its registered p42 cells: the registered exit when none is extractable; None when L9 lists none."""
+    cells = [cell for cell in cells if isinstance(cell, dict)
+             and registry.lookup(cell.get("cell_id"), ("extraction", "reported"), where)["p42"]]
     if not cells:
         return None
     return "expected_unresolvable" if all(cell.get("extractable") is False for cell in cells) else "extractable"
 
 
+def p42_family(registry, pack):
+    """The recompute's p42 cell id of a window (the registered p42 reported cell's condition family)."""
+    found = registry.families(pack, True)
+    return found.pop() if len(found) == 1 else None
+
+
 def compare_floors(c, custody, ours):
+    registry = custody.registry
     for pack in ("alpha", "beta"):
         report = custody.one(r"mint/[0-9a-f]{64}-extraction-" + pack + r"\.json")
         cells = (report or {}).get("cells", [])
+        cells = cells if isinstance(cells, list) else []
+        where = "extraction_cell:" + pack
         # Registered p42 exit: the p42 floor cells are not extractable (step 4 p42_floor_cells_only).
-        c.exact("p42_status", pack + "/extraction/p42", p42_word(cells if isinstance(cells, list) else []),
-                get(ours, "p42", "df-ph-prefill-p42-" + tag(pack), "status"))
-        l9_cells = keyed(cells, lambda cell: MODELS[pack] + "/" + cell_phase(cell.get("cell_id")) + "/" + str(cell.get("kind")),
-                         "extraction_cell", lambda cell: "p42" not in str(cell.get("cell_id")))
+        c.exact("p42_status", pack + "/extraction/p42", p42_word(cells, registry, where),
+                get(ours, "p42", p42_family(registry, pack), "status"))
+        # Each cell by its registered id (G3): the spec's window, target phase and kind, never its spelling.
+        l9_cells = keyed(cells, lambda cell: floor_key(registry.lookup(cell.get("cell_id"), ("extraction",), where, pack)),
+                         "extraction_cell", lambda cell: not registry.lookup(cell.get("cell_id"), ("extraction",), where, pack)["p42"])
         mine_cells = items(ours.get("floors"), lambda key, _: key.startswith(MODELS[pack] + "/"))
         for key, cell, mine in c.pairs("floor/", l9_cells, mine_cells):
             cell, mine = cell or {}, mine or get(ours, "floors", key, default={}) or {}
@@ -441,19 +673,20 @@ def compare_floors(c, custody, ours):
             c.numeric("count", key + "/n_admitted", cell.get("n_admitted"), mine.get("n"))
 
 
-def floor_cell_key(cell_id):
-    """d117-qwen3-1p7b-prefill-p2048-floor-v5 -> (model, phase)."""
-    return cell_model(cell_id), cell_phase(cell_id)
+def floor_key(entry):
+    """A registered extraction cell -> the recompute's floor key (model/phase/form)."""
+    return f"{entry['model']}/{entry['phase']}/{entry['form']}"
 
 
-def aggregate_key(cell):
-    return "/".join(map(str, floor_cell_key(cell.get("cell_id", ""))))
+def cell_key(entry):
+    """A registered aggregate floor or reported cell -> the recompute's cell key (model/phase)."""
+    return f"{entry['model']}/{entry['phase']}"
 
 
-def ratio_label(row):
-    model, phase = floor_cell_key(row.get("cell_id", ""))
+def ratio_label(row, registry):
+    entry = registry.lookup(row.get("cell_id"), ("floor",), "ratio")
     common = str(row.get("numerator_field", "")).startswith("common_mode")
-    return f"{model}/{phase}/{row.get('component')}" + ("/common_mode" if common else "")
+    return f"{cell_key(entry)}/{row.get('component')}" + ("/common_mode" if common else "")
 
 
 def our_ratios(ours):
@@ -463,8 +696,10 @@ def our_ratios(ours):
 
 
 def compare_aggregate(c, custody, ours):
+    registry = custody.registry
     floor = custody.one(r"mint/[0-9a-f]{64}-aggregate-floor\.json")
-    l9_cells = keyed((floor or {}).get("cells", []), aggregate_key, "aggregate_cell")
+    l9_cells = keyed((floor or {}).get("cells", []),
+                     lambda cell: cell_key(registry.lookup(cell.get("cell_id"), ("floor",), "aggregate_cell")), "aggregate_cell")
     for key, cell, mine in c.pairs("aggregate/", l9_cells, items(ours.get("floor_cells"))):
         cell, mine = cell or {}, mine or {}
         for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
@@ -474,7 +709,7 @@ def compare_aggregate(c, custody, ours):
     closeout = custody.one(r"finalized/outputs/closeout\.json")
     ratios = custody.one(r"finalized/outputs/closeout\.ratio-table\.json")
     c.exact("dominance_branch", "branch", get(closeout, "branch"), get(ours, "dominance", "branch"))
-    l9_rows, mine_rows = keyed(get(ratios, "ratios", default=[]), ratio_label, "ratio"), our_ratios(ours)
+    l9_rows, mine_rows = keyed(get(ratios, "ratios", default=[]), lambda row: ratio_label(row, registry), "ratio"), our_ratios(ours)
     if not l9_rows and not mine_rows:
         c.numeric("dominance_ratio", "ratio/none", None, None)
     # Ratio rows have their own key prefix: a ratio's n is not its floor cell's n (S3, Opus N2).
@@ -500,10 +735,11 @@ def holm_order(rows):
     return [cid for cid, _ in sorted(rows.items(), key=lambda item: (item[1], item[0]))]
 
 
-def contrast_floor_part(cells, cid, field):
+def contrast_floor_part(cells, contrast, field):
     """A contrast's floor_abs_j or floor_cmp_j: the larger of its two models' cells (max, never sum)."""
-    phase = cell_phase(cid)
-    values = [get(cells, model + "/" + phase, field) for model in MODELS.values()]
+    if contrast is None:
+        return None
+    values = [get(cells, model + "/" + contrast["phase"], field) for model in MODELS.values()]
     return max(values) if all(finite(v) for v in values) else None
 
 
@@ -524,28 +760,28 @@ def kept_blocks(blocks):
 
 
 # The recompute's arms (S2): arm A is the a1/a2 runs on ALPHA's model, arm B the b runs on
-# BETA's, in this registered order; each kept unit carries the tag sw-<arm>-<a|b>-<model tag>.
+# BETA's, in the registered floor_selector order [A, B].
 ARMS = {0: "alpha", 1: "beta"}
 
 
-def arm_condition(cid, pack):
-    return f"sw-{'decode' if cell_phase(cid) == 'decode' else 'prefill-p2048'}-{'a' if pack == 'alpha' else 'b'}-{tag(pack)}"
-
-
-def compare_arms(c, ours, cid, floor):
+def compare_arms(c, ours, cid, floor, registry):
     """A v3 floor's arm gates and resolutions, by registered position against the recompute's arm (S2).
 
     The arm a gate or resolution belongs to is its position, never its printed condition;
-    the printed arm_id, condition_family_id and source cell ids are compared as routing_id rows.
+    the printed arm_id, condition_family_id and source cell ids are compared as routing_id rows
+    against the registered contrast's condition (G3) and aggregate floor cell.
     """
-    cells, phase = ours.get("floor_cells"), cell_phase(cid)
+    contrast = registry.entry(cid, "contrast")
+    if contrast is None:
+        return
+    cells, phase = ours.get("floor_cells"), contrast["phase"]
     if "arm_gates" in floor:
         for index, gate, pack in c.pairs(f"contrast/{cid}/arm/", positions(floor["arm_gates"]), ARMS):
             gate = gate if isinstance(gate, dict) else {}
             c.exact("routing_id", f"contrast/{cid}/arm/{index}/arm_id", gate.get("arm_id"),
                     {"alpha": "A", "beta": "B"}.get(pack))
             c.exact("routing_id", f"contrast/{cid}/arm/{index}/condition_family_id", gate.get("condition_family_id"),
-                    arm_condition(cid, pack) if pack else None)
+                    contrast["conditions"][index] if pack else None)
             c.numeric("floor_gate_j", f"{cid}/arm/{index}/floor_gate_j", gate.get("floor_gate_j"),
                       get(cells, f"{MODELS.get(pack)}/{phase}", "floor_gate_j"))
     if "resolutions" in floor:
@@ -556,13 +792,17 @@ def compare_arms(c, ours, cid, floor):
                 c.numeric("floor_gate_j", f"{cid}/resolution/{index}/{field}", resolution.get(field), get(cells, cell, field))
             sources = positions(resolution.get("source_cell_ids"))
             for number, source, own in c.pairs(f"contrast/{cid}/resolution/{index}/source/", sources, {0: cell}):
+                # The printed source id, looked up literally (G3): an unregistered id is no cell.
+                entry = registry.entry(source, "floor")
                 c.exact("routing_id", f"contrast/{cid}/resolution/{index}/source_cell_ids/{number}",
-                        "/".join(map(str, floor_cell_key(source))) if isinstance(source, str) else None, own, raw=source)
+                        cell_key(entry) if entry else None, own, raw=source)
 
 
 def compare_contrasts(c, custody, ours):
+    registry = custody.registry
     verdicts = custody.one(r"outputs/[0-9a-f]{64}-claim-verdicts\.json")
-    l9_rows = keyed(get(verdicts, "contrasts", default=[]), lambda row: row.get("contrast_id"), "contrast")
+    l9_rows = keyed(get(verdicts, "contrasts", default=[]),
+                    lambda row: registry.registered(row.get("contrast_id"), ("contrast",), "contrast"), "contrast")
     mine_all = items(ours.get("contrasts"))
     if not l9_rows and not mine_all:
         c.numeric("contrast_j", "contrasts", None, None)
@@ -583,8 +823,8 @@ def compare_contrasts(c, custody, ours):
         c.numeric("floor_gate_j", f"{cid}/active_floor_j", get(row, "floor", "active_floor_j"), mine.get("floor_gate_j"))
         for field in ("floor_abs_j", "floor_cmp_j"):
             c.numeric("floor_gate_j", f"{cid}/{field}", get(row, "floor", field),
-                      contrast_floor_part(ours.get("floor_cells"), str(cid), field))
-        compare_arms(c, ours, cid, row.get("floor") if isinstance(row.get("floor"), dict) else {})
+                      contrast_floor_part(ours.get("floor_cells"), registry.entry(cid, "contrast"), field))
+        compare_arms(c, ours, cid, row.get("floor") if isinstance(row.get("floor"), dict) else {}, registry)
         multiplicity = row.get("multiplicity") or {}
         c.numeric("contrast_p", f"{cid}/raw_p", multiplicity.get("raw_p"), mine.get("p"))
         c.numeric("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
@@ -638,10 +878,6 @@ def compare_brackets(c, custody, ours):
 KIND_ORDER = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j", "E_whole_window_drift_allowance_j")
 
 
-def reported_cid(pack, phase):
-    return f"df-ph-{'decode' if phase == 'decode' else 'prefill-p2048'}-{tag(pack)}"
-
-
 def unit_list(kept):
     return sorted((u.get("stratum"), u.get("unit_id")) for u in kept) if isinstance(kept, list) else None
 
@@ -652,13 +888,16 @@ def our_units(kept):
 
 def compare_reported(c, custody, ours):
     """Step 10: each pack's reported cells (estimator 1) against the recompute's reported_cells."""
+    registry = custody.registry
     for pack in ("alpha", "beta"):
         projection = custody.one(r"outputs/[0-9a-f]{64}-projection-" + pack + r"\.json")
         if projection is None:
             c.numeric("reported_cell_j", pack + "/projection", None, None)
-        l9_cells = keyed(get(projection, "cells", default=[]), lambda cell: reported_cid(pack, cell.get("phase") or "missing"),
-                         "projection_cell")
-        mine_cells = items(ours.get("reported_cells"), lambda key, _: key.endswith("-" + tag(pack)) and "p42" not in key)
+        where = "projection_cell:" + pack
+        # Each cell by its registered id (G3): the recompute's cell id is the cell's registered condition family.
+        l9_cells = keyed(get(projection, "cells", default=[]),
+                         lambda cell: registry.lookup(cell.get("cell_id"), ("reported",), where, pack)["family"], "projection_cell")
+        mine_cells = items(ours.get("reported_cells"), lambda key, _: key in registry.families(pack, False))
         for cid, cell, _ in c.pairs(f"reported/{pack}/", l9_cells, mine_cells):
             cell = cell or {}
             mine = get(ours, "reported_cells", cid, default={}) or {}
@@ -683,13 +922,14 @@ def compare_reported(c, custody, ours):
             c.exact("kept_units", key + "/kept_units", unit_list(cell.get("kept_units")), our_units(mine.get("kept_units")))
             c.numeric("count", key + "/interval/df", ivl.get("df"), ours_ivl.get("df"))
         # The registered p42 exit, when L9's projection lists its refused p42 cells.
-        refused = refused_p42(get(projection, "refused_cells", default=[]))
+        refused = refused_p42(get(projection, "refused_cells", default=[]), registry, where)
         if refused is not None:
-            c.exact("p42_status", pack + "/projection/p42", refused, get(ours, "p42", "df-ph-prefill-p42-" + tag(pack), "status"))
+            c.exact("p42_status", pack + "/projection/p42", refused, get(ours, "p42", p42_family(registry, pack), "status"))
 
 
-def refused_p42(cells):
-    return p42_word([dict(cell, extractable=False) for cell in cells if isinstance(cell, dict)]) if isinstance(cells, list) else None
+def refused_p42(cells, registry, where):
+    return (p42_word([dict(cell, extractable=False) for cell in cells if isinstance(cell, dict)], registry, where)
+            if isinstance(cells, list) else None)
 
 
 def any_finite(values):
@@ -704,16 +944,20 @@ def by_pack(windows):
     return {pack: window for pack, PACK in PACKS.items() for window in [get(windows, PACK)] if window is not None}
 
 
-def sensitivity_reported(cells):
-    return keyed(cells, lambda cell: (cell.get("pack"), str(cell.get("cell_id", "")).replace("d117-reported-mean-ph-", "df-ph-")),
-                 "sensitivity_reported_cell")
+def sensitivity_reported(cells, registry):
+    def key(cell):
+        entry = registry.lookup(cell.get("cell_id"), ("reported",), "sensitivity_reported_cell", cell.get("pack"))
+        return entry["pack"], entry["family"]
+    return keyed(cells, key, "sensitivity_reported_cell")
 
 
-def our_sensitivity_reported(line, ours):
-    """The recompute's sensitivity cells, and its p42 cells (L9 lists them as refused cells)."""
-    cells = dict(items(line.get("reported_cells"), lambda key, _: "p42" not in key))
-    cells.update({cid: item for cid, item in (ours.get("p42") or {}).items() if "p42" in cid})
-    return {(pack, cid): item for cid, item in cells.items() for pack in ("alpha", "beta") if cid.endswith("-" + tag(pack))}
+def our_sensitivity_reported(line, ours, registry):
+    """The recompute's sensitivity cells, and its p42 cells (L9 lists them as refused cells), by registered window."""
+    cells = {(pack, cid): item for pack in ("alpha", "beta")
+             for cid, item in items(line.get("reported_cells"), lambda key, _: key in registry.families(pack, False)).items()}
+    cells.update({(pack, cid): item for pack in ("alpha", "beta")
+                  for cid, item in (ours.get("p42") or {}).items() if cid in registry.families(pack, True)})
+    return cells
 
 
 def compare_sensitivity(c, custody, ours):
@@ -733,14 +977,18 @@ def compare_sensitivity(c, custody, ours):
                   get(ours, "windows", PACKS.get(pack, ""), "b_op_s"))
         c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_sens_s", get(record, "windows", pack, "b_sens_s"),
                   get(line, "windows", PACKS.get(pack, ""), "b_sens_s"))
-    cells = keyed(record.get("floor_cells", []), aggregate_key, "sensitivity_floor_cell")
+    registry = custody.registry
+    cells = keyed(record.get("floor_cells", []), lambda cell: cell_key(registry.lookup(
+        cell.get("cell_id"), ("floor",), "sensitivity_floor_cell", cell.get("pack"))), "sensitivity_floor_cell")
     for key, cell, _ in c.pairs("sensitivity/floor_cells/", cells, items(line.get("floor_cells"))):
         cell, mine = cell or {}, get(line, "floor_cells", key, default={}) or {}
         for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
             c.numeric("floor_gate_j", f"sensitivity/{key}/{field}", get(cell, "sensitivity", field), mine.get(field))
         c.numeric("floor_j", f"sensitivity/{key}/allowance_j", get(cell, "sensitivity", "allowance_j"),
                   get(line, "floors", key + "/absolute", "allowance_j"))
-    rows = keyed(record.get("contrasts", []), lambda row: row.get("contrast_id"), "sensitivity_contrast")
+    rows = keyed(record.get("contrasts", []),
+                 lambda row: registry.registered(row.get("contrast_id"), ("contrast",), "sensitivity_contrast"),
+                 "sensitivity_contrast")
     for cid, row, _ in c.pairs("sensitivity/contrasts/", rows, items(line.get("contrasts"))):
         row, mine = row or {}, get(line, "contrasts", cid, default={}) or {}
         c.numeric("contrast_j", f"sensitivity/{cid}/D_j", get(row, "sensitivity", "D_j"), mine.get("D_j"))
@@ -748,14 +996,14 @@ def compare_sensitivity(c, custody, ours):
                   mine.get("floor_gate_j"))
         for field in ("floor_abs_j", "floor_cmp_j"):
             c.numeric("floor_gate_j", f"sensitivity/{cid}/{field}", get(row, "sensitivity", field),
-                      contrast_floor_part(line.get("floor_cells"), str(cid), field))
+                      contrast_floor_part(line.get("floor_cells"), registry.entry(cid, "contrast"), field))
         c.exact("outcome_word", f"sensitivity/{cid}/outcome", get(row, "sensitivity", "outcome"), mine.get("outcome"))
-    reported = sensitivity_reported(record.get("reported_cells", []))
-    for (pack, cid), cell, _ in c.pairs("sensitivity/reported_cells/", reported, our_sensitivity_reported(line, ours)):
+    reported = sensitivity_reported(record.get("reported_cells", []), registry)
+    for (pack, cid), cell, _ in c.pairs("sensitivity/reported_cells/", reported, our_sensitivity_reported(line, ours, registry)):
         cell = cell or {}
         mine = get(line, "reported_cells", cid, default={}) or {}
         sens = cell.get("sensitivity") or {}
-        if "p42" in cid:
+        if cid in registry.families(pack, True):
             # The registered p42 exit: no reported value on either side; compared as a status, not as numbers.
             l9 = "expected_unresolvable" if not any_finite(sens) else "computed"
             c.exact("p42_status", f"sensitivity/{pack}/{cid}", l9, get(ours, "p42", cid, "status"))
@@ -768,31 +1016,21 @@ def compare_sensitivity(c, custody, ours):
                   get(mine, "attribution_floor", "value_j"))
 
 
-def reported_key(cell_id):
-    """d117-reported-mean-ph-decode-qwen3-1p7b -> (recompute cell id, model/phase)."""
-    cid = str(cell_id).replace("d117-reported-mean-ph-", "df-ph-")
-    model = MODELS["alpha"] if cid.endswith("qwen3-1p7b") else MODELS["beta"]
-    return cid, model + "/" + cell_phase(cid)
-
-
 def pack_of_model(model):
     return next((p for p, m in MODELS.items() if m == model), None)
-
-
-def pack_of_cell(cid):
-    return next((p for p in ("alpha", "beta") if str(cid).endswith("-" + tag(p))), None)
 
 
 CELL_LINES, CONTRAST_LINES = ("cross_window", "battery_assist_cell"), ("battery_assist_contrast", "magnitude_ratio",
                                                                        "magnitude_per_token", "loo_counts", "loo_magnitude")
 
 
-def our_cell_lines(disclosures):
-    lines = {("cross_window", pack_of_model(key.split("/", 1)[0]), reported_cid(str(pack_of_model(key.split("/", 1)[0])),
-              key.split("/", 1)[-1])): item for key, item in items(disclosures.get("cross_window")).items()}
-    lines.update({("battery_assist_cell", pack_of_cell(cid), cid): item
-                  for cid, item in (disclosures.get("battery_assist") or {}).items()
-                  if pack_of_cell(cid) and "p42" not in cid and cid.startswith("df-")})
+def our_cell_lines(disclosures, registry):
+    """The recompute's cell lines by (line, window, registered cell id): cross-window lines are keyed model/phase."""
+    lines = {("cross_window", pack, registry.reported_family(pack, phase)): item
+             for key, item in items(disclosures.get("cross_window")).items()
+             for model, _, phase in [key.partition("/")] for pack in [pack_of_model(model)] if pack}
+    lines.update({("battery_assist_cell", pack, cid): item for cid, item in (disclosures.get("battery_assist") or {}).items()
+                  for pack in ("alpha", "beta") if cid in registry.families(pack, False)})
     return lines
 
 
@@ -839,13 +1077,15 @@ def compare_disclosures(c, custody, ours):
     if record is None:
         c.numeric("reported_cell_j", "disclosure/record", None, None)
         return
-    disclosures = ours.get("disclosures") or {}
-    lines = keyed(record.get("cells", []), lambda row: (row.get("line"), row.get("pack"), reported_key(row.get("cell_id"))[0]),
+    disclosures, registry = ours.get("disclosures") or {}, custody.registry
+    # The gate (G2, G3) admitted only registered cell ids of the line's own window here.
+    lines = keyed(record.get("cells", []),
+                  lambda row: (row.get("line"), row.get("pack"), registry.entry(row.get("cell_id"), "reported")["family"]),
                   "disclosure_cell_line", lambda row: row.get("line") in CELL_LINES)
-    for (kind, pack, cid), row, _ in c.pairs("disclosure/cells/", lines, our_cell_lines(disclosures)):
+    for (kind, pack, cid), row, _ in c.pairs("disclosure/cells/", lines, our_cell_lines(disclosures, registry)):
         row, key = row or {}, f"disclosure/{pack}/{cid}/{kind}"
         if kind == "cross_window":
-            mine = get(disclosures, "cross_window", reported_key(cid)[1], default={}) or {}
+            mine = get(disclosures, "cross_window", f"{MODELS.get(pack)}/{registry.phase_of_family(cid)}", default={}) or {}
             for field in ("F_j", "G_j", "delta_j", "h_F_j", "h_G_j"):
                 c.numeric("reported_cell_j", key + "/" + field, row.get(field), mine.get(field))
             c.exact("outcome_word", key + "/agree", row.get("agree"), mine.get("agree"))
@@ -1065,7 +1305,7 @@ def load_meter_records(specs, flags=None):
             raise Refusal("harvest_meter_argument_invalid")
         try:
             raw = Path(path).read_bytes()
-            records[pack] = loads(raw, flags, "harvest_meter:" + pack)
+            records[pack] = loads(raw, flags, "harvest_meter:" + pack, duplicate="harvest_meter_duplicate_key")
         except (OSError, ValueError):
             raise Refusal("harvest_meter_unreadable") from None
         if not isinstance(records[pack], dict):
@@ -1098,6 +1338,8 @@ def compare_exclusions(c, ours):
 # A leaf no rule matches refuses the run.
 STEP11_SOURCES = (("fill", r"outputs/[0-9a-f]{64}-results-fill-input\.json"),
                   ("disclosure", r"disclosures/[0-9a-f]{64}\.json"))
+# The bytes after the canonical JSON: render_results_fill_input adds a newline, canonical_json_bytes none.
+STEP11_TAILS = {"fill": b"\n", "disclosure": b""}
 UNCOVERED, NAMED, NULL_NAMED = "uncovered:", "uncovered-by-name:", "uncovered-null-by-name:"
 TEXT = UNCOVERED + "rendered text and labels; checked against issued values by the post-release reader (synthesis 2(b)(iii))"
 IDENTITY = UNCOVERED + "identity, label or provenance (ids, digests, pins, stage names); bound by L9's record, not a computed quantity"
@@ -1122,7 +1364,10 @@ SR = r"disclosure:(sensitivity/reported_cells/\*|block_lines/sensitivity_reporte
 SF = r"disclosure:(sensitivity/floor_cells/\*|block_lines/sensitivity_floor/record)/"
 SC = r"disclosure:(sensitivity/contrasts/\*|block_lines/sensitivity_contrast/record)/"
 COVERAGE = (
-    (r"(fill|disclosure):(.*/)?(text|label|line|restricted|schema_version)", TEXT),
+    # Enumerated leaf names only (G5): no rule takes a field at any depth.
+    (r"(fill|disclosure):schema_version|disclosure:sensitivity/(schema_version|label)|"
+     r"disclosure:(cells|floors|contrasts|block_lines|fixed_sentences|window_lines/[a-z]+)/[a-z][a-z0-9_]*/(text|label|line|restricted)",
+     TEXT),
     # Fill input: each contrast's copy of its claim verdict, bound by its contrast_id.
     (F + "estimate", "contrast_j", "{cid}/dbar_j"),
     (F + "interval/(?P<side>lower|upper)", "contrast_j", "{cid}/metrology_interval_j/{side}"),
@@ -1147,7 +1392,9 @@ COVERAGE = (
     (F + r"floor/resolutions/\*/source_cell_ids/\*", "routing_id", "contrast/{cid}/resolution/{resolution}/source_cell_ids/{source}"),
     (F + r"floor/arm_gates/\*/floor_gate_j", "floor_gate_j", "{cid}/arm/{arm}/floor_gate_j"),
     (F + r"floor/arm_gates/\*/(?P<field>arm_id|condition_family_id)", "routing_id", "contrast/{cid}/arm/{arm}/{field}"),
-    (F + r"floor/(resolutions/\*/)?(point_floor_diagnostics|single_count_discipline)(/.*)?", FLOOR_DIAGNOSTICS),
+    (F + r"floor/(resolutions/\*/)?point_floor_diagnostics/(unguarded_floor_j|guard_factor|guarded_floor_j)", FLOOR_DIAGNOSTICS),
+    (F + r"floor/(resolutions/\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)",
+     UNCOVERED + "attribution-floor diagnostic label and flag, and the single-count discipline's words"),
     (F + r"floor/(aggregation|claim_floor_rule|status|transport_verdict|floor_source|floor_limit_class|"
      r"arm_gates/\*/status|resolutions/\*/(status|transport_rule_id|reason_codes(/\*)?|"
      r"floor_source|floor_limit_class))", UNCOVERED + "registered floor rule names and resolution status"),
@@ -1158,16 +1405,19 @@ COVERAGE = (
     (F + r"loo/rows/\*/df", "count", "{cid}/loo/{loo}/df"),
     (F + r"loo/rows/\*/metrology_aware_ci95/(?P<side>lower|upper)", "contrast_j", "{cid}/loo/{loo}/metrology_interval_j/{side}"),
     (F + r"loo/rows/\*/decision_interval/(?P<side>lower|upper)", "contrast_j", "{cid}/loo/{loo}/decision_interval_j/{side}"),
-    (F + r"(claim_evaluation/reason_codes(/\*)?|claim_evaluation/claim_ready_for_l2_l3|loo/status|loo/rows|"
-     r"loo/rows/\*/influence_triggers(/\*)?)",
+    (F + r"(claim_evaluation/reason_codes/\*|claim_evaluation/claim_ready_for_l2_l3|loo/status|loo/rows/\*/influence_triggers/\*)",
      UNCOVERED + "L9 reason-code vocabulary; the recompute derives the outcome, ceiling and influence, not these codes"),
-    (F + r"(kept_block_ids|removed_block_ids|sampling/removed_block_ids)(/\*)?", UNCOVERED + "block identity; kept sets compared as kept_units"),
-    (F + r"(conditions|metric|equivalence)(/.*)?", NAMED + "registered contrast definition from the sealed manifest"),
-    (F + r"(claim_role|hypothesized_direction|sampling/confirmatory_status)", UNCOVERED + "registered contrast definition from the sealed manifest"),
-    (r"fill:(gamma/(evidence_class|limitations(/\*)?|contrasts/\*/limitations(/\*)?))",
+    (F + r"(kept_block_ids|removed_block_ids|sampling/removed_block_ids)/\*", UNCOVERED + "block identity; kept sets compared as kept_units"),
+    (F + r"(claim_role|hypothesized_direction|sampling/confirmatory_status|equivalence/method|"
+     r"conditions/(condition_a_id|condition_b_id|cell_a_id|cell_b_id|difference_orientation)|"
+     r"metric/(name|metric_tag|window_class|unit))", UNCOVERED + "registered contrast definition from the sealed manifest"),
+    (F + r"equivalence/margin", NAMED + "registered contrast definition from the sealed manifest"),
+    (F + r"(equivalence|metric/ratio_estimand)", NULL_NAMED + "registered contrast definition: no equivalence margin, "
+     "no ratio estimand (J contrasts)"),
+    (r"fill:(gamma/(evidence_class|limitations/\*|contrasts/\*/limitations/\*))",
      UNCOVERED + "registered limitation notes; copied from the claim verdicts by L9's validated adapter"),
-    (r"fill:characterization/.*", UNCOVERED + "characterization selection; not funded, not run (constant)"),
-    (r"fill:(campaigns|gamma/finalized_manifest|gamma/floor_artifact)/.*", IDENTITY),
+    (r"fill:characterization/(funded|run)", UNCOVERED + "characterization selection; not funded, not run (constant)"),
+    (r"fill:characterization/verdict", NULL_NAMED + "characterization selection; not funded, not run (constant)"),
     # Disclosure record: the cells (reported cells and their lines), bound by pack and cell_id.
     (D + r"windows/[a-z]+/attempt", IDENTITY_NUMBER),
     (D + r"cells/(reported_cell|battery_assist_cell/primary)/(?P<field>mean_j|lower_j|upper_j)", "reported_cell_j", "{pack}/{rcid}/{field}"),
@@ -1197,9 +1447,9 @@ COVERAGE = (
     (D + r"contrasts/primary_contrast/estimator/raw_p", "contrast_p", "{cid}/raw_p"),
     (D + r"contrasts/primary_contrast/estimator/metrology_aware_CI95/(?P<side>lower|upper)", "contrast_j",
      "{cid}/metrology_interval_j/{side}"),
-    (D + r"contrasts/primary_contrast/estimator/(SE_repeat|SE_metrology|repeat_point_CI95/(lower|upper)|variance_contributions(/.*)?)",
-     ESTIMATOR_INTERNALS),
-    (D + r"contrasts/primary_contrast/estimator/(name|excluded_stochastic_terms(/\*)?)",
+    (D + r"contrasts/primary_contrast/estimator/(SE_repeat|SE_metrology|repeat_point_CI95/(lower|upper)|"
+     r"variance_contributions/\*/(summed_paired_variance|squared_standard_error))", ESTIMATOR_INTERNALS),
+    (D + r"contrasts/primary_contrast/estimator/(name|excluded_stochastic_terms/\*|variance_contributions/\*/name)",
      UNCOVERED + "registered estimator definition (name, no extra stochastic terms)"),
     (D + r"contrasts/(primary_contrast|decision_floor)/decision_interval/(?P<side>lower|upper)", "contrast_j",
      "{cid}/decision_interval_j/{side}"),
@@ -1222,8 +1472,9 @@ COVERAGE = (
     (D + r"contrasts/contrast_interval/exact_t", ESTIMATOR_INTERNALS),
     (D + r"contrasts/loo_counts/count", "count", "disclosure/{cid}/loo_counts/count"),
     (D + r"contrasts/loo_magnitude/rows/\*/movement_j", "contrast_j", "disclosure/{cid}/loo_magnitude/{loo_number}/movement_j"),
-    (D + r"contrasts/(loo_counts/exclusive_block_numbers(/\*)?|loo_magnitude/rows(/\*/block_number)?)",
-     UNCOVERED + "leave-one-out block numbers; the outcomes, estimates and p values of every leave-one-out row are compared"),
+    (D + r"contrasts/(loo_counts/exclusive_block_numbers/\*|loo_magnitude/rows/\*/block_number)",
+     IDENTITY + "; leave-one-out block numbers (strings by design); the outcomes, estimates and p values of every "
+     "leave-one-out row are compared"),
     (D + r"contrasts/kept_units/n_b", "count", "{cell_id}/n"),
     (D + r"contrasts/kept_units/n_r", FLOOR_KEPT),
     (D + r"(cells|contrasts|floors)/[a-z_]+/(codes/\*/(blinding|code|family)|families(/\*)?|stratum|removed_unit_ids(/\*)?|"
@@ -1235,7 +1486,7 @@ COVERAGE = (
     (W + r"neg8_allowance/values_j/bracket\.claim_families\.gross_energy\.(?P<field>bound_envelope_j|bound_prediction_j|"
      r"start\.mean_j|midpoint\.mean_j|end\.mean_j|trajectory_excursion_max_j|drift_allowance_j)",
      "floor_j", "disclosure/{pack}/neg8_allowance/{field}"),
-    (W + r"neg8_allowance/values_j/.*", NEG8_INTERNALS),
+    (W + r"neg8_allowance/values_j/[A-Za-z0-9_.]+_j", NEG8_INTERNALS),
     (W + r"reference_counts/counts/(?P<slot>start|midpoint|end)", "count", "disclosure/{pack}/reference_counts/{slot}"),
     (W + r"reference_counts/planned/(start|midpoint|end)", CONSTANT),
     (W + r"corpus_counts/deciding", "count", "disclosure/{pack}/corpus_counts/deciding"),
@@ -1292,12 +1543,18 @@ COVERAGE = (
      r"triggers/(doubling_count|systematic_sequences/\*))|g10/(codes/[A-Za-z0-9_.]+|redraw_cycles)|"
      r"reharvest_account/(survivors_before|survivors_after))", STRUCTURE_NUMBER),
     (D + r"block_lines/(superseded_history|attempt_count|attempt_history|g10|harvest_once|reharvest_account)/.*", STRUCTURE),
-    (D + r"fixed_sentences/.*", TEXT),
-    (r"(fill|disclosure):(.*/)?(positions/\*|attempt)", IDENTITY_NUMBER),
-    (r"(fill|disclosure):(.*/)?(cell_id|contrast_id|unit_id|plan_id|run_id|bundle_id|pack|harvest_pin|record_shape|model|"
-     r"stage_ids/\*|stage_id|floor_cell_ids/\*|floor_row_ids/\*|source_cell_ids/\*|floor_source_cell_ids/\*|"
-     r"omitted_block_id|transport_group_id|[a-z_]*sha256|[a-z_]*_id|claim_verdicts_id|manifest_id|artifact_id|"
-     r"central_band/(pack|plan_id))", IDENTITY),
+    (r"fill:campaigns/(alpha|beta)/attempt|disclosure:(cells|floors|contrasts)/removed_unit/positions/\*", IDENTITY_NUMBER),
+    # Identity at the positions L9's producers print it (results_fill_adapter, build_results_fill_input, disclosures).
+    (r"fill:(campaigns/(alpha|beta)/(plan_id|claim_usable|exclusions_sha256|harvest_record_sha256)|"
+     r"gamma/(claim_verdicts_id|claim_verdicts_sha256|exclusions_sha256|finalized_manifest/(manifest_id|file_sha256)|"
+     r"floor_artifact/(artifact_id|file_sha256)|contrasts/\*/(contrast_id|plan_id|floor_source_cell_ids/\*|"
+     r"floor/floor_row_ids/\*|floor/resolutions/\*/(source_cell_ids/\*|transport_group_id)|loo/rows/\*/omitted_block_id)))", IDENTITY),
+    (r"disclosure:(windows/[a-z]+/(plan_id|harvest_pin|record_shape)|"
+     r"(cells|floors|contrasts)/[a-z_]+/(pack|cell_id|contrast_id|unit_id|stage_ids/\*)|"
+     r"window_lines/[a-z]+/[a-z_]+/(pack|run_id|model|stage_id|harvest_pin|central_band/plan_id)|"
+     r"block_lines/[a-z_]+/(pack|plan_id|cell_id|component|record/(pack|cell_id|contrast_id|floor_cell_ids/\*))|"
+     r"sensitivity/((reported_cells|floor_cells)/\*/(pack|cell_id)|contrasts/\*/(contrast_id|floor_cell_ids/\*)|"
+     r"windows/[a-z]+/plan_id))", IDENTITY),
 )
 
 
@@ -1305,19 +1562,22 @@ def numeric(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def leaves(value, path="", context=None):
-    """(path, value, context): context maps each scalar field of the enclosing objects, nearest
-    first, to (value, path of that field), and "@<list>" to the position in each enclosing list."""
+def leaves(value, label, path="", star="", context=None):
+    """(path, value, context): context maps each identity field to (value, path of that field), read
+    only from the object that owns it (G2; star is the path with * for each list item), and
+    "@<list>" to the position in each enclosing list. Other scalars never enter the context, so a
+    nested object cannot re-route its parent's leaves."""
     context = context or {}
     if isinstance(value, dict) and value:
         context = {**context, **{key: (item, join(path, key)) for key, item in value.items()
-                                 if not isinstance(item, (dict, list))}}
+                                 if owns(label, key, star) and not isinstance(item, (dict, list))}}
         for key, item in value.items():
-            yield from leaves(item, join(path, key), context)
+            yield from leaves(item, label, join(path, key), join(star, key), context)
     elif isinstance(value, list) and value:
         name = "@" + path.rsplit("/", 1)[-1]
         for index, item in enumerate(value):
-            yield from leaves(item, path + "/" + step(item), {**context, name: (index, None)})
+            yield from leaves(item, label, path + "/" + step(item), star + "/*" if star else "*",
+                              {**context, name: (index, None)})
     else:
         yield path, value, context
 
@@ -1326,13 +1586,13 @@ def leaves(value, path="", context=None):
 # run, model, ratio component and label, leave-one-out block) and list positions. An
 # attribute a line asserts about another object (a gate's condition_family_id, a
 # resolution's source_cell_ids, a band's pack) never routes a key; it is compared as a
-# routing_id row instead.
+# routing_id row instead. A cell or contrast id routes only through its registered entry (G3).
 IDENTITY_FIELDS = ("contrast_id", "cell_id", "pack", "run_id", "model", "component", "text", "omitted_block_id",
                    "block_number")
 POSITIONS = {"arm": "@arm_gates", "resolution": "@resolutions", "source": "@source_cell_ids"}
 
 
-def binding(context, groups):
+def binding(context, groups, registry):
     """Key fields, and for each the id leaves it was read from (none for a path group or a position)."""
     value = {name: context[name][0] for name in IDENTITY_FIELDS if name in context}
     fields = {name: item for name, item in value.items()}
@@ -1342,20 +1602,21 @@ def binding(context, groups):
         if result is not None:
             fields[name], sources[name] = result, [context[u][1] for u in using if u in context]
     cell = value.get("cell_id")
-    derive("cid", value.get("contrast_id"), "contrast_id")
-    if isinstance(cell, str):
-        derive("rcid", reported_key(cell)[0], "cell_id")
-        model, phase, kind = cell_model(cell), cell_phase(cell), floor_kind(cell)
-        if model:
-            derive("aggregate_cell", model + "/" + phase, "cell_id")
-            if kind:
-                derive("floor_cell", f"{model}/{phase}/{kind}", "cell_id")
-                derive("minted_field", f"{model}/{phase}/floor_{'abs' if kind == 'absolute' else 'cmp'}_j", "cell_id")
-            component = value.get("component")
-            label = re.match(r"\S+ \S+: (R|R_cm) ", str(value.get("text", "")))
-            if label and component:
-                derive("ratio_label", f"{model}/{phase}/{component}" + ("/common_mode" if label[1] == "R_cm" else ""),
-                       "cell_id", "component", "text")
+    derive("cid", value.get("contrast_id") if registry.entry(value.get("contrast_id"), "contrast") else None, "contrast_id")
+    reported, extraction, floor = (registry.entry(cell, kind) for kind in ("reported", "extraction", "floor"))
+    if reported:
+        derive("rcid", reported["family"], "cell_id")
+    if extraction:
+        derive("floor_cell", floor_key(extraction), "cell_id")
+        derive("minted_field", f"{cell_key(extraction)}/floor_{'abs' if extraction['form'] == 'absolute' else 'cmp'}_j",
+               "cell_id")
+    if floor:
+        derive("aggregate_cell", cell_key(floor), "cell_id")
+        component = value.get("component")
+        label = re.match(r"\S+ \S+: (R|R_cm) ", str(value.get("text", "")))
+        if label and component:
+            derive("ratio_label", f"{cell_key(floor)}/{component}" + ("/common_mode" if label[1] == "R_cm" else ""),
+                   "cell_id", "component", "text")
     derive("loo", loo_key(value.get("omitted_block_id")), "omitted_block_id")
     derive("loo_number", block_key(value.get("block_number")), "block_number")
     for name, position in POSITIONS.items():
@@ -1367,21 +1628,30 @@ def binding(context, groups):
     return fields, sources
 
 
-def key_for(template, context, groups):
+def key_for(template, context, groups, registry):
     """The row key a leaf binds to, and the id leaves that routed it; None when a field is unresolved."""
-    fields, sources = binding(context, groups)
+    fields, sources = binding(context, groups, registry)
     names = re.findall(r"\{(\w+)\}", template)
     if any(not isinstance(fields.get(name), (str, int)) or isinstance(fields.get(name), bool) for name in names):
         return None, []
     return template.format(**{name: fields[name] for name in names}), [p for name in names for p in sources[name]]
 
 
-def admits(rule, value, number, nonfinite):
-    """Default deny for numbers (S1): uncovered: takes strings and booleans only; uncovered-null-by-name: a null only."""
+# A string spelling a number (Opus round 3 F3): numeric-class, except under the text and identity rules.
+NUMBER_WORD = r"\s*[+-]?((0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?|\.[0-9]+|NaN|nan|Infinity|inf)\s*"
+
+
+def numeric_word(value):
+    return isinstance(value, str) and re.fullmatch(NUMBER_WORD, value) is not None
+
+
+def admits(rule, value, number, nonfinite, word=False):
+    """Default deny for numbers (S1): uncovered: takes strings and booleans only (a string spelling a
+    number only under the text and identity rules); uncovered-null-by-name: a null only."""
     if len(rule) == 3:
         return True
     if rule[1].startswith(UNCOVERED):
-        return not number
+        return not number and (not word or rule[1] in (TEXT, IDENTITY))
     if rule[1].startswith(NULL_NAMED):
         return value is None and not nonfinite
     return True
@@ -1391,6 +1661,7 @@ def coverage(custody, comparison, rules=None):
     rules = COVERAGE if rules is None else rules
     rows = {(row["family"], row["key"]): row for row in comparison.rows}
     report, unmapped, unbound, named, absent, nonfinite, routed, bound = {}, set(), {}, set(), [], set(), set(), set()
+    exemptions = {}
     for label, pattern in STEP11_SOURCES:
         names = custody.names(pattern)
         if not names:
@@ -1399,13 +1670,13 @@ def coverage(custody, comparison, rules=None):
             document = custody.read(name)
             odd = custody.nonfinite.get(name, set())
             nonfinite.update(label + ":" + leaf for leaf in odd)
-            for leaf, value, context in leaves(document):
+            for leaf, value, context in leaves(document, label):
                 path = label + ":" + leaf
-                number = numeric(value) or value is None or leaf in odd
+                number, word = numeric(value) or value is None or leaf in odd, numeric_word(value)
                 rule, match = None, None
                 for candidate in rules:
                     match = re.fullmatch(candidate[0], path)
-                    if match and admits(candidate, value, number, leaf in odd):
+                    if match and admits(candidate, value, number, leaf in odd, word):
                         rule = candidate
                         break
                 if rule is None and value in ([], {}):
@@ -1415,11 +1686,12 @@ def coverage(custody, comparison, rules=None):
                     unmapped.add(path)
                 elif len(rule) == 2:
                     report.setdefault(path, rule[1])
-                    if rule[1].startswith(NULL_NAMED) or (rule[1].startswith(NAMED) and number):
+                    if rule[1].startswith(NULL_NAMED) or (rule[1].startswith(NAMED) and (number or word)):
                         named.add(path)
+                        exemptions.setdefault(rule[0], set()).add(path)
                 else:
                     family = rule[1]
-                    key, routes = key_for(rule[2], context, match.groupdict())
+                    key, routes = key_for(rule[2], context, match.groupdict(), custody.registry)
                     row = rows.get((family, key)) if key is not None else None
                     printed = row.get("l9_raw", row.get("l9")) if row else None
                     reason = ("key_unresolved" if key is None else "no_row" if row is None else
@@ -1443,16 +1715,18 @@ def coverage(custody, comparison, rules=None):
         report.pop(path, None)
     return {"leaves": report, "unmapped": sorted(unmapped | set(uncompared)), "uncompared": uncompared,
             "unbound": [{"path": p, "family": f, "key": k, "reason": r} for p, f, k, r in sorted(unbound)],
-            "uncovered_numeric": sorted(named), "absent_sources": absent, "nonfinite": sorted(nonfinite)}
+            "uncovered_numeric": sorted(named), "absent_sources": absent, "nonfinite": sorted(nonfinite),
+            # G5: each named numeric exemption (rule pattern) with the leaves it took, for the full-size census.
+            "named_exemptions": {pattern: sorted(paths) for pattern, paths in sorted(exemptions.items())}}
 
 
-def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()):
+def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=(), registry=None):
     bars = load_bars(bars_path)
     flags = []
     meter_records, meter_digests = load_meter_records(meter, flags)
-    custody = Custody(l9_custody, flags)
+    custody = Custody(l9_custody, flags, registry)
     try:
-        ours = loads(Path(recompute_path).read_bytes(), flags, "recompute")
+        ours = loads(Path(recompute_path).read_bytes(), flags, "recompute", duplicate="recompute_output_duplicate_key")
     except (OSError, ValueError):
         raise Refusal("recompute_output_unreadable") from None
     c = Comparison(bars)
@@ -1470,6 +1744,7 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
     return {"schema": SCHEMA, "bar_set": bars.get("bar_set"), "bars": bars["families"],
             "l9_steps": {f"{s}/{w}" if w else str(s): v for (s, w), v in sorted(custody.status.items(), key=str)},
             "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
+            "routing_registry_sha256": custody.registry.digests,
             "structure_flags": flags, "counts": c.counts(),
             "coverage": cover, "comparisons": c.rows}
 

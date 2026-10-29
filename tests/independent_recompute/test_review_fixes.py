@@ -34,7 +34,7 @@ class Case(unittest.TestCase):
     def setUp(self):
         test_comparator.ComparatorTests.setUp(self)
         # Fixture-only text leaf that the shipped map does not name (as the Opus probe does).
-        self.files[DISCLOSURE].pop("note")
+        self.files[DISCLOSURE].pop("note", None)
 
     def shipped(self, bars="recompute_coded_7e322b76", meter=()):
         ours = self.root / "ours.json"
@@ -54,6 +54,16 @@ class Case(unittest.TestCase):
     def unbound(self, result):
         return {(row["path"], row["reason"]) for row in result["coverage"]["unbound"]}
 
+    def set_estimate(self, cid, value):
+        """One contrast's estimate in the verdict and every producer copy of it (fill row, disclosure lines)."""
+        next(r for r in self.files[VERDICTS]["contrasts"] if r["contrast_id"] == cid)["estimator"]["estimate"] = value
+        next(r for r in self.files[FILL]["gamma"]["contrasts"] if r["contrast_id"] == cid)["estimate"] = value
+        for line in self.files[DISCLOSURE]["contrasts"]:
+            if line.get("contrast_id") == cid and line["line"] == "primary_contrast":
+                line["estimator"]["estimate"] = value
+            if line.get("contrast_id") == cid and line["line"] == "decision_floor":
+                line["estimate_j"] = value
+
 
 class BaselineTests(Case):
     def test_shipped_coverage_baseline_is_clean(self):
@@ -65,9 +75,7 @@ class BaselineTests(Case):
 class KeyBoundCoverageTests(Case):
     """X1: a mapped leaf is covered only by the agreeing row it copies, value and type equal."""
     def test_swapped_fill_estimates_refuse_p1b(self):
-        for row in self.files[VERDICTS]["contrasts"]:
-            if row["contrast_id"] == PREFILL:
-                row["estimator"]["estimate"] = -2.5
+        self.set_estimate(PREFILL, -2.5)
         self.ours["contrasts"][PREFILL]["dbar_j"] = -2.5
         contrasts = self.files[FILL]["gamma"]["contrasts"]
         contrasts[0]["estimate"], contrasts[1]["estimate"] = -2.5, -1.25
@@ -119,11 +127,17 @@ class KeyBoundCoverageTests(Case):
         self.ours["contrasts"][DECODE]["dbar_j"] = -1.25 + 1e-3
         result = self.shipped()
         self.assertEqual(self.fails(result), {"contrast_j": 1})
-        self.assertEqual(self.unbound(result), {("fill:gamma/contrasts/*/estimate", "row_disagrees")})
+        # The fill and the producer-shaped disclosure lines print the same estimate (RC-CMP-6 G4).
+        self.assertEqual(self.unbound(result), {(path, "row_disagrees") for path in (
+            "fill:gamma/contrasts/*/estimate", "disclosure:contrasts/primary_contrast/estimator/estimate",
+            "disclosure:contrasts/decision_floor/estimate_j")})
 
     def test_leaf_whose_key_resolves_to_no_row_refuses(self):
+        # RC-CMP-6 G3: an unregistered contrast id refuses at the input gate, before any binding.
         self.files[FILL]["gamma"]["contrasts"][0]["contrast_id"] = "ctr-unknown"
-        self.assertIn(("fill:gamma/contrasts/*/estimate", "no_row"), self.unbound(self.shipped()))
+        with self.assertRaisesRegex(cmp.Refusal, "routing_id_unregistered:fill:gamma/contrasts/\\*/contrast_id"):
+            self.shipped()
+        self.assertEqual(self.exit_code()[:2], (2, "refused=routing_id_unregistered:fill:gamma/contrasts/*/contrast_id\n"))
 
 
 class CatchAllTests(Case):
@@ -141,16 +155,21 @@ class CatchAllTests(Case):
                      "disclosure:window_lines/alpha/machine_member/values/rho",
                      "fill:campaigns/gamma/gross_energy_j", "fill:characterization/delta_j"):
             self.assertIn(path, unmapped)
-        # Counterfactual: letting uncovered: rules take numbers swallows them.
+        # Counterfactual: letting uncovered: rules take numbers swallows the window-line ones. The fill's
+        # campaign and characterization fields are enumerated names now (RC-CMP-6 G5): no rule takes these.
         with mock.patch.object(cmp, "numeric", lambda value: False):
             unmapped = self.shipped(RELEASE)["coverage"]["unmapped"]
-        self.assertFalse({p for p in unmapped if "energy" in p or "delta_j" in p or "values/rho" in p})
+        self.assertFalse({p for p in unmapped if "meter_energy_j" in p or "values/rho" in p})
+        self.assertTrue({"fill:campaigns/gamma/gross_energy_j", "fill:characterization/delta_j"} <= set(unmapped))
 
     def test_words_under_catch_alls_stay_uncovered(self):
-        self.files[FILL]["campaigns"] = {"alpha": {"path": "a.json"}, "beta": {"path": "b.json"}}
+        self.files[FILL]["campaigns"]["alpha"]["plan_id"] = "plan-other"
         result = self.shipped()
         self.assertEqual(result["coverage"]["unmapped"], [])
-        self.assertTrue(result["coverage"]["leaves"]["fill:campaigns/alpha/path"].startswith("uncovered:"))
+        self.assertTrue(result["coverage"]["leaves"]["fill:campaigns/alpha/plan_id"].startswith("uncovered:"))
+        # A field the producer does not write is no longer taken by a subtree rule (RC-CMP-6 G5).
+        self.files[FILL]["campaigns"]["alpha"]["path"] = "a.json"
+        self.assertEqual(self.shipped()["coverage"]["unmapped"], ["fill:campaigns/alpha/path"])
 
     def test_numeric_leaves_uncovered_by_name_are_listed(self):
         self.files[DISCLOSURE]["contrasts"].append({"line": "magnitude_per_token", "contrast_id": PREFILL,
