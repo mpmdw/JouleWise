@@ -121,8 +121,6 @@ def transform(mode, archive, output, export=None):
     for source in (archive, export):
         if source and (output.is_relative_to(source) or source.is_relative_to(output)):
             raise ValueError("output overlaps source archive/export")
-    if output.exists():
-        raise ValueError("output overlaps an existing output")
     sources = {}
 
     def read(path):
@@ -311,6 +309,7 @@ def transform(mode, archive, output, export=None):
               "producing_tree_dirty": bool(subprocess.check_output(
                   ["git", "status", "--porcelain", "--untracked-files=no"],
                   cwd=Path(__file__).resolve().parents[1], text=True).strip()),
+              "records.thermal_view_changed": False,
               "status": ("not defined (see member statuses)" if any(v.startswith("not defined") for v in statuses.values())
                          else "evaluated" if changes else "equals registered line"),
               "member_statuses": [{"run_id": m["run_id"],
@@ -326,13 +325,17 @@ def transform(mode, archive, output, export=None):
               "restored_units": [runs for runs in units.values() if any(before[r] for r in runs)
                                  and not any(after[r] for r in runs)],
               "dropped_units": [runs for runs in units.values() if any(after[r] for r in runs)]}
-    output.mkdir(parents=True)
+    output.mkdir(parents=True, exist_ok=True)
     for path in archive.rglob("*"):
         rel = path.relative_to(archive)
         dest = output / rel
         if path.is_dir():
+            if dest.is_symlink():
+                dest.unlink()
             dest.mkdir(exist_ok=True)
         elif rel != Path("derived/b6-acceptance.json") and rel not in (Path("thermal_line.json"), Path("view_manifest.json")):
+            if dest.exists() or dest.is_symlink():
+                dest.unlink()
             dest.symlink_to(path.resolve())
     write_copy(output / "derived/b6-acceptance.json", new_acceptance)
     if exports:
@@ -362,7 +365,7 @@ def sha256(path):
 
 def write_copy(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink():
+    if path.exists() or path.is_symlink():
         path.unlink()
     path.write_bytes(content.encode("utf-8"))
     path.chmod(0o444)
