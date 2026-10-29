@@ -415,19 +415,51 @@ def view_files(output):
     return files
 
 
+def manifest_entries(value):
+    """Validate control data before using paths as mapping keys or sorting them."""
+    if not isinstance(value, dict) or set(value) != {"files"} or not isinstance(value["files"], list):
+        raise ValueError("manifest must be an object containing a files list")
+    expected = {}
+    for row in value["files"]:
+        if not isinstance(row, dict) or not {"path", "size", "sha256"} <= row.keys():
+            raise ValueError("manifest entry must contain path, size and sha256")
+        if row.keys() - {"path", "size", "sha256", "mtime_ns", "inode"}:
+            raise ValueError("manifest entry contains unknown fields")
+        path = row["path"]
+        if (not isinstance(path, str) or not path or Path(path).is_absolute()
+                or any(part in ("", ".", "..") for part in path.split("/"))
+                or "\\" in path or path in CONTROL or path in expected):
+            raise ValueError("manifest entry path must be unique, relative and normalized")
+        size, digest = row["size"], row["sha256"]
+        if size is None and digest is None:
+            if set(row) != {"path", "size", "sha256"}:
+                raise ValueError("unavailable manifest entry has metadata")
+        elif (type(size) is not int or size < 0 or not isinstance(digest, str)
+              or re.fullmatch(r"[0-9a-f]{64}", digest) is None):
+            raise ValueError("manifest entry requires a nonnegative integer size and SHA-256")
+        if ("mtime_ns" in row) != ("inode" in row):
+            raise ValueError("manifest entry requires both identity stamps")
+        if any(type(row[key]) is not int for key in ("mtime_ns", "inode") if key in row):
+            raise ValueError("manifest identity stamps must be integers")
+        expected[path] = row
+    return expected
+
+
 def verify(output):
     output = Path(output)
     record_path = output / "thermal_line.json"
     record = json.loads(record_path.read_bytes())
     manifest_path = output / "view_manifest.json"
-    different = []
+    different, reasons = [], []
     try:
         if sha256(manifest_path) != record["view_manifest_sha256"]:
             different.append("view_manifest.json")
-        expected = {row["path"]: row for row in json.loads(manifest_path.read_bytes())["files"]}
-    except (OSError, ValueError, KeyError, TypeError):
+            reasons.append("manifest SHA-256 differs from recorded binding")
+        expected = manifest_entries(json.loads(manifest_path.read_bytes()))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
         expected = {}
         different.append("view_manifest.json")
+        reasons.append("manifest invalid: " + (str(exc) if type(exc) is ValueError else type(exc).__name__))
     current = {row["path"]: row for row in view_files(output)}
     different.extend(path for path in sorted(expected.keys() | current.keys())
                      if expected.get(path) != current.get(path))
@@ -435,7 +467,8 @@ def verify(output):
     record["notices"] = [notice for notice in record["notices"]
                          if notice["code"] != "records.thermal_view_changed"]
     if different:
-        record["notices"].append({"code": "records.thermal_view_changed"})
+        record["notices"].append({"code": "records.thermal_view_changed",
+                                  "reason": "; ".join(reasons) if reasons else "payload differs from manifest"})
     record["view_differing_paths"] = sorted(set(different))
     write_copy(record_path, json.dumps(record, indent=2) + "\n", output)
     return record["view_differing_paths"]

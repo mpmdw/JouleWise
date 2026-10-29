@@ -1044,6 +1044,30 @@ class RecordedFaultTests(unittest.TestCase):
             t.write_copy(out / 'export/withheld/payload', 'opaque', out, [self.archive])
         self.assertFalse((self.archive / 'payload').exists())
 
+    def test_malformed_manifests_record_reason_and_exit_zero(self):
+        row = {'path': 'payload', 'size': 0, 'sha256': '0' * 64}
+        cases = [None, [], {}, {'files': {}}, {'files': [None]}, {'files': [{'path': 7}]},
+                 {'files': [dict(row, path=7)]}, {'files': [dict(row, path='../payload')]},
+                 {'files': [dict(row, path='/payload')]}, {'files': [dict(row, path='a//b')]},
+                 {'files': [row, row]}, {'files': [dict(row, size=True)]},
+                 {'files': [dict(row, sha256=7)]}, {'files': [dict(row, inode=True, mtime_ns=1)]},
+                 {'files': [dict(row, inode=1)]}, {'files': [dict(row, extra=1)]}]
+        for index, value in enumerate(cases + ['invalid-json', 'missing-file']):
+            with self.subTest(index=index):
+                out = self.root / ('damaged-' + str(index))
+                t.transform('request-end-p1', self.archive, out)
+                path = out / 'view_manifest.json'
+                path.unlink()
+                if value != 'missing-file':
+                    path.write_text('{' if value == 'invalid-json' else json.dumps(value))
+                capture = io.StringIO()
+                with contextlib.redirect_stdout(capture):
+                    self.assertIsNone(t.main(['verify', str(out)]))
+                record = json.loads((out / 'thermal_line.json').read_bytes())
+                self.assertIs(record['records.thermal_view_changed'], True)
+                self.assertIn('view_manifest.json', record['view_differing_paths'])
+                self.assertTrue(any(n['code'] == 'records.thermal_view_changed' and n['reason'] for n in record['notices']))
+
     def test_existing_output_and_manifest_binding(self):
         existing = self.root / 'existing'
         existing.mkdir()
@@ -1056,7 +1080,7 @@ class RecordedFaultTests(unittest.TestCase):
         manifest.write_bytes(manifest.read_bytes() + b'\n')
         self.assertEqual(t.verify(out), ['view_manifest.json'])
         result = json.loads((out / 'thermal_line.json').read_bytes())
-        self.assertIn({'code': 'records.thermal_view_changed'}, result['notices'])
+        self.assertTrue(any(n['code'] == 'records.thermal_view_changed' and n['reason'] for n in result['notices']))
         manifest.write_text('{}')
         differing = t.verify(out)
         self.assertIn('view_manifest.json', differing)
