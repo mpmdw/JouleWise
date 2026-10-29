@@ -131,4 +131,4 @@ Fix commits, each pushed: `22bc6039c`, `338ab1a07`, `3ed2ca65c`, `b904908b8`, `4
 
 Draft PR: https://github.com/mpmdw/JouleWise/pull/598 (target `lane/2026-10-28-bytes-pass2-open`).
 
-CI is running on the PR; build, fences, and installed-wheel checks passed on the implementation head. The whole-suite result remains pending and is not claimed green. The final report push may supersede that run; the PR checks show the current head.
+CI is running on the PR. Earlier implementation runs passed build, fences, and installed-wheel checks. The whole-suite result remains pending and is not claimed green. The final report push may supersede that run; the PR checks show the current head.
