@@ -645,8 +645,8 @@ def read_known_bytes(records, scan):
         def stack_leaves(value, spec, leaf_path, field=""):
             if isinstance(spec, dict):
                 source = value if isinstance(value, dict) else {}
-                return {k: stack_leaves(source.get(k, ABSENT), child, leaf_path+"."+k,
-                                       field+"."+k if field else k) for k, child in spec.items()}
+                return {**source, **{k: stack_leaves(source.get(k, ABSENT), child, leaf_path+"."+k,
+                                       field+"."+k if field else k) for k, child in spec.items()}}
             betas = (("rails", "rest", "gpu") if field == "measurement_boundary_label.rails"
                      else names if field in PHYSICAL_FIELDS else ())
             valid, error = input_value(value, spec, leaf_path)
