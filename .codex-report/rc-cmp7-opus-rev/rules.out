@@ -1,0 +1,9 @@
+disclosure:sensitivity/reported_cells/*/mean_and_half_width_equal_primary False -> uncovered:true by construction: L9's sensitivity seat refuses when a b
+disclosure:block_lines/sensitivity_reported/record/mean_and_half_width_equal_primary False -> uncovered:true by construction: L9's sensitivity seat refuses when a b
+disclosure:sensitivity/contrasts/*/bound_independent_values_equal_primary False -> uncovered:true by construction: L9's sensitivity seat refuses when a b
+disclosure:block_lines/sensitivity_contrast/record/bound_independent_values_equal_primary False -> uncovered:true by construction: L9's sensitivity seat refuses when a b
+fill:gamma/contrasts/*/claim_evaluation/claim_ready_for_l2_l3 True -> uncovered:L9 reason-code vocabulary; the recompute derives the outcome
+fill:campaigns/alpha/claim_usable False -> uncovered:identity, label or provenance (ids, digests, pins, stage nam
+fill:gamma/contrasts/*/hypothesized_direction 'negative' -> uncovered:registered contrast definition from the sealed manifest
+disclosure:cells/reported_cell/status 'refused' -> uncovered:a descriptive line's computation status word (computed, one_
+disclosure:contrasts/battery_assist_contrast/status 'one_quad' -> uncovered:a descriptive line's computation status word (computed, one_

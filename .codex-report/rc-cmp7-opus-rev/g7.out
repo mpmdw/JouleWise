@@ -1,0 +1,17 @@
+## G7: run_phase_energy_j universe from L9's kept-units record
+A0 control: exit=0 err='' fails={}
+A1 L9 drops run-a from kept-units (rereduced file kept; recompute selects): exit=1 err='' fails={'routing_id': 1}
+A2 L9 drops run-a from kept-units and does not re-reduce it (recompute selects): exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3}
+A3 as A2 plus L9 states other exclusions (recompute unchanged): exit=1 err='' fails={'routing_id': 2, 'run_phase_energy_j': 3}
+A4 shared: both sides drop run-a (recompute unselected), same exclusions hash: exit=0 err='' fails={}
+A5 shared: as A4 with both sides on one other exclusions file: exit=0 err='' fails={}
+A5b as A5 with the recompute's re-derivation disagreeing with that file: exit=1 err='' fails={'exclusions_rederivation': 1}
+A6 L9 adds run-z (no rereduced file, recompute lacks it): exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3}
+A7 L9 adds and re-reduces run-z: exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3}
+A8 run-a moved to beta's kept-units record: exit=1 err='' fails={'routing_id': 2, 'run_phase_energy_j': 3}
+A9 run_ids a bare string (characters become ids): exit=1 err='' fails={'routing_id': 6, 'run_phase_energy_j': 15}
+A10 a second alpha kept-units record: exit=2 err='refused=l9_output_ambiguous' fails=None
+A11 gamma: no kept-units record and no recompute hash (both absent): exit=1 err='' fails={'routing_id': 1}
+A12 a registered spare reference in kept-units: exit=2 err='refused=kept_units_member_not_science:alpha' fails=None
+A13 a registered science run that the recompute labels role=reference, selected, L9 lacks: exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3}
+A14 reference re-reduced by L9 (not kept) with other values, recompute selects it: exit=1 err='' fails={'routing_id': 1, 'run_phase_energy_j': 3}

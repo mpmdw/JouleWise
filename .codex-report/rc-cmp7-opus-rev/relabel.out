@@ -1,0 +1,16 @@
+
+## relabel sweep (probe_cmp6 relabel, all sections incl. window_lines and cells)
+relabels tried: 3818; exit 0: 13
+    ('block_lines', None, 'sensitivity_boundary', 'superseded_history')
+    ('fixed_sentences', None, 'order', 'conditionality')
+    ('fixed_sentences', None, 'order', 'config_binding')
+    ('fixed_sentences', None, 'order', 'd177')
+    ('fixed_sentences', None, 'order', 'dominance')
+    ('fixed_sentences', None, 'order', 'fixed_prompt')
+    ('fixed_sentences', None, 'order', 'floor_drift_ownership')
+    ('fixed_sentences', None, 'order', 'floor_transfer_assumption')
+    ('fixed_sentences', None, 'order', 'floor_transfer_limit')
+    ('fixed_sentences', None, 'order', 'gross_energy')
+    ('fixed_sentences', None, 'order', 'p42')
+    ('fixed_sentences', None, 'order', 'separate_windows')
+    ('fixed_sentences', None, 'order', 'single_window')

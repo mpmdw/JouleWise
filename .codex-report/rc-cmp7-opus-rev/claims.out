@@ -1,0 +1,10 @@
+
+## claim words in the fill, one at a time (ceiling compared; these not)
+   fixture ceiling/ready: L1 False
+C1 claim_ready_for_l2_l3 True (ceiling stays L1): exit=0 err='' fails={}
+C2 claim_level_ceiling L2 (control: compared): exit=2 err='refused=step11_unmapped_fill' fails={}
+C3 campaigns/alpha/claim_usable False: exit=0 err='' fails={}
+C3b recompute: ALPHA claim_usable False (+ its claim_usable_false flag); fill prints True: exit=0 err='' fails={}
+C4 hypothesized_direction negative: exit=0 err='' fails={}
+C5 reason_codes [] (floor_not_cleared dropped): exit=0 err='' fails={}
+C6 loo/status computed with no rows: exit=0 err='' fails={}
