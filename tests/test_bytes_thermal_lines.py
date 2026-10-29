@@ -441,7 +441,11 @@ class ReviewerRealChainTests(unittest.TestCase):
                   code == 0 and member_codes(root / "hull2b") == hull2 and
                   json.loads((root / "hull2b/thermal_line.json").read_text())["changes"] == [], err)
             code, _, err = run_cli("hull-p2", w1.archive, root / "wrongpass")
-            check("pass mismatch recorded with exit 0", code == 0 and "pass mismatch" in (root / "wrongpass/thermal_line.json").read_text(), err)
+            wrong = json.loads((root / "wrongpass/thermal_line.json").read_text())
+            check("pass mismatch recorded, hull-invariant members remain equal", code == 0
+                  and wrong["equals_registered_line"]
+                  and member_codes(root / "wrongpass") == p1
+                  and {"code": "records.thermal_pass_mismatch", "reason": "pass mismatch"} in wrong["notices"], err)
 
             # --- pass 1: nonzero inside one request, s5-p1-shaped tail elsewhere ----
             first = science[0]

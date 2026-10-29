@@ -176,6 +176,8 @@ def transform(mode, archive, output, export=None):
                 before.setdefault(run, set()).add(row["code"])
     after = {run: set(codes) for run, codes in before.items()}
     notices, changes, statuses = [], [], {}
+    if pass_mismatch:
+        notices.append({"code": "records.thermal_pass_mismatch", "reason": "pass mismatch"})
     unavailable = None
     mismatch = False
     provenance_unavailable = False
