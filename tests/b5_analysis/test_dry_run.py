@@ -149,7 +149,8 @@ class DriverPrimitiveTests(unittest.TestCase):
             if ':' in code:self.assertIn(code.split(':',1)[0],tooling)
         self.assertIn('ledger_copies_disagree_below_T',tooling)
         self.assertLessEqual(closeout.TOOLING_REFUSAL_CODES,set(tooling))
-        self.assertEqual(closeout.OUTCOME_CLASS_CODES,set(outcome))
+        # Step 6 owns its closeout outcomes; step 4 adds the plan's floor-cell outcome (L9-STEP4-1).
+        self.assertEqual(closeout.OUTCOME_CLASS_CODES|{'floor_cell_not_extractable'},set(outcome))
         remaining=owner.D165_CLOSEOUT_REFUSAL_CODES-closeout.TOOLING_REFUSAL_CODES-closeout.OUTCOME_CLASS_CODES
         self.assertEqual(len(remaining),10)
         self.assertFalse(remaining&(set(tooling)|set(outcome)))
