@@ -162,3 +162,102 @@ Verification used Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1` and `PYTHONDONTWRITEBY
 Only the three authorized files changed. No hardware or real BYTES measurements were used. Analysis SHA-256 remains `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`; harvest remains `2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744`.
 
 Fix commits, each pushed: `ad3b497d8`, `c9dcee9dd`, `7beee5ed9`, `0f164a1d5`, `cd91fd2c9`, `edafd77e5`. This report is committed and pushed separately. PR #598 remains a draft. The final-head CI job snapshot is read after that push and reported with the handoff; no completed green whole-suite result is claimed.
+
+
+## Fix round 3
+
+Activation `1cc172c8`, 2026-10-29. Continued `ad0bb794d` on `codex/2026-10-28-by-therm-lines`; input review/probes are JouleWise-data `9cc245015`, `by-therm-lines-delta-opus/`. Implemented V1–V6; Opus 7 remains outside this round.
+
+- V1: hull unavailability keeps an existing OS code determined and marks a science member without it `not defined (hull assessment unavailable)`. Request-end's removal direction is preserved. Either pass mismatch marks every science member `not defined (pass mismatch)`. Equality requires all science members determined and equal. Tests cover both directions, both fault kinds, and individual unavailable hull records.
+- V2: empty CSVs and missing code columns preserve their bytes, record undefined science statuses, and exit 0. A missing hull `journal_available` is an unavailable assessment. Unavailable Git metadata records both producer fields as null. Journal mismatch/provenance is checked before would-add: affected members keep their codes and receive the records-fault status. A matching-seal would-add still stops before creating output.
+- V3: U3 had covered damaged manifests, but not the thermal record. Missing, unparsable or invalid thermal records now list `thermal_line.json`, reconstruct a flagged record, and exit 0.
+- V4: confirmed U2 already handles absent `derived/window_flags.json` with `records.thermal_journal_provenance_unavailable`; retained that exact code and status. The original probes and regression tests confirm it.
+- V5: empty code fields are unquoted empty fields. A withheld-copy regression compares the entire CSV against the exporter's `csv.DictWriter` with its exact parameters, including CRLF and opaque quoted fields.
+- V6: verification rehashes every recorded source, including copied acceptance/export inputs, records `source_differing_paths`, sets the view-change flag, and prints `source changed since transform: <path>`. Changed and missing sources exit 0.
+
+Decisions I made:
+
+- Apply the hull direction to missing per-member assessment fields, null exclusions and unavailable journals as well as missing assessment files: an existing code remains determined; an absent code cannot be certified equal.
+- Treat an invalid CSV header or row structure as an export records fault for every science member because the table cannot establish member/code agreement. Preserve the input CSV bytes and roll back proposed changes for those members.
+- Apply the same provenance-unavailable protection to an apparent would-add as to an apparent removal. Only a matching seal can justify the would-add stop. Missing-request-span behavior remains the registered full-hull fallback.
+- Keep U1's existing-output refusal and overlap protections. `probes_delta.py` already uses a fresh output directory for every transform, including `o2` after a journal change and separate `t4cN/o` cases. Therefore the adaptation for U1's new-output rule is the identity adaptation: no script changes were needed. Both executions used the exact pinned script in memory with `JW=/workspace/JouleWise`.
+- Source freshness shares `records.thermal_view_changed` but has a separate source-path list; view-relative differing paths retain their existing meaning. A damaged record loses its bindings, so verification also flags the manifest/payload paths it can no longer certify.
+
+Every probe line is recorded below. Temporary roots alone are normalized to `$TMP`; the probe's CLI helper prints only the last stdout/stderr line, so `withheld/spans.json` can be the tail even when the full output also lists a damaged control file.
+
+Before (`ad0bb794d`):
+
+```text
+PROBE T2 export-without-exclusion_codes-column (2, "'exclusion_codes' is not in list", False)
+PROBE T2 empty-public-csv (1, 'IndexError: list index out of range', False)
+PROBE T2 withheld-store-absent (0, '}', 'not defined (journal provenance unavailable)', ['not defined (journal provenance unavailable)', 'equals registered line'], ['s.runs.csv', 's.session.json'])
+PROBE T2 hull-record-missing-journal_available (1, "KeyError: 'journal_available'", False)
+PROBE T3 no-window_flags.json (0, '}', ['records.thermal_journal_provenance_unavailable', 'records.thermal_line_undefined'], [])
+PROBE T3 sealed-journal-null (0, '}', ['records.thermal_journal_provenance_unavailable', 'records.thermal_line_undefined'], 'not defined (journal provenance unavailable)')
+PROBE T3 mismatch-and-would-add (2, 'request-end would add thermal.os_level_nonzero: a', False)
+PROBE T3 matching-seal (0, '}', ['a'], 'evaluated')
+PROBE T3 one-byte-journal-change (0, '}', [], "not defined (journal differs from the harvest's)", [])
+PROBE T4 modes-of-copies {'thermal_line.json': '0o444', 'view_manifest.json': '0o444', 'derived/b6-acceptance.json': '0o444'}
+PROBE T4 baseline (0, 'view verified')
+PROBE T4 identical-bytes-new-inode (0, 'withheld/reductions/a.json')
+PROBE T4 identical-bytes-touch-only (0, 'derived/roster.json', 'flag=True')
+PROBE T4 deleted-linked-source (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 added-file-in-view (0, 'derived/extra.json', 'flag=True')
+PROBE T4 deleted-file-in-view (0, 'derived/roster.json', 'flag=True')
+PROBE T4 manifest-not-json (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 manifest-deleted (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 manifest-files-list-of-ints (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 thermal_line-deleted (1, "FileNotFoundError: [Errno 2] No such file or directory: '$TMP/t4c7/o/thermal_line.json'", 'flag=FileNotFoundError')
+PROBE T4 thermal_line-not-json (1, 'json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)', 'flag=JSONDecodeError')
+PROBE T4 source-acceptance-only-changed (0, 'view verified', 'flag=False')
+PROBE T4 source-export-rewritten-after-transform (0, 'view verified')
+PROBE BLIND decoded-sentinels []
+PROBE BLIND sentinels-in-stdout-or-record []
+PROBE BLIND withheld-copy-bytes (False, 1)
+PROBE BLIND sidecar-copy {"operative_bound_s": 645192837.465564, "blinding": {"withheld": {"path": "withheld/s.withheld.csv", "row_count": 1}}}
+PROBE T3 gap-independence {'comparisons': 24000, 'os_decision_differs': 0, 'comparisons_with_unmeasured_holes': 19486}
+```
+
+After (`08e66102c`):
+
+```text
+PROBE T2 export-without-exclusion_codes-column (0, '}', True)
+PROBE T2 empty-public-csv (0, '}', True)
+PROBE T2 withheld-store-absent (0, '}', 'not defined (journal provenance unavailable)', ['not defined (journal provenance unavailable)', 'equals registered line'], ['s.runs.csv', 's.session.json'])
+PROBE T2 hull-record-missing-journal_available (0, '}', True)
+PROBE T3 no-window_flags.json (0, '}', ['records.thermal_journal_provenance_unavailable', 'records.thermal_line_undefined'], [])
+PROBE T3 sealed-journal-null (0, '}', ['records.thermal_journal_provenance_unavailable', 'records.thermal_line_undefined'], 'not defined (journal provenance unavailable)')
+PROBE T3 mismatch-and-would-add (0, '}', True)
+PROBE T3 matching-seal (0, '}', ['a'], 'evaluated')
+PROBE T3 one-byte-journal-change (0, '}', [], "not defined (journal differs from the harvest's)", [])
+PROBE T4 modes-of-copies {'thermal_line.json': '0o444', 'view_manifest.json': '0o444', 'derived/b6-acceptance.json': '0o444'}
+PROBE T4 baseline (0, 'view verified')
+PROBE T4 identical-bytes-new-inode (0, 'withheld/reductions/a.json')
+PROBE T4 identical-bytes-touch-only (0, 'derived/roster.json', 'flag=True')
+PROBE T4 deleted-linked-source (0, 'source changed since transform: $TMP/t4c1/archive/withheld/spans.json', 'flag=True')
+PROBE T4 added-file-in-view (0, 'derived/extra.json', 'flag=True')
+PROBE T4 deleted-file-in-view (0, 'derived/roster.json', 'flag=True')
+PROBE T4 manifest-not-json (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 manifest-deleted (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 manifest-files-list-of-ints (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 thermal_line-deleted (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 thermal_line-not-json (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 source-acceptance-only-changed (0, 'source changed since transform: $TMP/t4c9/archive/derived/b6-acceptance.json', 'flag=True')
+PROBE T4 source-export-rewritten-after-transform (0, 'source changed since transform: $TMP/t4x/export/s.runs.csv')
+PROBE BLIND decoded-sentinels []
+PROBE BLIND sentinels-in-stdout-or-record []
+PROBE BLIND withheld-copy-bytes (True, 1)
+PROBE BLIND sidecar-copy {"operative_bound_s": 645192837.465564, "blinding": {"withheld": {"path": "withheld/s.withheld.csv", "row_count": 1}}}
+PROBE T3 gap-independence {'comparisons': 24000, 'os_decision_differs': 0, 'comparisons_with_unmeasured_holes': 19486}
+```
+
+Verification used Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`, synthetic fixtures only, no hardware or real BYTES data. Comparisons remain exact on codes, counts, integer stamps and hashes. No tolerance or numerical bar was introduced. The randomized gap probe exercises pre-existing production gap behavior; it adds no tool threshold.
+
+- `python3.13 -m unittest tests.test_bytes_thermal_lines -q`: 33 tests, OK, 515.889 s; grouped analysis 30/30 and real harvest/acceptance chain 29/29, including compressed journals.
+- `python3.13 -m unittest tests.b6.test_bytes_p2_thermal_window tests.test_harvest_b5_window -q`: 198 tests, OK, 11 skipped, 713.242 s. Pass-1, block-5 and alpha byte-identity checks each compare 177 files exactly.
+- Final focused `RecordedFaultTests`: 23 tests, OK. `git diff --check`: passed. The full repository suite is delegated to CI because this scope is confined to the exclusion-only tool and its regressions.
+
+Analysis SHA-256 unchanged: `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`.
+Harvest SHA-256 unchanged: `2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744`.
+
+Each implementation step was committed and pushed: `7da248861` (V1), `73ccf920d` (V2), `08e66102c` (V3/V5/V6; V4 confirmed already closed). This report is a separate commit. Only the three authorized files changed. No NEEDS_RULING remains. PR #598 stays draft; final-head CI is read after the report push and every job's state is reported in the handoff. No all-green CI claim is made in this section.
