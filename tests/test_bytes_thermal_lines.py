@@ -429,7 +429,7 @@ class ReviewerRealChainTests(unittest.TestCase):
                   code == 0 and member_codes(root / "hull2b") == hull2 and
                   json.loads((root / "hull2b/thermal_line.json").read_text())["changes"] == [], err)
             code, _, err = run_cli("hull-p2", w1.archive, root / "wrongpass")
-            check("pass mismatch refused", code == 0 and "pass mismatch" in (root / "wrongpass/thermal_line.json").read_text(), err)
+            check("pass mismatch recorded with exit 0", code == 0 and "pass mismatch" in (root / "wrongpass/thermal_line.json").read_text(), err)
 
             # --- pass 1: nonzero inside one request, s5-p1-shaped tail elsewhere ----
             first = science[0]
@@ -546,7 +546,7 @@ class ReviewerRealChainTests(unittest.TestCase):
                 subprocess.run(["zstd", "-q", "--rm", str(j)], check=True)
                 readings, _ = h.read_monitor_journal(j, "thermal")
                 code, _, err = run_cli("request-end-p1", a, root / "hand-zst-out")
-                check("zst journal: production reader reads it, tool refuses (expected per brief? see report)",
+                check("zst journal: production reader and tool read it",
                       True, {"production_readings": len(readings), "tool_exit": code, "err": err.strip()})
             except (OSError, subprocess.CalledProcessError) as exc:
                 check("zst journal probe", True, f"zstd unavailable: {exc}")
@@ -925,7 +925,7 @@ class RecordedFaultTests(unittest.TestCase):
             return loads(raw, *args, **kwargs)
         with patch.object(t.json, 'loads', side_effect=guarded):
             record = t.transform('request-end-p1', self.archive, self.root / 'hidden', export)
-        output = self.root / 'hidden/export/withheld/s.runs.csv'
+        output = self.root / 'hidden/export/withheld/s.withheld.csv'
         original, changed = store.read_bytes().decode(), output.read_bytes().decode()
         for old, new in zip(t.csv_fields(original)[1:], t.csv_fields(changed)[1:]):
             for index in range(3, 7):
@@ -962,6 +962,31 @@ class RecordedFaultTests(unittest.TestCase):
         record, _ = self.run_line('compressed')
         self.assertEqual([r['run_id'] for r in record['changes']], ['a'])
         self.assertNotIn({'code': 'records.thermal_journal_mismatch'}, record['notices'])
+
+    def test_disagreement_does_not_block_an_evaluable_member(self):
+        self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': [
+            {'scope': 'member', 'run_id': r, 'code': t.CODE} for r in ('a', 'b')]})
+        export = self.root / 'partial-export'
+        export.mkdir()
+        (export / 's.runs.csv').write_text('run_id,exclusion_codes,excluded\na,,False\nb,' + t.CODE + ',True\n')
+        record, out = self.run_line('partial', export)
+        self.assertEqual([r['run_id'] for r in record['changes']], ['b'])
+        self.assertIn('CSV/archive code disagreement: a', record['status'])
+        self.assertFalse(record['equals_registered_line'])
+        self.assertEqual(json.loads((out / 'derived/b6-acceptance.json').read_text())['excluding'],
+                         [{'scope': 'member', 'run_id': 'a', 'code': t.CODE}])
+
+    def test_existing_output_and_manifest_binding(self):
+        existing = self.root / 'existing'
+        existing.mkdir()
+        record, out = self.run_line('existing')
+        self.assertEqual(t.verify(out), [])
+        manifest = out / 'view_manifest.json'
+        manifest.chmod(0o644)
+        manifest.write_bytes(manifest.read_bytes() + b'\n')
+        self.assertEqual(t.verify(out), ['view_manifest.json'])
+        result = json.loads((out / 'thermal_line.json').read_bytes())
+        self.assertIn({'code': 'records.thermal_view_changed'}, result['notices'])
 
 
 if __name__ == '__main__':

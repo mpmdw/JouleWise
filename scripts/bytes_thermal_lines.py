@@ -247,8 +247,11 @@ def transform(mode, archive, output, export=None):
             except ValueError:
                 locator = None
             if locator:
-                store_rel = Path("withheld") / path.name
-                inputs.append((export / locator, store_rel, True))
+                store_rel = Path("withheld") / (session + ".withheld.csv")
+                store = (export / locator).resolve()
+                if output.is_relative_to(store) or store.is_relative_to(output):
+                    raise ValueError("output overlaps source withheld store")
+                inputs.append((store, store_rel, True))
                 a, z = field_span(raw_sidecar, ("blinding", "withheld", "path"))
                 raw_sidecar = replace(raw_sidecar, [(a, z, json.dumps(store_rel.as_posix()))])
             exports[Path(sidecar.name)] = raw_sidecar
@@ -303,6 +306,9 @@ def transform(mode, archive, output, export=None):
         for unit in member.get("units", []):
             key = (unit["cell_id"], unit["stratum"], unit["unit_id"])
             units.setdefault(key, []).append(member["run_id"])
+    undefined_statuses = sorted({value for value in statuses.values() if value.startswith("not defined")})
+    line_status = ("; ".join(undefined_statuses) if undefined_statuses else
+                   "evaluated" if changes else "equals registered line")
     record = {"label": LABELS[mode], "source_sha256": sources,
               "producing_commit": subprocess.check_output(
                   ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True).strip(),
@@ -310,14 +316,13 @@ def transform(mode, archive, output, export=None):
                   ["git", "status", "--porcelain", "--untracked-files=no"],
                   cwd=Path(__file__).resolve().parents[1], text=True).strip()),
               "records.thermal_view_changed": False,
-              "status": ("not defined (see member statuses)" if any(v.startswith("not defined") for v in statuses.values())
-                         else "evaluated" if changes else "equals registered line"),
+              "status": line_status,
               "member_statuses": [{"run_id": m["run_id"],
                   "status": statuses.get(m["run_id"], "equals registered line"),
                   "blinded_status": "not defined at blinded stage (row withheld)"
                       if m["run_id"] in withheld_runs else statuses.get(m["run_id"], "equals registered line")}
                   for m in roster],
-              "changes": changes, "notices": notices, "equals_registered_line": not changes,
+              "changes": changes, "notices": notices, "equals_registered_line": not changes and not undefined_statuses,
               "restored_members": sorted(r for r in before if before[r] and not after[r]),
               "dropped_members": [{"run_id": r, "codes": sorted(c)} for r, c in sorted(after.items()) if c],
               # Units are printed as run-id lists; the analysis owns validity,
@@ -400,6 +405,10 @@ def verify(output):
     different.extend(path for path in sorted(expected.keys() | current.keys())
                      if expected.get(path) != current.get(path))
     record["records.thermal_view_changed"] = bool(different)
+    record["notices"] = [notice for notice in record["notices"]
+                         if notice["code"] != "records.thermal_view_changed"]
+    if different:
+        record["notices"].append({"code": "records.thermal_view_changed"})
     record["view_differing_paths"] = sorted(set(different))
     record_path.chmod(0o644)
     write_copy(record_path, json.dumps(record, indent=2) + "\n")
