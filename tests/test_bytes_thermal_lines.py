@@ -122,8 +122,9 @@ class ThermalLinesTests(unittest.TestCase):
             self.assertNotIn(sentinel, capture.getvalue())
             self.assertEqual(a.count(sentinel), b.count(sentinel))
         again = self.root / 'again'
-        repeated = t.transform('hull-p2', out, again, out / 'export')
-        self.assertEqual(repeated['changes'], [])
+        repeated = t.transform('hull-p2', source, again, export)
+        self.assertEqual(json.dumps(repeated['changes']), json.dumps(record['changes']))
+        self.assertEqual((out / 'view_manifest.json').read_bytes(), (again / 'view_manifest.json').read_bytes())
         self.assertEqual((out / 'derived/b6-acceptance.json').read_bytes(), (again / 'derived/b6-acceptance.json').read_bytes())
         archive_only = t.transform('hull-p2', source, self.root / 'no-csv')
         self.assertEqual(record['changes'], archive_only['changes'])
@@ -982,10 +983,53 @@ class RecordedFaultTests(unittest.TestCase):
         self.assertEqual(json.loads((out / 'derived/b6-acceptance.json').read_text())['excluding'],
                          [{'scope': 'member', 'run_id': 'a', 'code': t.CODE}])
 
+    def test_existing_linked_output_refuses_without_source_writes(self):
+        export = self.root / 'export'
+        export.mkdir()
+        csv_path = export / 's.runs.csv'
+        csv_path.write_text('run_id,exclusion_codes,excluded\na,' + t.CODE + ',True\nb,,False\n')
+        out = self.root / 'linked-output'
+        out.mkdir()
+        (out / 'export').symlink_to(export, target_is_directory=True)
+        before = csv_path.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'new directory'):
+            t.transform('request-end-p1', self.archive, out, export)
+        self.assertEqual(csv_path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in out.iterdir()), ['export'])
+
+    def test_fresh_outputs_have_identical_manifests_and_changes(self):
+        export = self.root / 'repeat-export'
+        export.mkdir()
+        (export / 's.runs.csv').write_text('run_id,exclusion_codes,excluded\na,' + t.CODE + ',True\nb,,False\n')
+        first = self.root / 'first'
+        second = self.root / 'second'
+        a = t.transform('request-end-p1', self.archive, first, export)
+        b = t.transform('request-end-p1', self.archive, second, export)
+        self.assertEqual((first / 'view_manifest.json').read_bytes(), (second / 'view_manifest.json').read_bytes())
+        self.assertEqual(json.dumps(a['changes']).encode(), json.dumps(b['changes']).encode())
+        before = {str(p.relative_to(first)): p.read_bytes() for p in first.rglob('*') if p.is_file()}
+        self.put('sources/repo/plan_tree.json', {'bytes_pass': 2})
+        with self.assertRaisesRegex(ValueError, 'new directory'):
+            t.transform('request-end-p1', self.archive, first)
+        # Linked source payload can change, but the certified export/control files cannot.
+        for name in ('export/s.runs.csv', 'view_manifest.json', 'thermal_line.json', 'derived/b6-acceptance.json'):
+            self.assertEqual((first / name).read_bytes(), before[name])
+
+    def test_destination_directory_guard(self):
+        out = self.root / 'guard'
+        out.mkdir()
+        (out / 'export').mkdir()
+        (out / 'export/withheld').symlink_to(self.archive, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'symlink'):
+            t.write_copy(out / 'export/withheld/payload', 'opaque', out, [self.archive])
+        self.assertFalse((self.archive / 'payload').exists())
+
     def test_existing_output_and_manifest_binding(self):
         existing = self.root / 'existing'
         existing.mkdir()
-        record, out = self.run_line('existing')
+        with self.assertRaisesRegex(ValueError, 'new directory'):
+            t.transform('request-end-p1', self.archive, existing)
+        record, out = self.run_line('fresh')
         self.assertEqual(t.verify(out), [])
         manifest = out / 'view_manifest.json'
         manifest.chmod(0o644)

@@ -121,6 +121,9 @@ def transform(mode, archive, output, export=None):
     for source in (archive, export):
         if source and (output.is_relative_to(source) or source.is_relative_to(output)):
             raise ValueError("output overlaps source archive/export")
+    if output.exists() or output.is_symlink():
+        raise ValueError("output must be a new directory")
+    source_roots = [source for source in (archive, export) if source]
     sources = {}
 
     def read(path):
@@ -330,32 +333,30 @@ def transform(mode, archive, output, export=None):
               "restored_units": [runs for runs in units.values() if any(before[r] for r in runs)
                                  and not any(after[r] for r in runs)],
               "dropped_units": [runs for runs in units.values() if any(after[r] for r in runs)]}
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=False)
     for path in archive.rglob("*"):
         rel = path.relative_to(archive)
         dest = output / rel
+        guard_destination(dest, output, source_roots)
         if path.is_dir():
-            if dest.is_symlink():
-                dest.unlink()
+            guard_destination(dest / "_directory_check", output, source_roots)
             dest.mkdir(exist_ok=True)
         elif rel != Path("derived/b6-acceptance.json") and rel not in (Path("thermal_line.json"), Path("view_manifest.json")):
             if dest.exists() or dest.is_symlink():
                 dest.unlink()
             dest.symlink_to(path.resolve())
-    write_copy(output / "derived/b6-acceptance.json", new_acceptance)
+    write_copy(output / "derived/b6-acceptance.json", new_acceptance, output, source_roots)
     if exports:
+        guard_destination(output / "export", output, source_roots)
+        guard_destination(output / "export/_directory_check", output, source_roots)
         (output / "export").mkdir(exist_ok=True)
         for name, content in exports.items():
             destination = output / "export" / name
-            # A transformed input may already contain export links. Never
-            # follow such a link when writing a second-generation copy.
-            if destination.is_symlink():
-                destination.unlink()
-            write_copy(destination, content)
+            write_copy(destination, content, output, source_roots)
     manifest = {"files": view_files(output)}
-    write_copy(output / "view_manifest.json", json.dumps(manifest, indent=2) + "\n")
+    write_copy(output / "view_manifest.json", json.dumps(manifest, indent=2) + "\n", output, source_roots)
     record["view_manifest_sha256"] = sha256(output / "view_manifest.json")
-    write_copy(output / "thermal_line.json", json.dumps(record, indent=2) + "\n")
+    write_copy(output / "thermal_line.json", json.dumps(record, indent=2) + "\n", output, source_roots)
     return record
 
 
@@ -368,8 +369,24 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def write_copy(path, content):
+def guard_destination(path, output, sources=()):
+    """Check every destination directory before creating or replacing a leaf."""
+    relative = path.relative_to(output)
+    directory = output
+    for part in (None, *relative.parts[:-1]):
+        if part is not None:
+            directory = directory / part
+        if directory.is_symlink():
+            raise ValueError("destination directory is a symlink: " + str(directory))
+        if any(directory.resolve().is_relative_to(source) for source in sources):
+            raise ValueError("destination directory resolves inside source: " + str(directory))
+
+
+def write_copy(path, content, output=None, sources=()):
+    output = output if output is not None else path.parent
+    guard_destination(path, output, sources)
     path.parent.mkdir(parents=True, exist_ok=True)
+    guard_destination(path, output, sources)
     if path.exists() or path.is_symlink():
         path.unlink()
     path.write_bytes(content.encode("utf-8"))
@@ -383,8 +400,12 @@ def view_files(output):
         if relative not in CONTROL and (path.is_file() or path.is_symlink()):
             try:
                 stat = path.stat()
-                files.append({"path": relative, "size": stat.st_size, "sha256": sha256(path),
-                              "mtime_ns": stat.st_mtime_ns, "inode": stat.st_ino})
+                entry = {"path": relative, "size": stat.st_size, "sha256": sha256(path)}
+                # Only linked source identities must disclose re-acceptance.
+                # Fresh copied payloads have different inodes and timestamps.
+                if path.is_symlink():
+                    entry.update(mtime_ns=stat.st_mtime_ns, inode=stat.st_ino)
+                files.append(entry)
             except OSError:
                 files.append({"path": relative, "size": None, "sha256": None})
     return files
@@ -412,8 +433,7 @@ def verify(output):
     if different:
         record["notices"].append({"code": "records.thermal_view_changed"})
     record["view_differing_paths"] = sorted(set(different))
-    record_path.chmod(0o644)
-    write_copy(record_path, json.dumps(record, indent=2) + "\n")
+    write_copy(record_path, json.dumps(record, indent=2) + "\n", output)
     return record["view_differing_paths"]
 
 
