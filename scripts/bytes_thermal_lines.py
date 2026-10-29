@@ -237,13 +237,13 @@ def transform(mode, archive, output, export=None):
                 undefined(run, "noninteger span")
                 continue
             found = {code for code, *_ in h.thermal_member_flags(stamps, readings, thresholds)}
+            if (CODE in found) != (CODE in before[run]) and (mismatch or provenance_unavailable):
+                undefined(run, "journal provenance unavailable" if provenance_unavailable
+                          else "journal differs from the harvest's")
+                continue
             if CODE in found and CODE not in before[run]:
                 raise ValueError(f"request-end would add {CODE}: {run}")
             if CODE not in found:
-                if (mismatch or provenance_unavailable) and CODE in before[run]:
-                    undefined(run, "journal provenance unavailable" if provenance_unavailable
-                              else "journal differs from the harvest's")
-                    continue
                 after[run].discard(CODE)
         if after[run] != before[run]:
             statuses[run] = "evaluated"
@@ -278,8 +278,22 @@ def transform(mode, archive, output, export=None):
                 raw = read(source)
             except OSError:
                 continue
-            rows = csv_fields(raw)
-            header = [decode_field(raw, span) for span in rows[0]]
+            try:
+                rows = csv_fields(raw)
+                if not rows:
+                    raise ValueError("empty export CSV")
+                header = [decode_field(raw, span) for span in rows[0]]
+                if "run_id" not in header or "exclusion_codes" not in header:
+                    raise ValueError("export CSV missing run_id or exclusion_codes column")
+                if any(len(row) != len(header) for row in rows[1:]):
+                    raise ValueError("export CSV row width differs from header")
+            except ValueError as exc:
+                exports[relative] = raw
+                for member in roster:
+                    if member.get("kind") == "science":
+                        bad.add(member["run_id"])
+                        undefined(member["run_id"], str(exc))
+                continue
             rid, codes = header.index("run_id"), header.index("exclusion_codes")
             for row in rows[1:]:
                 run = decode_field(raw, row[rid])
@@ -326,12 +340,18 @@ def transform(mode, archive, output, export=None):
     undefined_statuses = sorted({value for value in statuses.values() if value.startswith("not defined")})
     line_status = ("; ".join(undefined_statuses) if undefined_statuses else
                    "evaluated" if changes else "equals registered line")
+    try:
+        producing_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        producing_tree_dirty = bool(subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=Path(__file__).resolve().parents[1], text=True, stderr=subprocess.DEVNULL).strip())
+    except (OSError, subprocess.CalledProcessError):
+        producing_commit = producing_tree_dirty = None
     record = {"label": LABELS[mode], "source_sha256": sources,
-              "producing_commit": subprocess.check_output(
-                  ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True).strip(),
-              "producing_tree_dirty": bool(subprocess.check_output(
-                  ["git", "status", "--porcelain", "--untracked-files=no"],
-                  cwd=Path(__file__).resolve().parents[1], text=True).strip()),
+              "producing_commit": producing_commit,
+              "producing_tree_dirty": producing_tree_dirty,
               "records.thermal_view_changed": False,
               "status": line_status,
               "member_statuses": [{"run_id": m["run_id"],

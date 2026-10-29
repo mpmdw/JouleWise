@@ -940,6 +940,46 @@ class RecordedFaultTests(unittest.TestCase):
                 self.assertFalse(record['equals_registered_line'])
                 self.assertEqual(record['changes'], [])
 
+    def test_invalid_csv_records_fault_and_copies_bytes(self):
+        export = self.root / 'bad-export'
+        export.mkdir()
+        path = export / 's.runs.csv'
+        for index, raw in enumerate(('', 'run_id,excluded\na,True\nb,False\n')):
+            path.write_text(raw)
+            record, out = self.run_line('bad-csv-' + str(index), export)
+            self.assertEqual(record['changes'], [])
+            self.assertFalse(record['equals_registered_line'])
+            self.assertTrue(all(m['status'].startswith('not defined (') for m in record['member_statuses']))
+            self.assertEqual((out / 'export/s.runs.csv').read_bytes(), path.read_bytes())
+
+    def test_git_unavailable_records_null_producer(self):
+        import os
+        with patch.dict(os.environ, {'GIT_DIR': str(self.root / 'no-git')}):
+            record, _ = self.run_line('no-git')
+        self.assertIsNone(record['producing_commit'])
+        self.assertIsNone(record['producing_tree_dirty'])
+
+    def test_would_add_requires_matching_seal(self):
+        self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': []})
+        fixtures.thermal_journal(range(0, 126, 5), {60}).dump(self.journal)
+        self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {
+            'journal': {'sha256': '0' * 64}}}}})
+        record, _ = self.run_line('mismatch-add')
+        self.assertEqual(record['changes'], [])
+        self.assertIn({'code': 'records.thermal_journal_mismatch'}, record['notices'])
+        self.assertEqual([m['status'] for m in record['member_statuses']],
+                         ["not defined (journal differs from the harvest's)"] * 2)
+        (self.archive / 'derived/window_flags.json').unlink()
+        record, _ = self.run_line('unsealed-add')
+        self.assertEqual([m['status'] for m in record['member_statuses']],
+                         ['not defined (journal provenance unavailable)'] * 2)
+        self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {
+            'journal': {'sha256': hashlib.sha256(self.journal.read_bytes()).hexdigest()}}}}})
+        out = self.root / 'sealed-add'
+        with self.assertRaisesRegex(ValueError, 'request-end would add'):
+            t.transform('request-end-p1', self.archive, out)
+        self.assertFalse(out.exists())
+
     def test_export_disagreement_and_missing_member(self):
         export = self.root / 'export'
         export.mkdir()
