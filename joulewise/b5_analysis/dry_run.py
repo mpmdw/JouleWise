@@ -205,6 +205,17 @@ FLAGS = ('backup_roots_env_ignored', 'runs_root_has_unlisted_file', 'harvest_che
 CHECKS = ('input_census', 'window_index', 'harvest_outputs', 'sources_sha256sums', 'withheld_no_harvest_digest', 'withheld',
           'plan_tree_binding:sealed', 'plan_tree_binding:synthetic', 'ledger_prefix_of_live')
 _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])')
+# Archived copies of the project's own tracked documents. Their names are written
+# in the repository before any window, authenticated by the archive's source
+# manifest, and carry no measurement; activation ids (22784e38) and version
+# strings (2.1.260) in them read as float tokens. Only these census names are
+# exempt from the token rule; every other field and name keeps it.
+REPOSITORY_DOCUMENT_PREFIX = 'sources/night-custody/results-clone/docs/'
+
+
+def repository_document_name(row):
+    return (type(row) is dict and row.get('check') == 'sources_sha256sums' and type(row.get('path')) is str
+            and row['path'].startswith(REPOSITORY_DOCUMENT_PREFIX))
 
 
 def _plain(value):
@@ -286,9 +297,9 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
         need(type(value) is int and value >= 0)
     def boolean(value):
         need(type(value) is bool)
-    def path(value):
+    def path(value, named_document=False):
         need(type(value) is str and bool(value) and '\\' not in value and '\x00' not in value
-             and not _FLOAT_TOKEN.search(value) and not Path(value).is_absolute()
+             and (named_document or not _FLOAT_TOKEN.search(value)) and not Path(value).is_absolute()
              and all(p not in ('', '.', '..') for p in value.split('/')))
     keys(record, {'schema_version','mode','analysis_commit','window_index_sha256','sealed',
         'attempts','windows','input_census','steps','completed_without_tooling_refusal'} |
@@ -328,7 +339,7 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
     for row in record['input_census']:
         keys(row, ('window','path','sha256','check'))
         need(row['window'] in PACKS and row['check'] in CHECKS)
-        path(row['path']); digest(row['sha256'])
+        path(row['path'],repository_document_name(row)); digest(row['sha256'])
         # Source names and original-root names are inventory-relative paths.
         need(row['path'] in census_paths or row['path'].startswith(('sources/','original/claim-runs/','withheld/'))
              or (row['check'] == 'window_index' and row['path'] == 'harvest.json'))
@@ -451,11 +462,15 @@ class RunState:
         return item
 
     def write(self, role, relative, value=None, *, raw=None, addressed=False):
+        derived = raw is None
         raw = _canonical(value) if raw is None else raw
         if role.startswith(('attempt_','census_','kept_','tripwire_')):
             # P9 readers' own records are structure only even in restricted
             # custody. Unlike analysis artifacts, they have no float token.
-            if _FLOAT_TOKEN.search(raw.decode('utf-8')):
+            scanned = raw
+            if role.startswith('census_') and derived and type(value) is list:
+                scanned = _canonical([{**row,'path':''} if repository_document_name(row) else row for row in value])
+            if _FLOAT_TOKEN.search(scanned.decode('utf-8')):
                 raise AnalysisRefusal('reader_record_not_structure_only')
         if addressed:
             original = Path(relative)

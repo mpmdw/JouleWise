@@ -1081,6 +1081,47 @@ class ReaderRecordGuardTests(unittest.TestCase):
             self.assertFalse(s.restricted.exists())
 
 
+class RepositoryDocumentNameTests(unittest.TestCase):
+    """Real block-5 archives carry the repository's own process-trace names (activation ids, version strings)."""
+    NAMES=('sources/night-custody/results-clone/docs/process_traces/2026-09-26-activation-22784e38/00-activation-record.md',
+           'sources/night-custody/results-clone/docs/process_traces/2026-09-02-hands-free-week/14a-claude-help-2.1.260.txt')
+
+    def row(self,path,check='sources_sha256sums'):
+        return {'path':path,'sha256':'b'*64,'check':check}
+
+    def test_census_write_accepts_repository_document_names_only(self):
+        with tempfile.TemporaryDirectory(prefix='s10-doc-names-') as tmp:
+            s=d.RunState('blind-dry-run',Path(tmp)/'index.json',Path(tmp)/'restricted','a'*40)
+            item=s.write('census_alpha','supply-census/alpha.json',[self.row(name) for name in self.NAMES])
+            self.assertIn('census_alpha',s.outputs)
+            self.assertIn(self.NAMES[0],(s.restricted/item['name']).read_text())
+            refused=(('census_beta',[self.row(self.NAMES[0],'input_census')]),
+                     ('census_beta',[self.row('sources/night-custody/measurement/run-1e5.json')]),
+                     ('census_beta',[self.row('sources/night-custody/results-clone/runs/22784e38.json')]),
+                     ('census_beta',[{**self.row(self.NAMES[0]),'sha256':'12.5'}]),
+                     ('census_beta',{'path':self.NAMES[0],'check':'sources_sha256sums'}),
+                     ('attempt_beta',[self.row(self.NAMES[0])]))
+            for role,value in refused:
+                with self.subTest(value=value),self.assertRaisesRegex(AnalysisRefusal,'^reader_record_not_structure_only$'):
+                    s.write(role,'supply-census/beta.json',value)
+            with self.assertRaisesRegex(AnalysisRefusal,'^reader_record_not_structure_only$'):
+                s.write('census_gamma','supply-census/gamma.json',[self.row(self.NAMES[0])],
+                        raw=d._canonical([self.row('sources/1e-100.json')]))
+            self.assertEqual(set(s.outputs),{'census_alpha'})
+
+    def test_record_validation_accepts_repository_document_names_only(self):
+        def record(rows):
+            return d.build_dry_run_record(mode='blind-dry-run',analysis_commit='a'*40,window_index_sha256='c'*64,
+                sealed={key:'d'*64 for key in d.SEAL_KEYS},input_census=[{'window':'alpha',**row} for row in rows],
+                steps=[d.StepRecord('0',None,'tooling_refusal',exit_status=2,refusal='reader_record_not_structure_only')]
+                      +[d.StepRecord(step,None,'not_run') for step in d.STEP_IDS[1:]])
+        d.validate_dry_run_record(record([self.row(name) for name in self.NAMES]))
+        for row in (self.row(self.NAMES[0],'input_census'),self.row('sources/night-custody/measurement/run-1e5.json'),
+                    self.row('sources/night-custody/results-clone/runs/22784e38.json')):
+            with self.subTest(row=row),self.assertRaisesRegex(AnalysisRefusal,'^dry_run_record_invalid$'):
+                d.validate_dry_run_record(record([row]))
+
+
 class CustodyPathWriteTests(unittest.TestCase):
     def test_registered_write_refuses_path_escape_before_mutation(self):
         with tempfile.TemporaryDirectory(prefix='s10-output-path-') as tmp:
