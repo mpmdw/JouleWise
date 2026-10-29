@@ -567,7 +567,7 @@ REDUCER_DEPENDENCIES = {
     "gd": ("S.x", "alpha"),
     "gamma_d": ("gd",),
     "delta": ("gd", "gc", "gamma_d", "gamma_c"),
-    "r": ("C3.x", "alpha", "gc"),
+    "r": ("S.x", "C3.x", "alpha", "gc"),
     "dgc": ("C1.dx", "C2.dx", "C3.dx", "r"),
     "da": ("C1.dx", "r", "dgc"),
     "halfwidth": ("S.dx", "da", "alpha", "dgc", "delta"),
@@ -597,8 +597,10 @@ def arithmetic(path, operation):
 
 def reduce_boundary(calls, sizes, boundary):
     """§3: evaluate the dependency graph, retaining independent H4 nodes."""
-    nodes, arms, errors = {}, {}, {}
+    nodes, arms, errors, origins = {}, {}, {}, {}
     def node(key, dependencies, operation, reason):
+        origins[key] = tuple(dict.fromkeys(p for d in dependencies for p in origins.get(d, ())))
+        reason += " from "+", ".join(origins[key])
         failure = next((errors[d] for d in dependencies if not finite_number(nodes.get(d))), None)
         try:
             if failure:
@@ -617,6 +619,14 @@ def reduce_boundary(calls, sizes, boundary):
                                              "two complete arm calls missing")
             for key, value in (("e", data.get("excess_j")), ("u", data.get("bound_j")), ("n", row.get("N"))):
                 name = prefix+key+str(j)
+                position = next((i for i,c in enumerate(calls) if c is row), None)
+                root = f"records[{position}]"
+                native = ("meter","battery") if boundary == "dc" else ("rails","meter","battery") if boundary == "rest" else (boundary,)
+                leaves = tuple(root+".harvest.energy_j."+b for b in native)
+                origins[name] = ((root+".receipt.repeats",) if key == "n" else leaves+
+                    tuple(root+".harvest.idle."+span+"."+b+".power_w" for span in ("pre","post") for b in native)+
+                    ((root+".harvest.anchor_shift_j",root+".harvest.r_max_s",root+".harvest.meter_edge_w",
+                      root+".harvest.battery_edge_j",root+".harvest.meter_gaps") if key == "u" else ()))
                 nodes[name] = value if finite_number(value) else not_defined(why)
                 if not finite_number(value): errors[name] = why
         e0,e1,u0,u1,n0,n1 = (prefix+k for k in ("e0","e1","u0","u1","n0","n1"))
@@ -627,8 +637,9 @@ def reduce_boundary(calls, sizes, boundary):
         try:
             why = next((errors[d] for d in deps["xi"] if d in errors), None)
             if why: raise ValueError(why)
-            xi = arithmetic(arm+" excess/N", lambda: [nodes[e0]/nodes[n0],nodes[e1]/nodes[n1]])
+            xi = arithmetic(arm+" excess/N from "+", ".join(p for d in deps["xi"] for p in origins[d]), lambda: [nodes[e0]/nodes[n0],nodes[e1]/nodes[n1]])
             nodes[prefix+"xi"] = 1  # pair availability prerequisite
+            origins[prefix+"xi"] = tuple(p for d in deps["xi"] for p in origins[d])
         except ValueError as exc:
             xi = not_defined(str(exc)); nodes[prefix+"xi"] = xi; errors[prefix+"xi"] = str(exc)
         node(prefix+"x", deps["x"], lambda: (nodes[e0]+nodes[e1])/(nodes[n0]+nodes[n1]), arm+" excess/N")
@@ -657,6 +668,8 @@ def reduce_boundary(calls, sizes, boundary):
         if "{arm}" in key or key == "upper_limit": continue
         node(key, deps, operations[key], boundary+" "+key+" from records receipt/harvest")
     result = {key:v[key] for key in REDUCER_DEPENDENCIES if "{arm}" not in key and key not in ("gc","gd","dgc","da","upper_limit")}
+    if nodes.get("alpha") == 0:
+        result["epsilon_flip_over_alpha"] = not_defined("alpha is zero")
     result["arms"] = arms
     if "halfwidth" in errors:
         result.update(reason=errors["halfwidth"], description=not_defined(errors["halfwidth"]),
@@ -829,6 +842,9 @@ def read_known_bytes(records, scan):
                 if "reason" in stats:
                     stats["reason"] = f"records[{i-1}].harvest.idle.{span}.{stream}: "+stats["reason"]
         idle = combined_idle(prepost["pre"],prepost["post"])
+        for stream, stats in idle.items():
+            if "reason" in stats and "records[" not in stats["reason"]:
+                stats["reason"] = f"records[{i-1}].harvest.idle.pre/post.{stream}.power_w: "+stats["reason"]
         call.update(idle=idle,native_idle=prepost)
         energy = h.get("energy_j",{})
         battery_rows = h.get("battery_samples",[])
@@ -971,9 +987,14 @@ def read_known_bytes(records, scan):
         output["share"] = describe_share(rails if "delta" in rails else None,dc)
         gpu = [c for c in output["calls"] if c["arm"] in ("S","C2")]
         if len(gpu)==4 and all(finite_number(c["boundaries"].get("gpu",{}).get("excess_j")) for c in gpu):
-            power = {arm:sum(c["boundaries"]["gpu"]["excess_j"] for c in gpu if c["arm"]==arm)/
+            try:
+                power = {arm:sum(c["boundaries"]["gpu"]["excess_j"] for c in gpu if c["arm"]==arm)/
                          sum(c["T"] for c in gpu if c["arm"]==arm) for arm in ("S","C2")}
-            output["gpu_power_contrast_w"] = power["S"]-power["C2"]
+                output["gpu_power_contrast_w"] = arithmetic(
+                    "records.harvest.energy_j.gpu/receipt.end_ns/start_ns", lambda: power["S"]-power["C2"])
+                arithmetic("records.harvest.energy_j.gpu/receipt.end_ns/start_ns", lambda: power)
+            except (ValueError, OverflowError) as exc:
+                output["gpu_power_contrast_w"] = not_defined(str(exc))
         else:
             output["gpu_power_contrast_w"] = not_defined("GPU spans missing")
     output["sizes"] = sizes if scan.get("K") is not None else {a:not_defined("knee not found") for a in sizes}
@@ -982,8 +1003,8 @@ def read_known_bytes(records, scan):
                               NONNEG, "harvest.hour_as_run_s")
     output["hour_as_run_s"] = not_defined("session endpoints missing: "+error) if error else hour
     try:
-        output["stamped_envelope_s"] = (records[-1]["receipt"]["idle_post_end_ns"]-records[0]["receipt"]["idle_pre_start_ns"])/1e9
-    except (IndexError,KeyError,TypeError):
+        output["stamped_envelope_s"] = arithmetic("records.receipt.idle_post_end_ns/idle_pre_start_ns", lambda: (records[-1]["receipt"]["idle_post_end_ns"]-records[0]["receipt"]["idle_pre_start_ns"])/1e9)
+    except (IndexError,KeyError,TypeError,ValueError,OverflowError):
         output["stamped_envelope_s"] = not_defined("session endpoints missing")
     output = json_evidence(output)
     output["printed"] = printed_record(output)
@@ -1001,7 +1022,7 @@ def format_interval(value, halfwidth):
     """§14 H2: two significant half-width digits; estimate at the same place."""
     if halfwidth == 0:
         return f"{value:.2f} ± 0.00"
-    rounded = float(format(halfwidth, ".2g"))
+    rounded = arithmetic("halfwidth print conversion", lambda: float(format(halfwidth, ".2g")))
     places = 1-math.floor(math.log10(rounded))
     return f"{round(value,places):.{max(0,places)}f} ± {round(halfwidth,places):.{max(0,places)}f}"
 
@@ -1011,8 +1032,14 @@ def printed_record(result):
     printed = {"claim_lines": {}, "contrasts": {}, "share": result["share"],
                "stack_comparisons": result["stack_comparisons"]}
     for boundary,value in result["boundaries"].items():
-        interval = (format_interval(value["delta"],value["halfwidth"]) if isinstance(value.get("halfwidth"),(int,float))
-                    else ((f"{value['delta']} J/GB; " if isinstance(value.get("delta"),(int,float)) else "")+value["description"]))
+        try:
+            interval = (format_interval(value["delta"],value["halfwidth"]) if isinstance(value.get("halfwidth"),(int,float))
+                        else ((f"{value['delta']} J/GB; " if isinstance(value.get("delta"),(int,float)) else "")+value["description"]))
+        except (ValueError, OverflowError) as exc:
+            why = boundary+" delta/halfwidth print arithmetic unavailable: "+str(exc)
+            value.update({"class":"UNDETERMINED","reason":why,"description":not_defined(why),
+                          "halfwidth":not_defined(why),"upper_limit":not_defined(why)})
+            interval = not_defined(why)
         printed["contrasts"][boundary] = interval
         if boundary not in ("rails","rest") or value["class"] == "RESOLVED":
             continue
@@ -1030,7 +1057,11 @@ def printed_record(result):
                     f"whether {boundary} lines include memory-traffic energy is not established.")
         printed["claim_lines"][boundary] = line
     if isinstance(result["share"]["f"],(float,int)):
-        printed["share"] = format_interval(result["share"]["f"],result["share"]["df"])
+        try:
+            printed["share"] = format_interval(result["share"]["f"],result["share"]["df"])
+        except (ValueError, OverflowError) as exc:
+            result["share"] = {key:not_defined("rails/DC share print: "+str(exc)) for key in ("f","df")}
+            printed["share"] = result["share"]
     return printed
 
 

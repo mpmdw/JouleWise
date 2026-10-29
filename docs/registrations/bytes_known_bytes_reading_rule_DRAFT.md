@@ -456,6 +456,9 @@ call, missing stream integral, missing r_max/edge bound, missing native support 
 gap power source/missing adapter rating. A gap's power sources must be named; enforce this
 through the printed reason, never an exception that discards the record. Retain all inputs,
 per-call excesses, available bounds and central contrasts when only their bound is undefined.
+Native-support failure makes that arm’s x and δx undefined; the residual requires
+complete native support in all four arms, and every propagated width requires
+all four arm uncertainties. Coefficients using complete arms remain computable.
 A missing DC prerequisite prevents common DC validity; a rails-only prerequisite affects
 rails/rest, and a GPU-only prerequisite affects GPU. With no K, every K-dependent quantity,
 including share and GPU arm-power contrast, is `not defined (knee not found)`.
