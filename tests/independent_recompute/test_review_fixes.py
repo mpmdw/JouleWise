@@ -215,11 +215,12 @@ class UnionTests(Case):
         self.assertGreater(fails.get("count", 0), 0)
 
     def test_counterfactual_l9_keys_only(self):
-        # With the recompute's keys ignored (the 3bf93b25e behaviour), P5 passes.
+        # With the recompute's keys ignored (the 3bf93b25e behaviour), P5 passes. RC-CMP-7 G7: L9's side is now
+        # its re-reduced runs and the registered step-2 universe; the 3bf93b25e behaviour keys on the first only.
         del self.files["rereduced/alpha/run-a.rereduced.json"]
 
         def l9_keys_only(c, scope, *sides):
-            for key in sorted(set().union(*sides[:-1]), key=str):
+            for key in sorted(set().union(*sides[:1]), key=str):
                 yield (key,) + tuple(side.get(key) for side in sides)
         with mock.patch.object(cmp.Comparison, "pairs", l9_keys_only):
             self.assertEqual(self.fails(self.shipped()), {})

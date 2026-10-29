@@ -106,6 +106,18 @@ def item(line, restricted, text, **values):
     return {"line": line, "restricted": restricted, "label": line, "text": text, **values}
 
 
+def kept_units_record(pack, runs, cell_id=None):
+    """kept_units.KeptUnits.to_record: the kept and dropped units of each cell, by run id."""
+    cell_id = cell_id or ALPHA_CELLS["absolute"]
+    units = [{"cell_id": cell_id, "stratum": "repeat", "unit_id": f"{cell_id}-r{i + 1:02d}", "run_ids": [run],
+              "positions": [i + 1], "stage_ids": ["01_phase_decode_absolute"]} for i, run in enumerate(runs)]
+    cells = {cell_id: {"target": True, "planned": {"repeat": len(runs)}, "minimum": {"repeat": 0}, "n_r": len(runs),
+                       "n_b": 0, "kept": {"repeat": units}, "dropped": []}} if runs else {}
+    return {"schema_version": "joulewise.b5_kept_units.v1", "pack": pack, "plan_id": "plan-" + pack, "attempt": 1,
+            "harvest_pin": "a1b2c3d" + pack, "exclusions_sha256": "e" * 64, "roster_sha256": "d" * 64,
+            "catalog_sha256": "c" * 64, "sensitivity_label": None, "cells": cells}
+
+
 def l9_files():
     """L9 restricted outputs in the producers' shapes (RC-CMP-6 G4), with the registered ids."""
     files = {"rereduced/alpha/run-a.rereduced.json": {"phase_energy_j": {"prefill": 2.5, "decode": 97.25},
@@ -127,6 +139,9 @@ def l9_files():
         files[f"brackets/{SHA}-{pack}.json"] = {"b_sens": 0.0625, "evaluation": {"acceptance": {"allowance": {
             "operative_b_fiducial_binary64_s": 0.0375}}}}
     files[f"brackets/{SHA}-gamma.json"] = copy.deepcopy(files[f"brackets/{SHA}-alpha.json"])
+    # L9's step-2 selection (RC-CMP-7 G7): each window's kept-units record (kept_units.KeptUnits.to_record).
+    for pack in ("alpha", "beta", "gamma"):
+        files[f"kept-units/{SHA}-{pack}.json"] = kept_units_record(pack, ["run-a"] if pack == "alpha" else [])
     files[f"brackets/{SHA}-block.json"] = {"T": 424, "attained_by_sequence": 396, "value_s": 0.0625}
     files[f"mint/{SHA}-aggregate-floor.json"] = {"cells": [
         {"cell_id": f"d117-{model}-{phase}-floor-v5", "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
@@ -226,6 +241,7 @@ def recompute_output():
     return {"program_sha256": "f" * 64,
             "members": {"ALPHA": {"run-a": {"E_j": {"prefill": 2.5, "decode": 97.25, "request": 120.0}, "selected": True},
                                   "corpus-r1": {"E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}, "selected": False}}},
+            "inputs": {p: {"exclusions_sha256": "e" * 64} for p in ("ALPHA", "BETA", "GAMMA")},
             "windows": {p: {"b_op_s": 0.0375} for p in ("ALPHA", "BETA", "GAMMA")},
             "disclosures": {"sensitivity_bound": {"B_max_s": 0.0625, "T": 424, "attaining_sequence": 396,
                                                   "windows": {p: {"b_sens_s": 0.0625} for p in ("ALPHA", "BETA", "GAMMA")}}},

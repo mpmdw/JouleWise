@@ -1,0 +1,238 @@
+"""RC-CMP-7: FIX-BRIEF-3 Amendment 1 (G7) and the RC-CMP6-OPUS-REV findings 2 and 3.
+
+G7: each family's key universe comes from registered member roles, applied identically to both
+sides, never from either side's output. run_phase_energy_j's universe is the science runs L9's
+step 2 re-reduces (the kept units of L9's kept-units record); a member the window's sealed plan
+tree registers as a NEG-8 reference is compared in its NEG-8 family and listed as excluded with
+compared_in:<family>. The regressions are RC-CMP-4's two causes (report/2026-10-28-rc-cmp-4) on
+the producer-shaped fixture and Opus's probes G7.1 and G7.2 (review/2026-10-29-rc-cmp6-opus-rev
+probe_cmp6.py). At 1134bbf58 the RC-CMP-4 window and G7.1 exit 1 and G7.2 exits 0 (counterfactuals
+in .codex-report/RC-CMP-7.md); each test here also shows, where the check can be switched off in
+place, the case passing or failing without it.
+"""
+import copy
+from unittest import mock
+
+from . import test_comparator
+from .test_comparator import SHA, cmp
+from .test_input_gate import CODED, GateCase
+from .test_review_fixes import DISCLOSURE
+
+ALPHA_KEPT = f"kept-units/{SHA}-alpha.json"
+BASE = "bracket.claim_families.gross_energy."
+NEG8_VALUES = {"bound_envelope_j": 2.0, "bound_prediction_j": 1.5, "start.mean_j": 10.0, "midpoint.mean_j": 10.5,
+               "end.mean_j": 11.0, "trajectory_excursion_max_j": 1.0, "drift_allowance_j": 1.25}
+# RC-CMP-4 cause 1: the NEG-8 reference members the recompute marked selected in each window (12 corpus,
+# 3 window-end, 2 of 3 window-start, the midpoint), with their registered roles in the sealed plan trees.
+RC_CMP4_REFERENCES = ([f"neg8-refcorpus-r{i:02d}" for i in range(1, 13)] + [f"neg8-window-end-r{i}" for i in (1, 2, 3)]
+                      + ["neg8-window-start-r2", "neg8-window-start-r3", "neg8-window-midpoint"])
+ROLES = {"neg8-refcorpus": "corpus", "neg8-window-end": "end", "neg8-window-start": "start", "neg8-window-midpoint": "midpoint"}
+
+
+def role_of(rid):
+    """The fixture's expected role (a test-side table; the comparator reads the plan trees)."""
+    return next(role for prefix, role in ROLES.items() if rid.startswith(prefix))
+
+
+def with_neg8(case, packs=("alpha", "beta", "gamma"), start=2, deciding=12):
+    """Both sides' NEG-8 lines (disclosures._reference_lines) for each window."""
+    ours = {"bound_envelope_j": 2.0, "bound_prediction_j": 1.5, "start_mean_j": 10.0, "midpoint_j": 10.5,
+            "end_mean_j": 11.0, "spread_j": 1.0, "allowance_j": 1.25, "n_start": 2, "n_mid": 1, "n_end": 3,
+            "corpus_n": 12}
+    item = test_comparator.item
+    for pack in packs:
+        case.files[DISCLOSURE]["window_lines"][pack] += [
+            item("neg8_allowance", True, f"{pack}: NEG-8 allowance", source="survivor_rescreen",
+                 values_j={BASE + k: v for k, v in NEG8_VALUES.items()}),
+            item("reference_counts", False, f"{pack}: reference counts", counts={"start": start, "midpoint": 1, "end": 3},
+                 planned={"start": 3, "midpoint": 1, "end": 3}),
+            item("corpus_counts", False, f"{pack}: corpus counts", collected=12, in_window=12, deciding=deciding,
+                 desk_cap=[], drop_counts={})]
+        case.ours["windows"][cmp.PACKS[pack]]["neg8"] = dict(ours)
+
+
+def with_references(case, packs=("alpha", "beta", "gamma")):
+    """RC-CMP-4 cause 1: every NEG-8 reference member in the recompute's member detail, selected."""
+    for pack in packs:
+        members = case.ours["members"].setdefault(cmp.PACKS[pack], {})
+        for rid in RC_CMP4_REFERENCES:
+            members[rid] = {"role": role_of(rid), "selected": True, "E_j": {"prefill": 1.0, "decode": 1.0, "request": 2.0}}
+        members["neg8-window-start-r1"] = {"role": "start", "selected": False,
+                                           "E_j": {"prefill": 1.0, "decode": 1.0, "request": 2.0}}
+
+
+def old_key_set(c, custody, ours):
+    """1134bbf58's compare_runs: L9's re-reduced runs against every selected member (the outputs' union)."""
+    members = ours["members"]
+    for (pack, rid), name, _ in c.pairs("run/", cmp.rereduced_names(custody), cmp.selected_runs(members)):
+        l9 = custody.read(name) if name else {}
+        mine = cmp.get(members, cmp.PACKS[pack], rid, "E_j", default={})
+        for phase in ("prefill", "decode"):
+            c.numeric("run_phase_energy_j", f"{pack}/{rid}/{phase}", cmp.get(l9, "phase_energy_j", phase), cmp.get(mine, phase))
+        c.numeric("run_phase_energy_j", f"{pack}/{rid}/request", cmp.get(l9, "gross_energy_j"), cmp.get(mine, "request"))
+
+
+class StepTwoUniverseTests(GateCase):
+    """G7 on run_phase_energy_j."""
+    def code(self):
+        code, err, out = self.exit_code(CODED)
+        return code, err, out
+
+    def test_role_table_from_the_sealed_plan_trees(self):
+        registry = cmp.load_registry()
+        for pack in ("alpha", "beta", "gamma"):
+            roles = registry.roles[pack]
+            self.assertEqual(sum(r == "corpus" for r in roles.values()), 18)
+            self.assertEqual({rid for rid, r in roles.items() if r == "start"},
+                             {f"neg8-window-start-r{i}" for i in (1, 2, 3)} | {f"neg8-window-start-spare-{i}" for i in (1, 2, 3)})
+            self.assertEqual(roles["neg8-window-midpoint"], "midpoint")
+            self.assertEqual(roles["neg8-window-midpoint-spare-1"], "midpoint")
+        self.assertEqual(sum(r == "science" for r in registry.roles["alpha"].values()), 100)
+        self.assertEqual(sum(r == "science" for r in registry.roles["gamma"].values()), 80)
+        self.assertEqual(registry.roles["gamma"]["gamma-interior-reference-decode-midpoint"], "diagnostic")
+        self.assertEqual(registry.role("alpha", "d117fq31p7-df-ph-decode-abs-r01"), "science")
+        self.assertIsNone(registry.role("alpha", "run-a"))
+
+    def test_rc_cmp4_window_passes_and_lists_each_reference_member(self):
+        # RC-CMP-4's two causes together: the registered cmp-abba floor spelling is in the base fixture's
+        # floor_composition lines, and every window's reference members are selected by the recompute.
+        self.assertIn("d117-df-cmp-abba-ph-decode-qwen3-1p7b",
+                      {row.get("cell_id") for row in self.files[DISCLOSURE]["floors"]})
+        with_neg8(self)
+        with_references(self)
+        code, err, out = self.code()
+        self.assertEqual((code, err), (0, ""))
+        excluded = {(row["pack"], row["run_id"]): row for row in out["excluded_members"]}
+        self.assertEqual(len(excluded), 3 * 19)
+        for (pack, rid), row in excluded.items():
+            family = "corpus_counts" if role_of(rid) == "corpus" else "reference_counts"
+            self.assertEqual((row["family"], row["role"], row["reason"]),
+                             ("run_phase_energy_j", role_of(rid), "compared_in:" + family))
+        self.assertFalse(excluded[("alpha", "neg8-window-start-r1")]["selected"])
+        keys = {row["key"] for row in out["comparisons"] if row["family"] == "run_phase_energy_j"}
+        self.assertEqual(keys, {"alpha/run-a/" + phase for phase in ("prefill", "decode", "request")})
+        # Counterfactual: 1134bbf58's key set (the union of the outputs) fails the same sound window.
+        with mock.patch.object(cmp, "compare_runs", old_key_set):
+            code, _, out = self.code()
+        self.assertEqual(code, 1)
+        self.assertEqual(out["counts"]["run_phase_energy_j"]["fail"], 3 * 3 * 18)
+
+    def test_opus_g7_1_refcorpus_member_selected_passes(self):
+        self.ours["members"]["ALPHA"]["run-a"]["role"] = "science"
+        self.ours["members"]["ALPHA"]["neg8-refcorpus-r01"] = {"role": "reference", "selected": True,
+                                                               "E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}}
+        code, err, out = self.code()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(out["excluded_members"], [{"family": "run_phase_energy_j", "pack": "alpha",
+                                                    "run_id": "neg8-refcorpus-r01", "role": "corpus", "selected": True,
+                                                    "reason": "compared_in:corpus_counts"}])
+        with mock.patch.object(cmp, "compare_runs", old_key_set):
+            self.assertEqual(self.code()[0], 1)
+
+    def test_opus_g7_2_science_run_both_sides_omit_disagrees(self):
+        self.files.pop("rereduced/alpha/run-a.rereduced.json")
+        self.ours["members"]["ALPHA"]["run-a"]["selected"] = False
+        code, _, out = self.code()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.fails(out), {"run_phase_energy_j": 3, "routing_id": 1})
+        route = next(r for r in out["comparisons"] if r["key"] == "run/alpha/run-a")
+        self.assertEqual((route["l9"], route["recompute"], route["reason"]), (None, None, "missing_or_null"))
+        # Counterfactual: a universe taken from the outputs (no kept-units runs) compares the run nowhere.
+        with mock.patch.object(cmp, "step_2_universe", lambda custody: ({}, {p: {"exclusions_sha256": "e" * 64}
+                                                                              for p in cmp.PACKS})):
+            code, _, out = self.code()
+        self.assertEqual(code, 0)
+        self.assertEqual(out["counts"]["run_phase_energy_j"], {"pass": 0, "fail": 0})
+
+    def test_universe_run_either_side_lacks_disagrees(self):
+        for side in ("l9", "recompute"):
+            with self.subTest(side):
+                self.setUp()
+                if side == "l9":
+                    self.files.pop("rereduced/alpha/run-a.rereduced.json")
+                else:
+                    self.ours["members"]["ALPHA"]["run-a"]["selected"] = False
+                code, _, out = self.code()
+                self.assertEqual(code, 1)
+                # The run's routing_id row; its energies too where L9's are absent (the recompute's
+                # unselected member detail still carries its values, which then agree).
+                self.assertEqual(self.fails(out), {"run_phase_energy_j": 3, "routing_id": 1} if side == "l9"
+                                 else {"routing_id": 1})
+                route = next(r for r in out["comparisons"] if r["key"] == "run/alpha/run-a")
+                self.assertEqual(route["verdict"], "DISAGREE")
+
+    def test_run_both_sides_hold_outside_the_universe_disagrees(self):
+        # L9 re-reduced it and the recompute selected it, but L9's step-2 selection does not keep it.
+        self.files[ALPHA_KEPT] = test_comparator.kept_units_record("alpha", [])
+        code, _, out = self.code()
+        self.assertEqual(code, 1)
+        route = next(r for r in out["comparisons"] if r["key"] == "run/alpha/run-a")
+        self.assertEqual((route["l9"], route["verdict"]), (None, "DISAGREE"))
+
+    def test_kept_reference_member_refuses(self):
+        self.files[ALPHA_KEPT] = test_comparator.kept_units_record("alpha", ["run-a", "neg8-refcorpus-r01"])
+        self.refused("kept_units_member_not_science:alpha")
+        self.files[ALPHA_KEPT] = test_comparator.kept_units_record("alpha", ["run-a", "gamma-interior-reference-decode-midpoint"])
+        self.files[f"kept-units/{SHA}-gamma.json"] = test_comparator.kept_units_record(
+            "gamma", ["gamma-interior-reference-decode-midpoint"])
+        self.files[ALPHA_KEPT] = test_comparator.kept_units_record("alpha", ["run-a"])
+        self.refused("kept_units_member_not_science:gamma")
+
+    def test_missing_record_or_other_exclusions_disagree(self):
+        for label, edit in (("record absent", lambda: self.files.pop(ALPHA_KEPT)),
+                            ("other exclusions", lambda: self.files[ALPHA_KEPT].update(exclusions_sha256="9" * 64))):
+            with self.subTest(label):
+                self.setUp()
+                edit()
+                code, _, out = self.code()
+                self.assertEqual(code, 1)
+                self.assertIn("routing_id", self.fails(out))
+                row = next(r for r in out["comparisons"] if r["key"] == "run/alpha/kept_units/exclusions_sha256")
+                self.assertEqual(row["verdict"], "DISAGREE")
+
+    def test_reference_member_l9_rereduced_disagrees(self):
+        # A reference member is in no run universe: a re-reduced file for one is DISAGREE.
+        self.files["rereduced/alpha/neg8-refcorpus-r01.rereduced.json"] = {
+            "phase_energy_j": {"prefill": 1.0, "decode": 1.0}, "gross_energy_j": 1.0}
+        self.ours["members"]["ALPHA"]["neg8-refcorpus-r01"] = {"selected": True,
+                                                               "E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}}
+        code, _, out = self.code()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.fails(out), {"routing_id": 1})
+        route = next(r for r in out["comparisons"] if r["key"] == "run/alpha/neg8-refcorpus-r01")
+        self.assertEqual((route["l9"], route["recompute"]), (None, None))
+
+    def test_selected_diagnostic_or_unregistered_member_disagrees(self):
+        # Only registered NEG-8 reference roles leave the run universe; any other selected member is a key.
+        for rid in ("gamma-interior-reference-decode-midpoint", "extra-run"):
+            with self.subTest(rid):
+                self.setUp()
+                self.ours["members"]["ALPHA"][rid] = {"selected": True, "E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}}
+                code, _, out = self.code()
+                self.assertEqual(code, 1)
+                self.assertEqual(self.fails(out), {"routing_id": 1, "run_phase_energy_j": 3})
+
+    def test_reference_member_dropped_from_a_neg8_line_still_disagrees(self):
+        # Opus NEG8.1 and NEG8.2 with the reference members excluded from run_phase_energy_j.
+        for label, start, deciding, path in (("start reference", 1, 12, "reference_counts/counts/start"),
+                                             ("corpus member", 2, 11, "corpus_counts/deciding")):
+            with self.subTest(label):
+                self.setUp()
+                with_references(self, ("alpha",))
+                with_neg8(self, ("alpha",), start=start, deciding=deciding)
+                code, err, out = self.code()
+                self.assertEqual((code, err), (2, "refused=step11_unmapped_fill\n"))
+                self.assertEqual(self.fails(out), {"count": 1})
+                self.assertIn((f"disclosure:window_lines/alpha/{path}", "row_disagrees"), self.unbound(out))
+                self.assertTrue(any(r["run_id"] == "neg8-window-start-r2" for r in out["excluded_members"]))
+
+    def test_neg8_line_dropped_by_one_side_disagrees(self):
+        with_references(self, ("alpha",))
+        with_neg8(self, ("alpha",))
+        self.files[DISCLOSURE]["window_lines"]["alpha"] = [
+            row for row in self.files[DISCLOSURE]["window_lines"]["alpha"] if row["line"] != "corpus_counts"]
+        code, _, out = self.code()
+        self.assertEqual(code, 1)
+        row = next(r for r in out["comparisons"] if r["key"] == "disclosure/window_lines/alpha/corpus_counts")
+        self.assertEqual((row["l9"], row["verdict"]), (None, "DISAGREE"))
+        self.assertEqual(copy.deepcopy(self.fails(out)), {"routing_id": 1, "count": 1})

@@ -49,6 +49,10 @@ Rules (RC-CMP-1 A1-A4):
   nested object never re-routes its parent's leaves. G3: every L9 id that
   routes a binding is looked up literally in the sealed campaign configs
   (Registry); an id they do not register refuses; no id is parsed for its parts;
+- key universes (RC-CMP-7 G7): run_phase_energy_j compares the science runs L9's
+  step 2 re-reduces (its kept-units record), applied identically to both sides; a
+  member the window's sealed plan tree registers as a NEG-8 reference is compared in
+  its NEG-8 family and listed in the restricted output as excluded (compared_in:<family>);
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
@@ -160,7 +164,7 @@ def bar_for(spec, reference):
 
 class Comparison:
     def __init__(self, bars):
-        self.bars, self.rows, self.scope, self.seen = bars, [], [], set()
+        self.bars, self.rows, self.scope, self.seen, self.excluded = bars, [], [], set(), []
 
     def add(self, row):
         if (row["family"], row["key"]) in self.seen:
@@ -360,7 +364,13 @@ EXTRACTION_SPECS = {"alpha": "d117_floor_qwen3-1p7b_v5/extraction_spec.json",
                     "beta": "d117_floor_qwen3-8b_v5/extraction_spec.json"}
 MANIFEST = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json"
 DECLARATION = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json"
+# Each window's sealed plan tree (G7): its registered member roles (science runs, NEG-8 references, spares).
+PLAN_TREES = {"alpha": "d117_floor_qwen3-1p7b_v5/plan_tree.json", "beta": "d117_floor_qwen3-8b_v5/plan_tree.json",
+              "gamma": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json"}
 REGISTRY_PINS = {
+    PLAN_TREES["alpha"]: "2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809",
+    PLAN_TREES["beta"]: "e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707",
+    PLAN_TREES["gamma"]: "da8028977dfe44b3bf1d13e79e7bfea2b1390aa985bef7faa891369c8e3985bc",
     EXTRACTION_SPECS["alpha"]: "a6498f56469448fd422e6ca2e0787b362a4fd6957bffab7d477ac7f30db38df6",
     EXTRACTION_SPECS["beta"]: "2c0ee7189f9aa7e8f534be3cca3bf6f4125c23b5e7bf7ee1e600c7edf9d81ddc",
     MANIFEST: "4342ea609ec7f57fbb21860440995ac8f2038d93ed508f8d7bb72a540c86050d",
@@ -376,11 +386,16 @@ class Registry:
     floor: an aggregate floor cell (the consumer declaration's arm A and B cells of each phase);
     contrast: a registered contrast (target phase; floor_selector condition family ids in [A, B] order).
     A p42 cell is a prefill cell whose workload has 42 prompt tokens.
+    roles: each window's member roles from its sealed plan tree (G7); blocks: each contrast's
+    registered block ids in order (the recompute numbers them b01, b02, ... in that order).
     """
     def __init__(self, root=CAMPAIGNS, pins=None):
         pins = REGISTRY_PINS if pins is None else pins
         self.digests, self.tables = {}, {"extraction": {}, "reported": {}, "floor": {}, "contrast": {}}
+        self.roles, self.blocks = {}, {}
         try:
+            for pack, name in PLAN_TREES.items():
+                self.roles[pack] = plan_roles(self.read(root, name, pins))
             for pack, name in EXTRACTION_SPECS.items():
                 spec = self.read(root, name, pins)
                 members = {}
@@ -404,6 +419,10 @@ class Registry:
                 a, b = contrast["floor_dependency"]["floor_selector"]["condition_family_ids"]
                 self.register("contrast", contrast["contrast_id"], phase=contrast["target_precheck_path"][-1],
                               conditions=(a, b))
+                blocks = contrast["block_ids"]
+                if not all(isinstance(bid, str) for bid in blocks) or len(set(blocks)) != len(blocks):
+                    raise ValueError(blocks)
+                self.blocks[contrast["contrast_id"]] = tuple(blocks)
             declaration = self.read(root, DECLARATION, pins)
             decode = declaration["decode_floor_cells"]
             for phase, (a, b) in (("decode", (decode["condition_a"], decode["condition_b"])),
@@ -460,6 +479,51 @@ class Registry:
         """The target phase of a recompute reported cell id (a registered condition family)."""
         found = {e["phase"] for e in self.tables["reported"].values() if e["family"] == family}
         return found.pop() if len(found) == 1 else None
+
+
+    def role(self, pack, rid):
+        """A member's registered role in its window's plan tree (science, start, midpoint, end, corpus,
+        diagnostic), or None when the plan tree does not list it."""
+        return self.roles.get(pack, {}).get(rid) if isinstance(rid, str) else None
+
+    def block(self, cid, block_id):
+        """A contrast's registered block id -> the recompute's block key (b01 for the first), else None (F3)."""
+        blocks = self.blocks.get(cid, ())
+        return "b%02d" % (blocks.index(block_id) + 1) if isinstance(block_id, str) and block_id in blocks else None
+
+
+# The plan tree's reference inputs and the role each registers (literal input ids, never parsed); a spare
+# takes the slot its stage's spare_retry declares. Interior references are diagnostic: no family uses them.
+REFERENCE_INPUTS = {"neg8_bound": "corpus", "neg8_bound_corpus": "corpus", "start_reference": "start",
+                    "start_references": "start", "midpoint_reference": "midpoint", "end_reference": "end",
+                    "end_references": "end", "decode_midpoint_reference": "diagnostic",
+                    "prefill_midpoint_reference": "diagnostic"}
+
+
+def plan_roles(tree):
+    """{run_id: role} from a sealed plan tree: science/*, external_inputs members, spare_retry members."""
+    roles = {}
+
+    def assign(rid, role):
+        if not isinstance(rid, str) or roles.get(rid, role) != role:
+            raise ValueError(rid)
+        roles[rid] = role
+    for member in tree["science"]:
+        assign(member["run_id"], "science")
+    inputs = tree["external_inputs"]
+    for entry in inputs["manifests"] if isinstance(inputs, dict) else inputs:
+        if "members" in entry:
+            role = REFERENCE_INPUTS[entry.get("external_input_id", entry.get("input_id"))]
+            for member in entry["members"]:
+                assign(member["run_id"], role)
+    for stage in tree["stage_graph"]:
+        spare = stage.get("spare_retry")
+        if spare is not None:
+            if spare["slot"] not in ("start", "midpoint", "end"):
+                raise ValueError(spare["slot"])
+            for member in spare["members"]:
+                assign(member["run_id"], spare["slot"])
+    return roles
 
 
 _REGISTRY = {}
@@ -579,24 +643,78 @@ def sides(a, b):
     return tuple(zip(("lower", "upper"), interval(a), interval(b)))
 
 
+# G7: the NEG-8 family each registered reference role is compared in; such a member never enters
+# run_phase_energy_j (L9's step 2 re-reduces science runs only) and is listed as excluded from it.
+REFERENCE_FAMILIES = {"start": "reference_counts", "midpoint": "reference_counts", "end": "reference_counts",
+                      "corpus": "corpus_counts"}
+KEPT_UNITS = r"kept-units/[0-9a-f]{64}-%s\.json"
+
+
 def compare_runs(c, custody, ours):
     """S-13's per-run term: each kept run's phase energies (and gross request energy).
 
-    The key set is the union of L9's re-reduced runs and the recompute's selected
-    (kept) runs; a member detail without the selected field counts as selected.
+    G7: the key universe is the registered science runs L9's step 2 re-reduces
+    (step_2_universe), applied identically to both sides, never either side's output:
+    a key is present on L9's side only when it is in the universe and L9 re-reduced it,
+    and on the recompute's only when it is a selected member; so a universe run that
+    either side lacks, or a run either side holds outside the universe, is DISAGREE.
+    A member whose registered role is a NEG-8 reference is compared in its NEG-8
+    family instead and listed in c.excluded with the reason compared_in:<family>.
     """
     members = ours.get("members")
     if not isinstance(members, dict):
         raise Refusal("recompute_member_detail_missing")
-    named = rereduced_names(custody)
-    selected = selected_runs(members)
-    for (pack, rid), name, _ in c.pairs("run/", named, selected):
+    registry = custody.registry
+    universe, records = step_2_universe(custody)
+    for pack in PACKS:
+        # The kept set is the one built from the exclusions the recompute re-derived (exclusions_rederivation).
+        c.exact("routing_id", f"run/{pack}/kept_units/exclusions_sha256", get(records.get(pack), "exclusions_sha256"),
+                get(ours, "inputs", PACKS[pack], "exclusions_sha256"))
+    c.excluded.extend(reference_members(members, registry))
+    selected = selected_runs(members, lambda key: registry.role(*key) not in REFERENCE_FAMILIES)
+    for (pack, rid), name, _, _ in c.pairs("run/", rereduced_names(custody), universe, selected):
         l9 = custody.read(name) if name else {}
         mine = get(members, PACKS[pack], rid, "E_j", default={})
         for phase in ("prefill", "decode"):
             c.numeric("run_phase_energy_j", pack + "/" + rid + "/" + phase,
                       get(l9, "phase_energy_j", phase), get(mine, phase))
         c.numeric("run_phase_energy_j", pack + "/" + rid + "/request", get(l9, "gross_energy_j"), get(mine, "request"))
+
+
+def step_2_universe(custody):
+    """G7: the science runs L9's step 2 re-reduces, per window, and each window's kept-units record.
+
+    The runs are the run ids of every kept unit of L9's kept-units record (dry_run.kept_bundles reads
+    exactly these): L9's registered step-2 selection, read as data. A run it keeps that the window's
+    sealed plan tree registers as a reference or diagnostic member refuses. A window without the
+    record has no universe; its exclusions_sha256 row is then DISAGREE.
+
+    NEEDS_RULING (RC-CMP-7): no sealed source alone fixes the kept set (it depends on the window's
+    exclusions), and the plan tree's science/* list is not required to contain each kept run.
+    """
+    universe, records = {}, {}
+    for pack in PACKS:
+        record = custody.one(KEPT_UNITS % pack)
+        records[pack] = record
+        cells = get(record, "cells", default={})
+        for cell in (cells.values() if isinstance(cells, dict) else ()):
+            strata = get(cell, "kept", default={})
+            for units in (strata.values() if isinstance(strata, dict) else ()):
+                for unit in units if isinstance(units, list) else ():
+                    for rid in get(unit, "run_ids", default=[]) or []:
+                        if not isinstance(rid, str) or custody.registry.role(pack, rid) not in (None, "science"):
+                            raise Refusal("kept_units_member_not_science:" + pack)
+                        universe[(pack, rid)] = rid
+    return universe, records
+
+
+def reference_members(members, registry):
+    """G7: the recompute's members whose registered role is a NEG-8 reference, each with its family."""
+    return [{"family": "run_phase_energy_j", "pack": pack, "run_id": rid, "role": registry.role(pack, rid),
+             "selected": isinstance(member, dict) and member.get("selected", True) is True,
+             "reason": "compared_in:" + REFERENCE_FAMILIES[registry.role(pack, rid)]}
+            for pack, PACK in PACKS.items() for rid, member in sorted((get(members, PACK) or {}).items())
+            if registry.role(pack, rid) in REFERENCE_FAMILIES]
 
 
 def rereduced_names(custody):
@@ -607,9 +725,10 @@ def rereduced_names(custody):
     return named
 
 
-def selected_runs(members):
+def selected_runs(members, keep=lambda key: True):
+    """The recompute's selected members (a member detail without the selected field counts as selected)."""
     return {(pack, rid): m for pack, PACK in PACKS.items() for rid, m in (get(members, PACK) or {}).items()
-            if isinstance(m, dict) and m.get("selected", True) is True}
+            if isinstance(m, dict) and m.get("selected", True) is True and keep((pack, rid))}
 
 
 # L9 extraction floor field -> recompute floor field (same definitions, different names).
@@ -1747,6 +1866,8 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
             "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
             "routing_registry_sha256": custody.registry.digests,
             "structure_flags": flags, "counts": c.counts(),
+            # G7: each member kept out of a family's key universe, with the family it is compared in.
+            "excluded_members": c.excluded,
             "coverage": cover, "comparisons": c.rows}
 
 
