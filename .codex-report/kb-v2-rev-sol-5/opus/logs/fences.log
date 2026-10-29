@@ -1,0 +1,13 @@
+gen_state rc=0
+  scripts/validate_powermetrics_fiducial.py
+  scripts/write_b5_identity_pins.py
+PASS 16 pin families current
+repin rc=0
+Ran 31 tests in 0.983s
+
+OK
+docs rc=0
+  "schema_version": "joulewise.receipt_histsem_verification.v1",
+  "status": "PASS"
+}
+histsem rc=0

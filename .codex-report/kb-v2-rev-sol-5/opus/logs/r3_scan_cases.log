@@ -1,0 +1,12 @@
+Sol1 DRAM-only quantized=False: knee not found K=None reason=no resolved cache evidence above=0 undefined_pairs=0 m_th=331.6000GB/s dm_th=4.34e-05
+§5 worked quantized=False: knee found K=67108864 reason=None above=11 undefined_pairs=0 m_th=335.0997GB/s dm_th=4.44e-05
+   16->32 MiB margin 664.900 GB/s bar 0.00043 GB/s; 32->64 m=198.80
+Sol1 DRAM-only quantized=True: knee not found K=None reason=no resolved cache evidence above=0 undefined_pairs=0 m_th=331.6000GB/s dm_th=4.34e-05
+§5 worked quantized=True: knee found K=67108864 reason=None above=11 undefined_pairs=0 m_th=335.0997GB/s dm_th=4.44e-05
+   16->32 MiB margin 664.900 GB/s bar 0.00043 GB/s; 32->64 m=198.80
+§5 worked, s_max=1 GiB: knee not found K=None reason=64 K > s_max above=11 undefined_pairs=0 m_th=335.0997GB/s dm_th=4.46e-05
+noise 0.05%: {64: 1.0}
+noise 0.10%: {64: 1.0}
+noise 0.20%: {64: 1.0}
+noise 0.50%: {64: 1.0}
+rc=0

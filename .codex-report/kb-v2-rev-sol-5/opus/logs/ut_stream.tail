@@ -1,0 +1,25 @@
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1281, in wait
+    return self._wait(timeout=timeout)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 2080, in _wait
+    time.sleep(delay)
+    ~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1240, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/tmp/jw/tests/test_bytes_stream_test.py", line 70, in sleep
+    assert self.payload() is not None, "payload must stay resident through post-idle"
+           ~~~~~~~~~~~~^^
+TypeError: 'NoneType' object is not callable
+
+----------------------------------------------------------------------
+Ran 49 tests in 965.491s
+
+FAILED (errors=1)
+rc=1

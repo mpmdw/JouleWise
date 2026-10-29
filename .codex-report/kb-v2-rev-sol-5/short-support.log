@@ -1,0 +1,18 @@
+thin pre calls 8 class UNDETERMINED rest halfwidth 0.0011851819800064896 -> 0.0011851202553169475
+  C3 dx None reason idle variance not defined (rails insufficient native samples) native rails insufficient native samples
+  printed 0.1262 ± 0.0012 -> 0.1262 ± 0.0012
+thin post calls 8 class UNDETERMINED rest halfwidth 0.0011851819800064896 -> 0.0011851249137840678
+  C3 dx None reason idle variance not defined (rails insufficient native samples) native rails insufficient native samples
+  printed 0.1262 ± 0.0012 -> 0.1262 ± 0.0012
+full pre calls 8 class UNDETERMINED rest halfwidth 0.0024454049816970496 -> 0.0024813471842505914
+  C3 dx None reason idle variance not defined (rails insufficient native samples) native rails insufficient native samples
+  printed 0.1262 ± 0.0024 -> 0.1262 ± 0.0025
+full post calls 8 class UNDETERMINED rest halfwidth 0.0024454049816970496 -> 0.0024813471842505914
+  C3 dx None reason idle variance not defined (rails insufficient native samples) native rails insufficient native samples
+  printed 0.1262 ± 0.0024 -> 0.1262 ± 0.0025
+jitter pre calls 8 class UNDETERMINED rest halfwidth 0.0025572074458721024 -> 0.0025186057999666196
+  C3 dx None reason idle variance not defined (rails insufficient native samples) native rails insufficient native samples
+  printed 0.1262 ± 0.0026 -> 0.1262 ± 0.0025
+jitter post calls 8 class UNDETERMINED rest halfwidth 0.0025572074458721024 -> 0.0025186057999666196
+  C3 dx None reason idle variance not defined (rails insufficient native samples) native rails insufficient native samples
+  printed 0.1262 ± 0.0026 -> 0.1262 ± 0.0025

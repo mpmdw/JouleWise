@@ -1,0 +1,7 @@
+gap with unnamed adapter source: printed; rails=UNDETERMINED reasons=['records[3].harvest.adapter_source missing or invalid (gap power sources must be named)', 'gap power sources must be named']
+gap with adapter rating missing: printed; rails=UNDETERMINED reasons=['records[3].harvest.adapter_max_w missing or invalid (adapter rating missing)', 'adapter rating missing']
+seven calls (one call lost): printed; rails=UNDETERMINED reasons=['the test requires all eight calls', 'records must be the complete stamped palindrome', 'DC contrast input missing']
+r_max missing (no meter clock fit): printed; rails=UNDETERMINED reasons=['records[0].harvest.r_max_s missing or invalid (r_max missing)', 'r_max missing']
+meter stream integral missing: printed; rails=UNDETERMINED reasons=['records[0].harvest.energy_j.meter missing or invalid', 'meter stream integral missing']
+operative timing bound missing (description): printed; rails=RESOLVED reasons=[]
+one duplicated meter stamp in a pre-idle span: printed; rails=RESOLVED reasons=[]

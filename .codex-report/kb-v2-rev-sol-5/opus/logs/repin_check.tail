@@ -1,0 +1,25 @@
+  joulewise/night_gate.py
+  joulewise/schemas.py
+  joulewise/whole_window.py
+  scripts/bench_replay_start_drift.py
+  scripts/bench_replay_systemsetup_stub.py
+  scripts/check-codex-mcp.mjs
+  scripts/check_b5_chain.py
+  scripts/codex-app-bridge.mjs
+  scripts/codex-bridge
+  scripts/digest_pin_census.py
+  scripts/extract_detection_floors.py
+  scripts/g10_clock_step_control.py
+  scripts/harvest_b5_window.py
+  scripts/harvest_v5_g2b_window.py
+  scripts/install_night_agent.sh
+  scripts/magistrate_watchdog.py
+  scripts/recover_calibration_ledger.py
+  scripts/repin.py
+  scripts/run_campaign.py
+  scripts/run_night.py
+  scripts/test_timings.json
+  scripts/validate_powermetrics_fiducial.py
+  scripts/write_b5_identity_pins.py
+PASS 16 pin families current
+rc=0

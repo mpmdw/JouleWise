@@ -1,0 +1,1 @@
+reversed_idle EXIT 1 ValueError: idle durations must match samples and be finite and > 0

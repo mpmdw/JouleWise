@@ -1,0 +1,81 @@
+baseline 0 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('RESOLVED', 0.0024454049816970496)}
+[huge_int_start_ns_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].receipt.start_ns missing or invalid
+    gpu: records[0].receipt.start_ns missing or invalid
+    dc: records[0].receipt.start_ns missing or invalid
+    rest: records[0].receipt.start_ns missing or invalid
+[huge_int_idle_stamp] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].harvest.idle.pre.meter[0].stamp_ns missing or invalid
+    gpu: records[2].harvest.idle.pre.meter[0].stamp_ns missing or invalid
+    dc: records[2].harvest.idle.pre.meter[0].stamp_ns missing or invalid
+    rest: records[2].harvest.idle.pre.meter[0].stamp_ns missing or invalid
+[huge_int_scan_K] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.K missing or invalid
+    gpu: scan.K missing or invalid
+    dc: scan.K missing or invalid
+    rest: scan.K missing or invalid
+[huge_int_scan_receipt] 0 ('knee not found', 'scan prerequisite missing: receipts[0].start_ns missing or invalid')
+[huge_int_scan_repeats] 0 ('knee not found', 'scan prerequisite missing: receipts[0].repeats missing or invalid')
+[power_1e308_idle_rails] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: idle variance not defined (rails idle arithmetic unavailable: intermediate overflow in fsum)
+    rest: idle variance not defined (rails idle arithmetic unavailable: intermediate overflow in fsum)
+[energy_1e308_dc_meter] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 2.4558742775934592e+303), 'rest': ('UNDETERMINED', 2.4558742775934592e+303)} shrunk=[]
+    rails: contrast not resolved
+    gpu: contrast not resolved
+    dc: contrast not resolved
+    rest: contrast not resolved
+[idle_rails_row_end_before_start] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[5].start_ns/end_ns invalid time order
+    rest: records[1].harvest.idle.pre.rails[5].start_ns/end_ns invalid time order
+[idle_rails_negative_power] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[0].power_w missing or invalid
+    rest: records[1].harvest.idle.pre.rails[0].power_w missing or invalid
+[energy_rails_negative] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.energy_j.rails missing or invalid
+    rest: records[0].harvest.energy_j.rails missing or invalid
+[idle_pre_end_before_start] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].receipt.idle_pre_start_ns/idle_pre_end_ns invalid time order
+    gpu: records[1].receipt.idle_pre_start_ns/idle_pre_end_ns invalid time order
+    dc: records[1].receipt.idle_pre_start_ns/idle_pre_end_ns invalid time order
+    rest: records[1].receipt.idle_pre_start_ns/idle_pre_end_ns invalid time order
+[battery_edge_negative] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002523995578128973), 'rest': ('RESOLVED', 0.002442377826125192)} shrunk=['dc', 'rest']
+[repeats_true] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[3].receipt.repeats missing or invalid
+    gpu: records[3].receipt.repeats missing or invalid
+    dc: records[3].receipt.repeats missing or invalid
+    rest: records[3].receipt.repeats missing or invalid
+[adapter_source_blank] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[3].harvest.adapter_source missing or invalid (gap power sources must be named)
+    gpu: records[3].harvest.adapter_source missing or invalid (gap power sources must be named)
+    dc: records[3].harvest.adapter_source missing or invalid (gap power sources must be named)
+    rest: records[3].harvest.adapter_source missing or invalid (gap power sources must be named)
+[rails_label_empty_list] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[4].harvest.capture_stack.measurement_boundary_label.rails missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[rails_label_no_gpu_rec7] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', 0.0024454049816970496)} shrunk=[]
+    rails: measured rails boundary differs (measurement_boundary_label.rails)
+    gpu: gpu_power missing from recorded rail set (measurement_boundary_label.rails)
+    rest: measured rails boundary differs (measurement_boundary_label.rails)
+[scan_is_list] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan missing or invalid
+    gpu: scan missing or invalid
+    dc: scan missing or invalid
+    rest: scan missing or invalid
+[records_is_dict] rc=0 calls=0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records missing or invalid
+    gpu: records missing or invalid
+    dc: records missing or invalid
+    rest: records missing or invalid
+[input_is_list] 0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)}
+[input_is_NaN] 0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)}
+[rec0_start_ns_at_idle_pre_start] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    gpu: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    dc: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    rest: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    deltas {'rails': None, 'gpu': None, 'dc': None, 'rest': None} baseline {'rails': 0.06671643154340534, 'gpu': 0.03331790684544816, 'dc': 0.1929431367724039, 'rest': 0.1262267052289986}
+[idle_rails_last_row_end_ns_0] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0025270227337008313), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[575].start_ns/end_ns invalid time order
+    rest: records[1].harvest.idle.pre.rails[575].start_ns/end_ns invalid time order
+    call1 rails baseline_bound_j None baseline 4.3789241639929335 pre rails sample_count 0 baseline 576

@@ -1,0 +1,13 @@
+indep §5 rails: alpha=1.4000 mJ gc=0.02800 gd=0.09472 Delta=0.066716626 dDelta=0.000571796
+indep §5 dc: alpha=2.6500 mJ gc=0.05300 gd=0.24594 Delta=0.192943505 dDelta=0.002524213
+indep §5 rest: alpha=1.2500 mJ gc=0.02500 gd=0.15123 Delta=0.126226879 dDelta=0.002444084
+indep §5 f=0.345783 df=0.007487
+[A knee found (§5)] contrasts={'rails': 'not defined (records[0].harvest.idle.pre.rails[1].power_w missing or invalid)', 'gpu': 'not defined (records[0].harvest.idle.pre.gpu[1].power_w missing or invalid)', 'dc': 'not defined (records[0].harvest.idle.pre.meter[1].power_w missing or invalid)', 'rest': 'not defined (records[0].harvest.idle.pre.rails[1].power_w missing or invalid)'} share={'f': 'not defined (DC contrast not valid)', 'df': 'not defined (DC contrast not valid)'}
+   classes={'rails': 'UNDETERMINED (records[0].harvest.idle.pre.rails[1].power_w missing or invalid)', 'gpu': 'UNDETERMINED (records[0].harvest.idle.pre.gpu[1].power_w missing or invalid)', 'dc': 'UNDETERMINED (records[0].harvest.idle.pre.meter[1].power_w missing or invalid)', 'rest': 'UNDETERMINED (records[0].harvest.idle.pre.rails[1].power_w missing or invalid)'}
+   claim[rails]: Known-bytes check: rails memory-traffic attribution is undetermined (records[0].harvest.idle.pre.rails[1].power_w missing or invalid).
+   claim[rest]: Known-bytes check: rest memory-traffic attribution is undetermined (records[0].harvest.idle.pre.rails[1].power_w missing or invalid).
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/kb-v2-rev-sol-5/sol/sol3/adapted/e2e.py", line 160, in <module>
+    print(f'   program-indep {k}: dDelta {v["delta"]-ind[k][0]:+.2e} dHalf {v["halfwidth"]-ind[k][1]:+.2e} J/GB')
+                                          ~^^^^^^^^^
+KeyError: 'delta'

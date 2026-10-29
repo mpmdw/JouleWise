@@ -1,0 +1,3 @@
+DRAM-only 24 MHz tick, 200 trials: {'no resolved cache evidence': 200}
+§5 24 MHz tick, 200 trials: {'K=65536KiB': 200}
+rc=0

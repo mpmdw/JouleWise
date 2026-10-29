@@ -1,0 +1,6 @@
+reversed_idle EXIT 1 ValueError: idle durations must match samples and be finite and > 0
+huge_integer EXIT 1 OverflowError: int too large to convert to float
+huge_finite EXIT 0 {'rails': ('UNDETERMINED', 0.00037680552871134073), 'gpu': ('UNDETERMINED', 0.00018752060232746175), 'dc': ('UNDETERMINED', 'inf'), 'rest': ('UNDETERMINED', 'inf')} ['contrast not resolved']
+fractional_stamp EXIT 0 {'rails': ('RESOLVED', 0.0003768055287114152), 'gpu': ('RESOLVED', 0.00018752060232749083), 'dc': ('RESOLVED', 0.0021929684335738834), 'rest': ('RESOLVED', 0.0019148739296720879)} []
+bad_clock EXIT 0 {'rails': ('RESOLVED', 0.00037680552871134073), 'gpu': ('RESOLVED', 0.00018752060232746175), 'dc': ('RESOLVED', 0.002192968433570414), 'rest': ('RESOLVED', 0.0019148739296687113)} []
+bad_scan_status EXIT 0 {'rails': ('RESOLVED', 0.00037680552871134073), 'gpu': ('RESOLVED', 0.00018752060232746175), 'dc': ('RESOLVED', 0.002192968433570414), 'rest': ('RESOLVED', 0.0019148739296687113)} []

@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/kb-v2-rev-sol-4/sol3/consult/verify_round4.py", line 7, in <module>
+    import experiment_round4 as e
+  File "/workspace/JouleWise/.codex-report/kb-v2-rev-sol-4/sol3/consult/experiment_round4.py", line 19, in <module>
+    from scripts import bytes_stream_test as probe
+ModuleNotFoundError: No module named 'scripts'

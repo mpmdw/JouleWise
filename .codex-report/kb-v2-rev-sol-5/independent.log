@@ -1,0 +1,17 @@
+independent cases 5010 failures 9
+(('records', 0, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 1, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 2, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 3, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 4, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 5, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 6, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 7, 'receipt', 'stack', 'telemetry_backend'), 'disclosure', 'AssertionError()')
+(('records', 7, 'harvest', 'idle', 'post', 'rails', 5, 'end_ns'), 'huge', 'AssertionError()')
+H4 all 8 positions / 4 boundaries: PASS
+signed battery edge, energy, idle power, native poll: PASS
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/kb-v2-rev-sol-5/independent.py", line 94, in <module>
+    d=cp(D);o=d
+          ^^^^^
+AssertionError

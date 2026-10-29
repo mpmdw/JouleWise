@@ -1,0 +1,8 @@
+meter edge missing reading EXIT 0 dc UNDETERMINED delta 0.1929431367724039 arms ['S', 'C1', 'C3', 'C2'] first_dc_bound None retained_other_calls 8
+battery edge missing reading EXIT 0 dc UNDETERMINED delta 0.1929431367724039 arms ['S', 'C1', 'C3', 'C2'] first_dc_bound None retained_other_calls 8
+meter edge readings empty EXIT 0 dc UNDETERMINED delta 0.1929431367724039 arms ['S', 'C1', 'C3', 'C2'] first_dc_bound None retained_other_calls 8
+battery edge readings empty EXIT 0 dc UNDETERMINED delta 0.1929431367724039 arms ['S', 'C1', 'C3', 'C2'] first_dc_bound None retained_other_calls 8
+idle pre object null EXIT 0 dc UNDETERMINED delta None arms ['S', 'C1', 'C3', 'C2'] first_dc_bound None retained_other_calls 7
+null receipt EXIT 0 dc UNDETERMINED delta None arms ['S', 'C1', 'C3', 'C2'] first_dc_bound None retained_other_calls 7
+missing C1 receipt EXIT 0 dc UNDETERMINED delta None arms ['S', 'C1', 'C3', 'C2'] first_dc_bound 6.331777865263114 retained_other_calls 7
+missing C1 repeat count EXIT 0 dc UNDETERMINED delta None arms ['S', 'C1', 'C3', 'C2'] first_dc_bound 6.331777865263114 retained_other_calls 7

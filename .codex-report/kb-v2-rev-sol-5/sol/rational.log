@@ -1,0 +1,26 @@
+{
+  "K_bytes": 67108864,
+  "threshold_GBs": 335.09969869370707,
+  "threshold_lower_GBs": 335.09965410765943,
+  "threshold_upper_GBs": 335.0997432797666,
+  "pair_m_GBs": 1000.0000348308483,
+  "pair_lower_GBs": 999.9996495246795,
+  "pair_upper_GBs": 1000.0004201373141,
+  "margin_GBs": 664.9003361371414,
+  "bar_GBs": 0.00042989222833251953,
+  "threshold_halfwidth_GBs": 4.4586059509277344e-05,
+  "independent_discrepancies_GBs": {
+    "pair_m_bytes_s": 1.855372086156459e-13,
+    "pair_lower": 2.8793189825782005e-13,
+    "pair_upper": 1.3004829729178014e-13,
+    "pair_margin": 6.867982417606291e-14,
+    "pair_bar": 1.3755344438922442e-13,
+    "threshold": 5.582222818958298e-14,
+    "threshold_lower": 1.1478590395424757e-13,
+    "threshold_upper": 2.0663473442532736e-14
+  },
+  "float_noise_GBs": 2.8793189825782005e-13,
+  "million_times_float_noise_GBs": 2.8793189825782006e-07,
+  "agreement_bar_GBs": 4.5e-07,
+  "worked_phase_confirmations_per_conversion": 400
+}

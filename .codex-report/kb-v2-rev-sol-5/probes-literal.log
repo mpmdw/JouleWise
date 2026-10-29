@@ -1,0 +1,101 @@
+baseline 0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)}
+[huge_int_start_ns_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].receipt.start_ns missing or invalid
+    gpu: records[0].receipt.start_ns missing or invalid
+    dc: records[0].receipt.start_ns missing or invalid
+    rest: records[0].receipt.start_ns missing or invalid
+[huge_int_idle_stamp] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[huge_int_scan_K] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.K missing or invalid
+    gpu: scan.K missing or invalid
+    dc: scan.K missing or invalid
+    rest: scan.K missing or invalid
+[huge_int_scan_receipt] 0 ('knee not found', 'scan prerequisite missing: receipts[0].start_ns missing or invalid')
+[huge_int_scan_repeats] 0 ('knee not found', 'scan prerequisite missing: receipts[0].repeats missing or invalid')
+[power_1e308_idle_rails] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[energy_1e308_dc_meter] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[idle_rails_row_end_before_start] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[idle_rails_negative_power] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[energy_rails_negative] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.energy_j.rails missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.energy_j.rails missing or invalid
+[idle_pre_end_before_start] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[1].receipt.idle_pre_start_ns/idle_pre_end_ns invalid time order
+[battery_edge_negative] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[repeats_true] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[3].receipt.repeats missing or invalid
+[adapter_source_blank] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+[rails_label_empty_list] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[rails_label_no_gpu_rec7] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: measured rails boundary differs (measurement_boundary_label.rails)
+[scan_is_list] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan missing or invalid
+    gpu: scan missing or invalid
+    dc: scan missing or invalid
+    rest: scan missing or invalid
+[records_is_dict] rc=0 calls=0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records missing or invalid
+    gpu: records missing or invalid
+    dc: records missing or invalid
+    rest: records missing or invalid
+[input_is_list] 0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)}
+[input_is_NaN] 0 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)}
+[rec0_start_ns_at_idle_pre_start] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    gpu: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    dc: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    rest: records[0].receipt.idle_pre_end_ns/start_ns invalid time order
+    deltas {'rails': None, 'gpu': None, 'dc': None, 'rest': None} baseline {'rails': None, 'gpu': None, 'dc': None, 'rest': None}
+[idle_rails_last_row_end_ns_0] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+    gpu: records[0].harvest.idle.pre.gpu[1].power_w missing or invalid
+    dc: records[0].harvest.idle.pre.meter[1].power_w missing or invalid
+    rest: records[0].harvest.idle.pre.rails[1].power_w missing or invalid
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/kb-v2-rev-sol-5/opus/probes.py", line 94, in <module>
+    print('    call1 rails baseline_bound_j', r['calls'][1]['boundaries']['rails']['baseline_bound_j'], 'baseline', B['calls'][1]['boundaries']['rails']['baseline_bound_j'],
+                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyError: 'rails'

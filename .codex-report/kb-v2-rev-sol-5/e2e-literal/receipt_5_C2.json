@@ -1,0 +1,1347 @@
+{
+  "schema_version": "joulewise.bytes_stream.v2",
+  "non_claim": true,
+  "clock": "CLOCK_MONOTONIC_RAW",
+  "clock_resolution_s": 1e-09,
+  "clock_tick_num_ns": null,
+  "clock_tick_den": null,
+  "clock_tick_source": "not applicable (non-macOS clock_getres)",
+  "clock_ns_conversion": "unknown",
+  "clock_ns_conversion_source": "unknown",
+  "clock_duration_bound_ns": 4.0,
+  "start_ns": 2850415800581,
+  "end_ns": 3100414932188,
+  "idle_pre_start_ns": 2789815800581,
+  "idle_pre_end_ns": 2847415800581,
+  "idle_post_start_ns": 3103414932188,
+  "idle_post_end_ns": 3161014932188,
+  "idle_s": 57.6,
+  "settle_s": 3,
+  "duration_s": 249.999131607,
+  "bytes_per_read": 16777216,
+  "repeats": 3743791,
+  "bytes_read": 62810390265856,
+  "boundary": "logical uint8 payload reads; excludes initialization and reduction workspace",
+  "stack": {
+    "os_version": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "hardware_unit": {
+      "machine": "arm64",
+      "device": "macbook_m3_max"
+    },
+    "runtime_version": {
+      "name": "mlx",
+      "version": "0.31.2"
+    },
+    "kernel_library": "unavailable",
+    "telemetry_backend": "powermetrics",
+    "measurement_boundary_label": {
+      "rails": [
+        "cpu_power",
+        "gpu_power",
+        "ane_power"
+      ]
+    },
+    "packages": {
+      "mlx": "0.31.2",
+      "mlx-lm": "0.31.3",
+      "mlx-metal": "0.31.2",
+      "numpy": "2.5.1",
+      "safetensors": "0.8.0",
+      "tokenizers": "0.22.2",
+      "transformers": "5.12.1"
+    },
+    "python": "3.13.1",
+    "git_commit": "review",
+    "model_artifact_sha256": "not_applicable",
+    "quantization": "not_applicable",
+    "tokenizer_identity": "not_applicable",
+    "sampler_output_policy": "not_applicable",
+    "batching_concurrency_policy": "not_applicable"
+  },
+  "stack_check": {
+    "status": "pending_capture",
+    "differences": [],
+    "pending_fields": [
+      "telemetry_backend",
+      "measurement_boundary_label.rails"
+    ],
+    "physical_differences": [],
+    "disclosure_differences": [],
+    "comparison": [
+      {
+        "field": "os_version",
+        "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+      },
+      {
+        "field": "hardware_unit.machine",
+        "actual": "arm64",
+        "expected": "arm64"
+      },
+      {
+        "field": "hardware_unit.device",
+        "actual": "macbook_m3_max",
+        "expected": "macbook_m3_max"
+      },
+      {
+        "field": "runtime_version.name",
+        "actual": "mlx",
+        "expected": "mlx"
+      },
+      {
+        "field": "runtime_version.version",
+        "actual": "0.31.2",
+        "expected": "0.31.2"
+      },
+      {
+        "field": "kernel_library",
+        "actual": "unavailable",
+        "expected": "unavailable"
+      },
+      {
+        "field": "python",
+        "actual": "3.13.1",
+        "expected": "3.13.1"
+      },
+      {
+        "field": "packages.mlx",
+        "actual": "0.31.2",
+        "expected": "0.31.2"
+      },
+      {
+        "field": "packages.mlx-lm",
+        "actual": "0.31.3",
+        "expected": "0.31.3"
+      },
+      {
+        "field": "packages.mlx-metal",
+        "actual": "0.31.2",
+        "expected": "0.31.2"
+      },
+      {
+        "field": "packages.numpy",
+        "actual": "2.5.1",
+        "expected": "2.5.1"
+      },
+      {
+        "field": "packages.safetensors",
+        "actual": "0.8.0",
+        "expected": "0.8.0"
+      },
+      {
+        "field": "packages.tokenizers",
+        "actual": "0.22.2",
+        "expected": "0.22.2"
+      },
+      {
+        "field": "packages.transformers",
+        "actual": "5.12.1",
+        "expected": "5.12.1"
+      },
+      {
+        "field": "telemetry_backend",
+        "actual": null,
+        "expected": "powermetrics"
+      },
+      {
+        "field": "measurement_boundary_label.rails",
+        "actual": null,
+        "expected": [
+          "cpu_power",
+          "gpu_power",
+          "ane_power"
+        ]
+      }
+    ]
+  },
+  "reference_check": {
+    "commit": "6731d5249",
+    "sources": {
+      "configs/b6/registration/identity_pins.json": "95d07401bb5d7c7e44e9dc27984bc3da4fb04642ec7cf80bf3c6ecadaf2efc6e",
+      "configs/bytes/identity_pins.json": "0760eded0603782b5367ad56721faf96417b9ea87bb698dc520835f34e03b2b2"
+    },
+    "units": {
+      "A/decode": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "A/prefill_p2048": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "B/decode": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "B/prefill_p2048": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "alpha": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "alpha/prefill_p2048": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "beta": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "beta/prefill_p2048": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "llama-70b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "neg8_reference": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-14b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-1p7b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-30b-a3b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-32b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-4b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-8b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-8b-8bit": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen3-next-80b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      },
+      "qwen35-122b": {
+        "status": "match",
+        "differences": [],
+        "pending_fields": [],
+        "physical_differences": [],
+        "disclosure_differences": [],
+        "comparison": [
+          {
+            "field": "os_version",
+            "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+            "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+          },
+          {
+            "field": "hardware_unit.machine",
+            "actual": "arm64",
+            "expected": "arm64"
+          },
+          {
+            "field": "hardware_unit.device",
+            "actual": "macbook_m3_max",
+            "expected": "macbook_m3_max"
+          },
+          {
+            "field": "runtime_version.name",
+            "actual": "mlx",
+            "expected": "mlx"
+          },
+          {
+            "field": "runtime_version.version",
+            "actual": "0.31.2",
+            "expected": "0.31.2"
+          },
+          {
+            "field": "kernel_library",
+            "actual": "unavailable",
+            "expected": "unavailable"
+          },
+          {
+            "field": "telemetry_backend",
+            "actual": "powermetrics",
+            "expected": "powermetrics"
+          },
+          {
+            "field": "measurement_boundary_label.rails",
+            "actual": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ],
+            "expected": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          }
+        ]
+      }
+    },
+    "errors": [],
+    "versions": {
+      "status": "match",
+      "differences": [],
+      "pending_fields": [],
+      "physical_differences": [],
+      "disclosure_differences": [],
+      "comparison": [
+        {
+          "field": "os_version",
+          "actual": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+          "expected": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+        },
+        {
+          "field": "hardware_unit.machine",
+          "actual": "arm64",
+          "expected": "arm64"
+        },
+        {
+          "field": "hardware_unit.device",
+          "actual": "macbook_m3_max",
+          "expected": "macbook_m3_max"
+        },
+        {
+          "field": "runtime_version.name",
+          "actual": "mlx",
+          "expected": "mlx"
+        },
+        {
+          "field": "runtime_version.version",
+          "actual": "0.31.2",
+          "expected": "0.31.2"
+        },
+        {
+          "field": "kernel_library",
+          "actual": "unavailable",
+          "expected": "unavailable"
+        },
+        {
+          "field": "python",
+          "actual": "3.13.1",
+          "expected": "3.13.1"
+        },
+        {
+          "field": "packages.mlx",
+          "actual": "0.31.2",
+          "expected": "0.31.2"
+        },
+        {
+          "field": "packages.mlx-lm",
+          "actual": "0.31.3",
+          "expected": "0.31.3"
+        },
+        {
+          "field": "packages.mlx-metal",
+          "actual": "0.31.2",
+          "expected": "0.31.2"
+        },
+        {
+          "field": "packages.numpy",
+          "actual": "2.5.1",
+          "expected": "2.5.1"
+        },
+        {
+          "field": "packages.safetensors",
+          "actual": "0.8.0",
+          "expected": "0.8.0"
+        },
+        {
+          "field": "packages.tokenizers",
+          "actual": "0.22.2",
+          "expected": "0.22.2"
+        },
+        {
+          "field": "packages.transformers",
+          "actual": "5.12.1",
+          "expected": "5.12.1"
+        },
+        {
+          "field": "telemetry_backend",
+          "actual": "powermetrics",
+          "expected": "powermetrics"
+        },
+        {
+          "field": "measurement_boundary_label.rails",
+          "actual": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ],
+          "expected": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+tau_s float finite True accessor error None EXIT 1
+                     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/JouleWise/scripts/bytes_stream_test.py", line 750, in read_known_bytes
+    trim_ns = round(max(0,h["tau_s"]-receipt["settle_s"])*1e9)
+OverflowError: cannot convert float infinity to integer
+tau_s int finite True accessor error None EXIT 1
+                     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/JouleWise/scripts/bytes_stream_test.py", line 750, in read_known_bytes
+    trim_ns = round(max(0,h["tau_s"]-receipt["settle_s"])*1e9)
+OverflowError: cannot convert float infinity to integer

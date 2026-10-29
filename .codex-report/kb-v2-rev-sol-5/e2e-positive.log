@@ -1,0 +1,50 @@
+indep §5 rails: alpha=1.4000 mJ gc=0.02800 gd=0.09472 Delta=0.066716626 dDelta=0.000571796
+indep §5 dc: alpha=2.6500 mJ gc=0.05300 gd=0.24594 Delta=0.192943505 dDelta=0.002524213
+indep §5 rest: alpha=1.2500 mJ gc=0.02500 gd=0.15123 Delta=0.126226879 dDelta=0.002444084
+indep §5 f=0.345783 df=0.007487
+[A knee found (§5)] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0025', 'rest': '0.1262 ± 0.0024'} share=0.3458 ± 0.0075
+   classes={'rails': 'RESOLVED', 'gpu': 'RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+   program-indep rails: dDelta -1.94e-07 dHalf +1.49e-06 J/GB
+   program-indep dc: dDelta -3.68e-07 dHalf +2.81e-06 J/GB
+   program-indep rest: dDelta -1.74e-07 dHalf +1.32e-06 J/GB
+   stamped envelope s: 3560.605331508  hour_as_run: not defined (session endpoints missing: harvest.hour_as_run_s missing or invalid)
+   receipt reference_check status per unit: {'match'} errors []
+[B DRAM-only scan quantized=False -> knee not found (no resolved cache evidence)] contrasts={'rails': 'not defined (knee not found)', 'gpu': 'not defined (knee not found)', 'dc': 'not defined (knee not found)', 'rest': 'not defined (knee not found)'} share={'f': 'not defined (knee not found)', 'df': 'not defined (knee not found)'}
+   classes={'rails': 'UNDETERMINED (knee not found)', 'gpu': 'UNDETERMINED (knee not found)', 'dc': 'UNDETERMINED (knee not found)', 'rest': 'UNDETERMINED (knee not found)'}
+   claim[rails]: Known-bytes check: rails memory-traffic attribution is undetermined (knee not found).
+   claim[rest]: Known-bytes check: rest memory-traffic attribution is undetermined (knee not found).
+[B DRAM-only scan quantized=True -> knee not found (no resolved cache evidence)] contrasts={'rails': 'not defined (knee not found)', 'gpu': 'not defined (knee not found)', 'dc': 'not defined (knee not found)', 'rest': 'not defined (knee not found)'} share={'f': 'not defined (knee not found)', 'df': 'not defined (knee not found)'}
+   classes={'rails': 'UNDETERMINED (knee not found)', 'gpu': 'UNDETERMINED (knee not found)', 'dc': 'UNDETERMINED (knee not found)', 'rest': 'UNDETERMINED (knee not found)'}
+   claim[rails]: Known-bytes check: rails memory-traffic attribution is undetermined (knee not found).
+   claim[rest]: Known-bytes check: rest memory-traffic attribution is undetermined (knee not found).
+[C one stream counter gap, call 4] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0026', 'rest': '0.1262 ± 0.0025'} share=0.3458 ± 0.0076
+   classes={'rails': 'RESOLVED', 'gpu': 'RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+   gap term: {'bound_j': 2.8000000000000003, 'P_max_w': 140, 'adapter_source': 'H adapter nameplate 140 W', 'battery_source': 'native battery polls (synthetic)'} halfwidths {'dc': 0.00255677, 'rest': 0.00247515}
+   pre-idle gap bound J: 6.076367782114584 expected 6.076367782114583
+[D stack difference in packages.mlx-metal] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0025', 'rest': '0.1262 ± 0.0024'} share=0.3458 ± 0.0075
+   classes={'rails': 'UNDETERMINED (stack differs in: packages.mlx-metal)', 'gpu': 'UNDETERMINED (stack differs in: packages.mlx-metal)', 'dc': 'UNDETERMINED (stack differs in: packages.mlx-metal)', 'rest': 'UNDETERMINED (stack differs in: packages.mlx-metal)'}
+   claim[rails]: Known-bytes check: rails memory-traffic attribution is undetermined (stack differs in: packages.mlx-metal).
+   claim[rest]: Known-bytes check: rest memory-traffic attribution is undetermined (stack differs in: packages.mlx-metal).
+   physical: ['packages.mlx-metal'] disclosure: []
+[D stack difference in packages.numpy] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0025', 'rest': '0.1262 ± 0.0024'} share=0.3458 ± 0.0075
+   classes={'rails': 'RESOLVED', 'gpu': 'RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+   physical: [] disclosure: ['packages.numpy']
+[D stack difference in python] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0025', 'rest': '0.1262 ± 0.0024'} share=0.3458 ± 0.0075
+   classes={'rails': 'RESOLVED', 'gpu': 'RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+   physical: [] disclosure: ['python']
+[D capture telemetry_backend differs] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0025', 'rest': '0.1262 ± 0.0024'} share=0.3458 ± 0.0075
+   classes={'rails': 'RESOLVED', 'gpu': 'RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+   disclosure: ['telemetry_backend']
+[E zero rails contrast (rails above idle = 0 in every arm)] contrasts={'rails': '0.00000 ± 0.00025', 'gpu': '-0.00004 ± 0.00012', 'dc': '0.1262 ± 0.0021', 'rest': '0.1262 ± 0.0023'} share=0.0000 ± 0.0019
+   classes={'rails': 'NOT RESOLVED', 'gpu': 'NOT RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+   claim[rails]: Known-bytes check: the rails response to DRAM-sourced bytes is not resolved (0.00000 ± 0.00025 J/GB, cache-bias-corrected upper limit 0.00025 J/GB); whether rails lines include memory-traffic energy is not established.
+[E negative contrast] contrasts={'rails': '-0.01319 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '-0.0385 ± 0.0025', 'rest': '-0.0253 ± 0.0024'} share={'f': 'not defined (DC contrast not valid)', 'df': 'not defined (DC contrast not valid)'}
+   classes={'rails': 'UNDETERMINED (contrast not resolved)', 'gpu': 'UNDETERMINED (contrast not resolved)', 'dc': 'UNDETERMINED (contrast not resolved)', 'rest': 'UNDETERMINED (contrast not resolved)'}
+   claim[rails]: Known-bytes check: rails memory-traffic attribution is undetermined (contrast not resolved).
+   claim[rest]: Known-bytes check: rest memory-traffic attribution is undetermined (contrast not resolved).
+   describe_share(DC zero valid?): {'f': 'not defined (DC contrast not valid)', 'df': 'not defined (DC contrast not valid)'}
+[F divergent checkout] receipt written; unit diffs: {'A/decode': ['os_version']} | versions diffs: ['packages.mlx']
+[F divergent checkout] contrasts={'rails': '0.06672 ± 0.00057', 'gpu': '0.03332 ± 0.00029', 'dc': '0.1929 ± 0.0025', 'rest': '0.1262 ± 0.0024'} share=0.3458 ± 0.0075
+   classes={'rails': 'RESOLVED', 'gpu': 'RESOLVED', 'dc': 'RESOLVED', 'rest': 'RESOLVED'}
+[F2 unreadable versions file] errors: ['configs/bytes/identity_pins.json: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)']
+[G unpatched collect_stack] stack_check differences: ['os_version', 'hardware_unit.machine', 'python', 'packages.mlx', 'packages.mlx-lm', 'packages.mlx-metal', 'packages.numpy', 'packages.safetensors', 'packages.tokenizers', 'packages.transformers']
