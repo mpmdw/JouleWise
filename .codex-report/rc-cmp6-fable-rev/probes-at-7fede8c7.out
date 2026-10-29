@@ -1,0 +1,40 @@
+# RC-CMP6-FABLE-REV probes at scripts/compare_b5_recompute.py in /home/user/rccmp-tmp/wt-old
+## P1 G7: run_phase_energy_j key universe (RC-CMP-4 cause A on the fixture)
+P1a reference members selected by the recompute, no L9 re-reduced file
+    exit=1 stderr='' fails={'routing_id': 2, 'run_phase_energy_j': 6}
+    disagree=[('routing_id', 'run/alpha/neg8-refcorpus-r01', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-refcorpus-r01/prefill', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-refcorpus-r01/decode', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-refcorpus-r01/request', 'missing_or_null'), ('routing_id', 'run/alpha/neg8-window-start-r2', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-window-start-r2/prefill', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-window-start-r2/decode', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-window-start-r2/request', 'missing_or_null')]
+    restricted output mentions compared_in: False; keys under coverage: ['absent_sources', 'leaves', 'nonfinite', 'unbound', 'uncompared', 'uncovered_numeric', 'unmapped']
+P1b counterfactual: the same members with selected=false (universe follows the recompute's own flag)
+    exit=0 stderr='' fails={}
+P1c the mirror: an L9 re-reduced reference with no selected recompute member
+    exit=1 stderr='' fails={'routing_id': 1, 'run_phase_energy_j': 3}
+    disagree=[('routing_id', 'run/alpha/neg8-refcorpus-r01', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-refcorpus-r01/prefill', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-refcorpus-r01/decode', 'missing_or_null'), ('run_phase_energy_j', 'alpha/neg8-refcorpus-r01/request', 'missing_or_null')]
+
+## P2 NEG-8 families: a reference dropped from a NEG-8 line
+P2a control: L9's NEG-8 lines agree with the recompute's neg8 block
+    exit=0 stderr='' fails={}
+P2b L9 drops one start reference (count 2, start mean moves)
+    exit=2 stderr='refused=step11_unmapped_fill' fails={'count': 1, 'floor_j': 1}
+    disagree=[('floor_j', 'disclosure/alpha/neg8_allowance/start.mean_j', None), ('count', 'disclosure/alpha/reference_counts/start', None)]
+    unbound=[('disclosure:window_lines/alpha/neg8_allowance/values_j/bracket.claim_families.gross_energy.start.mean_j', 'row_disagrees'), ('disclosure:window_lines/alpha/reference_counts/counts/start', 'row_disagrees')]
+
+## P3 loo_key: the omitted block id is still parsed for its number
+P3a control: omitted_block_id b02
+    exit=0 stderr='' fails={}
+    omitted_block_id leaf reported as: 'routing_id'
+P3b typo'd omitted_block_id TYPO-b02 (parses to b02)
+    exit=0 stderr='' fails={}
+    omitted_block_id leaf reported as: 'routing_id'
+P3c another contrast's spelling ctr-prefill-b02 (parses to b02)
+    exit=0 stderr='' fails={}
+    omitted_block_id leaf reported as: 'routing_id'
+P3d producer spelling ab02 (L9's _block_number reads b02; the comparator does not)
+    exit=2 stderr='refused=step11_unmapped_fill' fails={'contrast_j': 10, 'contrast_p': 4, 'count': 4, 'outcome_word': 4, 'routing_id': 2}
+    disagree=[('routing_id', 'contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None', 'missing_or_null'), ('contrast_j', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/dbar_j', 'missing_or_null'), ('contrast_p', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/raw_p', 'missing_or_null'), ('contrast_p', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/adjusted_p', 'missing_or_null'), ('outcome_word', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/outcome', 'missing_or_null'), ('contrast_j', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/metrology_interval_j/lower', 'missing_or_null'), ('contrast_j', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/metrology_interval_j/upper', 'missing_or_null'), ('contrast_j', 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/None/decision_interval_j/lower', 'missing_or_null')] ...
+    unbound=[('fill:gamma/contrasts/*/loo/rows/*/adjusted_p', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/decision_interval/lower', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/decision_interval/upper', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/df', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/estimate', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/floor_status', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/metrology_aware_ci95/lower', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/metrology_aware_ci95/upper', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/n_blocks', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/outcome', 'key_unresolved'), ('fill:gamma/contrasts/*/loo/rows/*/raw_p', 'key_unresolved')]
+    omitted_block_id leaf reported as: "uncovered:identity, label or provenance (ids, digests, pins, stage names); bound by L9's record, not a computed quantity"
+
+## P4 custody record step status
+P4a step 11 recorded as failed in the custody record
+    exit=0 stderr='' fails={}
+    l9_steps in the restricted output: {'11': 'failed'}
