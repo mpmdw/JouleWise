@@ -1,0 +1,3 @@
+noise 0.05%: false knee 0.000; {'no resolved cache evidence': 142, 'cache arm pairs not both resolved': 47, '64 K > s_max': 11}
+noise 0.20%: false knee 0.000; {'no resolved cache evidence': 176, 'cache arm pairs not both resolved': 22, '64 K > s_max': 2}
+noise 1.00%: false knee 0.000; {'no resolved cache evidence': 179, 'cache arm pairs not both resolved': 12, '64 K > s_max': 9}

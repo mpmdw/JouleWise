@@ -1,0 +1,8 @@
+GPU source absent on registered PASS
+GPU source absent on harvested PASS
+non-Mac clock branch PASS
+registry row ('configs/campaigns/bytes_mac_check/plan_tree.json', '/stage_graph/18/input/sha256', 'file:configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-midpoint/order_manifest.json')
+registry row ('configs/campaigns/bytes_mac_check/plan_tree.json', '/stage_graph/2/input/sha256', 'file:configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-bound-collection/order_manifest.json')
+registry row ('configs/campaigns/bytes_mac_check/plan_tree.json', '/stage_graph/24/input/sha256', 'file:configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-end/order_manifest.json')
+registry row ('configs/campaigns/bytes_mac_check/plan_tree.json', '/stage_graph/4/input/sha256', 'file:configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-start/order_manifest.json')
+registry exactly four rows; all other content bit-identical PASS
