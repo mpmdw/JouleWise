@@ -118,6 +118,14 @@ def replace(raw, replacements):
     return raw
 
 
+def member_status(mode, original_has_code, untrusted_reason, candidate_equal):
+    """Direction alone determines the invariant members, even without evidence."""
+    if untrusted_reason:
+        mutable = original_has_code if mode == "request-end-p1" else not original_has_code
+        return "not defined (" + untrusted_reason + ")" if mutable else "equals registered line"
+    return "equals registered line" if candidate_equal else "evaluated"
+
+
 def transform(mode, archive, output, export=None):
     output_existed = Path(output).exists() or Path(output).is_symlink()
     archive, output = Path(archive).resolve(), Path(output).resolve()
@@ -140,19 +148,32 @@ def transform(mode, archive, output, export=None):
     exclusions = selected(raw_acceptance, "excluding")
     roster_raw = read(archive / "derived/roster.json")
     roster = selected(roster_raw, "members")
-    pass_mismatch = False
-    for tree in sorted((archive / "sources/repo").rglob("plan_tree.json")):
-        tree_raw = read(tree)
+    trees = sorted((archive / "sources/repo").rglob("plan_tree.json"))
+    pass_mismatch = not trees
+    for tree in trees:
         try:
-            pass_id = selected(tree_raw, "bytes_pass")
-        except ValueError:
-            continue
-        if pass_id != (2 if mode == "hull-p2" else 1):
+            pass_id = selected(read(tree), "bytes_pass")
+            if type(pass_id) is not int or pass_id != (2 if mode == "hull-p2" else 1):
+                pass_mismatch = True
+        except (OSError, ValueError, IndexError, TypeError):
             pass_mismatch = True
-    before = {m["run_id"]: set() for m in roster}
+    structural = {}
+    global_fault = None
+    if not isinstance(exclusions, list):
+        global_fault = "acceptance excluding is not a list"
+        exclusions = []
+    # Keep unidentified roster entries in the record without inventing an identity.
+    missing_identity = any(not isinstance(m.get("run_id"), str) for m in roster)
+    if missing_identity:
+        global_fault = "roster member missing run_id"
+    before = {m.get("run_id"): set() for m in roster}
     for row in exclusions:
         if row.get("scope") == "member":
-            before.setdefault(row["run_id"], set()).add(row["code"])
+            run = row.get("run_id")
+            if not isinstance(row.get("code"), str):
+                structural[run] = "exclusion row missing code"
+            else:
+                before.setdefault(run, set()).add(row["code"])
     after = {run: set(codes) for run, codes in before.items()}
     notices, changes, statuses = [], [], {}
     unavailable = None
@@ -170,7 +191,7 @@ def transform(mode, archive, output, export=None):
             flags = archive / "derived/window_flags.json"
             try:
                 expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
-            except (OSError, ValueError):
+            except (OSError, ValueError, IndexError, TypeError):
                 expected = None
             provenance_unavailable = not isinstance(expected, str) or not expected
             if provenance_unavailable:
@@ -190,7 +211,7 @@ def transform(mode, archive, output, export=None):
                 readings, malformed = h.read_monitor_journal(journal, "thermal")
                 if malformed:
                     notices.append({"code": "records.monitor_line_malformed"})
-    except (OSError, ValueError):
+    except (OSError, ValueError, IndexError, TypeError):
         unavailable = "archived thermal journal unavailable" if mode == "request-end-p1" else "hull assessment unavailable"
 
     def undefined(run, reason):
@@ -198,68 +219,85 @@ def transform(mode, archive, output, export=None):
         notices.append({"run_id": run, "code": "records.thermal_line_undefined", "reason": reason})
 
     for member in roster:
-        run = member["run_id"]
+        run = member.get("run_id")
         if member.get("kind") != "science":
             notices.append({"run_id": run, "code": "reference.unchanged"})
             continue
-        statuses[run] = "equals registered line"
-        if pass_mismatch:
-            undefined(run, "pass mismatch")
-            continue
-        if unavailable:
-            if (CODE not in before[run]) if mode == "hull-p2" else (CODE in before[run]):
-                undefined(run, unavailable)
-            continue
-        if mode == "hull-p2":
+        reason = global_fault or structural.get(run) or ("pass mismatch" if pass_mismatch else unavailable)
+        candidate = set(before[run])
+        if not reason and mode == "hull-p2":
             try:
                 record = selected(assessments, "members", run, FIELD)
                 if (not isinstance(record, dict) or type(record.get("journal_available")) is not bool
-                        or "excluded" not in record or record["excluded"] not in (True, False, None)):
+                        or "excluded" not in record
+                        or (record["excluded"] is not None and type(record["excluded"]) is not bool)):
                     raise ValueError("invalid hull assessment")
+                if not record["journal_available"]:
+                    notices.append({"run_id": run, "code": "thermal.unmeasured"})
+                if record["excluded"] is None:
+                    notices.append({"run_id": run, "code": "member.span_unknown"})
+                if not record["journal_available"] or record["excluded"] is None:
+                    raise ValueError("unavailable hull assessment")
+                if record["excluded"]:
+                    candidate.add(CODE)
             except (ValueError, TypeError, IndexError):
-                if CODE not in before[run]:
-                    undefined(run, "hull assessment unavailable")
-                continue
-            if not record["journal_available"]:
-                notices.append({"run_id": run, "code": "thermal.unmeasured"})
-            if record["excluded"] is None:
-                notices.append({"run_id": run, "code": "member.span_unknown"})
-            if not record["journal_available"] or record["excluded"] is None:
-                if CODE not in before[run]:
-                    undefined(run, "hull assessment unavailable")
-                continue
-            if record["excluded"] is True:
-                after[run].add(CODE)
-        else:
-            span = spans.get(run, {})
-            if span.get("member") is None or span.get("request") is None:
-                notices.append({"run_id": run, "code": "request_span.absent_keep_hull"})
-                continue
-            stamps = [span["member"][0], span["request"][1]]
-            if any(type(v) is not int for v in stamps):
-                undefined(run, "noninteger span")
-                continue
-            found = {code for code, *_ in h.thermal_member_flags(stamps, readings, thresholds)}
-            if (CODE in found) != (CODE in before[run]) and (mismatch or provenance_unavailable):
-                undefined(run, "journal provenance unavailable" if provenance_unavailable
-                          else "journal differs from the harvest's")
-                continue
-            if CODE in found and CODE not in before[run]:
-                raise ValueError(f"request-end would add {CODE}: {run}")
-            if CODE not in found:
-                after[run].discard(CODE)
+                reason = "hull assessment unavailable"
+        elif not reason:
+            reason = ("journal provenance unavailable" if provenance_unavailable else
+                      "journal differs from the harvest's" if mismatch else None)
+            try:
+                span = spans.get(run, {})
+                if run not in spans or not isinstance(span, dict):
+                    raise ValueError("member span unavailable")
+                if span.get("member") is None or span.get("request") is None:
+                    notices.append({"run_id": run, "code": "request_span.absent_keep_hull"})
+                else:
+                    if any(not isinstance(span[k], list) or len(span[k]) != 2 for k in ("member", "request")):
+                        raise ValueError("invalid span")
+                    stamps = [span["member"][0], span["request"][1]]
+                    if any(type(v) is not int for v in stamps):
+                        raise ValueError("noninteger span")
+                    found = {code for code, *_ in h.thermal_member_flags(stamps, readings, thresholds)}
+                    if CODE in found and CODE not in before[run] and not reason:
+                        raise ValueError(f"request-end would add {CODE}: {run}")
+                    if CODE not in found:
+                        candidate.discard(CODE)
+            except (TypeError, IndexError, AttributeError):
+                reason = reason or "invalid span"
+            except ValueError as exc:
+                if str(exc).startswith("request-end would add"):
+                    raise
+                reason = reason or str(exc)
+        status = member_status(mode, CODE in before[run], reason, candidate == before[run])
+        if global_fault or run in structural:
+            status = "not defined (" + (global_fault or structural[run]) + ")"
+        statuses[run] = status
+        if status.startswith("not defined"):
+            undefined(run, status[len("not defined ("):-1])
+        elif not reason:
+            after[run] = candidate
         if after[run] != before[run]:
-            statuses[run] = "evaluated"
             changes.append({"run_id": run, "code": CODE,
                             "action": "added" if CODE in after[run] else "removed",
                             "reason": LABELS[mode]})
     exports = {}
     withheld_runs = set()
     if export:
-        session = selected(raw_acceptance, "session_id")
-        path = export / (session + ".runs.csv")
-        inputs = [(path, Path(path.name), False)]
-        sidecar = export / (session + ".session.json")
+        try:
+            session = selected(raw_acceptance, "session_id")
+            if not isinstance(session, str):
+                raise ValueError("invalid session_id")
+        except (ValueError, IndexError, TypeError):
+            session = None
+            for member in roster:
+                if member.get("kind") == "science":
+                    run = member.get("run_id")
+                    undefined(run, "acceptance missing session_id")
+                    after[run] = set(before[run])
+            changes = []
+        path = export / ((session or "") + ".runs.csv")
+        inputs = [(path, Path(path.name), False)] if session else []
+        sidecar = export / ((session or "") + ".session.json")
         if sidecar.is_file():
             raw_sidecar = read(sidecar)
             try:
@@ -279,6 +317,14 @@ def transform(mode, archive, output, export=None):
         for source, relative, withheld in inputs:
             try:
                 raw = read(source)
+            except UnicodeDecodeError:
+                exports[relative] = source.read_bytes()
+                for member in roster:
+                    if member.get("kind") == "science":
+                        run = member.get("run_id")
+                        bad.add(run)
+                        undefined(run, "export CSV is not UTF-8")
+                continue
             except OSError:
                 continue
             try:
@@ -294,8 +340,8 @@ def transform(mode, archive, output, export=None):
                 exports[relative] = raw
                 for member in roster:
                     if member.get("kind") == "science":
-                        bad.add(member["run_id"])
-                        undefined(member["run_id"], str(exc))
+                        bad.add(member.get("run_id"))
+                        undefined(member.get("run_id"), str(exc))
                 continue
             rid, codes = header.index("run_id"), header.index("exclusion_codes")
             for row in rows[1:]:
@@ -310,7 +356,7 @@ def transform(mode, archive, output, export=None):
             tables.append((relative, raw, rows, header))
         for change in changes:
             run = change["run_id"]
-            if run not in seen:
+            if run not in seen and run not in bad:
                 bad.add(run)
                 undefined(run, "changed member absent from export")
         for run in bad:
@@ -328,7 +374,7 @@ def transform(mode, archive, output, export=None):
                         edits.append((*row[header.index("excluded")], str(bool(after[run]))))
             exports[relative] = replace(raw, edits)
     new_exclusions = [row for row in exclusions if not (
-        row.get("scope") == "member" and row["code"] not in after[row["run_id"]])]
+        row.get("scope") == "member" and isinstance(row.get("code"), str) and row["code"] not in after[row["run_id"]])]
     for change in changes:
         if change["action"] == "added":
             new_exclusions.append({"scope": "member", "run_id": change["run_id"], "code": CODE, "why": CODE})
@@ -339,7 +385,7 @@ def transform(mode, archive, output, export=None):
     for member in roster:
         for unit in member.get("units", []):
             key = (unit["cell_id"], unit["stratum"], unit["unit_id"])
-            units.setdefault(key, []).append(member["run_id"])
+            units.setdefault(key, []).append(member.get("run_id"))
     undefined_statuses = sorted({value for value in statuses.values() if value.startswith("not defined")})
     line_status = ("; ".join(undefined_statuses) if undefined_statuses else
                    "evaluated" if changes else "equals registered line")
@@ -357,14 +403,14 @@ def transform(mode, archive, output, export=None):
               "producing_tree_dirty": producing_tree_dirty,
               "records.thermal_view_changed": False,
               "status": line_status,
-              "member_statuses": [{"run_id": m["run_id"],
-                  "status": statuses.get(m["run_id"], "equals registered line"),
+              "member_statuses": [{"run_id": m.get("run_id"),
+                  "status": statuses.get(m.get("run_id"), "equals registered line"),
                   "blinded_status": "not defined at blinded stage (row withheld)"
-                      if m["run_id"] in withheld_runs else statuses.get(m["run_id"], "equals registered line")}
+                      if m.get("run_id") in withheld_runs else statuses.get(m.get("run_id"), "equals registered line")}
                   for m in roster],
               "changes": changes, "notices": notices, "equals_registered_line": not changes and not undefined_statuses,
-              "restored_members": sorted(r for r in before if before[r] and not after[r]),
-              "dropped_members": [{"run_id": r, "codes": sorted(c)} for r, c in sorted(after.items()) if c],
+              "restored_members": sorted((r for r in before if before[r] and not after[r]), key=str),
+              "dropped_members": [{"run_id": r, "codes": sorted(c)} for r, c in sorted(after.items(), key=lambda item: str(item[0])) if c],
               # Units are printed as run-id lists; the analysis owns validity,
               # whole-unit counts, and the five-unit minimum.
               "restored_units": [runs for runs in units.values() if any(before[r] for r in runs)
@@ -426,7 +472,7 @@ def write_copy(path, content, output=None, sources=()):
     guard_destination(path, output, sources)
     if path.exists() or path.is_symlink():
         path.unlink()
-    path.write_bytes(content.encode("utf-8"))
+    path.write_bytes(content if isinstance(content, bytes) else content.encode("utf-8"))
     path.chmod(0o444)
 
 
@@ -479,12 +525,27 @@ def manifest_entries(value):
 
 
 def verify(output):
-    output = Path(output)
+    output = Path(output).resolve()
+    if not output.is_dir():
+        return ["output missing"]
     record_path = output / "thermal_line.json"
     different, reasons = [], []
+    source_roots = []
     try:
         record = json.loads(record_path.read_bytes())
-        if not isinstance(record, dict) or not isinstance(record.get("notices"), list):
+        if isinstance(record, dict) and isinstance(record.get("source_sha256"), dict):
+            for source in record["source_sha256"]:
+                if isinstance(source, str):
+                    path = Path(source).resolve()
+                    source_roots.append(path.parent.parent if path.name == "b6-acceptance.json" else path.parent)
+        if (not isinstance(record, dict) or not isinstance(record.get("notices"), list)
+                or any(not isinstance(n, dict) or not isinstance(n.get("code"), str)
+                       for n in record["notices"])
+                or not isinstance(record.get("source_sha256"), dict)
+                or any(not isinstance(k, str) or not isinstance(v, str)
+                       for k, v in record["source_sha256"].items())
+                or not isinstance(record.get("view_manifest_sha256"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", record["view_manifest_sha256"]) is None):
             raise ValueError("invalid thermal line record")
     except (OSError, ValueError, TypeError, RecursionError):
         record = {"notices": []}
@@ -507,7 +568,7 @@ def verify(output):
     for source, digest in record.get("source_sha256", {}).items():
         try:
             changed = sha256(Path(source)) != digest
-        except OSError:
+        except (OSError, ValueError):
             changed = True
         if changed:
             changed_sources.append(source)
@@ -521,8 +582,12 @@ def verify(output):
         record["notices"].append({"code": "records.thermal_view_changed",
                                   "reason": "; ".join(reasons) if reasons else "payload differs from manifest"})
     record["view_differing_paths"] = sorted(set(different))
-    write_copy(record_path, json.dumps(record, indent=2) + "\n", output)
-    return record["view_differing_paths"]
+    if any(output.is_relative_to(root) for root in source_roots):
+        print(json.dumps(record, indent=2))
+    else:
+        write_copy(record_path, json.dumps(record, indent=2) + "\n", output)
+    return record["view_differing_paths"] + [
+        "source changed since transform: " + path for path in record["source_differing_paths"]]
 
 
 def main(argv=None):
@@ -538,10 +603,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.mode == "verify":
         different = verify(args.output)
-        record = json.loads((args.output / "thermal_line.json").read_bytes())
-        flags = different + ["source changed since transform: " + path
-                             for path in record["source_differing_paths"]]
-        print("\n".join(flags) if flags else "view verified")
+        print("\n".join(different) if different else "view verified")
         return
     try:
         record = transform(args.mode, args.archive, args.output, args.export)

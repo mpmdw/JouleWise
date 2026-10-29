@@ -18,6 +18,14 @@ from tests import test_harvest_b5_window as w
 from joulewise import bytes_analysis as ba
 
 
+def add_campaign_pass_identity(manifest):
+    # The analysis-only synthetic campaign predates archived pass identities.
+    for session in manifest['sessions']:
+        path = Path(session['archive']) / 'sources/repo/plan_tree.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({'bytes_pass': session['pass_id']}))
+
+
 def setUpModule():
     fixtures.setUpModule()
 
@@ -242,6 +250,7 @@ class BoundAnalysisReplayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = archive_campaign(root)
+            add_campaign_pass_identity(manifest)
             for session in manifest['sessions']:
                 source = Path(session['archive'])
                 roster_path = source / 'derived/roster.json'
@@ -675,6 +684,7 @@ class ReviewerGroupedAnalysisTests(unittest.TestCase):
             self.addCleanup(temporary.cleanup)
             root = Path(temporary.name)
             manifest = archive_campaign(root, non_claim=False, release="none", subpack_sessions=True)
+            add_campaign_pass_identity(manifest)
             models = {m["model"]: m for m in manifest["models"]}
             # Census over every session, including those with no thermal change.
             release_keys(root, manifest, "all")
@@ -850,6 +860,7 @@ class RecordedFaultTests(unittest.TestCase):
         self.archive = self.root / 'archive'
         self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': [
             {'scope': 'member', 'run_id': 'a', 'code': t.CODE}]})
+        self.put('sources/repo/plan_tree.json', {'bytes_pass': 1})
         self.put('derived/roster.json', {'members': [
             {'run_id': r, 'kind': 'science', 'units': []} for r in ('a', 'b')]})
         self.put('withheld/spans.json', {'spans': {
@@ -876,6 +887,170 @@ class RecordedFaultTests(unittest.TestCase):
             self.assertIsNone(t.main(args))
         self.assertTrue((out / 'thermal_line.json').is_file())
         return json.loads(capture.getvalue()), out
+
+    def test_generated_evidence_cross_product_cli(self):
+        import subprocess
+        import sys
+        faults = ('absent', 'unparsable', 'missing-field', 'wrong-type',
+                  'journal-mismatch', 'seal-unavailable', 'wrong-pass',
+                  'missing-plan', 'missing-pass')
+        faults = tuple(value for fault in faults for value in (fault, 'trusted'))
+        cells = 0
+        for mode in t.LABELS:
+            for present in (False, True):
+                for agrees in (False, True):
+                    for fault in faults:
+                        with self.subTest(mode=mode, present=present, agrees=agrees, fault=fault):
+                            self.put('sources/repo/plan_tree.json', {'bytes_pass': 2 if mode == 'hull-p2' else 1})
+                            self.put('derived/roster.json', {'members': [{'run_id': 'a', 'kind': 'science', 'units': []}]})
+                            original = [{'scope': 'member', 'run_id': 'a', 'code': t.CODE}] if present else []
+                            self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': original})
+                            candidate = present if agrees else not present
+                            self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: {
+                                'excluded': candidate, 'journal_available': True}}}})
+                            self.put('withheld/spans.json', {'spans': {'a': {
+                                'member': [20 * fixtures.NS, 100 * fixtures.NS],
+                                'request': [40 * fixtures.NS, 80 * fixtures.NS]}}})
+                            fixtures.thermal_journal(range(0, 126, 5), {60 if candidate else 90}).dump(self.journal)
+                            self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {
+                                'journal': {'sha256': hashlib.sha256(self.journal.read_bytes()).hexdigest()}}}}})
+                            evidence = self.archive / ('withheld/member-assessments.json' if mode == 'hull-p2' else 'withheld/spans.json')
+                            if fault == 'absent':
+                                evidence.unlink()
+                            elif fault == 'unparsable':
+                                evidence.write_text('{bad')
+                            elif fault in ('missing-field', 'wrong-type'):
+                                if mode == 'hull-p2':
+                                    value = {'journal_available': True}
+                                    if fault == 'wrong-type':
+                                        value['excluded'] = int(candidate)
+                                    self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: value}}})
+                                else:
+                                    self.put('withheld/spans.json', {} if fault == 'missing-field' else {'spans': []})
+                            elif fault in ('journal-mismatch', 'seal-unavailable'):
+                                if mode == 'request-end-p1':
+                                    if fault == 'journal-mismatch':
+                                        self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {'journal': {'sha256': '0' * 64}}}}})
+                                    else:
+                                        (self.archive / 'derived/window_flags.json').unlink()
+                                else:
+                                    # Hull trusts the sealed harvest assessment, not a journal replay.
+                                    self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: {
+                                        'excluded': candidate, 'journal_available': False}}}})
+                            elif fault == 'wrong-pass':
+                                self.put('sources/repo/plan_tree.json', {'bytes_pass': 1 if mode == 'hull-p2' else 2})
+                            elif fault == 'missing-plan':
+                                (self.archive / 'sources/repo/plan_tree.json').unlink()
+                            elif fault == 'missing-pass':
+                                self.put('sources/repo/plan_tree.json', {})
+                            out = self.root / ('cell-' + str(cells))
+                            cells += 1
+                            result = subprocess.run([sys.executable, t.__file__, mode, str(self.archive), str(out)], capture_output=True, text=True)
+                            if fault == 'trusted' and mode == 'request-end-p1' and candidate and not present:
+                                self.assertEqual(result.returncode, 2)
+                                self.assertFalse(out.exists())
+                                continue
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            record = json.loads(result.stdout)
+                            mutable = present if mode == 'request-end-p1' else not present
+                            undefined = fault != 'trusted' and mutable
+                            changed = fault == 'trusted' and mutable and not agrees
+                            status = record['member_statuses'][0]['status']
+                            self.assertEqual(status.startswith('not defined ('), undefined)
+                            if undefined:
+                                if fault in ('wrong-pass', 'missing-plan', 'missing-pass'):
+                                    reason = 'pass mismatch'
+                                elif mode == 'hull-p2':
+                                    reason = 'hull assessment unavailable'
+                                else:
+                                    reason = {'journal-mismatch': "journal differs from the harvest's",
+                                              'seal-unavailable': 'journal provenance unavailable',
+                                              'wrong-type': 'invalid span'}.get(fault, 'archived thermal journal unavailable')
+                                self.assertEqual(status, 'not defined (' + reason + ')')
+                            if not undefined:
+                                self.assertEqual(status, 'evaluated' if changed else 'equals registered line')
+                            self.assertEqual(record['equals_registered_line'], not undefined and not changed)
+                            codes = json.loads((out / 'derived/b6-acceptance.json').read_bytes())['excluding']
+                            expected_codes = {t.CODE} if (candidate if changed else present) else set()
+                            self.assertEqual({row['code'] for row in codes}, expected_codes)
+                            self.assertEqual(record['dropped_members'],
+                                             [{'run_id': 'a', 'codes': [t.CODE]}] if expected_codes else [])
+        self.assertEqual(cells, 144)
+
+    def test_w4_faults_cli(self):
+        import subprocess
+        import sys
+        for fault in ('excluding-null', 'missing-code', 'missing-run', 'utf8', 'session', 'empty-csv'):
+            with self.subTest(fault=fault):
+                acceptance = {'session_id': 's', 'excluding': [{'scope': 'member', 'run_id': 'a', 'code': t.CODE}]}
+                roster = {'members': [{'run_id': r, 'kind': 'science', 'units': []} for r in ('a', 'b')]}
+                if fault == 'excluding-null':
+                    acceptance['excluding'] = None
+                elif fault == 'missing-code':
+                    acceptance['excluding'][0].pop('code')
+                elif fault == 'missing-run':
+                    roster['members'][0].pop('run_id')
+                elif fault == 'session':
+                    acceptance.pop('session_id')
+                self.put('derived/b6-acceptance.json', acceptance)
+                self.put('derived/roster.json', roster)
+                export = self.root / ('exp-' + fault)
+                export.mkdir()
+                raw = (b'run_id,exclusion_codes,excluded\na,\xff,True\n' if fault == 'utf8' else b'')
+                (export / 's.runs.csv').write_bytes(raw)
+                out = self.root / ('w4-' + fault)
+                args = [sys.executable, t.__file__, 'request-end-p1', str(self.archive), str(out)]
+                if fault in ('utf8', 'session', 'empty-csv'):
+                    args += ['--export', str(export)]
+                result = subprocess.run(args, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                record = json.loads(result.stdout)
+                affected = record['member_statuses'][:1] if fault == 'missing-code' else record['member_statuses']
+                self.assertTrue(all(m['status'].startswith('not defined (') for m in affected))
+                self.assertEqual(record['changes'], [])
+                if fault in ('utf8', 'empty-csv'):
+                    self.assertEqual((out / 'export/s.runs.csv').read_bytes(), raw)
+                    self.assertNotIn('changed member absent', record['member_statuses'][0]['status'])
+
+    def test_verify_structural_damage_and_paths_cli(self):
+        import subprocess
+        import sys
+        for index, damage in enumerate(({'notices': [None]}, {'notices': [{}]}, {'notices': [{'code': 1}]},
+                {'source_sha256': None}, {'source_sha256': []}, {'source_sha256': {'x': 1}},
+                {'view_manifest_sha256': None})):
+            out = self.root / ('damage-' + str(index))
+            t.transform('request-end-p1', self.archive, out)
+            path = out / 'thermal_line.json'
+            record = json.loads(path.read_bytes())
+            record.update(damage)
+            path.unlink()
+            path.write_text(json.dumps(record))
+            p = subprocess.run([sys.executable, t.__file__, 'verify', str(out)], capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            record = json.loads(path.read_bytes())
+            self.assertTrue(record['records.thermal_view_changed'])
+            self.assertIn('thermal_line.json', record['view_differing_paths'])
+        out = self.root / 'real-output'
+        t.transform('request-end-p1', self.archive, out)
+        link = self.root / 'link'
+        link.symlink_to(out)
+        p = subprocess.run([sys.executable, t.__file__, 'verify', str(link)], capture_output=True, text=True)
+        self.assertEqual((p.returncode, p.stdout.strip()), (0, 'view verified'))
+        # A valid record copied into a source must never be rewritten there.
+        source_record = self.archive / 'thermal_line.json'
+        source_record.write_bytes((out / 'thermal_line.json').read_bytes())
+        before = source_record.read_bytes()
+        link.unlink()
+        link.symlink_to(self.archive)
+        p = subprocess.run([sys.executable, t.__file__, 'verify', str(link)], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('"records.thermal_view_changed": true', p.stdout)
+        self.assertEqual(source_record.read_bytes(), before)
+        self.assertFalse((self.archive / 'view_manifest.json').exists())
+        missing = self.root / 'missing-output'
+        p = subprocess.run([sys.executable, t.__file__, 'verify', str(missing)], capture_output=True, text=True)
+        self.assertEqual((p.returncode, p.stdout.strip()), (0, 'output missing'))
+        self.assertFalse(missing.exists())
 
     def test_missing_journal_with_and_without_affected_members(self):
         self.journal.unlink()
@@ -911,7 +1086,7 @@ class RecordedFaultTests(unittest.TestCase):
     def test_fault_direction_and_pass_mismatch_for_both_lines(self):
         for mode in t.LABELS:
             with self.subTest(mode=mode):
-                (self.archive / 'sources/repo/plan_tree.json').unlink(missing_ok=True)
+                self.put('sources/repo/plan_tree.json', {'bytes_pass': 2 if mode == 'hull-p2' else 1})
                 self.journal.unlink(missing_ok=True)
                 record = t.transform(mode, self.archive, self.root / (mode + '-unavailable'))
                 statuses = [m['status'] for m in record['member_statuses']]
@@ -923,7 +1098,8 @@ class RecordedFaultTests(unittest.TestCase):
                 self.put('sources/repo/plan_tree.json', {'bytes_pass': 1 if mode == 'hull-p2' else 2})
                 record = t.transform(mode, self.archive, self.root / (mode + '-wrong-pass'))
                 self.assertEqual([m['status'] for m in record['member_statuses']],
-                                 ['not defined (pass mismatch)'] * 2)
+                                 (['equals registered line', 'not defined (pass mismatch)'] if mode == 'hull-p2'
+                                  else ['not defined (pass mismatch)', 'equals registered line']))
                 self.assertFalse(record['equals_registered_line'])
                 self.assertEqual(record['changes'], [])
 
@@ -932,6 +1108,7 @@ class RecordedFaultTests(unittest.TestCase):
                 {'excluded': None, 'journal_available': True},
                 {'excluded': False, 'journal_available': False})):
             with self.subTest(value=value):
+                self.put('sources/repo/plan_tree.json', {'bytes_pass': 2})
                 self.put('withheld/member-assessments.json', {'members': {
                     r: {t.FIELD: value} for r in ('a', 'b')}})
                 record = t.transform('hull-p2', self.archive, self.root / ('hull-fault-' + str(index)))
@@ -968,11 +1145,11 @@ class RecordedFaultTests(unittest.TestCase):
         self.assertEqual(record['changes'], [])
         self.assertIn({'code': 'records.thermal_journal_mismatch'}, record['notices'])
         self.assertEqual([m['status'] for m in record['member_statuses']],
-                         ["not defined (journal differs from the harvest's)"] * 2)
+                         ['equals registered line'] * 2)
         (self.archive / 'derived/window_flags.json').unlink()
         record, _ = self.run_line('unsealed-add')
         self.assertEqual([m['status'] for m in record['member_statuses']],
-                         ['not defined (journal provenance unavailable)'] * 2)
+                         ['equals registered line'] * 2)
         self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {
             'journal': {'sha256': hashlib.sha256(self.journal.read_bytes()).hexdigest()}}}}})
         out = self.root / 'sealed-add'
