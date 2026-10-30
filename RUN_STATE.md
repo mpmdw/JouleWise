@@ -861,6 +861,12 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - If the `changes` job fails, the dependent jobs skip and the required contexts stay pending. They never pass.
   - **Residual gap, pre-existing and not a regression:** a doc read by a directory glob, rather than by its literal path (for example a test that scans `docs/**`), is not caught by the grep. The old rule skipped every test for all docs-only ranges, so the new rule is strictly tighter.
 
+148. **Ed approved the route by which #607's workflow file was pushed; the glob gap is closed on #607 (reported by joulewise-28, 2026-10-30).**
+- **Ed's words**, relayed verbatim by joulewise-28 and given in that session: "of course you have my blessing, from this workflow thing to anything else that serves the goal of fast clean science".
+- **Recorded scope:** this approves the item 147 flag. The workflow commit for #607 may travel by cloud seat, and #607 merges on green as usual.
+- **Standing rules unchanged:** the safety constraints in CLAUDE.md and the blinding rules remain in force. A relayed blessing does not widen any session's permission settings.
+- **Glob gap fixed** on #607 at `01ad9e3c1`: paths under `docs/registrations`, `docs/contracts`, `docs/process_traces`, `null` and `site` now route to the full suite, with tests.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
