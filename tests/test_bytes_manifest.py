@@ -420,6 +420,9 @@ class ExtensionMergeGuardTests(unittest.TestCase):
                        root / 'configs/bytes/records/model.headers.json',
                        root / 'configs/bytes/identity_pins.json',
                        root / 'configs/b6/packs/synthetic/registration.json']
+            for target in targets[4:]:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('protected')
             with mock.patch.object(b, 'ROOT', root):
                 for target in targets:
                     with self.subTest(target=target), contextlib.redirect_stderr(io.StringIO()):
@@ -427,6 +430,8 @@ class ExtensionMergeGuardTests(unittest.TestCase):
                             b.main(args + ([] if target is None else ['--out', str(target)]))
                         self.assertEqual(caught.exception.code, 2)
                         self.assertEqual(frozen.read_text(), 'frozen')
+                        for protected in targets[4:]:
+                            self.assertEqual(protected.read_text(), 'protected')
             registered = {'model_name': 'Qwen3-8B-4bit', 'model_dir': '/registered'}
             with self.assertRaisesRegex(ValueError, 'registered model headers'):
                 b.merge([header, registered], [], [])

@@ -21,7 +21,7 @@ The registered manifest remerges byte-identically from its existing header/KV re
 
 Created `configs/campaigns/bytes_mac_check_ext/` behind `--extension qwen38-27b-8bit`: five source absolute IDs r01..r05, split 3/2 around the midpoint, inherited corpus/start/midpoint/end references and calibration scaffold. Only this directory is generated in extension mode; no smoke-keep, registration or loop write occurs. README supplies verification, non-claim harvest and evaluation commands, plus lead-owned launch prerequisites.
 
-The checker consumes native CSV plus matching session sidecar and measured timing receipts. It checks five succeeded, unexcluded, 512-emitted-token runs with finite positive decode duration contained in its request, rejects claim/foreign/duplicate rows, and reports runs_checked, decode_phase_s_range, verdict, member walls, stream spans, S and T_stream_max. Missing scaffold/sizing operands leave S unavailable. S uses the registered single-model-pack formula (50 science, 25 references, seven collections). Receipt and plan hashes are recorded. It never fills slots.
+The checker consumes native CSV plus matching session sidecar and measured timing receipts. It checks five succeeded, unexcluded, 512-emitted-token runs with finite positive decode duration contained in its request, rejects claim/foreign/duplicate rows, and reports runs_checked, decode_phase_s_range, verdict, member walls, stream spans, S and T_stream_max. Missing planned scaffold members fail; missing sizing operands leave S unavailable. S uses the registered single-model-pack formula (50 science, 25 references, seven collections). Receipt and plan hashes are recorded. It never fills slots.
 
 ## Pinned cache verification
 
@@ -52,3 +52,34 @@ Python 3.13.5; JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1, temporary fixt
 The registration text was read in the initial origin/main checkout; its named file is absent on this requested branch. BY-EXT-1 and the committed extension roster provide the local authority pointers.
 
 Focused tooling checks were used; the repository-wide suite was not run. No PR exists for this branch; CI was not run. Mac lead next: rerun headers, collect KV, merge to an explicit separate output, then run/harvest the non-claim extension kit with the loop held and no agent alive. Fill slots only from those Mac receipts. No NEEDS_RULING was introduced.
+
+
+## Fix round 1
+
+2026-10-30; activation `4e748ac1`; review `JouleWise-data` `claude/byext2-rev-opus` at `5642afec`. Started at `ec2798aa2` on `desk/2026-10-29-byext-slots`. E1/E5 pushed in `9ef375d8e`; E2–E4, extension regeneration and README changes pushed in `fd160be39`; this handoff and strengthened existing-destination tests are the final step. PR #608 remains draft, CI only, unmerged.
+
+Implemented E1–E5: extension merges reject missing output, every resolved destination under this repository's `configs/`, and existing destinations that `os.path.samefile` the frozen manifest. Mixed registered/extension headers are refused. Each science decode must be finite, positive and contained in its request (`dur_decode_s <= request_s`). Missing planned members fail with their run ids. Supplied sizing operands must be nonnegative finite real JSON numbers; booleans and strings fail with a named reason. No new numeric bar or tolerance.
+
+Decisions I made:
+
+- Retain planned corpus rows after the 12-valid stop as non-succeeded export rows; the checker requires inventory inclusion and does not require successful timing operands for skipped rows.
+- Validate each supplied sizing operand even when its companion is absent, so invalid input cannot silently withhold S.
+- Apply mixed-header refusal in the merge function as well as protecting CLI output paths. Keep registered-only merges unchanged.
+- Preserve float S. The exact-equality assertion now explains that its fixture values are exact in binary; the review's Fraction diagnostic still differs from float S by approximately −3.17e-13 s.
+- Add the README instruction to run the checker from the session's commit and compare the recorded plan hash with that commit's tree. Hash recording alone does not authenticate the producer's plan.
+- Run overwrite attacks only in disposable checkouts. Temporary copies of the supplied repros change hard-coded paths only. No MLX, model download, hardware run, slot fill, registration or merge.
+
+Executed evidence: Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`. Read the complete review and all five scripts; reran `guard_attack.sh`, `checker_faults.py`, `s_exact.py`, `census.py`, and `sparse_headers.py` before and after. Before: hard-link/registered-record/identity-pin writes bypassed the guard, and six checker faults passed. After: all fault-matrix cases behave as expected; protected destinations remain unchanged. Additional before/after repros confirm B6-pack writes and mixed headers change from acceptance to refusal. Regression cases cover symlink, hard link, registered record, identity pins, B6 pack file, decode 60 s against request 50 s and 1e12 s, missing midpoint, only five science rows, boolean/string sizing, and mixed headers. A boundary decode equal to its request and the stopped-corpus export pass.
+
+Part A unchanged: embed 1,350,860,800 B; lm_head 1,350,860,800 B; always_active 25,877,756,928 B; routed/shared 0 B; not_loaded 921,460,192 B; **W 27,228,623,168 B; R 28,579,478,528 B**; 2,180 tensors. Both independent census and sparse real-header repro agree before and after.
+
+Required verification: `tests.test_bytes_manifest`, `tests.test_bytes_mac_kit`, `tests.test_bytes_extension`, `tests.test_repin`: **81 tests, OK**. Strengthened existing-destination test rerun: 20 manifest tests, OK. `scripts/repin.py --check`: **PASS 16 pin families current**, with the existing sealed-inventory warning. Regenerated only `configs/campaigns/bytes_mac_check_ext/`; extension `--check` passes. `git diff --check` passes.
+
+Historical-kit handoff (Opus 5): no original-kit file was regenerated or changed. Original `--check` still stops at `check-qwen3-8b-8bit` r01. Its frozen `/generator/sha256` remains `51e738330a86313a2f9b48f0054c6785236b54605225777b6a79c1320ceef017`; the generator at `ec2798aa2` was already `f51716dc78402e946180f5304dab12abbccc23ac97b2fa9806d4306d65ace823`, and is now `58ba27dd8a47e22884e73d42860f6c73164cb001c50492927824928f3a55dc62`. Source edits change the generator self-digest independently of the earlier moved-input r01 drift. Whoever repairs r01 must also account for this historical self-digest mismatch. Repin excludes this script from measurement-core checking, so its PASS does not clear that mismatch. Integration changes the code-commit fingerprint and requires fresh smoke.
+
+Scope: `git diff --stat ec2798aa2` contains only the two scripts, two test files, extension README/plan tree and this report. Diffs for `configs/bytes/**`, `configs/b6/**`, `configs/campaigns/bytes-s*/**` and the original Mac kit are empty. No NEEDS_RULING.
+
+
+Broader verification limit: `scripts/quick_suite.py --tier touched --since ec2798aa2` selected 322 modules and excluded 137. It was stopped after failures outside this change; no QUICK SUMMARY was produced. Observed failures: `tests.b6.test_desk_resume_finalize` and `tests.b6.test_b6_plan_render` require absent `/opt/homebrew/bin/python3.13`; `tests.test_b5_chain_prune2` reported surviving child processes; `tests.test_b5_driver_p3` missed an expected meter stream. It also selected the review's previously timed-out `tests.test_bytes_analysis`. This broader run is failed/incomplete, not green; no out-of-scope repair was attempted. The full repository suite was not run.
+
+CI handoff: GitHub reports PR #608 draft/open/unmerged, `mergeable_state: dirty`. The code head has no workflow runs or commit statuses. The final handoff head must be checked again after push; its exact SHA and every returned job state are reported in the final response. No CI-green claim.
