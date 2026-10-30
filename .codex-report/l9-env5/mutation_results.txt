@@ -15,10 +15,11 @@ N04_member_sessions_drop_flag | KILLED | Ran 43 tests in 191.312s | FAILED (fail
 N05_truthy_flag | KILLED | Ran 43 tests in 195.497s | FAILED (failures=1) | test_default_is_off
 N06_drop_OF3_reproduced_guard | KILLED | Ran 43 tests in 196.312s | FAILED (failures=3) | test_bounds_sweep_equals_oracle,test_no_reproduced_member_envelope_is_not_clamped,test_short_prefill_clamps_and_bounds_sweep_equals_oracle
 N07_drop_OF5_input_inversion_guard | KILLED | Ran 43 tests in 190.447s | FAILED (failures=3) | test_input_window_inverted_at_zero_shift_is_refused
-N08_dry_run_flag_off | KILLED | Ran 43 tests in 188.935s | FAILED (failures=2) | test_dry_run_step_results_session_opts_in,test_every_analysis_consumer_passes_true
-N09_floor_extraction_flag_dropped | KILLED | Ran 43 tests in 187.099s | FAILED (failures=1, errors=1) | test_every_analysis_consumer_passes_true,test_floor_extraction_with_kept_units_opts_in
-N10_inputs_site3_flag_dropped | KILLED | Ran 43 tests in 187.745s | FAILED (failures=1) | test_every_analysis_consumer_passes_true
-N11_issuer_flag_dropped | KILLED | Ran 43 tests in 183.104s | FAILED (failures=1) | test_every_analysis_consumer_passes_true
+N08_dry_run_flag_off | KILLED | Ran 43 tests in 221.272s | FAILED (failures=2) | test_dry_run_step_results_session_opts_in,test_every_analysis_consumer_passes_true
+N09_floor_extraction_flag_dropped | KILLED | Ran 43 tests in 211.074s | FAILED (failures=1, errors=1) | test_every_analysis_consumer_passes_true,test_floor_extraction_with_kept_units_opts_in
+N10_inputs_site3_flag_dropped(rt) | KILLED | Ran 43 tests in 204.987s | FAILED (failures=1) | test_every_analysis_consumer_passes_true
+N11_issuer_flag_dropped | KILLED | Ran 43 tests in 198.362s | FAILED (failures=1) | test_every_analysis_consumer_passes_true
+N12_floor_mint_estimator_gate_inverted | KILLED | Ran 43 tests in 199.784s | FAILED (failures=1) | test_every_analysis_consumer_passes_true
 O-M01_clamp_to_start | KILLED | Ran 43 tests in 191.614s | FAILED (failures=3) | test_clamp_position_is_the_midpoint_to_the_last_bit
 O-M02_drop_negative_power_guard(rt) | KILLED | Ran 43 tests in 186.533s | FAILED (failures=1) | test_reviewer_mini_sweep_with_mixed_sign_trace
 O-M03_eps_off_sign | SURVIVED | Ran 43 tests in 202.202s | OK | 
