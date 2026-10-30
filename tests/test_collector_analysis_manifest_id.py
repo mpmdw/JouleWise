@@ -25,6 +25,7 @@ from joulewise.analysis_manifest_v3 import (
 )
 from scripts.run_campaign import resolve_prospective_analysis_manifest_v3
 import scripts.run_campaign as run_campaign_module
+from tests.custody_isolation import isolate_custody_parent
 from tests.test_analysis_manifest_v3 import install_synthetic_prospective_fixture
 from tests.test_run_campaign import (
     ROOT,
@@ -195,6 +196,11 @@ def _campaign_manifest(runs_dir: Path) -> tuple[Path, dict]:
 
 
 class CollectorAnalysisManifestIdentityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # The run_campaign.py child inherits this environment and publishes
+        # active-campaign entries; never under the real ~/night-custody.
+        isolate_custody_parent(self)
+
     def test_collector_fixture_run_records_v3_manifest_identity_and_sha256(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
