@@ -392,6 +392,10 @@ def journal_readings(raw):
         try:
             doc = document(line.decode("utf-8"))
             projected = {key: doc.optional(key) for key in ("schema", "module", "kind")}
+            if projected["kind"] != h.OBSERVATION_KIND["thermal"]:
+                # Bookkeeping lines have no observation stamps or values.
+                h.parse_monitor_line("thermal", projected)
+                continue
             for key in ("started", "finished"):
                 stamp = doc.field(key)
                 projected[key] = {name: stamp.field(name).scalar() for name in h.STAMP_KEYS}

@@ -1896,5 +1896,8 @@ class ProducerTrustTests(unittest.TestCase):
                 return loads(raw, *args, **kwargs)
             with patch.object(t.json, 'loads', side_effect=guarded):
                 record = t.transform('request-end-p1', archive.a, archive.root / 'out')
+                bookkeeping = json.dumps({'schema': t.h.JOURNAL_SCHEMA, 'module': 'thermal',
+                    'kind': sorted(t.h.BOOKKEEPING_KINDS)[0]})[:-1] + ',"energy":6666.750}\n'
+                self.assertEqual(t.journal_readings(bookkeeping.encode()), ([], 0))
             self.assertEqual(record['member_statuses'][0]['status'], 'evaluated')
             self.assertEqual(record['changes'][0]['action'], 'removed')
