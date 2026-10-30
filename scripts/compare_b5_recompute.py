@@ -72,6 +72,14 @@ Rules (RC-CMP-1 A1-A4):
   DISAGREE otherwise), an L9 item of a listed collection that no check claims is DISAGREE (unexpected/), and a
   compared step-11 leaf binds only inside a claimed item (not_in_table); a list the fill copies position by
   position prints every position (copy_shortened);
+- RC-CMP-10: a word the producer derives from the sign of, or a threshold on, a compared number (outcome,
+  direction, rejection, floor status, influence triggers, below, widened, equals_primary, not_below_primary, agree,
+  plausible, branch, magnitude rows) is compared only when every test it reads lies outside its family bar from the
+  threshold on both sides, or the decided tests fix it; otherwise the row is within_bar_undetermined and AGREE only
+  if the numbers agree (Comparison.word). The history lines are table entries from the window index L9's run read
+  (--window-index, bound to the record's window_index_sha256). A conditional family builds its value rows under the
+  table's own condition (holds). Every word or code compared against L9 is pinned to its producer
+  (tests/independent_recompute/test_rc_cmp10.py);
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
