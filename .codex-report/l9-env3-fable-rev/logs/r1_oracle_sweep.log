@@ -1,12 +1,13 @@
 {
- "inverted_defined": 14469,
- "noninverted_defined": 16123,
- "none": 3472,
- "point_at_lower": 1482,
+ "inverted_defined": 23829,
+ "noninverted_defined": 23197,
+ "none": 3886,
+ "point_at_lower": 1614,
  "point_at_upper": 0,
- "point_at_both": 9614,
+ "point_at_both": 15764,
  "mismatch": 0,
  "origin_mismatch": 0,
- "cases": 34064
+ "cases": 50912
 }
 RESULT: PASS
+SWEEP2_DONE
