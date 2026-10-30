@@ -26,12 +26,14 @@ from joulewise.detection_floor import (
     _close,
     _point_floor_diagnostic,
     comparative_false_effect_floor,
+    common_mode_zero_points_agree,
+    exact_stack_serving_cell,
     registered_common_mode_operative_bound,
 )
 from joulewise.identity_pins import stack_identity_sha256
 from joulewise.analysis_engine.inputs import (
     AnalysisInputError,
-    authenticate_floor_artifact_bytes,
+    authenticate_floor_artifact_bytes, load_floor_artifact,
 )
 from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
@@ -448,6 +450,7 @@ def validate_d165_paper_sources(
     custody_root: Path,
     floor_artifact_bytes: bytes,
     replay_sidecar_bytes: bytes,
+    window_index: Path | None = None,
 ) -> tuple[str, ...]:
     """Replay D-165's four owners and expose only closed nested codes."""
 
@@ -457,11 +460,12 @@ def validate_d165_paper_sources(
         manifest,
         manifest_path=finalized_manifest_path,
         custody_root=custody_root,
+        window_index=window_index,
     ):
         codes.append("d165_paper_finalized_manifest_invalid")
     try:
-        authenticate_floor_artifact_bytes(floor_artifact_bytes)
-    except (AnalysisInputError, TypeError, ValueError):
+        _authenticate_paper_floor(floor_artifact_bytes, manifest, custody_root, window_index)
+    except (AnalysisInputError, KeyError, OSError, TypeError, ValueError):
         codes.append("d165_paper_floor_artifact_invalid")
     sidecar = _paper_json_object(replay_sidecar_bytes)
     if sidecar is None or validate_d165_replay_sidecar(sidecar):
@@ -960,7 +964,11 @@ def replay_common_mode_dominance(
             raise ValueError(_COMMON_MODE_INPUT_INVALID) from exc
         if zero_point not in onset or zero_point not in offset:
             raise ValueError(_COMMON_MODE_ZERO_POINT_MEMBERSHIP)
-        if not math.isclose(zero_point, delta, rel_tol=1e-9, abs_tol=1e-12):
+        if not common_mode_zero_points_agree(
+            zero_point, delta,
+            (block["member_envelope_integral_sum_j"], zero_point, delta,
+             *onset, *offset),
+        ):
             raise ValueError(_COMMON_MODE_ZERO_POINT_DIVERGENCE)
         deltas.append(delta)
         splits.append((split["shared_width_j"], split["local_width_j"]))
@@ -1891,26 +1899,23 @@ def _contrast_floor_binding_error(
             if floor_cell is None:
                 return _FLOOR_CELL_UNRESOLVED
             key = floor_cell.get("key")
-            eligibility = floor_cell.get("eligibility")
-            source_regime = floor_cell.get("source_regime")
+            if not isinstance(key, Mapping):
+                return _FLOOR_CELL_UNRESOLVED
             try:
                 expected_stack_sha = stack_identity_sha256(
                     arm["floor_stack_identity"]
                 )
             except (KeyError, TypeError, ValueError):
                 return _FLOOR_CELL_UNRESOLVED
-            if (
-                not isinstance(key, Mapping)
-                or key.get("condition_family_id")
-                != arm.get("condition_family_id")
-                or key.get("condition_family_sha256")
-                != arm.get("condition_family_sha256")
-                or not isinstance(eligibility, Mapping)
-                or eligibility.get("claim_usable") is not True
-                or not isinstance(source_regime, Mapping)
-                or source_regime.get("stack_identity_sha256")
-                != expected_stack_sha
-            ):
+            selector = contrast.get("floor_selector", {})
+            serving = exact_stack_serving_cell(floor_artifact,
+                backend=selector.get("backend") if selector.get("backend") not in (None, "from_bundle") else key.get("backend"),
+                metric=selector.get("metric", key.get("metric")),
+                window_class=selector.get("window_class", key.get("window_class")),
+                condition_family_id=arm.get("condition_family_id"),
+                condition_family_sha256=arm.get("condition_family_sha256"),
+                stack_identity_sha256=expected_stack_sha)
+            if serving is None or serving.get("cell_id") != floor_cell_id:
                 return _FLOOR_CELL_UNRESOLVED
             sidecar_cell = sidecar_cells.get(floor_cell_id)
             comparative = (
@@ -2293,3 +2298,21 @@ def validate_d165_closeout(
             if value[key] != expected:
                 errors.append(f"closeout.{key}: does not match branch rule")
     return errors
+
+
+def _authenticate_paper_floor(floor_artifact_bytes, manifest, custody_root, window_index):
+    """Authenticate the paper-source floor (validate_d165_paper_sources).
+
+    Block 5 (a window index is given): the aggregate floor authenticates against
+    the pinset beside it, exactly as the claim gate loads it
+    (inputs.load_floor_artifact); no registered pinset names a block-5 floor.
+    Defined here, after the module's other rationale text, so the retired-rationale
+    census keeps its line keys.
+    """
+    if window_index is None:
+        authenticate_floor_artifact_bytes(floor_artifact_bytes)
+        return
+    attachment = manifest["evidence"]["aggregate_floor_artifact"]["path"]
+    authenticated = load_floor_artifact(Path(custody_root) / attachment, require_sibling_pinset=True)
+    if authenticated.file_sha256 != _raw_sha256(floor_artifact_bytes):
+        raise ValueError("floor attachment bytes differ")

@@ -1,0 +1,116 @@
+# Magistrate activation 7209d1b0 (Opus 5.5, headless), 2026-10-24 from 08:45 PDT
+
+Launch: notice_pending `transition-4576-usage_backoff` (activation 786c0858 exited on the Claude session limit, about 08:28 PDT). No unread mail from Ed. No new directive issues (the six open ones are from September). Nothing armed; no night agent loaded (only `com.joulewise.b6wake.1/2` and the magistrate are listed).
+
+1. **#416 triple audit at c84bb34c2, interrupted by the same limit.** Astra 6 xhigh finished (rc 0). Fable 5.1 and Opus 5.5 hit the session limit before their final reports (rc 1). Fable had a draft `REPORT.md` and was waiting on sub-auditor addenda. Both sessions were resumed at 08:47 with `claude -p --resume` (`~/night-archive/seats-786c/audit416/resume.sh`), so their context was kept. Email to Ed with the notice: Gmail 1a16e9893cc02912; `notice.ack` written.
+2. **Astra (ARM AFTER LISTED BLOCKERS):** A1 BLOCKER: the live arm still gates on the kernel frequency word, while P0 ruling 4 says to use the measured rate r. A2 BLOCKER: C4 runtime identities and frozen projections are missing. A3 and A4 SHOULD_FIX; A5 NIT. Six sizing rows reproduced; real-stream parser equality holds (native = analysis = twin, 0 J).
+   - Lead check of A1: across 22 block-6 arm records (44 frequency-gate reads, `/Users/edr/night-b6/**/hazards/arm.json`), the word was 0 ppm and passed every time (network time OFF). The gate has never refused and never changed a number. Its departure from ruling 4 is over-strict, never fail-open (Fable S6 says the same).
+   - Lead check of A2: the projection half is not a defect. Block 6's claim trees (for example `d117_floor_qwen3-1p7b_v5`) also carry `state: unprojected`, `projection_receipt: null`, `mode: derive_never_operator_enter`. That projection is derived at arm time, and block 6 counted 9/9 that way. The stack half is real: `identity_pins.json` units for all ten BYTES models have `stack_identity: {}`, where the block-6 units have eight keys. The registration's slot table marks C4 "PENDING BY-PIN" (§5 :164, §18 :434).
+3. **Opus finished (09:17; ARM AFTER LISTED BLOCKERS B1-B3).** Fable's resumed session is still finishing, and its draft report carries every finding. Both found a blocker Astra missed: the NEG-8 reference "request" span is the `measured_run` stage span. Lead re-execution on BY-H2 events: refcorpus r01 stage 8.943 s against a request (tokenize start to decode end) of 1.306 s, r02 8.651 s against 1.327 s. B is too small (Opus: DC drift term 52 % low), and the analysis SHA is bound in all six registrations, so the fix comes before any t0. Lead check of `cell.below_minimum`: the code adds it as a window reason, and the BYTES packs map it to EXCLUDE_WINDOW, against §6 ("never stops a stage").
+4. **Dispositions:** `DISPOSITIONS-416.md` (this directory). Fixed before the registration gate: the reference span, production-shaped fixtures (inter-stage gaps, 50 SPS), test7_passed validation, predictor-to-manifest binding, the twin's invalid-record set, the meter-edge window, dropped meter samples (`bytes.meter_gap`), §12's exact bars, cell.below_minimum cell-level, the arm clock hold by measured rate, C4 stack identity, blinding fail-open, blinding/catalog/sizing tests, catalog codes, and registration text. Kept: P0 ruling 6's disk P (Opus dissent recorded). Deferred items are named there. The DST hour of 11-01 is avoided by scheduling.
+5. **Fix seats (Sol 6.1 xhigh, local, Mac idle), launched 09:4x:** FIX-416-A (analysis; `jw-wt/fix416-analysis`, branch fix/2026-10-24-416-analysis) and FIX-416-B (gates, identity, blinding, text; `jw-wt/fix416-gates`, branch fix/2026-10-24-416-gates), both from c84bb34c2. Briefs and reports: `~/night-archive/seats-7209/fix416-{analysis,gates}/`. Auditor probes copied to `~/night-archive/seats-7209/probes/`. Afterwards: lead integration onto PR #578, delta cold passes (Fable and Opus, blind, executing) on the fix range, review rows for the integrated head, the registration cold gate, and freeing disk to 118.8 GB.
+6. **Seat rulings.** FIX-416-A round 1 stopped for scope and rulings. Granted export_runs.py (exact reference request columns), its test, and the generator's agreed SHA. Edge-power window corrected by the lead: the two adjacent samples plus every sample within ±r_max. My brief's ±(r_max + Δt) was too wide and moved 97/190 real H edges. Unprinted diagnostics (variance, covariance, MSE) are counted, not gated. FIX-416-B round 1 asked for build_b6_flag_catalog.py (granted) and joulewise/b5/driver.py (refused: an identity difference is a harvest flag, never an arm refusal, and block 6 counted 9/9 without an arm-time projection).
+7. **FIX-416-B done** (7647bf11a). Clock replay: 24/24 real arm records with the same decisions, 0/0 refusals over 33,932 monitor anchors. Spurious `model.identity_mismatch`: H 67 → 0, BY-H2 36 → 0. Lead reran the 28 sandbox-limited hazard tests outside the sandbox (108 OK) and tests/hazards (314 OK).
+8. **FIX-416-A done** (68f5b408b). The old-span mutant gives 3,549 fields above the bar; the fixed span gives 0. Real edges: 0/190 and 0/146 changed. The 28 s real-H dropout (−185 J before) is now flagged by both implementations. 19 campaigns, 0 above the bar. Coverage minimum 379/400. Estimator SHA 76c44759c4c674100303be718ce9c4db0723d3b7ffb9549f0ad4607285b0176a. The wrapper's scope capture failed ("Argument list too long" in codex-run-v3); the lead checked all 38 changed paths against the granted scope.
+9. **Integration** (24718b166, branch integrate/2026-10-24-416, pushed). Merged both branches, regenerated the 12 trees, re-issued identity tree hashes with the stack identities kept, applied the registration text (§7, 9, 12, 13, 18), and brought the seat records into the tree. repin, plan-tree and config-generator checks pass. F-S3 changed to deferred: `acceptance.json` is block 6's registered file, and pass 1 collects from one frozen pin.
+10. **Cold delta passes** (Fable 5.1 and Opus 5.5, blind, executing, local because they need real data; worktrees jw-wt/cold416-{fable,opus} at 24718b166): launched 11:5x. The brief asks specifically how big a dwell step the fitted-line clock residual can absorb. Test shards of the touched modules are running on the merged tree.
+11. **Merged-tree tests (lead).** tests/hazards 314 OK; tests/flags and the twin, plan-tree and identity modules OK. tests/b6: 306 tests, 1 expected failure (review rows). Agreement and analysis were red: seat B's fail-closed export broke seat A's fixture. Fixed in 2ed536739; agreement rerun 48 OK, 0 above the bar. Analysis: 111 tests, 3 failures (SubsetReleaseChain wrapper, FIX-416-C item 1). Draft PR #579 opened for CI.
+12. **Cold delta passes:** Fable REFUSE, Opus ADMIT-WITH-CORRECTIONS. Both seats were killed by my 2 h background limit after writing their reports (lesson: launch long seats so they can outlast the 2 h cap, or brief them to finish inside it). The lead re-executed Fable's blocker 2 and confirmed it. Email to Ed: Gmail 1a16fa8f5681d1f3. Dispositions appended to DISPOSITIONS-416.md. FIX-416-C (Sol 6.1 xhigh, worktree jw-wt/int416, `~/night-archive/seats-7209/fix416c/`) launched 13:5x.
+13. **FIX-416-C done** (86a0185da). Checked by re-running the seat's evidence:
+   - A reference with a corrupt or unreadable trace now stops the export with its cause.
+   - A BY-H2 re-export agrees with Fable's independent integral on 24/24 references (21/21 on H).
+   - A missing frequency word now gives REFUSE in all four variants of a 40 ppm slope.
+   - Sampler, OS and hardware mutations go from 0/168 to 168/168 flagged.
+   - 19 campaigns, 0 above the bar.
+   - Estimator 18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71; catalog 36971fe0 (268 codes).
+
+   The seat flagged that the largest undetected injected step is 1.009 ms, not ≤ 1 ms. Lead disposition: accepted. The registered bar is step_ns = 1 ms, and the excess is the fitted line absorbing 1.5/N of a step (N = 183). My "≤ 1 ms" in the brief was over-specified. The text states the 1.009 ms figure.
+
+   Lead outside the sandbox: tests/hazards 316 OK, after updating one expectation (10c9cf70b: a failed frequency read no longer makes the dwell unmeasured). Registration text applied in fcc0ac921, including the stale-sentence and edge-count fixes; repin and plan-tree checks pass.
+14. **Round-2 cold delta passes** (Fable and Opus, blind, executing, local; worktrees jw-wt/cold416b-*, hard stop at 110 min): launched 14:1x on 2ed536739..fcc0ac921. The full analysis module is running locally in two shards; CI runs on fcc0ac921.
+15. **Round-2 cold passes: both ADMIT-WITH-CORRECTIONS** (Fable, Opus; about 25 min each). Opus's blocker is the same reference-drop class again. Structural ruling instead of a consult: default-stop with positively established absences (see DISPOSITIONS-416.md, round 2). FIX-416-D (Sol 6.1 xhigh, own worktree jw-wt/fix416d, branch fix/2026-10-24-416-d from fcc0ac921, `~/night-archive/seats-7209/fix416d/`) launched 14:5x. Local analysis shards on fcc0ac921's code: 'rest' (all classes but word rates) OK; selected b6, G10, plan-tree, identity, twin and parser modules OK; word rates running.
+16. **FIX-416-D done** (d6500b81c, merged into integrate/2026-10-24-416). Storage classes that used to flag now stop with path and cause (28/28). The two registered absences still flag (5/5). 25 real archives replay with 0 stops and identical reference columns. The estimator is unchanged. Full local analysis module on the pre-D tree: OK (both shards).
+17. **CI on fcc0ac921 (PR #579) found real gaps:**
+   - the output coverage map lacked FIX-416-C's dropped-reference fields;
+   - the H-session test fixtures relied on the old unresolved-registration path;
+   - the concurrent blinding test failed on Linux (a spawn child reopening `<stdin>`; harness only);
+   - review rows (expected).
+
+   Locally, FIX-416-D's new stop sites were missing from the refusal registry. FIX-416-E (Sol 6.1 high) fixed the fixtures, the blinding test and the registry. The exact comparison of dropped-reference reasons showed that the twin words them differently. Lead ruling: reasons are registered codes, and the twin prints the analysis's code vocabulary; scripts/bytes_twin.py granted, bytes_analysis.py not (no re-bind). Round 2 is running.
+18. **FIX-416-E done** (891cf2bf8). Agreement: 17 registered campaigns 0 above the bar (seat). The 2 battery campaigns were rerun by the lead on the merged code: 0 above the bar, so 19/19 agree. The coverage mutation proof passes. Round 1 left a nested git repository in its scratch (a fit-stage commit), so the launcher refused round 2; the lead moved it to /private/tmp/fix416e/moved/. Registration text for D and E applied and pushed (81782d6a3).
+19. **Round-3 cold delta passes** (Fable and Opus, blind, executing; fcc0ac921..81782d6a3; focus on over-refusal by the default-stop and the SHA256SUMS requirement): launched 16:5x. Pruned the finished audit and cold worktrees and their scratch (free 62 → 77 GiB).
+20. **Round-3 cold passes: both ADMIT-WITH-CORRECTIONS.** Fable's HIGH is the same silent-removal class again, through the unauthenticated roster. The structural rule is extended to membership and status inputs (DISPOSITIONS-416.md round 3). FIX-416-F (Sol 6.1 xhigh, jw-wt/int416) launched 17:3x. All 19 agreement campaigns were 0 above the bar at 891cf2bf8's code (lead: battery 2; seat E: 17).
+21. **FIX-416-F round 1:** items 1-4 done (Opus's shadow probe went from 162 → 811 J unflagged to a stop; null idle baseline flags; status disagreement stops both ways; epoch tolerance). Two rulings:
+   - F1: the bundle search is confined to the archive. External originals are never candidates, since the literal rule stopped intact BY-H2 for its original runs-parent copy.
+   - F2: harvest.json records no digest for b6-acceptance.json or member-assessments.json (post-harvest). Verify the derived files it does record; protect membership with the two-way roster-versus-SHA256SUMS check, and status with the verified-status cross-check. No digest gate on acceptance (D-161).
+
+   Round 2 is running. CI on 81782d6a3: shard 7 has the expected review rows. Shard 11's test_fix573i_restore expects `refused: restore_refused: …`, but seat D's message adds the class name; the lead fixes it after F, keeping the established storage-stop form.
+22. **FIX-416-F done** (bc588a964), with lead edits:
+   - The seat stopped once more: H's three window-end references were planned but never collected. They have roster rows, no archived directory and no inventory entry, and acceptance excludes them. The lead granted a narrow exception: such a reference stays a printed excluded row only when acceptance records its exclusion (`check_membership`, `excluded_ids`).
+   - Storage stops keep the established `refused: <cause>` line. Seat D's class-name prefix had broken test_fix573i_restore in CI shard 11; the two newer tests were updated to match.
+   - Lead replay of the 25 real archives with their real plans: 0 stops, columns identical.
+   - Outside the sandbox: tests/hazards 323 OK; touched b6, gates and restore modules OK.
+   - Registration text applied: §5 N ≥ 150 step rule, §6 bundle, membership and status rules, null idle baseline; catalog 269 codes, digest 90ef019f.
+23. **Round-4 cold delta passes** (81782d6a3..bc588a964; Fable and Opus, blind, executing) launched 20:0x. The brief asks them to probe the lead's `excluded_ids` exception against D-161.
+24. **Round-4 cold passes: both ADMIT-WITH-CORRECTIONS.** Opus HIGH: BYTES smokes would stop at export (smoke-reduced rosters). Both: the N ≥ 150 clock count is not sound on gapped dwells. FIX-416-G (Sol 6.1 xhigh) launched 20:3x; dispositions in DISPOSITIONS-416.md round 4. The findings are narrowing to edge paths (smoke, gaps, partial bundles); the real-data replays have been clean since round C.
+25. **FIX-416-G done** (6b54a51d6).
+   - Smoke-reduced uncollected references: 13 block-6 smokes run through the BYTES branch went from 13 stops to 0.
+   - Clock step bar step_ns·(1 − a_j) at every N ≥ 3: Opus's gap-aligned 1.05-1.2 ms steps now refuse; 24/24 real arm records unchanged.
+   - Partial bundle prints its reason; gap bar 10 µs; `.DS_Store` ignored.
+   - 25 real archives byte-identical.
+   - Lead outside the sandbox: tests/hazards 326 OK; export, gates, restore and plan-tree modules 83 OK; repin and plan-tree checks pass.
+   - Text applied: §5 a_j rule, §6 smoke/partial/Finder rules, catalog digest 3c4b8280.
+   - CI on bc588a964: everything green except the expected review-row test.
+
+   Round-5 cold passes launched 21:3x.
+26. **Round-5 cold passes: both ADMIT-WITH-CORRECTIONS**, with edge cases only (sparse-anchor noise, keep-0 smoke stages, gap energy). FIX-416-H (Sol 6.1 high) launched 22:0x. Stopping rule the lead adopts for this lane: if round 6 returns only LOW/INFO findings, those are dispositioned without another fix round, and the PR proceeds to review rows, CI and the registration gate.
+27. **FIX-416-H done** (7a3b585db).
+   - Seat results: sparse-anchor noise refusals went from 76/2688 to 0; a 1.2 ms mid-dwell step still refuses on 24/24 real dwells; the removed-stage references print; the gap bound sits in the energy column; 25 real archives are byte-identical.
+   - Lead checks outside the sandbox: tests/hazards 328 OK; touched modules 109 OK; repin and plan-tree checks pass.
+   - Text applied; catalog 01767fe4.
+   - Round-6 cold passes launched 23:0x, with strict severity guidance.
+28. **Round-6 cold passes: Fable ADMIT; Opus ADMIT-WITH-CORRECTIONS with one HIGH.**
+   - The HIGH: a BYTES smoke needs an un-reduced archived plan tree to enumerate the stages that keep 0 removed. The only such copy is the results-clone, a best-effort `git clone --depth 1 origin` of the default branch, which lacks the bytes-s* trees. Without it the export stops, the smoke fails, and the loop holds the packs: a collection stop on a non-physical condition.
+   - Ruling (FIX-416-I, brief `~/night-archive/seats-7209/fix416i/BRIEF.md`):
+     - `smoke.prepare` archives the pre-reduction tree from the pinned checkout as a custody-owned witness;
+     - with no witness, the export does not stop: the sidecar records the removed stages as unwitnessed (those rows carry no numbers; the smoke is non-claim);
+     - an inconsistent witness stops;
+     - Fable's plain-path membership hardening;
+     - the gap-bar comment restores its acknowledgement of the noise floor.
+   - Every other round-6 finding is LOW or INFO: guard bands of at most about 1.05 ms against the 5 ms budget, the factor-2 margin of u_j covering the fit noise (max W_j/u_j = 0.51 over 17,425 real pairs), and P_max as an estimate. They are dispositioned with no fix, under the stopping rule of item 26.
+   - At 23:2x the Bash permission classifier began failing transiently. FIX-416-I is not yet launched as of this line.
+29. **FIX-416-I done** (028f8c50b), launched 23:3x once the Bash classifier recovered.
+   - Seat: the custody-owned smoke witness, the no-witness disclosure and plain-path membership.
+   - The seat stopped once more: plain-path membership stopped the real zero-run BY-H2 t0 refusal (h2-20261023T051434Z). Lead ruling: a non-smoke session that collected nothing (empty roster, no run bundle) exports its empty table.
+   - Lead replay: 25 real archives, 0 stops, identical columns.
+   - Lead outside the sandbox: tests/hazards 328 OK; export, gates, smoke, restore and gates modules 126 OK; repin and refusal allowlist OK. Text applied.
+   - Round-7 cold passes launched 00:2x on 10-25. This is the last round under item 26's stopping rule.
+30. **Round-7 cold passes: Fable ADMIT, Opus ADMIT.** The stopping rule is met. Opus's LOW (the zero-run exception also skipped the unlisted-directory custody check) was fixed by the lead in 49884a10a and checked with Opus's probe on a clone of the real zero-run archive (it stops again). Final lead replay: 25 archives, 0 stops, identical. Touched modules 149 OK.
+   - Review rows: 13 appended (81c78f79c). Ancestors of c84bb34c2 cite the three #416 reports; each FIX commit cites its cold round. tests.b6.test_audit_record_fixes passes; repin passes. PR #579's ledger is updated; CI runs on 81c78f79c.
+31. **Registration cold gate launched 01:1x** on 81c78f79c: Fable 5.1 judge and Opus 5.5 refuter, blind, executing (raw re-derivation of the sizing rows, estimator SHA, catalog digest, clock holds; text against code; agreement spot campaigns; blinding; doctrine). Brief: `~/night-archive/seats-7209/reggate/brief.md`. A Fable REFUSE goes to Ed. On ADMIT: merge #579 into the pass-1 lane once CI is green, then flip the registrations.
+32. **Registration cold gate: Fable 5.1 SEAL: ADMIT-WITH-CORRECTIONS, Opus 5.5 SEAL: ADMIT-WITH-CORRECTIONS** (both blind, executing; `~/night-archive/seats-7209/reggate/`; copies REGGATE-*.md in the lane records).
+   - Every registered number was re-derived exactly from the raw data and the code: the six sizing rows (168 receipts), the estimator, catalog and manifest digests, the clock holds, coverage, t values and the worked example. The agreement campaigns bytes, withheld, time, resident, defects and minimum are 0 above the bar.
+   - Corrections applied in **6731d5249 (the registration time: the six pass-1 packs flip to `registered`)**:
+     - C1, the generator: `REGISTERED_PASSES = {1}` writes `registered` and drops pass-1 draft notes; trees regenerated; identity hashes re-issued; all 12 registrations validate.
+     - C2, the registration text.
+     - Tests expect `registered` (141 OK).
+   - Opus's condition: the whole suite on the flipped tree. That is CI on 6731d5249.
+   - Recorded for later:
+     - the known-bytes test's reading rule must be written before that test runs (Opus 4);
+     - no pass-1 t0 between about 2026-10-31 16:30 PDT and 2026-11-01 02:00 PST (DST, Fable 4);
+     - `roster.json` identity_status is stale metadata, never consumed (Fable 2, NIT).
+33. **Disk offload:** H (/Users/edr/night-bytes/h-20261021T185555Z, 33 GiB, non-claim, frozen desk data in JouleWise-data) is going to iCloud Drive JouleWise-archive/2026-10-25-disk3 with per-member SHA-256 verification before removal (`~/night-archive/icloud-offload-2026-10-05/offload.py`; manifest and pointer as on 10-21). BY-H2 follows. Then `brctl evict` once uploaded.
+34. **Offloads verified:** H (35,966 members, tar sha256 8b1344a0…) and BY-H2 (33,798 members, 1ef3e1fe…) are in iCloud Drive JouleWise-archive/2026-10-25-disk3; the local sources are removed; restore pointers are in /Users/edr/night-bytes/. Upload was in progress at 02:1x, so they are not yet evicted. Seat scratch removed: 53 GiB of APFS clones in /private/tmp/fix416g pinned H's blocks. Free disk was 33 GiB pending eviction.
+35. **Hand-off.** This session stops here rather than arming: arming would oblige it to exit anyway, the remaining steps are mechanical, and a fresh activation costs far less context. The exact steps are in the RUN_STATE item 69 pointer.
+
+**Pruning tally (gates that ran this session, and what they caught that touched a number):**
+- #416 triple audit: YES. The NEG-8 reference span made B too small (Fable and Opus; Astra missed it).
+- Cold delta passes, rounds 1-7: YES.
+  - Round 1, Fable REFUSE: a reference dropped silently on a read failure.
+  - Round 2, Opus: the same class on other storage faults; E_ref 37.121 → 37.089 J.
+  - Round 3, Fable: an unauthenticated roster; allowance +16 %.
+  - Later rounds: edge cases, plus one collection-path HIGH (round 6, a smoke stopping for want of a tree witness). No number.
+- Registration cold gate: no number-touching defect (tooling and text corrections only).
+- GitHub CI: test-fixture and harness gaps only.
+- Lead host reruns of the sandbox-limited census tests: nothing.
+- Lead real-archive replays: caught one over-refusal of real data each time a rule changed (H's uncollected references; the zero-run archive). These touch which data count, so they stay.

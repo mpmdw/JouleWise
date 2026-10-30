@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from joulewise.hazards import base, battery, contention, monitor, smc, thermal
+from tests.live_hw import require_live_hw
 from tests.hazards.fakes import (
     FakeClocks, FakeProcessTable, FakeRegistry, FakeSmc, FrequencyReader, Runner, battery_bytes,
     completed, frequency_probe,
@@ -602,6 +603,12 @@ class SmcMonitorTests(unittest.TestCase):
 class SupervisorTests(unittest.TestCase):
     """The real monitor process: started, killed, restarted with the gap recorded, stopped."""
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if sys.platform == "darwin":  # only macOS reads the SMC, battery gauge and notify bus
+            require_live_hw()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
         self.addCleanup(self.tmp.cleanup)
@@ -803,6 +810,46 @@ def _kill_quietly(supervisor: monitor.Supervisor) -> None:
         except ProcessLookupError:
             pass
         process.wait(timeout=5)
+
+
+class RootPinLifetimeTests(unittest.TestCase):
+    def test_root_reused_after_an_absent_snapshot_and_in_next_interval_is_outside(self):
+        from tests.hazards.fakes import Process
+
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+            mac = FakeMac(Path(directory))
+            root = 5000
+            mac.table.add(Process(root, DRIVER, 'member_pgid_leader', cpu_per_s=0.0))
+            instance = mac.monitor()
+            instance.tree_roots = (*instance.tree_roots, root)
+            cadence_s = monitor.DEFAULT_CADENCE['contention_s']  # registered 10 s window cadence
+            try:
+                instance._contention()
+                mac.clocks.sleep(cadence_s)
+                mac.table.ps(contention.PS_ARGV)
+                mac.table.processes.pop(root)
+                instance._contention()
+                mac.clocks.sleep(cadence_s / 2)  # reuse at the next interval's midpoint
+                mac.table.ps(contention.PS_ARGV)
+                for pid, parent, command in ((root, 1, 'impostor'),
+                                             (5001, root, 'impostor_child')):
+                    # 1.2 CPU-s/s = 24 x the registered 0.05 limit, exposing
+                    # either impostor if PID reuse admits it into the tree.
+                    mac.table.add(Process(pid, parent, command, start_epoch=mac.clocks.wall_s,
+                                          cpu0=0.0, cpu_per_s=1.2))
+                mac.clocks.sleep(cadence_s / 2)  # finish the 10 s interval
+                instance._contention()  # Opus B: root absent from before
+                mac.clocks.sleep(cadence_s)
+                instance._contention()  # Opus C: reused root in both
+            finally:
+                instance.close_session('test')
+            intervals = monitor.contention_intervals(monitor.load_journals(directory)['contention'])
+            for result in intervals[1:]:
+                with self.subTest(interval=result['interval']):
+                    self.assertEqual({row['command'] for row in result['outside_over_limit']},
+                                     {'impostor', 'impostor_child'})
+                    self.assertEqual([f['code'] for f in contention.span_findings([result], result['interval'])],
+                                     ['contention.request_overlap'])
 
 
 if __name__ == "__main__":

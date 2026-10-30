@@ -1,0 +1,31 @@
+{
+  "bound_derived_from": "collected_subset",
+  "bound_formula": "max(max(mean(largest_n_start)-mean(smallest_n_end),mean(largest_n_end)-mean(smallest_n_start)),t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))",
+  "bound_used": "corpus_physics_clean",
+  "clean_bound": {
+    "corpus_manifest": {
+      "path": "derived/neg8-clean-corpus.json",
+      "sha256": "9c03c34185ff5b75032e243b3509f4db4b9349ef639dc82266c5058bab725c14"
+    },
+    "path": "withheld/neg8-clean-bound.json",
+    "sha256": "d507d00b317022e9c4cde39504f55c6f92bb84345fb4f125ddf54351cd70d9b4"
+  },
+  "harvest_reference_losses": {},
+  "rescreen": {
+    "conditions": [],
+    "decision": null,
+    "evaluated": false,
+    "evaluated_at_source": "evaluation_scope.completed_at",
+    "freshness": null,
+    "problems": [
+      "evaluation_basis_invalid"
+    ],
+    "verdict_authenticated": true
+  },
+  "schema": "joulewise.b5_neg8_screen.v1",
+  "stored": {
+    "conditions_beyond_bound_underived": [],
+    "decision": "failed"
+  },
+  "survivor_bracket": null
+}

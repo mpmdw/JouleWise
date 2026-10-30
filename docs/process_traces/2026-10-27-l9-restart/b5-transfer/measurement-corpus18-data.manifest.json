@@ -1,0 +1,91 @@
+{
+ "schema": "joulewise.b5_transfer_manifest.v1",
+ "item": "measurement-corpus18-data",
+ "data_root": "/Users/edr",
+ "created_utc": "2026-10-28T13:33:18Z",
+ "procedure": "docs/process_traces/2026-10-27-l9-restart/BLOCK5-TRANSFER.md",
+ "notes": [
+  "untracked/ignored files of the corpus18 checkout, excluding .venv/ and __pycache__; HEAD 4cb222a19cba8b60b936941e9ed3997121471359",
+  "git status --porcelain had 0 lines (clean tracked tree)",
+  "HEAD is 9 local-only pin commits above be6525e5a6511adf882282e404e163e14dbb738b (on origin/main); they change only configs/calibration/calibration_ledger_head.json, so that tracked file is INCLUDED as on-disk bytes; every other tracked file is identical to be6525e5a6511adf882282e404e163e14dbb738b on the public repo"
+ ],
+ "details": {
+  "git_head": "4cb222a19cba8b60b936941e9ed3997121471359",
+  "public_base_commit": "be6525e5a6511adf882282e404e163e14dbb738b",
+  "local_only_commits": [
+   "4cb222a19cba8b60b936941e9ed3997121471359",
+   "e84b1ea63ce98871486bf5de4b143e6b71d9e31d",
+   "a9b11f40c103de4aa2007b8220d90dbe9069c70d",
+   "81da8a6ffd8d0caf655b35c03c1021c02efc8111",
+   "9bd5317340a5512928f96c60c607bc4bf38ce305",
+   "c97389f2f3be4c846459d18c4c0500bb942325c9",
+   "86f4d0853292c8acbac0b218c5136970d1b20351",
+   "ff0dbc7e5ace4e0bc6da14cafdf3b611caf39856",
+   "39665b8cb8ce841b1345c9b39b10022e0f92dfa4"
+  ],
+  "tracked_files_changed_by_local_commits": [
+   "configs/calibration/calibration_ledger_head.json"
+  ],
+  "untracked_or_ignored_included": [
+   "joulewise.egg-info/PKG-INFO",
+   "joulewise.egg-info/SOURCES.txt",
+   "joulewise.egg-info/dependency_links.txt",
+   "joulewise.egg-info/requires.txt",
+   "joulewise.egg-info/top_level.txt",
+   "runs/calibration_observation_ledger.jsonl",
+   "runs/calibration_observation_ledger.jsonl.lock"
+  ]
+ },
+ "file_count": 8,
+ "dir_count": 5,
+ "total_uncompressed_bytes": 1189162,
+ "files": [
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/configs/calibration/calibration_ledger_head.json",
+   "size_bytes": 173,
+   "sha256": "5ffc7fcbf03eb82d7b70cb9bce04f1ca8ac31fd6808f811ef9cd6e5d912103bb"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/joulewise.egg-info/PKG-INFO",
+   "size_bytes": 377,
+   "sha256": "6c7b4ebaf4eeb2b76cc8ac825e958ba445e4a273cc8951b917f6a861abd9d85e"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/joulewise.egg-info/SOURCES.txt",
+   "size_bytes": 16907,
+   "sha256": "2b263b2cc7832e5077e1d37decd68375d119debfc0c81d6cfcd40b64b21bf600"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/joulewise.egg-info/dependency_links.txt",
+   "size_bytes": 1,
+   "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/joulewise.egg-info/requires.txt",
+   "size_bytes": 71,
+   "sha256": "bc2980189c46653ec31b5fd528d2db083f9365dd08732d97daa416285ddbda76"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/joulewise.egg-info/top_level.txt",
+   "size_bytes": 10,
+   "sha256": "790bc30fdb66c70407aa2cb9ec595226d2ffd30cf9f1f298814a0fe4d580cc70"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/runs/calibration_observation_ledger.jsonl",
+   "size_bytes": 1171623,
+   "sha256": "49b2236d23fb5c6170c8edaf7dc2b68572a3f78977a1c6a5768a6056ce656e88"
+  },
+  {
+   "path": "night-custody/measurement/JouleWise-measurement-20261009T1814Z-b5-corpus18/runs/calibration_observation_ledger.jsonl.lock",
+   "size_bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+ ],
+ "tar": {
+  "name": "measurement-corpus18-data.tar.zst",
+  "size_bytes": 100414,
+  "sha256": "cff2623b4765f07053b5320a200f1200d423ee95b17d29de59c1c3c30676a944",
+  "command": "COPYFILE_DISABLE=1 tar --no-mac-metadata -n -cf - -C /Users/edr --null -T <dirs+files> | zstd -3 -T0",
+  "entries": 13
+ }
+}

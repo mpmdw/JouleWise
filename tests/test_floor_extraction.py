@@ -6516,5 +6516,117 @@ class FloorCustodyReadTests(unittest.TestCase):
                 self.assertEqual(raised.exception.reason, V2_AUTHENTICATION_INPUT_CHANGED)
 
 
+class S4DefaultCompatibilityTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    """Default arguments retain the existing report and per-cell bytes."""
+
+    def test_explicit_s4_defaults_equal_legacy_report_and_direct_cell(self):
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-") as tmp:
+            root = Path(tmp)
+            members = [{"slot": f"r{i}", "bundle_id": f"r{i}"} for i in range(5)]
+            for i, member in enumerate(members):
+                write_bundle(root, member["bundle_id"], make_summary(10.0 + 0.01*i))
+            install_synthetic_recovered_manifest(root, [m["bundle_id"] for m in members])
+            spec = {"schema_version": EXTRACTION_SPEC_SCHEMA_VERSION, "cells": [{
+                "cell_id": "legacy", "kind": "absolute", "metric": "gross_energy_j",
+                "window_class": "request", "members": members,
+            }]}
+            legacy = extract_cells(root, spec)
+            explicit = extract_cells(root, spec, kept_units=None, archive_context=None, b_override_s=None)
+            encode = lambda report: json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+            self.assertEqual(encode(legacy), encode(explicit))
+            kwargs = dict(cell_id="legacy", metric="gross_energy_j", window_class="request",
+                members=members, runs_root=root, cooldowns=campaign_cooldown_evidence(root))
+            direct = extract_absolute_cell(**kwargs)
+            explicit_cell = extract_absolute_cell(**kwargs, kept_unit_ids=None,
+                removed_unit_ids=frozenset(), minimum_kept=None)
+            self.assertEqual(encode(direct.as_row()), encode(explicit_cell.as_row()))
+
+    def test_comparative_s4_defaults_equal_direct_legacy_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-cmp-") as tmp:
+            root = Path(tmp)
+            blocks = [{"block_id": f"b{i}", "members": {p: f"b{i}-{p}" for p in ("A1", "B1", "B2", "A2")}} for i in range(5)]
+            for i, block in enumerate(blocks):
+                for p, bundle in block["members"].items():
+                    write_bundle(root, bundle, make_summary(10.0 + i*0.01 + (0.1 if p.startswith("B") else 0.0)))
+            install_synthetic_recovered_manifest(root, [run for block in blocks for run in block["members"].values()])
+            kwargs = dict(cell_id="legacy-cmp", metric="gross_energy_j", window_class="request",
+                blocks=blocks, runs_root=root, cooldowns=campaign_cooldown_evidence(root))
+            direct = extract_comparative_cell(**kwargs)
+            explicit = extract_comparative_cell(**kwargs, kept_unit_ids=None,
+                removed_unit_ids=frozenset(), minimum_kept=None)
+            self.assertEqual(json.dumps(direct.as_row(), sort_keys=True), json.dumps(explicit.as_row(), sort_keys=True))
+
+
+class S4LegacyCliMessagesTests(unittest.TestCase):
+    """The non-index CLI retains its original input-error messages."""
+
+    def invoke(self, runs_root, spec_path, out_path):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            code = extract_main(["--runs-root", str(runs_root), "--spec", str(spec_path),
+                                 "--out", str(out_path)])
+        return code, stderr.getvalue()
+
+    def test_unreadable_spec_retains_exception_message(self):
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-cli-") as tmp:
+            root = Path(tmp)
+            out = root / "report.json"
+            code, error = self.invoke(root, root / "missing-spec.json", out)
+            self.assertEqual(code, 2)
+            self.assertTrue(error.startswith("error: cannot read extraction spec:"), error)
+            self.assertFalse(out.exists())
+
+    def test_invalid_spec_retains_validator_message(self):
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-cli-") as tmp:
+            root = Path(tmp)
+            spec = {"schema_version": "wrong"}
+            spec_path = root / "spec.json"
+            spec_path.write_text(json.dumps(spec), encoding="utf-8")
+            out = root / "report.json"
+            code, error = self.invoke(root, spec_path, out)
+            self.assertEqual((code, error), (2, f"error: {validate_extraction_spec(spec)[0]}\n"))
+            self.assertFalse(out.exists())
+
+    def test_missing_runs_root_retains_path_message(self):
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-cli-") as tmp:
+            root = Path(tmp)
+            runs = root / "missing-runs"
+            spec_path = root / "spec.json"
+            spec_path.write_text("{}", encoding="utf-8")
+            out = root / "report.json"
+            self.assertEqual(self.invoke(runs, spec_path, out),
+                             (2, f"error: runs root is not a directory: {runs}\n"))
+            self.assertFalse(out.exists())
+
+    def test_non_index_input_errors_still_propagate(self):
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-cli-") as tmp:
+            root = Path(tmp)
+            spec_path = root / "spec.json"
+            spec_path.write_text("{}", encoding="utf-8")
+            out = root / "report.json"
+            for error_type in (OSError, UnicodeError, ValueError, KeyError, TypeError):
+                error = error_type("synthetic input failure")
+                with self.subTest(error_type=error_type), \
+                     mock.patch("scripts.extract_detection_floors.extract_indexed_pack", side_effect=error), \
+                     self.assertRaises(error_type) as raised:
+                    self.invoke(root, spec_path, out)
+                self.assertIs(raised.exception, error)
+            self.assertFalse(out.exists())
+
+    def test_non_index_analysis_refusal_is_still_code_only(self):
+        from joulewise.b5_analysis.windows import AnalysisRefusal
+
+        with tempfile.TemporaryDirectory(prefix="s4-legacy-cli-") as tmp:
+            root = Path(tmp)
+            spec_path = root / "spec.json"
+            spec_path.write_text("{}", encoding="utf-8")
+            out = root / "report.json"
+            with mock.patch("scripts.extract_detection_floors.extract_indexed_pack",
+                            side_effect=AnalysisRefusal("member_code_on_kept_unit")):
+                self.assertEqual(self.invoke(root, spec_path, out),
+                                 (2, "error: member_code_on_kept_unit\n"))
+            self.assertFalse(out.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

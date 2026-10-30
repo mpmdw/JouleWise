@@ -1013,3 +1013,42 @@ P2-039 implementation acceptance is all of:
 - This is a docs-only specification run; no quiet-machine measurement,
   production calibration, or canonical test-suite run was performed.
 ```
+
+
+### L9 producer lineage inventory (2026-10-20)
+
+A v2 aggregate with one common producer lineage retains `provenance.launch_lineage`.
+When producer lineages differ it instead carries `provenance.producer_launch_lineages`,
+ordered exactly as `producer_calibration_plans`, with `{plan_id, launch_lineage}` entries.
+A legacy producer has a null entry and `floor_producer_lineage_absent:<plan_id>`.
+The two carrier shapes are mutually exclusive. Within one producer, split lineages
+and mixed marker/legacy provenance still refuse `launch_lineage_conflict`.
+
+Raw handoff carriers retain their schema-declared receipt, pack and window-context
+locators verbatim, including absolute locators. The lineage reader re-authenticates
+those locators and records the scoped limitation below when they are unavailable.
+Numerical component and producer-plan paths remain safe-relative paths.
+Component reconstruction uses each producer's own carrier and checks its pinned
+digest, retaining refusals for changed numerical content or source membership.
+Reopening a minted carrier that cannot be authenticated produces
+`floor_launch_lineage_unauthenticated:<plan_id|aggregate>` in `inputs.limitations`.
+Claim validation re-derives and compares the complete floor-lineage limitation list.
+
+
+### L9 exact stack service (2026-10-20)
+
+`exact_stack_serving_cell` is shared by finalization, dominance close-out and
+claim request/resolution. It selects exactly one claim-usable cell whose backend,
+metric, window class and full eleven-field stack digest match. The key family
+must match by id and digest, or a matching transport group must admit that family
+by id and digest and name this cell as its sole source. On that group route both
+hash-authenticated family definitions must match in `measurement_target.metric`
+and `workload_profile.prompt_tokens` / `output_tokens`. The request has empty
+consumer stress. The floor-pack scientific config identity need not equal the
+contrast-pack identity; registered family admission and stack identity bind it.
+Resolution is `exact`, keeps the real source cell id, and checks the singleton
+group gate equals the cell gate identically. It adds
+`floor_cell_from_floor_pack:<family>:<cell_id>:no_envelope_comparison`.
+There is no stress-envelope comparison under sealed `exact_stack_only.v1`.
+Other stacks, unadmitted families, and zero or several source cells still refuse;
+v3's ban on cross-stack transport remains.

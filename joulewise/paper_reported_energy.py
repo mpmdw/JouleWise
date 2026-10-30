@@ -13,13 +13,22 @@ import re
 import statistics
 import subprocess
 from functools import wraps
+from dataclasses import dataclass
+from typing import Mapping, Sequence
+
+from joulewise.b5_analysis.kept_units import ReportedCellKept
 
 
 SCHEMA = "joulewise.paper_reported_energy_projection.v1"
 REGISTRATION_SCHEMA = "joulewise.paper_reported_energy_registration.v1"
 INTERVAL_METHOD = "stratified_repeat_abba_mean_t9_plus_kind_bounds.v1"
 EXCLUDED_PREDICTION_TERM = "detection_floor.py:sqrt(1+1/n)"
-T975_DF9 = 2.262157162798205
+T975: Mapping[int, float] = {
+    9: 2.262157162798205, 8: 2.306004135204166, 7: 2.364624251592785,
+    6: 2.44691185114497, 5: 2.5705818356363155, 4: 2.7764451051977943,
+    3: 3.1824463052837095, 2: 4.302652729749464, 1: 12.706204736174705,
+}
+T975_DF9 = T975[9]
 BOUND_KINDS = (
     "E_clock_anchor_shift_bound_j",
     "E_interpolation_joint_edge_bound_j",
@@ -42,6 +51,8 @@ PAPER_REPORTED_ENERGY_REFUSAL_CODES = frozenset({
     "paper_reported_energy_floor_identity_mismatch",
     "paper_reported_energy_floor_member_mismatch",
     "paper_reported_energy_floor_stratum_mismatch",
+    "paper_reported_energy_kept_units_below_minimum",
+    "paper_reported_energy_whole_window_allowance_unrecorded",
     "paper_reported_energy_member_count_invalid",
     "paper_reported_energy_member_duplicate",
     "paper_reported_energy_member_identity_invalid",
@@ -378,8 +389,160 @@ def _observed_tokens(row, phase):
     return denominator
 
 
+
+@dataclass(frozen=True)
+class CellEstimate:
+    mean_j: float
+    lower_j: float
+    upper_j: float
+    n_r: int
+    n_b: int
+    df: int
+    s_r: float
+    s_b: float
+    variance: float
+    h_j: float
+    kind_averages_j: Mapping[str, float]
+    B_j: float
+    per_token: Mapping
+    attribution_floor: Mapping
+    below_minimum: bool
+
+
+def _kept_ordinals(kept):
+    if not isinstance(kept, ReportedCellKept):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid")
+    repeats = tuple(range(1, 11))
+    quads = tuple(tuple(range(i, i + 4)) for i in range(11, 51, 4))
+    for yes, no, universe in (
+        (kept.kept_repeat_ordinals, kept.removed_repeat_ordinals, repeats),
+        (kept.kept_quad_ordinals, kept.removed_quad_ordinals, quads),
+    ):
+        if (type(yes) is not tuple or type(no) is not tuple
+            or any(type(x) is not int for x in (yes + no) if universe is repeats)
+            or any(type(x) is not tuple or any(type(n) is not int for n in x)
+                   for x in (yes + no) if universe is quads)
+            or tuple(sorted(yes)) != yes or tuple(sorted(no)) != no
+            or len(yes + no) != len(universe) or len(set(yes + no)) != len(universe) or set(yes + no) != set(universe)):
+            raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid")
+    return kept.kept_repeat_ordinals + tuple(n for q in kept.kept_quad_ordinals for n in q)
+
+
 @_closed_refusals
-def _project_cell(cell, rows, binding):
+def estimate_reported_cell(rows: Sequence[Mapping], kept: ReportedCellKept, *,
+                           minimum: int | None = 5) -> CellEstimate:
+    ordinals = _kept_ordinals(kept)
+    if (not isinstance(rows, Sequence) or isinstance(rows, (str, bytes))
+        or tuple(row["member"]["ordinal"] for row in rows) != ordinals):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_member_count_invalid")
+    if minimum is not None and (type(minimum) is not int or minimum != 5):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid")
+    n_r, n_b = len(kept.kept_repeat_ordinals), len(kept.kept_quad_ordinals)
+    if min(n_r, n_b) < (2 if minimum is None else 5):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_kept_units_below_minimum")
+    energies = [_number(row["energy_j"], "energy_j", nonnegative=True) for row in rows]
+    r, q = energies[:n_r], energies[n_r:]
+    b = [statistics.fmean(q[i:i + 4]) for i in range(0, len(q), 4)]
+    full = n_r == n_b == 10
+    mean = statistics.fmean(energies) if full else 0.2 * statistics.fmean(r) + 0.8 * statistics.fmean(b)
+    s_r, s_b = statistics.stdev(r), statistics.stdev(b)
+    variance = 0.2 ** 2 * s_r ** 2 / n_r + 0.8 ** 2 * s_b ** 2 / n_b
+    df = min(n_r, n_b) - 1
+    half = T975[df] * math.sqrt(variance)
+    for row in rows:
+        _exact(row["bounds_j"], BOUND_KINDS, "bounds_j")
+    terms = {}
+    for kind in BOUND_KINDS:
+        values = [_number(row["bounds_j"][kind], kind, nonnegative=True) for row in rows]
+        terms[kind] = (statistics.fmean(values) if full else
+                       0.2 * statistics.fmean(values[:n_r]) + 0.8 * statistics.fmean(values[n_r:]))
+    bound = math.fsum(terms.values())
+    token_error, token_scope, counts = None, None, []
+    for row in rows:
+        try:
+            counts.append(_observed_tokens(row, row["phase"]))
+            scope = tuple(row["tokens"][key] for key in ("tokenizer_sha256", "output_policy_sha256"))
+            if token_scope is not None and token_scope != scope:
+                raise PaperReportedEnergyRefusal("paper_reported_energy_token_scope_mismatch")
+            token_scope = scope
+        except PaperReportedEnergyRefusal as exc:
+            token_error = exc.code
+    # Any denominator refusal nulls the sibling, leaving the energy estimator intact.
+    sums = {"repeat": {"energy_sum_j": math.fsum(r), "observed_token_sum": None if token_error else sum(counts[:n_r])},
+            "quad": {"energy_sum_j": math.fsum(q), "observed_token_sum": None if token_error else sum(counts[n_r:])}}
+    ratio = None if token_error else (math.fsum(energies) / sum(counts) if full else
+            0.2 * (math.fsum(r) / sum(counts[:n_r])) + 0.8 * (math.fsum(q) / sum(counts[n_r:])))
+    per_token = {"status": "refused" if token_error else "computed", "energy_sum_j": math.fsum(energies),
+                 "observed_token_sum": None if token_error else sum(counts), "j_per_token": ratio,
+                 "reason": token_error, "strata": sums}
+    first = [row["bounds_j"][BOUND_KINDS[0]] for row in rows]
+    largest = max(first)
+    floor = {"value_j": largest, "attained_by": rows[first.index(largest)]["member"]["bundle_id"],
+             "minimum_j": min(first)}
+    return CellEstimate(mean, mean - half - bound, mean + half + bound, n_r, n_b, df,
+                        s_r, s_b, variance, half, terms, bound, per_token, floor, min(n_r, n_b) < 5)
+
+
+def _reported_unit_records(kept, removed):
+    cell = kept.cell
+    all_units = [u for units in cell.kept.values() for u in units] + list(cell.dropped)
+    dropped = {(u.stratum, u.unit_id) for u in cell.dropped}
+    result = []
+    for stratum in ("repeat", "quad"):
+        units = sorted((u for u in all_units if u.stratum == stratum), key=lambda u: u.positions)
+        if len(units) != 10:
+            raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid")
+        for i, unit in enumerate(units):
+            ordinals = [i + 1] if stratum == "repeat" else list(range(11 + i * 4, 15 + i * 4))
+            if ((stratum, unit.unit_id) in dropped) == removed:
+                result.append({"stratum": stratum, "unit_id": unit.unit_id, "ordinals": ordinals})
+    return result
+
+
+def _project_kept_cell(cell, rows, binding, kept, exclusions_sha256, minimum):
+    ordinals = _kept_ordinals(kept)
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_member_count_invalid")
+    for row in rows:
+        _exact(row, {"member", "model", "phase", "selection_sha256", "prompt_pin_sha256",
+                     "whole_window_basis_sha256", "strict_valid", "unit", "energy_j", "bounds_j", "tokens"}, "record")
+        member = row["member"]
+        ordinal = member.get("ordinal") if type(member) is dict else None
+        if (type(ordinal) is not int or not 1 <= ordinal <= 50
+            or member != cell["members"][ordinal - 1]):
+            raise PaperReportedEnergyRefusal("paper_reported_energy_record_identity_mismatch")
+    if tuple(row["member"]["ordinal"] for row in rows) != ordinals:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_member_count_invalid")
+    model, phase = _cell_identity(cell["cell_id"])
+    for row, ordinal in zip(rows, ordinals):
+        if (row["member"] != cell["members"][ordinal - 1] or row["model"] != model or row["phase"] != phase
+            or any(row[name] != binding[name] for name in ("selection_sha256", "prompt_pin_sha256", "whole_window_basis_sha256"))):
+            raise PaperReportedEnergyRefusal("paper_reported_energy_record_identity_mismatch")
+        index = ordinal - 1
+        unit = ({"kind": "repeat", "index": ordinal, "position": None} if ordinal <= 10 else
+                {"kind": "abba", "index": (index - 10) // 4 + 1, "position": ("A1", "B1", "B2", "A2")[(index - 10) % 4]})
+        if row["strict_valid"] is not True or row["unit"] != unit or type(row["unit"]["index"]) is not int:
+            raise PaperReportedEnergyRefusal("paper_reported_energy_record_invalid")
+    estimate = estimate_reported_cell(rows, kept, minimum=minimum)
+    if binding["attribution_floor_j"] != estimate.attribution_floor["value_j"]:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_binding_mismatch")
+    result = {"cell_id": cell["cell_id"], "model": model, "phase": phase, "members": cell["members"],
+              "mean_j": estimate.mean_j, "lower_j": estimate.lower_j, "upper_j": estimate.upper_j,
+              "n_bundles": estimate.n_r + 4 * estimate.n_b, "independence_units": estimate.n_r + estimate.n_b,
+              "interval": {"method": INTERVAL_METHOD, **{k: getattr(estimate, k) for k in
+                           ("n_r", "n_b", "df", "s_r", "s_b", "variance", "h_j", "kind_averages_j", "B_j")}},
+              "phase_ratio_estimand": cell["phase_ratio_estimand"], "per_token": dict(estimate.per_token),
+              "binding": dict(binding), "attribution_floor_composed": False,
+              "kept_units": _reported_unit_records(kept, False), "removed_units": _reported_unit_records(kept, True),
+              "exclusions_sha256": exclusions_sha256, "attribution_floor": dict(estimate.attribution_floor)}
+    if estimate.below_minimum:
+        result["below_minimum"] = True
+    json.dumps(result, allow_nan=False)
+    return result
+
+
+@_closed_refusals
+def _project_cell(cell, rows, binding, *, kept=None, exclusions_sha256=None, minimum=5):
     """Private normalized arithmetic kernel, never an evidence admission API."""
     model, phase = _validate_members(cell)
     _exact(binding, {"model", "cell_id", "extraction_spec_sha256", "selection_sha256",
@@ -389,6 +552,12 @@ def _project_cell(cell, rows, binding):
     for name in ("extraction_spec_sha256", "selection_sha256", "prompt_pin_sha256", "whole_window_basis_sha256"):
         _sha(binding[name], name)
     _number(binding["attribution_floor_j"], "attribution_floor_j", nonnegative=True)
+    if kept is not None:
+        if type(exclusions_sha256) is not str or SHA_RE.fullmatch(exclusions_sha256) is None:
+            raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid")
+        return _project_kept_cell(cell, rows, binding, kept, exclusions_sha256, minimum)
+    if exclusions_sha256 is not None:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid")
     if type(rows) is not list or len(rows) != 50:
         raise PaperReportedEnergyRefusal("paper_reported_energy_member_count_invalid")
     energy, bounds, tokens = [], {kind: [] for kind in BOUND_KINDS}, []

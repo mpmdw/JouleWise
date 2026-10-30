@@ -1,0 +1,413 @@
+{
+  "catalog": {
+    "path": "/private/tmp/b5-s0-beta-pin3-gd32zt93/measurement/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+    "sha256": "5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d"
+  },
+  "collector_errors": [],
+  "exclusions": {
+    "cells": [
+      {
+        "cell_id": "df-b5t-family",
+        "dropped_units": [
+          {
+            "codes": [
+              "member.bytes_missing"
+            ],
+            "positions": [
+              2,
+              3,
+              4,
+              5
+            ],
+            "run_ids": [
+              "s0-mock-b01-a1",
+              "s0-mock-b01-a2",
+              "s0-mock-b01-b1",
+              "s0-mock-b01-b2"
+            ],
+            "stratum": "quad",
+            "unit_id": "s0-mock-b01"
+          },
+          {
+            "codes": [
+              "member.bytes_missing"
+            ],
+            "positions": [
+              0
+            ],
+            "run_ids": [
+              "s0-mock-r01"
+            ],
+            "stratum": "repeat",
+            "unit_id": "s0-mock-r01"
+          },
+          {
+            "codes": [
+              "member.bytes_missing"
+            ],
+            "positions": [
+              1
+            ],
+            "run_ids": [
+              "s0-mock-r02"
+            ],
+            "stratum": "repeat",
+            "unit_id": "s0-mock-r02"
+          }
+        ],
+        "kept_units": {
+          "quad": [],
+          "repeat": []
+        },
+        "minimum": {
+          "quad": 5,
+          "repeat": 5
+        },
+        "n_kept": {
+          "quad": 0,
+          "repeat": 0
+        },
+        "n_quads": 0,
+        "n_repeats": 0,
+        "planned": {
+          "quad": 1,
+          "repeat": 2
+        },
+        "resolvable": false,
+        "target": true
+      }
+    ],
+    "claim_usable": false,
+    "members_excluded": [
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 0,
+        "run_id": "s0-mock-r01"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 1,
+        "run_id": "s0-mock-r02"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 2,
+        "run_id": "s0-mock-b01-a1"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 3,
+        "run_id": "s0-mock-b01-b1"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 4,
+        "run_id": "s0-mock-b01-b2"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 5,
+        "run_id": "s0-mock-b01-a2"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 6,
+        "run_id": "b5t-neg8-end-1"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 7,
+        "run_id": "b5t-neg8-end-2"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 8,
+        "run_id": "b5t-neg8-end-3"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 9,
+        "run_id": "b5t-neg8-midpoint"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 10,
+        "run_id": "b5t-neg8-start-1"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 11,
+        "run_id": "b5t-neg8-start-2"
+      },
+      {
+        "codes": [
+          "member.bytes_missing"
+        ],
+        "families": [
+          "MEMBER_VALIDITY"
+        ],
+        "position": 12,
+        "run_id": "b5t-neg8-start-3"
+      }
+    ],
+    "reasons": [
+      "cell.below_minimum",
+      "neg8.screen_failed",
+      "roster.no_science_bundles"
+    ],
+    "release_blocked": false,
+    "unclassified": []
+  },
+  "flags": {
+    "by_code": {
+      "chain.stopped_before_collection": 1,
+      "collection.zero_yield": 1,
+      "diagnostic.s1_structural": 1,
+      "g3.not_applicable": 1,
+      "lineage.locator_unreadable": 2,
+      "member.bytes_missing": 13,
+      "neg8.corpus_member_dropped": 1,
+      "neg8.screen_failed": 1,
+      "roster.no_science_bundles": 1,
+      "roster.not_in_plan": 18,
+      "thermal.battery_temperature_unmeasured": 2,
+      "thermal.os_level_nonzero": 1,
+      "whole_window.not_passed": 1
+    },
+    "by_effect": {
+      "DISCLOSE": 10,
+      "EXCLUDE_MEMBER": 32,
+      "EXCLUDE_WINDOW": 2
+    },
+    "by_family": {
+      "DIAGNOSTIC": 4,
+      "MEMBER_VALIDITY": 13,
+      "NEG8": 3,
+      "PHYSICS_IN_SPAN": 1,
+      "RECORDS": 3,
+      "ROSTER": 20
+    },
+    "total": 44,
+    "unclassified": []
+  },
+  "hazards": {
+    "battery": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "battery",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "clock": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "clock",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "contention": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "contention",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "disk": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "disk",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "instrument": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "instrument",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "thermal": {
+      "arm": [
+        {
+          "measurement": {
+            "error": null,
+            "module": "thermal",
+            "schema": "joulewise.hazard_measurement.v1"
+          },
+          "phase": "instant",
+          "reasons": [],
+          "thresholds": {},
+          "verdict": "PASS"
+        }
+      ]
+    }
+  },
+  "schema": "joulewise.window_flags.v1",
+  "window": {
+    "attempt": 3,
+    "boot_session_uuid": "B5-S0-MOCK-BOOT",
+    "custody_root": "/private/tmp/b5-s0-beta-pin3-gd32zt93/custody",
+    "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "pack_id": "s0_beta_mock_v5",
+    "plan_id": "s0-beta-plan",
+    "t0_epoch_s": 1791649801
+  },
+  "yield": {
+    "j3_failed_stages": [],
+    "per_collection_stage": [],
+    "per_roster_stage": [
+      {
+        "planned": 2,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "01_abs",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 4,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "02_abba",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 3,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "end_reference",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 1,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "midpoint_reference",
+        "strict_deferred": 0,
+        "succeeded": 0
+      },
+      {
+        "planned": 3,
+        "present": 0,
+        "raw_valid": 0,
+        "stage_id": "start_reference",
+        "strict_deferred": 0,
+        "succeeded": 0
+      }
+    ],
+    "planned": 13,
+    "present": 0,
+    "raw_valid": 0,
+    "schema": "joulewise.b5_harvest_yield.v1",
+    "stage_journal": {
+      "campaign_collection": 0,
+      "stages": 1
+    },
+    "strict_deferred": 0,
+    "succeeded": 0,
+    "unresolved_collection_stages": [],
+    "window_stage_yield": null
+  }
+}

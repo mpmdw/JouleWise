@@ -10,6 +10,7 @@ import unittest.mock
 
 from joulewise import battery_float
 from joulewise.hazards import base, battery, smc
+from tests.live_hw import LiveHardwareTestCase
 from tests.hazards.fakes import BATTERY, FakeClocks, FakeSmc, Runner, battery_bytes, completed, update_time
 from tests.hazards.fakes import ROOT
 
@@ -530,7 +531,10 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
                 found = battery.span_findings(readings + [changed], self.span(130, 170))
                 self.assertEqual([f["code"] for f in found], ["battery.member_span"])
                 self.assertIn(text, found[0]["detail"])
-                self.assertEqual(battery.span_findings(readings + [changed], self.span(160, 200)), [])
+                # The state observed at 150 s remains in force at the next
+                # member's start, until the healthy registry read at 182 s.
+                later = battery.span_findings(readings + [changed], self.span(160, 200))
+                self.assertEqual([f["code"] for f in later], ["battery.member_span"])
 
     def test_an_unread_state_at_a_publication_is_missing_evidence_and_excludes(self):
         readings = self.series(10) + self.smc_lines(600)
@@ -634,6 +638,38 @@ class SmcMemberSpanTests(SpanRig, unittest.TestCase):
         samples = battery.smc_samples(readings)
         self.assertEqual([(entry["monotonic_ns"], entry["current_ma"]) for entry in samples],
                          [(readings[3]["finished"]["monotonic_ns"], -600)])
+
+
+class StateCarryForwardTests(SpanRig, unittest.TestCase):
+    def state_read(self, second, **state):
+        item = reading(self.raw, update=self.t0, mono_ns=self.mono0 + second * 10**9,
+                       wall_offset_ns=(second - 2) * 10**9)
+        item["values"].update(state)
+        return item
+
+    def test_state_before_member_survives_gauge_deduplication(self):
+        # The 5 s registry poll observes a transition without a new 60 s
+        # gauge publication. Fresh 1 Hz SMC samples cover both later members.
+        for state, text in (({"external_connected": False}, "ExternalConnected is No"),
+                            ({"is_charging": True}, "IsCharging is Yes")):
+            with self.subTest(state=state):
+                changed = self.state_read(5, **state)
+                readings = self.series(2) + [changed] + self.smc_lines(70)
+                self.assertEqual(len(battery.publications(readings)), 2)
+                for span in (self.span(10, 20), self.span(30, 40)):
+                    found = battery.span_findings(readings, span)
+                    self.assertEqual([item["code"] for item in found], ["battery.member_span"])
+                    self.assertIn(text, found[0]["detail"])
+                    self.assertEqual(found[0]["interval"]["monotonic_ns"],
+                                     [changed["finished"]["monotonic_ns"]] * 2)
+
+    def test_later_state_read_supersedes_carried_transition(self):
+        # The next 5 s poll restores AC before the member, with UpdateTime
+        # still unchanged. The old direct state must not persist forever.
+        readings = (self.series(2) + [self.state_read(5, external_connected=False),
+                                    self.state_read(10, external_connected=True)]
+                    + self.smc_lines(70))
+        self.assertEqual(battery.span_findings(readings, self.span(15, 20)), [])
 
 
 class AssistReviewTests(SpanRig, unittest.TestCase):
@@ -772,7 +808,7 @@ class FrozenGrammarRegistrationTests(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "darwin", "reads the real gauge (macOS)")
-class LiveReadOnlyTests(unittest.TestCase):
+class LiveReadOnlyTests(LiveHardwareTestCase):
     def test_live_ioreg_parses_and_carries_accumulators(self):
         measurement = battery.measure(base.Context())
         self.assertIsNone(measurement.error)

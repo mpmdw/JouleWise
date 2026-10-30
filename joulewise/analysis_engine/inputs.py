@@ -19,7 +19,7 @@ import re
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
 
 from joulewise.analysis_manifest import (
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,
@@ -58,6 +58,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     TRANSPORT_RULE_ID,
+    exact_stack_serving_cell,
     SingleCountDisciplineError,
     read_single_count_discipline,
     canonical_domain_sha256,
@@ -83,6 +84,8 @@ from joulewise.whole_window import (
     REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     AuthenticatedConsumptionSession,
+    ArchiveContext,
+    archive_context_operative_bound_s,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     recognizable_occurrence_supersession_counts,
@@ -94,6 +97,7 @@ from joulewise.whole_window import (
 from joulewise.calibration_bracketing import load_calibration_acceptance_bound
 from joulewise.calibration_ledger import (
     CalibrationLedgerSnapshot,
+    LEDGER_SCHEMA,
     load_calibration_ledger_snapshot,
 )
 from joulewise.publication_privacy import source_provenance_problems
@@ -103,6 +107,20 @@ from joulewise.uncertainty_evidence import capture_pipeline_refusal
 
 from .claims import REDUCER_REASON_CODES, ordered_reason_codes
 from joulewise.cooldown import cooldown_disposition_from_raw
+if TYPE_CHECKING:
+    from joulewise.b5_analysis.archive import ArchiveHandle
+    from joulewise.b5_analysis.kept_units import CellKeptUnits, KeptUnits
+
+
+def __getattr__(name: str) -> Any:
+    # The collection writer imports inputs. Archive analysis must stay outside
+    # that frozen import graph; the sealed consumer home resolves lazily.
+    if name in {"KeptUnits", "CellKeptUnits", "load_kept_units"}:
+        from joulewise.b5_analysis import kept_units
+        return getattr(kept_units, name)
+    raise AttributeError(name)
+
+from joulewise.window_lineage import is_hazard_runs_root, is_hazard_lineage
 
 
 StrictValidator = Callable[[Path, bool], list[str]]
@@ -245,6 +263,133 @@ class AnalysisInputError(ValueError):
     """Invalid process input: CLI exits 2 and writes no artifact."""
 
 
+MIDPOINT_LOST_CODE = "neg8.midpoint_lost"
+REMOVED_UNIT_LABEL = "unit_removed_by_exclusion_function"
+
+
+def require_contrast_attempt_keeps_midpoint(archive: ArchiveHandle) -> None:
+    """Check authenticated harvest flags before opening any science member."""
+    rows = [_strict_json_admission_bytes(line, "GAMMA flags")
+            for line in archive.output_bytes("derived/flags.jsonl").splitlines() if line.strip()]
+    exclusions = _strict_json_admission_bytes(
+        archive.output_bytes("derived/exclusions.json"), "GAMMA exclusions")
+    counts = exclusions.get("flag_counts", {}).get("by_code", {})
+    if any(row.get("code") == MIDPOINT_LOST_CODE for row in rows) or counts.get(MIDPOINT_LOST_CODE, 0):
+        raise AnalysisInputError("analysed_attempt_carries_midpoint_lost")
+
+
+def archive_snapshot(context: ArchiveContext) -> CalibrationLedgerSnapshot:
+    """A context owns the bracket; the empty snapshot prevents a live-ledger read."""
+    return CalibrationLedgerSnapshot(LEDGER_SCHEMA,
+        context.neg8_harvest_archive / "sources/ledger/calibration_observation_ledger.jsonl",
+        0, "0" * 64, (), (), ())
+
+
+def planned_contrast_units(manifest: Mapping[str, Any]) -> dict:
+    entries = {row["entry_id"]: row for row in manifest.get("entries", [])}
+    blocks = {row["block_id"]: row for row in manifest.get("blocks", [])}
+    result = {}
+    for contrast in manifest["contrasts"]:
+        quads = {}
+        for block_id in contrast["block_ids"]:
+            if "members" in contrast:
+                members = sorted((row for row in contrast["members"] if row["block_id"] == block_id),
+                                 key=lambda row: row["order_index"])
+                runs = [row["run_id"] for row in members]
+            else:
+                runs = [entries[blocks[block_id]["position_entry_ids"][position]]["run_id"]
+                        for position in ("A1", "B1", "B2", "A2")]
+            quads[block_id] = runs
+        result[contrast["contrast_id"]] = {"quad": quads}
+    return result
+
+
+def _check_kept_plan(manifest: Mapping[str, Any], kept_units: KeptUnits) -> dict[str, CellKeptUnits]:
+    planned = planned_contrast_units(manifest)
+    cells = {}
+    for cid, strata in planned.items():
+        try:
+            cell = kept_units.for_contrast(cid)
+        except ValueError as exc:
+            raise AnalysisInputError("exclusions_plan_mismatch") from exc
+        actual = {unit.unit_id: list(unit.run_ids)
+                  for unit in (*cell.kept["quad"], *cell.dropped) if unit.stratum == "quad"}
+        if actual != strata["quad"]:
+            raise AnalysisInputError("exclusions_plan_mismatch")
+        cells[cid] = cell
+    return cells
+
+
+def archived_verdict_row(archive: ArchiveHandle) -> Mapping[str, Any]:
+    window = archive.window
+    root = "sources/claim-runs"
+    if window.claim_runs_root.is_relative_to(window.custody_root):
+        root = "sources/night-custody/" + window.claim_runs_root.relative_to(window.custody_root).as_posix()
+    return _strict_json_admission_bytes(archive.source_bytes(root + "/whole-window-verdict.json"),
+                                         "whole-window verdict")
+
+
+def block5_claim_gate_inputs(window_index_path: Path, manifest_path: Path,
+                             runs_root: Path, evidence_roots: Mapping[str, Path] | None = None, *,
+                             _test_pack_table: Mapping[str, Mapping[str, str]] | None = None,
+                             _test_synthetic_plan_tree_sha256: str | None = None) -> dict:
+    """Build one fixed archive context per indexed root for the claim gate and replay."""
+    from joulewise.b5_analysis.windows import SealPins, load_window_index, select_analysed_attempts
+    from joulewise.b5_analysis.archive import open_attempt_record, open_archive
+    from joulewise.b5_analysis.bracket import evaluate_window_bracket
+    from joulewise.b5_analysis.context import build_context
+    from joulewise.b5_analysis.kept_units import load_kept_units
+    if not is_hazard_runs_root(Path(runs_root)):
+        raise AnalysisInputError("kept_units_not_a_block5_root")
+    pins = SealPins.load()
+    test_pack_kwargs = ({"pack_table": _test_pack_table} if _test_pack_table is not None else {})
+    index = load_window_index(window_index_path, seal_pins=pins, **test_pack_kwargs)
+    records = [open_attempt_record(entry, seal_pins=pins, **test_pack_kwargs) for entry in index.entries]
+    windows = select_analysed_attempts(index, records, seal_pins=pins)
+    gamma = windows["gamma"]
+    if gamma.claim_runs_root.resolve() != Path(runs_root).resolve():
+        raise AnalysisInputError("runs_root_differs_from_window_index")
+    manifest = _strict_json_admission_bytes(_read_analysis_input(Path(manifest_path), label="analysis manifest"),
+                                           "analysis manifest")
+    contexts, archives, units_by_pack, brackets = {}, {}, {}, {}
+    required_roots = {str(Path(root).resolve()) for root in (evidence_roots or {}).values()}
+    for pack, window in windows.items():
+        root_key = str(window.claim_runs_root.resolve())
+        if pack != "gamma" and root_key not in required_roots:
+            continue
+        archive = open_archive(window, seal_pins=pins, **test_pack_kwargs,
+            **({"synthetic_plan_tree_sha256": _test_synthetic_plan_tree_sha256}
+               if _test_synthetic_plan_tree_sha256 is not None else {}))
+        if pack == "gamma":
+            planned = planned_contrast_units(manifest)
+        else:
+            relative = f"sources/repo/configs/campaigns/{window.pack_id}/extraction_spec.json"
+            spec = _strict_json_admission_bytes(archive.source_bytes(relative), "floor spec",
+                                                governed_extraction_spec=True)
+            planned = {}
+            for cell in spec["cells"]:
+                strata = planned.setdefault(cell["condition_family_id"], {})
+                if cell["kind"] == "absolute":
+                    strata["repeat"] = {row["bundle_id"]: [row["bundle_id"]] for row in cell["members"]}
+                else:
+                    strata["quad"] = {row["block_id"]: [row["members"][p] for p in ("A1", "B1", "B2", "A2")]
+                                      for row in cell["blocks"]}
+        units = load_kept_units(archive, sealed_catalog_sha256=pins.sealed["catalog_sha256"], planned_units=planned)
+        if pack == "gamma":
+            require_contrast_attempt_keeps_midpoint(archive)
+        bracket = evaluate_window_bracket(archive, repo_root=Path(__file__).resolve().parents[2])
+        row = archived_verdict_row(archive)
+        contexts[root_key] = build_context(archive, units, bracket, row,
+            **({"test_only_allow_synthetic_binding": True}
+               if _test_synthetic_plan_tree_sha256 is not None else {}))
+        archives[pack], units_by_pack[pack], brackets[pack] = archive, units, bracket
+    for root_id, root in (evidence_roots or {}).items():
+        if is_hazard_runs_root(Path(root)) and str(Path(root).resolve()) not in contexts:
+            raise AnalysisInputError(f"archive_context_required: {root_id}")
+    return {"kept_units": units_by_pack["gamma"], "archive_contexts": contexts,
+            "gamma_archive": archives["gamma"], "archives": archives, "brackets": brackets}
+
+
 def _reject_duplicate_admission_keys(
     pairs: list[tuple[str, Any]],
 ) -> dict[str, Any]:
@@ -322,8 +467,13 @@ def _strict_json_admission_bytes(
     object_pairs_hook: Callable[
         [list[tuple[str, Any]]], dict[str, Any]
     ] = _reject_duplicate_admission_keys,
+    governed_extraction_spec: bool = False,
 ) -> Any:
-    """Strict-parse one analysis input and refuse deleted vocabulary."""
+    """Strict-parse one analysis input and refuse deleted vocabulary.
+
+    A sealed floor pack's extraction spec is the one governed document that
+    declares estimator registration; its reader passes governed_extraction_spec.
+    """
 
     try:
         value = json.loads(
@@ -339,7 +489,7 @@ def _strict_json_admission_bytes(
         raise AnalysisInputError(
             f"{label} is not valid UTF-8 JSON: {exc}"
         ) from exc
-    forbidden = _registration_vocabulary_paths(value, label)
+    forbidden = [] if governed_extraction_spec else _registration_vocabulary_paths(value, label)
     if forbidden:
         raise AnalysisInputError(
             f"{label}: forbidden key 'estimator_registration' at {forbidden[0]}"
@@ -369,6 +519,7 @@ class AuthenticatedFloorArtifact:
     raw_bytes: bytes
     file_sha256: str
     root_ids: frozenset[str]
+    limitations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -549,8 +700,11 @@ class LoadedAnalysisInputs:
     unregistered_matching: tuple[Mapping[str, Any], ...]
     top_up_entry_ids: frozenset[str]
     floor_artifact_bytes: bytes = b""
+    limitations: tuple[str, ...] = ()
     supersession_audit: tuple[Mapping[str, Any], ...] = ()
     supersession_diverged: bool = False
+    kept_quads: Mapping[str, CellKeptUnits] | None = None
+    kept_units: KeptUnits | None = None
     floor_binding: FloorEvidenceBinding = field(
         default_factory=lambda: FloorEvidenceBinding(
             bound_cell_ids=frozenset(),
@@ -610,7 +764,7 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
     return value, raw
 
 
-def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
+def load_manifest(path: Path, *, _block5_inputs: Mapping[str, Any] | None = None) -> tuple[Mapping[str, Any], str]:
     value, raw = _load_json_object(path, "analysis manifest")
     schema_version = value.get("schema_version")
     refusals = ()
@@ -623,6 +777,7 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
             value,
             manifest_path=path,
             custody_root=path.parent,
+            **({"_block5_inputs": _block5_inputs} if _block5_inputs is not None else {}),
         )
         errors = [
             f"{refusal.reason_code}: {refusal.detail}"
@@ -738,9 +893,16 @@ def _lexical_child_path(
 
 
 def _finalized_runs_root(
-    manifest: Mapping[str, Any], manifest_path: Path, supplied_runs_root: Path
+    manifest: Mapping[str, Any], manifest_path: Path, supplied_runs_root: Path,
+    *, indexed_runs_root: Path | None = None,
 ) -> Path:
-    """Bind consumption to the runs root authenticated by finalization."""
+    """Bind consumption to the runs root authenticated by finalization.
+
+    On a block-5 root the indexed GAMMA claim runs root owns the bundles and
+    lies outside custody (as the finalizer authenticates it); custody owns the
+    attachments. Both the bracket's authenticated root and the supplied root
+    must then be that indexed root.
+    """
 
     supplied = Path(supplied_runs_root)
     if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
@@ -771,6 +933,17 @@ def _finalized_runs_root(
             "analysis_manifest_runs_root_mismatch: bracket has no authenticated runs root"
         )
     authenticated = Path(authenticated_text)
+    if indexed_runs_root is not None:
+        try:
+            indexed = Path(indexed_runs_root).resolve(strict=True)
+            if (indexed.is_dir() and authenticated.resolve(strict=True) == indexed
+                    and supplied.resolve(strict=True) == indexed):
+                return indexed
+        except (OSError, RuntimeError, ValueError):
+            pass
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: runs_root_not_the_indexed_window"
+        )
     custody = Path(manifest_path).parent.absolute()
     resolved_custody = custody.resolve(strict=True)
     try:
@@ -884,6 +1057,8 @@ def authenticate_floor_artifact_bytes(
     *,
     expected_sha256: str | None = None,
     expected_artifact_id: str | None = None,
+    pinset_path: Path | None = None,
+    expected_pinset_sha256: str | None = None,
 ) -> AuthenticatedFloorArtifact:
     """Authenticate floor bytes and derive their exhaustive evidence roots.
 
@@ -906,7 +1081,8 @@ def authenticate_floor_artifact_bytes(
     )
     if not isinstance(value, Mapping):
         raise AnalysisInputError("floor artifact top level must be an object")
-    errors = validate_floor_artifact(value)
+    errors = (validate_floor_artifact(value) if pinset_path is None else
+              validate_floor_artifact(value, pinset_path=pinset_path, expected_pinset_sha256=expected_pinset_sha256))
     if errors:
         raise AnalysisInputError("invalid floor artifact: " + "; ".join(errors))
     artifact_id = value.get("artifact_id")
@@ -915,27 +1091,24 @@ def authenticate_floor_artifact_bytes(
             "floor artifact bytes artifact_id does not match bound artifact_id"
         )
     provenance = value.get("provenance")
-    stored_launch_lineage = (
-        provenance.get("launch_lineage")
-        if isinstance(provenance, Mapping)
-        else None
-    )
-    if isinstance(stored_launch_lineage, Mapping):
-        # A minted carrier is metadata, not authority. Claim-bearing admission
-        # independently reopens consumption/start/settle/completion; consumers
-        # without those receipts must refuse rather than trust copied digests.
+    limitations: list[str] = []
+    inventory = provenance.get("producer_launch_lineages") if isinstance(provenance, Mapping) else None
+    carriers = ([(row["plan_id"], row["launch_lineage"]) for row in inventory]
+                if isinstance(inventory, list) else
+                [("aggregate", provenance["launch_lineage"])]
+                if isinstance(provenance, Mapping) and "launch_lineage" in provenance else [])
+    for scope, stored in carriers:
+        if stored is None:
+            limitations.append(f"floor_producer_lineage_absent:{scope}")
+            continue
+        # Mint already authenticated the producer; reopening a record cannot
+        # change the digest-pinned numerical components or source membership.
         try:
-            authenticated_launch = authenticate_launch_lineage(
-                stored_launch_lineage,
-                require_completion=True,
-            )
-        except LaunchLineageError as exc:
-            raise AnalysisInputError(f"{exc.reason_code}: {exc}") from exc
-        if authenticated_launch.get("launch_lineage") != stored_launch_lineage:
-            raise AnalysisInputError(
-                "launch_lineage_conflict: floor artifact lineage differs from "
-                "directly authenticated receipts"
-            )
+            authenticated = authenticate_launch_lineage(stored, require_completion=True)
+            if authenticated.get("launch_lineage") != stored:
+                limitations.append(f"floor_launch_lineage_unauthenticated:{scope}")
+        except LaunchLineageError:
+            limitations.append(f"floor_launch_lineage_unauthenticated:{scope}")
     root_ids = frozenset(
         root_id
         for cell in value.get("cells", [])
@@ -953,16 +1126,34 @@ def authenticate_floor_artifact_bytes(
         raw_bytes=raw,
         file_sha256=digest,
         root_ids=root_ids,
+        limitations=tuple(limitations),
     )
 
 
-def load_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:
+def sibling_floor_pinset(floor_path: Path) -> Path:
+    path = Path(floor_path)
+    value = _strict_json_admission_bytes(_read_analysis_input(path, label="floor artifact"), "floor artifact")
+    name = value.get("provenance", {}).get("calibration_plan", {}).get("relative_path")
+    if not isinstance(name, str) or not name or "\\" in name or PurePosixPath(name).name != name or name in (".", ".."):
+        raise AnalysisInputError("floor_pinset_not_beside_floor: invalid name")
+    sibling = path.parent / name
+    if sibling.is_symlink() or not sibling.is_file():
+        raise AnalysisInputError("floor_pinset_not_beside_floor: missing or unsafe sibling")
+    return sibling
+
+
+def load_floor_artifact(path: Path, *, require_sibling_pinset: bool = False) -> AuthenticatedFloorArtifact:
     """Load and authenticate a floor without erasing its capability type."""
 
     try:
         raw = _read_analysis_input(Path(path), label="floor artifact")
     except OSError as exc:
         raise AnalysisInputError(f"cannot read floor artifact {path}: {exc}") from exc
+    if require_sibling_pinset:
+        pinset = sibling_floor_pinset(path)
+        pinset_raw = _read_analysis_input(pinset, label="floor producer pinset")
+        return authenticate_floor_artifact_bytes(raw, pinset_path=pinset,
+            expected_pinset_sha256=hashlib.sha256(pinset_raw).hexdigest())
     return authenticate_floor_artifact_bytes(raw)
 
 
@@ -1163,6 +1354,17 @@ def _safe_relative_posix(value: object, label: str) -> str:
     return value
 
 
+# L9 preserves each raw handoff carrier. These schema-declared locators are
+# re-authenticated by the lineage reader, with a scoped limitation if absent.
+# Numerical component and producer-plan paths keep their relative-path contract.
+_FLOOR_LINEAGE_LOCATOR_FIELDS = frozenset({
+    "consumption.path", "start.path", "settle.path", "completion.path",
+    "launch_record.path", "pack_root",
+    "window_context.claim_runs_root", "window_context.bound_runs_root",
+    "window_context.custody_root", "window_context.night_dir",
+})
+
+
 def _assert_floor_artifact_path_independent(
     value: object,
     label: str = "artifact",
@@ -1184,6 +1386,12 @@ def _assert_floor_artifact_path_independent(
     if isinstance(value, str) and (
         value.startswith("/") or _WINDOWS_ABSOLUTE_RE.match(value)
     ):
+        carrier_field = re.fullmatch(
+            r"artifact\.provenance\.(?:launch_lineage|"
+            r"producer_launch_lineages\[[0-9]+\]\.launch_lineage)\.(.+)", label,
+        )
+        if carrier_field and carrier_field.group(1) in _FLOOR_LINEAGE_LOCATOR_FIELDS:
+            return
         raise ValueError(f"{label}: absolute paths may not be persisted")
 
 
@@ -1232,13 +1440,16 @@ def _component_order_sequences(
 def declared_evidence_roots(
     floor_artifact_path: Path,
     evidence_roots: Mapping[str, Path] | None,
+    *,
+    require_sibling_pinset: bool = False,
 ) -> Mapping[str, Path] | None:
     """Restrict supplied roots to artifact-declared IDs, failing closed on read."""
 
     if evidence_roots is None:
         return None
     try:
-        authenticated = load_floor_artifact(floor_artifact_path)
+        authenticated = load_floor_artifact(floor_artifact_path,
+            **({"require_sibling_pinset": True} if require_sibling_pinset else {}))
         declared_root_ids = authenticated.root_ids
     except Exception:
         # This pre-authentication read only narrows separation inputs. Preserve
@@ -1752,10 +1963,17 @@ def bind_floor_artifact_evidence(
     _authenticated_floor: AuthenticatedFloorArtifact | None = None,
     mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    archive_contexts: Mapping[str, ArchiveContext] | None = None,
 ) -> FloorEvidenceBinding:
     """Bind v2 component values to their named strict evidence roots."""
 
-    if calibration_ledger_snapshot is None:
+    supplied_roots = (evidence_roots.items() if isinstance(evidence_roots, Mapping)
+                      else (("floor evidence", evidence_roots),))
+    for root_id, root in supplied_roots:
+        if is_hazard_runs_root(Path(root)) and str(Path(root).resolve()) not in (archive_contexts or {}):
+            raise AnalysisInputError(f"archive_context_required: {root_id}")
+
+    if calibration_ledger_snapshot is None and not archive_contexts:
         acceptance = load_calibration_acceptance_bound()
         cutoff = (
             acceptance.get("ledger_cutoff")
@@ -1786,6 +2004,37 @@ def bind_floor_artifact_evidence(
     normalized_roots, root_mapping_problems = _normalize_evidence_roots(
         authenticated_floor.root_ids, evidence_roots
     )
+    floor_sessions = {}
+    for root_id, root in normalized_roots.items():
+        context = (archive_contexts or {}).get(str(root.resolve()))
+        if context is None:
+            continue
+        member_ids = set()
+        bases = set()
+        for cell in artifact.get("cells", []):
+            for kind in ("absolute", "comparative"):
+                component = cell.get(kind, {})
+                provenance = cell.get("provenance", {}).get(kind, {})
+                if provenance.get("evidence_root_id") != root_id:
+                    continue
+                basis = component.get("whole_window_evaluation_basis_sha256")
+                if isinstance(basis, str):
+                    bases.add(basis)
+                rows = (component.get("bundle_observations", []) if kind == "absolute" else
+                        [row for block in component.get("blocks", []) for row in block.get("members", [])])
+                member_ids.update(row["bundle_id"] for row in rows)
+        if member_ids & context.removed_bundle_ids:
+            raise AnalysisInputError("floor_artifact_invalid: removed floor member")
+        basis = next(iter(bases)) if len(bases) == 1 else None
+        session = AuthenticatedConsumptionSession(root, member_ids, mode=mode,
+            evaluation_basis_sha256=basis, calibration_ledger_snapshot=archive_snapshot(context), archive_context=context)
+        reasons = whole_window_refusal_reasons(root, member_ids, consumption_session=session,
+                                             **({"evaluation_basis_sha256": basis} if basis is not None else {}))
+        if reasons:
+            raise AnalysisInputError(reasons[0] + ": " + ", ".join(reasons))
+        if not session.ready:
+            raise AnalysisInputError("operative_bound_not_the_window_bracket")
+        floor_sessions[str(root.resolve())] = session
     artifact_provenance = artifact.get("provenance", {})
     multi_producer = artifact_provenance.get("producer_calibration_plans") is not None
     producer_plans, plan_problems = (
@@ -1878,7 +2127,9 @@ def bind_floor_artifact_evidence(
                         member_ids,
                         evaluation_basis_sha256=basis,
                         consumption_semantics_id=consumption_semantics_id,
-                        calibration_ledger_snapshot=calibration_ledger_snapshot,
+                        calibration_ledger_snapshot=(archive_snapshot(archive_contexts[str(root.resolve())])
+                            if str(root.resolve()) in (archive_contexts or {}) else calibration_ledger_snapshot),
+                        archive_context=(archive_contexts or {}).get(str(root.resolve())),
                         mode=mode,
                     )
                     reasons = whole_window_refusal_reasons(
@@ -2040,7 +2291,21 @@ def bind_floor_artifact_evidence(
                 except Exception as exc:
                     strict = (f"strict validation raised {type(exc).__name__}: {exc}",)
                 reader = BundleReader(path)
-                summary = reader.raw_summary()
+                floor_session = floor_sessions.get(str(evidence_root.resolve()))
+                if floor_session is not None:
+                    summary = floor_session.summary_for(bundle_id)
+                    if not isinstance(summary, Mapping):
+                        raise AnalysisInputError("operative_bound_not_the_window_bracket")
+                    provenance = floor_session.provenance_for(bundle_id)
+                    floor_context = archive_contexts[str(evidence_root.resolve())]
+                    if (not isinstance(provenance, Mapping)
+                            or type(provenance.get("operative_fiducial_bound_s")) not in (int, float)
+                            or not math.isfinite(provenance["operative_fiducial_bound_s"])
+                            or (expected_bound := archive_context_operative_bound_s(floor_context)) is None
+                            or provenance["operative_fiducial_bound_s"] != expected_bound):
+                        raise AnalysisInputError("operative_bound_not_the_window_bracket")
+                else:
+                    summary = reader.raw_summary()
                 metadata = reader.raw_metadata()
                 raw_config = reader.raw_config()
                 local_problems.extend(strict)
@@ -3080,6 +3345,8 @@ def _scan_replacements_and_topups(
     registered: Mapping[str, BundleEvidence],
     cohort_identities: Mapping[str, Mapping[str, Any]],
     cleanup_records: Mapping[str, Sequence[str]],
+    *,
+    excluded_bundle_ids: frozenset[str] = frozenset(),
 ) -> tuple[
     dict[str, BundleEvidence],
     list[BundleEvidence],
@@ -3109,7 +3376,8 @@ def _scan_replacements_and_topups(
     if not runs_root.is_dir():
         return dict(registered), extras, [], unmatched_rows, top_up_entry_ids
 
-    for path in sorted((item for item in runs_root.iterdir() if item.is_dir()), key=lambda p: p.name):
+    for path in sorted((item for item in runs_root.iterdir()
+                        if item.name not in excluded_bundle_ids and item.is_dir()), key=lambda p: p.name):
         try:
             resolved_path = path.resolve()
         except (OSError, RuntimeError) as exc:
@@ -3255,6 +3523,9 @@ def load_analysis_inputs(
     mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     neg8_harvest_archive: Path | None = None,
+    kept_units: KeptUnits | None = None,
+    archive_contexts: Mapping[str, ArchiveContext] | None = None,
+    gamma_archive: ArchiveHandle | None = None,
 ) -> LoadedAnalysisInputs:
     """Load analysis-corpus inputs and independently bind floor evidence.
 
@@ -3269,16 +3540,82 @@ def load_analysis_inputs(
     on a HAZARD runs root, audit A1).
     """
 
+    block5 = is_hazard_runs_root(Path(runs_root))
+    if not block5 and (kept_units is not None or archive_contexts is not None):
+        raise AnalysisInputError("kept_units_not_a_block5_root")
+    if block5 and kept_units is None:
+        raise AnalysisInputError("kept_quads_required")
+    context = (archive_contexts or {}).get(str(Path(runs_root).resolve()))
+    if block5 and context is None:
+        raise AnalysisInputError("archive_context_required")
+    if block5:
+        if kept_units.window.pack != "gamma":
+            raise AnalysisInputError("exclusions_plan_mismatch")
+        if gamma_archive is None:
+            raise AnalysisInputError("archive_context_required: GAMMA archive")
+        if (gamma_archive.window != kept_units.window
+                or Path(context.neg8_harvest_archive) != Path(kept_units.window.archive_root)):
+            raise AnalysisInputError("context_window_mismatch")
+        if (neg8_harvest_archive is not None
+                and Path(neg8_harvest_archive).resolve() != Path(context.neg8_harvest_archive).resolve()):
+            raise AnalysisInputError("neg8_archive_differs_from_window_index")
+        require_contrast_attempt_keeps_midpoint(gamma_archive)
     analysis_manifest_path = Path(analysis_manifest_path)
-    manifest, manifest_sha = load_manifest(analysis_manifest_path)
+    replay_inputs = None
+    if block5:
+        candidate, _raw = _load_json_object(analysis_manifest_path, "analysis manifest")
+        registered_run_ids = {entry["run_id"] for entry in candidate["entries"]}
+        if context.removed_bundle_ids & registered_run_ids != kept_units.removed_run_ids():
+            raise AnalysisInputError("context_kept_units_mismatch")
+        if candidate.get("schema_version") == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+            role = candidate.get("evidence", {}).get("analysed_attempt_exclusions")
+            if role is None:
+                raise AnalysisInputError("analysed_attempt_exclusions_role_missing")
+            window = kept_units.window
+            if (role.get("sha256") != kept_units.exclusions_sha256 or role.get("catalog_sha256") != kept_units.catalog_sha256
+                    or role.get("harvest_pin") != window.harvest_pin
+                    or role.get("harvest_record", {}).get("sha256") != window.harvest_record_sha256):
+                raise AnalysisInputError("exclusions_differ_from_finalized_manifest")
+            cells = _check_kept_plan(candidate, kept_units)
+            kept_ids = frozenset(run for cell in cells.values() for unit in cell.kept["quad"] for run in unit.run_ids)
+            for entry in candidate["entries"]:
+                run_id = entry["run_id"]
+                if run_id not in kept_ids:
+                    continue
+                relative = entry.get("bundle_path")
+                if relative is None or not (Path(runs_root) / relative).is_dir():
+                    cid = next(cid for cid, cell in cells.items()
+                               if any(run_id in unit.run_ids for unit in cell.kept["quad"]))
+                    try:
+                        kept_units.stop_if_member_code_on_kept_unit(cid, run_id, "paired_block_incomplete")
+                    except ValueError as exc:
+                        raise AnalysisInputError("member_code_on_kept_unit") from exc
+            from joulewise.b5_analysis.bracket import WindowBracket, LEDGER_COPY, TERMINAL_PIN
+            from joulewise.whole_window import _archive_thaw
+            pin = _strict_json_admission_bytes(gamma_archive.output_bytes(TERMINAL_PIN), "terminal pin")
+            evaluation = _archive_thaw(context.window_bracket)
+            evaluation.pop("reasons", None)
+            bracket = WindowBracket(window, "window_evidence" if window.governed_e3 else "sealed", evaluation,
+                context.window_bracket["b_fiducial_s"], pin["sequence"],
+                hashlib.sha256(gamma_archive.source_bytes(LEDGER_COPY)).hexdigest(),
+                "equal" if window.governed_e3 else "no_harvest_digest",
+                hashlib.sha256(_read_analysis_input(window.archive_root / "sources/SHA256SUMS", label="archive source inventory")).hexdigest())
+            replay_inputs = {"gamma_archive": gamma_archive, "kept_units": kept_units,
+                             "archive_contexts": archive_contexts, "brackets": {"gamma": bracket}}
+    manifest, manifest_sha = load_manifest(analysis_manifest_path,
+        **({"_block5_inputs": replay_inputs} if replay_inputs is not None else {}))
     runs_root = _finalized_runs_root(
         manifest,
         analysis_manifest_path,
         Path(runs_root),
+        **({"indexed_runs_root": gamma_archive.window.claim_runs_root} if block5 else {}),
     )
-    authenticated_floor = load_floor_artifact(
-        Path(floor_artifact_path)
-    )
+    kept_quads = _check_kept_plan(manifest, kept_units) if block5 else None
+    kept_run_ids = (frozenset(run for cell in kept_quads.values() for unit in cell.kept["quad"] for run in unit.run_ids)
+                    if kept_quads is not None else None)
+    authenticated_floor = load_floor_artifact(Path(floor_artifact_path), require_sibling_pinset=block5)
+    if context is not None:
+        calibration_ledger_snapshot = archive_snapshot(context)
     if calibration_ledger_snapshot is None:
         acceptance = load_calibration_acceptance_bound()
         cutoff = (
@@ -3363,6 +3700,7 @@ def load_analysis_inputs(
         _authenticated_floor=authenticated_floor,
         calibration_ledger_snapshot=calibration_ledger_snapshot,
         mode=mode,
+        **({"archive_contexts": archive_contexts} if block5 else {}),
     )
     cleanup_records = _campaign_claim_records(
         runs_root, collection_manifest_id
@@ -3376,14 +3714,21 @@ def load_analysis_inputs(
             or PurePosixPath(run_id).name != run_id
         ):
             raise AnalysisInputError(f"manifest run_id is not a safe basename: {run_id!r}")
+        if kept_run_ids is not None and run_id not in kept_run_ids:
+            registered[entry["entry_id"]] = BundleEvidence(entry=entry, bundle_id=run_id,
+                relative_path=run_id, path=runs_root / run_id, summary=None, metadata=None, raw_config=None,
+                strict_problems=(), base_reason_codes=(REMOVED_UNIT_LABEL,), config_sha256=None,
+                summary_sha256=None, replacement_classification="registered", inclusion_status="excluded")
+            continue
         source_config, _ = _load_json_object(
             config_root / entry["config"], "manifest config"
         )
-        authenticated_bundle_path = _registered_bundle_path(
-            manifest,
-            entry,
-            runs_root,
-        )
+        try:
+            authenticated_bundle_path = _registered_bundle_path(manifest, entry, runs_root)
+        except AnalysisInputError as exc:
+            if block5:
+                raise AnalysisInputError("member_code_on_kept_unit") from exc
+            raise
         registered[entry["entry_id"]] = _read_bundle(
             entry,
             authenticated_bundle_path,
@@ -3394,30 +3739,48 @@ def load_analysis_inputs(
         _apply_cleanup_claim_policy(
             registered[entry["entry_id"]], cleanup_records.get(run_id)
         )
-    cohort_identities = _enforce_registered_realized_identity(manifest, registered)
+        if block5 and not registered[entry["entry_id"]].included:
+            for cid, cell in kept_quads.items():
+                if any(run_id in unit.run_ids for unit in cell.kept["quad"]):
+                    try:
+                        kept_units.stop_if_member_code_on_kept_unit(cid, run_id, "paired_block_incomplete")
+                    except ValueError as exc:
+                        raise AnalysisInputError("member_code_on_kept_unit") from exc
+
+    operative_registered = {key: row for key, row in registered.items()
+                            if kept_run_ids is None or row.bundle_id in kept_run_ids}
+    cohort_identities = _enforce_registered_realized_identity(manifest, operative_registered)
     effective, extras, replacements, unregistered, top_up_ids = _scan_replacements_and_topups(
         manifest,
         config_root,
         runs_root,
         strict_validator,
-        registered,
+        operative_registered,
         cohort_identities,
         cleanup_records,
+        **({"excluded_bundle_ids": kept_units.removed_run_ids()} if block5 else {}),
     )
-    _require_common_launch_lineage(tuple(effective.values()))
+    effective.update({key: row for key, row in registered.items() if key not in operative_registered})
+    operative_evidence = tuple(row for row in (*registered.values(), *extras)
+                               if kept_run_ids is None or row.bundle_id in kept_run_ids)
+    _require_common_launch_lineage(tuple(row for row in effective.values()
+                                       if kept_run_ids is None or row.bundle_id in kept_run_ids))
+    if block5 and supersession_diverged:
+        raise AnalysisInputError("whole_window_verdict_conflict: supersession scan diverged")
     if supersession_diverged:
         # D-093 is a pre-estimation source-visibility gate.  Preserve a
         # claim artifact with the raw/validated counts, but make every
         # possible observation ineligible before any estimator is invoked.
-        for evidence in (*registered.values(), *extras):
+        for evidence in operative_evidence:
             _exclude_evidence(evidence, "whole_window_verdict_conflict")
     cooldown_by_bundle = _campaign_cooldown_evidence(
         runs_root, collection_manifest_id
     )
-    for evidence in (*registered.values(), *extras):
+    for evidence in operative_evidence:
         evidence.campaign_cooldown = cooldown_by_bundle.get(evidence.bundle_id)
     effective_bundle_ids = {
         evidence.bundle_id for evidence in effective.values()
+        if kept_run_ids is None or evidence.bundle_id in kept_run_ids
     }
     basis_kwargs = (
         {"evaluation_basis_sha256": verdict_basis_sha256}
@@ -3431,6 +3794,8 @@ def load_analysis_inputs(
         session_kwargs["calibration_ledger_snapshot"] = (
             calibration_ledger_snapshot
         )
+    if context is not None:
+        session_kwargs["archive_context"] = context
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         effective_bundle_ids,
@@ -3443,39 +3808,55 @@ def load_analysis_inputs(
         consumption_session=consumption_session,
         **basis_kwargs,
     )
+    if block5 and whole_window_reasons:
+        raise AnalysisInputError(whole_window_reasons[0] + ": " + ", ".join(whole_window_reasons))
     if whole_window_reasons:
         # The whole-window NEG-8/adapter/CPU verdict is a campaign-wide causal
         # prerequisite.  Attach every missing/failed barrier to every possible
         # claim input so no contrast can route around it through replacement
         # selection or a different downstream consumer.
-        for evidence in (*registered.values(), *extras):
+        for evidence in operative_evidence:
             for reason in whole_window_reasons:
                 _exclude_evidence(evidence, reason)
     else:
+        if block5 and not consumption_session.ready:
+            # DECISIONS.md B1: without a ready session every kept member would
+            # keep its stored summary, reduced under the pre-capture bound.
+            raise AnalysisInputError("operative_bound_not_the_window_bracket")
         if consumption_session.ready:
-            for evidence in (*registered.values(), *extras):
+            for evidence in operative_evidence:
+                provenance = consumption_session.provenance_for(evidence.bundle_id) if block5 else None
+                if block5 and (not isinstance(provenance, Mapping)
+                               or type(provenance.get("operative_fiducial_bound_s")) not in (int, float)
+                               or not math.isfinite(provenance["operative_fiducial_bound_s"])
+                               or (expected_bound := archive_context_operative_bound_s(context)) is None
+                               or provenance["operative_fiducial_bound_s"] != expected_bound):
+                    raise AnalysisInputError("operative_bound_not_the_window_bracket")
                 operative_summary = consumption_session.summary_for(
                     evidence.bundle_id
                 )
+                if block5 and not isinstance(operative_summary, Mapping):
+                    # A kept member with no operative summary would be
+                    # estimated from its stored one (same hazard as above).
+                    raise AnalysisInputError("operative_bound_not_the_window_bracket")
                 if isinstance(operative_summary, Mapping):
                     # Stored summary bytes and their digest remain the custody
                     # authority.  Claim math consumes this in-memory widened
                     # view, and the audit row records the complete discharge.
                     evidence.summary = operative_summary
                     evidence.window_prechecks.clear()
-                    evidence.consumption_provenance = (
-                        consumption_session.provenance_for(
-                            evidence.bundle_id
-                        )
-                    )
+                    evidence.consumption_provenance = (provenance if block5 else
+                        consumption_session.provenance_for(evidence.bundle_id))
         allowances = whole_window_drift_allowances(
             runs_root,
             effective_bundle_ids,
             consumption_session=consumption_session,
-            neg8_harvest_archive=neg8_harvest_archive,
+            neg8_harvest_archive=(context.neg8_harvest_archive if block5 else neg8_harvest_archive),
             **basis_kwargs,
         )
-        for evidence in (*registered.values(), *extras):
+        if block5 and allowances.status != "allowances":
+            raise AnalysisInputError(f"drift_allowance_not_recorded_on_block5_root: {allowances.status}")
+        for evidence in operative_evidence:
             # A ``legacy`` result is never an allowance waiver: every
             # governed non-current reducer pair is already claim-ineligible
             # via deterministic_bounds' universal clock_anchor_unresolved
@@ -3493,6 +3874,7 @@ def load_analysis_inputs(
         floor_artifact=floor_artifact,
         floor_sha256=floor_sha,
         floor_artifact_bytes=authenticated_floor.raw_bytes,
+        limitations=authenticated_floor.limitations,
         floor_binding=floor_binding,
         registered=registered,
         effective=effective,
@@ -3502,6 +3884,8 @@ def load_analysis_inputs(
         top_up_entry_ids=frozenset(top_up_ids),
         supersession_audit=tuple(supersession_audit),
         supersession_diverged=supersession_diverged,
+        kept_quads=kept_quads,
+        kept_units=kept_units,
     )
 
 
@@ -4041,14 +4425,57 @@ def deterministic_bounds(
     return result, tuple(ordered_reason_codes(reasons))
 
 
+@dataclass(frozen=True)
+class _HazardConsumerIdentities:
+    # None is the hazard-only authentication failure, distinct from the ARM
+    # empty set and the legacy route's None return.
+    identities: frozenset[str] | None
+    configs: tuple[Mapping[str, Any], ...] = ()
+
+
+# Closed §I.3 allowlist. Notes describe hardware for people; project/operator
+# label the record. None is consulted by workload, phase, runtime or telemetry.
+_CONSUMER_RECORDING_FIELDS = (
+    ("hardware_target", "notes"),
+    ("run_metadata", "project"),
+    ("run_metadata", "operator"),
+)
+
+
+def _consumer_recording_key(config: Mapping[str, Any]) -> str:
+    identity = copy.deepcopy(dict(_typed_config(config) or {}))
+    identity.pop("run_id", None)
+    for section, field_name in _CONSUMER_RECORDING_FIELDS:
+        value = identity.get(section)
+        if isinstance(value, dict):
+            value.pop(field_name, None)
+    # Compare every tag and every other typed field. Only run_id is omitted,
+    # as in the existing scientific identity; it labels the physical repeat.
+    return canonical_json_sha256(identity)
+
+
+def _consumer_measurement_identity(config: Mapping[str, Any]) -> str:
+    identity = copy.deepcopy(dict(scientific_config_identity(config) or {}))
+    for section, field_name in _CONSUMER_RECORDING_FIELDS:
+        value = identity.get(section)
+        if isinstance(value, dict):
+            value.pop(field_name, None)
+    return canonical_json_sha256(identity)
+
+
+def _consumer_recording_values(config: Mapping[str, Any]) -> tuple[Any, ...]:
+    return tuple(config.get(section, {}).get(field_name)
+                 for section, field_name in _CONSUMER_RECORDING_FIELDS)
+
+
 def _frozen_consumer_identity_set(
     evidence: Sequence[BundleEvidence], condition_family_id: str
-) -> frozenset[str] | None:
-    """Read the U8-bound frozen member identities for a successor consumer.
+) -> frozenset[str] | _HazardConsumerIdentities | None:
+    """Read the committed hazard declaration or the unchanged U8 frozen set.
 
-    ``None`` means the legacy, pre-launch-lineage route is in use.  An empty
-    set means successor lineage was present but its frozen declaration could
-    not be authenticated, so the caller must refuse.
+    Legacy None, ARM empty-set refusal, and hazard unauthenticated declaration
+    are distinct. Hazard applicability is already bound by _read_bundle's
+    config_hash_mismatch checks against the sealed plan's source config (§I.1).
     """
 
     authenticated_rows = [
@@ -4058,40 +4485,67 @@ def _frozen_consumer_identity_set(
     ]
     if not authenticated_rows:
         return None
+    hazard = len(authenticated_rows) == len(evidence) and all(
+        is_hazard_lineage(row.get("launch_lineage")) for row in authenticated_rows)
+    failure = _HazardConsumerIdentities(None) if hazard else frozenset()
     if len(authenticated_rows) != len(evidence):
-        return frozenset()
+        return failure
     if any(
         not isinstance(row.get("pack_root"), str) or not row.get("pack_root")
         for row in authenticated_rows
     ):
-        return frozenset()
+        return failure
     pack_roots = {row["pack_root"] for row in authenticated_rows}
     if len(pack_roots) != 1:
-        return frozenset()
+        return failure
     if any(
         not isinstance(row.get("pack_sha256"), str)
         or re.fullmatch(r"[0-9a-f]{64}", row["pack_sha256"]) is None
         for row in authenticated_rows
     ):
-        return frozenset()
+        return failure
     pack_hashes = {row["pack_sha256"] for row in authenticated_rows}
     if len(pack_hashes) != 1:
-        return frozenset()
+        return failure
     try:
         pack_root = Path(next(iter(pack_roots))).resolve(strict=True)
         if committed_pack_tree_sha256(pack_root) != next(iter(pack_hashes)):
-            return frozenset()
+            return failure
         tree, _tree_raw = _load_json_object(
             pack_root / "plan_tree.json", "consumer identity plan tree"
         )
         attachments = tree.get("arm_attachments")
         if not isinstance(attachments, Mapping):
-            return frozenset()
+            return failure
         projection = validate_identity_pin_projection(
             attachments.get("identity_pin_projection")
         )
+        if hazard:
+            readiness = attachments.get("arm_readiness")
+            if (projection["state"] != "unprojected"
+                or not isinstance(readiness, Mapping)
+                or readiness.get("freeze_receipt") is not None):
+                return failure
+            units = [unit for unit in projection["identity_units"]
+                     if any(binding.get("family") == condition_family_id
+                            for binding in unit["consumer_bindings"])]
+            if len(units) != 1:
+                return failure
+            configs = []
+            for row in units[0]["config_inventory"]:
+                path = _lexical_child_path(pack_root, row["path"],
+                    label="sealed consumer identity config", require_directory=False)
+                raw = _read_analysis_input(path, label="sealed consumer identity config")
+                if hashlib.sha256(raw).hexdigest() != row["sha256"]:
+                    return failure
+                config = parse_json_bytes(raw, require_canonical=False)
+                if not isinstance(config, Mapping):
+                    return failure
+                configs.append(config)
+            identities = frozenset(scientific_config_identity_sha256(c) for c in configs)
+            return _HazardConsumerIdentities(identities, tuple(configs)) if identities else failure
         if projection["state"] != "frozen":
-            return frozenset()
+            return failure
         readiness = attachments.get("arm_readiness")
         freeze_reference = (
             readiness.get("freeze_receipt")
@@ -4102,7 +4556,7 @@ def _frozen_consumer_identity_set(
             not isinstance(freeze_reference, Mapping)
             or set(freeze_reference) != {"path", "sha256"}
         ):
-            return frozenset()
+            return failure
         freeze_path = _lexical_child_path(
             pack_root,
             freeze_reference["path"],
@@ -4126,12 +4580,12 @@ def _frozen_consumer_identity_set(
             freeze_sha != freeze_reference["sha256"]
             or freeze_sidecar != gnu_sidecar(freeze_sha, freeze_path.name)
         ):
-            return frozenset()
+            return failure
         freeze_receipt = validate_freeze_receipt(
             parse_json_bytes(freeze_raw, require_canonical=True)
         )
         if freeze_receipt["status"] != "PASS":
-            return frozenset()
+            return failure
         identity_items = [
             item
             for item in freeze_receipt["evidence"]
@@ -4140,7 +4594,7 @@ def _frozen_consumer_identity_set(
             == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA
         ]
         if len(identity_items) != 1:
-            return frozenset()
+            return failure
         identity_item = identity_items[0]
         if (
             identity_item.get("evidence_id") != "u11-freeze-projection"
@@ -4152,7 +4606,7 @@ def _frozen_consumer_identity_set(
                 "sha256": identity_item.get("sha256"),
             }
         ):
-            return frozenset()
+            return failure
         receipt_path = _lexical_child_path(
             pack_root,
             identity_item["path"],
@@ -4179,12 +4633,12 @@ def _frozen_consumer_identity_set(
             receipt_sha != identity_item["sha256"]
             or receipt_sidecar != gnu_sidecar(receipt_sha, receipt_path.name)
         ):
-            return frozenset()
+            return failure
         receipt = validate_projection_receipt(
             parse_json_bytes(receipt_raw, require_canonical=True)
         )
         if receipt["receipt_kind"] != "freeze_projection" or receipt["status"] != "PASS":
-            return frozenset()
+            return failure
         matching_units = [
             unit
             for unit in receipt["identity_units"]
@@ -4195,7 +4649,7 @@ def _frozen_consumer_identity_set(
             )
         ]
         if len(matching_units) != 1:
-            return frozenset()
+            return failure
         unit = matching_units[0]
         projection_units = [
             candidate
@@ -4207,7 +4661,7 @@ def _frozen_consumer_identity_set(
             or projection_units[0]["model_runtime_config"]["config_set_sha256"]
             != unit["model_runtime_config"]["config_set_sha256"]
         ):
-            return frozenset()
+            return failure
         identities: set[str] = set()
         for row in unit["config_inventory"]:
             config_path = _lexical_child_path(
@@ -4220,17 +4674,17 @@ def _frozen_consumer_identity_set(
                 config_path, label="frozen identity config"
             )
             if hashlib.sha256(raw).hexdigest() != row["sha256"]:
-                return frozenset()
+                return failure
             config = parse_json_bytes(raw, require_canonical=False)
             if not isinstance(config, Mapping):
-                return frozenset()
+                return failure
             identities.add(scientific_config_identity_sha256(config))
         if (
             not identities
             or identity_unit_config_set_sha256(identities)
             != unit["model_runtime_config"]["config_set_sha256"]
         ):
-            return frozenset()
+            return failure
         return frozenset(identities)
     except (
         AnalysisInputError,
@@ -4241,7 +4695,7 @@ def _frozen_consumer_identity_set(
         TypeError,
         ValueError,
     ):
-        return frozenset()
+        return failure
 
 
 def _floor_request_or_refusal(
@@ -4250,6 +4704,8 @@ def _floor_request_or_refusal(
     contrast: Mapping[str, Any],
     condition_family_id: str,
     evidence: Sequence[BundleEvidence],
+    *,
+    limitations: list[str] | None = None,
 ) -> FloorRequest | tuple[str, ...]:
     """Build a production request or return its identity-specific refusal."""
 
@@ -4278,12 +4734,50 @@ def _floor_request_or_refusal(
     declared_consumer_identities = _frozen_consumer_identity_set(
         evidence, condition_family_id
     )
+    exact_consumer_identities = set(consumer_identities)
+    hazard_declaration = isinstance(declared_consumer_identities, _HazardConsumerIdentities)
+    if hazard_declaration:
+        declaration = declared_consumer_identities
+        if declaration.identities is None:
+            if limitations is not None:
+                limitations.append(f"consumer_identity_set_unauthenticated:{condition_family_id}")
+            # No authenticated declaration means no multi-identity exact match;
+            # never let this fall through to the transport route (§I.4).
+            if len(consumer_identities) != 1:
+                return ("consumer_identity_undeclared",)
+        else:
+            matched_identities = set()
+            declared_reference_identities = set()
+            recording_difference = False
+            for row in evidence:
+                matches = [config for config in declaration.configs
+                    if _consumer_recording_key(config) == _consumer_recording_key(row.raw_config)]
+                if not matches:
+                    return ("consumer_identity_undeclared",)
+                observed = scientific_config_identity_sha256(row.raw_config)
+                hashes = {scientific_config_identity_sha256(c) for c in matches}
+                # Several declaration records may differ only in the three
+                # recording fields. They identify one measurement; all their
+                # original hashes can bind a direct source cell, without an
+                # arbitrary choice of which record's hash to keep.
+                matched_identities.add(_consumer_measurement_identity(row.raw_config))
+                declared_reference_identities.update(hashes)
+                recording_difference |= not any(
+                    scientific_config_identity_sha256(c) == observed
+                    and _consumer_recording_values(c) == _consumer_recording_values(row.raw_config)
+                    for c in matches)
+            consumer_identities = matched_identities
+            exact_consumer_identities = declared_reference_identities
+            if recording_difference and limitations is not None:
+                limitations.append(f"consumer_identity_recording_difference:{condition_family_id}")
+        declared_consumer_identities = None
     if declared_consumer_identities is not None:
         if not declared_consumer_identities:
             return ("consumer_identity_set_unauthenticated",)
         if not consumer_identities.issubset(declared_consumer_identities):
             return ("consumer_identity_undeclared",)
-    if len(consumer_identities) > 1 and declared_consumer_identities is None:
+    if (len(consumer_identities) > 1 and declared_consumer_identities is None
+        and not hazard_declaration):
         return ("consumer_identity_undeclared",)
     consumer_identity = (
         next(iter(consumer_identities))
@@ -4299,6 +4793,39 @@ def _floor_request_or_refusal(
     if len(consumer_stack_hashes) != 1:
         return ()
     consumer_stack_hash = next(iter(consumer_stack_hashes))
+    # The sealed dependency supplies the family digest on the v3 route. Legacy
+    # callers discover it from the artifact, retaining their existing API.
+    dependency = contrast.get("floor_dependency", {})
+    transport = dependency.get("transport", {})
+    exact_only = transport.get("mode") == "exact_stack_only"
+    family_hashes = {f.get("condition_family_sha256")
+        for group in artifact.get("transport_groups", []) if isinstance(group, Mapping)
+        for f in group.get("allowed_consumer_condition_families", [])
+        if isinstance(f, Mapping) and f.get("condition_family_id") == condition_family_id}
+    family_hashes.update(c.get("key", {}).get("condition_family_sha256")
+        for c in artifact.get("cells", []) if isinstance(c, Mapping)
+        and c.get("key", {}).get("condition_family_id") == condition_family_id)
+    declared_hashes = {f.get("condition_domain_sha256") for f in transport.get("transport_groups", [])
+                       if isinstance(f, Mapping) and f.get("condition_family_id") == condition_family_id}
+    if declared_hashes:
+        family_hashes = declared_hashes
+    if consumer_identity is not None and len(family_hashes) == 1:
+        family_sha = next(iter(family_hashes))
+        serving = exact_stack_serving_cell(artifact, backend=backend, metric=selector.get("metric"),
+            window_class=selector.get("window_class"), condition_family_id=condition_family_id,
+            condition_family_sha256=family_sha, stack_identity_sha256=consumer_stack_hash)
+        if serving is not None:
+            cell_id = serving["cell_id"]
+            direct = serving["key"]["condition_family_id"] == condition_family_id
+            if (cell_id in binding.bound_cell_ids
+                and binding.cell_stack_identity_sha256.get(cell_id) == consumer_stack_hash
+                and (not direct or binding.cell_scientific_identity_sha256.get(cell_id) in exact_consumer_identities)):
+                return FloorRequest(backend=backend, metric=str(selector["metric"]),
+                    window_class=str(selector["window_class"]), condition_family_id=condition_family_id,
+                    condition_family_sha256=family_sha, stack_identity_sha256=consumer_stack_hash,
+                    consumer_stress={})
+    if exact_only:
+        return ()
     matches: list[Mapping[str, Any]] = []
     same_condition_seen = False
     for cell in artifact.get("cells", []):
@@ -4320,7 +4847,7 @@ def _floor_request_or_refusal(
             or not same_condition
             or cell_id not in binding.bound_cell_ids
             or binding.cell_scientific_identity_sha256.get(cell_id)
-            != consumer_identity
+            not in exact_consumer_identities
             or binding.cell_stack_identity_sha256.get(cell_id)
             != consumer_stack_hash
         ):
@@ -4450,7 +4977,7 @@ def resolve_floor(
         if evidence_binding is not None
         else frozenset(cells)
     )
-    exact = [
+    direct = [
         cell
         for cell in cells.values()
         if isinstance(cell.get("key"), Mapping)
@@ -4462,6 +4989,12 @@ def resolve_floor(
         and cell.get("source_regime", {}).get("stack_identity_sha256")
         == request.stack_identity_sha256
     ]
+    serving = exact_stack_serving_cell(artifact, backend=request.backend, metric=request.metric,
+        window_class=request.window_class, condition_family_id=request.condition_family_id,
+        condition_family_sha256=request.condition_family_sha256,
+        stack_identity_sha256=request.stack_identity_sha256) if not request.consumer_stress else None
+    # Keep the historical direct-cell refusal diagnostics (e.g. not claim ready).
+    exact = [serving] if serving is not None else direct
     if len(exact) == 1:
         cell = exact[0]
         cell_id = str(cell["cell_id"])
@@ -4517,6 +5050,13 @@ def resolve_floor(
             for value in values
         ):
             reasons.append("cell_not_claim_ready")
+        if cell["key"].get("condition_family_id") != request.condition_family_id:
+            group = next(g for g in artifact["transport_groups"]
+                         if g.get("transport_group_id") == cell.get("transport_group_id"))
+            # max(singleton) is the same stored operand; this is identical-code
+            # identity, with no numerical tolerance or envelope calculation.
+            if group.get("composed_floor_gate_j") != cell.get("floor_gate_j"):
+                reasons.append("artifact_schema_invalid")
         limit_class = cell.get("floor_limit_class")
         floor_source = cell.get("floor_source")
         point_diagnostics = cell.get("point_floor_diagnostics")
@@ -4760,6 +5300,12 @@ def unavailable_floor_resolution(
 
 __all__ = [
     "AnalysisInputError",
+    "KeptUnits",
+    "load_kept_units",
+    "MIDPOINT_LOST_CODE",
+    "require_contrast_attempt_keeps_midpoint",
+    "sibling_floor_pinset",
+    "block5_claim_gate_inputs",
     "AuthenticatedFloorArtifact",
     "authenticate_floor_artifact_bytes",
     "bind_floor_artifact_evidence",

@@ -1235,3 +1235,208 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HazardConsumerConfigPinningTests(unittest.TestCase):
+    def test_step1_each_workload_and_phase_variant_is_excluded_before_floor_request(self):
+        """§I.1: the real loader binds bytes AND typed config to the plan.
+
+        Hardware/provenance observations are isolated here so they cannot mask
+        deletion of the config checks. The unchanged bundle must be included.
+        """
+        from joulewise.analysis_engine import inputs
+        pack = ROOT / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
+        tree = json.loads((pack / 'plan_tree.json').read_bytes())
+        unit = next(u for u in tree['arm_attachments']['identity_pin_projection']['identity_units']
+                    if u['identity_unit_id'] == 'A/decode')
+        source = json.loads((pack / unit['config_inventory'][0]['path']).read_bytes())
+        variants = {'control': copy.deepcopy(source)}
+        for name in ('suite_manifest_sha256', 'output_tokens', 'measurement-arm', 'df-condition', 'decode-prompt'):
+            config = copy.deepcopy(source)
+            if name == 'suite_manifest_sha256':
+                config['workload_profile'][name] = 'f' * 64
+            elif name == 'output_tokens':
+                config['workload_profile'][name] += 1
+            else:
+                tags = config['run_metadata']['tags']
+                prefix = name + '='
+                self.assertTrue(any(t.startswith(prefix) for t in tags), name)
+                config['run_metadata']['tags'] = [prefix + 'different-registration' if t.startswith(prefix) else t for t in tags]
+            variants[name] = config
+        with tempfile.TemporaryDirectory(prefix='l9-step1-') as td, \
+             mock.patch.object(inputs, 'authenticate_bundle_launch_lineage', return_value=None), \
+             mock.patch.object(inputs, '_source_provenance_admission_problems', return_value=()), \
+             mock.patch.object(inputs, '_realized_identity_matches_config', return_value=True), \
+             mock.patch.object(inputs, '_floor_request_or_refusal') as floor:
+            for name, config in variants.items():
+                with self.subTest(variant=name):
+                    bundle = Path(td) / name
+                    bundle.mkdir()
+                    for filename, value in (('config.json', inputs._typed_config(config)),
+                                            ('metadata.json', _stack_metadata_for(config)),
+                                            ('summary_metrics.json', {'status': 'succeeded'})):
+                        (bundle / filename).write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+                    row = inputs._read_bundle({}, bundle, Path(td), source, lambda *_: ())
+                    self.assertEqual(row.inclusion_status, 'included' if name == 'control' else 'excluded')
+                    self.assertEqual(row.base_reason_codes, () if name == 'control' else ('config_hash_mismatch',))
+                    if name != 'control':
+                        self.assertNotEqual(row.config_sha256, row.expected_config_sha256)
+                        self.assertNotEqual(inputs._typed_config(row.raw_config), inputs._typed_config(source))
+            floor.assert_not_called()
+
+
+class HazardConsumerDeclarationTests(unittest.TestCase):
+    def setUp(self):
+        import shutil
+        self.temporary = tempfile.TemporaryDirectory(prefix='l9-consumer-')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.pack = self.root / 'pack'
+        shutil.copytree(ROOT / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5', self.pack)
+        self.fixture = d117_fixture.D117ContrastV5PackTests()
+        self.fixture.init_fixture_git(self.root)
+        self.fixture.commit_fixture(self.root, 'synthetic hazard declaration')
+
+    def case(self, unit_id='A/decode'):
+        from joulewise.window_lineage import HAZARD_LINEAGE_SCHEMA
+        tree = json.loads((self.pack / 'plan_tree.json').read_bytes())
+        unit = next(u for u in tree['arm_attachments']['identity_pin_projection']['identity_units']
+                    if u['identity_unit_id'] == unit_id)
+        config = json.loads((self.pack / unit['config_inventory'][0]['path']).read_bytes())
+        family = unit['consumer_bindings'][0]['family']
+        metric = 'phase_energy_j.' + ('decode' if unit_id.endswith('/decode') else 'prefill')
+        metadata = _stack_metadata_for(config)
+        stack = floor_stack_identity(config, metadata)
+        cell = make_cell(cell_id='source', regime=make_regime(stack_identity=stack), condition=family, metric=metric)
+        cell['key']['window_class'] = 'phase'
+        artifact = {'artifact_id': 'synthetic-hazard-floor', 'calibration_scope': 'window_a', 'cells': [cell], 'transport_groups': []}
+        binding = FloorEvidenceBinding(frozenset({'source'}),
+            {'source': scientific_config_identity_sha256(config)},
+            {'source': identity_pins.stack_identity_sha256(stack)}, frozenset(), {}, ())
+        lineage = {'pack_root': str(self.pack), 'pack_sha256': committed_pack_tree_sha256(self.pack),
+                   'launch_lineage': {'schema_version': HAZARD_LINEAGE_SCHEMA}}
+        rows = [_bundle_evidence('hazard-member', config, metadata, launch_lineage=lineage)]
+        return artifact, binding, {'floor_selector': {'metric': metric, 'window_class': 'phase'}}, family, rows
+
+    def request(self, case):
+        from joulewise.analysis_engine.inputs import _floor_request_or_refusal
+        notes = []
+        result = _floor_request_or_refusal(*case, limitations=notes)
+        return result, notes
+
+    def test_each_sealed_hazard_identity_unit_authenticates_without_seam(self):
+        from joulewise.analysis_engine.inputs import FloorRequest, _HazardConsumerIdentities
+        for unit in ('A/decode', 'B/decode', 'A/prefill_p2048', 'B/prefill_p2048'):
+            with self.subTest(unit=unit):
+                case = self.case(unit)
+                declaration = _frozen_consumer_identity_set(case[4], case[3])
+                self.assertIsInstance(declaration, _HazardConsumerIdentities)
+                self.assertEqual(declaration.identities, frozenset({scientific_config_identity_sha256(case[4][0].raw_config)}))
+                request, notes = self.request(case)
+                self.assertIsInstance(request, FloorRequest)
+                self.assertEqual(notes, [])
+
+    def test_bad_pack_digest_is_scoped_limitation_and_still_resolves(self):
+        from joulewise.analysis_engine.inputs import FloorRequest
+        case = self.case()
+        case[4][0].launch_lineage['pack_sha256'] = '0' * 64
+        request, notes = self.request(case)
+        self.assertIsInstance(request, FloorRequest)
+        self.assertEqual(notes, ['consumer_identity_set_unauthenticated:' + case[3]])
+        self.assertEqual(FrozenConsumerIdentitySetTests()._production_floor_resolution(case).status, 'exact')
+
+    def test_unreadable_declarations_are_limitations(self):
+        from joulewise.analysis_engine.inputs import FloorRequest
+        original = (self.pack / 'plan_tree.json').read_bytes()
+        for attack in ('no_unit', 'two_units', 'file_digest'):
+            with self.subTest(attack=attack):
+                tree = json.loads(original)
+                projection = tree['arm_attachments']['identity_pin_projection']
+                unit = next(u for u in projection['identity_units'] if u['identity_unit_id'] == 'A/decode')
+                if attack == 'no_unit':
+                    unit['consumer_bindings'] = []
+                elif attack == 'two_units':
+                    projection['identity_units'][1]['consumer_bindings'] = copy.deepcopy(unit['consumer_bindings'])
+                else:
+                    unit['config_inventory'][0]['sha256'] = '0' * 64
+                # The observed bundle comes from the honest registration; only
+                # its second declaration read is damaged in this synthetic pack.
+                case = self.case()
+                (self.pack / 'plan_tree.json').write_text(json.dumps(tree, indent=2, sort_keys=True) + '\n')
+                self.fixture.commit_fixture(self.root, attack)
+                case[4][0].launch_lineage['pack_sha256'] = committed_pack_tree_sha256(self.pack)
+                request, notes = self.request(case)
+                self.assertIsInstance(request, FloorRequest)
+                self.assertEqual(notes, ['consumer_identity_set_unauthenticated:' + case[3]])
+                (self.pack / 'plan_tree.json').write_bytes(original)
+                self.fixture.commit_fixture(self.root, 'restore declaration')
+
+    def test_only_closed_recording_fields_become_limitations(self):
+        from joulewise.analysis_engine.inputs import FloorRequest
+        for section, field in (('hardware_target', 'notes'), ('run_metadata', 'project'), ('run_metadata', 'operator')):
+            with self.subTest(field=field):
+                case = self.case()
+                case[4][0].raw_config[section][field] = 'recording difference'
+                request, notes = self.request(case)
+                self.assertIsInstance(request, FloorRequest)
+                self.assertEqual(notes, ['consumer_identity_recording_difference:' + case[3]])
+
+    def test_multiple_declared_recording_variants_never_add_an_ambiguity_refusal(self):
+        from joulewise.analysis_engine.inputs import FloorRequest
+        case = self.case()
+        tree = json.loads((self.pack / 'plan_tree.json').read_bytes())
+        unit = next(u for u in tree['arm_attachments']['identity_pin_projection']['identity_units']
+                    if u['identity_unit_id'] == 'A/decode')
+        row = unit['config_inventory'][1]
+        second = copy.deepcopy(case[4][0].raw_config)
+        second['run_id'] = json.loads((self.pack / row['path']).read_bytes())['run_id']
+        second['hardware_target']['notes'] = 'second declared recording'
+        raw = (json.dumps(second, indent=2, sort_keys=True) + '\n').encode()
+        (self.pack / row['path']).write_bytes(raw)
+        row['sha256'] = hashlib.sha256(raw).hexdigest()
+        (self.pack / 'plan_tree.json').write_text(json.dumps(tree, indent=2, sort_keys=True) + '\n')
+        self.fixture.commit_fixture(self.root, 'two recording variants of one measurement')
+        case[4][0].launch_lineage['pack_sha256'] = committed_pack_tree_sha256(self.pack)
+        original_hash = case[1].cell_scientific_identity_sha256['source']
+        second_hash = scientific_config_identity_sha256(second)
+        self.assertNotEqual(original_hash, second_hash)
+        case[4][0].raw_config['hardware_target']['notes'] = 'third recording value'
+        for source_hash in (original_hash, second_hash):
+            with self.subTest(source_hash=source_hash):
+                case[1].cell_scientific_identity_sha256['source'] = source_hash
+                request, notes = self.request(case)
+                self.assertIsInstance(request, FloorRequest)
+                self.assertEqual(notes, ['consumer_identity_recording_difference:' + case[3]])
+
+    def test_tags_and_all_other_fields_still_refuse(self):
+        for field in ('measurement-arm', 'df-condition', 'decode-prompt', 'ordinary-tag',
+                      'suite_manifest_sha256', 'output_tokens', 'idle_seconds', 'metadata_notes', 'ambient_temp_c'):
+            with self.subTest(field=field):
+                case = self.case()
+                config = case[4][0].raw_config
+                if field == 'suite_manifest_sha256':
+                    config['workload_profile'][field] = 'f' * 64
+                elif field == 'output_tokens':
+                    config['workload_profile'][field] += 1
+                elif field == 'metadata_notes':
+                    config['run_metadata']['notes'] = 'not allowlisted'
+                elif field == 'ambient_temp_c':
+                    config['run_metadata'][field] = 23.0
+                elif field == 'idle_seconds':
+                    config['sampling'][field] += 1
+                else:
+                    config['run_metadata']['tags'].append(field + '=different')
+                result, notes = self.request(case)
+                self.assertEqual(result, ('consumer_identity_undeclared',))
+                self.assertEqual(notes, [])
+
+    def test_multi_identity_unauthenticated_hazard_never_falls_to_transport(self):
+        case = self.case()
+        second = copy.deepcopy(case[4][0])
+        second.raw_config['run_metadata']['tags'].append('different-identity')
+        case[4].append(second)
+        for row in case[4]:
+            row.launch_lineage['pack_sha256'] = '0' * 64
+        result, notes = self.request(case)
+        self.assertEqual(result, ('consumer_identity_undeclared',))
+        self.assertEqual(notes, ['consumer_identity_set_unauthenticated:' + case[3]])

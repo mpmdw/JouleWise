@@ -32,7 +32,7 @@ The durable states are:
 - `LAUNCHING`: launch predicates passed and a resident supervisor is being forked.
 - `ACTIVE`: the recorded child PID, start time, and activation are live in both `state.json` and `magistrate.lock`. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
-- `FENCED`: a discovered or installed plan's active span forbids launch. A discovered active span with an already-owned session instead returns `STANDDOWN_<phase>` with `adopt=True` to drain that session; an installed-only fence returns `FENCED` with `adopt=False` after the stop checks clear. `installed_agent_fence` reads `~/Library/LaunchAgents/com.joulewise.night.plist` and `com.joulewise.night.deadman.plist`, extracts `--plan` from `ProgramArguments`, parses that plan with `NightPlan.from_mapping`, and uses the same `plan_span_active` arithmetic as discovery. An unreadable LaunchAgents directory, unparseable plist or unreadable/invalid referenced plan enters `HOLD_UNSAFE`. The installer also requires the resolved plan path to be its own `<custody_root>/night_plan.json`.
+- `FENCED`: a discovered or installed plan's active span forbids launch. An active span (discovered or installed alike) with an already-owned session instead returns `STANDDOWN_<phase>` with `adopt=True` to drain that session. `load_plans` reads `~/Library/LaunchAgents/com.joulewise.night.plist` and `com.joulewise.night.deadman.plist`, extracts `--plan` from `ProgramArguments`, parses that plan with `NightPlan.from_mapping`, and uses the same `plan_span_active` arithmetic as discovery. An unreadable LaunchAgents directory, unparseable plist or unreadable/invalid referenced plan enters `HOLD_UNSAFE` and drains a resident session. The installer also requires the resolved plan path to be its own `<custody_root>/night_plan.json`.
 - `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the cooperative drain, clamped by any parseable plan to REQUEST/TERM/KILL at t0−8/−6/−5 minutes. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its cooperative drain on monotonic time, clamped by any parseable plan to the t0−8/−6/−5-minute ladder. Once that conservative drain begins, later sane samples do not cancel it.
@@ -110,25 +110,27 @@ referenced plan holds `HOLD_UNSAFE`. No clock hour alone creates a fence.
 The short tick's `decide()` evaluates these checks in source order:
 
 1. Reset reboot-bound backoff, then return `CLOCK_UNCERTAIN` on an unsafe clock.
-2. Load sibling plans; unreadable/malformed plans and armed-plan conflicts return
-   `HOLD_UNSAFE`. Validate lock ownership, holding unsafe on unavailable process
-   evidence or an unresolved lock/twin condition.
-3. Read both installed plists through `installed_agent_fence`. Unreadable or
-   malformed installed inputs return `HOLD_UNSAFE` with the detail prefix
-   `installed_agent_fence:`. A valid active installed plan records a fence reason
-   `installed_plan:<plan_id>` for the later check.
-4. Compute discovered active spans and probe remote stop state; local `STOP`
-   overrides that observation. A discovered active span then takes the census /
-   owned-session branch above before either stop result is returned.
-5. Without a discovered active span, return `STOPPED` or `NETWORK_UNCERTAIN`
-   when applicable, with `adopt=True` only if there is an owned session.
-6. If stop checks clear, an active installed-plan fence returns `FENCED` with
-   `adopt=False`, even when its plan is absent from sibling discovery.
-7. Otherwise adopt a live owner as `ACTIVE`, enforce backoff, check for a
+2. Load plans: the sibling custody scan plus the plans named by the two installed
+   plists (`com.joulewise.night` and `com.joulewise.night.deadman`; `--plan` from
+   `ProgramArguments`), one entry per (plan id, resolved plan path). This is how a
+   block-6 plan under `/Users/edr/night-b6/sessions/`, which the custody scan does
+   not reach, gets the same request/TERM/KILL ladder. Unreadable or malformed plans
+   or plists (any exception, with the detail prefix `installed_agent_fence:` for a
+   plist) and armed-plan conflicts return `HOLD_UNSAFE`, which also drains a resident
+   session; a readable sibling plist keeps its plan's absolute deadlines. Validate
+   lock ownership, holding unsafe on unavailable process evidence or an unresolved
+   lock/twin condition.
+3. Compute active spans over the combined plans and probe remote stop state; local
+   `STOP` overrides that observation. An active span then takes the census /
+   owned-session branch above before either stop result is returned, so a STOP
+   during an installed plan's window reports the span's state, not `STOPPED`.
+4. Without an active span, return `STOPPED` or `NETWORK_UNCERTAIN` when
+   applicable, with `adopt=True` only if there is an owned session.
+5. Otherwise adopt a live owner as `ACTIVE`, enforce backoff, check for a
    remaining lock, and only then return `LAUNCHING`.
 
-Thus an installed-only `FENCED` return does not launch or adopt a supervisor;
-re-adoption is subject to the earlier branches and all other predicates.
+`installed_agent_fence` remains as a test helper that lists active installed plans
+as `installed_plan:<plan_id>`; `decide()` and the launch fence no longer call it.
 
 For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so the deadlines are REQUEST at `t0 - 8 min`, TERM at `t0 - 6 min`, and KILL at `t0 - 5 min`. Plan-boundary enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
 

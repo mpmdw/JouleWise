@@ -39,6 +39,9 @@ from .estimators import (
 )
 from .inputs import (
     AnalysisInputError,
+    REMOVED_UNIT_LABEL,
+    sibling_floor_pinset,
+    is_hazard_runs_root,
     BundleEvidence,
     declared_evidence_roots,
     FloorEvidenceBinding,
@@ -374,6 +377,8 @@ def _resolve_contrast_floor(
     contrast: Mapping[str, Any],
     included: Mapping[str, Sequence[BundleEvidence]],
     request_factory: _FloorRequestFactory | None,
+    *,
+    limitations: list[str] | None = None,
 ) -> list[FloorResolution]:
     resolutions: list[FloorResolution] = []
     is_v3 = is_abba_v3_consumable_schema(
@@ -398,6 +403,7 @@ def _resolve_contrast_floor(
                 contrast,
                 condition_id,
                 evidence,
+                limitations=limitations,
             )
             if isinstance(request_or_refusal, tuple):
                 request = None
@@ -477,6 +483,14 @@ def _resolve_contrast_floor(
                 request,
                 evidence_binding=binding,
             )
+            if limitations is not None and resolution.status == "exact":
+                # Source selection is known here. Deriving the note with the
+                # real resolver also leaves pure arithmetic test doubles alone.
+                floor_cells = {cell["cell_id"]: cell for cell in inputs.floor_artifact.get("cells", [])}
+                for cell_id in resolution.source_cell_ids:
+                    if floor_cells[cell_id]["key"]["condition_family_id"] != condition_id:
+                        limitations.append(
+                            f"floor_cell_from_floor_pack:{condition_id}:{cell_id}:no_envelope_comparison")
             resolutions.append(resolution)
     return resolutions
 
@@ -540,7 +554,29 @@ def _prepare_contrast_v3(
         contrast["condition_b_id"]: [],
     }
 
+    try:
+        cell = inputs.kept_quads[contrast["contrast_id"]] if inputs.kept_quads is not None else None
+    except KeyError as exc:
+        raise AnalysisInputError("kept_quads_required") from exc
+    removed = {unit.unit_id: unit for unit in cell.dropped} if cell is not None else {}
+    kept_codes = {"paired_block_incomplete", "fixed_n_plan_incomplete", "window_evidence_precheck_missing",
+                  "campaign_cooldown_evidence_missing", "idle_window_suspect"}
+    def stop(run_id, code):
+        if cell is not None:
+            try:
+                inputs.kept_units.stop_if_member_code_on_kept_unit(contrast["contrast_id"], run_id, code)
+            except ValueError as exc:
+                # CLI prints exception text; identifiers/codes stay in restricted custody.
+                raise AnalysisInputError("member_code_on_kept_unit") from exc
+            raise AnalysisInputError("member_code_on_kept_unit")
+
     for block_id in contrast["block_ids"]:
+        if block_id in removed:
+            unit = removed[block_id]
+            block_rows.append({"block_id": block_id, "bundle_a_id": None, "bundle_b_id": None,
+                "position_bundle_ids": dict(zip(("A1", "B1", "B2", "A2"), unit.run_ids)),
+                "included": False, "reason_codes": [REMOVED_UNIT_LABEL]})
+            continue
         block = block_by_id.get(block_id)
         positions = (
             block.get("position_entry_ids")
@@ -549,6 +585,8 @@ def _prepare_contrast_v3(
         )
         reasons: list[str] = []
         if not isinstance(positions, Mapping):
+            if cell is not None:
+                stop(next(unit.run_ids[0] for unit in cell.kept["quad"] if unit.unit_id == block_id), "paired_block_incomplete")
             reasons.append("paired_block_incomplete")
             block_rows.append(
                 {
@@ -571,10 +609,17 @@ def _prepare_contrast_v3(
                 if isinstance(entry, Mapping)
                 else None
             )
+            if cell is not None and (evidence is None or not evidence.included):
+                stop(entry["run_id"] if isinstance(entry, Mapping) else
+                     next(unit.run_ids[0] for unit in cell.kept["quad"] if unit.unit_id == block_id),
+                     "paired_block_incomplete")
             if evidence is None:
                 reasons.append("bundle_missing")
             else:
                 evidence_by_position[position] = evidence
+                for code in evidence.base_reason_codes:
+                    if code in kept_codes:
+                        stop(evidence.bundle_id, code)
                 reasons.extend(evidence.base_reason_codes)
 
         values: dict[str, float | None] = {}
@@ -584,8 +629,12 @@ def _prepare_contrast_v3(
             value = metric_value(evidence.summary or {}, evidence_metric)
             values[position] = value
             if value is None:
+                stop(evidence.bundle_id, "paired_block_incomplete")
                 reasons.append("metric_missing_or_nonfinite")
             precheck = window_evidence_precheck(evidence, evidence_metric)
+            for code in precheck["reasons"]:
+                if code in kept_codes:
+                    stop(evidence.bundle_id, code)
             reasons.extend(precheck["reasons"])
             governed, stochastic_reasons = governed_stochastic_variance(
                 evidence, evidence_metric
@@ -722,12 +771,12 @@ def _prepare_contrast_v3(
             )
 
     complete_blocks = len(observation_parts)
-    planned_n = inputs.manifest["design"]["sampling_plan"]["planned_n_blocks"]
+    planned_n = cell.n_b if cell is not None else inputs.manifest["design"]["sampling_plan"]["planned_n_blocks"]
     if complete_blocks < 2:
         global_reasons.append("insufficient_complete_blocks")
     if complete_blocks < planned_n:
         global_reasons.append("fixed_n_plan_incomplete")
-    if any(not row["included"] for row in block_rows):
+    if any(not row["included"] and row["reason_codes"] != [REMOVED_UNIT_LABEL] for row in block_rows):
         global_reasons.append("paired_block_incomplete")
 
     observations = tuple(
@@ -745,8 +794,9 @@ def _prepare_contrast_v3(
         if len(observations) >= 2
         else None
     )
+    limitations: list[str] = []
     resolutions = _resolve_contrast_floor(
-        inputs, contrast, included_by_condition, request_factory
+        inputs, contrast, included_by_condition, request_factory, limitations=limitations
     )
     floor = _decorate_v3_floor(
         inputs.manifest,
@@ -771,12 +821,15 @@ def _prepare_contrast_v3(
     }
     return {
         "manifest": contrast,
+        **({"kept_n": cell.n_b, "removed_block_ids": [bid for bid in contrast["block_ids"] if bid in removed]}
+           if cell is not None else {}),
         "block_rows": block_rows,
         "observation_parts": observation_parts,
         "observations": observations,
         "estimate": estimate,
         "floor": floor,
         "floor_resolutions": tuple(resolutions),
+        "limitations": list(dict.fromkeys(limitations)),
         "global_reason_codes": ordered_reason_codes(global_reasons),
         "confirmatory_status": confirmatory_status,
         "randomization_check": randomization,
@@ -1042,8 +1095,9 @@ def _prepare_contrast(
         else None
     )
 
+    limitations: list[str] = []
     resolutions = _resolve_contrast_floor(
-        inputs, contrast, included_by_condition, request_factory
+        inputs, contrast, included_by_condition, request_factory, limitations=limitations
     )
     floor = _combined_floor(resolutions)
     if ratio_estimand is not None:
@@ -1088,6 +1142,7 @@ def _prepare_contrast(
         "estimate": estimate,
         "floor": floor,
         "floor_resolutions": tuple(resolutions),
+        "limitations": list(dict.fromkeys(limitations)),
         "global_reason_codes": ordered_reason_codes(global_reasons),
         "confirmatory_status": confirmatory_status,
         "randomization_check": randomization,
@@ -1107,7 +1162,7 @@ def _base_reasons(prepared: Mapping[str, Any], *, omit_block: str | None = None)
         # audit, but >=2 complete pairs still support the B4 descriptive
         # estimate.  The fixed-n failure is not_resolvable, not not_estimable.
         reasons = [reason for reason in reasons if reason != "metric_missing_or_nonfinite"]
-    return ordered_reason_codes(reasons)
+    return ordered_reason_codes(reason for reason in reasons if reason != REMOVED_UNIT_LABEL)
 
 
 def _interpolation_reasons(estimate: PairedEstimate | None, floor: Mapping[str, Any]) -> list[str]:
@@ -1398,7 +1453,8 @@ def _loo_family(
         contrast_id
         for contrast_id in contrast_ids
         if len(prepared_by_id[contrast_id]["observations"])
-        == len(prepared_by_id[contrast_id]["manifest"]["block_ids"])
+        == (inputs.kept_quads[contrast_id].n_b if inputs.kept_quads is not None
+            else len(prepared_by_id[contrast_id]["manifest"]["block_ids"]))
     }
     if not complete_ids:
         return {contrast_id: [] for contrast_id in contrast_ids}
@@ -1451,6 +1507,12 @@ def _loo_family(
     rows: dict[str, list[dict[str, Any]]] = {contrast_id: [] for contrast_id in contrast_ids}
     multiplicity = family["multiplicity"]
     for omitted_stratum in strata:
+        # Off block 5 every complete contrast gets a row, exactly as before.
+        kept_for_stratum = complete_ids if inputs.kept_quads is None else {cid for cid in complete_ids
+            if any(observation.block_id == block_id_by_stratum[cid][omitted_stratum]
+                   for observation in prepared_by_id[cid]["observations"])}
+        if not kept_for_stratum:
+            continue
         estimates: dict[str, PairedEstimate | None] = {}
         floors: dict[str, dict[str, Any]] = {}
         floor_resolutions: dict[str, tuple[FloorResolution, ...]] = {}
@@ -1494,7 +1556,7 @@ def _loo_family(
             q=multiplicity["q"],
         )
         for contrast_id in contrast_ids:
-            if contrast_id not in complete_ids:
+            if contrast_id not in kept_for_stratum:
                 continue
             omitted_block = block_id_by_stratum[contrast_id][omitted_stratum]
             prepared = prepared_by_id[contrast_id]
@@ -1516,7 +1578,8 @@ def _loo_family(
                 floor=floor,
                 randomization=randomizations[contrast_id],
             )
-            active_threshold = prepared["manifest"].get("mde")
+            active_threshold = (floor["active_floor_j"] if inputs.kept_quads is not None
+                                else prepared["manifest"].get("mde"))
             if not isinstance(active_threshold, (int, float)) or isinstance(active_threshold, bool):
                 active_threshold = floor["active_floor_j"]
             full_estimate = prepared["estimate"]
@@ -1629,6 +1692,8 @@ def _contrast_row(
             "confirmatory_status": prepared["confirmatory_status"],
             "planned_n": len(contrast["block_ids"]),
             "observed_complete_n": len(prepared["observations"]),
+            **({"kept_n": prepared["kept_n"], "removed_block_ids": prepared["removed_block_ids"]}
+               if "kept_n" in prepared else {}),
         },
         "estimator": _estimator_dict(estimate, contrast["estimator"], len(prepared["observations"])),
         "deterministic_bounds": deterministic,
@@ -1661,6 +1726,9 @@ def analyze_claims(
     legacy_l1_mechanics: bool = False,
     legacy_allowlist: frozenset[tuple[str, str]] | None = None,
     neg8_harvest_archive: Path | None = None,
+    kept_units: Any = None,
+    archive_contexts: Mapping[str, Any] | None = None,
+    gamma_archive: Any = None,
     _floor_request_factory: _FloorRequestFactory | None = None,
     _pair_stochastic_factory: _PairStochasticFactory | None = None,
 ) -> dict[str, Any]:
@@ -1680,6 +1748,7 @@ def analyze_claims(
             declared_evidence_roots(
                 Path(floor_artifact_path),
                 evidence_roots,
+                **({"require_sibling_pinset": True} if is_hazard_runs_root(Path(runs_root)) else {}),
             ),
         )
 
@@ -1691,6 +1760,8 @@ def analyze_claims(
         strict_validator=strict_validator,
         evidence_roots=evidence_roots,
         neg8_harvest_archive=neg8_harvest_archive,
+        **({"kept_units": kept_units, "archive_contexts": archive_contexts, "gamma_archive": gamma_archive}
+           if kept_units is not None or archive_contexts is not None or gamma_archive is not None else {}),
     )
     if inputs.manifest.get("schema_version") == FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA:
         transported_contrasts = [
@@ -1815,6 +1886,11 @@ def analyze_claims(
             )
         )
 
+    limitations = list(inputs.limitations)
+    for prepared in prepared_by_id.values():
+        for note in prepared["limitations"]:
+            if note not in limitations:
+                limitations.append(note)
     all_audits = list(inputs.registered.values()) + list(inputs.extra_audits)
     demoted_ids = sorted(
         row["contrast_id"]
@@ -1863,7 +1939,7 @@ def analyze_claims(
             },
             "runs_root_label": Path(runs_root).name or "runs",
             "evidence_class": evidence_class,
-            "limitations": ["legacy_l1_mechanics_only"] if legacy_l1_mechanics else [],
+            "limitations": (["legacy_l1_mechanics_only"] if legacy_l1_mechanics else []) + limitations,
         },
         "supersession_audit": [
             dict(row) for row in inputs.supersession_audit
@@ -1886,15 +1962,19 @@ def analyze_claims(
         "families": family_rows,
         "contrasts": contrast_rows,
     }
+    floor_validation_kwargs = ({"floor_pinset_path": sibling_floor_pinset(Path(floor_artifact_path))}
+                               if inputs.kept_quads is not None else {})
     artifact = finalize_claim_verdicts(
         body,
         frozen_manifest=inputs.manifest,
+        **floor_validation_kwargs,
     )
     if output_path is not None:
         write_claim_verdicts_atomic(
             Path(output_path),
             artifact,
             frozen_manifest=inputs.manifest,
+            **floor_validation_kwargs,
         )
     return artifact
 

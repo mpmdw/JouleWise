@@ -1,0 +1,14 @@
+{
+  "claim_licensing": true,
+  "conditions": [
+    "instrument_calibration_bracket_missing",
+    "neg8_bracket_missing",
+    "neg8_bracket_reference_invalid",
+    "neg8_drift_bound_underived",
+    "neg8_idle_sub_drift_bound_underived",
+    "whole_window_campaign_membership_unresolved"
+  ],
+  "excluded_bundles": [],
+  "member_failures": [],
+  "status": "failed"
+}

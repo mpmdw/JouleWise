@@ -643,7 +643,35 @@ derivation never edits its declaration or census.
   cells, compatible consumer families, runtime stack, and admissible stress
   envelope used by condition-family transport.
 
-### Analysis consumption
+### Hazard declaration consumption (L9 ruling, 2026-10-20)
+
+For an authenticated hazard lineage, an unprojected sealed pack with a null
+freeze receipt declares each family's consumer identities in its single identity
+unit. The gate authenticates the committed pack-tree digest, exactly one unit for
+the family, and every inventoried config's bytes and SHA-256. The frozen ARM
+route described below retains its U8 receipt requirements.
+
+A hazard declaration that cannot be re-authenticated yields
+`consumer_identity_set_unauthenticated:<family>` in `inputs.limitations`.
+This is justified by `_read_bundle`: both bundle config bytes and typed config
+must match the sealed plan's source config, otherwise `config_hash_mismatch`
+excludes the bundle before it supplies floor-request evidence. The five §I.1
+pinning variants (suite digest, output length, measurement-arm, df-condition,
+decode-prompt) each exercise that exclusion. A multi-identity arm with an
+unauthenticated declaration still refuses `consumer_identity_undeclared` and
+never falls through to transport.
+
+Only `hardware_target.notes`, `run_metadata.project`, and
+`run_metadata.operator` may differ as recording fields: notes describe hardware
+for people; project and operator label the record. None determines workload,
+phase, runtime, or telemetry. Their differences yield
+`consumer_identity_recording_difference:<family>`. Every tag and all other typed
+fields still bind. The existing omission of run_id from scientific identity
+continues to identify physical repeats. An undeclared scientific config still
+refuses `consumer_identity_undeclared`. Each limitation travels in the existing
+claim-verdict list and on to the validated fill input.
+
+### Analysis consumption (frozen ARM route)
 
 For successor packs, every accepted bundle carries an authenticated launch
 lineage that resolves one pack root. The analysis input gate follows that
@@ -737,27 +765,38 @@ them.
 
 ### What happens after arm
 
-The ordinary launch step authenticates and replays the arm receipt, pack
-digest, launch manifest, and one-use consumption record (each defined in
-§Analysis-gate definitions). It does not call
-`verify_frozen_projection`, `_derive_projection_units`, runtime `prepare`, or
-the tokenizer (`scripts/launch_window.py:102-167,239-280`). Therefore a model,
-runtime, or tokenizer change after arm and before `execve`—the point where the
-launcher process replaces itself with the reviewed collection command—is not
-re-derived by the launch step. The scheduled work row
-`V5-LAUNCH-REALIZATION-RECHECK-01` is specifically responsible for moving this
-boundary by re-deriving after consumed-launch verification and before bundle
-creation.
+The ordinary launch step first authenticates and replays the arm receipt,
+pack digest, launch manifest, and one-use consumption record (each defined in
+§Analysis-gate definitions; `verify_consumed_launch`, called at
+`scripts/launch_window.py:340`). It then re-derives the identity projection
+with the helpers arm uses (`_recheck_identity_projection`,
+`scripts/launch_window.py:277-301`, called at `:348`): it loads the frozen
+projection and its freeze receipt and calls `_derive_projection_units`, which
+reads the model and config files, prepares the runtime once per identity
+unit, and re-derives the prompt realization (rendering and tokenizing the
+prompt again) for every registered prompt-realization configuration. It refuses with
+`readiness_identity_environment_dirty` unless the frozen pack still matches
+its receipt, the re-derived `projection_input_sha256` equals the frozen value,
+and every identity unit's `model_runtime_config` is unchanged. The recheck
+runs after `verify_consumed_launch` and before `execve`—the point where the
+launcher process replaces itself with the reviewed collection command—and,
+under a night driver, before the driver may claim the chain start, so a
+refusal leaves the chain unstarted and no bundle is created. A model, runtime,
+or tokenizer change between arm and that recheck is therefore caught before
+collection. This recheck is the work row `V5-LAUNCH-REALIZATION-RECHECK-01`,
+implemented in commit 578ff42c4 (2026-10-04).
 
-If collection nevertheless produces a **succeeded bundle**, the completed run
+A change that lands after the recheck, while collection runs, is not
+re-derived before work begins. If collection nevertheless produces a
+**succeeded bundle**, the completed run
 directory whose status says collection succeeded, the bundle reader later
 compares the registered triple with coherent realized prompt evidence
 and reports missing, inconsistent, or mismatching realization evidence
 (`joulewise/bundle_read.py:931-1077`). That is a post-hoc catch: it can reject
 the bundle after work occurred, but cannot prevent the physical night. Because
 assurance language must stay no stronger than the evidence named with it, the
-present mechanism is therefore described as freeze-and-arm detection, not
-continuous launch-time assurance.
+present mechanism is therefore described as detection at freeze, arm, and
+launch, not continuous assurance during collection.
 
 ## 7. Receipt schema and refusal vocabulary
 
@@ -1045,8 +1084,9 @@ plan_tree + frozen three-pin values + PACK-CUSTODY freeze receipt/sidecar
 PASS or REFUSE arm-reverification receipt/sidecar
         |
         | ARROW L — launch_window:
-        | REPLAY/AUTHENTICATE receipt and consumption bindings;
-        | DO NOT RE-DERIVE model, runtime, tokenizer, or prompt
+        | REPLAY/AUTHENTICATE receipt and consumption bindings,
+        | then RE-DERIVE model, config, runtime, tokenizer, and prompt
+        | before execve; refuse on any mismatch
         v
 [BOX L — LAUNCHED COLLECTION]
 execve of the reviewed window command; physical energy is collected
@@ -1059,9 +1099,10 @@ PASS, evidence-missing, evidence-inconsistent, or realization-mismatch
 ```
 
 Every box is named `D`, `F`, `A`, `L`, or `B`; every arrow is named `F`, `A`,
-`L`, or `B`. Only arrows F and A re-derive. Arrow L only replays authenticated
-bytes. Arrow B is too late to save the night, which is the interval owned by
-`V5-LAUNCH-REALIZATION-RECHECK-01`.
+`L`, or `B`. Arrows F, A, and L re-derive; arrow L does so after replaying the
+authenticated bytes and before any physical work. Arrow B runs after the
+physical work, so it can reject a bundle but cannot save the night; it is the
+only catch for a change that lands during collection, after arrow L.
 
 ## 10. Tests that pin the clauses
 
@@ -1093,19 +1134,19 @@ bytes. Arrow B is too late to save the night, which is the interval owned by
 | Closed five-code vocabulary | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_projection_reason_vocabulary_is_closed` and `test_projection_reasons_are_registered_in_d078_decision_vocabulary` |
 | Every projection refusal code becomes an arm-readiness row refusal | `tests.test_arm_readiness_integration.ArmReadinessIntegrationTests.test_all_five_u11_refusals_propagate_through_identity_row` |
 | Refusal registry covers dynamically propagated projection codes | `tests.test_arm_readiness_integration.ArmReadinessIntegrationTests.test_refusal_registry_coverage_and_defensive_unreachable_justifications` |
-| Launch does not re-derive after arm | No test in these two modules pins this negative boundary; the executable evidence is `scripts/launch_window.py:102-167,239-280`, and `V5-LAUNCH-REALIZATION-RECHECK-01` is the named follow-up. |
+| Launch re-derives after consumed-launch verification and refuses a post-arm tokenizer or model-file change before bundle creation; a clean projection reaches the unchanged exec | `tests.test_launch_window_realization_recheck.LaunchRealizationRecheckTests.test_post_arm_tokenizer_mutation_refuses_before_bundle_create`, `test_post_arm_model_file_mutation_refuses_before_bundle_create`, and `test_clean_projection_reaches_unchanged_exec_and_bundle_create` |
 
-The launch boundary is scheduled to move under that final row: the named
-follow-up will re-derive after `verify_consumed_launch` and before
-`RunBundleWriter.create`.
+Under a night driver, the same module's
+`test_driver_tokenizer_mutation_after_consumed_replay_never_claims_start`
+shows that a launch-time refusal never claims the chain start.
 
 ## 11. Provenance of these rules
 
 The preceding sections are self-contained; the labels here only trace their
 policy sources. Rulings 44c and 150a R-150-4 are the source of the seven-key
 projection-input allowlist and the exclusion of packaging versions that do not
-change a hashed output. Ruling 150a R-150-2 owns the scheduled launch-time
-recheck. D-119 is the source of the rule that assurance wording may be no
+change a hashed output. Ruling 150a R-150-2 owns the launch-time recheck
+(implemented 2026-10-04). D-119 is the source of the rule that assurance wording may be no
 stronger than the evidence named with it. D-131 is the broader pack-specific
 alpha/beta/gamma roster policy; the `_v5` GAMMA generator enforces its exact
 ordered four-unit roster in addition to the generic validator.

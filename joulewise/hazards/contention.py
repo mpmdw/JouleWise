@@ -10,9 +10,12 @@ powermetrics, caffeinate, the monitor and the probes themselves.
 Arm, the dwell (plan §2.3): 30 s intervals; an interval is clean when no
 process outside the tree exceeds 0.05 CPU-s/s (5 % of one core).  READY after
 180 s of consecutive clean intervals (``HAZARD_ARM_CLEAN_S``; gate prune 2,
-A1); if none appears within 2700 s, REFUSE (the window is NULL).  ``kernel_task`` is included at the dwell, where the Mac
-should be idle.  An interval whose snapshot failed is UNMEASURED and breaks
-the clean run.
+A1); if none appears within 2700 s, REFUSE only when an interval measured
+contention, otherwise UNMEASURED. ``kernel_task`` is included at the dwell,
+where the Mac should be idle. An interval whose snapshot failed is UNMEASURED and breaks
+the clean run. An interval unmeasured solely because an outside CPU counter
+regressed without previous over-limit evidence is skipped: it neither breaks
+nor extends the clean run, and the number skipped is disclosed.
 
 In the window (flag only) the monitor journals an interval every 10 s;
 :func:`span_findings` gives ``contention.request_overlap`` when an outside
@@ -98,6 +101,7 @@ PS_ARGV = ("/bin/ps", "-Ao", "pid,ppid,lstart,time,ucomm")
 PROBE_TIMEOUT_S = 10.0
 KERNEL_TASK = "kernel_task"
 REPORT_FLOOR_CPU_S_PER_S = 0.005  # outside consumers below this are counted, not listed
+PS_TIME_QUANTUM_S = 0.01  # ps TIME renders cumulative CPU seconds to hundredths
 
 # The hazard arm's clean run (gate prune 2, A1).  Not prewindow.MIN_CLEAN_DWELL_S,
 # which stays 600 s for the legacy prewindow dwell.
@@ -333,10 +337,25 @@ def tree_identities(rows: Iterable[Mapping[str, Any]], roots: Iterable[int]) -> 
     return members
 
 
+def pin_roots(snapshot: Snapshot, roots: Iterable[int],
+              identities: dict[int, tuple[int, str]]) -> None:
+    """Pin each root's first observed identity for the collector's lifetime.
+
+    A member restarted under the same PID with a new identity is charged as
+    outside; it is never re-admitted as a root within this collector.
+    """
+
+    roots = set(roots)
+    for identity in snapshot.rows:
+        if identity[0] in roots:
+            identities.setdefault(identity[0], identity)
+
+
 def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
              include_kernel_task: bool, limit: float,
              previous_over: Mapping[tuple[int, str], float] | None = None,
-             aggregate_limit: float | None = None) -> dict[str, Any]:
+             aggregate_limit: float | None = None,
+             root_identities: Mapping[int, tuple[int, str]] | None = None) -> dict[str, Any]:
     """CPU-s/s of every process between two snapshots, split by tree membership.
 
     Ported from ``quiet_admission.interval_metrics``: a process present in both
@@ -344,9 +363,18 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     the interval contributes its whole counter; one that exited has no
     measurable delta and is listed as unaccounted.
 
+    ``root_identities`` pins each root's (pid, start) on first sight across
+    the collector's lifetime; standalone callers default to these snapshots.
+    ``tree_process_count`` counts distinct tree identities across both
+    snapshots, including exited tree processes, rather than current live PIDs.
+
     ``previous_over`` maps (pid, start) to the rate of each outside process
     that was above ``limit`` in the previous interval (:func:`over_limit`); one
-    of them that exited inside this interval makes it dirty at that rate.
+    of them that exited or regressed its counter inside this interval makes
+    it dirty at that rate. A regressed outside counter without that previous
+    evidence is unmeasured. Host CPU not attributed to measured counters and
+    its resolution are disclosed on the unaccounted entry, never used to
+    certify that process clean.
     ``aggregate_limit`` (None: not judged) makes the interval dirty when the
     host's busy CPU outside the tree exceeds it; with a limit, an unread host
     term leaves the interval unmeasured.
@@ -363,12 +391,28 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     if not math.isfinite(elapsed_s) or elapsed_s <= 0:
         result.update(error="snapshots are not in time order", clean=None)
         return result
-    union = {**before.rows, **after.rows}
-    tree = tree_identities(union.values(), tree_roots)
+    roots = set(tree_roots)
+    # Pin each root to its first observed identity. A reused root PID must
+    # not exempt its replacement, or that replacement's descendants.
+    if root_identities is None:  # standalone callers have only these two snapshots
+        pins: dict[int, tuple[int, str]] = {}
+        for snapshot in (before, after):
+            pin_roots(snapshot, roots, pins)
+        root_identities = pins
+    tree: set[tuple[int, str]] = set()
+    for snapshot in (before, after):
+        snapshot_roots = [pid for pid, identity in root_identities.items()
+                          if identity in snapshot.rows]
+        pids = tree_identities(snapshot.rows.values(), snapshot_roots)
+        # Close ancestry within each snapshot; an old child's ppid edge
+        # cannot give a new process reusing its PID tree membership.
+        tree.update(identity for identity in snapshot.rows if identity[0] in pids)
     wall_start_s = before.started.wall_ns / 1e9
     outside: list[dict[str, Any]] = []
     unaccounted: list[dict[str, Any]] = []
     exited_over: list[dict[str, Any]] = []
+    regressed_outside: list[dict[str, Any]] = []
+    ps_counter_reads = 0
     tree_cpu = 0.0
     kernel_task_cpu = None
     for identity in sorted(set(before.rows) | set(after.rows)):
@@ -390,13 +434,23 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
             # with TIME 0:00.00 while it is a zombie.  Its delta is unmeasurable.
             unaccounted.append({"pid": row["pid"], "command": row["command"],
                                 "start": row["start_identity"], "reason": "counter regressed"})
+            if identity not in tree and not (row["pid"] == 0 and row["command"] == KERNEL_TASK
+                                             and not include_kernel_task):
+                if previous_over and identity in previous_over:
+                    exited_over.append({
+                        "pid": row["pid"], "command": row["command"], "start": row["start_identity"],
+                        "cpu_s_per_s": previous_over[identity],
+                        "basis": "counter regressed inside this interval; its rate over the previous interval"})
+                else:
+                    regressed_outside.append(unaccounted[-1])
             continue
+        ps_counter_reads += 2 if first is not None else 1
         rate = delta / elapsed_s
         if row["command"] == KERNEL_TASK and row["pid"] == 0:
             kernel_task_cpu = rate
             if not include_kernel_task:
                 continue
-        if row["pid"] in tree:
+        if identity in tree:
             tree_cpu += rate
             continue
         outside.append({"pid": row["pid"], "command": row["command"],
@@ -410,6 +464,20 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     outside_aggregate = None if host_busy is None else host_busy - tree_cpu - excluded_kernel
     unattributed = (None if host_busy is None
                     else host_busy - tree_cpu - outside_total - excluded_kernel)
+    # Each subtracted ps counter has one TIME quantum of endpoint error.
+    # Host busy sums user/system/nice on every CPU, each with one host tick
+    # per endpoint. Divide each instrument's CPU-second resolution by its
+    # own measured interval; no additional acceptance margin is introduced.
+    ticks = host["host_ticks"]
+    resolution = (None if ticks is None else
+                  2 * 3 * ticks["cpus"] / ticks["ticks_per_s"] / ticks["elapsed_s"]
+                  + ps_counter_reads * PS_TIME_QUANTUM_S / elapsed_s)
+    for entry in unaccounted:
+        if entry["reason"] == "counter regressed":
+            # Disclosure only: host/ps quantization cannot bound a dying
+            # process tightly enough to certify it below the per-process limit.
+            entry["unattributed_cpu_s_per_s"] = unattributed
+            entry["unattributed_resolution_cpu_s_per_s"] = resolution
     aggregate_over = (aggregate_limit is not None and outside_aggregate is not None
                       and outside_aggregate > aggregate_limit)
     over = [item for item in outside if item["cpu_s_per_s"] > limit]
@@ -423,17 +491,21 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         outside_total_cpu_s_per_s=outside_total,
         outside_process_count=len(outside),
         tree_cpu_s_per_s=tree_cpu,
-        tree_process_count=len(tree & {r["pid"] for r in union.values()}),
+        tree_process_count=len(tree),
         kernel_task_cpu_s_per_s=kernel_task_cpu,
         kernel_task_included=include_kernel_task,
         **host,
         outside_aggregate_cpu_s_per_s=outside_aggregate,
         unattributed_cpu_s_per_s=unattributed,
+        unattributed_resolution_cpu_s_per_s=resolution,
         aggregate_limit_s_per_s=aggregate_limit,
         aggregate_over_limit=aggregate_over,
         unaccounted=unaccounted,
         raw=[ref.to_json() for ref in (before.raw, after.raw) if ref is not None],
     )
+    if regressed_outside:
+        result.update(error=REGRESSED_COUNTER_ERROR,
+                      clean=None)
     if aggregate_limit is not None and host_busy is None:
         result.update(error=f"host CPU unread, so the registered aggregate limit cannot be "
                             f"judged: {host['host_error']}", clean=None)
@@ -479,37 +551,56 @@ def _mid(snapshot: Snapshot, field: str) -> int:
 # The dwell
 
 
+REGRESSED_COUNTER_ERROR = "outside process CPU counter regressed without a previous over-limit rate"
+
+
+def _measured_contention(result: Mapping[str, Any]) -> bool:
+    return (result.get("clean") is False or bool(result.get("outside_over_limit"))
+            or bool(result.get("aggregate_over_limit")))
+
+
 class Dwell:
-    """Consecutive clean 30 s intervals until ``clean_s`` (READY) or ``cap_s`` (REFUSE)."""
+    """Clean intervals until ``clean_s`` (READY) or ``cap_s``.
+
+    Unproven regressed outside counters alone neither add clean time nor
+    reset it. Every other failed or dirty interval resets the run.
+    At the cap, measured contention makes the verdict REFUSE; missing
+    evidence alone makes it UNMEASURED.
+    """
 
     def __init__(self, thresholds: Mapping[str, Any], *, started_ns: int) -> None:
         self.limits = require_thresholds(MODULE, thresholds, ARM_THRESHOLD_KEYS)
         self.started_ns = started_ns
         self.intervals: list[dict[str, Any]] = []
-        self.clean_since_ns: int | None = None
+        self.clean_run_ns = 0
+        self.regressed_counter_intervals = 0
         self.ready_at_ns: int | None = None
 
     def add(self, result: Mapping[str, Any]) -> None:
         summary = _summary(result)
         self.intervals.append(summary)
         a, b = result["interval"]["monotonic_ns"]
+        if (result.get("error") == REGRESSED_COUNTER_ERROR and result.get("clean") is None
+                and not result.get("outside_over_limit") and not result.get("aggregate_over_limit")
+                and any(entry.get("reason") == "counter regressed"
+                        for entry in result.get("unaccounted", ()))):
+            # This is missing evidence, not measured contention. Its time
+            # cannot count toward READY, including at the end of the run.
+            self.regressed_counter_intervals += 1
+            return
         if result.get("clean"):
-            if self.clean_since_ns is None:
-                self.clean_since_ns = a
-            if self.ready_at_ns is None and b - self.clean_since_ns >= self.limits["clean_s"] * 1e9:
+            self.clean_run_ns += b - a
+            if self.ready_at_ns is None and self.clean_run_ns >= self.limits["clean_s"] * 1e9:
                 self.ready_at_ns = b
         else:
-            self.clean_since_ns = None
+            self.clean_run_ns = 0
 
     @property
     def ready(self) -> bool:
         return self.ready_at_ns is not None
 
     def clean_run_s(self, now_ns: int | None = None) -> float:
-        if self.clean_since_ns is None or not self.intervals:
-            return 0.0
-        end = self.intervals[-1]["interval"]["monotonic_ns"][1]
-        return (end - self.clean_since_ns) / 1e9
+        return self.clean_run_ns / 1e9
 
     def expired(self, now_ns: int) -> bool:
         return not self.ready and now_ns - self.started_ns >= self.limits["cap_s"] * 1e9
@@ -519,12 +610,18 @@ class Dwell:
                   "ready_at_monotonic_ns": self.ready_at_ns,
                   "clean_run_s": self.clean_run_s(), "elapsed_s":
                   (finished.monotonic_ns - self.started_ns) / 1e9,
+                  "regressed_counter_intervals": self.regressed_counter_intervals,
                   "started_monotonic_ns": self.started_ns}
         error = None
-        if self.intervals and all(item["error"] for item in self.intervals):
-            error = "every dwell interval failed to measure"
-        elif not self.intervals:
+        if not self.intervals:
             error = "no dwell interval was measured"
+        elif not self.ready and not any(_measured_contention(item) for item in self.intervals):
+            # Missing evidence alone cannot refuse an arm, even when some
+            # clean time was measured. An errored interval can still carry
+            # measured contention and must not take this shortcut.
+            error = ("every dwell interval failed to measure"
+                     if all(item["error"] for item in self.intervals)
+                     else "dwell ended without a qualifying clean run or measured contention")
         return Measurement(MODULE, "dwell", values, (), started, finished, error)
 
 
@@ -532,7 +629,7 @@ def _summary(result: Mapping[str, Any]) -> dict[str, Any]:
     keys = ("interval", "error", "clean", "elapsed_s", "max_outside", "outside_over_limit",
             "exited_over_limit", "outside_total_cpu_s_per_s", "outside_process_count",
             "tree_cpu_s_per_s", "kernel_task_cpu_s_per_s", "host_busy_cpu_s_per_s",
-            "outside_aggregate_cpu_s_per_s", "unattributed_cpu_s_per_s",
+            "outside_aggregate_cpu_s_per_s", "unattributed_cpu_s_per_s", "unattributed_resolution_cpu_s_per_s",
             "aggregate_limit_s_per_s", "aggregate_over_limit", "host_error", "unaccounted",
             "raw")
     return {key: result.get(key) for key in keys}
@@ -555,6 +652,8 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
     index = 0
     previous = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True,
                              host_reader=host_reader)
+    root_identities: dict[int, tuple[int, str]] = {}
+    pin_roots(previous, roots, root_identities)
     previous_over: dict[tuple[int, str], float] = {}
     next_snapshot_ns = previous.midpoint_ns + int(limits["interval_s"] * 1e9)
     while True:
@@ -563,9 +662,10 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
             index += 1
             current = take_snapshot(ctx, raw_name=f"dwell-{index:04d}-ps.txt", compress=True,
                                     host_reader=host_reader)
+            pin_roots(current, roots, root_identities)
             result = interval(previous, current, tree_roots=roots, include_kernel_task=True,
                               limit=limits["cpu_limit_s_per_s"], previous_over=previous_over,
-                              aggregate_limit=aggregate)
+                              aggregate_limit=aggregate, root_identities=root_identities)
             previous_over = over_limit(result)
             dwell.add(result)
             previous = current
@@ -591,22 +691,28 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
         raise ValueError("contention.judge received another module's measurement")
     if measurement.kind != "dwell":
         raise ValueError("the arm judges contention on a dwell, not a single snapshot")
-    if measurement.error:
-        return Verdict(MODULE, UNMEASURED, (measurement.error,), limits)
     values = measurement.values
     intervals = values["intervals"]
+    dirty = [item for item in intervals if _measured_contention(item)]
     observed = {"intervals": len(intervals), "clean_run_s": values["clean_run_s"],
                 "elapsed_s": values["elapsed_s"],
-                "unclean_intervals": sum(1 for item in intervals if item["clean"] is False),
-                "unmeasured_intervals": sum(1 for item in intervals if item["error"])}
+                "clean_intervals": sum(1 for item in intervals if item["clean"] is True),
+                "unclean_intervals": len(dirty),
+                # Intervals carrying an error; overlaps unclean_intervals when an
+                # errored interval also measured contention (not a partition term).
+                "unmeasured_intervals": sum(1 for item in intervals if item["error"]),
+                "other_unmeasured_intervals": sum(
+                    1 for item in intervals if item["clean"] is not True and not _measured_contention(item)
+                ) - values["regressed_counter_intervals"],
+                "regressed_counter_intervals": values["regressed_counter_intervals"]}
+    if measurement.error:
+        return Verdict(MODULE, UNMEASURED, (measurement.error,), limits, observed)
     if values["ready"]:
         return Verdict(MODULE, PASS, (), limits, observed)
-    last_dirty = next((item for item in reversed(intervals) if not item["clean"]), None)
+    last_dirty = dirty[-1] if dirty else None
     detail = ""
     if last_dirty is not None:
-        if last_dirty["error"]:
-            detail = f"; last failed interval: {last_dirty['error']}"
-        elif last_dirty.get("outside_over_limit"):
+        if last_dirty.get("outside_over_limit"):
             worst = max(last_dirty["outside_over_limit"], key=lambda item: item["cpu_s_per_s"])
             detail = (f"; last dirty interval: {worst['command']} (pid {worst['pid']}) at "
                       f"{worst['cpu_s_per_s']:.3f} CPU-s/s"
@@ -640,9 +746,10 @@ def span_findings(intervals: Sequence[Mapping[str, Any]], request: Mapping[str, 
         a, b = item["interval"]["monotonic_ns"]
         if b < start or a > stop:
             continue
-        if item.get("error"):
-            continue
-        covered.append((a, b))
+        # Missing evidence leaves coverage open, but cannot erase another
+        # outside process's directly measured over-limit evidence.
+        if not item.get("error"):
+            covered.append((a, b))
         over = [entry for entry in item.get("outside_over_limit") or ()
                 if entry["cpu_s_per_s"] > limit]
         if over:

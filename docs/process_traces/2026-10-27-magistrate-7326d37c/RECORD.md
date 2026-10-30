@@ -1,0 +1,13 @@
+# Magistrate activation 7326d37c (Opus 5.5, headless, 2026-10-27)
+
+- 03:39 PDT launch. notice_pending []. No unread mail from Ed. Directive list: only the standing September issues (#405, #408, #416, #417, #421, #422); nothing new.
+- Canonical root fast-forwarded 79c890233 -> 4e8978303 (records only); no `com.joulewise.night*` label loaded or on disk; the loop runs from its measurement clone.
+- BYTES loop at SESSION_DESK for r1-bytes-s5-p1 (Llama-3.3-70B, chain rc 0, 316 min). Waited on attempts.jsonl with a background watcher that refreshed the heartbeat and polled standdown.request (none arrived).
+- 05:19 attempt line: COLLECTED, acceptance ACCEPT, counting. 75/75 planned runs present, raw-valid and succeeded (absolute 10, quads 20 + 20, references 3 + 1 + 3, NEG8 bound 18). Minutes: chain 316.3, harvest 89.1, desk 95.6. 38 window flags.
+- **claim_usable false, reason `cell.below_minimum`** (`archive/derived/exclusions.json`): cell `bytes-llama-70b-decode` kept 2/10 quads (b01, b08; minimum 5) and 9/10 repeats. Dropped by registered EXCLUDE_MEMBER codes: quads b02 b03 b07 b09 b10 and repeat r07 for `thermal.os_level_nonzero` (OS thermal pressure level 1 inside the member span); quads b04 b05 b06 for that plus `battery.accumulator_excursion`, `battery.capture_pair_failed`, `battery.member_span`. Also `battery.assist` on 43 of 75 members (DISCLOSE) and `member.cooldown_cap_hit`. s1-s4 kept 10/10 in every cell.
+- Adapter checked: ioreg AdapterDetails Watts=140, 28 V, 4.99 A (the full adapter). Not an owner hardware action; the 70B load heats the machine and briefly exceeds 140 W.
+- Council launched (CLAUDE.local.md gate 4; cloud because the Mac is about to measure): two blind seats on the smallest prospective collection change that makes s5-p2 resolvable, plus whether battery.assist threatens kept numbers and whether s6 (Qwen3.5-122B) is at risk. Brief `~/night-archive/seats-7326d37c/brief-70b-thermal.md`. Sol 6.1 xhigh Codex Cloud thread `01a17d4f-f896-7059-8bc9-5e849c31b027` (model gpt-6.1-sol, effort xhigh read back; report to branch `codex/by-thermal70-sol` `.codex-report/BY-THERMAL70-sol.md`, or `codex-cloud-run.mjs --attach <thread> --out ~/night-archive/seats-7326d37c/sol`). Opus 5.5 cloud `session_01JActAcFn5QCt9Koq6D6TgQ`, report `reports/by-thermal70-opus.md` on JouleWise-data `claude/by-thermal70-opus*`.
+- Verdict and finding emailed to Ed on thread 1a174cad9022cac9 (Gmail 1a17d52011687055). No notice.ack (queue was empty).
+- Loop at ROTATE (s6-p1 next, the last pass-1 pack); exiting so no agent is alive when it arms.
+
+Pruning tally: the harvest's member-exclusion and cell-minimum checks caught the thermal and battery units, which touch the 70B cell's number. The watcher caught nothing.

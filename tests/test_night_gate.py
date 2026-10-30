@@ -2202,6 +2202,54 @@ class HazardPackPlanTests(unittest.TestCase):
         self.assertFalse(night_gate.HAZARD_DRIVER_REASON_CODES
                          & (night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES))
 
+    def test_block_six_bindings_are_optional_and_preserve_their_types(self):
+        screen = {"alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
+                  "operative_bound_stop_s": "0.092"}
+        for extension in ({}, {"spare_retries": False}, {"spare_retries": True},
+                          {"capture_screen": screen},
+                          {"capture_screen": dict.fromkeys(screen), "spare_retries": False},
+                          {"capture_screen": dict(screen, operative_bound_stop_s=None), "spare_retries": False}):
+            with self.subTest(extension=extension):
+                value = self.mapping()
+                value["hazard_window"]["bindings"].update(extension)
+                parsed = night_gate.NightPlan.from_mapping(value)
+                self.assertEqual(parsed.hazard_window["bindings"], value["hazard_window"]["bindings"])
+
+    def test_launch_bindings_still_require_the_fourteen_strings_and_refuse_unknown_keys(self):
+        for extension in ({}, {"capture_screen": dict.fromkeys(("alignment_reference_s", "bracket_screen_s",
+                                                               "operative_bound_stop_s")), "spare_retries": False}):
+            for name in night_gate.HAZARD_LAUNCH_BINDINGS:
+                for invalid in ("missing", None, 0, False, {}):
+                    with self.subTest(extension=extension, name=name, invalid=invalid):
+                        value = self.mapping()
+                        bindings = value["hazard_window"]["bindings"]
+                        bindings.update(extension)
+                        if invalid == "missing":
+                            del bindings[name]
+                        else:
+                            bindings[name] = invalid
+                        with self.assertRaises(night_gate.PlanError):
+                            night_gate.NightPlan.from_mapping(value)
+            value = self.mapping()
+            value["hazard_window"]["bindings"].update(extension, unknown="value")
+            with self.assertRaises(night_gate.PlanError):
+                night_gate.NightPlan.from_mapping(value)
+
+    def test_block_six_binding_types_are_checked(self):
+        screen = dict.fromkeys(("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s"))
+        bad_screens = [None, False, [], {}, dict(screen, extra=None)]
+        for name in screen:
+            bad_screens.append({key: item for key, item in screen.items() if key != name})
+            for item in (False, 0, 0.036, {}, [], "", "null", "NaN", "Infinity", "-0.1", "0.1\n", "1 + 2"):
+                bad_screens.append(dict(screen, **{name: item}))
+        for name, invalid in ([("capture_screen", item) for item in bad_screens]
+                              + [("spare_retries", item) for item in (None, 0, 1, "false", [], {})]):
+            with self.subTest(name=name, invalid=invalid):
+                value = self.mapping()
+                value["hazard_window"]["bindings"][name] = invalid
+                with self.assertRaises(night_gate.PlanError):
+                    night_gate.NightPlan.from_mapping(value)
+
     def test_evaluate_night_refuses_to_judge_a_hazard_plan(self):
         plan = night_gate.NightPlan.from_mapping(self.mapping())
         with self.assertRaises(night_gate.PlanError) as caught:

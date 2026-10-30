@@ -1,5 +1,5 @@
 ---
-description: Delegate a task to gpt-5.6-sol through the pinned project MCP server (Sol 6.0 seats use codex-run-v3)
+description: Delegate a task to gpt-6.1-sol through the project app-server MCP adapter, with high/xhigh effort
 argument-hint: <task, review request, or follow-up>
 ---
 
