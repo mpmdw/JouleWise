@@ -1,0 +1,88 @@
+=== M1: 
+    diff:  1 file changed, 1 insertion(+), 2 deletions(-)
+    step4 modules: rc=1 Ran 34 tests in 2.198s | FAILED (failures=4)
+       FAIL: test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file)
+       FAIL: test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes)
+       FAIL: test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not) (code='window_evidence_precheck_missing')
+       FAIL: test_R2_r3_only_reasons_are_an_r3_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_r3_only_reasons_are_an_r3_refusal) (code='window_evidence_precheck_missing')
+    r14: rc=1 Ran 1 test in 47.951s | FAILED (failures=1)
+       FAIL: test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit) (target_refused=True, reason='window_evidence_precheck_missing')
+    VERDICT: KILLED
+=== M2: 
+    diff:  2 files changed, 2 insertions(+), 5 deletions(-)
+    step4 modules: rc=1 Ran 34 tests in 2.097s | FAILED (failures=3)
+       FAIL: test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes)
+       FAIL: test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not) (code='idle_window_suspect')
+       FAIL: test_R2_r3_only_reasons_are_an_r3_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_r3_only_reasons_are_an_r3_refusal) (code='idle_window_suspect')
+    r14: rc=0 Ran 1 test in 46.046s | OK
+    VERDICT: KILLED
+=== M3: 
+    diff:  2 files changed, 5 insertions(+), 2 deletions(-)
+    step4 modules: rc=1 Ran 34 tests in 2.233s | FAILED (failures=3)
+       FAIL: test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes)
+       FAIL: test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes) (code='idle_window_suspect_unknown')
+       FAIL: test_R2_tooling_only_reasons_are_a_tooling_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_tooling_only_reasons_are_a_tooling_refusal) (reasons=('idle_window_suspect_unknown',))
+    r14: rc=0 Ran 1 test in 46.748s | OK
+    VERDICT: KILLED
+=== M4: 
+    diff:  2 files changed, 5 insertions(+), 2 deletions(-)
+    step4 modules: rc=1 Ran 34 tests in 2.096s | FAILED (failures=3)
+       FAIL: test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes)
+       FAIL: test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes) (code='paired_block_incomplete')
+       FAIL: test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not) (code='paired_block_incomplete')
+    r14: rc=0 Ran 1 test in 51.868s | OK
+    VERDICT: KILLED
+=== M5: 
+    diff:  1 file changed, 1 insertion(+)
+    step4 modules: rc=1 Ran 34 tests in 2.285s | FAILED (failures=1)
+       FAIL: test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell) (module='joulewise/analysis_engine/inputs.py', code='paired_block_incomplete', line=4063)
+    r14: rc=0 Ran 1 test in 45.856s | OK
+    VERDICT: KILLED
+=== M6: 
+    diff:  1 file changed, 1 insertion(+), 1 deletion(-)
+    step4 modules: rc=1 Ran 34 tests in 2.291s | FAILED (failures=1)
+       FAIL: test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell) (module='joulewise/analysis_engine/inputs.py', code='paired_block_incomplete', line=3590)
+    r14: rc=0 Ran 1 test in 48.450s | OK
+    VERDICT: KILLED
+=== M7: 
+    diff:  1 file changed, 1 insertion(+), 1 deletion(-)
+    step4 modules: rc=1 Ran 34 tests in 2.192s | FAILED (failures=7)
+       FAIL: test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes)
+       FAIL: test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not) (code='window_evidence_precheck_missing')
+       FAIL: test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not) (code='campaign_cooldown_evidence_missing')
+       FAIL: test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not) (code='idle_window_suspect')
+       FAIL: test_R2_r3_only_reasons_are_an_r3_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_r3_only_reasons_are_an_r3_refusal) (code='campaign_cooldown_evidence_missing')
+       FAIL: test_R2_r3_only_reasons_are_an_r3_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_r3_only_reasons_are_an_r3_refusal) (code='idle_window_suspect')
+       FAIL: test_R2_r3_only_reasons_are_an_r3_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests.test_R2_r3_only_reasons_are_an_r3_refusal) (code='window_evidence_precheck_missing')
+    r14: rc=1 Ran 1 test in 49.347s | FAILED (failures=1)
+       FAIL: test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit) (target_refused=True, reason='window_evidence_precheck_missing')
+    VERDICT: KILLED
+=== M8: 
+    diff:  1 file changed, 1 insertion(+), 1 deletion(-)
+    step4 modules: rc=0 Ran 34 tests in 2.314s | OK
+    r14: rc=0 Ran 1 test in 47.612s | OK
+    VERDICT: SURVIVED (step-4 modules + r14)
+=== M9: 
+    diff:  1 file changed, 1 insertion(+), 1 deletion(-)
+    step4 modules: rc=0 Ran 34 tests in 2.204s | OK
+    r14: rc=0 Ran 1 test in 45.791s | OK
+    tests.test_analysis_claims: rc=0 Ran 65 tests in 4.981s | OK
+    VERDICT: SURVIVED (step-4 modules + r14)
+=== M10: 
+    diff:  1 file changed, 1 insertion(+), 1 deletion(-)
+    step4 modules: rc=0 Ran 34 tests in 2.455s | OK
+    r14: rc=0 Ran 1 test in 49.109s | OK
+    VERDICT: SURVIVED (step-4 modules + r14)
+=== M11: 
+    diff:  1 file changed, 1 insertion(+), 1 deletion(-)
+    step4 modules: rc=0 Ran 34 tests in 2.823s | OK
+    r14: rc=1 Ran 1 test in 45.626s | FAILED (failures=1)
+       FAIL: test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit) (target_refused=True, reason='window_evidence_precheck_missing')
+    VERDICT: KILLED
+=== M12: 
+    diff:  1 file changed, 2 insertions(+), 8 deletions(-)
+    step4 modules: rc=1 Ran 34 tests in 2.394s | FAILED (failures=1)
+       FAIL: test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file)
+    r14: rc=0 Ran 1 test in 52.562s | OK
+    VERDICT: KILLED
+DONE rc=0

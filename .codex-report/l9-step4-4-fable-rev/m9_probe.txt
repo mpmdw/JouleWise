@@ -1,0 +1,8 @@
+# M9 behavioral demonstration (m9_probe.py): a stored precheck list carrying paired_block_incomplete
+HEAD reasons: ['campaign_cooldown_evidence_missing', 'capture_pipeline_absent', 'window_evidence_precheck_missing'] | paired_block_incomplete forwarded: False
+M9   reasons: ['campaign_cooldown_evidence_missing', 'capture_pipeline_absent', 'paired_block_incomplete'] | paired_block_incomplete forwarded: True
+
+M9 against tests outside tests/b5_analysis:
+tests.test_analysis_claims: Ran 65 tests, OK (in mutants.txt)
+tests.test_analysis_integration: Ran 116 tests in 172.678s, OK
+=> no test anywhere I ran exercises inputs.py:4067 (non-reducer stored reason -> window_evidence_precheck_missing).
