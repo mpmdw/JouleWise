@@ -590,6 +590,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **RC-CMP-10** is one fix round: Fable's RC-CMP-9 F1-F4, Opus's RC-CMP-9 findings when they land, and FS1-FS4. Rule: a word derived from the sign or threshold of a compared number is compared only when that number lies outside its bar from the threshold on both sides. Acceptance includes a laptop rerun of the full-size window at the seat's head, which must exit 0.
 - Lead note on FS3 for the paper: a sign printed for an estimate within numerical noise of zero carries no information. Where a leave-one-out or contrast estimate is within its bar of zero, the results text should say so instead of reading a direction into the sign.
 
+125. **RC-CMP-9 Opus delta ACCEPT_WITH_FIXES; RC-CMP-10 launched; two questions for Ed (reported by joulewise-28, 2026-10-30 02:16-02:18Z).**
+- Opus (`review/2026-10-30-rc-cmp9-opus-rev` `004535b56`): "The structure holds"; no output path reaches the table.
+  - F1 (blocking, one undeclared instance): leave-one-out rows at a kept n of 1 or 2. The table starts at n≥3 and `loo_counts` binds to the recompute's printed rows, so L9 dropping its rows exits 0. Small fix: bind to the kept n.
+  - F2 LOW: nested estimator, `bundle_blocks` and `randomization_check` keys are not required.
+  - F3: declared residuals for Ed.
+- Block-5 lead's call: under item 119's rule a further instance goes to Ed. This one is a missing table entry inside the design, not a failure of the design, so it is fixed in this round and Ed is informed.
+- 02:18Z: **RC-CMP-10** (Opus seat `trig_01Vwopo5mwsMM6g1tigPe2xr`, MCP cleared) covers:
+  - Opus F1-F2 and Fable F1-F4;
+  - FS1 (transport rule taken from the group's `group_rule_id`), FS2 (the invented p42 word dropped, pinned to the producer's codes), FS3 (sign and threshold words compared only outside their bar), FS4 (history lines become table entries keyed on the window index; the lane merges `origin/main` first);
+  - a new rule: every word or code literal the comparator expects is pinned to its producer source.
+  Acceptance includes joulewise-28's laptop full-size rerun exiting 0.
+- **For Ed:** RC-CMP-9 NEEDS_RULING 2: the whole-machine lines are the one remaining output-keyed universe (three-way omission only; rho is descriptive). NEEDS_RULING 5: should the recompute compute leave-one-out rows at n of 1 or 2?
+- `dry-d`: steps 0-3b ok; step 4 running for more than 1 h.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
