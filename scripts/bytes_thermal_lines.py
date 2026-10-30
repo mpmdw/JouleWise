@@ -293,6 +293,8 @@ def validate_acceptance(raw, roster):
             continue
         row = {key: node.optional(key) for key in ("scope", "run_id", "code")}
         rows.append(row)
+        if not isinstance(row["scope"], str):
+            reason = reason or "exclusion row missing scope"
         if row["scope"] != "member":
             continue
         run, code = row["run_id"], row["code"]

@@ -1822,3 +1822,28 @@ class ProducerTrustTests(unittest.TestCase):
                 self.assertIn(name, different)
                 control.chmod(0o644)
                 control.write_bytes(original)
+
+    def test_consumed_identity_types_are_records_faults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            faults = [('scope', None), ('scope', 1), ('scope', True), ('scope', []),
+                      ('run_id', 1), ('run_id', []), ('run_id', float('inf'))]
+            for index, (field, value) in enumerate(faults):
+                with self.subTest(field=field, value=value):
+                    archive = TrustArchive(Path(tmp) / str(index), 'hull-p2', False, True)
+                    if field == 'scope':
+                        row = {'scope': value, 'run_id': 'a', 'code': t.CODE}
+                        if value is None:
+                            row.pop('scope')
+                        archive.put(ACC, {'excluding': [row]})
+                        reason = 'exclusion row missing scope'
+                    else:
+                        roster = json.loads(archive.text(ROS))
+                        roster['members'][0]['run_id'] = value
+                        raw = json.dumps(roster).replace('Infinity', '1e309')
+                        archive.put(ROS, raw=raw.encode())
+                        reason = 'roster member missing run_id'
+                    record, out = self.cli(archive)
+                    self.assertEqual(record['member_statuses'][0]['status'], 'not defined (' + reason + ')')
+                    self.assertEqual(record['changes'], [])
+                    self.assertFalse(record['equals_registered_line'])
+                    t.validate_record((out / 'thermal_line.json').read_text())
