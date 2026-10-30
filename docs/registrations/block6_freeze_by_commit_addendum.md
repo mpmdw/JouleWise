@@ -111,6 +111,36 @@ branches built from it). The annotated tag is what keeps it reachable if those b
 
 ## 4. Appended records
 
-None yet. The Mac collection lead appends per-night records that are not in the repo (pin-only ledger commits,
-frozen-checkout heads, per-session OS builds), or commits them under `docs/process_traces/` and names them here
-(RUN_STATE next-activation step (1e)).
+Appended 2026-10-30 by the Mac collection lead (magistrate activation a7d07c32), from the measurement Mac. Only git
+objects and loop metadata were read; no session archive, capture or measured value was opened.
+
+**Pin-only ledger commits, now on GitHub.** Branch `records/b6-pin-heads` points at `20c881075`, the head of the
+measurement checkout `/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6`. Its first-parent
+chain down to `f31aca19f` is the nine commits below, each a child of the row above it.
+`git diff --name-only f31aca19f 20c881075` lists only `configs/calibration/calibration_ledger_head.json`, so all ten
+commits carry the code of `f31aca19f`.
+
+**Executed commit per session.** Sources: `measurement_head` (equal to `repo_head`) in each session's
+`/Users/edr/night-b6/sessions/<session>/custody/night_plan.json`. The `code_commit` and `os_build` of the session's
+smoke fingerprint, in `/Users/edr/night-b6/loop/smoke-passes.jsonl` (one line per smoke, in session order), agree
+with it for all nine. Session order and counting status: `/Users/edr/night-b6/loop/attempts.jsonl`, nine lines, all
+`counting`.
+
+| Session | Executed commit | Tree | OS build | Pin commit written at that session's desk |
+| --- | --- | --- | --- | --- |
+| r1-alpha | `f31aca19f90473231c41cb31643afb0d6c85d355` | `db97a5409ecd3d99872ed725735bc02551a4eb76` | 25G83 | `6da53f73b11d3688822466cb4d2ce922288258bc` (ledger seq 412) |
+| r1-beta | `6da53f73b11d3688822466cb4d2ce922288258bc` | `4d9bc84ef5abe81fbc7993db3b49bb457578578c` | 25G83 | `0a6ab8dc2bef4f4e273083b44a07ee1543c8b66c` (seq 422) |
+| r1-gamma | `0a6ab8dc2bef4f4e273083b44a07ee1543c8b66c` | `4955279f482d91c973b64b2457e20d953f5ccad6` | 25G83 | `c66bb1ba9618a8ed7aed7d114badd31ea15ef0aa` (seq 432) |
+| r2-beta | `c66bb1ba9618a8ed7aed7d114badd31ea15ef0aa` | `1f04f6d6c8f774c514d9e014dda0df1f44198956` | 25G83 | `eab9b45ace2f43124dd2afce0473deac5c649d02` (seq 442) |
+| r2-gamma | `eab9b45ace2f43124dd2afce0473deac5c649d02` | `5ad06f00c133ad6193d26857a6a7ae38a28e2547` | 25G83 | `ed22b3d3bbda2219e92063b6b7fec861ab522d55` (seq 452) |
+| r3-gamma | `ed22b3d3bbda2219e92063b6b7fec861ab522d55` | `5b936f8cf7c28c300b87d3b2590dd52667b8c3af` | 25G83 | `2a68e0831fc47d50283ed32d661cf21a92a61972` (seq 462) |
+| r3-alpha | `2a68e0831fc47d50283ed32d661cf21a92a61972` | `3dd764988fbceb8d64fcc9fb1fc4969189b76287` | 25G83 | `f56d5416b3b3fe9adece1329d1d936e5891973a7` (seq 472) |
+| r3-beta | `f56d5416b3b3fe9adece1329d1d936e5891973a7` | `f324e028857d04cdc3f5d31288d41627a2ee19cc` | 25G83 | `e7b2875e02b84ba5083d347328b291f76d3007fa` (seq 482) |
+| r4-alpha | `e7b2875e02b84ba5083d347328b291f76d3007fa` | `4e72de361060bd50b688a26b420f686bc0a1655a` | 25G83 | `20c881075be7530bedea7cca68efdec915388bc3` (seq 492; tree `e8c32525f7cbf4c07c3dc3647c7f6c0b8ecbe847`; no session ran at it) |
+
+Each pin commit's subject names the bracket session it records (for example "Pin-only: calibration ledger head at
+sequence 412 (bracket session r1-alpha-calibration)"). The OS build is the same, 25G83, for all nine sessions, which
+fills the "OS build per session" row of section 3 for collection.
+
+**What this changes in sections 1 and 3.** The per-night HEADs are now recorded and reachable. One code state still
+holds, so `b6/collection-n<k>` tags remain optional; the block-5 lead may cut them from the table above if wanted.

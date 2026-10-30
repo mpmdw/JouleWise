@@ -177,4 +177,36 @@ A new code state gets the next `bytes/collection-n<k>`.
 
 ## 5. Appended records
 
-None yet.
+Appended 2026-10-30 by the Mac collection lead (magistrate activation a7d07c32), during the `r2-bytes-s2-p2` desk with
+no `collection.active`. Only git objects and loop metadata were read; no archive, capture or measured value was opened.
+
+**The n4 measurement line is now on GitHub.** Branch `records/bytes-pass2-heads` points at `da20a8324`, the HEAD of
+the measurement checkout `/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes`. It contains
+`69bc0c93a`, `2649fad54`, `f0300a579` and every commit between them. `git diff --name-only 2649fad54 da20a8324` lists only
+`configs/calibration/calibration_ledger_head.json`, so every pass-2 session so far ran the code of `2649fad54`.
+The measurement line's own sizing commit is `dda456f98`, the cherry-pick of the lane's `7b622eb95`.
+
+| Commit | Tree | What it is |
+| --- | --- | --- |
+| `69bc0c93a445fd841bb9cfc5a65b47759e8b2fae` | `bcc34a8377e3a5b555f06429b6e21bccf84c4a34` | pin-only, ledger seq 480 (bracket session `r2-bytes-s1-p1-calibration`); the base of the n4 install |
+| `2649fad54a90aba185368f6035e4acf9e68519b8` | `cf10a3707056d64e32a1f758d4a36cee32c27ef1` | the n4 code state: registration, loop and emitter tests, BY-P2-THERM, sizing fix |
+| `f0300a579aef76db76f9140c078e36e70ef4cc88` | `2855e6f2e5d3b4007e6c1a985699e33491118e8a` | pin-only, seq 490 (`r2-bytes-s6-p2-n3-calibration`) |
+| `ba26f0757c8e6a34b81b35d178d909012e05b60d` | `511540f516460de010116e61ae98590242960c0d` | pin-only, seq 500 (`r2-bytes-s5-p2-calibration`) |
+| `c7d7cfee6882ad9fd9ccebd2e87c82f7589b3aba` | `2e34d5c34322f070b9869dcae0a494e49a9a5355` | pin-only, seq 510 (`r2-bytes-s4-p2-calibration`) |
+| `da20a8324326b9bdead6801f13147da74be5ec70` | `3fa13636fe751e862d2d2c023d449c4dbc302803` | pin-only, seq 520 (`r2-bytes-s3-p2-calibration`) |
+
+**Pass-2 sessions so far.** Sources: `measurement_head` in `/Users/edr/night-b6/sessions/<session>/custody/night_plan.json`.
+The `code_commit` and `os_build` of the matching smoke fingerprint in `/Users/edr/night-b6/loop-bytes/smoke-passes.jsonl`
+agree with it in every row.
+
+| Session | Measurement HEAD | OS build |
+| --- | --- | --- |
+| `r2-bytes-s6-p2`, `r2-bytes-s6-p2-n2` | none: no `custody/night_plan.json` was written, so no window ran | — |
+| `r2-bytes-s6-p2-n3` | `2649fad54` | 25G83 |
+| `r2-bytes-s5-p2` | `f0300a579` | 25G83 |
+| `r2-bytes-s4-p2` | `ba26f0757` | 25G83 |
+| `r2-bytes-s3-p2` | `c7d7cfee6` | 25G83 |
+| `r2-bytes-s2-p2` | `da20a8324` | 25G83 |
+
+Every smoke fingerprint in that file, pass 1 included, records OS build 25G83. `s1-p2`, the last pass-2 session, is
+appended after it runs. `bytes/collection-n4` can now be cut at `2649fad54`, the single n4 code state.
