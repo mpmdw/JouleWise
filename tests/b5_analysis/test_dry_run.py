@@ -389,9 +389,9 @@ class DriverDouble(d.StepRunner):
                 value.update(schema_version='joulewise.detection_floor_extraction.v1',kept_units_binding=binding,
                     spec_membership_refusals=[],cells=[
                         {'cell_id':window+'-target','extractable':not self.target_refusal,
-                         'refusal_reasons':list(self.target_reasons) if self.target_refusal else [],'floor':None},
+                         **({'refusal_reasons':list(self.target_reasons),'floor':None} if self.target_refusal else {})},
                         {'cell_id':window+'-p42','extractable':not self.p42,
-                         'refusal_reasons':['marker_self_digest_mismatch'] if self.p42 else [],'floor':None}])
+                         **({'refusal_reasons':['marker_self_digest_mismatch'],'floor':None} if self.p42 else {})}])
                 write(option('--out'),value)
                 if self.p42 or self.target_refusal or getattr(self,'empty_exit',False):return 1
             elif step=='5' and '--out-dir' in argv:

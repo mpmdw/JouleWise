@@ -958,7 +958,9 @@ class IndexedCliTests(unittest.TestCase):
 
     def test_r14_real_index_context_composition_with_registered_p42_exit(self):
         self.real_composition = cli.extract_indexed_pack
-        for target_refused, expected in ((False, "p42_floor_cells_only"), (True, "floor_cell_not_extractable")):
+        # L9-STEP4-2: the seam's window_evidence_precheck_missing is a tooling reason, so a
+        # refused target is a tooling refusal (floor_cell_not_extractable at origin/main 0a9ff42).
+        for target_refused, expected in ((False, "p42_floor_cells_only"), (True, "extraction_cell_tooling_refusal")):
             output = self.real_output(target_refused)
             out = self.fixture.directory / ("target-refused.json" if target_refused else "p42-only.json")
             if out.exists():
