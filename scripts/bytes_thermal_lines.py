@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from functools import lru_cache
 import hashlib
 import io
 import json
@@ -29,11 +30,11 @@ LABELS = {
 }
 # Lex JSON without decoding numbers or string values. Object keys alone are
 # decoded during navigation. This also supplies exact replacement offsets.
-TOKEN = re.compile(r'\s*("(?:[^"\\]|\\.)*"|[{}\[\]:,]|[^\s{}\[\]:,]+)')
-# PROTOTYPE (consult): the lexical grammar of RFC 8259. A number lexeme is
-# matched against this pattern and never converted; a string lexeme is
-# matched for valid escapes and never decoded unless it is an object key.
-STRING = re.compile(r'"(?:[^"\\\x00-\x1f]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*"')
+TOKEN = re.compile(r'[ \t\r\n]*("(?:[^"\\]|\\.)*"|[{}\[\]:,]|[^\s{}\[\]:,]+)')
+# RFC 8259 strings, with paired UTF-16 escapes only. No value is decoded here.
+UNICODE_ESCAPE = (r'\\u(?:[0-9a-cA-Ce-fE-F][0-9a-fA-F]{3}|[dD][0-7][0-9a-fA-F]{2}|'
+                  r'[dD][89aAbB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2})')
+STRING = re.compile(r'"(?:[^"\\\x00-\x1f\ud800-\udfff]|\\["\\/bfnrt]|' + UNICODE_ESCAPE + r')*"')
 NUMBER = re.compile(r'-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?')
 LITERALS = frozenset({"true", "false", "null"})
 
@@ -59,7 +60,7 @@ def lex(raw):
         elif lexeme not in "{}[]:," and lexeme not in LITERALS and NUMBER.fullmatch(lexeme) is None:
             raise ValueError("invalid JSON lexeme")
         tokens.append(match)
-    if raw[position:].strip():
+    if raw[position:].strip(" \t\r\n"):
         raise ValueError("JSON text has trailing bytes")
     if not tokens:
         raise ValueError("empty JSON text")
@@ -124,28 +125,23 @@ def lex(raw):
 
 
 def end_value(tokens, index):
-    value = tokens[index].group(1)
-    if value not in ("{", "["):
+    """Skip a validated value without recursion, including opaque deep subtrees."""
+    if tokens[index].group(1) not in ("{", "["):
         return index + 1
-    close = "}" if value == "{" else "]"
+    depth = 1
     index += 1
-    while tokens[index].group(1) != close:
-        if tokens[index].group(1) in (",", ":"):
-            index += 1
-        else:
-            index = end_value(tokens, index)
-    return index + 1
+    while depth:
+        value = tokens[index].group(1)
+        depth += (value in ("{", "[")) - (value in ("}", "]"))
+        index += 1
+    return index
 
 
-_DOCUMENTS = {}
-
-
+# Bounded compatibility cache for the public offset helpers. Validators own their
+# source documents; there is no process-wide retention of every archive read.
+@lru_cache(maxsize=8)
 def tokens_of(raw):
-    """The validated token stream of one source text, lexed once per text."""
-    tokens = _DOCUMENTS.get(raw)
-    if tokens is None:
-        tokens = _DOCUMENTS[raw] = lex(raw)
-    return tokens
+    return lex(raw)
 
 
 def field_span(raw, keys):
@@ -189,16 +185,243 @@ def item_spans(raw, keys):
     return spans
 
 
+class JsonValue:
+    """A view of validated tokens. Decode only explicitly consumed scalars."""
+    def __init__(self, raw, tokens=None, index=0):
+        self.raw = raw
+        self.tokens = lex(raw) if tokens is None else tokens
+        self.index = index
+
+    @property
+    def kind(self):
+        return self.tokens[self.index].group(1)[0]
+
+    def field(self, key):
+        for name, value in self.fields():
+            if name == key:
+                return value
+        raise ValueError("missing structural field: " + key)
+
+    def fields(self):
+        if self.kind != "{":
+            raise ValueError("expected JSON object")
+        index = self.index + 1
+        while self.tokens[index].group(1) != "}":
+            key = json.loads(self.tokens[index].group(1))
+            yield key, JsonValue(self.raw, self.tokens, index + 2)
+            index = end_value(self.tokens, index + 2)
+            index += self.tokens[index].group(1) == ","
+
+    def elements(self):
+        if self.kind != "[":
+            raise ValueError("expected JSON array")
+        index = self.index + 1
+        while self.tokens[index].group(1) != "]":
+            yield JsonValue(self.raw, self.tokens, index)
+            index = end_value(self.tokens, index)
+            index += self.tokens[index].group(1) == ","
+
+    def scalar(self):
+        if self.kind in "{[":
+            raise ValueError("expected JSON scalar")
+        return json.loads(self.tokens[self.index].group(1))
+
+    def optional(self, key):
+        try:
+            return self.field(key).scalar()
+        except ValueError:
+            return None
+
+    def text(self):
+        end = end_value(self.tokens, self.index)
+        return self.raw[self.tokens[self.index].start(1):self.tokens[end - 1].end(1)]
+
+
+def document(raw):
+    value = JsonValue(raw)
+    if value.kind != "{":
+        raise ValueError("expected JSON object")
+    return value
+
+
+def unit_valid(unit):
+    return (isinstance(unit, dict) and {"cell_id", "stratum", "unit_id"} <= unit.keys()
+            and all(type(unit[k]) in (str, int) for k in ("cell_id", "stratum", "unit_id")))
+
+
+def validate_roster(raw):
+    """Project roster identities and units; structural absence is a stop (X10)."""
+    doc = document(raw)
+    members, reason = [], None
+    for node in doc.field("members").elements():
+        if node.kind != "{":
+            raise ValueError("roster members is not a list of objects")
+        run, kind = node.optional("run_id"), node.optional("kind")
+        if not isinstance(run, str):
+            reason = reason or "roster member missing run_id"
+        if not isinstance(kind, str):
+            reason = reason or "roster member kind invalid"
+            kind = "science"
+        units = []
+        try:
+            for unit in node.field("units").elements():
+                values = {k: unit.optional(k) for k in ("cell_id", "stratum", "unit_id")}
+                if not unit_valid(values):
+                    raise ValueError("invalid unit")
+                units.append(values)
+        except ValueError:
+            reason = reason or "roster member units invalid"
+        members.append({"run_id": run, "kind": kind, "units": units})
+    return members, doc.optional("pack_id"), reason
+
+
+def validate_acceptance(raw, roster):
+    """Project identity/code fields, leaving every retained row byte-opaque."""
+    doc = document(raw)
+    before = {m["run_id"]: set() for m in roster}
+    structural, reason, rows = {}, None, []
+    try:
+        nodes = list(doc.field("excluding").elements())
+    except ValueError:
+        nodes = []
+        reason = "acceptance excluding is not a list"
+    for node in nodes:
+        if node.kind != "{":
+            rows.append(None)
+            reason = reason or "acceptance exclusion row is not an object"
+            continue
+        row = {key: node.optional(key) for key in ("scope", "run_id", "code")}
+        rows.append(row)
+        if row["scope"] != "member":
+            continue
+        run, code = row["run_id"], row["code"]
+        if not isinstance(run, str):
+            reason = reason or "exclusion row missing run_id"
+        elif run not in before:
+            reason = reason or "exclusion row names a run outside the roster"
+        elif not isinstance(code, str):
+            structural[run] = "exclusion row missing code"
+        else:
+            before[run].add(code)
+    return rows, before, structural, reason, doc.optional("session_id")
+
+
+def validate_plan(read, archive, pack_id, mode):
+    """Only the roster-named pack tree can carry pass identity (X6)."""
+    if (not isinstance(pack_id, str) or not pack_id or ".." in pack_id
+            or "/" in pack_id or "\\" in pack_id):
+        return "pass mismatch"
+    trees = [p for p in (archive / "sources/repo").rglob("plan_tree.json") if p.parent.name == pack_id]
+    if len(trees) != 1:
+        return "pass mismatch"
+    try:
+        value = document(read(trees[0])).field("bytes_pass").scalar()
+        if type(value) is int and value == (2 if mode == "hull-p2" else 1):
+            return None
+    except (OSError, ValueError):
+        pass
+    return "pass mismatch"
+
+
+def validate_hull(doc, run):
+    try:
+        value = doc.field("members").field(run).field(FIELD)
+        excluded, available = value.field("excluded").scalar(), value.field("journal_available").scalar()
+        if type(excluded) is bool and type(available) is bool and available:
+            return excluded, None
+    except ValueError:
+        pass
+    return None, "hull assessment unavailable"
+
+
+def validate_spans(doc, run):
+    try:
+        node = doc.field("spans").field(run)
+        spans = []
+        for key in ("member", "request"):
+            value = node.field(key)
+            if value.kind == "n":
+                spans.append(None)
+                continue
+            span = [v.scalar() for v in value.elements()]
+            if len(span) != 2 or any(type(v) is not int or v < 0 for v in span):
+                raise ValueError("invalid span")
+            if span[0] > span[1]:
+                raise ValueError("invalid span")
+            spans.append(span)
+        member, request = spans
+        if request is not None and (member is None or not (member[0] <= request[0] <= request[1] <= member[1])):
+            raise ValueError("invalid span")
+        return (member, request), None
+    except ValueError:
+        return None, "invalid span"
+
+
+def validate_seal(raw):
+    try:
+        node = document(raw)
+        for key in ("hazards", "thermal", "continuous", "journal", "sha256"):
+            node = node.field(key)
+        digest = node.scalar()
+        if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest):
+            return digest, None
+    except ValueError:
+        pass
+    return None, "journal provenance unavailable"
+
+
+def validate_journal(journal, expected, sources):
+    """Identity check and the production parser; per-member replay follows spans."""
+    try:
+        raw = h.read_bytes(journal)
+        actual = journal if journal.is_file() else Path(str(journal) + ".zst")
+        sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
+        readings, malformed = h.read_monitor_journal(journal, "thermal")
+        reason = ("journal provenance unavailable" if expected is None else
+                  "journal differs from the harvest's" if hashlib.sha256(raw).hexdigest() != expected else None)
+        return readings, malformed, reason
+    except (OSError, ValueError):
+        return [], 0, "archived thermal journal unavailable"
+
+
+def validate_replay(member, request, readings, present, thresholds, reason, run):
+    """V2 is checked before X5, using the unchanged production helper."""
+    found = {code for code, *_ in h.thermal_member_flags([member[0], request[1]], readings, thresholds)}
+    if CODE in found and not present and not reason:
+        raise ValueError(f"request-end would add {CODE}: {run}")
+    hull = {code for code, *_ in h.thermal_member_flags(member, readings, thresholds)}
+    disagrees = (CODE in hull) != present and not reason
+    return CODE in found, ("journal does not reproduce the registered hull decision" if disagrees else reason), disagrees
+
+
+def validate_sidecar(raw):
+    try:
+        node = document(raw)
+        for key in ("blinding", "withheld", "path"):
+            node = node.field(key)
+        value = node.scalar()
+        if isinstance(value, str) and value:
+            return value, None
+    except ValueError:
+        pass
+    return None, "withheld store locator unavailable"
+
+
 def csv_fields(raw):
     """Raw RFC4180 field spans, including quotes; retain all separators."""
-    rows, row, start, index, quoted = [], [], 0, 0, False
+    rows, row, start, index, quoted, closed = [], [], 0, 0, False, False
     while index < len(raw):
         char = raw[index]
         if char == '"':
             if quoted and index + 1 < len(raw) and raw[index + 1] == '"':
                 index += 2
                 continue
+            if not quoted and (index != start or closed):
+                raise ValueError("quote inside unquoted CSV field")
             quoted = not quoted
+            closed = not quoted
+        elif closed and char not in ',\r\n':
+            raise ValueError("bytes after closing CSV quote")
         if not quoted and char in ',\r\n':
             row.append((start, index))
             if char != ',':
@@ -207,6 +430,7 @@ def csv_fields(raw):
                 if char == '\r' and index + 1 < len(raw) and raw[index + 1] == '\n':
                     index += 1
             start = index + 1
+            closed = False
         index += 1
     if quoted:
         raise ValueError("unterminated CSV field")
@@ -218,6 +442,27 @@ def csv_fields(raw):
 
 def decode_field(raw, span):
     return next(csv.reader([raw[slice(*span)]]))[0] if span[0] != span[1] else ""
+
+
+def validate_export(raw):
+    """Lex all fields, decoding only headers and identity/code columns."""
+    try:
+        rows = csv_fields(raw)
+        if not rows:
+            raise ValueError("empty export CSV")
+        header = [decode_field(raw, span) for span in rows[0]]
+        if "run_id" not in header or "exclusion_codes" not in header:
+            raise ValueError("export CSV missing run_id or exclusion_codes column")
+        if len(set(header)) != len(header):
+            raise ValueError("export CSV repeats a header")
+        if any(len(row) != len(header) for row in rows[1:]):
+            raise ValueError("export CSV row width differs from header")
+        rid, codes = header.index("run_id"), header.index("exclusion_codes")
+        identities = [(decode_field(raw, row[rid]), set(filter(None, decode_field(raw, row[codes]).split(";"))))
+                      for row in rows[1:]]
+        return (rows, header, identities), None
+    except (ValueError, csv.Error) as exc:
+        return None, str(exc)
 
 
 def encode_field(value):
@@ -235,8 +480,10 @@ def replace(raw, replacements):
     return raw
 
 
-def member_status(mode, original_has_code, untrusted_reason, candidate_equal):
+def member_status(mode, original_has_code, untrusted_reason, candidate_equal, records_fault=None):
     """Direction alone determines the invariant members, even without evidence."""
+    if records_fault:
+        return "not defined (" + records_fault + ")"
     if untrusted_reason:
         mutable = original_has_code if mode == "request-end-p1" else not original_has_code
         return "not defined (" + untrusted_reason + ")" if mutable else "equals registered line"
@@ -262,108 +509,41 @@ def transform(mode, archive, output, export=None):
 
     acceptance_path = archive / "derived/b6-acceptance.json"
     raw_acceptance = read(acceptance_path)
-    exclusions = selected(raw_acceptance, "excluding")
     roster_raw = read(archive / "derived/roster.json")
-    roster = selected(roster_raw, "members")
-    if not isinstance(roster, list) or any(not isinstance(m, dict) for m in roster):
-        raise ValueError("roster members is not a list of objects")
-    # PROTOTYPE: the harvest archives the pack at repo/<pack relative>/plan_tree.json
-    # and names the pack by that directory (build_roster: pack_id = pack_root.name).
-    # With a pack identity, exactly that tree carries the pass. Without one (the
-    # synthetic fixtures), every archived tree must carry it: a fixture allowance.
-    try:
-        pack_id = selected(roster_raw, "pack_id")
-    except ValueError:
-        pack_id = None
-    trees = sorted((archive / "sources/repo").rglob("plan_tree.json"))
-    if isinstance(pack_id, str) and pack_id:
-        trees = [tree for tree in trees if tree.parent.name == pack_id]
-        pass_mismatch = len(trees) != 1
-    else:
-        pass_mismatch = not trees
-    for tree in trees:
-        try:
-            pass_id = selected(read(tree), "bytes_pass")
-            if type(pass_id) is not int or pass_id != (2 if mode == "hull-p2" else 1):
-                pass_mismatch = True
-        except (OSError, ValueError, IndexError, TypeError):
-            pass_mismatch = True
-    structural = {}
-    global_fault = None
-    if not isinstance(exclusions, list):
-        global_fault = "acceptance excluding is not a list"
-        exclusions = []
-    # Keep unidentified roster entries in the record without inventing an identity.
-    missing_identity = any(not isinstance(m.get("run_id"), str) for m in roster)
-    if missing_identity:
-        global_fault = "roster member missing run_id"
-
-    def unit_valid(unit):
-        return (isinstance(unit, dict) and {"cell_id", "stratum", "unit_id"} <= unit.keys()
-                and all(type(unit[k]) in (str, int) for k in ("cell_id", "stratum", "unit_id")))
-
-    if any(not isinstance(m.get("units", []), list) or not all(unit_valid(u) for u in m.get("units", []))
-           for m in roster):
-        global_fault = global_fault or "roster member units invalid"
-    before = {m.get("run_id"): set() for m in roster}
-    for row in exclusions:
-        if not isinstance(row, dict):
-            global_fault = global_fault or "acceptance exclusion row is not an object"
-        elif row.get("scope") == "member":
-            run = row.get("run_id")
-            if not isinstance(run, str):
-                global_fault = global_fault or "exclusion row missing run_id"
-            elif run not in before:
-                # Acceptance lists codes only for roster members (L4 compute over the roster).
-                global_fault = global_fault or "exclusion row names a run outside the roster"
-            elif not isinstance(row.get("code"), str):
-                structural[run] = "exclusion row missing code"
-            else:
-                before[run].add(row["code"])
+    roster, pack_id, roster_reason = validate_roster(roster_raw)
+    exclusions, before, structural, global_fault, session = validate_acceptance(raw_acceptance, roster)
+    global_fault = global_fault or roster_reason
+    pass_mismatch = validate_plan(read, archive, pack_id, mode) is not None
     after = {run: set(codes) for run, codes in before.items()}
     notices, changes, statuses = [], [], {}
     if pass_mismatch:
         notices.append({"code": "records.thermal_pass_mismatch", "reason": "pass mismatch"})
-    unavailable = None
-    mismatch = False
-    provenance_unavailable = False
-    assessments, spans, readings = None, {}, []
-    # The gap threshold affects only thermal.unmeasured. This projection never
-    # consumes that flag, so the production function's gap argument is immaterial.
+    unavailable, journal_reason = None, None
+    assessments, spans, readings = None, None, []
+    # This argument affects only the discarded thermal.unmeasured projection.
     thresholds = {"thermal_unmeasured_gap_s": 0}
     try:
         if mode == "hull-p2":
-            assessments = read(archive / "withheld/member-assessments.json")
+            assessments = document(read(archive / "withheld/member-assessments.json"))
         else:
-            spans = selected(read(archive / "withheld/spans.json"), "spans")
-            flags = archive / "derived/window_flags.json"
+            spans = document(read(archive / "withheld/spans.json"))
             try:
-                expected = selected(read(flags), "hazards", "thermal", "continuous", "journal", "sha256")
-            except (OSError, ValueError, IndexError, TypeError):
-                expected = None
-            provenance_unavailable = not isinstance(expected, str) or not expected
-            if provenance_unavailable:
+                expected, seal_reason = validate_seal(read(archive / "derived/window_flags.json"))
+            except (OSError, ValueError):
+                expected, seal_reason = None, "journal provenance unavailable"
+            if seal_reason:
                 notices.append({"code": "records.thermal_journal_provenance_unavailable"})
             journal = archive / "sources/night-custody/hazards/monitor/thermal.jsonl"
-            if not journal.is_file() and not Path(str(journal) + ".zst").is_file():
-                unavailable = "archived thermal journal unavailable"
-            else:
-                # read_bytes has the harvest's plain/.zst decompression semantics;
-                # the sealed digest binds decompressed journal bytes too.
-                digest = hashlib.sha256(h.read_bytes(journal)).hexdigest()
-                actual = journal if journal.is_file() else Path(str(journal) + ".zst")
-                sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
-                mismatch = not provenance_unavailable and digest != expected
-                if mismatch:
-                    notices.append({"code": "records.thermal_journal_mismatch"})
-                readings, malformed = h.read_monitor_journal(journal, "thermal")
-                if malformed:
-                    notices.append({"code": "records.monitor_line_malformed"})
-    except (OSError, ValueError, IndexError, TypeError):
+            readings, malformed, journal_reason = validate_journal(journal, expected, sources)
+            if journal_reason == "journal differs from the harvest's":
+                notices.append({"code": "records.thermal_journal_mismatch"})
+            if malformed:
+                notices.append({"code": "records.monitor_line_malformed"})
+    except (OSError, ValueError):
         unavailable = "archived thermal journal unavailable" if mode == "request-end-p1" else "hull assessment unavailable"
 
     def undefined(run, reason):
-        statuses[run] = "not defined (" + reason + ")"
+        statuses[run] = member_status(mode, False, None, True, records_fault=reason)
         notices.append({"run_id": run, "code": "records.thermal_line_undefined", "reason": reason})
 
     for member in roster:
@@ -374,67 +554,25 @@ def transform(mode, archive, output, export=None):
         reason = global_fault or structural.get(run) or ("pass mismatch" if pass_mismatch else unavailable)
         candidate = set(before[run])
         if not reason and mode == "hull-p2":
-            try:
-                record = selected(assessments, "members", run, FIELD)
-                if (not isinstance(record, dict) or type(record.get("journal_available")) is not bool
-                        or "excluded" not in record
-                        or (record["excluded"] is not None and type(record["excluded"]) is not bool)):
-                    raise ValueError("invalid hull assessment")
-                if not record["journal_available"]:
-                    notices.append({"run_id": run, "code": "thermal.unmeasured"})
-                if record["excluded"] is None:
-                    notices.append({"run_id": run, "code": "member.span_unknown"})
-                if not record["journal_available"] or record["excluded"] is None:
-                    raise ValueError("unavailable hull assessment")
-                if record["excluded"]:
-                    candidate.add(CODE)
-            except (ValueError, TypeError, IndexError):
-                reason = "hull assessment unavailable"
+            excluded, reason = validate_hull(assessments, run)
+            if excluded:
+                candidate.add(CODE)
         elif not reason:
-            reason = ("journal provenance unavailable" if provenance_unavailable else
-                      "journal differs from the harvest's" if mismatch else None)
-            try:
-                span = spans.get(run, {})
-                if run not in spans or not isinstance(span, dict):
-                    raise ValueError("member span unavailable")
-                if "request" not in span:
-                    raise ValueError("request span field missing")
-                if span["request"] is None:
+            span, span_reason = validate_spans(spans, run)
+            reason = journal_reason or span_reason
+            if span is not None:
+                member_span, request_span = span
+                if request_span is None:
                     notices.append({"run_id": run, "code": "request_span.absent_keep_hull"})
                 else:
-                    if span.get("member") is None:
-                        raise ValueError("member span unavailable")
-                    if any(not isinstance(span[k], list) or len(span[k]) != 2 for k in ("member", "request")):
-                        raise ValueError("invalid span")
-                    member_span, request_span = span["member"], span["request"]
-                    if any(type(v) is not int or v < 0 for v in member_span + request_span):
-                        raise ValueError("noninteger span")
-                    # PROTOTYPE: member_spans writes member = [min(starts), max(ends)] with the
-                    # request's stamps among them, so the request lies inside the member span.
-                    if not (member_span[0] <= request_span[0] <= request_span[1] <= member_span[1]):
-                        raise ValueError("invalid span")
-                    stamps = [member_span[0], request_span[1]]
-                    found = {code for code, *_ in h.thermal_member_flags(stamps, readings, thresholds)}
-                    if CODE in found and CODE not in before[run] and not reason:
-                        raise ValueError(f"request-end would add {CODE}: {run}")
-                    # PROTOTYPE: the pass-1 harvest wrote the registered code from exactly this
-                    # function on the member hull. The journal and span are trusted for this
-                    # member only if that replay reproduces the registered decision.
-                    hull = {code for code, *_ in h.thermal_member_flags(member_span, readings, thresholds)}
-                    if (CODE in hull) != (CODE in before[run]) and not reason:
+                    found, reason, disagrees = validate_replay(
+                        member_span, request_span, readings, CODE in before[run], thresholds, reason, run)
+                    if disagrees:
                         notices.append({"run_id": run, "code": "records.thermal_hull_replay_disagrees"})
-                        raise ValueError("journal does not reproduce the registered hull decision")
-                    if CODE not in found:
+                    if not found:
                         candidate.discard(CODE)
-            except (TypeError, IndexError, AttributeError):
-                reason = reason or "invalid span"
-            except ValueError as exc:
-                if str(exc).startswith("request-end would add"):
-                    raise
-                reason = reason or str(exc)
-        status = member_status(mode, CODE in before[run], reason, candidate == before[run])
-        if global_fault or run in structural:
-            status = "not defined (" + (global_fault or structural[run]) + ")"
+        status = member_status(mode, CODE in before[run], reason, candidate == before[run],
+                               records_fault=global_fault or structural.get(run))
         statuses[run] = status
         if status.startswith("not defined"):
             undefined(run, status[len("not defined ("):-1])
@@ -447,11 +585,7 @@ def transform(mode, archive, output, export=None):
     exports = {}
     withheld_runs = set()
     if export:
-        try:
-            session = selected(raw_acceptance, "session_id")
-            if not isinstance(session, str):
-                raise ValueError("invalid session_id")
-        except (ValueError, IndexError, TypeError):
+        if not isinstance(session, str):
             session = None
             for member in roster:
                 if member.get("kind") == "science":
@@ -465,7 +599,7 @@ def transform(mode, archive, output, export=None):
         if sidecar.is_file():
             try:
                 raw_sidecar = read(sidecar)
-                locator = selected(raw_sidecar, "blinding", "withheld", "path")
+                locator, _reason = validate_sidecar(raw_sidecar)
                 if not isinstance(locator, str) or not locator:
                     locator = None
             except UnicodeDecodeError:
@@ -495,33 +629,24 @@ def transform(mode, archive, output, export=None):
                 continue
             except OSError:
                 continue
-            try:
-                rows = csv_fields(raw)
-                if not rows:
-                    raise ValueError("empty export CSV")
-                header = [decode_field(raw, span) for span in rows[0]]
-                if "run_id" not in header or "exclusion_codes" not in header:
-                    raise ValueError("export CSV missing run_id or exclusion_codes column")
-                if any(len(row) != len(header) for row in rows[1:]):
-                    raise ValueError("export CSV row width differs from header")
-            except ValueError as exc:
+            table, export_reason = validate_export(raw)
+            if export_reason:
                 exports[relative] = raw
                 for member in roster:
                     if member.get("kind") == "science":
                         bad.add(member.get("run_id"))
-                        undefined(member.get("run_id"), str(exc))
+                        undefined(member.get("run_id"), export_reason)
                 continue
+            rows, header, identities = table
             rid, codes = header.index("run_id"), header.index("exclusion_codes")
-            for row in rows[1:]:
-                run = decode_field(raw, row[rid])
-                original = set(filter(None, decode_field(raw, row[codes]).split(";")))
+            for run, original in identities:
                 if run not in before or original != before[run] or run in seen:
                     bad.add(run)
                     undefined(run, "CSV/archive code disagreement: " + run)
                 seen.add(run)
                 if withheld:
                     withheld_runs.add(run)
-            tables.append((relative, raw, rows, header))
+            tables.append((relative, raw, rows, header, identities))
         for change in changes:
             run = change["run_id"]
             if run not in seen and run not in bad:
@@ -531,17 +656,16 @@ def transform(mode, archive, output, export=None):
             if run in before:
                 after[run] = set(before[run])
         changes = [c for c in changes if c["run_id"] not in bad]
-        for relative, raw, rows, header in tables:
+        for relative, raw, rows, header, identities in tables:
             rid, codes = header.index("run_id"), header.index("exclusion_codes")
             edits = []
-            for row in rows[1:]:
-                run = decode_field(raw, row[rid])
+            for row, (run, _original) in zip(rows[1:], identities):
                 if run not in bad and after[run] != before[run]:
                     edits.append((*row[codes], encode_field(";".join(sorted(after[run])))))
                     if "excluded" in header:
                         edits.append((*row[header.index("excluded")], str(bool(after[run]))))
             exports[relative] = replace(raw, edits)
-    # PROTOTYPE: retained rows keep their exact source lexemes (spliced, never
+    # Retained rows keep their exact source lexemes (spliced, never
     # re-encoded); only removed rows leave and added rows are appended.
     new_acceptance = raw_acceptance
     if changes:
@@ -715,28 +839,41 @@ def manifest_entries(value):
     return expected
 
 
+def validate_record(raw):
+    document(raw)
+    record = json.loads(raw)
+    if (not isinstance(record, dict) or not isinstance(record.get("notices"), list)
+            or any(not isinstance(n, dict) or not isinstance(n.get("code"), str)
+                   for n in record["notices"])
+            or not isinstance(record.get("source_sha256"), dict)
+            or any(not isinstance(k, str) or not Path(k).is_absolute()
+                   or ".." in Path(k).parts or Path(k).parent == Path("/")
+                   or not isinstance(v, str) or re.fullmatch(r"[0-9a-f]{64}", v) is None
+                   for k, v in record["source_sha256"].items())
+            or not isinstance(record.get("view_manifest_sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", record["view_manifest_sha256"]) is None):
+        raise ValueError("invalid thermal line record")
+    return record
+
+
+def validate_manifest(raw):
+    document(raw)
+    return manifest_entries(json.loads(raw))
+
+
 def verify(output):
     output = Path(output).resolve()
     if not output.is_dir():
         return ["output missing"]
     record_path = output / "thermal_line.json"
     different, reasons = [], []
-    # PROTOTYPE: source roots come from the view's own links (structural, record
-    # independent) and, once the record is validated, from its recorded sources.
+    # Roots from links survive damage to the record; record paths count only
+    # after the entire control document and its consumed fields validate.
     source_roots = linked_roots(output)
     try:
         if record_path.is_dir():
             raise ValueError("thermal line record is a directory")
-        record = json.loads(record_path.read_bytes())
-        if (not isinstance(record, dict) or not isinstance(record.get("notices"), list)
-                or any(not isinstance(n, dict) or not isinstance(n.get("code"), str)
-                       for n in record["notices"])
-                or not isinstance(record.get("source_sha256"), dict)
-                or any(not isinstance(k, str) or not isinstance(v, str)
-                       for k, v in record["source_sha256"].items())
-                or not isinstance(record.get("view_manifest_sha256"), str)
-                or re.fullmatch(r"[0-9a-f]{64}", record["view_manifest_sha256"]) is None):
-            raise ValueError("invalid thermal line record")
+        record = validate_record(record_path.read_bytes().decode("utf-8"))
         for source in record["source_sha256"]:
             path = Path(source).resolve()
             source_roots.append(path.parent.parent if path.name == "b6-acceptance.json" else path.parent)
@@ -749,7 +886,7 @@ def verify(output):
         if sha256(manifest_path) != record["view_manifest_sha256"]:
             different.append("view_manifest.json")
             reasons.append("manifest SHA-256 differs from recorded binding")
-        expected = manifest_entries(json.loads(manifest_path.read_bytes()))
+        expected = validate_manifest(manifest_path.read_bytes().decode("utf-8"))
     except (OSError, ValueError, KeyError, TypeError, RecursionError) as exc:
         expected = {}
         different.append("view_manifest.json")
