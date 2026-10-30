@@ -1,0 +1,8 @@
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 228.694s
+
+OK
+BYTE_IDENTITY pass1: 177 files, exact equality; manifest_sha256=fbaf0728d5bde5d432ff76fde3fe03468889a4085a875ca232fe6904cd89cc90
+BYTE_IDENTITY block5: 177 files, exact equality; manifest_sha256=e88f8b3ab4eda5969a7340e700a5944ca7439d7452d4a3a48b6c99c9e61f9093
+BYTE_IDENTITY alpha: 177 files, exact equality; manifest_sha256=34d49f24f8b4013652b46a0e0106c19e63df4c25bfc2e5c62ba73205d4621f58

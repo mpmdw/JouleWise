@@ -1,0 +1,12 @@
+LEX_MUTATIONS_40000 False [('\'{"a":[1,2],"a":"x"}\'', True, False), ('\'{"b":[1,2],"b":"x"}\'', True, False), ('\'{"a":[1,2],"a":"x"}\'', True, False), ('\'{"b":[1,2],"b":"x"}\'', True, False), ('\'{"a":[1,2],"a":"x"}\'', True, False)]
+Traceback (most recent call last):
+  File "/workspace/by-therm-review-sol5/.codex-report/by-therm-lines-rev-sol-5/probes.py", line 125, in <module>
+    lexical()
+    ~~~~~~~^^
+  File "/workspace/by-therm-review-sol5/.codex-report/by-therm-lines-rev-sol-5/probes.py", line 39, in lexical
+    emit('LEX_MUTATIONS_40000', not mismatch, mismatch[:5])
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/by-therm-review-sol5/.codex-report/by-therm-lines-rev-sol-5/probes.py", line 14, in emit
+    assert ok, (name, detail)
+           ^^
+AssertionError: ('LEX_MUTATIONS_40000', [('\'{"a":[1,2],"a":"x"}\'', True, False), ('\'{"b":[1,2],"b":"x"}\'', True, False), ('\'{"a":[1,2],"a":"x"}\'', True, False), ('\'{"b":[1,2],"b":"x"}\'', True, False), ('\'{"a":[1,2],"a":"x"}\'', True, False)])

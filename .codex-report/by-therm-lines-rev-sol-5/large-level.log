@@ -1,0 +1,11 @@
+head exit 1 record_exists False
+  File "/workspace/by-therm-review-sol5/joulewise/b5/harvest.py", line 3076, in thermal_member_flags
+    if reading.status == "ok" and _int(reading.values.get("level")) is not None]
+                                  ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/by-therm-review-sol5/joulewise/b5/harvest.py", line 2410, in _int
+    number = _num(value)
+  File "/workspace/by-therm-review-sol5/joulewise/b5/harvest.py", line 2404, in _num
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                                                                             ~~~~~~~~~~~~~^^^^^^^
+OverflowError: int too large to convert to float
+baseline OverflowError int too large to convert to float

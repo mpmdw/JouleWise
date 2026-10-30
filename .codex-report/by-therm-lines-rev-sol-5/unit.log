@@ -1,0 +1,85 @@
+.....................................PASS bytes-s5-p1/heldout: archive-stage transform changes exactly the target: [{'run_id': 'llama-3-3-70b-instruct-4bit-10', 'code': 'thermal.os_level_nonzero', 'action': 'removed', 'reason': 'request-end OS-window sensitivity (post hoc; not a registered result)'}]
+PASS bytes-s5-p1/heldout: blinded transform result: {'refused': None, 'in_public_csv': False}
+PASS bytes-s5-p1/heldout: archive stage source vs line (Llama-3.3-70B-Instruct-4bit): {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['llama-3-3-70b-instruct-4bit-10', 'llama-3-3-70b-instruct-4bit-11', 'llama-3-3-70b-instruct-4bit-12', 'llama-3-3-70b-instruct-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}}
+PASS bytes-s5-p1/heldout: archive-root ingress source vs line: {'source': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}, 'line': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}}
+PASS bytes-s5-p1/heldout: blinded stage commit=False source vs line: {'source': {'status': 'model absent from reduced cells', 'records': 0}, 'line': {'status': 'model absent from reduced cells', 'records': 0}, 'line_export_files': ['bytes-s5-p1.runs.csv', 'bytes-s5-p1.session.json', 'withheld']}
+PASS bytes-s5-p1/heldout: blinded stage commit=True source vs line: {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['llama-3-3-70b-instruct-4bit-10', 'llama-3-3-70b-instruct-4bit-11', 'llama-3-3-70b-instruct-4bit-12', 'llama-3-3-70b-instruct-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line_export_files': ['bytes-s5-p1.runs.csv', 'bytes-s5-p1.session.json', 'withheld']}
+PASS bytes-s2-p1/heldout: archive-stage transform changes exactly the target: [{'run_id': 'qwen3-30b-a3b-4bit-10', 'code': 'thermal.os_level_nonzero', 'action': 'removed', 'reason': 'request-end OS-window sensitivity (post hoc; not a registered result)'}]
+PASS bytes-s2-p1/heldout: blinded transform result: {'refused': None, 'in_public_csv': False}
+PASS bytes-s2-p1/heldout: archive stage source vs line (Qwen3-30B-A3B-4bit): {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-30b-a3b-4bit-10', 'qwen3-30b-a3b-4bit-11', 'qwen3-30b-a3b-4bit-12', 'qwen3-30b-a3b-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}}
+PASS bytes-s2-p1/heldout: archive-root ingress source vs line: {'source': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}, 'line': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}}
+PASS bytes-s2-p1/heldout: blinded stage commit=False source vs line: {'source': {'status': 'model absent from reduced cells', 'records': 0}, 'line': {'status': 'model absent from reduced cells', 'records': 0}, 'line_export_files': ['bytes-s2-p1.runs.csv', 'bytes-s2-p1.session.json', 'withheld']}
+PASS bytes-s2-p1/heldout: blinded stage commit=True source vs line: {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-30b-a3b-4bit-10', 'qwen3-30b-a3b-4bit-11', 'qwen3-30b-a3b-4bit-12', 'qwen3-30b-a3b-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line_export_files': ['bytes-s2-p1.runs.csv', 'bytes-s2-p1.session.json', 'withheld']}
+PASS bytes-s2-p1/fit: archive-stage transform changes exactly the target: [{'run_id': 'qwen3-8b-4bit-10', 'code': 'thermal.os_level_nonzero', 'action': 'removed', 'reason': 'request-end OS-window sensitivity (post hoc; not a registered result)'}]
+PASS bytes-s2-p1/fit: blinded transform result: {'refused': None, 'in_public_csv': True}
+PASS bytes-s2-p1/fit: archive stage source vs line (Qwen3-8B-4bit): {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-8b-4bit-10', 'qwen3-8b-4bit-11', 'qwen3-8b-4bit-12', 'qwen3-8b-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}}
+PASS bytes-s2-p1/fit: archive-root ingress source vs line: {'source': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}, 'line': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}}
+PASS bytes-s2-p1/fit: blinded stage commit=False source vs line: {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-8b-4bit-10', 'qwen3-8b-4bit-11', 'qwen3-8b-4bit-12', 'qwen3-8b-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line_export_files': ['bytes-s2-p1.runs.csv', 'bytes-s2-p1.session.json', 'withheld']}
+PASS bytes-s2-p1/fit: blinded stage commit=True source vs line: {'source': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-8b-4bit-10', 'qwen3-8b-4bit-11', 'qwen3-8b-4bit-12', 'qwen3-8b-4bit-13']}, 'line': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line_export_files': ['bytes-s2-p1.runs.csv', 'bytes-s2-p1.session.json', 'withheld']}
+PASS bytes-s2-p2/heldout: archive-stage transform changes exactly the target: [{'run_id': 'qwen3-30b-a3b-4bit-10', 'code': 'thermal.os_level_nonzero', 'action': 'added', 'reason': 'member-hull OS window (pass-1 registered window)'}]
+PASS bytes-s2-p2/heldout: blinded transform result: {'refused': None, 'in_public_csv': False}
+PASS bytes-s2-p2/heldout: archive stage source vs line (Qwen3-30B-A3B-4bit): {'source': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-30b-a3b-4bit-10', 'qwen3-30b-a3b-4bit-11', 'qwen3-30b-a3b-4bit-12', 'qwen3-30b-a3b-4bit-13']}}
+PASS bytes-s2-p2/heldout: archive-root ingress source vs line: {'source': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}, 'line': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}}
+PASS bytes-s2-p2/heldout: blinded stage commit=False source vs line: {'source': {'status': 'model absent from reduced cells', 'records': 0}, 'line': {'status': 'model absent from reduced cells', 'records': 0}, 'line_export_files': ['bytes-s2-p2.runs.csv', 'bytes-s2-p2.session.json', 'withheld']}
+PASS bytes-s2-p2/heldout: blinded stage commit=True source vs line: {'source': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-30b-a3b-4bit-10', 'qwen3-30b-a3b-4bit-11', 'qwen3-30b-a3b-4bit-12', 'qwen3-30b-a3b-4bit-13']}, 'line_export_files': ['bytes-s2-p2.runs.csv', 'bytes-s2-p2.session.json', 'withheld']}
+PASS bytes-s2-p2/fit: archive-stage transform changes exactly the target: [{'run_id': 'qwen3-8b-4bit-10', 'code': 'thermal.os_level_nonzero', 'action': 'added', 'reason': 'member-hull OS window (pass-1 registered window)'}]
+PASS bytes-s2-p2/fit: blinded transform result: {'refused': None, 'in_public_csv': True}
+PASS bytes-s2-p2/fit: archive stage source vs line (Qwen3-8B-4bit): {'source': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-8b-4bit-10', 'qwen3-8b-4bit-11', 'qwen3-8b-4bit-12', 'qwen3-8b-4bit-13']}}
+PASS bytes-s2-p2/fit: archive-root ingress source vs line: {'source': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}, 'line': {'status': 'unavailable', 'n_b': None, 'removed_runs': None}}
+PASS bytes-s2-p2/fit: blinded stage commit=False source vs line: {'source': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-8b-4bit-10', 'qwen3-8b-4bit-11', 'qwen3-8b-4bit-12', 'qwen3-8b-4bit-13']}, 'line_export_files': ['bytes-s2-p2.runs.csv', 'bytes-s2-p2.session.json', 'withheld']}
+PASS bytes-s2-p2/fit: blinded stage commit=True source vs line: {'source': {'status': 'computed', 'n_b': 10, 'removed_runs': []}, 'line': {'status': 'computed', 'n_b': 9, 'removed_runs': ['qwen3-8b-4bit-10', 'qwen3-8b-4bit-11', 'qwen3-8b-4bit-12', 'qwen3-8b-4bit-13']}, 'line_export_files': ['bytes-s2-p2.runs.csv', 'bytes-s2-p2.session.json', 'withheld']}
+
+SUMMARY 30 / 30 ; root /tmp/btl-ana-8u4wrgio
+pass-1 primary member codes: {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}
+pass-2 primary member codes: {}
+PASS real acceptance carries OS code on every pass-1 science member: {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}........
+----------------------------------------------------------------------
+Ran 45 tests in 1085.709s
+
+OK
+
+PASS real pass-2 primary carries no OS code
+PASS native harvest: no untrusted member
+PASS native harvest: no replay disagreement
+PASS request-end-p1 exit 0 on real archive
+PASS (c) request-end-p1(pass1) == pass-2 primary (exact): {'re1': {}, 'p2': {}}
+PASS native harvest: no untrusted member
+PASS native harvest: no replay disagreement
+PASS hull-p2 exit 0 on real archive
+PASS (a) hull-p2(pass2) == pass-1 primary (exact): {'hull2': {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}, 'p1': {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}}
+PASS (a) quad drops whole in hull record: [['b5t-abs-r01'], ['b5t-abs-r02'], ['b5t-cmp-b01-a1', 'b5t-cmp-b01-b1', 'b5t-cmp-b01-b2', 'b5t-cmp-b01-a2']]
+PASS (f) source archives unchanged
+PASS (f) hull-p2 idempotent on its own output
+PASS native harvest: no untrusted member
+PASS native harvest: no replay disagreement
+PASS pass mismatch recorded, hull-invariant members remain equal
+PASS native harvest: no untrusted member
+PASS native harvest: no replay disagreement
+PASS (c) inside-request member stays dropped; others restored; equals pass-2 primary: {'out': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'p2': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS native harvest: no untrusted member
+PASS native harvest: no replay disagreement
+PASS level==1 at exactly request-end stamp: tool == pass-2 primary: {'out': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'p2': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'p1': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS native harvest: no untrusted member
+PASS native harvest: no replay disagreement
+PASS malformed lines + non-numeric level: tool == pass-2 primary, malformed noticed: {'out': {}, 'p2': {}, 'err': ''}
+PASS native variant hull: no untrusted member
+PASS variant hull equals pass-1 primary
+PASS native variant hull: no untrusted member
+PASS variant hull equals pass-1 primary
+PASS native variant hull: no untrusted member
+PASS variant hull equals pass-1 primary
+PASS dup OS row fully removed; other thermal code and battery code kept: {'got': {'b5t-abs-r02': ['thermal.unmeasured'], 'b5t-cmp-b01-a1': ['battery.member_span']}, 'err': ''}
+PASS member absent from spans keeps hull OS code: {'got': {'b5t-cmp-b01-b1': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS request == hull keeps hull OS code: {'got': {'b5t-cmp-b01-b2': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS reference member OS code untouched: {'got': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS zst journal: production reader and tool read it: {'production_readings': 102, 'tool_exit': 0, 'err': ''}
+PASS JSON sentinel absent from stdout and record, byte-copied in output
+PASS output files are symlinks into the source
+PASS record lists the sources it hashed: ['b6-acceptance.json', 'plan_tree.json', 'roster.json', 'spans.json', 'thermal.jsonl', 'window_flags.json']
+PASS modified copy is read-only
+PASS initial view verifies
+PASS real re-acceptance detected
+PASS moving the source leaves the output dangling (detected only by failure): {'dangling_after_move': True}
+PASS linked files whose SHA-256 is NOT in the record: {'count': 174, 'example': 'harvest.json'}
+
+SUMMARY 44 / 44 pass; root /tmp/btl-chain-k5kj1sbc

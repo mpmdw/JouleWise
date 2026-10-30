@@ -1,0 +1,5 @@
+transform returned evaluated
+destination outside output True
+sibling sentinel preserved False
+sibling content 'run_id,exclusion_codes,excluded\na,thermal.os_level_nonzero,True\n'
+baseline sibling sentinel preserved False

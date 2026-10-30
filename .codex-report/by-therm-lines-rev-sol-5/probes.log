@@ -1,0 +1,35 @@
+LEX_MUTATIONS_40000 True []
+JSON_LOADS_ACCEPTS_DUPLICATES_TOOL_REFUSES True 6
+DECODED_DUPLICATE_DEPTH_0 True
+DECODED_DUPLICATE_DEPTH_1 True
+DECODED_DUPLICATE_DEPTH_7 True
+DECODED_DUPLICATE_DEPTH_1000 True
+MILLION_DEPTH True
+BAD_LEXEME_'01' True
+BAD_LEXEME_'.5' True
+BAD_LEXEME_'1.' True
+BAD_LEXEME_'+1' True
+BAD_LEXEME_'NaN' True
+BAD_LEXEME_'Infinity' True
+BAD_LEXEME_'0x10' True
+BAD_LEXEME_'"\x00"' True
+BAD_LEXEME_'"\\x20"' True
+BAD_LEXEME_'"\\u12xz"' True
+BAD_LEXEME_'"\\ud800"' True
+BAD_LEXEME_'\ufeff{}' True
+BAD_LEXEME_'{}{}' True
+PRODUCER_ESCAPED_UNICODE True
+ESCAPING_LOCATOR_SYMLINK_STORE True
+EXPORT_SOURCE_BYTES_INTACT True
+EXPORT_VIEW_VERIFIES True
+ROOT_SLASH_INVALID True
+NEW_NATIVE_ZERO_UNTRUSTED True 6
+NEW_NATIVE_ZERO_REPLAY_DISAGREEMENT True
+NEW_NATIVE_VIEW_VERIFIES True
+REAL_CHAIN_append-unsealed True not defined (journal differs from the harvest's)
+ONE_IN_HULL_NONZERO True b5t-cmp-b01-a1
+REAL_CHAIN_mutate-reseal True not defined (journal does not reproduce the registered hull decision)
+REAL_CHAIN_REPLAY_NOTICE_mutate-reseal True
+REAL_CHAIN_remove-row True equals registered line
+REAL_CHAIN_REPLAY_NOTICE_remove-row True
+SUMMARY independent probes passed
