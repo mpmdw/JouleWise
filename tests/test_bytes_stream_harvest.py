@@ -15,6 +15,64 @@ from scripts import bytes_stream_test as bt
 from tests.test_bytes_stream_capture import write_meter
 
 
+def independent_arithmetic(test, archive, record):
+    """Independent arithmetic over raw native streams; no producer integrators."""
+    import math
+    import plistlib
+    r, actual = record['receipt'], record['harvest']
+    lo, hi = r['start_ns'], r['end_ns']
+    duration = (hi-lo)/1e9
+    # 5.7e-6 J/GB * this call's payload GB = comparison bar in joules.
+    payload_gb = r['bytes_read']/1e9
+    tolerance_j = 5.7e-6 * payload_gb
+    message = f"5.7e-6 J/GB * {payload_gb} GB = {tolerance_j} J for this call"
+    raw = (archive/'runs_bytes_stream_test/capture/raw/powermetrics.plist').read_bytes()
+    # Native plist dates have whole-second precision. Use the capture's
+    # precise first endpoint, then advance on raw integer elapsed_ns support.
+    stop = read(archive/'runs_bytes_stream_test/capture/capture_stop.json')
+    end = round((stop['uncertainty_evidence']['clock_anchor']['first_sample_end_point_epoch_s']
+                 - 1_000_000)*1e9)
+    rails = []
+    for chunk in raw.split(b'\0'):
+        if not chunk.strip():
+            continue
+        doc = plistlib.loads(chunk)
+        # Synthetic epoch = 1,000,000 + RAW seconds (Capture's source clock).
+        if rails:
+            end += doc['elapsed_ns']
+        start = end-doc['elapsed_ns']
+        power = sum(doc['processor'][k] for k in ('cpu_power','gpu_power','ane_power'))/1000
+        rails.append(power*max(0,min(hi,end)-max(lo,start))/1e9)
+    test.assertAlmostEqual(actual['energy_j']['rails'], math.fsum(rails), delta=tolerance_j, msg=message)
+    # Decode raw meter bytes with the governed single clock fit; integrate
+    # independently with a direct half-open sample selection and arithmetic mean.
+    stream = kp.parse(next((archive/'custody/hazards/meter').glob('stream-*.jsonl')))
+    selected = [w for t,w in zip(stream.host_ns,stream.watts) if lo <= t < hi]
+    meter = math.fsum(selected)/len(selected)*duration
+    test.assertAlmostEqual(actual['energy_j']['meter'], meter, delta=tolerance_j, msg=message)
+    battery = [(t,-s['B0AC']*s['B0AV']/1e6) for t,s in zip(stream.poll_ns,stream.smc)
+               if 'B0AC' in s and 'B0AV' in s]
+    n = sum(lo <= t < hi for t,w in battery)
+    residual_ns = max(abs(stream.fit.stats[k]) for k in
+                      ('excess_latency_ms_min','excess_latency_ms_max'))*1e6
+    # BAT-2: one second averaged, one held, plus the largest raw poll gap.
+    tau_ns = 2_000_000_000 + max(b-a for a,b in zip(stream.poll_ns,stream.poll_ns[1:]))
+    # Edge power compared in W at a stricter energy-equivalent bar over T_call.
+    for index, edge in enumerate((lo,hi)):
+        right = next(i for i,t in enumerate(stream.host_ns) if t >= edge)
+        radius = residual_ns
+        powers = [w for i,(t,w) in enumerate(zip(stream.host_ns,stream.watts))
+                  if i in (right-1,right) or edge-radius <= t <= edge+radius]
+        test.assertAlmostEqual(actual['meter_edge_w'][index], max(powers),
+                               delta=tolerance_j/duration, msg=message+'; W bar = J bar / T_call')
+        charge = duration/n*math.fsum(abs(w) for t,w in battery
+                                   if edge <= t < edge+tau_ns)
+        test.assertAlmostEqual(actual['battery_edge_j'][index], charge, delta=tolerance_j, msg=message)
+    test.assertEqual(sum(g['missing_samples'] for g in actual['meter_gaps'] if g['span']=='stream'),2)
+    print(f"Independent arithmetic: {message}; rails={math.fsum(rails)} J; meter={meter} J; "
+          f"meter_edge_w={actual['meter_edge_w']}; battery_edge_j={actual['battery_edge_j']}")
+
+
 class HarvestTests(unittest.TestCase):
     def test_native_support_integral_and_anchor_envelope(self):
         # Compare identical governed functions on identical inputs: exact is

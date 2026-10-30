@@ -103,7 +103,8 @@ def synthetic_power(calls, lo, hi, *, boundary):
 def write_meter(path, calls, start, end):
     """50 Hz counter, 300 ms polls, a 7 s host/device offset and two lost samples.
 
-    Battery discharge of 3 W occupies the middle half of the first stream.
+    Battery discharge of 3 W occupies the middle half and a 300 ms end-edge
+    interval of the first stream (making the edge-charge check nonzero).
     These are explicit synthetic inputs, never acceptance thresholds.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -112,7 +113,8 @@ def write_meter(path, calls, start, end):
     r = calls[0] if calls else None
     gap = (r['start_ns']+r['end_ns'])//2 if r else start+10**9
     assist = lambda t: bool(r and r['start_ns']+(r['end_ns']-r['start_ns'])//4 <= t <
-                             r['end_ns']-(r['end_ns']-r['start_ns'])//4)
+                             r['end_ns']-(r['end_ns']-r['start_ns'])//4 or
+                             r and r['end_ns'] <= t < r['end_ns']+300_000_000)
     header = {'k':'h','status':'streaming','rate_idx':2, 'start_raw_ns':start,
               'start_mono_ns':start-7*10**9}
     with path.open('w') as f:
@@ -231,12 +233,16 @@ class CaptureTests(unittest.TestCase):
             self.assertIn('no allocatable scan triplet: S',result['error'])
             self.assertEqual(result['call_count'],0)
 
+    def test_missing_fiducials_stays_reasoned(self):
+        with tempfile.TemporaryDirectory(prefix="kb-cap-missing-") as tmp:
+            synthetic_chain(self, Path(tmp)/"archive", fiducials=False)
+
     def test_real_driver_chain_stage_and_harvest(self):
         with tempfile.TemporaryDirectory(prefix='kb-cap-e2e-') as tmp:
             synthetic_chain(self, Path(tmp)/'archive')
 
 
-def synthetic_chain(test, destination):
+def synthetic_chain(test, destination, *, fiducials=True):
     from tests.test_b5_driver import Harness
     from joulewise import night_gate
     from scripts import bytes_stream_harvest as harvest
@@ -250,6 +256,10 @@ def synthetic_chain(test, destination):
     tree = cap.read(kit/'plan_tree.json')
     window = harness.plan.hazard_window
     bindings = window['bindings']
+    # Match prepare's production attempt names, rather than Harness's B5 names.
+    bindings.update(pre_attempt_id='pre', post_attempt_id='post',
+        pre_calibration_dir=str(Path(bindings['claim_runs_root'])/'instrument_validation/pre'),
+        post_calibration_dir=str(Path(bindings['claim_runs_root'])/'instrument_validation/post'))
     # Keep only real hardware seams faked: existing reservation/calibration
     # fixture tools and new stage's fake array/capture adapter. Dispatch and
     # the rendered four-stage chain are the production implementations.
@@ -265,6 +275,7 @@ def synthetic_chain(test, destination):
             plan_id=harness.plan.plan_id,runbook_text=(cap.ROOT/chain.RUNBOOK_RELATIVE).read_text(),settle_s=0)
     harness.replace_chain(raw.decode(),keep_yield_plan=True)
     plan = cap.read(harness.plan_path)
+    plan['hazard_window']['bindings'] = bindings
     plan['hazard_window']['pack'].update(pack_root=str(kit),pack_id=kit.name,
         plan_tree_sha256=cap.sha(kit/'plan_tree.json'))
     plan['hazard_window']['stages']=[s.summary() for s in chain.stage_plan(tree)]
@@ -276,6 +287,20 @@ def synthetic_chain(test, destination):
     meter_life = sum(cap.CALL_S[a]+2*cap.IDLE_S+3*cap.SETTLE_S for a in cap.ORDER)+22*3*cap.SCAN_CALL_S
     harness.meter_argv = lambda request: [sys.executable, '-c',
         'import sys,time; time.sleep(float(sys.argv[1]))', str(meter_life), str(request.custody_root)]
+    if fiducials:
+        from tests.test_reduce import self_consistent_calibration
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+        evidence, raw_plist, events = self_consistent_calibration(protocol_id=PROTOCOL_ID)
+        fixture = harness.root/'fiducial-source'
+        (fixture/'raw').mkdir(parents=True)
+        cap.write(fixture/'instrument_evidence.json', evidence)
+        (fixture/'raw/powermetrics.plist').write_bytes(raw_plist)
+        (fixture/'events.jsonl').write_bytes(events)
+        # Replace only the physical calibration seam. The rendered pre/post
+        # tools write the production artifact trio at their real output paths.
+        tool = measurement/'scripts/validate_powermetrics_fiducial.py'
+        tool.write_text(tool.read_text() + '\nimport shutil\n' +
+            'shutil.copytree('+repr(str(fixture))+', directory, dirs_exist_ok=True)\n')
     rc=harness.run()
     test.assertEqual(rc,harness.driver.EXIT_GO)
     claim = Path(bindings['claim_runs_root'])
@@ -294,12 +319,25 @@ def synthetic_chain(test, destination):
     cap.write(destination/'SESSION.json',dict(non_claim=True,adapter_max_w=140,
         adapter_source='synthetic 140 W nameplate; no hardware',
         calibration_registration=cap.read(cap.ROOT/'configs/b6/registration/acceptance.json')))
-    # The fake calibration hardware does not manufacture authenticated
-    # fiducial evidence. Keep that missing prerequisite and exercise the real
-    # calibration evaluator/reader's reasoned path (not an invented bound).
     result=harvest.harvest(destination)
     cap.write(destination/'INPUT.json',result)
-    cap.write(destination/'READ.json',bt.read_known_bytes(result['records'],result['scan']))
+    reader = bt.read_known_bytes(result['records'],result['scan'])
+    cap.write(destination/'READ.json',reader)
+    if fiducials:
+        test.assertIsNotNone(result['provenance']['calibration']['operative_bound_s'])
+        for record in result['records']:
+            test.assertIsNotNone(record['harvest']['anchor_shift_j'])
+            test.assertIsNotNone(record['harvest']['operative_timing_bound_s'])
+        for boundary in reader['boundaries'].values():
+            test.assertIn(boundary['class'], ('RESOLVED', 'NOT RESOLVED'))
+        from tests.test_bytes_stream_harvest import independent_arithmetic
+        independent_arithmetic(test, destination, result['records'][0])
+    else:
+        for name in ('rails', 'gpu', 'rest'):
+            test.assertEqual(reader['boundaries'][name]['class'], 'UNDETERMINED')
+            test.assertIn('anchor_shift_j', reader['boundaries'][name]['reason'])
+        test.assertIsNone(result['provenance']['calibration']['operative_bound_s'])
+    print(json.dumps({k: reader['printed'][k] for k in ('contrasts','claim_lines','share')}, sort_keys=True))
     test.assertEqual(len(result['records']),8)
     test.assertEqual(result['scan']['status'],'knee found')
     test.assertEqual(len(cap.read(destination/'READ.json')['calls']),8)
