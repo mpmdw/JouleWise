@@ -86,13 +86,32 @@ string. T8c asserts the reasons are absent from the record, stdout and stderr fo
 and T4's `Q7331Z` sentinel cannot occur inside a digest (`test_dry_run.py:18`, `:519-523`). Executed records in
 `classifier_counterfactuals.txt` show `(tooling_refusal, extraction_cell_r3_refusal)` etc. with no reason text.
 
-**5. Full run.** `TMPDIR=/tmp/jwrev_tmp_a JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b5_analysis -t .`
+**5. Full run.** `TMPDIR=/tmp/jwrev_tmp_d JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b5_analysis -t .`
 at `901956944` from `/home/user/JouleWise` after `git fetch --unshallow` (TMPDIR outside the checkout, no float-like
 token). Exact tail (`full_suite_tail.txt`):
 
 ```
-(pending: whole-directory run in progress in this container; the tail lands in a follow-up commit on this branch)
+        '--output-dir',str(f['root'])], out)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/JouleWise/tests/b5_analysis/test_sensitivity_guard.py", line 62, in invoke
+    self.assertFalse(output.exists())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 1027 tests in 3565.259s
+
+FAILED (failures=1, skipped=13)
+EXIT=1
 ```
+
+The one failure is G6, the order-dependent fixture leak of RUN_STATE items 134-135 (PR #603, not on the lane's merged
+`origin/main`); standalone at the same head it is `Ran 1 test in 26.492s`, `OK` (`g6_standalone_tail.txt`). Every lane test
+passes in the whole run: r14, T4, T8/T8b/T8c, the step-4 modules and the archive step-4 test. Two earlier whole-directory
+attempts in this container gave no tail: one was stopped by my own 10-minute background limit, and its 12 GB of leftover
+TMPDIR then exhausted the disk allowance so the next attempt errored in `tempfile` and `copytree` (fixture copies); the
+run above started on an emptied TMPDIR. That is the same ENOSPC mechanism the lane records for Opus's `mint_kept_units`
+ERROR (S6): environment-dependent, not a code or fixture defect.
 
 Targeted run (T4, T8, T8b, T8c, `DriverPrimitiveTests`, the two step-4 modules, `test_archive`): `Ran 72 tests`, `OK`
 (`targeted_tests_tail.txt`).
