@@ -1608,3 +1608,434 @@ Decisions I made:
 - Run review scripts in a temporary mirror because they write evidence; preserve the review branch's evidence and the repository allowlist.
 
 No NEEDS_RULING or scope expansion. Only the four authorized files changed. No hardware measurement, admission or merge. Final-head CI is read after pushing this section; every observed job state is reported separately in the final handoff, without an advance green claim.
+
+## Round 8 replay transcripts
+
+Complete output of the supplied scripts (trailing whitespace trimmed); before is an immutable archive of `156f03110`, after uses the final reader. Fixtures were generated with the review's unchanged `run_with_clock.py` compatibility shim and `e2e_nonneg.py`.
+
+### baseline-probes
+
+```text
+baseline {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)}
+[tau_s_1e300_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+    gpu: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+    dc: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+    rest: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+[settle_s_1e300_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[gap_fsum_overflow_rec3] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+    gpu: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+    dc: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+    rest: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+[anchor_shift_1e308_all] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.idle.pre.rails.power_w, records[0].harvest.idle.post.rails.power_w, records[0].harvest.anch
+    gpu: S bound/N from records[0].harvest.energy_j.gpu, records[0].harvest.idle.pre.gpu.power_w, records[0].harvest.idle.post.gpu.power_w, records[0].harvest.anchor_shi
+    rest: S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.energy_j.meter, records[0].harvest.energy_j.battery, records[0].harvest.idle.pre.rails.powe
+[meter_edge_1e308_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    gpu: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    dc: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    rest: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+[r_max_1e308_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    gpu: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    dc: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    rest: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+[energy_rails_1e308_rec0] rc=0 calls=8 {'rails': ('NOT RESOLVED', 5.146164472158233e+302), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('NOT RESOLVED', 5.146164472158233e+302)} shrunk=[]
+    rails:
+    rest:
+[rails_row_overlap_prev_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732413065690482), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.0024454463165376823)} shrunk=['rails']
+[gpu_row_overlap_prev_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.0002858005853337753), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[rails_row0_covers_span_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.004869316027778751), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.006747554463523138)} shrunk=[]
+[idle_pre_start_ns_0_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[idle_post_end_far_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[meter_row0_stamp_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+    gpu: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+    dc: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+    rest: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+[rails_row0_start_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[0].start_ns invalid time order
+    rest: records[1].harvest.idle.pre.rails[0].start_ns invalid time order
+[battery_samples_row0_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+    gpu: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+    dc: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+    rest: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+[battery_idle_row0_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+    gpu: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+    dc: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+    rest: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+[meter_post_row0_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+    gpu: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+    dc: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+    rest: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+[battery_edge_neg_small_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002523995578128949), 'rest': ('RESOLVED', 0.002442377826125168)} shrunk=['dc', 'rest']
+[battery_edge_neg_all_calls] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    dc: dc delta/halfwidth print arithmetic unavailable: math domain error
+    rest: rest delta/halfwidth print arithmetic unavailable: math domain error
+    dc halfwidth not defined (dc delta/halfwidth print arithmetic unavailable: math domain error) baseline 0.002527022733700807 printed not defined (dc delta/halfwidth print arithmetic unavailable: math domain error)
+[battery_idle_power_neg_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0038892153761101323), 'rest': ('RESOLVED', 0.003807597624106364)} shrunk=[]
+[energy_battery_neg_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.017290156402910678), 'rest': ('RESOLVED', 0.0172085386509069)} shrunk=[]
+[energy_gpu_neg_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('NOT RESOLVED', 0.02404943315698854), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    gpu:
+[energy_meter_neg_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 0.14455694011577663), 'rest': ('UNDETERMINED', 0.14447532236377283)} shrunk=[]
+    rails: contrast not resolved
+    gpu: contrast not resolved
+    dc: contrast not resolved
+    rest: contrast not resolved
+[meter_edge_neg_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+    gpu: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+    dc: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+    rest: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+[gpu_power_zero_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.0003125907889370728), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[disclosure_python=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['python']
+[disclosure_python=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['python']
+[disclosure_python=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['python']
+[disclosure_numpy=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['packages.numpy']
+[disclosure_numpy=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['packages.numpy']
+[disclosure_numpy=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['packages.numpy']
+[disclosure_kernel_library=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['kernel_library']
+[disclosure_kernel_library=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['kernel_library']
+[disclosure_kernel_library=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['kernel_library']
+[disclosure_telemetry_backend=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['telemetry_backend']
+[disclosure_telemetry_backend=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['telemetry_backend']
+[disclosure_telemetry_backend=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['telemetry_backend']
+[stack_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.os_version missing or invalid
+    gpu: records[2].receipt.stack.os_version missing or invalid
+    dc: records[2].receipt.stack.os_version missing or invalid
+    rest: records[2].receipt.stack.os_version missing or invalid
+[hardware_unit_str_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.hardware_unit.machine missing or invalid
+    gpu: records[2].receipt.stack.hardware_unit.machine missing or invalid
+    dc: records[2].receipt.stack.hardware_unit.machine missing or invalid
+    rest: records[2].receipt.stack.hardware_unit.machine missing or invalid
+[packages_mlx_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.packages.mlx missing or invalid
+    gpu: records[2].receipt.stack.packages.mlx missing or invalid
+    dc: records[2].receipt.stack.packages.mlx missing or invalid
+    rest: records[2].receipt.stack.packages.mlx missing or invalid
+[runtime_version_name_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.runtime_version.name missing or invalid
+    gpu: records[2].receipt.stack.runtime_version.name missing or invalid
+    dc: records[2].receipt.stack.runtime_version.name missing or invalid
+    rest: records[2].receipt.stack.runtime_version.name missing or invalid
+[capture_stack_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[2].harvest.capture_stack.measurement_boundary_label.rails missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[mbl_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[2].harvest.capture_stack.measurement_boundary_label.rails missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[rails_label_elem_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[2].harvest.capture_stack.measurement_boundary_label.rails[1] missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[scan_status_null] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_7] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_list] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_absent] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_knee_not_found_with_K] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[scan_refused_K_null] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: knee not found
+    gpu: knee not found
+    dc: knee not found
+    rest: knee not found
+[scan_status_null_K_null] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_B_equals_K] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records must be the complete stamped palindrome
+    gpu: records must be the complete stamped palindrome
+    dc: records must be the complete stamped palindrome
+    rest: records must be the complete stamped palindrome
+[scan_Bc1_equals_Bc2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records must be the complete stamped palindrome
+    gpu: records must be the complete stamped palindrome
+    dc: records must be the complete stamped palindrome
+    rest: records must be the complete stamped palindrome
+```
+
+### baseline-overflow
+
+```text
+tau_s_1e300 OK {'rails': ('UNDETERMINED', 'not defined (two complete arm calls missing)'), 'gpu': ('UNDETERMINED', 'not defined (two complete arm calls missing)'), 'dc': ('UNDETERMINED', 'not defined (two complete arm calls missing)'), 'rest': ('UNDETERMINED', 'not defined (two complete arm calls missing)')}
+gap_fsum OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum)'), 'rest': ('UNDETERMINED', 'not defined (records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum)')}
+anchor_1e308_all OK {'rails': ('UNDETERMINED', 'not defined (S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.idle.pre.rails.power_w, records[0].harvest.idle.post.rails.power_w, records[0].harvest.anchor_shift_j, records[0].harvest.r_max_s, records[0].harvest.meter_edge_w, records[0].harvest.battery_edge_j, records[0].harvest.meter_gaps, records[7].harvest.energy_j.rails, records[7].harvest.idle.pre.rails.power_w, records[7].harvest.idle.post.rails.power_w, records[7].harvest.anchor_shift_j, records[7].harvest.r_max_s, records[7].harvest.meter_edge_w, records[7].harvest.battery_edge_j, records[7].harvest.meter_gaps, records[0].receipt.repeats, records[7].receipt.repeats arithmetic unavailable: non-finite arithmetic)'), 'gpu': ('UNDETERMINED', 'not defined (S bound/N from records[0].harvest.energy_j.gpu, records[0].harvest.idle.pre.gpu.power_w, records[0].harvest.idle.post.gpu.power_w, records[0].harvest.anchor_shift_j, records[0].harvest.r_max_s, records[0].harvest.meter_edge_w, records[0].harvest.battery_edge_j, records[0].harvest.meter_gaps, records[7].harvest.energy_j.gpu, records[7].harvest.idle.pre.gpu.power_w, records[7].harvest.idle.post.gpu.power_w, records[7].harvest.anchor_shift_j, records[7].harvest.r_max_s, records[7].harvest.meter_edge_w, records[7].harvest.battery_edge_j, records[7].harvest.meter_gaps, records[0].receipt.repeats, records[7].receipt.repeats arithmetic unavailable: non-finite arithmetic)'), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', 'not defined (S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.energy_j.meter, records[0].harvest.energy_j.battery, records[0].harvest.idle.pre.rails.power_w, records[0].harvest.idle.pre.meter.power_w, records[0].harvest.idle.pre.battery.power_w, records[0].harvest.idle.post.rails.power_w, records[0].harvest.idle.post.meter.power_w, records[0].harvest.idle.post.battery.power_w, records[0].harvest.anchor_shift_j, records[0].harvest.r_max_s, records[0].harvest.meter_edge_w, records[0].harvest.battery_edge_j, records[0].harvest.meter_gaps, records[7].harvest.energy_j.rails, records[7].harvest.energy_j.meter, records[7].harvest.energy_j.battery, records[7].harvest.idle.pre.rails.power_w, records[7].harvest.idle.pre.meter.power_w, records[7].harvest.idle.pre.battery.power_w, records[7].harvest.idle.post.rails.power_w, records[7].harvest.idle.post.meter.power_w, records[7].harvest.idle.post.battery.power_w, records[7].harvest.anchor_shift_j, records[7].harvest.r_max_s, records[7].harvest.meter_edge_w, records[7].harvest.battery_edge_j, records[7].harvest.meter_gaps, records[0].receipt.repeats, records[7].receipt.repeats arithmetic unavailable: non-finite arithmetic)')}
+anchor_1e308_one OK {'rails': ('NOT RESOLVED', 3.0271555718577845e+302), 'gpu': ('NOT RESOLVED', 3.0271555718577845e+302), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('NOT RESOLVED', 3.0271555718577845e+302)}
+battery_edge_all_-1.0 OK {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0024378264195100137), 'rest': ('RESOLVED', 0.002356208667506232)}
+battery_edge_all_-10.0 OK {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0016350595917928672), 'rest': ('RESOLVED', 0.001553441839789086)}
+battery_edge_all_-20.0 OK {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0007430964498849271), 'rest': ('RESOLVED', 0.0006614786978811458)}
+battery_edge_all_-40.0 OK {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (dc delta/halfwidth print arithmetic unavailable: math domain error)'), 'rest': ('UNDETERMINED', 'not defined (rest delta/halfwidth print arithmetic unavailable: math domain error)')}
+battery_edge_rec0_-1e6 OK {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (dc delta/halfwidth print arithmetic unavailable: math domain error)'), 'rest': ('UNDETERMINED', 'not defined (rest delta/halfwidth print arithmetic unavailable: math domain error)')}
+```
+
+### after-probes
+
+```text
+baseline {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)}
+[tau_s_1e300_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+    gpu: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+    dc: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+    rest: call prerequisite missing in call 1: records[0].harvest.tau_s / records[0].receipt.settle_s arithmetic unavailable: cannot convert float infinity to integer
+[settle_s_1e300_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[gap_fsum_overflow_rec3] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+    gpu: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+    dc: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+    rest: records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum
+[anchor_shift_1e308_all] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.idle.pre.rails.power_w, records[0].harvest.idle.post.rails.power_w, records[0].harvest.anch
+    gpu: S bound/N from records[0].harvest.energy_j.gpu, records[0].harvest.idle.pre.gpu.power_w, records[0].harvest.idle.post.gpu.power_w, records[0].harvest.anchor_shi
+    rest: S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.energy_j.meter, records[0].harvest.energy_j.battery, records[0].harvest.idle.pre.rails.powe
+[meter_edge_1e308_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    gpu: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    dc: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    rest: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+[r_max_1e308_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    gpu: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    dc: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+    rest: records[0].harvest energy_j/idle/meter_edge_w/r_max_s/battery_edge_j/anchor_shift_j.dc arithmetic unavailable: records[0].harvest energy_j/idle/edges.dc arithme
+[energy_rails_1e308_rec0] rc=0 calls=8 {'rails': ('NOT RESOLVED', 5.146164472158233e+302), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('NOT RESOLVED', 5.146164472158233e+302)} shrunk=[]
+    rails:
+    rest:
+[rails_row_overlap_prev_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[300].start_ns invalid time order
+    rest: records[1].harvest.idle.pre.rails[300].start_ns invalid time order
+[gpu_row_overlap_prev_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    gpu: records[1].harvest.idle.pre.gpu[300].start_ns invalid time order
+[rails_row0_covers_span_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[1].start_ns invalid time order
+    rest: records[1].harvest.idle.pre.rails[1].start_ns invalid time order
+[idle_pre_start_ns_0_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[idle_post_end_far_rec1] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[meter_row0_stamp_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+    gpu: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+    dc: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+    rest: records[1].harvest.idle.pre.meter[0].stamp_ns invalid time order
+[rails_row0_start_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.rails[0].start_ns invalid time order
+    rest: records[1].harvest.idle.pre.rails[0].start_ns invalid time order
+[battery_samples_row0_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+    gpu: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+    dc: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+    rest: records[1].harvest.battery_samples[0].stamp_ns invalid time order
+[battery_idle_row0_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+    gpu: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+    dc: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+    rest: records[1].harvest.idle.pre.battery[0].stamp_ns invalid time order
+[meter_post_row0_0_rec1] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+    gpu: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+    dc: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+    rest: records[1].harvest.idle.post.meter[0].stamp_ns invalid time order
+[battery_edge_neg_small_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    gpu: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    dc: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    rest: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+[battery_edge_neg_all_calls] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    gpu: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    dc: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    rest: records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)
+    dc halfwidth not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid)) baseline 0.002527022733700807 printed 0.19294313677240393 J/GB; not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))
+[battery_idle_power_neg_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.0038892153761101323), 'rest': ('RESOLVED', 0.003807597624106364)} shrunk=[]
+[energy_battery_neg_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.017290156402910678), 'rest': ('RESOLVED', 0.0172085386509069)} shrunk=[]
+[energy_gpu_neg_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    gpu: records[0].harvest.energy_j.gpu missing or invalid
+[energy_meter_neg_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.energy_j.meter missing or invalid
+    gpu: records[0].harvest.energy_j.meter missing or invalid
+    dc: records[0].harvest.energy_j.meter missing or invalid
+    rest: records[0].harvest.energy_j.meter missing or invalid
+[meter_edge_neg_rec0] rc=0 calls=8 {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+    gpu: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+    dc: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+    rest: records[0].harvest.meter_edge_w[0] missing or invalid (meter edge powers missing)
+[gpu_power_zero_rec0] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.0003125907889370728), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+[disclosure_python=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['python']
+[disclosure_python=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['python']
+[disclosure_python=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['python']
+[disclosure_numpy=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['packages.numpy']
+[disclosure_numpy=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['packages.numpy']
+[disclosure_numpy=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['packages.numpy']
+[disclosure_kernel_library=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['kernel_library']
+[disclosure_kernel_library=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['kernel_library']
+[disclosure_kernel_library=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['kernel_library']
+[disclosure_telemetry_backend=None_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['telemetry_backend']
+[disclosure_telemetry_backend=7_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['telemetry_backend']
+[disclosure_telemetry_backend=''_rec2] rc=0 calls=8 {'rails': ('RESOLVED', 0.0005732822806092617), 'gpu': ('RESOLVED', 0.00028575897827642216), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('RESOLVED', 0.002445404981697026)} shrunk=[]
+    stack_comparison disclosure ['telemetry_backend']
+[stack_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.os_version missing or invalid
+    gpu: records[2].receipt.stack.os_version missing or invalid
+    dc: records[2].receipt.stack.os_version missing or invalid
+    rest: records[2].receipt.stack.os_version missing or invalid
+[hardware_unit_str_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.hardware_unit.machine missing or invalid
+    gpu: records[2].receipt.stack.hardware_unit.machine missing or invalid
+    dc: records[2].receipt.stack.hardware_unit.machine missing or invalid
+    rest: records[2].receipt.stack.hardware_unit.machine missing or invalid
+[packages_mlx_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.packages.mlx missing or invalid
+    gpu: records[2].receipt.stack.packages.mlx missing or invalid
+    dc: records[2].receipt.stack.packages.mlx missing or invalid
+    rest: records[2].receipt.stack.packages.mlx missing or invalid
+[runtime_version_name_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records[2].receipt.stack.runtime_version.name missing or invalid
+    gpu: records[2].receipt.stack.runtime_version.name missing or invalid
+    dc: records[2].receipt.stack.runtime_version.name missing or invalid
+    rest: records[2].receipt.stack.runtime_version.name missing or invalid
+[capture_stack_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[2].harvest.capture_stack.measurement_boundary_label.rails missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[mbl_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[2].harvest.capture_stack.measurement_boundary_label.rails missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[rails_label_elem_null_rec2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: measured rails boundary missing (measurement_boundary_label.rails)
+    gpu: records[2].harvest.capture_stack.measurement_boundary_label.rails[1] missing or invalid
+    rest: measured rails boundary missing (measurement_boundary_label.rails)
+[scan_status_null] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_7] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_list] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_absent] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_status_knee_not_found_with_K] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid (inconsistent or unknown scan status)
+    gpu: scan.status missing or invalid (inconsistent or unknown scan status)
+    dc: scan.status missing or invalid (inconsistent or unknown scan status)
+    rest: scan.status missing or invalid (inconsistent or unknown scan status)
+[scan_refused_K_null] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: knee not found
+    gpu: knee not found
+    dc: knee not found
+    rest: knee not found
+[scan_status_null_K_null] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: scan.status missing or invalid
+    gpu: scan.status missing or invalid
+    dc: scan.status missing or invalid
+    rest: scan.status missing or invalid
+[scan_B_equals_K] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records must be the complete stamped palindrome
+    gpu: records must be the complete stamped palindrome
+    dc: records must be the complete stamped palindrome
+    rest: records must be the complete stamped palindrome
+[scan_Bc1_equals_Bc2] rc=0 calls=8 {'rails': ('UNDETERMINED', None), 'gpu': ('UNDETERMINED', None), 'dc': ('UNDETERMINED', None), 'rest': ('UNDETERMINED', None)} shrunk=[]
+    rails: records must be the complete stamped palindrome
+    gpu: records must be the complete stamped palindrome
+    dc: records must be the complete stamped palindrome
+    rest: records must be the complete stamped palindrome
+```
+
+### after-overflow
+
+```text
+tau_s_1e300 OK {'rails': ('UNDETERMINED', 'not defined (two complete arm calls missing)'), 'gpu': ('UNDETERMINED', 'not defined (two complete arm calls missing)'), 'dc': ('UNDETERMINED', 'not defined (two complete arm calls missing)'), 'rest': ('UNDETERMINED', 'not defined (two complete arm calls missing)')}
+gap_fsum OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum)'), 'rest': ('UNDETERMINED', 'not defined (records[3].harvest.meter_gaps/adapter_max_w/battery_samples.power_w arithmetic unavailable: intermediate overflow in fsum)')}
+anchor_1e308_all OK {'rails': ('UNDETERMINED', 'not defined (S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.idle.pre.rails.power_w, records[0].harvest.idle.post.rails.power_w, records[0].harvest.anchor_shift_j, records[0].harvest.r_max_s, records[0].harvest.meter_edge_w, records[0].harvest.battery_edge_j, records[0].harvest.meter_gaps, records[7].harvest.energy_j.rails, records[7].harvest.idle.pre.rails.power_w, records[7].harvest.idle.post.rails.power_w, records[7].harvest.anchor_shift_j, records[7].harvest.r_max_s, records[7].harvest.meter_edge_w, records[7].harvest.battery_edge_j, records[7].harvest.meter_gaps, records[0].receipt.repeats, records[7].receipt.repeats arithmetic unavailable: non-finite arithmetic)'), 'gpu': ('UNDETERMINED', 'not defined (S bound/N from records[0].harvest.energy_j.gpu, records[0].harvest.idle.pre.gpu.power_w, records[0].harvest.idle.post.gpu.power_w, records[0].harvest.anchor_shift_j, records[0].harvest.r_max_s, records[0].harvest.meter_edge_w, records[0].harvest.battery_edge_j, records[0].harvest.meter_gaps, records[7].harvest.energy_j.gpu, records[7].harvest.idle.pre.gpu.power_w, records[7].harvest.idle.post.gpu.power_w, records[7].harvest.anchor_shift_j, records[7].harvest.r_max_s, records[7].harvest.meter_edge_w, records[7].harvest.battery_edge_j, records[7].harvest.meter_gaps, records[0].receipt.repeats, records[7].receipt.repeats arithmetic unavailable: non-finite arithmetic)'), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('UNDETERMINED', 'not defined (S bound/N from records[0].harvest.energy_j.rails, records[0].harvest.energy_j.meter, records[0].harvest.energy_j.battery, records[0].harvest.idle.pre.rails.power_w, records[0].harvest.idle.pre.meter.power_w, records[0].harvest.idle.pre.battery.power_w, records[0].harvest.idle.post.rails.power_w, records[0].harvest.idle.post.meter.power_w, records[0].harvest.idle.post.battery.power_w, records[0].harvest.anchor_shift_j, records[0].harvest.r_max_s, records[0].harvest.meter_edge_w, records[0].harvest.battery_edge_j, records[0].harvest.meter_gaps, records[7].harvest.energy_j.rails, records[7].harvest.energy_j.meter, records[7].harvest.energy_j.battery, records[7].harvest.idle.pre.rails.power_w, records[7].harvest.idle.pre.meter.power_w, records[7].harvest.idle.pre.battery.power_w, records[7].harvest.idle.post.rails.power_w, records[7].harvest.idle.post.meter.power_w, records[7].harvest.idle.post.battery.power_w, records[7].harvest.anchor_shift_j, records[7].harvest.r_max_s, records[7].harvest.meter_edge_w, records[7].harvest.battery_edge_j, records[7].harvest.meter_gaps, records[0].receipt.repeats, records[7].receipt.repeats arithmetic unavailable: non-finite arithmetic)')}
+anchor_1e308_one OK {'rails': ('NOT RESOLVED', 3.0271555718577845e+302), 'gpu': ('NOT RESOLVED', 3.0271555718577845e+302), 'dc': ('RESOLVED', 0.002527022733700807), 'rest': ('NOT RESOLVED', 3.0271555718577845e+302)}
+battery_edge_all_-1.0 OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))'), 'rest': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))')}
+battery_edge_all_-10.0 OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))'), 'rest': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))')}
+battery_edge_all_-20.0 OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))'), 'rest': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))')}
+battery_edge_all_-40.0 OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))'), 'rest': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))')}
+battery_edge_rec0_-1e6 OK {'rails': ('UNDETERMINED', 0.0005732822806092617), 'gpu': ('UNDETERMINED', 0.00028575897827642216), 'dc': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))'), 'rest': ('UNDETERMINED', 'not defined (records[0].harvest.battery_edge_j[0] missing or invalid (battery edge energy missing or invalid))')}
+```
+
+## Round 8 (fix round)
+
+Activation `431c49d8`, 2026-10-29. Continued `codex/2026-10-28-kb-v2` from `156f03110`; read Opus delta review and scripts at JouleWise-data `8970e3b4e414b908ef0be60f1c2d30a94c66c7a1`. Implementation/test steps committed and pushed as `390ac6b81` and `6c75a95a1`; this report is the final committed/pushed step.
+
+K1–K4 are complete. Battery edge energy is again a non-negative bound; invalid values retain all evidence/calls and give `battery edge energy missing or invalid`, with no dependent printed interval. Nonpositive or non-finite computed half-widths become UNDETERMINED with quantity-naming reasons before interval formatting. Native rails/GPU intervals must be disjoint and ordered, including duplicate-row rejection. GPU and meter integrals must be non-negative. Scan statuses come from the producer's two values (`knee found`, `knee not found`); unknown values and a refusal with numeric K are reasoned scan-status faults.
+
+Verification: Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`.
+
+- Reader/kit: **51 tests, OK, 2060.172 s**, including **1134 generated real-CLI faults**. Added negative battery edge terms in all eight calls and both edge positions, overlap/duplicate rows in both native families and idle spans, GPU/meter signs, unknown/inconsistent scan statuses, and a formatter spy for invalid widths. Evidence/call retention, named reasons and no shrink are checked.
+- Session/repin: **73 tests, OK, 2021.338 s**. All **124 requested tests pass**. Seven focused tests and two formatter compatibility follow-up tests also pass. The environment interrupted the first full-suite attempt before completion; these totals are from completed reruns. These four modules cover the standalone tooling change; the full repository suite was not run locally.
+- Both Opus scripts replayed at the immutable `156f03110` snapshot and final reader: **53 named CLI cases plus 9 in-process cases** per side. Every transcript line is preserved in this report’s preceding replay-transcript appendix. Final CLI cases all exit 0 with eight calls, **0 tracebacks and 0 shrink flags**. All five negative-edge scenarios in the in-process script are reasoned unavailable after the fix. The review's stated 58 CLI cases differs from the observed 53; no cases were removed.
+- K2's `tau_s_1e300_rec0`, `gap_fsum_overflow_rec3`, and `anchor_shift_1e308_all` already pass at `156f03110`, retaining eight calls and reasoned undefined affected quantities. Round 7's J3 guards need no further change.
+- Round 7's `short_support.py` and `extreme.py` replay unchanged in a temporary mirror: six short-support cases retain eight calls and remove dependent widths; float/int extreme tau both exit 0. Opus `h4_arms.py`: **1,248 checks, 0 failures**. Standalone `repin.py --check`: **PASS 16 pin families current**; kit freshness: **verified non-claim Mac kit**. No regeneration or digest changes. `git diff --check` passes.
+
+Worked output is unchanged: **rails 0.06672 ± 0.00057, DC 0.1929 ± 0.0025, rest 0.1262 ± 0.0024 J/GB; share 0.3458 ± 0.0075**. The **4.5e-7 GB/s** and **5.7e-6 J/GB** bars are unchanged; no acceptance bar was added.
+
+Decisions I made:
+
+- K1 supersedes Round 6's mistaken signed-edge decision: battery power and its stream integral stay signed, but the registered absolute-power edge bound does not.
+- Reject nonpositive computed uncertainty before formatting; retain valid zero-valued underlying measurements and bounds. CI caught the existing direct zero-width helper compatibility test; restore that helper behavior while keeping invalid computed widths out of the formatter. No epsilon or replacement width is introduced.
+- Enforce disjointness only for interval rows; preserve the existing duplicate-poll-stamp policy for meter/battery polls.
+- Read status values directly from `knee_scan`'s initializer/update, and reject an inconsistent refusal with numeric K. Preserve the ordinary refusal with K null.
+- Replay scripts and write their scratch evidence in temporary mirrors, preserving both review branches and the exhaustive repository write scope.
+
+No NEEDS_RULING or scope expansion. Only the four authorized files changed. No hardware measurement, admission or merge. Final-head CI is read after pushing this report; every observed job state is reported separately in the final handoff, without an advance green claim.
