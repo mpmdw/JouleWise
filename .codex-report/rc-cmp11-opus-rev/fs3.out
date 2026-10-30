@@ -1,0 +1,40 @@
+======== A. undetermined rows on the sound window (base = with_neg8 + with_references + with_sensitivity)
+A widened=True: exit=0 err='' undetermined rows=0
+A widened=False: exit=0 err='' undetermined rows=0
+======== B. each relation word negated in every copy (test_rc_cmp8 RELATION_WORDS) + widened, under head / BI / SC
+B widened=True reported_cells[0].equals_primary: L9 prints True, its own numbers say False; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True reported_cells[0].not_below_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True reported_cells[0].mean_and_half_width_equal_primary: L9 prints False, its own numbers say None; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True floor_cells[0].equals_primary: L9 prints True, its own numbers say False; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True floor_cells[1].not_below_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True contrasts[0].not_below_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True contrasts[0].outcome_equals_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True contrasts[0].bound_independent_values_equal_primary: L9 prints False, its own numbers say None; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True windows[alpha].widened: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=True windows[beta].widened: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False reported_cells[0].equals_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False reported_cells[0].not_below_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False reported_cells[0].mean_and_half_width_equal_primary: L9 prints False, its own numbers say None; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False floor_cells[0].equals_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False floor_cells[1].not_below_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False contrasts[0].not_below_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False contrasts[0].outcome_equals_primary: L9 prints False, its own numbers say True; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False contrasts[0].bound_independent_values_equal_primary: L9 prints False, its own numbers say None; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False windows[alpha].widened: L9 prints True, its own numbers say False; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B widened=False windows[beta].widened: L9 prints True, its own numbers say False; exit head=2 BI=2 SC=2 (refused=step11_unmapped_fill)
+B summary: WRONG words (contradicting L9's own printed numbers) that exit 0 at head: 0; of these still exit 0 under BI: 0, under SC: 0
+======== C. the closures must not refuse sound windows or the full-size b10 flip inside the bar
+C head sound widened=True: exit=0 err=''
+C head sound widened=False: exit=0 err=''
+C head full-size b10 sign flip inside the bar (L9 ['estimate_sign'] vs []): exit=0 row=AGREE/None
+C head b10 identical +3.55e-15 both sides, L9 prints no trigger, recompute raises one: exit=2
+C BI sound widened=True: exit=0 err=''
+C BI sound widened=False: exit=0 err=''
+C BI full-size b10 sign flip inside the bar (L9 ['estimate_sign'] vs []): exit=0 row=AGREE/None
+C BI b10 identical +3.55e-15 both sides, L9 prints no trigger, recompute raises one: exit=2
+C SC sound widened=True: exit=2 err='error=internal TypeError'
+C SC sound widened=False: exit=2 err='error=internal TypeError'
+C SC full-size b10 sign flip inside the bar (L9 ['estimate_sign'] vs []): exit=2 row=None/None
+C SC b10 identical +3.55e-15 both sides, L9 prints no trigger, recompute raises one: exit=2
+======== D. a relation word negated in the record copy only (copy consistency still catches it)
+D record-only flip unwidened floor equals_primary: exit=2

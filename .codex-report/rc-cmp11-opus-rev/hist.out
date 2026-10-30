@@ -1,0 +1,130 @@
+H0 control: exit=0 err='' fails=0 [] rows=[]
+EXIT0 del attempt_count#0.restricted
+EXIT0 set attempt_count#0.restricted=True (was False)
+EXIT0 del attempt_count#0.label
+EXIT0 set attempt_count#0.label='attempt_count_x' (was 'attempt_count')
+EXIT0 set attempt_count#0.label='' (was 'attempt_count')
+EXIT0 del attempt_count#0.text
+EXIT0 set attempt_count#0.text='alpha: attempts of this pack: 1 (causes none)_x' (was 'alpha: attempts of this pack: 1 (causes none)')
+EXIT0 set attempt_count#0.text='' (was 'alpha: attempts of this pack: 1 (causes none)')
+EXIT0 del attempt_history#1.restricted
+EXIT0 set attempt_history#1.restricted=True (was False)
+EXIT0 del attempt_history#1.label
+EXIT0 set attempt_history#1.label='attempt_history_x' (was 'attempt_history')
+EXIT0 set attempt_history#1.label='' (was 'attempt_history')
+EXIT0 del attempt_history#1.text
+EXIT0 set attempt_history#1.text='alpha plan-alpha attempt 3: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; triggers on record: t1; recorded-only triggers: none; corpus doubling count: not recorded; other-session systematic sequences: 3_x' (was 'alpha plan-alpha attempt 3: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; triggers on record: t1; recorded-only triggers: none; corpus doubling count: not recorded; other-session systematic sequences: 3')
+EXIT0 set attempt_history#1.text='' (was 'alpha plan-alpha attempt 3: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; triggers on record: t1; recorded-only triggers: none; corpus doubling count: not recorded; other-session systematic sequences: 3')
+EXIT0 set attempt_history#1.collected=13 (was 12)
+EXIT0 set attempt_history#1.collected=11 (was 12)
+EXIT0 set attempt_history#1.planned=13 (was 12)
+EXIT0 set attempt_history#1.planned=11 (was 12)
+EXIT0 set attempt_history#1.catalog_path=True (was False)
+EXIT0 del attempt_count#2.restricted
+EXIT0 set attempt_count#2.restricted=True (was False)
+EXIT0 del attempt_count#2.label
+EXIT0 set attempt_count#2.label='attempt_count_x' (was 'attempt_count')
+EXIT0 set attempt_count#2.label='' (was 'attempt_count')
+EXIT0 del attempt_count#2.text
+EXIT0 set attempt_count#2.text='beta: attempts of this pack: 2 (causes harvest.fault, none)_x' (was 'beta: attempts of this pack: 2 (causes harvest.fault, none)')
+EXIT0 set attempt_count#2.text='' (was 'beta: attempts of this pack: 2 (causes harvest.fault, none)')
+EXIT0 del attempt_history#3.restricted
+EXIT0 set attempt_history#3.restricted=True (was False)
+EXIT0 del attempt_history#3.label
+EXIT0 set attempt_history#3.label='attempt_history_x' (was 'attempt_history')
+EXIT0 set attempt_history#3.label='' (was 'attempt_history')
+EXIT0 del attempt_history#3.text
+EXIT0 set attempt_history#3.text="beta plan-beta-a1 attempt 1: HARVEST_FAULT; cause key harvest.fault; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program_x" (was "beta plan-beta-a1 attempt 1: HARVEST_FAULT; cause key harvest.fault; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#3.text='' (was "beta plan-beta-a1 attempt 1: HARVEST_FAULT; cause key harvest.fault; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#3.collected=13 (was 12)
+EXIT0 set attempt_history#3.collected=11 (was 12)
+EXIT0 set attempt_history#3.planned=13 (was 12)
+EXIT0 set attempt_history#3.planned=11 (was 12)
+EXIT0 set attempt_history#3.catalog_path=True (was False)
+EXIT0 del attempt_history#4.restricted
+EXIT0 set attempt_history#4.restricted=True (was False)
+EXIT0 del attempt_history#4.label
+EXIT0 set attempt_history#4.label='attempt_history_x' (was 'attempt_history')
+EXIT0 set attempt_history#4.label='' (was 'attempt_history')
+EXIT0 del attempt_history#4.text
+EXIT0 set attempt_history#4.text="beta plan-beta attempt 2: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program_x" (was "beta plan-beta attempt 2: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#4.text='' (was "beta plan-beta attempt 2: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#4.collected=13 (was 12)
+EXIT0 set attempt_history#4.collected=11 (was 12)
+EXIT0 set attempt_history#4.planned=13 (was 12)
+EXIT0 set attempt_history#4.planned=11 (was 12)
+EXIT0 set attempt_history#4.catalog_path=True (was False)
+EXIT0 del g10#5.restricted
+EXIT0 set g10#5.restricted=True (was False)
+EXIT0 del g10#5.label
+EXIT0 set g10#5.label='g10_x' (was 'g10')
+EXIT0 set g10#5.label='' (was 'g10')
+EXIT0 del g10#5.text
+EXIT0 set g10#5.text='beta plan-beta: G10: g10.redraw 1; redraw cycles: 2_x' (was 'beta plan-beta: G10: g10.redraw 1; redraw cycles: 2')
+EXIT0 set g10#5.text='' (was 'beta plan-beta: G10: g10.redraw 1; redraw cycles: 2')
+EXIT0 del attempt_count#6.restricted
+EXIT0 set attempt_count#6.restricted=True (was False)
+EXIT0 del attempt_count#6.label
+EXIT0 set attempt_count#6.label='attempt_count_x' (was 'attempt_count')
+EXIT0 set attempt_count#6.label='' (was 'attempt_count')
+EXIT0 del attempt_count#6.text
+EXIT0 set attempt_count#6.text='gamma: attempts of this pack: 1 (causes none)_x' (was 'gamma: attempts of this pack: 1 (causes none)')
+EXIT0 set attempt_count#6.text='' (was 'gamma: attempts of this pack: 1 (causes none)')
+EXIT0 del attempt_history#7.restricted
+EXIT0 set attempt_history#7.restricted=True (was False)
+EXIT0 del attempt_history#7.label
+EXIT0 set attempt_history#7.label='attempt_history_x' (was 'attempt_history')
+EXIT0 set attempt_history#7.label='' (was 'attempt_history')
+EXIT0 del attempt_history#7.text
+EXIT0 set attempt_history#7.text="gamma plan-gamma attempt 1: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program_x" (was "gamma plan-gamma attempt 1: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#7.text='' (was "gamma plan-gamma attempt 1: COLLECTED; cause key none; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#7.collected=13 (was 12)
+EXIT0 set attempt_history#7.collected=11 (was 12)
+EXIT0 set attempt_history#7.planned=13 (was 12)
+EXIT0 set attempt_history#7.planned=11 (was 12)
+EXIT0 set attempt_history#7.catalog_path=True (was False)
+EXIT0 del superseded_history#8.restricted
+EXIT0 set superseded_history#8.restricted=True (was False)
+EXIT0 del superseded_history#8.label
+EXIT0 set superseded_history#8.label='superseded_history_x' (was 'superseded_history')
+EXIT0 set superseded_history#8.label='' (was 'superseded_history')
+EXIT0 set superseded_history#8.text='Superseded first-seal attempts:_x' (was 'Superseded first-seal attempts:')
+EXIT0 set superseded_history#8.text='' (was 'Superseded first-seal attempts:')
+EXIT0 del attempt_count#9.restricted
+EXIT0 set attempt_count#9.restricted=True (was False)
+EXIT0 del attempt_count#9.label
+EXIT0 set attempt_count#9.label='attempt_count_x' (was 'attempt_count')
+EXIT0 set attempt_count#9.label='' (was 'attempt_count')
+EXIT0 del attempt_count#9.text
+EXIT0 set attempt_count#9.text='alpha: attempts of this pack: 2 (causes NEG8+cell.below_minimum, none)_x' (was 'alpha: attempts of this pack: 2 (causes NEG8+cell.below_minimum, none)')
+EXIT0 set attempt_count#9.text='' (was 'alpha: attempts of this pack: 2 (causes NEG8+cell.below_minimum, none)')
+EXIT0 del attempt_history#10.restricted
+EXIT0 set attempt_history#10.restricted=True (was False)
+EXIT0 del attempt_history#10.label
+EXIT0 set attempt_history#10.label='attempt_history_x' (was 'attempt_history')
+EXIT0 set attempt_history#10.label='' (was 'attempt_history')
+EXIT0 del attempt_history#10.text
+EXIT0 set attempt_history#10.text="alpha plan-alpha-a1 attempt 1: COLLECTED; cause key NEG8+cell.below_minimum; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program_x" (was "alpha plan-alpha-a1 attempt 1: COLLECTED; cause key NEG8+cell.below_minimum; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#10.text='' (was "alpha plan-alpha-a1 attempt 1: COLLECTED; cause key NEG8+cell.below_minimum; collected 12 of 12 planned members; flag counts by family: ; not recorded by this harvest's program")
+EXIT0 set attempt_history#10.collected=13 (was 12)
+EXIT0 set attempt_history#10.collected=11 (was 12)
+EXIT0 set attempt_history#10.planned=13 (was 12)
+EXIT0 set attempt_history#10.planned=11 (was 12)
+EXIT0 set attempt_history#10.catalog_path=True (was False)
+EXIT0 del g10#11.restricted
+EXIT0 set g10#11.restricted=True (was False)
+EXIT0 del g10#11.label
+EXIT0 set g10#11.label='g10_x' (was 'g10')
+EXIT0 set g10#11.label='' (was 'g10')
+EXIT0 del g10#11.text
+EXIT0 set g10#11.text="alpha plan-alpha-a1: G10: no code recorded; redraw cycles: not recorded in the block's records_x" (was "alpha plan-alpha-a1: G10: no code recorded; redraw cycles: not recorded in the block's records")
+EXIT0 set g10#11.text='' (was "alpha plan-alpha-a1: G10: no code recorded; redraw cycles: not recorded in the block's records")
+EXIT0 del attempt_history#12.restricted
+EXIT0 set attempt_history#12.restricted=True (was False)
+EXIT0 del attempt_history#12.label
+EXIT0 set attempt_history#12.label='attempt_history_x' (was 'attempt_history')
+EXIT0 set attempt_history#12.label='' (was 'attempt_history')
+EXIT0 del attempt_history#12.text
+EXIT0 set attempt_history#12.text='alpha plan-alpha-a2 attempt 2: NO_COLLECTION; cause key none; not harvested_x' (was 'alpha plan-alpha-a2 attempt 2: NO_COLLECTION; cause key none; not harvested')
+EXIT0 set attempt_history#12.text='' (was 'alpha plan-alpha-a2 attempt 2: NO_COLLECTION; cause key none; not harvested')
+control=0 mutations=356 exits={1: 73, 0: 128, 2: 155}

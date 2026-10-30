@@ -1,0 +1,5 @@
+D0 control (None): exit=0 err='' fails=0 [] rows=[('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction', 'none', 'none', 'AGREE', None)]
+D1 False: exit=0 err='' fails=0 [] rows=[('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction', 'none', 'none', 'AGREE', None)]
+D2 '': exit=0 err='' fails=0 [] rows=[('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction', 'none', 'none', 'AGREE', None)]
+D3 0: exit=0 err='' fails=0 [] rows=[('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction', 'none', 'none', 'AGREE', None)]
+D4 []: exit=0 err='' fails=0 [] rows=[('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction', 'none', 'none', 'AGREE', None)]

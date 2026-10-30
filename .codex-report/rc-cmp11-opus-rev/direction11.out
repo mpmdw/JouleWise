@@ -1,0 +1,8 @@
+D0 None (control): rows mutated=2 exit=0 err='' row=('none', 'none', AGREE, None)
+D1 False: rows mutated=2 exit=2 err='refused=step11_unmapped_fill' row=(False, 'none', DISAGREE, None)
+D2 '': rows mutated=2 exit=2 err='refused=step11_unmapped_fill' row=('', 'none', DISAGREE, None)
+D3 0: rows mutated=2 exit=2 err='refused=step11_unmapped_fill' row=(0, 'none', DISAGREE, None)
+D4 []: rows mutated=2 exit=2 err='refused=step11_unmapped_fill' row=([], 'none', DISAGREE, None)
+D5 'banana': rows mutated=2 exit=2 err='refused=step11_unmapped_fill' row=('banana', 'none', DISAGREE, None)
+D6 'positive' (not supported): rows mutated=2 exit=2 err='refused=step11_unmapped_fill' row=('positive', 'none', DISAGREE, None)
+D7 key absent: rows mutated=2 exit=2 err='refused=required_key_absent:fill:gamma/contrasts/*/claim_evaluation/direction' row=(None, None, None, None)
