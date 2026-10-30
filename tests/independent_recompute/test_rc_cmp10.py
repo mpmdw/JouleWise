@@ -324,10 +324,16 @@ class P42CodeTests(Case):
                 self.base()
                 self.copies(other, which)
                 self.assertNotEqual(self.outcome(), 0)
-        # A member code printed identically in every copy passes (no re-derived reason exists; NEEDS_RULING 1).
+        # RC-CMP-11 F2: a member code printed identically in every copy is not the producer's p42 code: non-zero.
         self.base()
         self.copies(other)
-        self.assertEqual(self.outcome(), 0)
+        self.assertNotEqual(self.outcome(), 0)
+        # Counterfactual (1affc4208, NEEDS_RULING 1): any member code passed.
+        original = cmp.refused_code
+        with mock.patch.object(cmp, "refused_code", lambda custody, record, pack, cell_id, expected=None:
+                               original(custody, record, pack, cell_id,
+                                        None if expected == cmp.P42_REFUSAL_CODE else expected)):
+            self.assertEqual(self.outcome(), 0)
 
 
 class WithinBarTests(Case):
@@ -373,7 +379,9 @@ class WithinBarTests(Case):
 
     def test_below_screen_bound_inside_and_outside_the_bar(self):
         for b_op, l9_word, own_word, expected in ((cmp.SCREEN_BOUND_S, False, None, 0),
-                                                  (cmp.SCREEN_BOUND_S * (1 - 2e-7), False, None, 0),
+                                                  # RC-CMP-11 F1: b_op identical on both sides decides the
+                                                  # test (b_op < bound), so a printed False now disagrees.
+                                                  (cmp.SCREEN_BOUND_S * (1 - 2e-7), False, None, 1),
                                                   (0.0375, True, None, 1)):
             with self.subTest(b_op=b_op, word=l9_word):
                 self.base()
@@ -407,14 +415,14 @@ class WithinBarTests(Case):
         self.assertNotEqual(self.outcome(), 0)
 
     def test_relation_words_inside_the_bar(self):
-        # Unwidened, every sensitivity value equals its primary value: equals_primary is undetermined unless a
-        # value differs beyond its bar, so the word is never read into an ulp.
+        # Unwidened, every sensitivity value equals its primary value bit for bit on both sides: RC-CMP-11 F1 decides
+        # each test (no within_bar_undetermined row), and the producer's words agree.
         self.base(widened=False)
         code, err, out = self.exit_code(CODED)
         self.assertEqual((code, err), (0, ""))
         rows = [r for r in out["comparisons"] if r["key"].endswith("/equals_primary")]
         self.assertTrue(rows and all(r["verdict"] == "AGREE" for r in rows))
-        self.assertTrue(any(r.get("reason") == "within_bar_undetermined" for r in rows))
+        self.assertFalse(any(r.get("reason") == "within_bar_undetermined" for r in rows))
         # A decided difference (widened) still compares the word: L9 printing True there disagrees.
         self.base(widened=True)
         for record in (self.files[SENSITIVITY], self.files[DISCLOSURE]["sensitivity"]):

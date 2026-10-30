@@ -80,6 +80,9 @@ Rules (RC-CMP-1 A1-A4):
   (--window-index, bound to the record's window_index_sha256). A conditional family builds its value rows under the
   table's own condition (holds). Every word or code compared against L9 is pinned to its producer
   (tests/independent_recompute/test_rc_cmp10.py);
+- RC-CMP-11: bit-identical numbers and thresholds on both sides decide a test (strict relations false at
+  equality); the registered p42 cell's code is the producer's own (P42_REFUSAL_CODE); L9's direction is "none"
+  only for a printed None; an undetermined row still requires a producer word (direction, a trigger printed once);
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
@@ -236,7 +239,7 @@ class Comparison:
             raise Refusal("bars_family_missing:" + family)
         return bar_for(family_spec(self.bars["families"][family], key), reference)
 
-    def word(self, family, key, l9, ours, atoms=(), decide=None, raw=MISSING):
+    def word(self, family, key, l9, ours, atoms=(), decide=None, raw=MISSING, vocabulary=None):
         """FS3 (RC-CMP-10): a word the producer derives from the sign of, or a threshold on, compared numbers.
 
         Each atom is one such test (atom()): a compared number on each side, its threshold on each side and the
@@ -244,7 +247,8 @@ class Comparison:
         sides. The word is compared exactly (exact) when every test it reads is decided, or when decide (the
         recompute's word as a function of the tests' truth values) gives one word whatever the undecided tests
         are. Otherwise the row records both words with within_bar_undetermined and the tests inside their bar
-        (restricted output), and it is AGREE only if every number the word reads agrees within its bar.
+        (restricted output), and it is AGREE only if every number the word reads agrees within its bar (and, given
+        a vocabulary, L9's word is one of the producer's words: RC-CMP-11 F4).
         """
         open_ = [a for a in atoms if a["within"]]
         if open_ and decide is not None and all(a["truth"] is not None for a in atoms):
@@ -260,7 +264,8 @@ class Comparison:
         if not open_:
             return self.exact(family, key, l9, ours, raw=raw)
         assert family in CATEGORICAL, family
-        agree = all(a["agree"] for a in atoms) and l9 is not None and ours is not None
+        agree = all(a["agree"] for a in atoms) and l9 is not None and ours is not None and (
+            vocabulary is None or any(same(l9, v) for v in vocabulary))
         row = {"family": family, "key": key, "l9": l9, "recompute": ours, "verdict": "AGREE" if agree else "DISAGREE",
                "reason": "within_bar_undetermined", "within_bar": sorted({a["key"] for a in open_})}
         if raw is not MISSING:
@@ -271,13 +276,18 @@ class Comparison:
         """One sign or threshold test of a compared number (FS3): test(number, threshold) on each side.
 
         within: the number lies inside its family bar from the threshold on either side (both numbers and
-        thresholds finite); truth: the test on the recompute's side; agree: both numbers (and, where each side
-        has its own threshold, both thresholds) finite and within the bar of each other."""
+        thresholds finite), unless the two sides are bit-identical (RC-CMP-11 F1); truth: the test on the
+        recompute's side; agree: both numbers (and, where each side has its own threshold, both thresholds) finite
+        and within the bar of each other."""
         l9_threshold = threshold if l9_threshold is MISSING else l9_threshold
         values = (l9, ours, threshold, l9_threshold)
         bar = self.bar(family, key, l9 if finite(l9) else ours if finite(ours) else 0.0)
         known = all(finite(v) for v in values)
-        within = known and (abs(l9 - l9_threshold) <= bar or abs(ours - threshold) <= bar)
+        # RC-CMP-11 F1: bit-identical numbers and thresholds on both sides decide the test. Both producers then
+        # evaluate it on the same binary64 values (test here is the exact relation: strict words are false at
+        # equality), so no cross-side rounding is left for the bar to absorb.
+        within = known and not (l9 == ours and l9_threshold == threshold) and (
+            abs(l9 - l9_threshold) <= bar or abs(ours - threshold) <= bar)
         agree = known and abs(l9 - ours) <= bar and abs(l9_threshold - threshold) <= bar
         return {"name": name, "key": key, "within": within, "agree": agree,
                 "truth": bool(test(ours, threshold)) if finite(ours) and finite(threshold) else None}
@@ -2233,11 +2243,14 @@ def compare_contrasts(c, custody, ours):
         # the outcome).
         tests = [] if threshold_free(mine.get("outcome")) else tests
         c.word("outcome_word", f"{cid}/outcome", evaluation.get("outcome"), mine.get("outcome"), tests, decide_outcome)
-        # L9 names a direction only for a supported claim; "none" is a value, absence is not.
-        c.word("outcome_word", f"{cid}/direction", evaluation.get("direction") or "none" if evaluation else None,
+        # L9 names a direction only for a supported claim; "none" is a value, absence is not. RC-CMP-11 F4: L9's
+        # word is "none" only when it prints None (claims.py); any other value is compared as printed.
+        direction = evaluation.get("direction", MISSING)
+        c.word("outcome_word", f"{cid}/direction",
+               (None if direction is MISSING else "none" if direction is None else direction) if evaluation else None,
                (mine.get("direction") if mine.get("outcome") == "direction_supported" else "none") if mine else None,
                tests, lambda t: sign_word(t) if decide_outcome(t) == "direction_supported" else "none",
-               raw=evaluation.get("direction") if "direction" in evaluation else MISSING)
+               raw=evaluation.get("direction") if "direction" in evaluation else MISSING, vocabulary=DIRECTION_WORDS)
         # F2: the contrast-definition words, against the sealed manifest's registration.
         entry = registry.entry(cid, "contrast") or {}
         c.exact("outcome_word", f"{cid}/claim_role", row.get("claim_role"), entry.get("role"))
@@ -2338,9 +2351,12 @@ def compare_contrasts(c, custody, ours):
                    trigger_tests(tests_by_trigger, open_), raw=printed)
             for index, word, _ in c.pairs(key + "/influence_triggers/", positions(printed), positions(printed)):
                 # Each printed trigger: present in the recompute's list, or undetermined (FS3); a trigger the
-                # recompute raises and L9 leaves out is DISAGREE in the whole-list row above.
+                # recompute raises and L9 leaves out is DISAGREE in the whole-list row above. RC-CMP-11 F5: either
+                # way it is a member of the engine's trigger vocabulary, printed once.
+                printed_once = word in INFLUENCE_TRIGGERS and printed.count(word) == 1
                 c.word("outcome_word", f"{key}/influence_triggers/{index}", word,
-                       word if isinstance(triggers, list) and (word in triggers or word in open_) else None,
+                       word if isinstance(triggers, list) and printed_once and (word in triggers or word in open_)
+                       else None,
                        tests_by_trigger[word][0] if word in open_ else ())
         # The ceiling and readiness words read the outcome tests and the verdict triggers (the recompute's ceiling is
         # L2 iff supported, positive and no verdict trigger; the engine's readiness iff the ceiling permits L2).
@@ -2483,6 +2499,10 @@ def loo_numbers(l9_loo, mine_loo, floor_l9, floor_ours):
              "metrology": l9_loo.get("metrology_aware_ci95"), "p": l9_loo.get("adjusted_p")},
             {"mean": mine_loo.get("dbar_j"), "floor": floor_ours, "decision": mine_loo.get("decision_interval_j"),
              "metrology": mine_loo.get("metrology_interval_j"), "p": mine_loo.get("holm_p")})
+
+
+# The engine's direction words as L9's row carries them (claims.py: "positive" / "negative", None read as "none").
+DIRECTION_WORDS = ("positive", "negative", "none")
 
 
 def sign_word(t, prefix=""):
@@ -2856,7 +2876,8 @@ def compare_sensitivity(c, custody, ours):
             # a member of the producer's closed refusal codes and the same in every L9 copy (p42_code).
             c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"),
                     P42_REFUSED_STATUS if own == P42_UNRESOLVABLE else own)
-            code = refused_code(custody, record, pack, cell.get("cell_id"))
+            # RC-CMP-11 F2: the code the producer derives for the registered p42 cell (P42_REFUSAL_CODE).
+            code = refused_code(custody, record, pack, cell.get("cell_id"), P42_REFUSAL_CODE)
             c.exact("outcome_word", f"sensitivity/{pack}/{cid}/code", cell.get("code"),
                     code if own == P42_UNRESOLVABLE else None)
             c.exact("outcome_word", f"{pack}/projection/refused/{cid}/code",
@@ -2900,9 +2921,15 @@ def compare_sensitivity(c, custody, ours):
 # cell as status "refused" with the projection's code, and the code is one of the paper-reported-energy kernel's
 # closed refusal codes (paper_reported_energy.PAPER_REPORTED_ENERGY_REFUSAL_CODES, copied here and pinned by
 # test_rc_cmp10.py). The recompute derives no refusal reason (its p42 status is expected_unresolvable), so the
-# code must be a member of this set and the same in every L9 copy (projection, sensitivity record, its disclosure
-# copy and block line).
+# code must be a member of this set, the producer's p42 code (P42_REFUSAL_CODE, RC-CMP-11) and the same in every L9
+# copy (projection, sensitivity record, its disclosure copy and block line).
 P42_REFUSED_STATUS = "refused"
+# RC-CMP-11 F2: the code itself. The issuer (paper_reported_energy_issuer.normalized_rows) marks a p42 member row
+# strict_valid False when its window precheck gives reasons (p42_precheck), and the kernel's kept-cell projection
+# (paper_reported_energy._project_kept_cell) refuses such a row with this code; the pack's other cells are computed,
+# so the whole-window allowance (the one earlier pack-wide code) is recorded. Pinned by test_rc_cmp11.py to both
+# source lines and to the issuer's own output for the registered p42 cell (producer_fixtures.p42_refusal_code).
+P42_REFUSAL_CODE = "paper_reported_energy_record_invalid"
 # A reported cell below the registered minimum: the recompute's status word (independent_recompute_b5.py
 # reported_cell) and the kernel's code for it (paper_reported_energy.estimate_reported_cell), which the projection,
 # the sensitivity record and its copies print (FABLE F1, RC-CMP-10; pinned by test_rc_cmp10.py).

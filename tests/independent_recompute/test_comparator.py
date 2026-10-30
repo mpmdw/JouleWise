@@ -591,10 +591,11 @@ class ComparatorTests(unittest.TestCase):
 
     def test_planted_contrast(self):
         # RC-CMP-9: the sensitivity record's own primary D (read directly) and the sum of the verdict's printed
-        # deterministic terms see the moved D too. RC-CMP-10 FS3: the record's not_below_primary word reads D's
-        # sensitivity - primary difference, which then disagrees beyond its bar (one outcome_word row).
+        # deterministic terms see the moved D too. RC-CMP-11 F1: the record's not_below_primary word reads D's
+        # sensitivity - primary difference, identical on both sides, so the word is decided and agrees; the moved D
+        # is caught by the three contrast_j rows.
         self.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6))
-        self.assertEqual(self.fails(self.run_compare()), {"contrast_j": 3, "outcome_word": 1})
+        self.assertEqual(self.fails(self.run_compare()), {"contrast_j": 3})
         with mock.patch.object(cmp, "bar_for", return_value=float("inf")):
             self.assertEqual(self.fails(self.run_compare()), {})
 

@@ -532,31 +532,16 @@ class SensitivityFixtureTests(Round):
                     self.assertEqual(leaves[path], "outcome_word", path)
 
     def test_each_relation_word_flipped_fails(self):
-        decided = 0
+        # RC-CMP-11 F1: bit-identical numbers on both sides decide each test, so every relation-word flip fails
+        # (RC-CMP-10 FS3 had let a flip on unchanged values pass as within_bar_undetermined).
         for widened in (True, False):
             for section, index, word in RELATION_WORDS:
-                # RC-CMP-10 FS3: a relation word whose sensitivity - primary differences lie inside their bar (an
-                # unchanged value) is undetermined: flipped in every copy it passes, its row AGREE on the numbers.
-                self.setUp()
-                with_sensitivity(self, widened)
-                rows = [r for r in self.exit_code(CODED)[2]["comparisons"] if r["family"] == "outcome_word"
-                        and r["key"].endswith("/" + word) and r.get("reason") == "within_bar_undetermined"]
-                row = self.files[SENSITIVITY][section][index]
-                own = cmp.cell_key(cmp.load_registry().tables["floor"][row["cell_id"]]) if section == "floor_cells" \
-                    else row.get("contrast_id") or f"{row['pack']}/{test_comparator.reported_cells(row['pack'])['decode'][1]}"
-                open_ = any(f"/{own}/{word}" in r["key"] for r in rows)
-                decided += not open_
                 for copies in (("record", "disclosure", "block"), ("disclosure",), ("block",)):
                     with self.subTest(widened=widened, word=word, section=section, copies=copies):
                         self.setUp()
                         with_sensitivity(self, widened)
                         self.flip(section, index, word, copies)
-                        if open_ and copies == ("record", "disclosure", "block"):
-                            self.assertEqual(self.outcome(), 0)
-                        else:
-                            # A partial flip differs between copies: a copy no longer binds its row's printed value.
-                            self.assertNotEqual(self.outcome(), 0)
-        self.assertGreaterEqual(decided, 10)
+                        self.assertNotEqual(self.outcome(), 0)
         # Counterfactual: c372211bf exempted the two by-construction words, so a printed False passed.
         for section, word in (("reported_cells", "mean_and_half_width_equal_primary"),
                               ("contrasts", "bound_independent_values_equal_primary")):
@@ -571,8 +556,8 @@ class SensitivityFixtureTests(Round):
                     self.assertEqual(self.outcome(), 0)
 
     def test_widened_flipped_fails(self):
-        # RC-CMP-10 FS3: unwidened (b_sens = b_op) the word is undetermined and its flip passes on agreeing numbers.
-        for widened in (True,):
+        # RC-CMP-11 F1: unwidened (b_sens = b_op on both sides) the test is decided too.
+        for widened in (True, False):
             with self.subTest(widened=widened):
                 self.setUp()
                 with_sensitivity(self, widened)
