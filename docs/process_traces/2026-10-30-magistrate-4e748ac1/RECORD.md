@@ -48,3 +48,17 @@ Neither Mac run has an executable recipe today.
   - sizing, regeneration, a refuter gate and C4 pins;
   - an s7-p1 smoke and session of about six hours.
   The KB test needs the same quiet Mac before stage 1, and it is registered while the extension is not. The BY-EXT-2 code (manifest support and the kit, fixed and verified) stays on `desk/2026-10-29-byext-slots` for a later block. Ed is told in the s1-p2 verdict email and may overrule.
+
+## KB-CAP-1 round 1 (Sol xhigh, Codex Cloud `01a18e26-8fa1-7392-80c7-75256c151002`; `7978d95e9`, draft PR #613 into the KB-V2 branch)
+- Vehicle: the existing night driver and installer (hazard arm, agent census, network-time OFF, instrument checks, meter supervision). The graph is reservation, pre calibration, a new `bytes_stream_capture` stage, then post calibration. The stage holds one `powermetrics` capture and one meter stream across the scan and the eight calls. It uses a fresh test-only ledger with a genesis pin, and no claim ledger is copied.
+- Producer `scripts/bytes_stream_harvest.py`: every INPUT field is mapped to its source function. The integrators are the existing ones, unchanged. The meter-edge and battery-edge fields adapt `meter_decode`'s edge prescription, because `meter_decode` refuses gap-bearing spans. That is new number-bearing code, so it goes to the executing review.
+- End to end on synthetic data through the real driver, chain, stage, probe, harvest and reader: the knee was found and all 8 records were written. DC was RESOLVED. Rails, GPU and rest stayed UNDETERMINED because the fake calibration supplied no fiducials, so the anchor-shift path never ran.
+- Report error: it gives the agreement bars as 5.7e-8 J/GB and 4.5e-9 GB/s. The correct bars are 5.7e-6 J/GB and 4.5e-7 GB/s.
+- Round 2 launched (Sol high; brief `~/night-archive/seats-4e748ac1/kb-cap2/brief.md`). It has five parts:
+  - Y1: production-shaped calibration fiducials, so every number path runs end to end.
+  - Y2: an independent recompute of one call's integrals, with a 1%-of-half-width bar.
+  - Y3: correct the bar text.
+  - Y4: derive the disk input from recorded byte rates, and the adapter rating from where the repo records it.
+  - Y5: run the slow stream module to completion.
+- Then a blind executing review by Opus and Fable. KB fills a registration claim slot (§1), so cold passes come before the live run.
+- PR #608: retargeting did not start `ci.yml`, because `edited` is not one of its trigger types. Closing and reopening the PR started it.
