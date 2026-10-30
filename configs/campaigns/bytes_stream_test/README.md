@@ -58,7 +58,8 @@ lead, preserve the attempt and prepare a fresh session/t0 before installing.
 # After returning at the desk, require the existing terminal record:
 test -f "$SESSION/custody/night/result.json"
 # Copy the whole session once; preserve raw bytes and all unsuccessful stages.
-cp -a "$SESSION" "$ARCHIVE"
+mkdir -p "${ARCHIVE%/*}"
+test ! -e "$ARCHIVE" && cp -a "$SESSION" "$ARCHIVE"
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/scripts/bytes_stream_harvest.py" --archive "$ARCHIVE" --out "$OUT"
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/scripts/bytes_stream_test.py" scan "$ARCHIVE/runs_bytes_stream_test/capture/SCAN_RECEIPTS.json"
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/scripts/bytes_stream_test.py" read "$OUT"
