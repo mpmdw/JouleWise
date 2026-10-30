@@ -739,6 +739,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Discover over the whole `tests/b5_analysis` directory at the head: 1008 tests, OK (skipped=10). The other fixture users: 48 tests, OK. The gate ledger validates.
   - joulewise-28 read the diff as the light-tier review. It will merge on green CI under Ed's merge authorization, given in its own session, and tell Ed.
 
+139. **Missing envelope identified as the prefill phase energy. The builder lives in frozen `reduce.py`. L9-ENV-1 launched (reported by joulewise-28, 2026-10-30 05:02-05:03Z).**
+- Pointer-name diagnostic, structure only: `minted_only = ['/phase_energy_j/prefill']`, `operative_only = []`. Every failing bundle loses exactly the prefill phase envelope when re-derived under the widened bound.
+- That envelope is built in `reduce.py` at about lines 2550-2590, where a phase envelope is added only if `envelope(...)` is not `None`.
+- **Freeze:** `_rederive_summary_for_authenticated_fiducial_bound` and the envelope builder are both in `joulewise/reduce.py`. That file is among `test_frozen_files`' frozen singles; only `whole_window.py` is exempt. A cure inside `reduce.py` is therefore a change to a frozen collection file, and that is Ed's call.
+- **L9-ENV-1 launched 05:03Z.** Opus seat `trig_018wQ4tfCvY8ByYuacwTYoQB`, firing 05:12Z with MCP cleared. It first diagnoses why `envelope()` returns `None` for prefill under widening, using a synthetic repro with a dominated bound. It pushes the diagnosis before writing any fix. The next step depends on the category:
+  - (a) A defect in non-frozen code (`whole_window.py`): fix it by producing the record, never by relaxing coverage. Add a counterfactual showing that a genuinely missing envelope still refuses, and make no change to selection.
+  - (b) A defect in frozen `reduce.py` or another frozen file: diagnose it, write the minimal change, then STOP as BLOCKED `frozen_file_change_needs_ed`.
+  - (c) Widening legitimately leaves the prefill envelope undefined: STOP as BLOCKED `r3_ruling_needed`.
+  - In every category it adds the permanent synthetic widening case.
+- **Consequence:** attempt C may need an Ed decision, (b) or (c), before it can run. joulewise-28 will put the question to Ed as soon as the diagnosis lands.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
