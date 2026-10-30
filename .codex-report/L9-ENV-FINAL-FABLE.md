@@ -1,4 +1,4 @@
-VERDICT: ACCEPT
+VERDICT: ACCEPT_WITH_FIXES
 
 # L9-ENV-FINAL-FABLE: cold final pass on lane L9-ENV (opt-in analysis-side inverted-corner clamp)
 
@@ -12,22 +12,27 @@ data. Full history fetched (`git fetch --unshallow origin`).
 
 ## Bottom line
 
-The lane does what Ed's ruling says and nothing more. `joulewise/reduce.py` and the other three
-`ESTIMATOR_CODE_PATHS` files are byte-identical to `origin/main` (reduce.py sha256 `7b9c0d28…`, the
-block-5 registration pin). `scripts/run_campaign.py` is untouched, constructs the session without the
-flag, and so refuses exactly as at `origin/main`. The clamp is reachable only through
-`AuthenticatedConsumptionSession(analysis_clamp=True)`, which only the eleven analysis consumers pass;
-`origin/main` added no new consumer since the lane base. The clamped envelope's `lower_j` is the exact
-minimum over the admissible `(delta, eps_on, eps_off)` set with inverted intervals counted as 0 J, which I
-re-derived independently on five hand-built cases. On the suite's synthetic 0.5.2 bundle the analysis
-re-derivation changes no energy figure at all: only `energy_anchor_shift_envelopes` gains the omitted
-member pointers and their precheck reasons move from `anchor_energy_envelope_unrecorded` to
-`anchor_energy_envelope_exceeds_quarter_metric` (both metric-local; the global refusal set is identical).
-The whole `tests/b5_analysis` directory and all five `tests/test_whole_window*.py` modules pass on
-`d8050fca6` merged with current `origin/main` (clean merge, `50499b7b2`); exact tails below.
+The clamp itself is right and bounded. `joulewise/reduce.py` and the other three `ESTIMATOR_CODE_PATHS`
+files are byte-identical to `origin/main` (reduce.py sha256 `7b9c0d28…`, the block-5 registration pin).
+`scripts/run_campaign.py` is untouched, constructs the session without the flag, and refuses exactly as at
+`origin/main`. The clamp is reachable only through `AuthenticatedConsumptionSession(analysis_clamp=True)`,
+which only the eleven analysis consumers pass; `origin/main` added no new consumer since the lane base.
+The clamped envelope's `lower_j` is the exact minimum over the admissible `(delta, eps_on, eps_off)` set
+with inverted intervals counted as 0 J, re-derived independently on five hand-built cases. On the suite's
+synthetic 0.5.2 bundle the analysis re-derivation changes no energy figure: only
+`energy_anchor_shift_envelopes` gains the omitted member pointers and their precheck reasons move from
+`anchor_energy_envelope_unrecorded` to `anchor_energy_envelope_exceeds_quarter_metric` (both metric-local;
+the global refusal set is identical). All five `tests/test_whole_window*.py` modules pass.
 
-Three low/informational observations follow. None is a defect, none loosens a gate, and none needs
-to block the merge; F1 is a cheap fail-closed tightening I recommend for a follow-up.
+One fix is required before merge (F1). `d8050fca6` merged with current `origin/main` fails one test in the
+whole `tests/b5_analysis` run: `test_step4_reason_table` R1, because the string literal `"analysis_clamp"`
+that the signature-gated opt-in at `joulewise/analysis_engine/inputs.py:3801-3804` introduces is picked up
+by main's blind step-4 reason-table generator, which scans `inputs.py` for every snake_case string
+constant. The lane at `d8050fca6` alone cannot see this (main added the table and its test after the lane
+base); `origin/main` alone passes. The fix is the seat's own NR1, now mandatory: pass `analysis_clamp=True`
+as a literal keyword at that site, which I verified restores the generator output to `origin/main`'s bytes
+and turns the module green; it needs a one-line change to an out-of-scope test fake. Two further
+observations (F2, F3) are low/informational and do not block.
 
 ## Answers to the five questions
 
@@ -117,12 +122,46 @@ The code (`:1036-1058`) applies the clamp per window at each corner and then run
 breakpoint-exact scanner, and `lower_j = min` over the four corners (`:1062`).
 
 **(5) Whole `tests/b5_analysis` and `tests/test_whole_window*.py` at `d8050fca6` merged with `origin/main`.**
-See VERIFICATION. Merge `d8050fca6` + `origin/main` (`12ce1241d`) is clean (`50499b7b2`); `origin/main`
-changed none of the lane's files.
+Merge `d8050fca6` + `origin/main` (`12ce1241d`) is clean (`50499b7b2`); `origin/main` changed none of the
+lane's files. `tests/b5_analysis`: `Ran 1035 tests`, `FAILED (failures=1, skipped=13)`, the one failure is
+F1. The five `tests/test_whole_window*.py` modules: all `OK` (26, 11, 32, 8 and 57 tests). Exact tails in
+VERIFICATION.
 
 ## Findings (ranked)
 
-### F1 (Low, hardening). An omitted pointer that the mirror can define *without* clamping is still added
+### F1 (High for merge; fix before merge). The merged tree fails `tests/b5_analysis/test_step4_reason_table.py` R1
+
+- Evidence: on `d8050fca6` merged with `origin/main` (`50499b7b2`), the whole-directory run ends
+  `Ran 1035 tests ... FAILED (failures=1, skipped=13)`; the failure is
+  `test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file`
+  (`tests/b5_analysis/test_step4_reason_table.py:165`, `self.assertEqual(self.table, expected)`). The module
+  alone: `origin/main` `12ce1241d` `Ran 8 tests ... OK`; merged tree `Ran 8 tests ... FAILED (failures=1)`
+  (`logs/step4_reason_table_main.log`, `logs/step4_reason_table_merge.log`).
+- Cause: `tests/b5_analysis/step4_reasons/make_table.py` (byte-pinned, added to main in #609 after the lane
+  base) collects every string constant matching `[a-z][a-z0-9]*(_[a-z0-9]+)+` in eleven modules, including
+  `joulewise/analysis_engine/inputs.py` and `joulewise/whole_window.py`, and the registered
+  `configs/analysis/b5/step4_reason_classes.json` must equal that output plus the recorded ruling. The lane's
+  gated opt-in at `inputs.py:3801` (`if "analysis_clamp" in inspect.signature(...)`) and `:3804`
+  (`session_kwargs["analysis_clamp"] = True`) adds the literal `analysis_clamp`. Running the generator on
+  both trees, the only difference is `tooling added: ['analysis_clamp']` (`gen_main.json` versus
+  `gen_merge.json`). `whole_window.py` contributes no such literal; `floor_mint_estimator.py:490-491` has
+  the same idiom but is not a scanned module.
+- Why not regenerate the table: `analysis_clamp` is a constructor keyword, not a reason code, and the
+  table is a registered blind classification that changes only with its test and a ruling.
+- Fix (verified in a scratch worktree, reverted): at `inputs.py:3801-3810` drop the signature probe and
+  pass the keyword literally on the constructor call (`analysis_clamp=True,` beside `mode=mode,`). After
+  that change the generator output is byte-equal to `origin/main`'s (`gen_merge_fixed.json`),
+  `tests.b5_analysis.test_step4_reason_table` is `Ran 8 tests ... OK`, and
+  `tests.test_whole_window_analysis_clamp_flag` stays `Ran 11 tests ... OK` (its `SIGNATURE_GATED` branch
+  is only taken when the keyword is absent). One out-of-scope test then needs one line:
+  `tests/test_analysis_integration.py:2643` `FakeConsumptionSession.__init__(self, runs_root, bundle_ids, *, mode)`
+  must accept `analysis_clamp` (`TypeError: ... got an unexpected keyword argument 'analysis_clamp'`,
+  `logs/scratch_fix_integration_error.log`); the other 115 tests in that module pass. The lead needs to
+  widen the lane's write scope to that test file (and, for consistency, `tests/test_floor_mint_estimator.py`
+  so `floor_mint_estimator.py:490-491` can pass the literal too). The seat's `CallSiteTests` keeps pinning
+  every consumer, so the change cannot silently drop the opt-in.
+
+### F2 (Low, hardening). An omitted pointer that the mirror can define *without* clamping is still added
 
 `whole_window.py:1271-1275`: for a pointer the re-derivation omitted, the result of
 `_clamped_corner_composed_anchor_shift_envelope` is added whatever it is. That function returns reduce's
@@ -142,16 +181,6 @@ The session still catches the case where the pointer was minted, because `point_
 line, strictly fail-closed): before computing the clamp for an omitted pointer, require
 `_corner_composed_anchor_shift_envelope(contributions, *bounds) is None`, else `return summary`; that
 is, the mirror must agree with reduce that the envelope is undefined before it is allowed to define it.
-
-### F2 (Low, maintainability; the seat's NR1). Two call sites pass the flag only when the signature has it
-
-`joulewise/analysis_engine/inputs.py:3801-3804` and `joulewise/floor_mint_estimator.py:490-491` gate the
-keyword on `inspect.signature(AuthenticatedConsumptionSession).parameters`, to keep two out-of-scope tests
-(`tests.test_analysis_integration`'s fake session, `tests.test_floor_mint_estimator`'s exact-kwargs
-assertion) green. With the real class the flag is always passed, and `CallSiteTests` pins the gated text,
-so production behaviour is correct. The cost is that a future fake that lacks the parameter silently runs
-unclamped, and a reader cannot see the opt-in from the call alone. Fix (follow-up lane, scope ruling
-needed): pass `analysis_clamp=True` literally and update the two tests.
 
 ### F3 (Info; O-F6 and L9-ENV-4 O1). Clamped envelopes appear in the operative summary but not in provenance
 
@@ -175,8 +204,11 @@ schema addition and needs the lead's call, not a merge blocker.
 - "Non-inverting input gets reduce's bytes": confirmed by code (`:974-975`) and by my cases C and E.
 - "Every dominated member's tokenize/generation_setup gates move to exceeds_quarter_metric (O-F6)":
   reproduced on the synthetic bundle.
+- "The whole tests/b5_analysis directory is OK": true at `d8050fca6` alone, false once merged with current
+  `origin/main` (F1). The seat's open issue that main's 62 commits "touch no file in this lane's scope" is
+  correct but incomplete: main's new `test_step4_reason_table.py` scans `inputs.py`.
 - "7 modules fail identically on origin/main because /bin/zsh is missing": not re-checked here; outside
-  the requested scope (whole `tests/b5_analysis` plus `tests/test_whole_window*.py`), all of which pass.
+  the requested scope.
 - The L9-ENV-5 report at `6b7063860` still carries `STATUS: BLOCKED verification in progress` and two
   `*_PLACEHOLDER` tails; the lead should expect the seat's final tails before merge, but my own run below
   covers the requested scope.
@@ -205,6 +237,27 @@ python3.13 -m unittest tests.test_whole_window_parallel_strict
 python3.13 -m unittest tests.test_whole_window_selection
 ```
 
-TAILS_PLACEHOLDER
+Tails (`module | Ran line | last line | exit`):
+
+```
+tests/b5_analysis (discover)                   | Ran 1035 tests in 3802.021s | FAILED (failures=1, skipped=13) | exit=1
+  FAIL: test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests...)
+tests.test_whole_window                        | Ran 26 tests in 1.131s      | OK | exit=0
+tests.test_whole_window_analysis_clamp_flag    | Ran 11 tests in 87.964s     | OK | exit=0
+tests.test_whole_window_inverted_corner_clamp  | Ran 32 tests in 126.092s    | OK | exit=0
+tests.test_whole_window_parallel_strict        | Ran 8 tests in 1.101s       | OK | exit=0
+tests.test_whole_window_selection              | Ran 57 tests in 196.653s    | OK | exit=0
+```
+
+Baseline and fix evidence for F1 (same environment):
+
+```
+origin/main 12ce1241d: python3.13 -m unittest tests.b5_analysis.test_step4_reason_table | Ran 8 tests in 5.999s | OK
+merged 50499b7b2:      python3.13 -m unittest tests.b5_analysis.test_step4_reason_table | Ran 8 tests in 5.804s | FAILED (failures=1)
+merged + literal keyword at inputs.py (scratch, reverted):
+  tests.b5_analysis.test_step4_reason_table    | Ran 8 tests in 6.244s   | OK
+  tests.test_whole_window_analysis_clamp_flag  | Ran 11 tests in 77.394s | OK
+  tests.test_analysis_integration              | Ran 116 tests in 167.479s | FAILED (errors=1)  (FakeConsumptionSession keyword, see F1)
+```
 
 Full logs: `.codex-report/l9-env-final-fable/logs/*.log`.

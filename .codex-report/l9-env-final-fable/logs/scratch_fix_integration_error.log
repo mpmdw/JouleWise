@@ -1,0 +1,2 @@
+  File "/tmp/claude-0/-home-user-JouleWise/6784413d-07e7-5cf6-a609-7c721e382af4/scratchpad/wt-merge/tests/test_analysis_integration.py", line 2715, in test_analysis_loader_consumes_session_operated_envelopes
+TypeError: AnalysisIntegrationTests.test_analysis_loader_consumes_session_operated_envelopes.<locals>.FakeConsumptionSession.__init__() got an unexpected keyword argument 'analysis_clamp'
