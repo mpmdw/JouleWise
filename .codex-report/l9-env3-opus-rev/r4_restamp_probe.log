@@ -1,0 +1,9 @@
+mint envelope: None
+clamped envelope: {"anchor_bound_s": 0.0661, "independent_edge_shift_bound_j": 6.559999999999988, "lower_j": 74.75200000000001, "max_abs_delta_j": 6.559999999999988, "method": "common_trace_shift_plus_independent_edge_corners_v3", "point_j": 81.00000000000001, "upper_j": 87.56, "wall_minus_monotonic_independent_edge_span_s": 0.0}
+clamped gate reasons (joint 0.0): []
+restamp ok True gate after: {"eligible": false, "reasons": [], "windows": [{"eligible": false, "reasons": []}]}
+session _classify_precheck_refusals: (set(), {})
+analysis_engine treats eligible False + [] as: window_evidence_precheck_missing
+restamp without unrecorded -> False {'eligible': False, 'reasons': ['clock_bound_exceeds_quarter_window']}
+restamp of eligible gate -> False {'eligible': True, 'reasons': ['anchor_energy_envelope_unrecorded']}
+other reasons kept -> {'eligible': False, 'reasons': ['anchor_energy_envelope_exceeds_quarter_metric', 'negative_power_sample']}

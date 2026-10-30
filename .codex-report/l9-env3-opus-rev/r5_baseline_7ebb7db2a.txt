@@ -1,0 +1,5 @@
+BASE 7ebb7db2a tests.test_b5_chain | Ran 25 tests in 6.173s | FAILED (errors=21)
+BASE 7ebb7db2a tests.test_b5_chain_prune2 | Ran 44 tests in 21.139s | FAILED (failures=1, errors=10)
+BASE 7ebb7db2a tests.test_neg8_survivors | Ran 89 tests in 167.645s | FAILED (errors=4)
+BASE 7ebb7db2a tests.test_v5_block4_x12b | Ran 11 tests in 13.598s | FAILED (errors=1)
+BASE 7ebb7db2a tests.test_v5_s1_desk_closeout | Ran 7 tests in 3.796s | FAILED (errors=2)

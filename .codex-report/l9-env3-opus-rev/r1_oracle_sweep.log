@@ -1,0 +1,5 @@
+e1b reduce.py sha256 d37f731c07116c025a7670043e13c6a0f37bee74d2217ae08d160f4ac0074f8f
+GUARD DEFINED: guard/already-inverted-input
+GUARD DEFINED: guard/already-inverted-input-long
+cases 9118 mismatches 0 origin-None-but-clamp-defined 4186
+guard results: {"guard/already-inverted-input": "defined", "guard/already-inverted-input-long": "defined", "guard/empty-contrib": null, "guard/empty-curve": null, "guard/empty-windows": null, "guard/huge-bound": null, "guard/inf-fid": null, "guard/nan-bundle": null, "guard/nan-span": null, "guard/neg-bundle": null, "guard/neg-fid": null, "guard/neg-power": null, "guard/neg-span": null, "guard/no-overlap-after": null, "guard/no-overlap-before": null, "guard/no-overlap-far": null, "guard/none-bundle": null, "guard/none-fid": null}

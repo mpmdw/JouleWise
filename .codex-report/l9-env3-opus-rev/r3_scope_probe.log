@@ -1,0 +1,58 @@
+## R3 static scope probe (2026-10-30T07:39:19Z)
+-- diff origin/main...3e4d359c2 restricted to estimator/collection modules (expect empty):
+-- sha256 reduce.py at origin/main vs review head:
+7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc  -
+7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc  -
+-- callers of the new symbols anywhere in joulewise/ scripts/ (outside whole_window.py):
+(none)
+-- callers inside whole_window.py:
+945:def _clamped_corner_composed_anchor_shift_envelope(
+1086:def _group_envelope_contributions(
+1168:def _restamp_clamped_gate(gate: dict[str, Any], reasons: list[str]) -> bool:
+1192:            if isinstance(inner, dict) and not _restamp_clamped_gate(inner, reasons):
+1197:def _clamp_inverted_operative_envelopes(
+1244:        rows = _group_envelope_contributions(
+1261:            envelope = _clamped_corner_composed_anchor_shift_envelope(
+1322:                and not _restamp_clamped_gate(
+1330:def _rederive_operative_summary(
+1347:    return _clamp_inverted_operative_envelopes(
+1829:                        _rederive_operative_summary(
+-- any assignment into reduce module / setattr in the diff (monkeypatch):
+(none)
+-- new module-level names added by the diff:
+10:+from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+41:+_ANCHOR_ENVELOPE_UNRECORDED = "anchor_energy_envelope_unrecorded"
+44:+_CLAMP_GROUP_PREFIXES = (
+52:+def _clamped_corner_composed_anchor_shift_envelope(
+193:+def _group_envelope_contributions(
+275:+def _restamp_clamped_gate(gate: dict[str, Any], reasons: list[str]) -> bool:
+304:+def _clamp_inverted_operative_envelopes(
+437:+def _rederive_operative_summary(
+-- modules constructing AuthenticatedConsumptionSession (all reach _prepare -> _rederive_operative_summary when dominated):
+joulewise/analysis_engine/inputs.py
+joulewise/analysis_manifest_v3.py
+joulewise/b5_analysis/dry_run.py
+joulewise/floor_extraction.py
+joulewise/floor_mint_estimator.py
+joulewise/paper_reported_energy_issuer.py
+joulewise/whole_window.py
+joulewise/window_duration_margins.py
+scripts/check_window_provenance.py
+scripts/mint_floor_artifact.py
+scripts/produce_b5_disclosures.py
+scripts/run_campaign.py
+-- run_campaign --whole-window-verdict route:
+8367:def _run_whole_window_verdict_locked(
+8425:        consumption_session = AuthenticatedConsumptionSession(
+8433:        consumption_session._prepare(
+8449:                    consumption_session.summary_for(evaluation.bundle_id) or {}
+8539:        consumption_provenance=consumption_provenance,
+8596:    verdict_row_raw = append_log(log_path, row, lock_token=lock_token)
+-- harvest/controller/calibration_bracketing: zero references to consumption_session; harvest only calls
+   validate_whole_window_verdict_row(...) without a session (pointwise seam) -> cannot reach the clamp.
+-- whole_window.py constructs sessions only inside AuthenticatedConsumptionSession._prepare (nested members).
+-- CONCLUSION: reduce/controller/calibration_bracketing/harvest/mint precheck cannot reach the clamp;
+   scripts/run_campaign.py --whole-window-verdict (max-bracket or salvage-dangler semantics) DOES:
+   8425 session -> 8433 _prepare -> whole_window.py:1829 _rederive_operative_summary; operative summaries
+   replace member summaries (8449) and consumption_provenance (incl. operative_envelopes) is written into
+   the appended campaign-log verdict row (8539 -> 8596).
