@@ -1,0 +1,103 @@
+..........s.FFFFFFFEFF
+======================================================================
+ERROR: test_genuinely_missing_operative_envelope_still_refuses (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_genuinely_missing_operative_envelope_still_refuses) (pointer='/phase_energy_j/prefill')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 453, in test_genuinely_missing_operative_envelope_still_refuses
+    summary["energy_anchor_shift_envelopes"].pop(pointer)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyError: '/phase_energy_j/prefill'
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.03214074924086388)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5654 chars]gy_j/prefill": {"method": "common_trace_shift_[7872 chars]ull}' != '{"st[5654 chars]gy_j/generation_setup": {"method": "common_tra[8685 chars]ull}'
+Diff is 50981 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.06442031669616699)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5657 chars]gy_j/prefill": {"method": "common_trace_shift_[8491 chars]ull}' != '{"st[5657 chars]gy_j/generation_setup": {"method": "common_tra[9302 chars]ull}'
+Diff is 52587 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.06632031669616699)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5667 chars]gy_j/prefill": {"method": "common_trace_shift_[8494 chars]ull}' != '{"st[5667 chars]gy_j/generation_setup": {"method": "common_tra[9308 chars]ull}'
+Diff is 52645 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.066520316696167)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5650 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[8096 chars]ull}' != '{"st[5650 chars]}, "/phase_energy_j/generation_setup": {"metho[9305 chars]ull}'
+Diff is 51775 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.068420316696167)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5650 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[8096 chars]ull}' != '{"st[5650 chars]}, "/phase_energy_j/generation_setup": {"metho[9306 chars]ull}'
+Diff is 51777 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.10263047504425049)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5641 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[8093 chars]ull}' != '{"st[5641 chars]}, "/phase_energy_j/generation_setup": {"metho[9300 chars]ull}'
+Diff is 51723 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_clamp_fails_closed_without_exact_reconstruction (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_clamp_fails_closed_without_exact_reconstruction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 473, in test_clamp_fails_closed_without_exact_reconstruction
+    self.assertIn(PREFILL, clamped["energy_anchor_shift_envelopes"])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '/phase_energy_j/prefill' not found in {'/idle_subtracted_energy_j': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 7.63113168366416, 'lower_j': 4.880950028737197, 'upper_j': 7.921945558872125, 'max_abs_delta_j': 2.750181654926963, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8395612191730084}, '/energy_request_j': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 7.63113168366416, 'lower_j': 4.880950028737197, 'upper_j': 7.921945558872125, 'max_abs_delta_j': 2.750181654926963, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8395612191730084}, '/energy_token_j': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 0.039745477519084166, 'lower_j': 0.025421614733006234, 'upper_j': 0.041260133119125644, 'max_abs_delta_j': 0.014323862786077932, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8395612191730084}, '/energy_output_token_j': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 0.1192364325572525, 'lower_j': 0.0762648441990187, 'upper_j': 0.12378039935737695, 'max_abs_delta_j': 0.042971588358233795, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8395612191730084}, '/phase_energy_j/decode': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 4.746097552270651, 'lower_j': 1.636718618211479, 'upper_j': 7.652220423163459, 'max_abs_delta_j': 3.109378934059172, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 2.2181427179402498}, '/suite_item_energy_j/0:mock_item_001': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 7.662693530670881, 'lower_j': 4.909789311671436, 'upper_j': 7.942198260485348, 'max_abs_delta_j': 2.7529042189994453, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8429987445204796}, '/suite_block_energy_j/block_a': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 7.662693530670881, 'lower_j': 4.909789311671436, 'upper_j': 7.942198260485348, 'max_abs_delta_j': 2.7529042189994453, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8429987445204796}, '/suite_level_energy_j/block_a~1level_1': {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.12498922402954102, 'point_j': 7.662693530670881, 'lower_j': 4.909789311671436, 'upper_j': 7.942198260485348, 'max_abs_delta_j': 2.7529042189994453, 'wall_minus_monotonic_independent_edge_span_s': 8.106231689453125e-06, 'independent_edge_shift_bound_j': 1.8429987445204796}}
+
+======================================================================
+FAIL: test_prefill_just_over_twice_edge_bound_is_unchanged (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_prefill_just_over_twice_edge_bound_is_unchanged)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 430, in test_prefill_just_over_twice_edge_bound_is_unchanged
+    self.assertEqual(new, oracle)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+AssertionError: {'sta[5656 chars]gy_j/prefill': {'method': 'common_trace_shift_[8490 chars]None} != {'sta[5656 chars]gy_j/generation_setup': {'method': 'common_tra[9301 chars]None}
+Diff is 35637 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_short_prefill_under_dominating_bound (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_short_prefill_under_dominating_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 395, in test_short_prefill_under_dominating_bound
+    self.assertEqual(new, oracle)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+AssertionError: {'sta[5649 chars]}, '/suite_item_energy_j/0:mock_item_001': {'m[8095 chars]None} != {'sta[5649 chars]}, '/phase_energy_j/generation_setup': {'metho[9305 chars]None}
+Diff is 36307 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 17 tests in 72.265s
+
+FAILED (failures=9, errors=1, skipped=1)

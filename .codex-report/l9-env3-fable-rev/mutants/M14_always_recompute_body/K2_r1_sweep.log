@@ -1,0 +1,12 @@
+{
+ "inverted_defined": 14469,
+ "noninverted_defined": 16123,
+ "none": 3472,
+ "point_at_lower": 1482,
+ "point_at_upper": 0,
+ "point_at_both": 9614,
+ "mismatch": 0,
+ "origin_mismatch": 0,
+ "cases": 34064
+}
+RESULT: PASS

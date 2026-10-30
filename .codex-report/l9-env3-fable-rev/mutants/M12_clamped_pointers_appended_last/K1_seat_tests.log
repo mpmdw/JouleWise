@@ -1,0 +1,75 @@
+..........s.FFFFFF...F
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.03214074924086388)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5654 chars]gy_j/prefill": {"method": "common_trace_shift_[8685 chars]ull}' != '{"st[5654 chars]gy_j/generation_setup": {"method": "common_tra[8685 chars]ull}'
+Diff is 44769 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.06442031669616699)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5657 chars]gy_j/prefill": {"method": "common_trace_shift_[9302 chars]ull}' != '{"st[5657 chars]gy_j/generation_setup": {"method": "common_tra[9302 chars]ull}'
+Diff is 46019 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.06632031669616699)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5667 chars]gy_j/prefill": {"method": "common_trace_shift_[9308 chars]ull}' != '{"st[5667 chars]gy_j/generation_setup": {"method": "common_tra[9308 chars]ull}'
+Diff is 46083 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.066520316696167)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5650 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[9305 chars]ull}' != '{"st[5650 chars]}, "/phase_energy_j/generation_setup": {"metho[9305 chars]ull}'
+Diff is 46003 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.068420316696167)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5650 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[9306 chars]ull}' != '{"st[5650 chars]}, "/phase_energy_j/generation_setup": {"metho[9306 chars]ull}'
+Diff is 46007 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.10263047504425049)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5641 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[9300 chars]ull}' != '{"st[5641 chars]}, "/phase_energy_j/generation_setup": {"metho[9300 chars]ull}'
+Diff is 45947 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_short_prefill_under_dominating_bound (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_short_prefill_under_dominating_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 396, in test_short_prefill_under_dominating_bound
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[5650 chars]}, "/suite_item_energy_j/0:mock_item_001": {"m[9306 chars]ull}' != '{"st[5650 chars]}, "/phase_energy_j/generation_setup": {"metho[9306 chars]ull}'
+Diff is 46007 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 17 tests in 83.567s
+
+FAILED (failures=7, skipped=1)

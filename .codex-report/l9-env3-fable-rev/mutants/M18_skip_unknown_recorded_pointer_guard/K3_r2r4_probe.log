@@ -1,0 +1,604 @@
+ok   R3 mint 0.5.2: branch reduce_bundle == pristine origin/main bytes == stored mint (json bytes)
+ok   R3 mint 0.6.2: branch reduce_bundle == pristine origin/main bytes == stored mint (json bytes)
+minted bound 0.02142716616057592 span 8.106231689453125e-06 prefill D 0.1328568458557129 critical operative bound 0.06642031669616699
+
+===== 0.5.2  bundle=bundle
+phase window durations: {'decode': [0.2375791072845459], 'generation_setup': [4.291534423828125e-05], 'prefill': [0.1328568458557129], 'tokenize': [0.0004038810729980469]}
+minted envelope pointers: ['/energy_output_token_j', '/energy_request_j', '/energy_token_j', '/gross_energy_j', '/idle_subtracted_energy_j', '/phase_energy_j/decode', '/phase_energy_j/prefill', '/suite_block_energy_j/block_a', '/suite_item_energy_j/0:mock_item_001', '/suite_level_energy_j/block_a~1level_1']
+ok   0.5.2 bound=0.021427: all three succeeded
+ok   0.5.2 bound=0.021427: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.021427: anchor detail=None unresolved=False g=0.021435 2g=0.042871
+ok   0.5.2 bound=0.021427: every recorded group pointer is produced by the mirror (5 recorded / 7 mirrored)
+ok   0.5.2 bound=0.021427: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.021427: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.021427: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.021427: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.021427: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.021427: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.021427: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.021427: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.021427: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.021427: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.021427: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.021427: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.021427: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.021427: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.021427: /phase_energy_j/prefill: gate untouched
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.021427: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.021427: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.021427: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.021427: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.021427: gross_request gate untouched
+ok   0.5.2 bound=0.021427: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.021427: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.5.2 bound=0.021427: local classification new == oracle
+   0.5.2 bound=0.021427: added=['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.025713: all three succeeded
+ok   0.5.2 bound=0.025713: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.025713: anchor detail=None unresolved=False g=0.025721 2g=0.051441
+ok   0.5.2 bound=0.025713: every recorded group pointer is produced by the mirror (5 recorded / 7 mirrored)
+ok   0.5.2 bound=0.025713: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.025713: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.025713: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.025713: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.025713: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.025713: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.025713: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.025713: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.025713: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.025713: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.025713: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.025713: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.025713: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.025713: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.025713: /phase_energy_j/prefill: gate untouched
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.025713: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.025713: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.025713: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.025713: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.025713: gross_request gate untouched
+ok   0.5.2 bound=0.025713: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.025713: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.5.2 bound=0.025713: local classification new == oracle
+   0.5.2 bound=0.025713: added=['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.062420: all three succeeded
+ok   0.5.2 bound=0.062420: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.062420: anchor detail=None unresolved=False g=0.062428 2g=0.124857
+ok   0.5.2 bound=0.062420: every recorded group pointer is produced by the mirror (5 recorded / 7 mirrored)
+ok   0.5.2 bound=0.062420: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.062420: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.062420: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.062420: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.062420: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.062420: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.062420: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.062420: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.062420: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.062420: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.062420: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.062420: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.062420: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.062420: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.062420: /phase_energy_j/prefill: gate untouched
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.062420: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.062420: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.062420: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.062420: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.062420: gross_request gate untouched
+ok   0.5.2 bound=0.062420: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.062420: global classification equal old/new/oracle: ['anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.062420: local classification new == oracle
+   0.5.2 bound=0.062420: added=['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.066419: all three succeeded
+ok   0.5.2 bound=0.066419: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.066419: anchor detail=None unresolved=False g=0.066427 2g=0.132855
+ok   0.5.2 bound=0.066419: every recorded group pointer is produced by the mirror (5 recorded / 7 mirrored)
+ok   0.5.2 bound=0.066419: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.066419: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066419: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066419: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066419: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066419: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066419: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.066419: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.066419: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.066419: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.066419: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.066419: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.066419: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.066419: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.066419: /phase_energy_j/prefill: gate untouched
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.066419: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.066419: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.066419: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.066419: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.066419: gross_request gate untouched
+ok   0.5.2 bound=0.066419: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.066419: global classification equal old/new/oracle: ['anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.066419: local classification new == oracle
+   0.5.2 bound=0.066419: added=['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.066420: all three succeeded
+ok   0.5.2 bound=0.066420: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.066420: anchor detail=None unresolved=False g=0.066428 2g=0.132857
+ok   0.5.2 bound=0.066420: every recorded group pointer is produced by the mirror (5 recorded / 7 mirrored)
+ok   0.5.2 bound=0.066420: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.066420: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066420: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066420: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066420: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066420: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066420: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.066420: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.066420: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.066420: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.066420: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.066420: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.066420: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.066420: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.066420: /phase_energy_j/prefill: gate untouched
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.066420: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.066420: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.066420: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.066420: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.066420: gross_request gate untouched
+ok   0.5.2 bound=0.066420: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.066420: global classification equal old/new/oracle: ['anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.066420: local classification new == oracle
+   0.5.2 bound=0.066420: added=['/phase_energy_j/generation_setup', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.066421: all three succeeded
+ok   0.5.2 bound=0.066421: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.066421: anchor detail=None unresolved=False g=0.066429 2g=0.132859
+ok   0.5.2 bound=0.066421: every recorded group pointer is produced by the mirror (4 recorded / 7 mirrored)
+ok   0.5.2 bound=0.066421: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.066421: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.066421: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066421: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066421: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.066421: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.066421: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.066421: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.066421: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.066421: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.066421: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.066421: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.066421: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: no other reason dropped
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: still ineligible
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: gate == oracle gate
+ok   0.5.2 bound=0.066421: /phase_energy_j/prefill: inner window restamped and ineligible
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.066421: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.066421: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.066421: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.066421: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.066421: gross_request gate untouched
+ok   0.5.2 bound=0.066421: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.066421: global classification equal old/new/oracle: ['anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.066421: local classification new == oracle
+   0.5.2 bound=0.066421: added=['/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'prefill'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.070420: all three succeeded
+ok   0.5.2 bound=0.070420: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.070420: anchor detail=None unresolved=False g=0.070428 2g=0.140857
+ok   0.5.2 bound=0.070420: every recorded group pointer is produced by the mirror (4 recorded / 7 mirrored)
+ok   0.5.2 bound=0.070420: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.070420: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.070420: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.070420: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.070420: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.070420: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.070420: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.070420: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.070420: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.070420: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.070420: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.070420: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.070420: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: no other reason dropped
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: still ineligible
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: gate == oracle gate
+ok   0.5.2 bound=0.070420: /phase_energy_j/prefill: inner window restamped and ineligible
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.070420: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.070420: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.070420: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.070420: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.070420: gross_request gate untouched
+ok   0.5.2 bound=0.070420: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.070420: global classification equal old/new/oracle: ['anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.070420: local classification new == oracle
+   0.5.2 bound=0.070420: added=['/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'prefill'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.099630: all three succeeded
+ok   0.5.2 bound=0.099630: analysis summary == oracle summary (dict equality)
+   0.5.2 bound=0.099630: anchor detail=None unresolved=False g=0.099639 2g=0.199277
+ok   0.5.2 bound=0.099630: every recorded group pointer is produced by the mirror (4 recorded / 7 mirrored)
+ok   0.5.2 bound=0.099630: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.099630: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.099630: /suite_item_energy_j/0:mock_item_001: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.099630: /suite_block_energy_j/block_a: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.099630: /suite_level_energy_j/block_a~1level_1: reduce(mirror windows) == minted envelope
+ok   0.5.2 bound=0.099630: /gross_energy_j gross-family untouched
+ok   0.5.2 bound=0.099630: /idle_subtracted_energy_j gross-family untouched
+ok   0.5.2 bound=0.099630: /energy_request_j gross-family untouched
+ok   0.5.2 bound=0.099630: /energy_token_j gross-family untouched
+ok   0.5.2 bound=0.099630: /energy_output_token_j gross-family untouched
+ok   0.5.2 bound=0.099630: every added pointer comes from the mirror: ['/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize']
+ok   0.5.2 bound=0.099630: /phase_energy_j/decode: gate untouched
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: no other reason dropped
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: still ineligible
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: gate == oracle gate
+ok   0.5.2 bound=0.099630: /phase_energy_j/generation_setup: inner window restamped and ineligible
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: no other reason dropped
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: still ineligible
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: gate == oracle gate
+ok   0.5.2 bound=0.099630: /phase_energy_j/prefill: inner window restamped and ineligible
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: no other reason dropped
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: still ineligible
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: gate == oracle gate
+ok   0.5.2 bound=0.099630: /phase_energy_j/tokenize: inner window restamped and ineligible
+ok   0.5.2 bound=0.099630: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.099630: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.099630: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.099630: gross_request gate untouched
+ok   0.5.2 bound=0.099630: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.099630: global classification equal old/new/oracle: ['anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.099630: local classification new == oracle
+   0.5.2 bound=0.099630: added=['/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize']
+      local ('phase', 'generation_setup'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'prefill'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+      local ('phase', 'tokenize'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.5.2 bound=0.199261: all three succeeded
+ok   0.5.2 bound=0.199261: analysis summary == oracle summary (dict equality)
+NOTE 0.5.2 bound=0.199261: dict-equal to oracle but JSON key order differs (reducer recorded no envelope map; analysis appends the key)
+   0.5.2 bound=0.199261: anchor detail=None unresolved=False g=0.199269 2g=0.398538
+ok   0.5.2 bound=0.199261: every recorded group pointer is produced by the mirror (0 recorded / 7 mirrored)
+ok   0.5.2 bound=0.199261: mirror order == reduce mint order for recorded group pointers
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: clamped (lower_j=0.0)
+ok   0.5.2 bound=0.199261: /phase_energy_j/generation_setup: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /phase_energy_j/generation_setup: clamp applied exactly when the clamped function defines an envelope, with that envelope
+   0.5.2 bound=0.199261: /phase_energy_j/generation_setup: not clamped either (clamped function None: coverage/guard)
+ok   0.5.2 bound=0.199261: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+   0.5.2 bound=0.199261: /phase_energy_j/prefill: not clamped either (clamped function None: coverage/guard)
+ok   0.5.2 bound=0.199261: /phase_energy_j/tokenize: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /phase_energy_j/tokenize: clamp applied exactly when the clamped function defines an envelope, with that envelope
+   0.5.2 bound=0.199261: /phase_energy_j/tokenize: not clamped either (clamped function None: coverage/guard)
+ok   0.5.2 bound=0.199261: /suite_item_energy_j/0:mock_item_001: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /suite_item_energy_j/0:mock_item_001: clamp applied exactly when the clamped function defines an envelope, with that envelope
+   0.5.2 bound=0.199261: /suite_item_energy_j/0:mock_item_001: not clamped either (clamped function None: coverage/guard)
+ok   0.5.2 bound=0.199261: /suite_block_energy_j/block_a: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /suite_block_energy_j/block_a: clamp applied exactly when the clamped function defines an envelope, with that envelope
+   0.5.2 bound=0.199261: /suite_block_energy_j/block_a: not clamped either (clamped function None: coverage/guard)
+ok   0.5.2 bound=0.199261: /suite_level_energy_j/block_a~1level_1: omitted by reduce and reduce(mirror windows) is None too
+ok   0.5.2 bound=0.199261: /suite_level_energy_j/block_a~1level_1: clamp applied exactly when the clamped function defines an envelope, with that envelope
+   0.5.2 bound=0.199261: /suite_level_energy_j/block_a~1level_1: not clamped either (clamped function None: coverage/guard)
+ok   0.5.2 bound=0.199261: every added pointer comes from the mirror: ['/phase_energy_j/decode']
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: unrecorded removed from restamped gate
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: no other reason dropped
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: still ineligible
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: gate == oracle gate
+ok   0.5.2 bound=0.199261: /phase_energy_j/decode: inner window restamped and ineligible
+ok   0.5.2 bound=0.199261: /phase_energy_j/generation_setup: gate untouched
+ok   0.5.2 bound=0.199261: /phase_energy_j/prefill: gate untouched
+ok   0.5.2 bound=0.199261: /phase_energy_j/tokenize: gate untouched
+ok   0.5.2 bound=0.199261: /suite_item_energy_j/0:mock_item_001: gate untouched
+ok   0.5.2 bound=0.199261: /suite_block_energy_j/block_a: gate untouched
+ok   0.5.2 bound=0.199261: /suite_level_energy_j/block_a~1level_1: gate untouched
+ok   0.5.2 bound=0.199261: gross_request gate untouched
+ok   0.5.2 bound=0.199261: idle_subtracted_request gate untouched
+ok   0.5.2 bound=0.199261: global classification equal old/new/oracle: ['anchor_energy_envelope_unrecorded', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing']
+ok   0.5.2 bound=0.199261: local classification new == oracle
+   0.5.2 bound=0.199261: added=['/phase_energy_j/decode']
+      local ('phase', 'decode'): old=('anchor_energy_envelope_unrecorded', 'clock_bound_exceeds_quarter_window') new=('anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window')
+0.6.2 durations {'decode': [0.18181800842285156], 'prefill': [0.09090924263000488]}
+
+===== 0.6.2  bundle=axi-v062
+phase window durations: {'decode': [0.18181800842285156], 'prefill': [0.09090924263000488]}
+minted envelope pointers: ['/gross_energy_j', '/idle_subtracted_energy_j', '/phase_energy_j/decode', '/phase_energy_j/prefill']
+request_phase_windows keys: [('powermetrics', 'request-000', 'decode', 1), ('powermetrics', 'request-000', 'prefill', 0)]
+ok   0.6.2 bound=0.021427: all three succeeded
+ok   0.6.2 bound=0.021427: analysis summary == oracle summary (dict equality)
+   0.6.2 bound=0.021427: anchor detail=None unresolved=False g=0.021435 2g=0.042871
+ok   0.6.2 bound=0.021427: every recorded group pointer is produced by the mirror (2 recorded / 2 mirrored)
+ok   0.6.2 bound=0.021427: mirror order == reduce mint order for recorded group pointers
+ok   0.6.2 bound=0.021427: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.021427: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.021427: /gross_energy_j gross-family untouched
+ok   0.6.2 bound=0.021427: /idle_subtracted_energy_j gross-family untouched
+ok   0.6.2 bound=0.021427: every added pointer comes from the mirror: []
+ok   0.6.2 bound=0.021427: /phase_energy_j/decode: gate untouched
+ok   0.6.2 bound=0.021427: /phase_energy_j/prefill: gate untouched
+ok   0.6.2 bound=0.021427: gross_request gate untouched
+ok   0.6.2 bound=0.021427: idle_subtracted_request gate untouched
+ok   0.6.2 bound=0.021427: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.6.2 bound=0.021427: local classification new == oracle
+   0.6.2 bound=0.021427: added=[]
+ok   0.6.2 bound=0.025713: all three succeeded
+ok   0.6.2 bound=0.025713: analysis summary == oracle summary (dict equality)
+   0.6.2 bound=0.025713: anchor detail=None unresolved=False g=0.025721 2g=0.051441
+ok   0.6.2 bound=0.025713: every recorded group pointer is produced by the mirror (2 recorded / 2 mirrored)
+ok   0.6.2 bound=0.025713: mirror order == reduce mint order for recorded group pointers
+ok   0.6.2 bound=0.025713: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.025713: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.025713: /gross_energy_j gross-family untouched
+ok   0.6.2 bound=0.025713: /idle_subtracted_energy_j gross-family untouched
+ok   0.6.2 bound=0.025713: every added pointer comes from the mirror: []
+ok   0.6.2 bound=0.025713: /phase_energy_j/decode: gate untouched
+ok   0.6.2 bound=0.025713: /phase_energy_j/prefill: gate untouched
+ok   0.6.2 bound=0.025713: gross_request gate untouched
+ok   0.6.2 bound=0.025713: idle_subtracted_request gate untouched
+ok   0.6.2 bound=0.025713: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.6.2 bound=0.025713: local classification new == oracle
+   0.6.2 bound=0.025713: added=[]
+ok   0.6.2 bound=0.043447: all three succeeded
+ok   0.6.2 bound=0.043447: analysis summary == oracle summary (dict equality)
+   0.6.2 bound=0.043447: anchor detail=None unresolved=False g=0.043455 2g=0.086909
+ok   0.6.2 bound=0.043447: every recorded group pointer is produced by the mirror (2 recorded / 2 mirrored)
+ok   0.6.2 bound=0.043447: mirror order == reduce mint order for recorded group pointers
+ok   0.6.2 bound=0.043447: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.043447: /phase_energy_j/prefill: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.043447: /gross_energy_j gross-family untouched
+ok   0.6.2 bound=0.043447: /idle_subtracted_energy_j gross-family untouched
+ok   0.6.2 bound=0.043447: every added pointer comes from the mirror: []
+ok   0.6.2 bound=0.043447: /phase_energy_j/decode: gate untouched
+ok   0.6.2 bound=0.043447: /phase_energy_j/prefill: gate untouched
+ok   0.6.2 bound=0.043447: gross_request gate untouched
+ok   0.6.2 bound=0.043447: idle_subtracted_request gate untouched
+ok   0.6.2 bound=0.043447: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.6.2 bound=0.043447: local classification new == oracle
+   0.6.2 bound=0.043447: added=[]
+ok   0.6.2 bound=0.047447: all three succeeded
+ok   0.6.2 bound=0.047447: analysis summary == oracle summary (dict equality)
+   0.6.2 bound=0.047447: anchor detail=None unresolved=False g=0.047455 2g=0.094909
+ok   0.6.2 bound=0.047447: every recorded group pointer is produced by the mirror (1 recorded / 2 mirrored)
+ok   0.6.2 bound=0.047447: mirror order == reduce mint order for recorded group pointers
+ok   0.6.2 bound=0.047447: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: clamped (lower_j=0.0)
+ok   0.6.2 bound=0.047447: /gross_energy_j gross-family untouched
+ok   0.6.2 bound=0.047447: /idle_subtracted_energy_j gross-family untouched
+ok   0.6.2 bound=0.047447: every added pointer comes from the mirror: ['/phase_energy_j/prefill']
+ok   0.6.2 bound=0.047447: /phase_energy_j/decode: gate untouched
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: unrecorded removed from restamped gate
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: no other reason dropped
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: still ineligible
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: gate == oracle gate
+ok   0.6.2 bound=0.047447: /phase_energy_j/prefill: inner window restamped and ineligible
+ok   0.6.2 bound=0.047447: gross_request gate untouched
+ok   0.6.2 bound=0.047447: idle_subtracted_request gate untouched
+ok   0.6.2 bound=0.047447: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.6.2 bound=0.047447: local classification new == oracle
+   0.6.2 bound=0.047447: added=['/phase_energy_j/prefill']
+      local ('phase', 'prefill'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.6.2 bound=0.068170: all three succeeded
+ok   0.6.2 bound=0.068170: analysis summary == oracle summary (dict equality)
+   0.6.2 bound=0.068170: anchor detail=None unresolved=False g=0.068178 2g=0.136356
+ok   0.6.2 bound=0.068170: every recorded group pointer is produced by the mirror (1 recorded / 2 mirrored)
+ok   0.6.2 bound=0.068170: mirror order == reduce mint order for recorded group pointers
+ok   0.6.2 bound=0.068170: /phase_energy_j/decode: reduce(mirror windows) == minted envelope
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: clamped (lower_j=0.0)
+ok   0.6.2 bound=0.068170: /gross_energy_j gross-family untouched
+ok   0.6.2 bound=0.068170: /idle_subtracted_energy_j gross-family untouched
+ok   0.6.2 bound=0.068170: every added pointer comes from the mirror: ['/phase_energy_j/prefill']
+ok   0.6.2 bound=0.068170: /phase_energy_j/decode: gate untouched
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: unrecorded removed from restamped gate
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: no other reason dropped
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: still ineligible
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: gate == oracle gate
+ok   0.6.2 bound=0.068170: /phase_energy_j/prefill: inner window restamped and ineligible
+ok   0.6.2 bound=0.068170: gross_request gate untouched
+ok   0.6.2 bound=0.068170: idle_subtracted_request gate untouched
+ok   0.6.2 bound=0.068170: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.6.2 bound=0.068170: local classification new == oracle
+   0.6.2 bound=0.068170: added=['/phase_energy_j/prefill']
+      local ('phase', 'prefill'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   0.6.2 bound=0.136340: all three succeeded
+ok   0.6.2 bound=0.136340: analysis summary == oracle summary (dict equality)
+   0.6.2 bound=0.136340: anchor detail=None unresolved=False g=0.136348 2g=0.272695
+ok   0.6.2 bound=0.136340: every recorded group pointer is produced by the mirror (0 recorded / 2 mirrored)
+ok   0.6.2 bound=0.136340: mirror order == reduce mint order for recorded group pointers
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: omitted by reduce and reduce(mirror windows) is None too
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: clamped (lower_j=0.0)
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: omitted by reduce and reduce(mirror windows) is None too
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: clamp applied exactly when the clamped function defines an envelope, with that envelope
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: clamped (lower_j=0.0)
+ok   0.6.2 bound=0.136340: /gross_energy_j gross-family untouched
+ok   0.6.2 bound=0.136340: /idle_subtracted_energy_j gross-family untouched
+ok   0.6.2 bound=0.136340: every added pointer comes from the mirror: ['/phase_energy_j/decode', '/phase_energy_j/prefill']
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: unrecorded removed from restamped gate
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: no other reason dropped
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: still ineligible
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: gate == oracle gate
+ok   0.6.2 bound=0.136340: /phase_energy_j/decode: inner window restamped and ineligible
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: unrecorded removed from restamped gate
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: no other reason dropped
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: only exceeds_quarter added: ['anchor_energy_envelope_exceeds_quarter_metric']
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: still ineligible
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: gate == oracle gate
+ok   0.6.2 bound=0.136340: /phase_energy_j/prefill: inner window restamped and ineligible
+ok   0.6.2 bound=0.136340: gross_request gate untouched
+ok   0.6.2 bound=0.136340: idle_subtracted_request gate untouched
+ok   0.6.2 bound=0.136340: global classification equal old/new/oracle: ['environment_admission_missing']
+ok   0.6.2 bound=0.136340: local classification new == oracle
+   0.6.2 bound=0.136340: added=['/phase_energy_j/decode', '/phase_energy_j/prefill']
+      local ('phase', 'decode'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_below_threshold', 'clock_bound_exceeds_quarter_window') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold', 'clock_bound_exceeds_quarter_window')
+      local ('phase', 'prefill'): old=('anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples') new=('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'insufficient_in_window_samples')
+ok   edge setup: prefill inverts at this bound and is clamped
+FAIL R2: unknown recorded group pointer -> summary returned unchanged (fail closed)
+ok   R2: one-ulp tamper of a recorded envelope -> fail closed
+ok   R4: prefill gate without the unrecorded stamp -> fail closed
+ok   R4: prefill gate eligible=True -> fail closed
+ok   R4: inner window without the unrecorded stamp -> fail closed
+ok   frozen 0.5.1 summary -> untouched
+ok   failed summary -> untouched
+ok   non-mapping envelope map -> untouched
+ok   unreadable bundle path -> untouched
+ok   override narrower than the mint bound: analysis == reduce (both unresolved)
+restamp with empty clamped reasons -> {'eligible': False, 'reasons': []}
+ok   R4-edge (documented): empty clamped reasons -> eligible False with reasons [] (oracle would leave such a gate eligible)
+
+NOTES:
+  - 0.5.2 bound=0.199261: dict-equal to oracle but JSON key order differs (reducer recorded no envelope map; analysis appends the key)
+FAILS: 1
+  - R2: unknown recorded group pointer -> summary returned unchanged (fail closed)
+RESULT: FAIL

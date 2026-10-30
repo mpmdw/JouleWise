@@ -1,0 +1,85 @@
+..........s.FFFFFF..FF
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.03214074924086388)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[10205 chars]lope_unrecorded", "cadence_ratio_unrecorded", [4110 chars]ull}' != '{"st[10205 chars]lope_exceeds_quarter_metric", "cadence_ratio_u[4134 chars]ull}'
+Diff is 52559 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.06442031669616699)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[10384 chars]lope_unrecorded", "cadence_ratio_unrecorded", [4551 chars]ull}' != '{"st[10384 chars]lope_exceeds_quarter_metric", "cadence_ratio_u[4575 chars]ull}'
+Diff is 54161 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.06632031669616699)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[10400 chars]lope_unrecorded", "cadence_ratio_unrecorded", [4551 chars]ull}' != '{"st[10400 chars]lope_exceeds_quarter_metric", "cadence_ratio_u[4575 chars]ull}'
+Diff is 54225 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.066520316696167)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[10380 chars]lope_unrecorded", "cadence_ratio_unrecorded", [4539 chars]ull}' != '{"st[10380 chars]lope_exceeds_quarter_metric", "cadence_ratio_u[4575 chars]ull}'
+Diff is 54121 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.068420316696167)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[10381 chars]lope_unrecorded", "cadence_ratio_unrecorded", [4539 chars]ull}' != '{"st[10381 chars]lope_exceeds_quarter_metric", "cadence_ratio_u[4575 chars]ull}'
+Diff is 54125 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.10263047504425049)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 445, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(oracle))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[10366 chars]lope_unrecorded", "cadence_ratio_unrecorded", [4539 chars]ull}' != '{"st[10366 chars]lope_exceeds_quarter_metric", "cadence_ratio_u[4575 chars]ull}'
+Diff is 54065 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_prefill_just_over_twice_edge_bound_is_unchanged (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_prefill_just_over_twice_edge_bound_is_unchanged)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 430, in test_prefill_just_over_twice_edge_bound_is_unchanged
+    self.assertEqual(new, oracle)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+AssertionError: {'sta[10383 chars]lope_unrecorded', 'cadence_ratio_unrecorded', [4550 chars]None} != {'sta[10383 chars]lope_exceeds_quarter_metric', 'cadence_ratio_u[4574 chars]None}
+Diff is 34973 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_short_prefill_under_dominating_bound (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_short_prefill_under_dominating_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/tree/tests/test_whole_window_inverted_corner_clamp.py", line 395, in test_short_prefill_under_dominating_bound
+    self.assertEqual(new, oracle)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+AssertionError: {'sta[10380 chars]lope_unrecorded', 'cadence_ratio_unrecorded', [4538 chars]None} != {'sta[10380 chars]lope_exceeds_quarter_metric', 'cadence_ratio_u[4574 chars]None}
+Diff is 35326 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 17 tests in 65.353s
+
+FAILED (failures=8, skipped=1)
