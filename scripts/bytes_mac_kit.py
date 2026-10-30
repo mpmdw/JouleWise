@@ -363,12 +363,14 @@ python3.13 -B scripts/bytes_mac_kit.py --extension qwen38-27b-8bit --runs EXPORT
 
 Exit 0 passes, 2 fails the five-run rule, malformed input raises an error.
 The checker requires five succeeded, unexcluded, 512-token runs with finite
-positive dur_decode_s. It prints no energy result. It records runs_checked,
+positive dur_decode_s contained in its request (dur_decode_s <= request_s). It prints no energy result. It records runs_checked,
 decode_phase_s_range, verdict, per-member walls and stream spans, and sizing
 operands plus S and T_stream_max for the lead. S uses the registered formula
 for the eventual 50-science-member single-model pack, 25 references and seven
-collections; it is not the duration of this diagnostic kit. Missing scaffold
-or sizing receipts leave S unavailable. Only Mac receipts may fill slots;
+collections; it is not the duration of this diagnostic kit. Missing planned
+members fail; export corpus members past the 12-valid stop as non-succeeded rows.
+Missing sizing receipts leave S unavailable.
+Run the checker from the same commit the session ran from and compare its recorded plan hash with that commit's tree. Only Mac receipts may fill slots;
 this checker never writes slots or registrations.
 """
 
@@ -418,10 +420,19 @@ def evaluate_extension(rows, sidecar, measured):
             timings[rid] = {k: positive(receipt[k]) for k in ('request_s', 'member_wall_s', 'stream_s')}
             if min(timings[rid]['member_wall_s'], timings[rid]['stream_s']) < timings[rid]['request_s']:
                 raise ValueError('member/stream shorter than request')
+    for detail in details:
+        rid = detail['run_id']
+        if detail['pass'] and detail['decode_phase_s'] > timings[rid]['request_s']:
+            detail.update({'pass': False, 'reason': 'decode phase is not contained in its request'})
     verdict = 'pass' if all(d['pass'] for d in details) else 'fail'
     science = [timings[r] for r in expected if r in timings]
     refs = [v for r, v in timings.items() if by_id[r].get('role') in ('corpus', 'start', 'midpoint', 'end')]
     sizing = measured.get('sizing', {})
+    for key in ('fixed_desk_s', 'collection_stage_overhead_s'):
+        if key in sizing:
+            value = sizing[key]
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError(key + ' must be a finite nonnegative measured number')
     span = None
     margin = None
     # The scaffold plans every row, including corpus skips. Do not size from
@@ -435,6 +446,9 @@ def evaluate_extension(rows, sidecar, measured):
             inventory.update(e['run_id'] for e in manifest['executed_order'])
     if set(by_id) - inventory:
         raise ValueError('export contains unplanned runs')
+    missing = inventory - set(by_id)
+    if missing:
+        raise ValueError('harvest is missing planned kit members: ' + ', '.join(sorted(missing)))
     roles = {role: sum(by_id[r].get('role') == role for r in timings)
              for role in ('corpus', 'start', 'midpoint', 'end')}
     complete = (set(by_id) == inventory and roles['corpus'] >= 12

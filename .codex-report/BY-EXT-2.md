@@ -21,7 +21,7 @@ The registered manifest remerges byte-identically from its existing header/KV re
 
 Created `configs/campaigns/bytes_mac_check_ext/` behind `--extension qwen38-27b-8bit`: five source absolute IDs r01..r05, split 3/2 around the midpoint, inherited corpus/start/midpoint/end references and calibration scaffold. Only this directory is generated in extension mode; no smoke-keep, registration or loop write occurs. README supplies verification, non-claim harvest and evaluation commands, plus lead-owned launch prerequisites.
 
-The checker consumes native CSV plus matching session sidecar and measured timing receipts. It checks five succeeded, unexcluded, 512-emitted-token runs with finite positive bounded decode duration, rejects claim/foreign/duplicate rows, and reports runs_checked, decode_phase_s_range, verdict, member walls, stream spans, S and T_stream_max. Missing scaffold/sizing operands leave S unavailable. S uses the registered single-model-pack formula (50 science, 25 references, seven collections). Receipt and plan hashes are recorded. It never fills slots.
+The checker consumes native CSV plus matching session sidecar and measured timing receipts. It checks five succeeded, unexcluded, 512-emitted-token runs with finite positive decode duration contained in its request, rejects claim/foreign/duplicate rows, and reports runs_checked, decode_phase_s_range, verdict, member walls, stream spans, S and T_stream_max. Missing scaffold/sizing operands leave S unavailable. S uses the registered single-model-pack formula (50 science, 25 references, seven collections). Receipt and plan hashes are recorded. It never fills slots.
 
 ## Pinned cache verification
 

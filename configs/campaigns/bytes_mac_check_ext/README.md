@@ -59,10 +59,12 @@ python3.13 -B scripts/bytes_mac_kit.py --extension qwen38-27b-8bit --runs EXPORT
 
 Exit 0 passes, 2 fails the five-run rule, malformed input raises an error.
 The checker requires five succeeded, unexcluded, 512-token runs with finite
-positive dur_decode_s. It prints no energy result. It records runs_checked,
+positive dur_decode_s contained in its request (dur_decode_s <= request_s). It prints no energy result. It records runs_checked,
 decode_phase_s_range, verdict, per-member walls and stream spans, and sizing
 operands plus S and T_stream_max for the lead. S uses the registered formula
 for the eventual 50-science-member single-model pack, 25 references and seven
-collections; it is not the duration of this diagnostic kit. Missing scaffold
-or sizing receipts leave S unavailable. Only Mac receipts may fill slots;
+collections; it is not the duration of this diagnostic kit. Missing planned
+members fail; export corpus members past the 12-valid stop as non-succeeded rows.
+Missing sizing receipts leave S unavailable.
+Run the checker from the same commit the session ran from and compare its recorded plan hash with that commit's tree. Only Mac receipts may fill slots;
 this checker never writes slots or registrations.

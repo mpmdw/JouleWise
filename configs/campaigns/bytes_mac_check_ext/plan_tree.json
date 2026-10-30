@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/bytes_mac_kit.py",
-    "sha256": "f51716dc78402e946180f5304dab12abbccc23ac97b2fa9806d4306d65ace823"
+    "sha256": "58ba27dd8a47e22884e73d42860f6c73164cb001c50492927824928f3a55dc62"
   },
   "module_order": [
     "bytes-qwen3-1p7b",
