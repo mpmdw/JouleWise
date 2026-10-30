@@ -150,3 +150,12 @@ Neither Mac run has an executable recipe today.
   - Replay under doctrine rule 9: the three 10-11 arms are held (3 of 3), correctly for their word. The M3 state passes. The replay is not of known-good sessions under this test, because none exists at a nonzero word that this code could use.
   - Recorded as the path not taken, for a nonzero word: the judge's §4 RAW-consumer anchor identity (V3 arithmetic with the 5 ms cap on placement only, a pairing term, the capture bound joined into the operative bound, a new method identity). Build it only if a night is ever held by the word.
 - PR #613 CI: shard 5 failed on `tests.test_bytes_stream_capture` `test_prepare_authors_isolated_night_plan_without_default_ledger`. The fixture's `git commit` had no identity on CI (exit 128). Fixed by the lead on the branch (`e91946490`), test-only, using the pattern of `tests/test_repin.py`.
+
+## BY-THERM-LINES round 6 (Sol high, `01a18e99-bc3d-7399-aa7b-87c932b5c000`; head `4e29114ea`). The tool is admitted.
+- A1-A5 are implemented. A line that the production reader accepts but the strict lexer rejects now makes the journal untrusted; only lines that both readers reject keep the malformed-skip. Repeated roster ids are a W4 global fault. Export session ids must be safe, and destinations must stay inside the output. Level-conversion failures are contained. The replay notice is emitted only when a replay ran.
+- Lead re-execution at `4e29114ea` (log `~/night-archive/seats-4e748ac1/by-therm-fix6/lead/lead-probes-4e29114ea.log`):
+  - Opus `probe_journal_divergence.py`: in all four divergence cases, member `a` is `not defined (journal line not producer output)`, nothing is restored, and its codes are kept. The clean case stays equal. The probe's own direct call of `journal_readings` was wrapped, because that function now raises by design.
+  - `misc_probes.py`: a duplicate roster id, and a run listed as both science and reference, give `not defined (roster repeated run_id)` with no changes.
+  - Sol `session_path.py`: `not defined (unsafe export session_id)`, and the sibling file is preserved. TMPDIR was set to a resolved path, because on macOS `/tmp` resolves to `/private/tmp`.
+  - Sol `large_level.py`: exit 0 with a record written. The baseline still raises.
+- **Admitted by the lead.** No probe changes which members count. The three reported instances of the class are closed by the consult's rule as implemented. Next: run it on the real pass-1 and pass-2 archives locally (blinded data stays local) before the pass-2 analysis.
