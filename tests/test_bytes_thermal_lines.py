@@ -398,8 +398,8 @@ class ReviewerRealChainTests(unittest.TestCase):
                     return [(r.monotonic_ns, r.monotonic_raw_ns, r.wall_ns,
                              r.started_monotonic_ns, r.started_wall_ns, r.status,
                              t.h._int(r.values.get("level"))) for r in rows]
-                self.assertEqual(projection(actual), projection(expected))
-                self.assertEqual(malformed, prod_malformed)
+                check("native journal: consumed projections equal", projection(actual) == projection(expected))
+                check("native journal: malformed counts equal", malformed == prod_malformed)
                 return win, result
 
 
@@ -2024,3 +2024,25 @@ class RoundSixTests(unittest.TestCase):
                                  'not defined (member span unavailable)' if present else 'equals registered line')
                 self.assertEqual(record['changes'], [])
                 self.assertFalse(any(n['code'] == 'records.thermal_hull_replay_disagrees' for n in record['notices']))
+
+    def test_production_rejected_lines_keep_malformed_skip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            x = TrustArchive(Path(tmp), 'request-end-p1', True, False)
+            clean = x.journal.read_bytes()
+            line = clean.splitlines()[0]
+            cases = [b'[]', b'null']
+            limit = sys.get_int_max_str_digits()
+            if limit:
+                huge = b'1' * (limit + 1)
+                cases.extend([line[:-1] + b',"unused":' + huge + b'}',
+                              line[:-1] + b',"unused":0,"unused":' + huge + b'}'])
+            for i, extra in enumerate(cases):
+                x.journal.write_bytes(clean + extra + b'\n'); x.seal()
+                expected, malformed = t.h.read_monitor_journal(x.journal, 'thermal')
+                actual, tool_malformed = t.journal_readings(x.journal.read_bytes())
+                projection = lambda rows: [(r.monotonic_ns, r.started_monotonic_ns, r.status,
+                                             t.h._int(r.values.get('level'))) for r in rows]
+                self.assertEqual(projection(actual), projection(expected))
+                self.assertEqual((malformed, tool_malformed), (1, 1))
+                record = t.transform('request-end-p1', x.a, x.root / str(i))
+                self.assertEqual(record['restored_members'], ['a'])

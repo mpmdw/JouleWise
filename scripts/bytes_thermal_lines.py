@@ -387,6 +387,15 @@ class JournalProducerError(ValueError):
     """JSON accepted by production, but impossible for the L1 writer."""
 
 
+def opaque_production_integer(token):
+    # Match json.loads' interpreter-configured integer-token limit without
+    # converting the opaque value. Zero means the decoder has no limit.
+    limit = sys.get_int_max_str_digits()
+    if limit and len(token.removeprefix("-")) > limit:
+        raise ValueError("integer token exceeds production decoder limit")
+    return None
+
+
 def journal_readings(raw):
     """Lex each JSONL value, then project only the production parser's inputs.
 
@@ -398,18 +407,22 @@ def journal_readings(raw):
         if not line.strip(b" \t\r\n"):
             continue
         try:
-            doc = document(line.decode("utf-8"))
+            doc = JsonValue(line.decode("utf-8"))
         except (ValueError, UnicodeError):
             # Recognition only: discard every numeric token without converting
             # it. Never use this fallback's decoded object as evidence.
             try:
-                json.loads(line, parse_int=lambda _: None, parse_float=lambda _: None,
+                json.loads(line, parse_int=opaque_production_integer, parse_float=lambda _: None,
                            parse_constant=lambda _: None)
             except (ValueError, RecursionError):
                 malformed += 1
                 continue
             raise JournalProducerError("journal line not producer output")
         try:
+            for token in doc.tokens:
+                value = token.group(1)
+                if value[0] in "-0123456789" and not any(c in value for c in ".eE"):
+                    opaque_production_integer(value)
             projected = {key: doc.optional(key) for key in ("schema", "module", "kind")}
             if projected["kind"] != h.OBSERVATION_KIND["thermal"]:
                 # Bookkeeping lines have no observation stamps or values.
