@@ -604,6 +604,192 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **For Ed:** RC-CMP-9 NEEDS_RULING 2: the whole-machine lines are the one remaining output-keyed universe (three-way omission only; rho is descriptive). NEEDS_RULING 5: should the recompute compute leave-one-out rows at n of 1 or 2?
 - `dry-d`: steps 0-3b ok; step 4 running for more than 1 h.
 
+126. **Attempt B (`dry-d`) ended at step 4 ALPHA as outcome_class; not yet the science result, because item 103's ruling was too coarse (reported by joulewise-28 02:32:29Z; lead ruling ~02:45Z).**
+- `dry-d` at `d27c562f6`: steps 0, 1, 2, 3 and 3b ok. Step 4 ALPHA: status `outcome_class`, exit status 1, refusal "outcome-class refusal at step 4". Steps 5-11 `not_run`; BETA not run; driver exit 3. `completed_without_tooling_refusal` true; record sha256 `97eaae60…456e`. Under item 103's classifier the only outcome code is `floor_cell_not_extractable`, so at least one non-p42 floor cell in ALPHA is not extractable.
+- **Lead error, found by joulewise-28:** item 103 classed every non-extractable non-p42 floor cell as a scientific outcome. But `floor_extraction.py` sets `extractable = not terminal_refusal_reasons and floor is not None`, and the terminal reasons include many data-integrity and tooling codes (`bundle_hash_unresolved`, `reducer_wire_unknown`, `kept_units_required`, `whole_window_verdict_provenance_invalid`, `clock_anchor_unresolved`, `metric_missing_or_nonfinite`, `bundle_strict_invalid`, and others), not only physics. Under plan §3.2(1), a tooling refusal is cured (R3) and rerun, not reported. So the record's `outcome_class` does not establish a result.
+- **Plan:**
+  1. **Blind classification first, with no data and no ruling needed:** every terminal refusal reason `floor_extraction.py` can emit is classed TOOLING (integrity, provenance, wiring, missing or invalid inputs, clock anchors, bundle hashes; cured and rerun) or SCIENCE (the floor was computed, but the registered estimator says the cell is not resolvable or below its minimum, by registered rule). Every SCIENCE entry cites its registration or plan line, and anything ambiguous goes to TOOLING. The table is committed before anyone looks.
+  2. **A structure-only probe** of `mint/extraction-alpha.json`, aggregated over the refused non-p42 cells with no cell ids: each tooling-class code by name, everything else only as "outcome-class", plus "floor_absent_no_reason" if it applies. It reveals nothing beyond the record's class plus tooling codes, which plan §3.2(1) allows, but it reads blinded custody, so Ed's go is asked first, with the committed table in hand.
+  3. **Durable fix in L9:** `classify_step4_exit` reads each refused cell's terminal reasons through the table and returns a named tooling code when any tooling reason is present, so the dry-run record itself shows it.
+- No action on the `dry-d` custody until Ed rules.
+
+127. **Attempt B's step-4 stop is a TOOLING refusal, not a result (reported by joulewise-28, 2026-10-30 ~02:40-03:00Z; Ed approved the route).** Ed approved item 126's route (blind table first, then the probe).
+- **Blind class table committed before any read:** `lane/2026-10-30-step4-reason-table` `08ea5c958`, `CLASS_TABLE.json` sha256 `9537fe8c…224e`, generator `make_table.py`. It holds 42 MASK codes (numeric comparisons of measured quantities, printed only as "outcome-class") and 1,898 TOOLING literals over `floor_extraction` and the 10 modules on its reason path; an unknown code prints as "unclassified". The probe prints presence only, with no counts, ids or values. It was first tested on the synthetic full-size report (no refused non-p42 cell).
+- **Probe on `dry-d`'s ALPHA extraction report:** `any_refused_non_p42_cell` true; spec-membership refusals none; reasons present: `anchor_energy_envelope_unrecorded`, `common_mode_authenticated_bracket_required`, `whole_window_verdict_provenance_invalid`. **All three are TOOLING;** no outcome-class code and nothing unclassified. So attempt B's step-4 stop is a tooling refusal that item 103's classifier misclassified. It is cured (R3) and rerun under plan §3.2(1).
+- **Diagnosis from code:** all three trace to step 4's current-consumption session not being ready for those cells. `floor_extraction.py:2199` sets `whole_window_verdict_provenance_invalid` when a session is supplied but not ready. `:2845-2848` set `common_mode_authenticated_bracket_required` when the session is missing, not ready, or has no `calibration_bracket`. `anchor_energy_envelope_unrecorded` (`:2260`) likely follows, because the member falls back to the raw summary without an envelope. The synthetic chain prepares the session; on the real data, at least some cells' sessions are not ready. A likely wiring or inputs defect in L9's step 4.
+- **Next (joulewise-28, block-5 lead):**
+  1. Structure-only diagnosis on a scratch copy of why the session is not ready (its own refusal codes through the same table, the ready flag, cell kind; no ids or values). The lead suggests plan §3.1's optional "early floor rehearsal" (steps 3-5 on scratch copies, structure only) for fast iteration instead of six-hour reruns, and checking whether step 3b's bracket evidence reaches the step-4 session on real data.
+  2. An L9 fix lane with item 126's durable fix: `classify_step4_exit` reads each refused cell's terminal reasons through the committed table and returns a named tooling code.
+  3. Then attempt C, end to end, at the fixed head.
+- RC-CMP-10 continues in parallel.
+
+128. **Full-size synthetic comparator acceptance PASSES at RC-CMP-10's fix head (reported by joulewise-28, 2026-10-30 03:35Z).**
+- Comparator lane `ba5587669` (RC-CMP-10 milestone 2, before its final probes and report). L9 custody from the full JoinedHarness run at `0d2ff6404`; recompute at `ba5587669` exit 0.
+- Comparator with `--window-index` set to the chain fixture's synthetic index (sha `908577ff…`, equal to the record's `window_index_sha256`): **exit 0, 0 failures in every family**. Rows: `run_phase_energy_j` 786, `routing_id` 798, `outcome_word` 188, `reported_cell_j` 144, `floor_j` 149, `contrast_j` 122, `count` 133, `kept_units` 26, `p42_status` 6. `step11_unmapped` 0, `structure_flags` 0.
+- At `f9f86869e` the same comparison was exit 2, with 9 failing rows and 7 unmapped leaves (FS1-FS4); all are now closed.
+- **Release runbook:** the comparator now binds the window index (FS4). Without `--window-index` it reads the repository's `configs/analysis/b5/analysed_windows.json` and refuses `window_index_digest_differs` unless that equals L9's record. That is correct for the real release; synthetic runs must pass `--window-index`.
+- joulewise-28 reruns at RC-CMP-10's final head when it lands.
+
+129. **Step-4 session diagnosis narrowed to one preparation check (reported by joulewise-28, 2026-10-30 03:33-03:34Z).**
+- Structure-only session diagnostic on the real ALPHA inputs at `d27c562f6` (from a fresh worktree; nothing written to custody): `session_prepared` true, `session_ready` **false**, `session_refusal_reasons` = [`anchor_energy_envelope_unrecorded`] (a global `_fail_global`). `calibration_bracket` present, `archive_context` present. No path or removed-member refusals. No bundle has a served summary.
+- So step 3b's bracket does reach the session. The cascade comes from one preparation check in `whole_window.py` (about lines 1425-1463). For some survivor bundle, either (A) the stored or re-derived summary lacks `energy_anchor_shift_envelopes`, or (B) after re-derivation under a widened operative bound (operative bound greater than the minted bound), the operative envelope fails to cover the minted one, where (B) requires the operative `point_j` to equal the minted `point_j` with exact float equality.
+- 03:34Z: an instrumented structure-only diagnostic is running. It prints aggregated categorical flags only (which site; widened or not; point exact, within 1e-9, or far; lower, upper and half-width coverage ok; pointer set) and stops after 25 failing bundles. If it is (B) with the point close but not exact under widening, the defect is the exact-equality check against a re-derivation, which the synthetic chain never exercises because it never widens the bound: a `whole_window` tooling defect, not a data property.
+- **Lead caution for the fix:** loosening an exact-equality check changes what the validation admits. Any tolerance must be derived (about 1e6 times float noise on the quantity, per the project's agreement-bar rule), tested with a counterfactual, and reviewed by two families as code that can select data. Check also whether `whole_window.py` is in a sealed pin set before changing it (pin4 lists it; `test_frozen_files` exempts it).
+
+130. **L9-STEP4-2 DONE: the step-4 classifier now reads terminal reasons through a registered class table (reported by joulewise-28, 2026-10-30 03:34-03:39Z).**
+- The work is on `lane/2026-10-30-l9-step4-reasons`: code `a92026c7f`, report `8222d0e47`.
+- The blind class table is registered as `configs/analysis/b5/step4_reason_classes.json`. A regeneration test checks it against the extractor modules.
+- `classify_step4_exit` returns the outcome `floor_cell_not_extractable` only when every reason on every refused non-p42 cell is a MASK code, or when a cell has no reason and no floor. Any TOOLING or unlisted reason now gives the new tooling code `extraction_cell_tooling_refusal`: the run exits 2, and the cure is to fix and rerun. Malformed reasons give `extraction_report_malformed`. The run record still prints only the class code, which keeps it blind.
+- This supersedes item 103's coarse ruling. That ruling classed every non-p42 cell that could not be extracted as an outcome, and that defect reached the dry run as the stop on attempt B.
+- A T8c driver test is included. Counterfactuals at main `0a9ff42` reproduce the old misclassification.
+- The seat's whole-directory verification did not finish after a container restart. joulewise-28 is running `tests/b5_analysis` discovery locally at `8222d0e47` (started 03:38Z).
+- 03:39Z: two delta reviews launched, both firing at 03:45Z with MCP connections cleared: Opus (`trig_01QtiCibGeQvRHkZXJE54P8Y`) and Fable (`trig_018wCAnDbZHGbkgQkwBozuZi`). Fable audits all 42 MASK codes one by one, asking whether each is a true scientific outcome or an integrity gate that belongs in TOOLING. Classing an integrity gate as TOOLING stops the run rather than recording an outcome, so the fail-closed direction is TOOLING.
+- The envelope diagnostic from item 129 is still running.
+
+131. **RC-CMP-10 DONE at `1affc4208`; full-size acceptance passes; delta reviews launched (reported by joulewise-28, 2026-10-30 03:54-03:56Z).**
+- `1affc4208` is on the comparator lane. Its code diff from `ba5587669` (item 128) changes only docstrings.
+- The full-size synthetic acceptance rerun on the laptop at `1affc4208` passed. The comparator exited 0 with 0 failures in every family and `step11_unmapped` 0. The recompute also exited 0.
+- Five rulings are open:
+  1. The p42 code is checked as a closed set plus identical copies, with no re-derivation.
+  2. Should the recompute compute leave-one-out rows when only 1 or 2 runs are kept? **This one is for Ed.**
+  3. The g10 and `reharvest_account` lines are conditional on L9's own line, and no claim is carried over.
+  4. Fable finding F4 is bound through the finalized manifest's lineage.
+  5. The FS3 within-bar rule also skips relation words when the two values are equal.
+- 03:56Z: delta reviews of `f9f86869e..1affc4208` launched, excluding the main merge. Both fire at 04:02Z with MCP cleared:
+  - Opus: `trig_01MELv9vtj3Pek2rHj1bpq93`, results to `review/2026-10-30-rc-cmp10-opus-rev`.
+  - Fable: `trig_01WRv7NMBPGaR15mAq6R8jEB`, results to `review/2026-10-30-rc-cmp10-fable-rev`.
+- The reviews focus on ruling 5 as a possible false-pass route. Rulings 1 and 3, the class sweep and the pinned literals are also in scope.
+- **Lead view on ruling 5:** when the two values are bit-identical, a relation word is decidable without the bar, so skipping it can pass a false sentence. For example, "A exceeds B" is false when A equals B exactly. joulewise-28's candidate closure, that bit-identical values count as decided, is correct, provided the relation is then evaluated exactly: strict words (exceeds, lower, higher) fail when the values are equal, and equality words pass. Rulings 1, 3 and 4 are gate-shape choices for the block-5 lead to settle with the reviewers. Only ruling 2 needs Ed.
+
+132. **L9-STEP4-2 Fable review: ACCEPT_WITH_FIXES. The fixes fall on the blind class table, not the code (reported by joulewise-28, 2026-10-30 04:01Z).**
+- Review branch `review/2026-10-30-l9-step4-2-fable-rev` at `20f47ff37`. The code is faithful to the table: no TOOLING or unlisted reason reaches an outcome or an ok result.
+- The table's MASK regex admitted codes that the plan routes to R3:
+  - **F1** `kept_units_below_minimum`: plan §2.2 makes this an R3 stop, and the driver's namespace already lists it as tooling.
+  - **F2** six reducer precheck codes forwarded onto kept units: under §2.2 a member rule firing on a kept unit is R3. `instrument_calibration_stale` is also emitted on a bundle-read exception (`reduce.py:1505`).
+  - **F3** `admissible_set_uncertainty_dominates_point_floor` is terminal only on the corner cap at n > 16, which cannot be reached at n = 10.
+  - **F4** `calibration_bracket_exceeds_minted_bound` is a re-derivation consistency gate.
+  - **F5 (note)** `anchor_energy_envelope_exceeds_quarter_metric` is classed as tooling; a ruling could class it differently.
+  - **F6 (note)** tooling reasons on refusals that touch only p42 cells keep the registered exit.
+- Fable audited all 42 codes. Only 11 can be reached at step 4, and after F1-F4 none of them remains a registered scientific outcome. This agrees with plan §3.1: the only step-4 result is the p42 exit, and target cells are expected to extract.
+- **Ruling proposed by the block-5 lead (pending Opus's review):** at step 4, any refused non-p42 cell is TOOLING (`extraction_cell_tooling_refusal`), whatever its reasons, and the reachable MASK set is registered as empty. This fails closed, and it selects no data: attempt B's probe already showed only tooling refusals. The table and its regeneration test change in the same head.
+- **Orchestrator's view:** I agree, on one condition. "Tooling" here means "stop: this run cannot complete". It does not license changing code until a refused cell extracts. For the codes the plan routes to R3 (F1, F2, and F5 if it is ruled that way), the cure is an Ed ruling under §2.2, not a code fix and a rerun. The blind record should therefore separate R3-routed reasons from code-defect reasons using structure-only class codes. Any cure that changes which cells or units extract is analysis-selection and needs a ruling before the rerun.
+
+133. **Step-4 stops split into code defects and ruling questions (agreed by the block-5 lead and the orchestrator, 2026-10-30 ~04:10Z).**
+- This lands in L9-STEP4-3, in the same head as the table fixes from item 132, unless Opus objects.
+- There are two registered tooling-class codes:
+  - `extraction_cell_tooling_refusal`: a code or integrity defect. The cure is a code fix and a rerun.
+  - `extraction_cell_r3_refusal`: one of the plan §2.2 R3 codes, which are `kept_units_below_minimum`, the six forwarded precheck codes, and F5's code if it is ruled that way. The cure is an Ed ruling under §2.2, not a code change.
+- When both kinds appear among the refused cells, the R3 code wins, so a ruling question is never hidden behind a code fix.
+- The brief states that any cure which changes which cells or units extract is a selection change, and needs a ruling before any rerun.
+- Attempt B's three reasons were `anchor_energy_envelope_unrecorded`, `common_mode_authenticated_bracket_required` and `whole_window_verdict_provenance_invalid`. None of them is an R3 code: they are session-readiness and integrity codes. B's cure is therefore a code fix, the envelope diagnosis from item 129, not a ruling. The block-5 lead will still confirm that the fix leaves cell selection unchanged.
+
+134. **Whole `tests/b5_analysis` directory at the L9-STEP4-2 head `8222d0e47`: 1020 run, 3 failures, 10 skipped. None is a defect in the lane's code (run on the laptop by joulewise-28, 03:38-04:07Z on 2026-10-30).**
+- `test_floor_kept_units` r14 has a stale expectation. It expects `floor_cell_not_extractable` where the new classifier gives `extraction_cell_tooling_refusal`. This is the same pattern as the stale pins in PR #601. Under the item 133 split it becomes the tooling code or the R3 code.
+- `test_dry_run` T4 is a false positive. It asserts that the sentinel `7331` never reaches the record, but the sha256 of the new step-4 extraction output contains `7331`. Nothing leaked. The sentinel needs a non-hex character so it cannot occur inside a digest.
+- `test_sensitivity_guard` G6 passes when run alone, both at the fix head and at main `0a9ff426a`. This is the known order-dependent G6 failure that the L9-PATHTOKEN-1 report recorded as older than any change in that lane.
+- **Orchestrator note:** G6 is a test of a blinding guard that fails depending on test order. "Pre-existing" does not make it acceptable. It means either the guard or its test reads state left behind by an earlier test. It gets its own small lane: find the leaked state and make G6 independent of order. It does not block attempt C, because G6 passes on a clean order. It must be fixed before the release run.
+- All three changes go into L9-STEP4-3 once Opus's review of L9-STEP4-2 lands. L9-STEP4-3 also carries Fable's table fixes F1-F5 (item 132), the R3 split (item 133) and the step-4 ruling.
+
+135. **RC-CMP-10 Opus review: ACCEPT_WITH_FIXES. The G6 order-dependent failure is diagnosed as a leak in the shared test fixture, not in the guard (2026-10-30, about 04:15-04:40Z).**
+- **Opus review** (reported by joulewise-28): branch `review/2026-10-30-rc-cmp10-opus-rev` at `bb2e1d762`, suite 393 OK.
+  - F1, MEDIUM, a real false pass. The FS3 within-bar rule lets wrong relation words exit 0 when the two values are exactly equal. Cases E1-E4 and E6-E8 exit 0, including `equals_primary`, `not_below_primary`, `widened` and even "banana". Opus validated a one-line fix at `:280`: bit-identical counts as decided. The ulp over-refusal stays closed (U1-U4 exit 0). This is ruling 5 (item 131). RC-CMP-11 adds the exact strict/non-strict semantics and the counterfactual.
+  - F2: all 32 other closed-set p42 codes pass when printed identically. The lead's ruling on NR1 is to pin the producer-derived code if the comparator can derive it from registered or recompute data, and otherwise to exclude the contradicted codes.
+  - F3: two literals that hold by construction are unpinned. F4: a falsy direction counts as "none". F5: a duplicate trigger is accepted inside the bar.
+  - History entries: 356 mutations; exit 0 occurs only in the declared classes.
+  - RC-CMP-11 launches when Fable's RC-CMP-10 review lands. L9-STEP4-3 waits on Opus's review of L9-STEP4-2.
+- **G6, owned by the orchestrator** (item 134): reproduced with two modules, `test_finalization_block5` followed by `test_sensitivity_guard`, which fails at G6. The cause is `fixtures_s5._finalization_case`, which is `lru_cache`d, so one root is shared by every caller in the process. `test_finalization_block5` leaves `am-<id>.finalized.json` and an `analysed-attempt-exclusions-*.json` file in that root, and deletes the removed-member run directories under `runs/`. `finalization_case` restored only five named files. G6 then found the earlier test's finalized manifest and failed `assertFalse(output.exists())`. The guard itself refused correctly: exit code 2, the expected stderr code and empty stdout were all asserted before that check.
+  - The fix is on lane `lane/2026-10-30-g6-order` and touches tests only. `finalization_case` now snapshots and restores the whole root tree: new files and directories are removed, and deleted or changed files are restored. G6 now asserts as a precondition that its output does not exist yet, so any future leak reports as a leak and not as a guard failure.
+  - Verification: the reproducing pair goes from FAILED (1) to OK (87 tests). The counterfactual, with the fixture fix reverted and the precondition kept, fails with the leak message. The whole-directory run is in progress.
+  - Side finding on macOS only: with the default `TMPDIR` (`/var` is a symlink to `/private/var`), `test_finalization_block5` has 3 path-comparison failures of its own. Laptop runs need `TMPDIR` set to its resolved path, as joulewise-28's runs evidently already are. CI on Linux is unaffected.
+
+136. **Envelope diagnostic: re-derivation drops envelope pointers under the widened bound; it is not an exact-equality defect (reported by joulewise-28, 2026-10-30 04:20-04:21Z).**
+- On the real ALPHA inputs, structure only, 25 bundles fail. Every one has the same flag tuple: B | widened | `pointer_set_differs` | `record_incomplete` | `point_exact` | `lower_ok` | `upper_ok` | `half_ok`.
+- **Item 129's leading hypothesis is wrong.** The points that do exist match exactly. The defect is that `_rederive_summary_for_authenticated_fiducial_bound` re-reduces under the widened operative bound, and the resulting operative summary's `energy_anchor_shift_envelopes` lacks pointer(s) that the minted summary has. Some minted pointer has no operative record, so the coverage check fails.
+- This is a defect in the tooling's re-derivation path, which the synthetic chain never exercises because it never widens the bound. joulewise-28 assesses it as not a data property and not a selection effect.
+- 04:21Z: a pointer-name diagnostic is running with the same instrumentation. It prints only which envelope pointer names are minted-only or operative-only. A name is printed only if it matches `[A-Za-z_/.:-]`; anything else prints as "opaque". No values or ids are printed. It stops after 6 failing bundles. Its output gives the fix seat the exact missing metric(s).
+- **Pin check:** `whole_window.py` appears in `seal_pins` pin1-4 as a collection-time digest. Main's copy already differs from pin4, and `test_frozen_files` exempts it explicitly. Analysis may evolve it, so the fix is an ordinary reviewed L9 change.
+- **Orchestrator condition on the fix direction:** the fix must make the operative re-derivation produce the records it is missing. It must not relax coverage by dropping minted pointers from the requirement. The fix seat must explain why the widened re-reduction omits those pointers. If a pointer is absent because widening legitimately leaves that metric undefined, that is a §2.2 ruling for Ed, not a code fix (item 133's rule). A counterfactual must show that a genuinely missing operative envelope still refuses.
+- On TMPDIR: joulewise-28's laptop runs already set TMPDIR to a resolved path under `/private/tmp`. Step 0 also refuses `/var/folders` custody paths.
+
+137. **RC-CMP-10 Fable review: ACCEPT_WITH_FIXES; RC-CMP-11 launched (reported by joulewise-28, 2026-10-30 04:18-04:22Z).**
+- **Fable review:** branch `review/2026-10-30-rc-cmp10-fable-rev` at `2bf5b25b9`.
+  - Sweep: 5035 deletions, 0 undeclared. FS2 and FS4 are sound.
+  - F1 is the same false pass on exactly equal values that Opus found as its F1 (item 135). Eight wrong relation words, plus a b10 case with identical values and a trigger mismatch, exit 0. Fable validated the same one-line fix.
+  - F2 (note): the g10 and reharvest history lines are conditional on L9's own line. NR3 stands. Closing it fully would need the g10 codes registered in the window index, which is an Ed ruling. It is not needed for the dry run.
+  - F3 (note): any p42 member code passes. RC-CMP-11's F2 pin covers this.
+- **RC-CMP-11 launched at 04:22Z:** an Opus seat, `trig_019PUBUzQrcw3eKHeqtY56HA`, firing at 04:32Z with MCP cleared. Its scope:
+  - F1: bit-identical values decide the relation, with exact semantics (item 131): strict relation words fail when the values are equal, and equality and non-strict words pass. It includes the counterfactual that a strict claim over equal values must fail. The b10 flip and U1-U4 stay at exit 0.
+  - F2: p42 is pinned to the producer-derived code (the lead's NR1 ruling), falling back to the contradicted codes.
+  - F3: the two literal pins. F4: direction "none" only for `None`. F5: a closed trigger vocabulary with no repeats.
+  - Verification runs over the whole directory. The lead reruns the full-size window at the head.
+- Still waiting: Opus's review of L9-STEP4-2, which gates L9-STEP4-3, and the pointer-name diagnostic, which gates L9-ENV-1 (item 136).
+
+138. **L9-STEP4-2 Opus review: ACCEPT_WITH_FIXES. L9-STEP4-3 launched. G6 fix is PR #603 (reported by joulewise-28 and the orchestrator, 2026-10-30, 04:45-04:56Z).**
+- **Opus review** on branch `review/2026-10-30-l9-step4-2-opus-rev` at `acd6a2b6e`.
+  - The classifier is sound. 26 adversarial reports and mutants M1-M7 were all killed. No reason code leaks to the record, stdout or stderr.
+  - F1 (stale r14 pin) and F2 (T4 digest collision) match item 134.
+  - F3: six more MASK codes are integrity, config or numeric tooling: `sensitivity_bound_below_operative`, `calibration_bracket_exceeds_minted_bound`, `instrument_calibration_stale`, `calibration_acceptance_bound_stale`, `numeric_padding_insufficient` and `proposal_count_exceeds_configured_cap`. Opus recommends a reviewed override list in the fail-closed direction.
+  - Opus's full run also showed an ERROR in `test_mint_kept_units.SensitivityFixtureIsolationTests`.
+- **Orchestrator note on that ERROR:** it passed in the orchestrator's laptop discover run at main `f0269c5c5`: 1008 tests OK. Its mechanism differs from G6's. It patches `tempfile.tempdir` and clears the S2, S4 and mint caches, then runs `SensitivityGuardTests.setUpClass` and checks the S2 source bytes and cache identity. It does not use the finalization root, so PR #603 is unlikely to resolve it. The L9-STEP4-3 seat needs the actual error text from Opus's run. It should not assume the cause is the G6 leak.
+- **L9-STEP4-3 launched 04:56Z.** It is an Opus seat, `trig_01RjZrvU8MbxWwFmjbWqsvZk`, firing at 05:05Z with MCP cleared. It implements the step-4 ruling from items 132-133:
+  - Every refused non-p42 cell is a STOP. The code is `extraction_cell_r3_refusal` if any §2.2 R3 code is present, and R3 takes precedence. The R3 codes are `kept_units_below_minimum`, `insufficient_members_after_exclusion` and the six forwarded precheck codes. Otherwise the code is `extraction_cell_tooling_refusal`. A refused cell with no reasons is malformed. `floor_cell_not_extractable` is not returned at step 4.
+  - The blind generator stays byte-identical, the ruling is recorded separately, and the regeneration test checks both.
+  - It also carries the r14 and T4 fixes (sentinel `Q7331Z` plus digest stripping, as T3 does), the `mint_kept_units` ERROR, and a whole-directory verification.
+- **G6** (items 134-135) is PR #603: lane `lane/2026-10-30-g6-order`, head `61c3525cb`, light tier, tests only.
+  - Discover over the whole `tests/b5_analysis` directory at the head: 1008 tests, OK (skipped=10). The other fixture users: 48 tests, OK. The gate ledger validates.
+  - joulewise-28 read the diff as the light-tier review. It will merge on green CI under Ed's merge authorization, given in its own session, and tell Ed.
+
+139. **Missing envelope identified as the prefill phase energy. The builder lives in frozen `reduce.py`. L9-ENV-1 launched (reported by joulewise-28, 2026-10-30 05:02-05:03Z).**
+- Pointer-name diagnostic, structure only: `minted_only = ['/phase_energy_j/prefill']`, `operative_only = []`. Every failing bundle loses exactly the prefill phase envelope when re-derived under the widened bound.
+- That envelope is built in `reduce.py` at about lines 2550-2590, where a phase envelope is added only if `envelope(...)` is not `None`.
+- **Freeze:** `_rederive_summary_for_authenticated_fiducial_bound` and the envelope builder are both in `joulewise/reduce.py`. That file is among `test_frozen_files`' frozen singles; only `whole_window.py` is exempt. A cure inside `reduce.py` is therefore a change to a frozen collection file, and that is Ed's call.
+- **L9-ENV-1 launched 05:03Z.** Opus seat `trig_018wQ4tfCvY8ByYuacwTYoQB`, firing 05:12Z with MCP cleared. It first diagnoses why `envelope()` returns `None` for prefill under widening, using a synthetic repro with a dominated bound. It pushes the diagnosis before writing any fix. The next step depends on the category:
+  - (a) A defect in non-frozen code (`whole_window.py`): fix it by producing the record, never by relaxing coverage. Add a counterfactual showing that a genuinely missing envelope still refuses, and make no change to selection.
+  - (b) A defect in frozen `reduce.py` or another frozen file: diagnose it, write the minimal change, then STOP as BLOCKED `frozen_file_change_needs_ed`.
+  - (c) Widening legitimately leaves the prefill envelope undefined: STOP as BLOCKED `r3_ruling_needed`.
+  - In every category it adds the permanent synthetic widening case.
+- **Consequence:** attempt C may need an Ed decision, (b) or (c), before it can run. joulewise-28 will put the question to Ed as soon as the diagnosis lands.
+
+140. **Prefill envelope cause confirmed. Ed ruled to clamp inverted corner windows in frozen `reduce.py`. L9-ENV-2 launched (reported by joulewise-28, 2026-10-30 05:10-05:12Z).**
+- **Inversion check** on the real ALPHA inputs, booleans only: all 30 of 30 `None` results from `_corner_composed_anchor_shift_envelope` had valid guards and a window shorter than 2·`edge_bound_s`. 87 envelopes were returned. This confirms the orchestrator's hypothesis from reading the code. The fixed corner check `end_s < start_s` makes the function return `None` when a short phase window inverts at the (+edge, −edge) corner, and widening raises `edge_bound_s = fiducial_bound_s + wall_minus_monotonic_span_s`.
+- **Ed's ruling.** joulewise-28 relays it: Ed answered at 05:11Z in joulewise-28's session, not in this one.
+  - Ed chose option 1: **clamp in frozen `joulewise/reduce.py`.** An inverted corner window becomes zero-length and contributes 0 J, so the envelope is defined but wide.
+  - Rationale: power is non-negative, so energy is monotone in each edge. When the (+edge, −edge) corner inverts, the admissible set includes the empty interval. A wide or unresolvable prefill result is an honest outcome.
+  - Options not chosen: (2) an R3 ruling that prefill is non-claimable at the metric level; (3) staying fail-closed.
+- L9-ENV-1, the diagnose-and-stop seat, was disabled before it fired.
+- **L9-ENV-2** was launched at 05:12Z to implement the ruling. It is an Opus seat, `trig_01B8ziqZjv927yNg5rHBhpkD`, firing at 05:20Z with MCP cleared, on `lane/2026-10-30-l9-env-clamp`. Its brief:
+  - Make the clamp minimal. Keep every other `None` guard, and stay bit-identical for windows that do not invert.
+  - Add the permanent synthetic widening case, with windows just under and just over 2·edge, checking session readiness before and after. Add the counterfactual that a genuinely missing envelope still refuses.
+  - In `test_frozen_files`, rebind `reduce.py` to the reviewed digest after the ruling, citing the ruling. Every other frozen file stays unchanged, and `sealed_inventory` and `seal_pins` are untouched.
+  - Report whether the independent recompute or the comparator would disagree with the clamped values at release.
+- **Next:** two-family review, then a §3.1 rehearsal of the session on the real ALPHA inputs (structure-only, checking `session_ready`), then attempt C.
+- **Orchestrator check on the ruling's consequences:**
+  - Coverage still holds against the minted envelopes, because the clamped lower bound (0 J or more) is at or below the minted lower bound, and the (−edge, +edge) corner only lengthens the window, so the upper bound is at or above the minted upper bound.
+  - The independent recompute must either implement the same clamp or have its disagreement registered. The seat's release-comparison report covers this.
+
+141. **L9-STEP4-3 DONE; delta reviews launched (reported by joulewise-28, 2026-10-30 05:22-05:25Z).**
+- **Implementation:** branch `lane/2026-10-30-l9-step4-reasons`, code `b898fbbc2`, report `901956944`, with origin/main merged at `ed577960d`. It implements the step-4 stop-class ruling from items 132, 133 and 138.
+  - Every refused non-p42 cell gets one of two codes: `extraction_cell_r3_refusal`, used if any §2.2 R3 code is present (R3 wins), or `extraction_cell_tooling_refusal` otherwise.
+  - A refused cell with no reasons is classed as malformed.
+  - The verification tails are still pending in the seat's report.
+- **Laptop test run:** 05:25Z, whole-directory `tests/b5_analysis` discovery running at `901956944`.
+- **Delta reviews:** launched at 05:25Z, both firing at 05:32Z with MCP cleared.
+  - Opus (`trig_014C63w5qEffHJK6HC6FmMVe`) re-runs its probe and mutants.
+  - Fable (`trig_01Rna9qSVtNGDXMRQZ4F1x4A`) checks the R3 list against plan §2.2 and §3.1.
+- **Still in flight:** RC-CMP-11 reviews (fired 05:14Z), L9-ENV-2 clamp (05:20Z), PR #603 CI.
+
+142. **PR #603 (G6) merged. Ed amended the clamp ruling to apply on the analysis side only. A repo-trimming mission started (2026-10-30, about 05:40Z).**
+- **PR #603 merged** at merge commit `93e7f5dd2`. joulewise-28 merged it under Ed's merge authorization, which was given in that session. The orchestrator verified on origin that the commit is on main. CI was green on head `61c3525cb`: test shards 1-12, quick, fences, gate-ledger, the calibration-exclusive jobs, build and installed-wheel. G6 no longer depends on test order. This was a release prerequisite from item 134.
+- **Ed's amended ruling: "Analysis-only clamp".** joulewise-28 relays it; Ed gave it in that session, not this one. It amends item 140.
+  - `reduce.py` is a pinned estimator path. Changing it would make the live calibration acceptance stale everywhere, collection nights included.
+  - So `reduce.py` and the acceptance stay untouched, and BYTES collection is unaffected.
+  - The same clamp goes into the analysis-side re-derivation in `whole_window.py`. That file is exempt from pin4 and is not an estimator path.
+  - The `reduce.py` patch from L9-ENV-2 (`e1b3a0510`) is kept only as a test oracle and will not be merged.
+- **L9-ENV-3** is firing to implement this.
+  - **Orchestrator note:** the analysis-side clamp must match the oracle bit for bit on every window, inverting or not, and must leave every other `None` guard and the `point_j` check from item 140 in place.
+  - The independent recompute still needs the same clamp, or a registered difference class. That stays joulewise-28's follow-on lane.
+- **Repo-trimming mission:** Ed started a separate Opus agent to remove deprecated and old-version cruft. It is scoped away from frozen, pinned, block-5 and collection files and will land as PRs.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
