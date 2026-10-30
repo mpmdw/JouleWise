@@ -646,6 +646,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - 03:39Z: two delta reviews launched, both firing at 03:45Z with MCP connections cleared: Opus (`trig_01QtiCibGeQvRHkZXJE54P8Y`) and Fable (`trig_018wCAnDbZHGbkgQkwBozuZi`). Fable audits all 42 MASK codes one by one, asking whether each is a true scientific outcome or an integrity gate that belongs in TOOLING. Classing an integrity gate as TOOLING stops the run rather than recording an outcome, so the fail-closed direction is TOOLING.
 - The envelope diagnostic from item 129 is still running.
 
+131. **RC-CMP-10 DONE at `1affc4208`; full-size acceptance passes; delta reviews launched (reported by joulewise-28, 2026-10-30 03:54-03:56Z).**
+- `1affc4208` is on the comparator lane. Its code diff from `ba5587669` (item 128) changes only docstrings.
+- The full-size synthetic acceptance rerun on the laptop at `1affc4208` passed. The comparator exited 0 with 0 failures in every family and `step11_unmapped` 0. The recompute also exited 0.
+- Five rulings are open:
+  1. The p42 code is checked as a closed set plus identical copies, with no re-derivation.
+  2. Should the recompute compute leave-one-out rows when only 1 or 2 runs are kept? **This one is for Ed.**
+  3. The g10 and `reharvest_account` lines are conditional on L9's own line, and no claim is carried over.
+  4. Fable finding F4 is bound through the finalized manifest's lineage.
+  5. The FS3 within-bar rule also skips relation words when the two values are equal.
+- 03:56Z: delta reviews of `f9f86869e..1affc4208` launched, excluding the main merge. Both fire at 04:02Z with MCP cleared:
+  - Opus: `trig_01MELv9vtj3Pek2rHj1bpq93`, results to `review/2026-10-30-rc-cmp10-opus-rev`.
+  - Fable: `trig_01WRv7NMBPGaR15mAq6R8jEB`, results to `review/2026-10-30-rc-cmp10-fable-rev`.
+- The reviews focus on ruling 5 as a possible false-pass route. Rulings 1 and 3, the class sweep and the pinned literals are also in scope.
+- **Lead view on ruling 5:** when the two values are bit-identical, a relation word is decidable without the bar, so skipping it can pass a false sentence. For example, "A exceeds B" is false when A equals B exactly. joulewise-28's candidate closure, that bit-identical values count as decided, is correct, provided the relation is then evaluated exactly: strict words (exceeds, lower, higher) fail when the values are equal, and equality words pass. Rulings 1, 3 and 4 are gate-shape choices for the block-5 lead to settle with the reviewers. Only ruling 2 needs Ed.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
