@@ -64,6 +64,14 @@ Rules (RC-CMP-1 A1-A4):
   words (True) are compared exactly; a compared line, sensitivity row or fill claim key its producer
   always writes is required (required_key_absent), and below_screen_bound and neg8_screen pair per
   registered window;
+- the expected-check table (RC-CMP-9): before any family compares, one table built from the registered sources
+  only (REGISTERED_SOURCES, closed) lists every item the producers print unconditionally per registered
+  window, cell, contrast, block, ratio and record row, with its nested keys (the producers' key sets, copied as
+  literals), and each conditional item with the registered condition (a status or kept word on either side)
+  that makes it expected; each check must find its item on L9's side and the recompute's (expected/<check>,
+  DISAGREE otherwise), an L9 item of a listed collection that no check claims is DISAGREE (unexpected/), and a
+  compared step-11 leaf binds only inside a claimed item (not_in_table); a list the fill copies position by
+  position prints every position (copy_shortened);
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
