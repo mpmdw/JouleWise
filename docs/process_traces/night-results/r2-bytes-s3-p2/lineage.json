@@ -1,0 +1,90 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 1281681483004583,
+    "monotonic_raw_ns": 1281681483004166,
+    "wall_s": 1793297344.499221
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2_bound",
+      "sha256": "52bf84d4c3cf158a8d2a45ed8ca69982b57a9c0233bd89ed947379d1de9070e9",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2",
+      "sha256": "4cf78ac71973a39fe684d77a5e5e9287bf2235d76c9cb1e13aa94ef19fdfdb0d",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 1281681472245291,
+    "monotonic_raw_ns": 1281681472245250,
+    "wall_s": 1793297344.488462
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "r2-bytes-s3-p2-calibration",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/custody/window_lineage/launch.json",
+        "sha256": "dc7b5040efa9386dae49a98a1fbc998b117bd5d4d7d747f4ff41fd050bf31f4a"
+      },
+      "pack_id": "bytes-s3-p2",
+      "pack_root": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/campaigns/bytes-s3-p2",
+      "pack_sha256": "945b298367be441cac5871aa5cc810894f6b2ab148eb0e9d06f7efd60a16a0c9",
+      "plan_id": "bytes-s3-p2",
+      "plan_tree_sha256": "455166e588e0203291d1caf21b4ee07821fd1abe35e8cb5c6df97c89396b67fd",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2_bound",
+        "claim_runs_root": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2",
+        "custody_root": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/custody",
+        "night_dir": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/custody/night",
+        "post_attempt_id": "r2-bytes-s3-p2-cal-post",
+        "pre_attempt_id": "r2-bytes-s3-p2-cal-pre"
+      },
+      "window_id": "bytes-s3-p2"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2_bound/.joulewise-launch-lineage.json",
+        "sha256": "52bf84d4c3cf158a8d2a45ed8ca69982b57a9c0233bd89ed947379d1de9070e9"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/.joulewise-launch-lineage.json",
+        "sha256": "4cf78ac71973a39fe684d77a5e5e9287bf2235d76c9cb1e13aa94ef19fdfdb0d"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/custody/window_lineage/authorization.json",
+        "sha256": "d80fc06219a1d79f121259c340f14605d2a87a8816c400a9f5bd9edeab128633"
+      },
+      "go": {
+        "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/custody/window_lineage/go.json",
+        "sha256": "0f8232801df9dbfa88f0fca17021bfe57844913d0cc49f49ce4a30c0e6c38027"
+      },
+      "launch": {
+        "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/custody/window_lineage/launch.json",
+        "sha256": "dc7b5040efa9386dae49a98a1fbc998b117bd5d4d7d747f4ff41fd050bf31f4a"
+      }
+    },
+    "unrecorded": []
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}
