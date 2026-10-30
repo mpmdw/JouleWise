@@ -750,6 +750,57 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - In every category it adds the permanent synthetic widening case.
 - **Consequence:** attempt C may need an Ed decision, (b) or (c), before it can run. joulewise-28 will put the question to Ed as soon as the diagnosis lands.
 
+140. **Prefill envelope cause confirmed. Ed ruled to clamp inverted corner windows in frozen `reduce.py`. L9-ENV-2 launched (reported by joulewise-28, 2026-10-30 05:10-05:12Z).**
+- **Inversion check** on the real ALPHA inputs, booleans only: all 30 of 30 `None` results from `_corner_composed_anchor_shift_envelope` had valid guards and a window shorter than 2·`edge_bound_s`. 87 envelopes were returned. This confirms the orchestrator's hypothesis from reading the code. The fixed corner check `end_s < start_s` makes the function return `None` when a short phase window inverts at the (+edge, −edge) corner, and widening raises `edge_bound_s = fiducial_bound_s + wall_minus_monotonic_span_s`.
+- **Ed's ruling.** joulewise-28 relays it: Ed answered at 05:11Z in joulewise-28's session, not in this one.
+  - Ed chose option 1: **clamp in frozen `joulewise/reduce.py`.** An inverted corner window becomes zero-length and contributes 0 J, so the envelope is defined but wide.
+  - Rationale: power is non-negative, so energy is monotone in each edge. When the (+edge, −edge) corner inverts, the admissible set includes the empty interval. A wide or unresolvable prefill result is an honest outcome.
+  - Options not chosen: (2) an R3 ruling that prefill is non-claimable at the metric level; (3) staying fail-closed.
+- L9-ENV-1, the diagnose-and-stop seat, was disabled before it fired.
+- **L9-ENV-2** was launched at 05:12Z to implement the ruling. It is an Opus seat, `trig_01B8ziqZjv927yNg5rHBhpkD`, firing at 05:20Z with MCP cleared, on `lane/2026-10-30-l9-env-clamp`. Its brief:
+  - Make the clamp minimal. Keep every other `None` guard, and stay bit-identical for windows that do not invert.
+  - Add the permanent synthetic widening case, with windows just under and just over 2·edge, checking session readiness before and after. Add the counterfactual that a genuinely missing envelope still refuses.
+  - In `test_frozen_files`, rebind `reduce.py` to the reviewed digest after the ruling, citing the ruling. Every other frozen file stays unchanged, and `sealed_inventory` and `seal_pins` are untouched.
+  - Report whether the independent recompute or the comparator would disagree with the clamped values at release.
+- **Next:** two-family review, then a §3.1 rehearsal of the session on the real ALPHA inputs (structure-only, checking `session_ready`), then attempt C.
+- **Orchestrator check on the ruling's consequences:**
+  - Coverage still holds against the minted envelopes, because the clamped lower bound (0 J or more) is at or below the minted lower bound, and the (−edge, +edge) corner only lengthens the window, so the upper bound is at or above the minted upper bound.
+  - The independent recompute must either implement the same clamp or have its disagreement registered. The seat's release-comparison report covers this.
+
+141. **L9-STEP4-3 DONE; delta reviews launched (reported by joulewise-28, 2026-10-30 05:22-05:25Z).**
+- **Implementation:** branch `lane/2026-10-30-l9-step4-reasons`, code `b898fbbc2`, report `901956944`, with origin/main merged at `ed577960d`. It implements the step-4 stop-class ruling from items 132, 133 and 138.
+  - Every refused non-p42 cell gets one of two codes: `extraction_cell_r3_refusal`, used if any §2.2 R3 code is present (R3 wins), or `extraction_cell_tooling_refusal` otherwise.
+  - A refused cell with no reasons is classed as malformed.
+  - The verification tails are still pending in the seat's report.
+- **Laptop test run:** 05:25Z, whole-directory `tests/b5_analysis` discovery running at `901956944`.
+- **Delta reviews:** launched at 05:25Z, both firing at 05:32Z with MCP cleared.
+  - Opus (`trig_014C63w5qEffHJK6HC6FmMVe`) re-runs its probe and mutants.
+  - Fable (`trig_01Rna9qSVtNGDXMRQZ4F1x4A`) checks the R3 list against plan §2.2 and §3.1.
+- **Still in flight:** RC-CMP-11 reviews (fired 05:14Z), L9-ENV-2 clamp (05:20Z), PR #603 CI.
+
+142. **PR #603 (G6) merged. Ed amended the clamp ruling to apply on the analysis side only. A repo-trimming mission started (2026-10-30, about 05:40Z).**
+- **PR #603 merged** at merge commit `93e7f5dd2`. joulewise-28 merged it under Ed's merge authorization, which was given in that session. The orchestrator verified on origin that the commit is on main. CI was green on head `61c3525cb`: test shards 1-12, quick, fences, gate-ledger, the calibration-exclusive jobs, build and installed-wheel. G6 no longer depends on test order. This was a release prerequisite from item 134.
+- **Ed's amended ruling: "Analysis-only clamp".** joulewise-28 relays it; Ed gave it in that session, not this one. It amends item 140.
+  - `reduce.py` is a pinned estimator path. Changing it would make the live calibration acceptance stale everywhere, collection nights included.
+  - So `reduce.py` and the acceptance stay untouched, and BYTES collection is unaffected.
+  - The same clamp goes into the analysis-side re-derivation in `whole_window.py`. That file is exempt from pin4 and is not an estimator path.
+  - The `reduce.py` patch from L9-ENV-2 (`e1b3a0510`) is kept only as a test oracle and will not be merged.
+- **L9-ENV-3** is firing to implement this.
+  - **Orchestrator note:** the analysis-side clamp must match the oracle bit for bit on every window, inverting or not, and must leave every other `None` guard and the `point_j` check from item 140 in place.
+  - The independent recompute still needs the same clamp, or a registered difference class. That stays joulewise-28's follow-on lane.
+- **Repo-trimming mission:** Ed started a separate Opus agent to remove deprecated and old-version cruft. It is scoped away from frozen, pinned, block-5 and collection files and will land as PRs.
+
+143. **L9-ENV-3 fired; L9-STEP4-3 reviewed and L9-STEP4-4 fired; RC-CMP-11 accepted by both reviewers, now PR #604 (reported by joulewise-28, 2026-10-30, about 05:45-06:00Z).**
+- **L9-ENV-3** (`trig_01CbwFi6AMKmjPYSjYVNu5HE`, lane `lane/2026-10-30-l9-env-analysis-clamp`) clamps on the analysis side only, in `whole_window`. `reduce.py` and the estimator paths stay byte-identical. The oracle is a vendored copy of the function from `e1b3a0510`, compared by bit-identical dict equality across a sweep. The brief forbids a runtime monkeypatch. At review, the lead checks the item-142 points: the no-overlap and negative-power guards, `point_j` at the bounds, and that the clamp is applied only during re-derivation.
+- **L9-STEP4-3 reviews:**
+  - Opus: ACCEPT (`279cf616d`).
+  - Fable: ACCEPT_WITH_FIXES (`910bcd189`).
+  - Lead ruling, following §2.2 bullet 3 literally: `window_evidence_precheck_missing`, `campaign_cooldown_evidence_missing` and `idle_window_suspect` move to R3.
+  - Opus F1 raised a broader question about all 31 forwarded reducer codes. It goes to Ed as an **optional** ruling and does not block.
+  - **L9-STEP4-4** (`trig_019CpPG9yiLtYEW7Rd5rtKZU`) fired on the same lane. It merges main first, so it picks up the G6 fixture fix from item 142.
+- **RC-CMP-11:** Opus ACCEPT (`c38b105d2`), Fable ACCEPT (`0322e4748`). Main was merged into the lane at `4fc643363`. **PR #604** is open, and joulewise-28 will merge it once CI is green.
+- **Trimming agent scope** is confirmed. It excludes `tests/b5_analysis/**` (including `fixtures_s5.py` and G6), every pinned and sealed file, and the coordination files.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.

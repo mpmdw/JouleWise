@@ -127,6 +127,7 @@ class SensitivityGuardTests(unittest.TestCase):
         with s5.finalization_case() as f:
             built = {**f['block5_inputs'], 'archive_contexts': {k: wider(v) for k,v in f['block5_inputs']['archive_contexts'].items()}}
             out = f['root']/(f['prospective']['manifest_id']+'.finalized.json')
+            self.assertFalse(out.exists(), 'shared finalization root holds another test\'s output')
             with mock.patch.object(finalize, 'block5_claim_gate_inputs', return_value=built):
                 self.invoke(finalize.main, ['--window-index','unused','--prospective-manifest',str(f['prospective_path']),
                     '--plan-tree',str(f['plan_tree_path']),'--custody-root',str(f['root']),'--runs-root',str(f['runs_root']),
