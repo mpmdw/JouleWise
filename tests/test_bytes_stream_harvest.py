@@ -50,11 +50,22 @@ class HarvestTests(unittest.TestCase):
             self.assertEqual(result['energy_j']['battery'],kp.integrate(times,watts,*spans['stream'])[0])
             self.assertGreater(result['energy_j']['battery'],0)
             self.assertEqual(sum(g['missing_samples'] for g in result['meter_gaps']),2)
-            self.assertEqual(result['tau_s'],2.34)  # 2×1 s SMC + 340 ms gap-bearing poll.
+            from joulewise.bytes_analysis import _battery_delay_ns
+            # Same governed function and same stream: exact replay, not a
+            # comparison against a separately rounded floating literal.
+            self.assertEqual(result['tau_s'],_battery_delay_ns(stream)/1e9)
             self.assertEqual(result['idle']['pre']['meter'],h.points(stream.host_ns,stream.watts,spans['pre']))
             # Charging is retained signed, never clamped to zero.
             stream.smc=[dict(B0AC=250,B0AV=12000) for _ in stream.smc]
             self.assertLess(h.meter_fields(stream,spans)['energy_j']['battery'],0)
+
+    def test_uncovered_idle_is_unavailable_not_a_partial_mean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stream=self.stream(Path(tmp))
+            spans={'pre':(-2*10**9,5*10**9),'stream':(10*10**9,20*10**9),'post':(24*10**9,27*10**9)}
+            result=h.meter_fields(stream,spans)
+            self.assertEqual(result['idle']['pre']['meter'],[])
+            self.assertIsNotNone(result['energy_j']['meter'])
 
     def test_missing_battery_readings_remain_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

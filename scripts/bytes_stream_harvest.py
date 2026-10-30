@@ -123,7 +123,8 @@ def meter_fields(stream, spans):
                           for d in range(before+s.step_ms, after, s.step_ms))
             if missing:
                 gaps.append(dict(span=name, missing_samples=missing))
-    idle = {name: {'meter': points(stream.host_ns,stream.watts,spans[name]),
+    idle = {name: {'meter': (points(stream.host_ns,stream.watts,spans[name])
+                             if stream.host_ns[0] <= spans[name][0] and stream.host_ns[-1] >= spans[name][1] else []),
                    'battery': points(bt,bw,spans[name])} for name in ('pre','post')}
     return dict(energy_j={'meter': meter, 'battery': battery}, idle=idle,
                 r_max_s=residual, tau_s=tau_ns/1e9, meter_edge_w=powers,
@@ -192,8 +193,10 @@ def harvest(archive):
             h['energy_j'][key] = energy
             envelopes.append(envelope)
             for name in ('pre','post'):
+                covered = bool(native[key] and native[key][0]['start_ns'] <= spans[name][0]
+                               and native[key][-1]['end_ns'] >= spans[name][1])
                 h['idle'][name][key] = [r for r in native[key]
-                    if r['start_ns'] < spans[name][1] and r['end_ns'] > spans[name][0]]
+                    if r['start_ns'] < spans[name][1] and r['end_ns'] > spans[name][0]] if covered else []
         h.update(anchor_shift_j=None if any(v is None for v in envelopes) else max(envelopes),
                  operative_timing_bound_s=bound, capture_stack=stack,
                  adapter_max_w=session['adapter_max_w'], adapter_source=session['adapter_source'],

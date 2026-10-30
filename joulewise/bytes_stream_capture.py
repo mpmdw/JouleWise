@@ -127,6 +127,8 @@ def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None)
             counts = {}
             for arm, size in sizes.items():
                 own = [r for r in scan_calls if r['bytes_per_read'] == size]
+                if len(own) != 3:
+                    raise ValueError('planned arm payload has no allocatable scan triplet: ' + arm)
                 t_dispatch = math.fsum(r['duration_s']/r['repeats'] for r in own) / len(own)
                 counts[arm] = math.floor(CALL_S[arm]/t_dispatch)
                 if counts[arm] <= 0:

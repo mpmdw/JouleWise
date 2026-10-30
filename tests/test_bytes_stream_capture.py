@@ -214,6 +214,23 @@ class CaptureTests(unittest.TestCase):
             self.assertIn('allocation_stop',value)
             self.assertEqual(value['call_count'],0)
 
+    def test_unallocatable_stream_size_retains_specific_missing_scan_reason(self):
+        with tempfile.TemporaryDirectory(prefix='kb-size-') as tmp:
+            clock=Clock()
+            mx=Array(clock)
+            allocate=mx.ones
+            def limited(shape,dtype):
+                if shape[0]>2**31:
+                    raise RuntimeError('synthetic allocation ceiling')
+                return allocate(shape,dtype)
+            mx.ones=limited
+            with patch.object(bt,'collect_stack',return_value={**copy.deepcopy(bt.REFERENCE_STACK),
+                             **copy.deepcopy(bt.REFERENCE_VERSIONS)}):
+                result=cap.run_stage(Path(tmp)/'capture',device='synthetic',adapter=Capture(clock,[]),clock=clock,mx=mx)
+            self.assertEqual(result['status'],'incomplete')
+            self.assertIn('no allocatable scan triplet: S',result['error'])
+            self.assertEqual(result['call_count'],0)
+
     def test_real_driver_chain_stage_and_harvest(self):
         with tempfile.TemporaryDirectory(prefix='kb-cap-e2e-') as tmp:
             synthetic_chain(self, Path(tmp)/'archive')
@@ -254,8 +271,11 @@ def synthetic_chain(test, destination):
     cap.write(harness.root/'updated-plan.json',plan)
     harness.plan_path=harness.root/'updated-plan.json'
     harness.plan=night_gate.NightPlan.from_mapping(plan)
+    # Fake hardware lives until supervision stops it. Its allowance is the
+    # §1/§2 planned palindrome plus the 22×3×2 s scan, not an arbitrary timeout.
+    meter_life = sum(cap.CALL_S[a]+2*cap.IDLE_S+3*cap.SETTLE_S for a in cap.ORDER)+22*3*cap.SCAN_CALL_S
     harness.meter_argv = lambda request: [sys.executable, '-c',
-        'import sys,time; time.sleep(600)', str(request.custody_root)]
+        'import sys,time; time.sleep(float(sys.argv[1]))', str(meter_life), str(request.custody_root)]
     rc=harness.run()
     test.assertEqual(rc,harness.driver.EXIT_GO)
     claim = Path(bindings['claim_runs_root'])
