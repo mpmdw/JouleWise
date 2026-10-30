@@ -1,0 +1,29 @@
+# git diff --stat 81155d419..6ce02feba
+ .codex-report/L9-STEP4-5.md                   | 177 ++++++++++++++++++++++++++
+ .codex-report/l9-step4-5/full_run_tail.txt    |   9 ++
+ .codex-report/l9-step4-5/mutants.py           | 144 +++++++++++++++++++++
+ .codex-report/l9-step4-5/mutants.txt          | 139 ++++++++++++++++++++
+ configs/analysis/b5/step4_reason_classes.json |   2 +-
+ tests/b5_analysis/test_step4_exit_classes.py  |   9 +-
+ tests/b5_analysis/test_step4_member_codes.py  | 124 ++++++++++++++++++
+ tests/b5_analysis/test_step4_reason_table.py  |  76 ++++++++---
+ 8 files changed, 658 insertions(+), 22 deletions(-)
+
+# git diff 81155d419..6ce02feba -- joulewise scripts configs (full)
+diff --git a/configs/analysis/b5/step4_reason_classes.json b/configs/analysis/b5/step4_reason_classes.json
+index 7b6d5f5b6..427d736e2 100644
+--- a/configs/analysis/b5/step4_reason_classes.json
++++ b/configs/analysis/b5/step4_reason_classes.json
+@@ -1978,7 +1978,7 @@
+   "window_evidence_precheck_missing"
+  ],
+  "step4_rule": {
+-  "ruling": "L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind",
++  "ruling": "L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind; amended by the L9-STEP4-4 lead ruling (2026-10-30): the member-level codes plan section 2.2 bullet 3 names that reach a step-4 cell (window_evidence_precheck_missing, campaign_cooldown_evidence_missing, idle_window_suspect) are r3. A tooling-origin cause of one of these codes also routes to R3 (an Ed ruling), which is stop-side.",
+   "refused_cells_only_p42": "p42_floor_cells_only",
+   "refused_non_p42_cell_without_reasons": "extraction_report_malformed",
+   "any_r3_reason_on_a_refused_non_p42_cell": "extraction_cell_r3_refusal",
+
+# merge deda94037 vs automatic merge-tree of its parents
+auto tree 4c7334afdd040933e07fc0ff2436761878df06e6
+(no output above = identical)

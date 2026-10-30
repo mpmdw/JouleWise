@@ -1,0 +1,7 @@
+# at deda94037, TMPDIR=/tmp/l9final-base2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest tests.b5_analysis.test_step4_reason_table tests.b5_analysis.test_step4_exit_classes tests.b5_analysis.test_step4_member_codes tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit
+.........................................
+----------------------------------------------------------------------
+Ran 41 tests in 62.905s
+
+OK
+EXIT 0

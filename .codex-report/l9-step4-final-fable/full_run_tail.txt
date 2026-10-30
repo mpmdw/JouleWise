@@ -1,0 +1,12 @@
+# at deda94037, clean tree, from /home/user/JouleWise:
+# TMPDIR=/tmp/l9final JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b5_analysis -t .
+# ERROR:/FAIL: lines: 0
+----------------------------------------------------------------------
+Ran 1035 tests in 4116.674s
+
+OK (skipped=13)
+
+real	69m22.831s
+user	58m29.091s
+sys	8m4.592s
+EXIT 0

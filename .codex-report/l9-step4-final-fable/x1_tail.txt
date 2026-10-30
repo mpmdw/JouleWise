@@ -1,0 +1,26 @@
+# Own mutant X1 at deda94037 (worktree /tmp/l9final-wt2): delete the FIRST of the two paired_block_incomplete kept-unit stop sites only
+# git diff:
+diff --git a/joulewise/analysis_engine/inputs.py b/joulewise/analysis_engine/inputs.py
+index ea67b9c6f..c4bf0fc27 100644
+--- a/joulewise/analysis_engine/inputs.py
++++ b/joulewise/analysis_engine/inputs.py
+@@ -3586,10 +3586,7 @@ def load_analysis_inputs(
+                 if relative is None or not (Path(runs_root) / relative).is_dir():
+                     cid = next(cid for cid, cell in cells.items()
+                                if any(run_id in unit.run_ids for unit in cell.kept["quad"]))
+-                    try:
+-                        kept_units.stop_if_member_code_on_kept_unit(cid, run_id, "paired_block_incomplete")
+-                    except ValueError as exc:
+-                        raise AnalysisInputError("member_code_on_kept_unit") from exc
++                    pass
+             from joulewise.b5_analysis.bracket import WindowBracket, LEDGER_COPY, TERMINAL_PIN
+             from joulewise.whole_window import _archive_thaw
+             pin = _strict_json_admission_bytes(gamma_archive.output_bytes(TERMINAL_PIN), "terminal pin")
+
+# TMPDIR=/tmp/l9x1tmp JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest <4 step-4 targets>
+.........................................
+----------------------------------------------------------------------
+Ran 41 tests in 67.143s
+
+OK
+EXIT 0

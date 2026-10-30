@@ -1,0 +1,53 @@
+# python3.13 -I .codex-report/l9-step4-5/mutants.py /tmp/l9final-wt <13 names>; worktree detached at deda94037; TMPDIR=/tmp/l9s5tmp
+## O6 classifier checks r3 before the p42 exit
+   rc=1 Ran 41 tests in 68.720s | FAILED (failures=10) -> KILLED
+     test_R2_a_refused_non_p42_cell_without_reasons_is_a_malformed_report (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests)
+     test_R2_an_r3_code_on_a_p42_cell_does_not_make_a_target_refusal_r3 (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests)
+     test_R2_p42_cell_reasons_are_irrelevant_to_the_registered_exit (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests)
+     test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests)
+## O7 classifier checks only the first reason
+   rc=1 Ran 41 tests in 50.183s | FAILED (failures=3) -> KILLED
+     test_R2_r3_takes_precedence_over_tooling_on_any_refused_non_p42_cell (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests)
+## O11 calibration_bracketing.py emits paired_block_incomplete beside its pinned code
+   rc=1 Ran 41 tests in 53.315s | FAILED (failures=1) -> KILLED
+     test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+## O12 forwarding filter also drops window_evidence_precheck_missing
+   rc=1 Ran 41 tests in 54.175s | FAILED (failures=4) -> KILLED
+     test_missing_precheck_root_is_r3_on_the_target_cell (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+     test_stored_non_reducer_reasons_become_precheck_missing (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+## O12b forwarding filter also drops idle_window_suspect
+   rc=1 Ran 41 tests in 59.568s | FAILED (failures=1) -> KILLED
+     test_idle_window_suspect_on_energy_request_j_is_r3_on_the_target_cell (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+## F7 classifier drops the three plan-named codes at runtime
+   rc=1 Ran 41 tests in 63.255s | FAILED (failures=14) -> KILLED
+     test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests)
+     test_R2_r3_only_reasons_are_an_r3_refusal (tests.b5_analysis.test_step4_exit_classes.Step4ReasonClassTests)
+     test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+     test_idle_window_suspect_on_energy_request_j_is_r3_on_the_target_cell (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+     test_missing_precheck_root_is_r3_on_the_target_cell (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+     test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests)
+     test_stored_non_reducer_reasons_become_precheck_missing (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+     test_unverified_campaign_cooldown_is_r3_on_the_target_cell (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+## F8 pin idle_window_suspect to the _unknown emission site
+   rc=1 Ran 41 tests in 65.974s | FAILED (failures=1) -> KILLED
+     test_R3_each_code_is_pinned_to_its_producer_emission_site_and_plan_line (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+## F9 precheck forwards non-reducer stored reasons
+   rc=1 Ran 41 tests in 61.209s | FAILED (failures=2, errors=1) -> KILLED
+     test_stored_non_reducer_reasons_become_precheck_missing (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+## F10 extractor stops filtering cooldown_cap_hit
+   rc=1 Ran 41 tests in 55.150s | FAILED (failures=1) -> KILLED
+     test_verified_cap_hit_is_filtered_from_cell_reasons (tests.b5_analysis.test_step4_member_codes.Step4MemberCodeTests)
+## F12 both kept-unit stop sites for paired_block_incomplete deleted
+   rc=1 Ran 41 tests in 57.950s | FAILED (failures=2) -> KILLED
+     test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+     test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+## N1 claim-gate literal in a module outside the eleven, not at a pinned site
+   rc=1 Ran 41 tests in 55.835s | FAILED (failures=2) -> KILLED
+     test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+## N2 claim-gate literal in the extractor CLI
+   rc=1 Ran 41 tests in 53.955s | FAILED (failures=1) -> KILLED
+     test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+## N4 pin text is a fragment of the real statement
+   rc=1 Ran 41 tests in 54.137s | FAILED (failures=1) -> KILLED
+     test_R3_each_code_is_pinned_to_its_producer_emission_site_and_plan_line (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests)
+EXIT 0

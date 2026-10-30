@@ -1,0 +1,10 @@
+N 200000 violations 0
+  (0, 'ok', 'ok') 33273
+  (1, 'extraction_cell_r3_refusal', 'tooling_refusal') 4550
+  (1, 'extraction_cell_tooling_refusal', 'tooling_refusal') 40154
+  (1, 'extraction_exit_without_refused_cell', 'tooling_refusal') 8928
+  (1, 'extraction_extractable_not_boolean', 'tooling_refusal') 12287
+  (1, 'extraction_report_malformed', 'tooling_refusal') 45800
+  (1, 'extraction_spec_membership_refused', 'tooling_refusal') 6706
+  (1, 'p42_floor_cells_only', 'ok') 14812
+  (2, 'refused', 'unclassified_refusal') 33490
