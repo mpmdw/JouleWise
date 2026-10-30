@@ -122,5 +122,16 @@ from the checkout at 901956944, with a full clone. TMPDIR is outside the checkou
 tail (`full-run-tail.txt`):
 
 ```
-TAIL_PLACEHOLDER
+FAIL: test_G6_finalizer_main (tests.b5_analysis.test_sensitivity_guard.SensitivityGuardTests.test_G6_finalizer_main)
+----------------------------------------------------------------------
+Ran 1027 tests in 3154.296s
+
+FAILED (failures=1, skipped=13)
 ```
+
+The only failure is G6 (`AssertionError: True is not false`). It is the known order-dependent fixture leak (PR #603,
+not on `origin/main` at the merge). This range does not touch `test_sensitivity_guard.py`, and G6 passes alone at
+901956944 (`Ran 1 test in 26.043s`, `OK`). `test_mint_kept_units…test_guard_setup_after_s4_preserves_the_cached_source`
+passed in the full run, which confirms the S6 environment-dependent disposition. The r14, T4, T8/T8b/T8c, T18 and step-4
+table and classifier tests all pass. The suite is red only on G6, which is outside this lane, so the verdict stays
+ACCEPT on the condition that #603 lands before the next official attempt.

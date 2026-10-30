@@ -1,0 +1,10 @@
+FAIL: test_G6_finalizer_main (tests.b5_analysis.test_sensitivity_guard.SensitivityGuardTests.test_G6_finalizer_main)
+AssertionError: True is not false
+Ran 1027 tests in 3154.296s
+
+FAILED (failures=1, skipped=13)
+EXIT 1
+
+G6 alone at 901956944:
+Ran 1 test in 26.043s
+OK
