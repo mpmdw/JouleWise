@@ -1,0 +1,1729 @@
+ours:program_sha256: exit=0 err='' nfails=0
+ours:members: exit=2 err='refused=recompute_member_detail_missing' nfails=0
+ours:members/ALPHA: exit=1 err='' nfails=4
+ours:members/ALPHA/run-a: exit=1 err='' nfails=4
+ours:members/ALPHA/run-a/E_j: exit=1 err='' nfails=3
+ours:members/ALPHA/run-a/E_j/prefill: exit=1 err='' nfails=1
+ours:members/ALPHA/run-a/E_j/decode: exit=1 err='' nfails=1
+ours:members/ALPHA/run-a/E_j/request: exit=1 err='' nfails=1
+ours:members/ALPHA/run-a/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/corpus-r1: exit=0 err='' nfails=0
+ours:members/ALPHA/corpus-r1/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/corpus-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/corpus-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/corpus-r1/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/corpus-r1/selected: exit=1 err='' nfails=4
+ours:members/ALPHA/neg8-refcorpus-r01: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r01/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r01/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r01/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r01/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r01/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r01/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r02/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r03/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r04/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r05/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r06/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r07/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r08/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r09/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r10/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r11/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-refcorpus-r12/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r1/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r2/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-end-r3/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r2/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r3/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-midpoint/E_j/request: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1/role: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1/selected: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1/E_j: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/ALPHA/neg8-window-start-r1/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r01/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r02/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r03/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r04/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r05/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r06/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r07/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r08/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r09/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r10/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r11/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-refcorpus-r12/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r1/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r2/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-end-r3/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r2/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r3/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-midpoint/E_j/request: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1/role: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1/selected: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1/E_j: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/BETA/neg8-window-start-r1/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r01/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r02/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r03/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r04/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r05/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r06/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r07/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r08/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r09/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r10/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r11/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-refcorpus-r12/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r1/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r2/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-end-r3/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r2/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r3/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-midpoint/E_j/request: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1/role: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1/selected: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1/E_j: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1/E_j/prefill: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1/E_j/decode: exit=0 err='' nfails=0
+ours:members/GAMMA/neg8-window-start-r1/E_j/request: exit=0 err='' nfails=0
+ours:inputs: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:inputs/ALPHA: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:inputs/ALPHA/exclusions_sha256: exit=1 err='' nfails=3
+ours:inputs/ALPHA/claim_usable: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:inputs/BETA: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:inputs/BETA/exclusions_sha256: exit=1 err='' nfails=3
+ours:inputs/BETA/claim_usable: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:inputs/GAMMA: exit=1 err='' nfails=2
+ours:inputs/GAMMA/exclusions_sha256: exit=1 err='' nfails=2
+ours:inputs/GAMMA/claim_usable: exit=0 err='' nfails=0
+ours:windows: exit=2 err='refused=step11_unmapped_fill' nfails=163
+ours:windows/ALPHA: exit=2 err='refused=step11_unmapped_fill' nfails=57
+ours:windows/ALPHA/b_op_s: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:windows/ALPHA/neg8: exit=2 err='refused=step11_unmapped_fill' nfails=29
+ours:windows/ALPHA/neg8/source: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:windows/ALPHA/neg8/screen_decision: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/bound_envelope_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/bound_prediction_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/start_mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/midpoint_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/end_mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/spread_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/n_start: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/n_mid: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/n_end: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/ALPHA/neg8/corpus_n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA: exit=2 err='refused=step11_unmapped_fill' nfails=57
+ours:windows/BETA/b_op_s: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:windows/BETA/neg8: exit=2 err='refused=step11_unmapped_fill' nfails=29
+ours:windows/BETA/neg8/source: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:windows/BETA/neg8/screen_decision: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/bound_envelope_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/bound_prediction_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/start_mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/midpoint_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/end_mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/spread_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/n_start: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/n_mid: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/n_end: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/BETA/neg8/corpus_n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA: exit=2 err='refused=step11_unmapped_fill' nfails=49
+ours:windows/GAMMA/b_op_s: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:windows/GAMMA/neg8: exit=2 err='refused=step11_unmapped_fill' nfails=21
+ours:windows/GAMMA/neg8/source: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/screen_decision: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/bound_envelope_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/bound_prediction_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/start_mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/midpoint_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/end_mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/spread_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/n_start: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/n_mid: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/n_end: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:windows/GAMMA/neg8/corpus_n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures: exit=2 err='refused=step11_unmapped_fill' nfails=228
+ours:disclosures/sensitivity_bound: exit=2 err='refused=step11_unmapped_fill' nfails=119
+ours:disclosures/sensitivity_bound/B_max_s: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/T: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/attaining_sequence: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/windows: exit=2 err='refused=step11_unmapped_fill' nfails=15
+ours:disclosures/sensitivity_bound/windows/ALPHA: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:disclosures/sensitivity_bound/windows/ALPHA/b_sens_s: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:disclosures/sensitivity_bound/windows/BETA: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:disclosures/sensitivity_bound/windows/BETA/b_sens_s: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:disclosures/sensitivity_bound/windows/GAMMA: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:disclosures/sensitivity_bound/windows/GAMMA/b_sens_s: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:disclosures/sensitivity_bound/reported_cells: exit=2 err='refused=step11_unmapped_fill' nfails=44
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/status: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-1p7b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/status: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-1p7b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/status: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-decode-qwen3-8b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/status: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/reported_cells/df-ph-prefill-p2048-qwen3-8b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/floor_cells: exit=2 err='refused=step11_unmapped_fill' nfails=34
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/decode/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/decode/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/decode/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/prefill/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/prefill/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-1.7B-4bit/prefill/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/decode/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/decode/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/decode/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/prefill/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/prefill/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:disclosures/sensitivity_bound/floor_cells/Qwen3-8B-4bit/prefill/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:disclosures/sensitivity_bound/floors: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:disclosures/sensitivity_bound/floors/Qwen3-1.7B-4bit/decode/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-1.7B-4bit/decode/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-1.7B-4bit/prefill/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-1.7B-4bit/prefill/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-8B-4bit/decode/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-8B-4bit/decode/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-8B-4bit/prefill/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/floors/Qwen3-8B-4bit/prefill/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/contrasts: exit=2 err='refused=step11_unmapped_fill' nfails=14
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/D_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/outcome_equals_primary: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/D_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/sensitivity_bound/contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/outcome_equals_primary: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist: exit=2 err='refused=step11_unmapped_fill' nfails=62
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/assist_members_by_stratum: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/assist_members_by_stratum: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/assist_members_by_stratum: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/assist_members_by_stratum: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/s_d_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/se_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/t_star: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/status: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/assist_quads: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/assist_members_by_stratum: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/s_d_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/se_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/t_star: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/status: exit=0 err='' nfails=0
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/assist_quads: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/assist_members_by_stratum: exit=0 err='' nfails=0
+ours:disclosures/cross_window: exit=2 err='refused=step11_unmapped_fill' nfails=32
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode/G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode/h_G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode/F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode/h_F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode/delta_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/decode/agree: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill/G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill/h_G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill/F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill/h_F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill/delta_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-1.7B-4bit/prefill/agree: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode/G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode/h_G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode/F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode/h_F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode/delta_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/decode/agree: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill/G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill/h_G_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill/F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill/h_F_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill/delta_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:disclosures/cross_window/Qwen3-8B-4bit/prefill/agree: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:p42: exit=2 err='refused=step11_unmapped_fill' nfails=24
+ours:p42/df-ph-prefill-p42-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=12
+ours:p42/df-ph-prefill-p42-qwen3-1p7b/status: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:p42/df-ph-prefill-p42-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=12
+ours:p42/df-ph-prefill-p42-qwen3-8b/status: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:floors: exit=2 err='refused=step11_unmapped_fill' nfails=168
+ours:floors/Qwen3-1.7B-4bit/decode/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=22
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/absolute/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=20
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/decode/comparative/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=22
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/absolute/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=20
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-1.7B-4bit/prefill/comparative/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=22
+ours:floors/Qwen3-8B-4bit/decode/absolute/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/absolute/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/absolute/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/absolute/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-8B-4bit/decode/absolute/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/decode/absolute/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/decode/absolute/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/decode/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:floors/Qwen3-8B-4bit/decode/absolute/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/absolute/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=20
+ours:floors/Qwen3-8B-4bit/decode/comparative/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/comparative/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/comparative/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/comparative/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-8B-4bit/decode/comparative/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/decode/comparative/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/decode/comparative/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/decode/comparative/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-8B-4bit/decode/comparative/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/decode/comparative/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=22
+ours:floors/Qwen3-8B-4bit/prefill/absolute/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/absolute/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/absolute/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/absolute/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-8B-4bit/prefill/absolute/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/prefill/absolute/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/prefill/absolute/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/prefill/absolute/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:floors/Qwen3-8B-4bit/prefill/absolute/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/absolute/n: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=20
+ours:floors/Qwen3-8B-4bit/prefill/comparative/corner_widened_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/comparative/operative_unguarded_floor_j: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/comparative/guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/comparative/drift_widened_guarded_floor_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-8B-4bit/prefill/comparative/prediction_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/prefill/comparative/max_abs_deviation_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/prefill/comparative/s_j: exit=1 err='' nfails=2
+ours:floors/Qwen3-8B-4bit/prefill/comparative/allowance_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:floors/Qwen3-8B-4bit/prefill/comparative/guard: exit=1 err='' nfails=3
+ours:floors/Qwen3-8B-4bit/prefill/comparative/n: exit=1 err='' nfails=3
+ours:floor_cells: exit=2 err='refused=step11_unmapped_fill' nfails=74
+ours:floor_cells/Qwen3-1.7B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=21
+ours:floor_cells/Qwen3-1.7B-4bit/decode/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-1.7B-4bit/decode/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-1.7B-4bit/decode/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=9
+ours:floor_cells/Qwen3-1.7B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=21
+ours:floor_cells/Qwen3-1.7B-4bit/prefill/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-1.7B-4bit/prefill/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-1.7B-4bit/prefill/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=9
+ours:floor_cells/Qwen3-8B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=21
+ours:floor_cells/Qwen3-8B-4bit/decode/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-8B-4bit/decode/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-8B-4bit/decode/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=9
+ours:floor_cells/Qwen3-8B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=21
+ours:floor_cells/Qwen3-8B-4bit/prefill/floor_abs_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-8B-4bit/prefill/floor_cmp_j: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:floor_cells/Qwen3-8B-4bit/prefill/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=9
+ours:dominance: exit=2 err='refused=step11_unmapped_fill' nfails=87
+ours:dominance/branch: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:dominance/ratios: exit=2 err='refused=step11_unmapped_fill' nfails=56
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/absolute/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/absolute/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/absolute/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/absolute/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/comparative/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/comparative/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/comparative/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/decode/comparative/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/absolute/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/absolute/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/absolute/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/absolute/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/comparative/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/comparative/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/comparative/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-1.7B-4bit/prefill/comparative/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/decode/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-8B-4bit/decode/absolute/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/decode/absolute/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/decode/absolute/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/decode/absolute/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/decode/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-8B-4bit/decode/comparative/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/decode/comparative/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/decode/comparative/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/decode/comparative/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/absolute: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/absolute/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/absolute/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/absolute/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/absolute/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/comparative: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/comparative/R: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/comparative/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/comparative/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/ratios/Qwen3-8B-4bit/prefill/comparative/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode: exit=2 err='refused=step11_unmapped_fill' nfails=28
+ours:dominance/common_mode/Qwen3-1.7B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/common_mode/Qwen3-1.7B-4bit/decode/R_cm: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-1.7B-4bit/decode/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-1.7B-4bit/decode/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-1.7B-4bit/decode/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-1.7B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/common_mode/Qwen3-1.7B-4bit/prefill/R_cm: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-1.7B-4bit/prefill/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-1.7B-4bit/prefill/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-1.7B-4bit/prefill/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-8B-4bit/decode: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/common_mode/Qwen3-8B-4bit/decode/R_cm: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-8B-4bit/decode/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-8B-4bit/decode/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-8B-4bit/decode/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-8B-4bit/prefill: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:dominance/common_mode/Qwen3-8B-4bit/prefill/R_cm: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:dominance/common_mode/Qwen3-8B-4bit/prefill/numerator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-8B-4bit/prefill/denominator_j: exit=2 err='refused=step11_unmapped_fill' nfails=1
+ours:dominance/common_mode/Qwen3-8B-4bit/prefill/n: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts: exit=2 err='refused=step11_unmapped_fill' nfails=401
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=200
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/n: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/s_d_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/se_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/t_star: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/D_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=15
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=12
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/direction: exit=0 err='' nfails=0
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/ceiling: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/p: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads: exit=2 err='refused=step11_unmapped_fill' nfails=39
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/0: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/1: exit=2 err='refused=step11_unmapped_fill' nfails=12
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/2: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/3: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/4: exit=2 err='refused=step11_unmapped_fill' nfails=9
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/5: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/6: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/7: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_quads/8: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo: exit=2 err='refused=step11_unmapped_fill' nfails=132
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/0/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/1/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/2/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/3/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/4/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/5/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/6/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/7/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/8/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=200
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/n: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/s_d_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/se_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/t_star: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/D_j: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/floor_gate_j: exit=2 err='refused=step11_unmapped_fill' nfails=15
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=12
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction: exit=0 err='' nfails=0
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/ceiling: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/p: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads: exit=2 err='refused=step11_unmapped_fill' nfails=39
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/0: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/1: exit=2 err='refused=step11_unmapped_fill' nfails=12
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/2: exit=2 err='refused=step11_unmapped_fill' nfails=11
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/3: exit=2 err='refused=step11_unmapped_fill' nfails=10
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/4: exit=2 err='refused=step11_unmapped_fill' nfails=9
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/5: exit=2 err='refused=step11_unmapped_fill' nfails=8
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/6: exit=2 err='refused=step11_unmapped_fill' nfails=7
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/7: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/kept_quads/8: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo: exit=2 err='refused=step11_unmapped_fill' nfails=132
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/0/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/1/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/2/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/3/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/4/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/5/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/6/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/7/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8: exit=2 err='refused=step11_unmapped_fill' nfails=16
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/block_number: exit=2 err='refused=step11_unmapped_fill' nfails=27
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/dbar_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/holm_p: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/holm_reject: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/outcome: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/n: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/loo/8/above_floor: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells: exit=2 err='refused=step11_unmapped_fill' nfails=136
+ours:reported_cells/df-ph-decode-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=34
+ours:reported_cells/df-ph-decode-qwen3-1p7b/status: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-1p7b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-1p7b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-1p7b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-decode-qwen3-1p7b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-decode-qwen3-1p7b/n_bundles: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/s_r: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/s_b: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/variance: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/df: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/kind_averages_j: exit=1 err='' nfails=3
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/kind_averages_j/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/kind_averages_j/1: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/interval/kind_averages_j/2: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:reported_cells/df-ph-decode-qwen3-1p7b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:reported_cells/df-ph-decode-qwen3-1p7b/attribution_floor/minimum_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:reported_cells/df-ph-decode-qwen3-1p7b/per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/per_token/j_per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/kept_units: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/kept_units/repeat: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-1p7b/kept_units/repeat/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b: exit=2 err='refused=step11_unmapped_fill' nfails=34
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/status: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/n_bundles: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/s_r: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/s_b: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/variance: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/df: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/kind_averages_j: exit=1 err='' nfails=3
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/kind_averages_j/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/kind_averages_j/1: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/interval/kind_averages_j/2: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/attribution_floor/minimum_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/per_token/j_per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/kept_units: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/kept_units/repeat: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-1p7b/kept_units/repeat/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=34
+ours:reported_cells/df-ph-decode-qwen3-8b/status: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-8b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-8b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-8b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-decode-qwen3-8b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-decode-qwen3-8b/n_bundles: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/s_r: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/s_b: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/variance: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/df: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/kind_averages_j: exit=1 err='' nfails=3
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/kind_averages_j/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/kind_averages_j/1: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/interval/kind_averages_j/2: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:reported_cells/df-ph-decode-qwen3-8b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:reported_cells/df-ph-decode-qwen3-8b/attribution_floor/minimum_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:reported_cells/df-ph-decode-qwen3-8b/per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/per_token/j_per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/kept_units: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/kept_units/repeat: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-decode-qwen3-8b/kept_units/repeat/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=34
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/status: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/mean_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/lower_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/upper_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/n_r: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/n_b: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/n_bundles: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/h_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/B_j: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/s_r: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/s_b: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/variance: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/df: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/kind_averages_j: exit=1 err='' nfails=3
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/kind_averages_j/0: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/kind_averages_j/1: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/interval/kind_averages_j/2: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/attribution_floor: exit=2 err='refused=step11_unmapped_fill' nfails=6
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/attribution_floor/value_j: exit=2 err='refused=step11_unmapped_fill' nfails=5
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/attribution_floor/minimum_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/per_token/j_per_token: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/kept_units: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/kept_units/repeat: exit=1 err='' nfails=1
+ours:reported_cells/df-ph-prefill-p2048-qwen3-8b/kept_units/repeat/0: exit=1 err='' nfails=1
+ours:descriptive: exit=2 err='refused=step11_unmapped_fill' nfails=26
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/ratio: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/ratio_interval: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/ratio_interval/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/ratio_interval/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_difference_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/per_token_decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b: exit=2 err='refused=step11_unmapped_fill' nfails=13
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/ratio: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/ratio_interval: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/ratio_interval/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/ratio_interval/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_difference_j: exit=2 err='refused=step11_unmapped_fill' nfails=2
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_metrology_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_metrology_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_metrology_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_decision_interval_j: exit=2 err='refused=step11_unmapped_fill' nfails=3
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_decision_interval_j/0: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:descriptive/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/per_token_decision_interval_j/1: exit=2 err='refused=step11_unmapped_fill' nfails=4
+ours:exclusions_rederivation: exit=1 err='' nfails=3
+ours:exclusions_rederivation/ALPHA: exit=1 err='' nfails=1
+ours:exclusions_rederivation/ALPHA/status: exit=1 err='' nfails=1
+ours:exclusions_rederivation/BETA: exit=1 err='' nfails=1
+ours:exclusions_rederivation/BETA/status: exit=1 err='' nfails=1
+ours:exclusions_rederivation/GAMMA: exit=1 err='' nfails=1
+ours:exclusions_rederivation/GAMMA/status: exit=1 err='' nfails=1
+recompute drops tried: 1308; exit 0: 419
+   EXIT0 ours:program_sha256
+   EXIT0 ours:members/ALPHA/run-a/selected
+   EXIT0 ours:members/ALPHA/corpus-r1
+   EXIT0 ours:members/ALPHA/corpus-r1/E_j
+   EXIT0 ours:members/ALPHA/corpus-r1/E_j/prefill
+   EXIT0 ours:members/ALPHA/corpus-r1/E_j/decode
+   EXIT0 ours:members/ALPHA/corpus-r1/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r01/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r02/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r03/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r04/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r05/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r06/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r07/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r08/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r09/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r10/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r11/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12/role
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12/selected
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12/E_j
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-refcorpus-r12/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1/role
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1/selected
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-end-r1/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2/role
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2/selected
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-end-r2/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3/role
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3/selected
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-end-r3/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2/role
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2/selected
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-start-r2/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3/role
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3/selected
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-start-r3/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint/role
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint/selected
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-midpoint/E_j/request
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1/role
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1/selected
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1/E_j
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1/E_j/prefill
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1/E_j/decode
+   EXIT0 ours:members/ALPHA/neg8-window-start-r1/E_j/request
+   EXIT0 ours:members/BETA
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r01/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r02/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r03/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r04/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r05/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r06/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r07/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r08/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r09/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r10/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r11/E_j/request
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12/role
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12/selected
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12/E_j
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12/E_j/decode
+   EXIT0 ours:members/BETA/neg8-refcorpus-r12/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-end-r1
+   EXIT0 ours:members/BETA/neg8-window-end-r1/role
+   EXIT0 ours:members/BETA/neg8-window-end-r1/selected
+   EXIT0 ours:members/BETA/neg8-window-end-r1/E_j
+   EXIT0 ours:members/BETA/neg8-window-end-r1/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-end-r1/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-end-r1/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-end-r2
+   EXIT0 ours:members/BETA/neg8-window-end-r2/role
+   EXIT0 ours:members/BETA/neg8-window-end-r2/selected
+   EXIT0 ours:members/BETA/neg8-window-end-r2/E_j
+   EXIT0 ours:members/BETA/neg8-window-end-r2/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-end-r2/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-end-r2/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-end-r3
+   EXIT0 ours:members/BETA/neg8-window-end-r3/role
+   EXIT0 ours:members/BETA/neg8-window-end-r3/selected
+   EXIT0 ours:members/BETA/neg8-window-end-r3/E_j
+   EXIT0 ours:members/BETA/neg8-window-end-r3/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-end-r3/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-end-r3/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-start-r2
+   EXIT0 ours:members/BETA/neg8-window-start-r2/role
+   EXIT0 ours:members/BETA/neg8-window-start-r2/selected
+   EXIT0 ours:members/BETA/neg8-window-start-r2/E_j
+   EXIT0 ours:members/BETA/neg8-window-start-r2/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-start-r2/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-start-r2/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-start-r3
+   EXIT0 ours:members/BETA/neg8-window-start-r3/role
+   EXIT0 ours:members/BETA/neg8-window-start-r3/selected
+   EXIT0 ours:members/BETA/neg8-window-start-r3/E_j
+   EXIT0 ours:members/BETA/neg8-window-start-r3/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-start-r3/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-start-r3/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-midpoint
+   EXIT0 ours:members/BETA/neg8-window-midpoint/role
+   EXIT0 ours:members/BETA/neg8-window-midpoint/selected
+   EXIT0 ours:members/BETA/neg8-window-midpoint/E_j
+   EXIT0 ours:members/BETA/neg8-window-midpoint/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-midpoint/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-midpoint/E_j/request
+   EXIT0 ours:members/BETA/neg8-window-start-r1
+   EXIT0 ours:members/BETA/neg8-window-start-r1/role
+   EXIT0 ours:members/BETA/neg8-window-start-r1/selected
+   EXIT0 ours:members/BETA/neg8-window-start-r1/E_j
+   EXIT0 ours:members/BETA/neg8-window-start-r1/E_j/prefill
+   EXIT0 ours:members/BETA/neg8-window-start-r1/E_j/decode
+   EXIT0 ours:members/BETA/neg8-window-start-r1/E_j/request
+   EXIT0 ours:members/GAMMA
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r01/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r02/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r03/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r04/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r05/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r06/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r07/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r08/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r09/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r10/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r11/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12/role
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12/selected
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12/E_j
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-refcorpus-r12/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1/role
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1/selected
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-end-r1/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2/role
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2/selected
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-end-r2/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3/role
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3/selected
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-end-r3/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2/role
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2/selected
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-start-r2/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3/role
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3/selected
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-start-r3/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint/role
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint/selected
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-midpoint/E_j/request
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1/role
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1/selected
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1/E_j
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1/E_j/prefill
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1/E_j/decode
+   EXIT0 ours:members/GAMMA/neg8-window-start-r1/E_j/request
+   EXIT0 ours:inputs/GAMMA/claim_usable
+   EXIT0 ours:disclosures/battery_assist/df-ph-decode-qwen3-1p7b/assist_members_by_stratum
+   EXIT0 ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-1p7b/assist_members_by_stratum
+   EXIT0 ours:disclosures/battery_assist/df-ph-decode-qwen3-8b/assist_members_by_stratum
+   EXIT0 ours:disclosures/battery_assist/df-ph-prefill-p2048-qwen3-8b/assist_members_by_stratum
+   EXIT0 ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/status
+   EXIT0 ours:disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/assist_members_by_stratum
+   EXIT0 ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/status
+   EXIT0 ours:disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/assist_members_by_stratum
+   EXIT0 ours:contrasts/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/direction
+   EXIT0 ours:contrasts/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/direction
+exit=0

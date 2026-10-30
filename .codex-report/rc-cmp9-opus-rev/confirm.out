@@ -1,0 +1,65 @@
+## base widened=True: (0, '')
+FILL gamma/contrasts/0 (decode contrast) removed: exit=2 err='refused=step11_unmapped_fill' fails=14
+FILL gamma/contrasts emptied: exit=2 err='refused=step11_unmapped_fill' fails=28
+FILL gamma removed: exit=2 err='refused=step11_unmapped_fill' fails=29
+FILL contrast estimate removed: exit=1 err='' fails=1
+FILL contrast decision_interval removed: exit=1 err='' fails=1
+FILL contrast conditions/difference_orientation removed: exit=1 err='' fails=1
+FILL contrast floor/claim_floor_rule removed: exit=1 err='' fails=1
+FILL contrast floor removed: exit=1 err='' fails=5
+DISC primary_contrast line removed: exit=1 err='' fails=1
+DISC primary_contrast estimator/estimate removed: exit=1 err='' fails=1
+DISC decision_floor line removed: exit=1 err='' fails=1
+DISC contrast_interval line removed: exit=1 err='' fails=1
+DISC attribution_floor line removed: exit=1 err='' fails=1
+DISC dominance_branch line removed: exit=1 err='' fails=1
+DISC dominance_ratio line removed: exit=1 err='' fails=1
+DISC sensitivity_bmax line removed: exit=1 err='' fails=1
+DISC sensitivity_window (alpha) line removed: exit=1 err='' fails=1
+DISC sensitivity_contrast line removed: exit=1 err='' fails=1
+DISC sensitivity_reported (computed) line removed: exit=1 err='' fails=1
+DISC sensitivity copy: contrasts emptied: exit=1 err='' fails=2
+DISC sensitivity copy removed: exit=1 err='' fails=18
+DISC block_lines removed: exit=1 err='' fails=35
+CONTROL DISC reported_cell line removed: exit=1 err='' fails=3
+CONTROL DISC magnitude_per_token line removed: exit=1 err='' fails=7
+CONTROL DISC neg8_screen alpha removed: exit=1 err='' fails=3
+CONTROL DISC sensitivity_window widened flipped: exit=2 err='refused=step11_unmapped_fill' fails=0
+RELABEL FILL floor_source_cell_ids/0 decode->prefill floor: exit=2 err='refused=step11_unmapped_fill' fails=0
+RELABEL VERDICT floor/floor_row_ids swapped to prefill floors: exit=2 err='refused=step11_unmapped_fill' fails=2
+RELABEL SENS record contrasts/0/floor_cell_ids swapped: exit=2 err='refused=step11_unmapped_fill' fails=2
+## base widened=False: (0, '')
+FILL gamma/contrasts/0 (decode contrast) removed: exit=2 err='refused=step11_unmapped_fill' fails=14
+FILL gamma/contrasts emptied: exit=2 err='refused=step11_unmapped_fill' fails=28
+FILL gamma removed: exit=2 err='refused=step11_unmapped_fill' fails=29
+FILL contrast estimate removed: exit=1 err='' fails=1
+FILL contrast decision_interval removed: exit=1 err='' fails=1
+FILL contrast conditions/difference_orientation removed: exit=1 err='' fails=1
+FILL contrast floor/claim_floor_rule removed: exit=1 err='' fails=1
+FILL contrast floor removed: exit=1 err='' fails=5
+DISC primary_contrast line removed: exit=1 err='' fails=1
+DISC primary_contrast estimator/estimate removed: exit=1 err='' fails=1
+DISC decision_floor line removed: exit=1 err='' fails=1
+DISC contrast_interval line removed: exit=1 err='' fails=1
+DISC attribution_floor line removed: exit=1 err='' fails=1
+DISC dominance_branch line removed: exit=1 err='' fails=1
+DISC dominance_ratio line removed: exit=1 err='' fails=1
+DISC sensitivity_bmax line removed: exit=1 err='' fails=1
+DISC sensitivity_window (alpha) line removed: exit=1 err='' fails=1
+DISC sensitivity_contrast line removed: exit=1 err='' fails=1
+DISC sensitivity_reported (computed) line removed: exit=1 err='' fails=1
+DISC sensitivity copy: contrasts emptied: exit=1 err='' fails=2
+DISC sensitivity copy removed: exit=1 err='' fails=18
+DISC block_lines removed: exit=1 err='' fails=35
+CONTROL DISC reported_cell line removed: exit=1 err='' fails=3
+CONTROL DISC magnitude_per_token line removed: exit=1 err='' fails=7
+CONTROL DISC neg8_screen alpha removed: exit=1 err='' fails=3
+CONTROL DISC sensitivity_window widened flipped: exit=2 err='refused=step11_unmapped_fill' fails=0
+RELABEL FILL floor_source_cell_ids/0 decode->prefill floor: exit=2 err='refused=step11_unmapped_fill' fails=0
+RELABEL VERDICT floor/floor_row_ids swapped to prefill floors: exit=2 err='refused=step11_unmapped_fill' fails=2
+RELABEL SENS record contrasts/0/floor_cell_ids swapped: exit=2 err='refused=step11_unmapped_fill' fails=2
+
+real	0m9.071s
+user	0m8.166s
+sys	0m0.539s
+confirm exit=0
