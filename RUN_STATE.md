@@ -818,6 +818,15 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - The independent recompute needs the same clamp, or a registered comparator difference class, before release (items 140 and 142).
   - Block-6 registration has to carry the acceptance reissue as an explicit dependency, so it is not rediscovered at sealing time.
 
+145. **Queued follow-up for the block boundary: one D-138 acceptance reissue that rotates the `reduce.py` estimator pin once (agreed by the block-5 lead and the orchestrator, 2026-10-30, about 06:10Z; refines item 144).**
+- **When:** at the next block boundary (block 6 / BYTES registration), coordinated with the collection lead.
+- **Scope:** a single D-138 transaction carrying both staged `reduce.py` changes:
+  - A178 (GATE-R2-COVERAGE-ULP-01): the one-ULP endpoint fix to `_anchor_coverage_ok`, staged since 2026-09-10 and already marked to ride a D-079 acceptance reissue.
+  - The L9-ENV-2 inverted-corner clamp: `e1b3a0510`, parked on `lane/2026-10-30-l9-env-clamp`.
+- **Testing:** both changes touch the anchor-envelope area, so the reissue's delta refuter tests them together, as clamp × coverage endpoint. That includes a window whose corner inverts and whose endpoint lies within one ULP.
+- **Acceptance:** the reissue is science-neutral, and the new acceptance is used for the next registration.
+- **After block 5 is released:** the same follow-up deletes the L9-ENV-3 `whole_window` mirror (about 440 lines).
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
