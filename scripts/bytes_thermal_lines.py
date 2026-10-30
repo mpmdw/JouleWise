@@ -478,7 +478,9 @@ def validate_hull_replay(member, readings, present, thresholds, reason):
                     CODE in {code for code, *_ in h.thermal_member_flags(member, readings, thresholds)})
     except (OverflowError, ValueError, TypeError):
         return "journal level conversion unavailable", False
-    disagrees = replayed is None or replayed != present
+    if replayed is None:
+        return "member span unavailable", False
+    disagrees = replayed != present
     return ("journal does not reproduce the registered hull decision" if disagrees else None), disagrees
 
 

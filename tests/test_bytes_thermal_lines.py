@@ -2013,3 +2013,14 @@ class RoundSixTests(unittest.TestCase):
                                      'not defined (journal level conversion unavailable)' if present else 'equals registered line')
                     self.assertEqual(record['changes'], [])
                     self.assertFalse(any(n['code'] == 'records.thermal_hull_replay_disagrees' for n in record['notices']))
+
+    def test_unknown_span_is_not_replay_disagreement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for present in (False, True):
+                x = TrustArchive(Path(tmp) / str(present), 'request-end-p1', present, False)
+                x.put(SPANS, {'spans': {'a': {'member': None, 'request': None}}})
+                record = t.transform('request-end-p1', x.a, x.root / 'out')
+                self.assertEqual(record['member_statuses'][0]['status'],
+                                 'not defined (member span unavailable)' if present else 'equals registered line')
+                self.assertEqual(record['changes'], [])
+                self.assertFalse(any(n['code'] == 'records.thermal_hull_replay_disagrees' for n in record['notices']))
