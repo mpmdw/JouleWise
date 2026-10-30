@@ -2235,8 +2235,22 @@ def _corner_composed_anchor_shift_envelope(
                     )
                     for window in windows
                 ]
-                if any(window.end_s < window.start_s for window in shifted_windows):
-                    return None
+                # Ed's 2026-10-30 ruling (lane L9-ENV-2): a window shorter
+                # than 2*edge_bound inverts at the (+edge, -edge) corner.
+                # The admissible set then contains an empty interval, so
+                # with nonnegative power the true minimum contribution is
+                # 0 J: clamp to a zero-length window at the shifted midpoint
+                # (inside the original window) instead of dropping the
+                # envelope.  Non-inverted windows are untouched.
+                shifted_windows = [
+                    Window(
+                        start_s=(window.start_s + window.end_s) / 2.0,
+                        end_s=(window.start_s + window.end_s) / 2.0,
+                    )
+                    if window.end_s < window.start_s
+                    else window
+                    for window in shifted_windows
+                ]
                 corner_contributions.append((curve, shifted_windows))
             corner = _anchor_shift_envelope(corner_contributions, bundle_bound_s)
             if corner is None:

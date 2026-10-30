@@ -16,11 +16,20 @@ SEAL = ROOT / "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
 # analysis commit's bytes, not main's working tree.
 B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
 EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py"})
+# Ed's 2026-10-30 ruling (owner decision via the block-5 lead; lane L9-ENV-2,
+# branch lane/2026-10-30-l9-env-clamp): reduce.py's
+# _corner_composed_anchor_shift_envelope clamps an inverted corner window to
+# zero length instead of dropping the envelope. The sealed inventory still
+# records the pre-ruling digest (7b9c0d28...); the freeze binds reduce.py to
+# the reviewed post-ruling bytes instead, and every other file as before.
+RULING_REBOUND = {"joulewise/reduce.py": "d37f731c07116c025a7670043e13c6a0f37bee74d2217ae08d160f4ac0074f8f"}
+SEALED_PRE_RULING = {"joulewise/reduce.py": "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"}
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
                  "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")
 
 
-def frozen_digests():
+def sealed_digests():
+    """The freeze as sealed, before Ed's 2026-10-30 reduce.py ruling."""
     pins = SealPins.load()
     inventory = json.loads((ROOT / (SEALED_DIR + "sealed_inventory.json")).read_bytes())["files"]
     singles = {"scripts/run_campaign.py", "joulewise/reduce.py", "joulewise/uncertainty_evidence.py",
@@ -33,6 +42,15 @@ def frozen_digests():
                       ("sealed_inventory.json", "inventory_sha256"), ("flag_catalog.json", "catalog_sha256"),
                       ("identity_pins.json", "identity_pins_sha256"), ("sizing_b5.json", "sizing_sha256")):
         digests[SEALED_DIR + name] = pins.sealed[key]
+    return digests
+
+
+def frozen_digests():
+    digests = sealed_digests()
+    for path, digest in RULING_REBOUND.items():
+        if digests.get(path) != SEALED_PRE_RULING[path]:
+            raise AssertionError(f"{path}: sealed digest is not the pre-ruling digest")
+        digests[path] = digest
     return digests
 
 
@@ -58,6 +76,40 @@ def frozen_mismatches(root=ROOT):
 class FrozenFilesTests(unittest.TestCase):
     def test_frozen_files(self):
         self.assertEqual(frozen_mismatches(), [])
+
+    def test_reduce_rebinding_is_the_only_change(self):
+        # Every frozen file except reduce.py keeps the digest it had before the
+        # ruling, and reduce.py is bound to exactly one post-ruling digest.
+        inventory = json.loads((ROOT / (SEALED_DIR + "sealed_inventory.json")).read_bytes())["files"]
+        sealed, frozen = sealed_digests(), frozen_digests()
+        self.assertEqual(set(RULING_REBOUND), {"joulewise/reduce.py"})
+        self.assertEqual(inventory["joulewise/reduce.py"], SEALED_PRE_RULING["joulewise/reduce.py"])
+        self.assertEqual(sealed["joulewise/reduce.py"], SEALED_PRE_RULING["joulewise/reduce.py"])
+        self.assertEqual(frozen["joulewise/reduce.py"], RULING_REBOUND["joulewise/reduce.py"])
+        self.assertEqual(set(frozen), set(sealed))
+        self.assertEqual({path for path in sealed if sealed[path] != frozen[path]}, {"joulewise/reduce.py"})
+
+    def test_any_other_reduce_byte_fails_the_freeze(self):
+        import shutil
+        import tempfile
+
+        names = sorted(frozen_digests())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in names:
+                if name in EVOLVED_ON_MAIN:
+                    continue
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / name, target)
+            source = (ROOT / "joulewise/reduce.py").read_bytes()
+            for variant in (source + b"\n", source.replace(b"/ 2.0,", b"/ 2.00,", 1), source[:-1],
+                            source.replace(b"else window", b"else  window", 1)):
+                self.assertNotEqual(variant, source)
+                (root / "joulewise/reduce.py").write_bytes(variant)
+                self.assertIn("joulewise/reduce.py", [p for p in frozen_mismatches(root) if p not in EVOLVED_ON_MAIN])
+            (root / "joulewise/reduce.py").write_bytes(source)
+            self.assertEqual([p for p in frozen_mismatches(root) if p not in EVOLVED_ON_MAIN], [])
 
     def test_seal_pins_match_every_printed_value(self):
         value = json.loads((ROOT / "configs/analysis/b5/seal_pins.json").read_bytes())
