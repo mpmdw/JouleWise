@@ -70,6 +70,7 @@
     "exclusions_schema_invalid",
     "extraction_cell_ids_duplicated",
     "extraction_cell_set_differs_from_spec",
+    "extraction_cell_tooling_refusal",
     "extraction_exit_without_refused_cell",
     "extraction_extractable_not_boolean",
     "extraction_report_malformed",

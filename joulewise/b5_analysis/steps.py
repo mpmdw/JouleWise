@@ -1,7 +1,10 @@
 """Step-record primitives; S10 supplies the driver and the tracked class table."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, fields
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
@@ -32,6 +35,16 @@ STEP4_CELL_IDS_DUPLICATED = "extraction_cell_ids_duplicated"
 STEP4_CELL_SET_DIFFERS = "extraction_cell_set_differs_from_spec"
 STEP4_EXTRACTABLE_NOT_BOOLEAN = "extraction_extractable_not_boolean"
 STEP4_EXIT_WITHOUT_REFUSED_CELL = "extraction_exit_without_refused_cell"
+STEP4_CELL_TOOLING_REFUSAL = "extraction_cell_tooling_refusal"
+
+_STEP4_REASON_TABLE = Path(__file__).resolve().parents[2] / "configs/analysis/b5/step4_reason_classes.json"
+
+
+@lru_cache(maxsize=1)
+def step4_reason_classes() -> tuple[frozenset[str], frozenset[str]]:
+    """The blind extractor reason table (L9-STEP4-2): (mask, tooling)."""
+    table = json.loads(_STEP4_REASON_TABLE.read_bytes())
+    return frozenset(table["mask"]), frozenset(table["tooling"])
 
 
 def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mapping[str, Any]) -> str:
@@ -74,11 +87,25 @@ def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mappi
         return STEP4_CELL_SET_DIFFERS
     if any(type(cell.get("extractable")) is not bool for cell in cells):
         return STEP4_EXTRACTABLE_NOT_BOOLEAN
-    refused = {cell["cell_id"] for cell in cells if cell["extractable"] is False}
+    refused = [cell for cell in cells if cell["extractable"] is False]
     if not refused:
         return STEP4_EXIT_WITHOUT_REFUSED_CELL
+    # Every refused cell, p42 included, carries its terminal reasons as a list of codes.
+    if any(type(cell.get("refusal_reasons")) is not list
+           or any(type(reason) is not str for reason in cell["refusal_reasons"]) for cell in refused):
+        return STEP4_REPORT_MALFORMED
     # "Only the p42 floor cells": every refused cell is one, not necessarily all.
-    return STEP4_P42_FLOOR_CELLS_ONLY if refused <= p42 else STEP4_FLOOR_CELL_NOT_EXTRACTABLE
+    targets = [cell for cell in refused if cell["cell_id"] not in p42]
+    if not targets:
+        return STEP4_P42_FLOOR_CELLS_ONLY
+    # Only measured-quantity comparisons are an outcome; any tooling or unlisted
+    # reason means cure and rerun. A reasonless refusal is an outcome only without a floor.
+    mask, _ = step4_reason_classes()
+    for cell in targets:
+        reasons = cell["refusal_reasons"]
+        if not set(reasons) <= mask or (not reasons and ("floor" not in cell or cell["floor"] is not None)):
+            return STEP4_CELL_TOOLING_REFUSAL
+    return STEP4_FLOOR_CELL_NOT_EXTRACTABLE
 
 
 @dataclass(frozen=True)

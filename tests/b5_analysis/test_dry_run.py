@@ -291,6 +291,8 @@ class DriverDouble(d.StepRunner):
     fail_bundle=False
     p42=False
     target_refusal=False
+    # Synthetic extractor reasons (L9-STEP4-2): a mask code by default.
+    target_reasons=('insufficient_idle_samples',)
     bad_projection=False
     release_change=None
     source_case=None
@@ -385,8 +387,11 @@ class DriverDouble(d.StepRunner):
                     **{key:stored[key] for key in d.REFIT_DEPENDENT_SUMMARY_KEYS if key in stored}})
             elif step=='4':
                 value.update(schema_version='joulewise.detection_floor_extraction.v1',kept_units_binding=binding,
-                    spec_membership_refusals=[],cells=[{'cell_id':window+'-target','extractable':not self.target_refusal},
-                                                     {'cell_id':window+'-p42','extractable':not self.p42}])
+                    spec_membership_refusals=[],cells=[
+                        {'cell_id':window+'-target','extractable':not self.target_refusal,
+                         'refusal_reasons':list(self.target_reasons) if self.target_refusal else [],'floor':None},
+                        {'cell_id':window+'-p42','extractable':not self.p42,
+                         'refusal_reasons':['marker_self_digest_mismatch'] if self.p42 else [],'floor':None}])
                 write(option('--out'),value)
                 if self.p42 or self.target_refusal or getattr(self,'empty_exit',False):return 1
             elif step=='5' and '--out-dir' in argv:
@@ -453,7 +458,8 @@ class DriverAcceptanceTests(unittest.TestCase):
 
     def setUp(self):
         for key,value in {'calls':[],'refusal':None,'outcome':False,'exception_at':None,'change_at':None,
-                'fail_bundle':False,'p42':False,'target_refusal':False,'bad_projection':False,'release_change':None}.items():
+                'fail_bundle':False,'p42':False,'target_refusal':False,'target_reasons':('insufficient_idle_samples',),
+                'bad_projection':False,'release_change':None}.items():
             setattr(DriverDouble,key,value)
 
     def execute(self,*,mode='blind-dry-run',custody=None,runner=DriverDouble,git=None):
@@ -552,6 +558,21 @@ class DriverAcceptanceTests(unittest.TestCase):
         self.assertEqual(result.code,2,result.stderr)
         rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
         self.assertEqual(rows,[('tooling_refusal','extraction_exit_without_refused_cell')])
+
+    def test_T8c_step4_tooling_reason_cell_is_a_tooling_refusal(self):
+        # At origin/main (0a9ff42) this row was ('outcome_class','outcome-class refusal at step 4'), run exit 3.
+        for reasons in (('marker_self_digest_mismatch',),('insufficient_idle_samples','marker_self_digest_mismatch'),
+                        ('syn_unlisted_reason',)):
+            with self.subTest(reasons=reasons):
+                DriverDouble.calls=[];DriverDouble.target_refusal=True;DriverDouble.target_reasons=reasons
+                result=self.execute();self.assertEqual(result.code,2,result.stderr)
+                rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
+                self.assertEqual(rows,[('tooling_refusal','extraction_cell_tooling_refusal')])
+                self.assertFalse(result.record['completed_without_tooling_refusal'])
+                self.assertFalse(any(step=='5' for step,_,_ in DriverDouble.calls))
+                # R3: the record and streams name the class, never the extractor's reasons.
+                for text in (result.path.read_text(),result.stdout,result.stderr):
+                    for reason in reasons:self.assertNotIn(reason,text)
 
     def test_T9_strict_validation_stops_and_never_visits_removed_bundle(self):
         result=self.execute();self.assertEqual(result.code,0,result.stderr)
