@@ -827,6 +827,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Acceptance:** the reissue is science-neutral, and the new acceptance is used for the next registration.
 - **After block 5 is released:** the same follow-up deletes the L9-ENV-3 `whole_window` mirror (about 440 lines).
 
+146. **Ed adopted "freeze blocks by commit, not on main" (reported by joulewise-28, 2026-10-30, about 06:20Z).**
+- The plan is `docs/process/freeze_by_commit.md`, on PR #606 (light tier, docs only). joulewise-28 will merge it once CI is green.
+- **Phase 0, now (additive only):** the annotated tag `b5/collection` is pushed at `c27485347` (H_claim, the head named in `sealed_inventory.json`). The orchestrator verified it on origin: the tag object is `dbf91f4ba` and it peels to `c27485347`. The tag `b5/analysis` is added at the merged commit that official attempt C runs on.
+- **Phase 1, immediately after the block-5 release:**
+  - Freeze tests check the tag's tree instead of main's bytes.
+  - The step-5 identity check becomes "HEAD is the registered analysis commit or a ruled descendant".
+  - Calibration acceptance becomes commit-scoped, landing with the D-138 reissue together with A178 and L9-ENV-2 (item 145).
+  - Line-number test pins are retired.
+- **Phase 2:** prune according to TRIM_REPORT.
+- **Queue:** both phases are registered as the kernel task `FREEZE-BY-COMMIT-01` (rank 346).
+- **Block 6 / BYTES ownership** (asked by joulewise-28):
+  - Block 6's registration is already REGISTERED: commit `2a4e5149c`, 2026-10-17, cold-gated. Block-6 collection is under way, run by the Mac collection lead (magistrate activations).
+  - So F1 (commit plus tree hash in the registration), F4 (commit-scoped acceptance) and F6 (environment lock) cannot be adopted "from the start" for block 6. For block 6 they would be an amendment, and that is Ed's call.
+  - The BYTES registration is still in draft (`bytes_known_bytes_reading_rule_DRAFT.md`, session `f18a96e1`, plus the extension models of 2026-10-27). It is the natural first registration to carry F1, F4 and F6 from the start. Its owner is the collection lead, which needs this handed over at its next activation.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.

@@ -3805,6 +3805,37 @@
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
       "stop_card": null
     },
+    "FREEZE-BY-COMMIT-01": {
+      "acceptance": {
+        "evidence": [
+          "Phase 1 (after the block-5 release): freeze tests check the b5/collection and b5/analysis tag trees rather than main's bytes; step-5 identity accepts HEAD equal to the registered analysis commit or a ruled descendant; calibration acceptance is commit-scoped and lands with the D-138 reissue carrying A178 and the L9-ENV-2 clamp (RUN_STATE item 145); line-number test pins are retired",
+          "Phase 2: prune per TRIM_REPORT once phase 1 has landed",
+          "BYTES registration carries F1 (commit plus tree hash), F4 (commit-scoped acceptance) and F6 (environment lock) from the start"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FREEZE-BY-COMMIT-01/acceptance",
+          "label": "FREEZE-BY-COMMIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Blocks are frozen by commit (annotated tags plus tree hashes), not by main's bytes. Phase 1 lands right after the block-5 release and Phase 2 prunes; phase 0 (tag b5/collection at c27485347) is already done."
+      },
+      "authority": {
+        "label": "Ed's adoption of freeze-by-commit, relayed by the block-5 lead (RUN_STATE item 146; plan docs/process/freeze_by_commit.md on PR #606)",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Freeze each block by commit rather than on main: phase 1 moves freeze tests, the step-5 identity check and calibration acceptance onto the registered commits right after the block-5 release; phase 2 prunes per TRIM_REPORT.",
+      "id": "FREEZE-BY-COMMIT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 346,
+      "status": "queued",
+      "status_note": "Registered 2026-10-30 from RUN_STATE item 146. Starts after the block-5 release (not a kernel dependency: the release is not a kernel task). Phase 0 is done: annotated tag b5/collection at c27485347; b5/analysis is tagged at attempt C's merged commit.",
+      "stop_card": null
+    },
     "FULL-SUITE-EVERY-FIX-HEAD-RULE-01": {
       "acceptance": {
         "evidence": [
