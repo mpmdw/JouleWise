@@ -1,0 +1,523 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "01fc056717533ea5c4458c6c63fcf718fce53e98d3b7157048c49795501ad045",
+    "sidecar_sha256": "01fc056717533ea5c4458c6c63fcf718fce53e98d3b7157048c49795501ad045",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-bound-collection"
+      },
+      {
+        "kind": "neg8_corpus_retry_decision",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-bound-collection.retry-decision"
+      },
+      {
+        "kind": "neg8_corpus_collected",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-bound-derivation.corpus"
+      },
+      {
+        "kind": "bound_derivation",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-bound-derivation"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-4b-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-4b-quads-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-4b-quads-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-reference-midpoint"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-1p7b-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-1p7b-quads-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-qwen3-1p7b-quads-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "bytes-s1-p2-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 1368845606860083,
+    "monotonic_raw_ns": 1368845606859541,
+    "wall_s": 1793384508.6230762
+  },
+  "faults": {
+    "bound_derivation_failed": false,
+    "post_bracket_failed": false,
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 524,
+    "head": "f1a55bb40d0e725db383c23194fb245b05b340fa",
+    "path": "/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/night/executed_inventory.json",
+    "sha256": "6b3ce111c8e11fe3a72d832eabf97a33bb63bdfb51b374a42d087d71ad25ba7c",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 70861,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1368845366134916,
+        "monotonic_raw_ns": 1368845366134708,
+        "wall_s": 1793384508.3823512
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "a8bd465730852e744d04d1f1eeff9b1ae852f785947be34fcd04727ce55dc89e",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1368844838409500,
+        "monotonic_raw_ns": 1368844838408916,
+        "wall_s": 1793384507.854626
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 1349406992761041,
+          "monotonic_raw_ns": 1349406992760708,
+          "wall_s": 1793365070.008977
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.841
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 1368839828244208,
+      "monotonic_raw_ns": 1368839828243958,
+      "wall_s": 1793384502.844461
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 1368844838409500,
+      "monotonic_raw_ns": 1368844838408916,
+      "wall_s": 1793384507.854626
+    },
+    "released": {
+      "monotonic_ns": 1368844838333458,
+      "monotonic_raw_ns": 1368844838331791,
+      "wall_s": 1793384507.8545501
+    },
+    "released_after_chain_s": 5.01
+  },
+  "neg8_corpus": {
+    "collected_manifest": {
+      "path": "/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/night/transcript/neg8-settled-corpus.collected.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "committed_manifest": {
+      "path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261025T0853Z-bytes/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "errors": [],
+    "members_kept": 18,
+    "members_listed": 18,
+    "pruned": false,
+    "summary": {
+      "path": "/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/night/transcript/neg8-settled-corpus.collected.summary.json",
+      "sha256": "07f9232d576d86ab28de0625d8a8ee2f18e87825e7b565ee7f87fbe9bc1b730e"
+    }
+  },
+  "pack_id": "bytes-s1-p2",
+  "plan_id": "r2-bytes-s1-p2",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -41,
+    "end": {
+      "monotonic_ns": 1368839828254250,
+      "monotonic_raw_ns": 1368839828252000,
+      "read_skew_ns": 250,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 1368839828251958,
+      "wall_s": 1793384502.844471
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 1349407869411041,
+      "monotonic_raw_ns": 1349407869408208,
+      "read_skew_ns": 500,
+      "sleep_offset_ns": 83,
+      "uptime_raw_ns": 1349407869408125,
+      "wall_s": 1793365070.885628
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 1349182218985958,
+    "monotonic_raw_ns": 1349182218985458,
+    "wall_s": 1793364845.235202
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 125,
+    "failed": 0,
+    "logged": 125,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 18,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 18,
+        "present": 18,
+        "rc": 0,
+        "role": "corpus",
+        "stage_id": "bytes-s1-p2-bound-collection",
+        "status": "OK",
+        "succeeded": 18
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-s1-p2-reference-start",
+        "status": "OK",
+        "succeeded": 3
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 10,
+        "present": 10,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-4b-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-4b-quads-01-05",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-4b-quads-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 1,
+        "present": 1,
+        "rc": 0,
+        "role": "reference_midpoint",
+        "stage_id": "bytes-s1-p2-reference-midpoint",
+        "status": "OK",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 10,
+        "planned": 10,
+        "present": 10,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-1p7b-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 11,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-1p7b-quads-01-05",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 12,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "bytes-qwen3-1p7b-quads-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 13,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "bytes-s1-p2-reference-end",
+        "status": "OK",
+        "succeeded": 3
+      }
+    ],
+    "planned": 125,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 125,
+    "yield_status": "FULL"
+  },
+  "yield_plan": {
+    "planned": 125,
+    "source": [
+      "driver"
+    ],
+    "stages": 10
+  },
+  "yield_tripwire": {
+    "attempted_seen": 125,
+    "counted_in_settle": 9,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 10,
+    "stalled": false
+  }
+}
