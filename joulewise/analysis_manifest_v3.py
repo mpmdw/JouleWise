@@ -3773,9 +3773,8 @@ def _authenticate_finalization_inputs(
             set(bundle_paths),
             evaluation_basis_sha256=str(basis["sha256"]),
             consumption_semantics_id=str(semantics_id),
-            calibration_ledger_snapshot=snapshot,
+            calibration_ledger_snapshot=snapshot, analysis_clamp=True,
             **({"archive_context": context} if context is not None else {}),
-            analysis_clamp=True,
         )
         if block5_inputs is None:
             session._prepare(bundle_paths=bundle_paths, policy=policy)

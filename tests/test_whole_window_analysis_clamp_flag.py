@@ -48,6 +48,27 @@ ANALYSIS_CONSUMERS = {
     "scripts/produce_b5_disclosures.py": 1,
 }
 COLLECTION = "scripts/run_campaign.py"
+# (file, constructor line) -> the exact signature-gated opt-in it must carry.
+SIGNATURE_GATED = {
+    ("joulewise/analysis_engine/inputs.py", 3805): (
+        '    if "analysis_clamp" in inspect.signature(\n'
+        '        AuthenticatedConsumptionSession\n'
+        '    ).parameters:\n'
+        '        session_kwargs["analysis_clamp"] = True\n'
+        '    consumption_session = AuthenticatedConsumptionSession(\n'
+        '        runs_root,\n'
+        '        effective_bundle_ids,\n'
+        '        mode=mode,\n'
+        '        **session_kwargs,\n'
+        '    )\n'
+    ),
+    ("joulewise/floor_mint_estimator.py", 480): (
+        '        **({"archive_context": producer_entry.archive_context} if producer_entry is not None else {}),\n'
+        '        **({"analysis_clamp": True}\n'
+        '           if "analysis_clamp" in inspect.signature(AuthenticatedConsumptionSession).parameters else {}),\n'
+        '    )\n'
+    ),
+}
 
 
 def _constructor_calls(relative: str) -> list[ast.Call]:
@@ -187,6 +208,15 @@ class CallSiteTests(unittest.TestCase):
                 self.assertEqual(len(calls), count)
                 for call in calls:
                     keyword = _keyword(call, "analysis_clamp")
+                    if keyword is None and (relative, call.lineno) in SIGNATURE_GATED:
+                        # Passed only when the constructor accepts it (the
+                        # calibration_ledger_snapshot idiom of
+                        # load_analysis_inputs); the real class always does.
+                        source = (ROOT / relative).read_text(encoding="utf-8")
+                        self.assertIn(SIGNATURE_GATED[(relative, call.lineno)], source)
+                        self.assertIn("analysis_clamp", inspect.signature(
+                            whole_window.AuthenticatedConsumptionSession).parameters)
+                        continue
                     self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
                     self.assertIsInstance(keyword.value, ast.Constant)
                     self.assertIs(keyword.value.value, True)

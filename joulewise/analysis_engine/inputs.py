@@ -3798,12 +3798,15 @@ def load_analysis_inputs(
         )
     if context is not None:
         session_kwargs["archive_context"] = context
+    if "analysis_clamp" in inspect.signature(
+        AuthenticatedConsumptionSession
+    ).parameters:
+        session_kwargs["analysis_clamp"] = True
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         effective_bundle_ids,
         mode=mode,
         **session_kwargs,
-        analysis_clamp=True,
     )
     whole_window_reasons = whole_window_refusal_reasons(
         runs_root,
