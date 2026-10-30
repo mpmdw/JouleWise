@@ -69,6 +69,12 @@ class DocsOnlyClassifierTests(unittest.TestCase):
     def test_workflow_change_runs_tests(self):
         self.assertEqual(self.classify({".github/workflows/ci.yml": "on: push\n"}), 1)
 
+    def test_glob_read_docs_directories_run_tests(self):
+        for path in ("docs/registrations/b9.md", "docs/contracts/c.md", "docs/process_traces/t/r.md",
+                     "docs/null/n.md", "docs/site/s.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify({path: "y\n"}), 1)
+
     def test_empty_range_runs_tests(self):
         self.assertEqual(self.classify({}), 1)
 

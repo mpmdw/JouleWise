@@ -14,6 +14,8 @@ paths=$(git diff --name-only --no-renames "$before..$after") || exit 1
 [[ -n "$paths" ]] || exit 1
 while IFS= read -r path; do
   case "$path" in
+    # Directories that code or tests read by glob rather than by literal path: run everything.
+    docs/registrations/*|docs/contracts/*|docs/process_traces/*|docs/null/*|docs/site/*) exit 1 ;;
     docs/*.md) ;;
     */*) exit 1 ;;
     *.md) ;;
