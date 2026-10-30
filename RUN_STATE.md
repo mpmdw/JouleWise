@@ -711,6 +711,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Orchestrator condition on the fix direction:** the fix must make the operative re-derivation produce the records it is missing. It must not relax coverage by dropping minted pointers from the requirement. The fix seat must explain why the widened re-reduction omits those pointers. If a pointer is absent because widening legitimately leaves that metric undefined, that is a §2.2 ruling for Ed, not a code fix (item 133's rule). A counterfactual must show that a genuinely missing operative envelope still refuses.
 - On TMPDIR: joulewise-28's laptop runs already set TMPDIR to a resolved path under `/private/tmp`. Step 0 also refuses `/var/folders` custody paths.
 
+137. **RC-CMP-10 Fable review: ACCEPT_WITH_FIXES; RC-CMP-11 launched (reported by joulewise-28, 2026-10-30 04:18-04:22Z).**
+- **Fable review:** branch `review/2026-10-30-rc-cmp10-fable-rev` at `2bf5b25b9`.
+  - Sweep: 5035 deletions, 0 undeclared. FS2 and FS4 are sound.
+  - F1 is the same false pass on exactly equal values that Opus found as its F1 (item 135). Eight wrong relation words, plus a b10 case with identical values and a trigger mismatch, exit 0. Fable validated the same one-line fix.
+  - F2 (note): the g10 and reharvest history lines are conditional on L9's own line. NR3 stands. Closing it fully would need the g10 codes registered in the window index, which is an Ed ruling. It is not needed for the dry run.
+  - F3 (note): any p42 member code passes. RC-CMP-11's F2 pin covers this.
+- **RC-CMP-11 launched at 04:22Z:** an Opus seat, `trig_019PUBUzQrcw3eKHeqtY56HA`, firing at 04:32Z with MCP cleared. Its scope:
+  - F1: bit-identical values decide the relation, with exact semantics (item 131): strict relation words fail when the values are equal, and equality and non-strict words pass. It includes the counterfactual that a strict claim over equal values must fail. The b10 flip and U1-U4 stay at exit 0.
+  - F2: p42 is pinned to the producer-derived code (the lead's NR1 ruling), falling back to the contradicted codes.
+  - F3: the two literal pins. F4: direction "none" only for `None`. F5: a closed trigger vocabulary with no repeats.
+  - Verification runs over the whole directory. The lead reruns the full-size window at the head.
+- Still waiting: Opus's review of L9-STEP4-2, which gates L9-STEP4-3, and the pointer-name diagnostic, which gates L9-ENV-1 (item 136).
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
