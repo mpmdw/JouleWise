@@ -1,0 +1,173 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 61a45ed8c..a2f5b6e33 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -13,16 +13,21 @@ concurrency:
+ jobs:
+   quick:
+     needs: changes
+-    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     steps:
++      - name: Docs-only range (required contexts report success without running tests)
++        if: needs.changes.outputs.code != 'true'
++        run: echo "No code changes in this range; tests skipped."
+       - uses: actions/checkout@v5
++        if: needs.changes.outputs.code == 'true'
+         with:
+           fetch-depth: 0
+       - uses: actions/setup-python@v6
++        if: needs.changes.outputs.code == 'true'
+         with:
+           python-version: "3.13"
+       - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
++        if: needs.changes.outputs.code == 'true'
+         run: |
+           if [ ! -x /bin/zsh ]; then
+             sudo apt-get update -q
+@@ -30,6 +35,7 @@ jobs:
+           fi
+           test -x /bin/zsh
+       - name: Quick test tier
++        if: needs.changes.outputs.code == 'true'
+         run: python3 scripts/quick_suite.py --tier quick --workers 4
+ 
+   # Select interpreters and skip expensive jobs only for proven docs-only ranges.
+@@ -60,30 +66,19 @@ jobs:
+           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+         run: |
+-          # Only a successful, non-empty docs-only diff may suppress tests.
+-          # Check every fallible detector command explicitly: errors run CI.
++          # Only a successful, non-empty, unreferenced docs-only diff may suppress tests
++          # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). Errors run CI.
+           docs_only() {
+-            local before after paths path
++            local before after
+             [[ "${CHECKOUT_OUTCOME:-}" == success ]] || return 1
+             case "${GITHUB_EVENT_NAME:-}" in
+               push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
+               pull_request) before=${PR_BASE_SHA:-}; after=${PR_HEAD_SHA:-} ;;
+               *) return 1 ;;
+             esac
+-            [[ "$before" =~ ^[0-9a-f]{40}$ && "$before" != 0000000000000000000000000000000000000000 ]] || return 1
+-            [[ "$after" =~ ^[0-9a-f]{40}$ && "$after" != 0000000000000000000000000000000000000000 ]] || return 1
+-            git cat-file -e "$before^{commit}" || return 1
+-            git cat-file -e "$after^{commit}" || return 1
+-            paths=$(git diff --name-only --no-renames "$before..$after") || return 1
+-            [[ -n "$paths" ]] || return 1
+-            while IFS= read -r path; do
+-              case "$path" in
+-                docs/*) ;;
+-                */*) return 1 ;;
+-                *.md) ;;
+-                *) return 1 ;;
+-              esac
+-            done <<< "$paths"
++            # Run the BASE commit's classifier so a range cannot rewrite its own gate.
++            git cat-file -e "$before:scripts/ci_docs_only.sh" 2>/dev/null || return 1
++            git show "$before:scripts/ci_docs_only.sh" | bash -s -- "$before" "$after"
+           }
+           code=true
+           if docs_only; then
+@@ -131,7 +126,6 @@ jobs:
+ 
+   test:
+     needs: [changes]
+-    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     env:
+       # CI-12 (2026-10-05): hosted runners are free for this public repo, so
+@@ -149,18 +143,25 @@ jobs:
+         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+     steps:
++      - name: Docs-only range (required contexts report success without running tests)
++        if: needs.changes.outputs.code != 'true'
++        run: echo "No code changes in this range; tests skipped."
+       - uses: actions/checkout@v5
++        if: needs.changes.outputs.code == 'true'
+         with:
+           # Golden provenance sidecars replay `git archive` against their
+           # pinned base commit; a shallow checkout lacks that object.
+           fetch-depth: 0
+       - uses: actions/setup-python@v6
++        if: needs.changes.outputs.code == 'true'
+         with:
+           python-version: ${{ matrix.python-version }}
+       # Once-per-run state, receipt, and CLI/mock checks live in fences.
+       - name: Compile Python sources
++        if: needs.changes.outputs.code == 'true'
+         run: python -m compileall -q joulewise tests
+       - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
++        if: needs.changes.outputs.code == 'true'
+         run: |
+           # Tests require /bin/zsh: /usr/bin/zsh without that symlink is insufficient.
+           if [ ! -x /bin/zsh ]; then
+@@ -169,6 +170,7 @@ jobs:
+           fi
+           test -x /bin/zsh
+       - name: Unit tests (stdlib core only, per D-009/D-017)
++        if: needs.changes.outputs.code == 'true'
+         # test_calibration_exits AND test_calibration_writer_crash_matrix
+         # are intentionally absent here (both carry exclusive_modules
+         # declarations); each runs once in its exclusive job below, while
+@@ -227,7 +229,6 @@ jobs:
+ 
+   calibration-exits-exclusive:
+     needs: [changes]
+-    if: needs.changes.outputs.code == 'true'
+     # Exclusive by design: this module already runs sequentially internally;
+     # colocating it with an ordinary shard only adds scheduler starvation.
+     # The module watchdog ceiling is 10 minutes per child and this hosted job
+@@ -238,20 +239,26 @@ jobs:
+       matrix:
+         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+     steps:
++      - name: Docs-only range (required contexts report success without running tests)
++        if: needs.changes.outputs.code != 'true'
++        run: echo "No code changes in this range; tests skipped."
+       - uses: actions/checkout@v5
++        if: needs.changes.outputs.code == 'true'
+         with:
+           fetch-depth: 0
+       - uses: actions/setup-python@v6
++        if: needs.changes.outputs.code == 'true'
+         with:
+           python-version: ${{ matrix.python-version }}
+       - name: Compile calibration-exit sources
++        if: needs.changes.outputs.code == 'true'
+         run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
+       - name: Exclusive calibration-exit module
++        if: needs.changes.outputs.code == 'true'
+         run: python -m unittest -v tests.test_calibration_exits
+ 
+   calibration-writer-crash-matrix-exclusive:
+     needs: [changes]
+-    if: needs.changes.outputs.code == 'true'
+     # Exclusive because fallback-weight shard placement is unsound for this
+     # module: its hosted runtime is dominated by its own subprocess-heavy
+     # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
+@@ -278,15 +285,22 @@ jobs:
+         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+         shard: [1, 2]
+     steps:
++      - name: Docs-only range (required contexts report success without running tests)
++        if: needs.changes.outputs.code != 'true'
++        run: echo "No code changes in this range; tests skipped."
+       - uses: actions/checkout@v5
++        if: needs.changes.outputs.code == 'true'
+         with:
+           fetch-depth: 0
+       - uses: actions/setup-python@v6
++        if: needs.changes.outputs.code == 'true'
+         with:
+           python-version: ${{ matrix.python-version }}
+       - name: Compile calibration sources
++        if: needs.changes.outputs.code == 'true'
+         run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
+       - name: Exclusive calibration-writer crash-matrix module (shard ${{ matrix.shard }} of 2)
++        if: needs.changes.outputs.code == 'true'
+         env:
+           SHARD_INDEX: ${{ matrix.shard }}
+         run: |
