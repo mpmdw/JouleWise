@@ -347,3 +347,48 @@ Pinned files remain unchanged:
 ```
 
 `git diff --check` passes; fixture orphan census is `[]`, count 0, exit 0. Only the three authorized files changed. Synthetic fixtures only; no hardware or real BYTES data. All 13 code/test checkpoints were committed and pushed; this report is the separate final checkpoint. No NEEDS_RULING remains. CI is checked on the final pushed report commit and its job states are supplied separately in the handoff.
+
+
+## Fix round 6
+
+Activation `4e748ac1`, 2026-10-30. Continued `3ee2b83f3` on `codex/2026-10-28-by-therm-lines`, draft PR #598. Read the complete Opus delta-4 report/probes at JouleWise-data `e1b61a4d7`, Sol delta-5 report/probes at `2f5ed90ba`, and adopted consult `0858773e`. Implemented A1–A5 within the existing three-file WRITE_SCOPE.
+
+- A1: JSON accepted by the production bytes decoder but rejected by the strict journal lexer makes the whole journal untrusted with `journal line not producer output`. Both-rejected lines retain malformed-skip behavior. Dup-level, NaN-sibling, lone-surrogate and BOM cases cannot restore a member; UTF-16 is also covered. Native real-chain archives now assert equal consumed stamps, status, integer level and malformed counts against `read_monitor_journal`.
+- A2: repeated roster run ids, including science/reference collisions, are W4 global records faults. Acceptance bytes and codes remain intact.
+- A3: validate the session as a safe single filename component before constructing export paths. Invalid identities produce export records faults, exit 0 and unchanged science codes. The writer checks resolved output containment, including leaf symlinks. External sidecar locators remain supported for reading; the outside sentinel is preserved.
+- A4: contain production-helper conversion exceptions at the tool boundary as `journal level conversion unavailable`, under W1. The huge-level probe now exits 0 and writes a record.
+- A5: emit `records.thermal_hull_replay_disagrees` only after an actual replay disagrees. Unknown member spans carry `member span unavailable` without that notice.
+
+Decisions I made:
+
+- Use the production bytes decoder as a recognition check on lexer-rejected lines. Numeric callbacks discard tokens and its decoded result is discarded. Consumed evidence still passes through lexical projection and the pinned production parser/helper. Match the interpreter's existing integer-token length rejection by counting digits, without converting opaque values. Keep non-object and other production-rejected lines in the malformed-skip path.
+- Apply duplicate-identity faults globally across science members and export-identity faults to all science members in that export. Reject empty session identities and both separator spellings as unsafe filename components. Keep source-side locator resolution independent of destination containment.
+- Preserve W1's direction-invariant members for unavailable journal evidence. Keep the matching-seal would-add stop and the source-overlap/new-output safety switches. Unknown spans produce no replay-disagreement notice; helper conversion failures introduce no new numerical interpretation.
+- Leave Opus 4 unchanged: lone-surrogate refusal remains; macOS L1 decoding cannot emit that case. Leave Opus 5 unchanged: vertical-tab/form-feed whitespace changes only the malformed-line notice.
+
+Verification used Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1` and `PYTHONDONTWRITEBYTECODE=1`:
+
+- `tests.test_bytes_thermal_lines`, alone in the background and waited to completion: **52 tests, OK, 1100.046 s**. All 45 previous tests remain. Round 5 was 1132.253 s; the 1.1× ceiling is 1245.4783 s. Grouped analysis passed **30/30** and strengthened real-chain checks **60/60**.
+- `tests.b6.test_bytes_p2_thermal_window` and `tests.test_harvest_b5_window`: **198 tests, OK, 11 skipped, 704.941 s**. Pass-1, block-5 and alpha each retain exact 177-file byte identity.
+- Every supplied Opus and Sol Python probe was rerun before and after, including the independent probes and census. The original divergence script stops at the new validator exception before its CLI call; a labelled in-memory adaptation catches that exception and completes all four CLI comparisons, with no restorations. The committed regressions assert the same result. Other probes complete; independent probes pass and the census ends `SUMMARY fails []`. Production-shaped real harvest: 103 equal readings, malformed 1/1, zero undefined members and zero replay disagreement.
+- An environment restart interrupted the first full-module attempt; it is not counted as a result. Corrected the native-chain assertion binding before the completed final run. Final logs are retained in `/tmp/round6/final-*.log`; the tested script SHA-256 is `5a8e5fe467276045168605332b19c81dd94489406247d9282223257e1126df19` at code head `a9da7cd02`.
+
+Census, source equals output on both passes:
+
+| Sessions | Public + withheld rows | Science before commitment | After commitment / archive |
+|---|---:|---:|---:|
+| s2-p1, s2-p2 | 63 + 50 = 113 | 50 | 100 / 100 |
+| s5-p1, s5-p2 | 13 + 50 = 63 | 0 | 50 / 50 |
+
+All four sessions have zero undefined members. Model sets, exact target changes, withheld labels and verified views pass at both blinded stages and the archive stage.
+
+Pinned SHA-256 hashes remain unchanged:
+
+```text
+18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71  joulewise/bytes_analysis.py
+2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744  joulewise/b5/harvest.py
+```
+
+`git diff --check` passes. Fixture-orphan census: `[]`, count 0, exit 0. Only the script, its test module and this report changed. Synthetic fixtures only; no hardware or real BYTES data. No tolerance or scientific numerical bar was added. No NEEDS_RULING remains. The full repository suite is left to CI for this exclusion-only tooling change.
+
+Code/test checkpoints, each committed and pushed: `e4a6cc2c5`, `be5fc668e`, `a3ff6ca8b`, `a672aab75`, `67a8f7cc6`, `a9da7cd02`. This report is the separate final checkpoint. CI is read on the final pushed report head and every job state is supplied in the handoff; no green claim is made here.
