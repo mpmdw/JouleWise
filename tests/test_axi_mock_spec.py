@@ -23,6 +23,7 @@ from joulewise.interfaces import AxiCancelledProposalCounters, RuntimeAdapter
 from joulewise.output_identity import build_output_identity_report
 from joulewise.schemas import BenchmarkConfig, RunStatus
 from scripts.run_campaign import load_analysis_manifest, run_axi_spec_campaign
+from tests.custody_isolation import isolate_custody_parent
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +83,10 @@ class MockSpecRegistry:
 
 
 class AxiMockSpecTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Campaigns publish active-campaign entries; never under the real ~/night-custody.
+        isolate_custody_parent(self)
+
     def assert_oracle_values(self, actual: object, expected: object) -> None:
         if isinstance(expected, dict):
             self.assertIsInstance(actual, dict)

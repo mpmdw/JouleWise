@@ -1,0 +1,44 @@
+{
+ "schema": "joulewise.b5_window_index.v1",
+ "attempts": [
+  {
+   "pack": "alpha",
+   "pack_id": "synthetic-alpha",
+   "attempt": 1,
+   "plan_id": "plan-alpha",
+   "seal": "second",
+   "entry_kind": "harvested",
+   "verdict": "COLLECTED",
+   "claim_usable": true,
+   "cause_key": null,
+   "g10_requested": false,
+   "g10_redraw_cycles": null
+  },
+  {
+   "pack": "beta",
+   "pack_id": "synthetic-beta",
+   "attempt": 1,
+   "plan_id": "plan-beta",
+   "seal": "second",
+   "entry_kind": "harvested",
+   "verdict": "COLLECTED",
+   "claim_usable": true,
+   "cause_key": null,
+   "g10_requested": false,
+   "g10_redraw_cycles": null
+  },
+  {
+   "pack": "gamma",
+   "pack_id": "synthetic-gamma",
+   "attempt": 1,
+   "plan_id": "plan-gamma",
+   "seal": "second",
+   "entry_kind": "harvested",
+   "verdict": "COLLECTED",
+   "claim_usable": true,
+   "cause_key": null,
+   "g10_requested": false,
+   "g10_redraw_cycles": null
+  }
+ ]
+}
