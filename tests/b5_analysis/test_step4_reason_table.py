@@ -1,56 +1,150 @@
-"""L9-STEP4-2 R1: the registered step-4 reason table is the blind table, regenerated.
+"""L9-STEP4-2 R1 and L9-STEP4-3: the registered step-4 reason table is the blind table plus the recorded ruling.
 
 step4_reason_classes.json copies the mask and tooling lists of
 CLASS_TABLE.json at 08ea5c958. step4_reasons/make_table.py is that commit's
 generator, byte for byte; rerunning it over this checkout's extractor modules
 must reproduce both lists, so a new extractor code literal cannot fall
 outside the registered table without this test failing.
+
+L9-STEP4-3 records the lead's ruling (RUN_STATE items 132-133 and 138) beside
+the generator output, never inside it: the 'r3' list of plan section 2.2 codes
+and the step-4 rule. The registered file must equal generator output plus
+RULING below, byte for byte, so the table and this test change together.
 """
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
+from joulewise.b5_analysis import dry_run as d
 from joulewise.b5_analysis import steps
 
 ROOT = Path(__file__).resolve().parents[2]
 TABLE = ROOT / 'configs/analysis/b5/step4_reason_classes.json'
 GENERATOR = Path(__file__).resolve().parent / 'step4_reasons/make_table.py'
+PLAN = ROOT / 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
+
+HEADER = {
+    'schema_version': 'joulewise.b5_step4_reason_classes.v2',
+    'source': {
+        'commit': '08ea5c95849654c066811273807f9ca6bf5327cf',
+        'table': 'docs/process_traces/2026-10-30-step4-reasons/CLASS_TABLE.json',
+        'generator': 'docs/process_traces/2026-10-30-step4-reasons/make_table.py',
+        'generator_sha256': '051c13b267c747f3c4bf88318c819bcb9c5c603ba608160ca04389e817a549d2',
+    },
+}
+RULING = {
+    'r3': ['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold',
+           'calibration_acceptance_bound_stale', 'clock_bound_exceeds_quarter_window',
+           'instrument_calibration_stale', 'insufficient_in_window_samples',
+           'insufficient_members_after_exclusion', 'kept_units_below_minimum'],
+    'step4_rule': {
+        'ruling': 'L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind',
+        'refused_cells_only_p42': 'p42_floor_cells_only',
+        'refused_non_p42_cell_without_reasons': 'extraction_report_malformed',
+        'any_r3_reason_on_a_refused_non_p42_cell': 'extraction_cell_r3_refusal',
+        'otherwise': 'extraction_cell_tooling_refusal',
+        'mask_and_tooling_lists': 'blind generator output, not read at step 4',
+    },
+}
+
+# Plan section 2.2 sentences that route each R3 code (whitespace-normalized).
+MINIMUM_RULE = ('If an analysis program finds fewer, the program and the exclusion function disagree: '
+                'the analysis stops and the step goes to R3.')
+MEMBER_RULE = ("If one fires on a kept unit, the registration's member rules and the code disagree: "
+               'the analysis stops and the step goes to R3.')
+# code -> (producer module, emission site literal, plan sentence)
+R3_PINS = {
+    'kept_units_below_minimum':
+        ('joulewise/floor_extraction.py', 'refusals.append("kept_units_below_minimum")', MINIMUM_RULE),
+    'insufficient_members_after_exclusion':
+        ('joulewise/floor_extraction.py', 'refusals.append("insufficient_members_after_exclusion")', MINIMUM_RULE),
+    'insufficient_in_window_samples':
+        ('joulewise/reduce.py', 'reasons.append("insufficient_in_window_samples")', MEMBER_RULE),
+    'cadence_ratio_below_threshold':
+        ('joulewise/reduce.py', 'reasons.append("cadence_ratio_below_threshold")', MEMBER_RULE),
+    'clock_bound_exceeds_quarter_window':
+        ('joulewise/reduce.py', 'reasons.append("clock_bound_exceeds_quarter_window")', MEMBER_RULE),
+    'anchor_energy_envelope_exceeds_quarter_metric':
+        ('joulewise/reduce.py', 'return ["anchor_energy_envelope_exceeds_quarter_metric"]', MEMBER_RULE),
+    'instrument_calibration_stale':
+        ('joulewise/reduce.py', 'return None, "instrument_calibration_stale"', MEMBER_RULE),
+    'calibration_acceptance_bound_stale':
+        ('joulewise/calibration_bracketing.py', 'return finish(("calibration_acceptance_bound_stale",))', MEMBER_RULE),
+}
+# The six member-level codes the window-evidence precheck forwards onto kept units (Fable F2).
+FORWARDED_PRECHECK = {code for code, pin in R3_PINS.items() if pin[2] is MEMBER_RULE}
 
 
 class Step4ReasonTableTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.table = json.loads(TABLE.read_bytes())
+        cls.raw = TABLE.read_bytes()
+        cls.table = json.loads(cls.raw)
 
     def test_R1_table_shape_is_sorted_disjoint_and_pins_its_source(self):
         table = self.table
-        self.assertEqual(set(table), {'schema_version', 'source', 'modules', 'mask_rule', 'mask', 'tooling'})
-        self.assertEqual(table['schema_version'], 'joulewise.b5_step4_reason_classes.v1')
+        self.assertEqual(list(table), ['schema_version', 'source', 'modules', 'mask_rule', 'mask', 'tooling',
+                                       'r3', 'step4_rule'])
+        self.assertEqual(table['schema_version'], 'joulewise.b5_step4_reason_classes.v2')
         self.assertEqual(table['source']['commit'], '08ea5c95849654c066811273807f9ca6bf5327cf')
-        for name in ('mask', 'tooling'):
+        for name in ('mask', 'tooling', 'r3'):
             self.assertEqual(table[name], sorted(set(table[name])))
             self.assertTrue(all(type(code) is str and code for code in table[name]))
         self.assertFalse(set(table['mask']) & set(table['tooling']))
         self.assertEqual((len(table['mask']), len(table['tooling'])), (42, 1898))
-        self.assertEqual(steps.step4_reason_classes(), (frozenset(table['mask']), frozenset(table['tooling'])))
 
     def test_R1_generator_copy_is_the_committed_blind_generator(self):
         digest = hashlib.sha256(GENERATOR.read_bytes()).hexdigest()
         self.assertEqual(digest, self.table['source']['generator_sha256'])
         self.assertEqual(digest, '051c13b267c747f3c4bf88318c819bcb9c5c603ba608160ca04389e817a549d2')
 
-    def test_R1_regenerating_over_the_current_modules_gives_the_registered_lists(self):
+    def test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file(self):
         run = subprocess.run([sys.executable, '-I', str(GENERATOR), str(ROOT)],
                              capture_output=True, text=True, check=False)
         self.assertEqual(run.returncode, 0, run.stderr)
         fresh = json.loads(run.stdout)
-        self.assertEqual(fresh['mask'], self.table['mask'])
-        self.assertEqual(fresh['tooling'], self.table['tooling'])
-        self.assertEqual(fresh['mask_rule'], self.table['mask_rule'])
-        self.assertEqual(fresh['modules'], self.table['modules'])
+        self.assertEqual(set(fresh), {'modules', 'mask_rule', 'mask', 'tooling'})
+        expected = {**HEADER, **{key: fresh[key] for key in ('modules', 'mask_rule', 'mask', 'tooling')}, **RULING}
+        self.assertEqual(self.table, expected)
+        self.assertEqual(self.raw, (json.dumps(expected, indent=1) + '\n').encode())
+
+    def test_R3_list_is_read_by_the_classifier_and_drawn_from_the_blind_mask(self):
+        self.assertEqual(steps.step4_r3_reasons(), frozenset(RULING['r3']))
+        self.assertEqual(set(R3_PINS), set(RULING['r3']))
+        # Every R3 code was a blind MASK code; the ruling moves none of them to an outcome.
+        self.assertLessEqual(set(RULING['r3']), set(self.table['mask']))
+
+    def test_R3_step4_rule_names_the_classifier_codes_and_they_are_registered(self):
+        rule = self.table['step4_rule']
+        self.assertEqual(rule['refused_cells_only_p42'], steps.STEP4_P42_FLOOR_CELLS_ONLY)
+        self.assertEqual(rule['refused_non_p42_cell_without_reasons'], steps.STEP4_REPORT_MALFORMED)
+        self.assertEqual(rule['any_r3_reason_on_a_refused_non_p42_cell'], steps.STEP4_CELL_R3_REFUSAL)
+        self.assertEqual(rule['otherwise'], steps.STEP4_CELL_TOOLING_REFUSAL)
+        classes = d.refusal_classes()
+        for code in (steps.STEP4_REPORT_MALFORMED, steps.STEP4_CELL_R3_REFUSAL, steps.STEP4_CELL_TOOLING_REFUSAL):
+            self.assertIn(code, classes['tooling_refusal'])
+        self.assertFalse(hasattr(steps, 'STEP4_FLOOR_CELL_NOT_EXTRACTABLE'))
+
+    def test_R3_each_code_is_pinned_to_its_producer_emission_site_and_plan_line(self):
+        plan = ' '.join(PLAN.read_text().split())
+        section = plan[plan.index('### 2.2 Members and units'):plan.index('### 2.3 ')]
+        for code, (module, emission, sentence) in R3_PINS.items():
+            with self.subTest(code=code):
+                self.assertIn(code, emission)
+                self.assertIn(emission, (ROOT / module).read_text())
+                self.assertIn(sentence, section)
+
+    def test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes(self):
+        from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
+        self.assertEqual(len(FORWARDED_PRECHECK), 6)
+        self.assertEqual(set(self.table['mask']) & REDUCER_REASON_CODES, FORWARDED_PRECHECK)
+        # The window-evidence precheck forwards reducer reasons onto the cell's members.
+        inputs = (ROOT / 'joulewise/analysis_engine/inputs.py').read_text()
+        self.assertRegex(inputs, re.compile(r'def window_evidence_precheck\b'))
 
 
 if __name__ == '__main__':

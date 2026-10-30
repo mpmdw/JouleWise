@@ -175,7 +175,10 @@ class ArchiveTests(unittest.TestCase):
                             for row in spec["cells"]], "spec_membership_refusals": []}
         self.assertEqual(classify_step4_exit(1, report, spec), "p42_floor_cells_only")
         report["cells"][-1]["extractable"] = False
-        self.assertEqual(classify_step4_exit(1, report, spec), "floor_cell_not_extractable")
+        # L9-STEP4-3: a refused target is a stop (floor_cell_not_extractable at 8222d0e47).
+        self.assertEqual(classify_step4_exit(1, report, spec), "extraction_cell_tooling_refusal")
+        report["cells"][-1]["refusal_reasons"] = ["kept_units_below_minimum"]
+        self.assertEqual(classify_step4_exit(1, report, spec), "extraction_cell_r3_refusal")
         report["cells"][-1]["extractable"] = True
         report["spec_membership_refusals"] = [{"reason": "campaign_member_omitted_from_spec"}]
         self.assertEqual(classify_step4_exit(1, report, spec), "extraction_spec_membership_refused")

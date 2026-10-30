@@ -69,6 +69,7 @@
     "exclusions_roster_mismatch",
     "exclusions_schema_invalid",
     "extraction_cell_ids_duplicated",
+    "extraction_cell_r3_refusal",
     "extraction_cell_set_differs_from_spec",
     "extraction_cell_tooling_refusal",
     "extraction_exit_without_refused_cell",
@@ -185,7 +186,6 @@
     "window_index_required"
   ],
   "outcome_class": [
-    "dominance_ratio_zero_denominator",
-    "floor_cell_not_extractable"
+    "dominance_ratio_zero_denominator"
   ]
 }

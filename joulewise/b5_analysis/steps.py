@@ -25,9 +25,9 @@ def require_primary_context(*objects) -> None:
 
 
 # Every step-4 exit-1 branch names itself through dry_run_refusal_classes.json:
-# the registered p42 exit, one outcome class, or a tooling code (plan section 3.1).
+# the registered p42 exit or a tooling code. Plan section 3.1 registers no other
+# step-4 result, so no step-4 exit is an outcome class (L9-STEP4-3 ruling).
 STEP4_P42_FLOOR_CELLS_ONLY = "p42_floor_cells_only"
-STEP4_FLOOR_CELL_NOT_EXTRACTABLE = "floor_cell_not_extractable"
 STEP4_REPORT_MALFORMED = "extraction_report_malformed"
 STEP4_SPEC_MALFORMED = "extraction_spec_malformed"
 STEP4_SPEC_MEMBERSHIP_REFUSED = "extraction_spec_membership_refused"
@@ -36,15 +36,15 @@ STEP4_CELL_SET_DIFFERS = "extraction_cell_set_differs_from_spec"
 STEP4_EXTRACTABLE_NOT_BOOLEAN = "extraction_extractable_not_boolean"
 STEP4_EXIT_WITHOUT_REFUSED_CELL = "extraction_exit_without_refused_cell"
 STEP4_CELL_TOOLING_REFUSAL = "extraction_cell_tooling_refusal"
+STEP4_CELL_R3_REFUSAL = "extraction_cell_r3_refusal"
 
 _STEP4_REASON_TABLE = Path(__file__).resolve().parents[2] / "configs/analysis/b5/step4_reason_classes.json"
 
 
 @lru_cache(maxsize=1)
-def step4_reason_classes() -> tuple[frozenset[str], frozenset[str]]:
-    """The blind extractor reason table (L9-STEP4-2): (mask, tooling)."""
-    table = json.loads(_STEP4_REASON_TABLE.read_bytes())
-    return frozenset(table["mask"]), frozenset(table["tooling"])
+def step4_r3_reasons() -> frozenset[str]:
+    """The plan section 2.2 R3 codes recorded beside the blind table (L9-STEP4-3 ruling)."""
+    return frozenset(json.loads(_STEP4_REASON_TABLE.read_bytes())["r3"])
 
 
 def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mapping[str, Any]) -> str:
@@ -95,17 +95,19 @@ def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mappi
            or any(type(reason) is not str for reason in cell["refusal_reasons"]) for cell in refused):
         return STEP4_REPORT_MALFORMED
     # "Only the p42 floor cells": every refused cell is one, not necessarily all.
+    # A refused p42 cell's reasons are irrelevant to the registered exit.
     targets = [cell for cell in refused if cell["cell_id"] not in p42]
     if not targets:
         return STEP4_P42_FLOOR_CELLS_ONLY
-    # Only measured-quantity comparisons are an outcome; any tooling or unlisted
-    # reason means cure and rerun. A reasonless refusal is an outcome only without a floor.
-    mask, _ = step4_reason_classes()
-    for cell in targets:
-        reasons = cell["refusal_reasons"]
-        if not set(reasons) <= mask or (not reasons and ("floor" not in cell or cell["floor"] is not None)):
-            return STEP4_CELL_TOOLING_REFUSAL
-    return STEP4_FLOOR_CELL_NOT_EXTRACTABLE
+    # Any other refused cell stops the run. A refusal must name its reasons.
+    if any(not cell["refusal_reasons"] for cell in targets):
+        return STEP4_REPORT_MALFORMED
+    # A section 2.2 R3 code anywhere is cured by an Ed ruling, never a code change,
+    # so it wins over tooling; every other code, listed or not, is cured by a fix and rerun.
+    r3 = step4_r3_reasons()
+    if any(reason in r3 for cell in targets for reason in cell["refusal_reasons"]):
+        return STEP4_CELL_R3_REFUSAL
+    return STEP4_CELL_TOOLING_REFUSAL
 
 
 @dataclass(frozen=True)

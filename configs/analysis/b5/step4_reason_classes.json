@@ -1,5 +1,5 @@
 {
- "schema_version": "joulewise.b5_step4_reason_classes.v1",
+ "schema_version": "joulewise.b5_step4_reason_classes.v2",
  "source": {
   "commit": "08ea5c95849654c066811273807f9ca6bf5327cf",
   "table": "docs/process_traces/2026-10-30-step4-reasons/CLASS_TABLE.json",
@@ -1963,5 +1963,23 @@
   "writer_entry",
   "writer_test_status",
   "zero_point_is_carried_structurally_by_the_registered_builder_as_the_shift_zero_index_never_supplied_or_matched_by_value_and_direct_keyword_inputs_are_unregistered"
- ]
+ ],
+ "r3": [
+  "anchor_energy_envelope_exceeds_quarter_metric",
+  "cadence_ratio_below_threshold",
+  "calibration_acceptance_bound_stale",
+  "clock_bound_exceeds_quarter_window",
+  "instrument_calibration_stale",
+  "insufficient_in_window_samples",
+  "insufficient_members_after_exclusion",
+  "kept_units_below_minimum"
+ ],
+ "step4_rule": {
+  "ruling": "L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind",
+  "refused_cells_only_p42": "p42_floor_cells_only",
+  "refused_non_p42_cell_without_reasons": "extraction_report_malformed",
+  "any_r3_reason_on_a_refused_non_p42_cell": "extraction_cell_r3_refusal",
+  "otherwise": "extraction_cell_tooling_refusal",
+  "mask_and_tooling_lists": "blind generator output, not read at step 4"
+ }
 }

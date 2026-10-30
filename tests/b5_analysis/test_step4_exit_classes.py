@@ -18,10 +18,16 @@ SPEC = {'cells': [
 P42 = ('syn-p42-abs', 'syn-p42-cmp')
 
 
-# Synthetic picks from configs/analysis/b5/step4_reason_classes.json (L9-STEP4-2).
+# Synthetic picks from configs/analysis/b5/step4_reason_classes.json (L9-STEP4-2):
+# a blind-mask code that is not R3, a tooling code, an unlisted code and an R3 code.
 MASK = 'insufficient_idle_samples'
 TOOLING = 'marker_self_digest_mismatch'
 UNLISTED = 'syn_reason_in_neither_list'
+R3 = 'kept_units_below_minimum'
+R3_CODES = ('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold',
+            'calibration_acceptance_bound_stale', 'clock_bound_exceeds_quarter_window',
+            'insufficient_in_window_samples', 'insufficient_members_after_exclusion',
+            'instrument_calibration_stale', 'kept_units_below_minimum')
 
 
 def cell(cell_id, refused, reasons=(MASK,)):
@@ -30,7 +36,7 @@ def cell(cell_id, refused, reasons=(MASK,)):
 
 
 def report(refused=(), reasons=None, **changes):
-    """Refused cells carry a mask reason unless `reasons` maps a cell id to its own."""
+    """Refused cells carry a non-R3 mask reason unless `reasons` maps a cell id to its own."""
     reasons = reasons or {}
     value = {'spec_membership_refusals': [],
              'cells': [cell(c['cell_id'], c['cell_id'] in refused, reasons.get(c['cell_id'], (MASK,)))
@@ -66,11 +72,13 @@ class Step4ExitClassTests(unittest.TestCase):
             with self.subTest(refused=refused):
                 self.assertClass(report(refused), 'p42_floor_cells_only', 'ok')
 
-    def test_S2_a_non_p42_floor_cell_not_extractable_is_an_outcome_class(self):
+    def test_S2_a_refused_non_p42_floor_cell_is_a_stop_never_an_outcome(self):
+        # L9-STEP4-3: floor_cell_not_extractable (outcome_class) at 8222d0e47 for these mask-only reports.
         for refused in (('syn-target',), ('syn-cmp',), ('syn-target', *P42)):
             with self.subTest(refused=refused):
-                self.assertClass(report(refused), 'floor_cell_not_extractable', 'outcome_class')
-        self.assertIn('floor_cell_not_extractable', d.refusal_classes()['outcome_class'])
+                self.assertClass(report(refused), 'extraction_cell_tooling_refusal', 'tooling_refusal')
+        classes = d.refusal_classes()
+        self.assertNotIn('floor_cell_not_extractable', classes['tooling_refusal'] + classes['outcome_class'])
 
     def test_S2_p42_floor_cells_are_absolute_or_comparative_cells_of_the_p42_family_token(self):
         spec = copy.deepcopy(SPEC)
@@ -80,13 +88,13 @@ class Step4ExitClassTests(unittest.TestCase):
             with self.subTest(refused=refused):
                 rep = {'spec_membership_refusals': [],
                        'cells': [cell(c['cell_id'], c['cell_id'] in refused) for c in spec['cells']]}
-                self.assertClass(rep, 'floor_cell_not_extractable', 'outcome_class', spec)
+                self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal', spec)
 
-    def test_S2_a_refused_cell_in_a_spec_without_p42_cells_is_an_outcome_class(self):
+    def test_S2_a_refused_cell_in_a_spec_without_p42_cells_is_a_stop(self):
         spec = {'cells': SPEC['cells'][:2]}
         rep = {'spec_membership_refusals': [],
                'cells': [cell('syn-target', True), cell('syn-cmp', False)]}
-        self.assertClass(rep, 'floor_cell_not_extractable', 'outcome_class', spec)
+        self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal', spec)
 
     def test_S3_spec_membership_refusal_is_tooling(self):
         for refused in ((), P42, ('syn-target',)):
@@ -153,52 +161,67 @@ class Step4ExitClassTests(unittest.TestCase):
 
 
 class Step4ReasonClassTests(unittest.TestCase):
-    """L9-STEP4-2: a refused non-p42 cell is an outcome only on mask reasons.
+    """L9-STEP4-3 ruling: every refused non-p42 cell is a stop, named by its reasons' class.
 
-    At origin/main (0a9ff42) every exit-1 case below that names
-    extraction_cell_tooling_refusal or extraction_report_malformed returned
-    floor_cell_not_extractable, recorded as outcome_class.
+    At 8222d0e47 the mask-only cases below returned floor_cell_not_extractable
+    (outcome_class), and extraction_cell_r3_refusal did not exist.
     """
     assertClass = Step4ExitClassTests.assertClass
 
     def test_R2_tooling_only_reasons_are_a_tooling_refusal(self):
-        for reasons in ((TOOLING,), (TOOLING, 'content_digest')):
+        for reasons in ((TOOLING,), (TOOLING, 'content_digest'), ('window_evidence_precheck_missing',)):
             with self.subTest(reasons=reasons):
                 rep = report(('syn-target',), {'syn-target': reasons})
                 self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal')
 
-    def test_R2_mixed_tooling_and_mask_reasons_are_a_tooling_refusal(self):
-        for refused, reasons in ((('syn-target',), {'syn-target': (MASK, TOOLING)}),
-                                 (('syn-target', 'syn-cmp'), {'syn-target': (MASK,), 'syn-cmp': (TOOLING,)}),
-                                 (('syn-target', *P42), {'syn-target': (TOOLING, MASK)})):
-            with self.subTest(refused=refused, reasons=reasons):
-                self.assertClass(report(refused, reasons), 'extraction_cell_tooling_refusal', 'tooling_refusal')
+    def test_R2_blind_mask_codes_outside_r3_are_a_tooling_refusal(self):
+        # Fable F3/F4 and Opus F3: reachable mask codes that are not R3 are tooling.
+        for reasons in ((MASK,), ('cell_stale',), ('admissible_set_uncertainty_dominates_point_floor',),
+                        ('calibration_bracket_exceeds_minted_bound',), ('sensitivity_bound_below_operative',),
+                        ('numeric_padding_insufficient', 'proposal_count_exceeds_configured_cap')):
+            with self.subTest(reasons=reasons):
+                rep = report(('syn-target',), {'syn-target': reasons})
+                self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal')
 
-    def test_R2_mask_only_reasons_are_the_outcome_class(self):
-        for refused, reasons in ((('syn-target',), {'syn-target': (MASK,)}),
-                                 (('syn-target', 'syn-cmp'), {'syn-target': (MASK, 'cell_stale'),
-                                                             'syn-cmp': ('kept_units_below_minimum',)}),
-                                 (('syn-target', *P42), {'syn-target': (MASK,), P42[0]: (TOOLING,)})):
+    def test_R2_r3_only_reasons_are_an_r3_refusal(self):
+        for code in R3_CODES:
+            with self.subTest(code=code):
+                self.assertClass(report(('syn-target',), {'syn-target': (code,)}),
+                                 'extraction_cell_r3_refusal', 'tooling_refusal')
+        rep = report(('syn-target', 'syn-cmp'), {'syn-target': R3_CODES, 'syn-cmp': (R3,)})
+        self.assertClass(rep, 'extraction_cell_r3_refusal', 'tooling_refusal')
+
+    def test_R2_r3_takes_precedence_over_tooling_on_any_refused_non_p42_cell(self):
+        for refused, reasons in ((('syn-target',), {'syn-target': (TOOLING, R3)}),
+                                 (('syn-target',), {'syn-target': (UNLISTED, MASK, 'cadence_ratio_below_threshold')}),
+                                 (('syn-target', 'syn-cmp'), {'syn-target': (TOOLING,), 'syn-cmp': (R3,)}),
+                                 (('syn-target', 'syn-cmp'), {'syn-target': (R3,), 'syn-cmp': (UNLISTED,)}),
+                                 (('syn-target', *P42), {'syn-target': (TOOLING, 'instrument_calibration_stale')})):
             with self.subTest(refused=refused, reasons=reasons):
-                self.assertClass(report(refused, reasons), 'floor_cell_not_extractable', 'outcome_class')
+                self.assertClass(report(refused, reasons), 'extraction_cell_r3_refusal', 'tooling_refusal')
+
+    def test_R2_an_r3_code_on_a_p42_cell_does_not_make_a_target_refusal_r3(self):
+        rep = report(('syn-target', *P42), {'syn-target': (TOOLING,), P42[0]: (R3,), P42[1]: (R3,)})
+        self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal')
 
     def test_R2_an_unclassified_reason_is_a_tooling_refusal(self):
-        for reasons in ((UNLISTED,), (MASK, UNLISTED), ('',)):
+        for reasons in ((UNLISTED,), (MASK, UNLISTED), ('',), (R3 + ' ',), (R3.upper(),)):
             with self.subTest(reasons=reasons):
                 rep = report(('syn-target',), {'syn-target': reasons})
                 self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal')
 
-    def test_R2_no_reason_is_an_outcome_only_without_a_floor(self):
+    def test_R2_a_refused_non_p42_cell_without_reasons_is_a_malformed_report(self):
+        # At 8222d0e47 an empty list with floor null was floor_cell_not_extractable (outcome_class).
         rep = report(('syn-target',), {'syn-target': ()})
-        self.assertClass(rep, 'floor_cell_not_extractable', 'outcome_class')
         with_floor = copy.deepcopy(rep);with_floor['cells'][0]['floor'] = {'guarded_floor_j': None}
         no_floor_key = copy.deepcopy(rep);del no_floor_key['cells'][0]['floor']
-        for bad in (with_floor, no_floor_key):
-            with self.subTest(cell=bad['cells'][0]):
-                self.assertClass(bad, 'extraction_cell_tooling_refusal', 'tooling_refusal')
+        beside_r3 = report(('syn-target', 'syn-cmp'), {'syn-target': (R3,), 'syn-cmp': ()})
+        for bad in (rep, with_floor, no_floor_key, beside_r3):
+            with self.subTest(cells=bad['cells'][:2]):
+                self.assertClass(bad, 'extraction_report_malformed', 'tooling_refusal')
 
     def test_R2_p42_cell_reasons_are_irrelevant_to_the_registered_exit(self):
-        for reasons in ((TOOLING,), (UNLISTED,), (MASK, TOOLING), ()):
+        for reasons in ((TOOLING,), (UNLISTED,), (MASK, TOOLING), (R3,), (R3, TOOLING), ()):
             with self.subTest(reasons=reasons):
                 rep = report(P42, {P42[0]: reasons, P42[1]: reasons})
                 self.assertClass(rep, 'p42_floor_cells_only', 'ok')
@@ -216,10 +239,21 @@ class Step4ReasonClassTests(unittest.TestCase):
         rep = report(P42);del rep['cells'][0]['refusal_reasons']
         self.assertClass(rep, 'p42_floor_cells_only', 'ok')
 
-    def test_R2_new_code_is_registered_tooling_only(self):
+    def test_R2_new_codes_are_registered_tooling_only(self):
         classes = d.refusal_classes()
-        self.assertIn('extraction_cell_tooling_refusal', classes['tooling_refusal'])
-        self.assertNotIn('extraction_cell_tooling_refusal', classes['outcome_class'])
+        for code in ('extraction_cell_tooling_refusal', 'extraction_cell_r3_refusal'):
+            with self.subTest(code=code):
+                self.assertIn(code, classes['tooling_refusal'])
+                self.assertNotIn(code, classes['outcome_class'])
+
+    def test_R2_no_step4_exit_1_report_is_an_outcome_class(self):
+        reports = [report(refused, {c: reasons for c in refused})
+                   for refused in (('syn-target',), ('syn-cmp',), ('syn-target', *P42))
+                   for reasons in ((MASK,), (TOOLING,), (UNLISTED,), (R3,), ())]
+        for rep in reports:
+            with self.subTest(report=rep['cells']):
+                code = classify_step4_exit(1, rep, SPEC)
+                self.assertNotEqual(record(code).status, 'outcome_class')
 
 
 if __name__ == '__main__':

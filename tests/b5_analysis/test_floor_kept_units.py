@@ -928,7 +928,7 @@ class IndexedCliTests(unittest.TestCase):
         return self.real_composition(*args, **kwargs, seal_pins=SealPins.load(), pack_table=fx.PACK_TABLE,
             test_only_allow_synthetic_binding=True, repo_root=self.fixture.local_repo)
 
-    def real_output(self, target_refused=False):
+    def real_output(self, target_refused=False, target_reason="window_evidence_precheck_missing"):
         root, spec = arithmetic()
         spec = copy.deepcopy(spec)
         aliases = copy.deepcopy(spec["cells"])
@@ -943,8 +943,10 @@ class IndexedCliTests(unittest.TestCase):
             result = real(**kwargs)
             # These cell calls share a metric; the named precheck seam records
             # a p42 outcome on the two later calls, with real arithmetic elsewhere.
-            if self._evaluated_cell >= 2 or (target_refused and self._evaluated_cell == 0):
+            if self._evaluated_cell >= 2:
                 return replace(result, reasons=("window_evidence_precheck_missing",))
+            if target_refused and self._evaluated_cell == 0:
+                return replace(result, reasons=(target_reason,))
             return result
         real_abs, real_cmp = fe.extract_absolute_cell, fe.extract_comparative_cell
         def absolute(**kwargs):
@@ -958,31 +960,36 @@ class IndexedCliTests(unittest.TestCase):
 
     def test_r14_real_index_context_composition_with_registered_p42_exit(self):
         self.real_composition = cli.extract_indexed_pack
-        # L9-STEP4-2: the seam's window_evidence_precheck_missing is a tooling reason, so a
-        # refused target is a tooling refusal (floor_cell_not_extractable at origin/main 0a9ff42).
-        for target_refused, expected in ((False, "p42_floor_cells_only"), (True, "extraction_cell_tooling_refusal")):
-            output = self.real_output(target_refused)
-            out = self.fixture.directory / ("target-refused.json" if target_refused else "p42-only.json")
-            if out.exists():
-                out.unlink()
-            stderr, stdout = io.StringIO(), io.StringIO()
-            with s2.capture_adapter(), mock.patch.object(cli, "extract_indexed_pack", side_effect=self.composition),                  mock.patch.object(cli, "extract_cells", return_value=output) as extract,                  contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
-                code = cli.main(["--window-index", str(self.fixture.index), "--pack", "beta", "--hash-bundles", "--out", str(out)])
-            self.assertEqual(code, 1, stderr.getvalue())
-            report = json.loads(out.read_bytes())
-            self.assertEqual(classify_step4_exit(code, report, self.fixture.spec), expected)
-            self.assertEqual(report["spec_membership_refusals"], [])
-            self.assertEqual(stdout.getvalue(), "")
-            args, kwargs = extract.call_args
-            self.assertEqual(args[0], self.fixture.window.claim)
-            self.assertEqual(args[1], self.fixture.spec)
-            self.assertEqual(kwargs["evaluation_basis_sha256"], self.fixture.row["evaluation_basis"]["sha256"])
-            self.assertEqual(kwargs["consumption_semantics_id"], ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID)
-            self.assertEqual(kwargs["mode"], "read_replay")
-            self.assertIs(kwargs["hash_bundles"], True)
-            self.assertIsInstance(kwargs["kept_units"], KeptUnits)
-            self.assertIsInstance(kwargs["archive_context"], ww.ArchiveContext)
-            self.assertEqual(kwargs["archive_context"].neg8_harvest_archive, self.fixture.window.archive)
+        # L9-STEP4-3: a refused target is a stop named by its reasons' class. The seam's
+        # window_evidence_precheck_missing is tooling; cadence_ratio_below_threshold is a plan
+        # section 2.2 R3 code. Both were floor_cell_not_extractable at origin/main 0a9ff42.
+        for target_refused, reason, expected in (
+                (False, None, "p42_floor_cells_only"),
+                (True, "window_evidence_precheck_missing", "extraction_cell_tooling_refusal"),
+                (True, "cadence_ratio_below_threshold", "extraction_cell_r3_refusal")):
+            with self.subTest(target_refused=target_refused, reason=reason):
+                output = self.real_output(target_refused, reason)
+                out = self.fixture.directory / ("target-refused-%s.json" % reason if target_refused else "p42-only.json")
+                if out.exists():
+                    out.unlink()
+                stderr, stdout = io.StringIO(), io.StringIO()
+                with s2.capture_adapter(), mock.patch.object(cli, "extract_indexed_pack", side_effect=self.composition),                  mock.patch.object(cli, "extract_cells", return_value=output) as extract,                  contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+                    code = cli.main(["--window-index", str(self.fixture.index), "--pack", "beta", "--hash-bundles", "--out", str(out)])
+                self.assertEqual(code, 1, stderr.getvalue())
+                report = json.loads(out.read_bytes())
+                self.assertEqual(classify_step4_exit(code, report, self.fixture.spec), expected)
+                self.assertEqual(report["spec_membership_refusals"], [])
+                self.assertEqual(stdout.getvalue(), "")
+                args, kwargs = extract.call_args
+                self.assertEqual(args[0], self.fixture.window.claim)
+                self.assertEqual(args[1], self.fixture.spec)
+                self.assertEqual(kwargs["evaluation_basis_sha256"], self.fixture.row["evaluation_basis"]["sha256"])
+                self.assertEqual(kwargs["consumption_semantics_id"], ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID)
+                self.assertEqual(kwargs["mode"], "read_replay")
+                self.assertIs(kwargs["hash_bundles"], True)
+                self.assertIsInstance(kwargs["kept_units"], KeptUnits)
+                self.assertIsInstance(kwargs["archive_context"], ww.ArchiveContext)
+                self.assertEqual(kwargs["archive_context"].neg8_harvest_archive, self.fixture.window.archive)
 
     def test_r15_archive_spec_mismatch_exit_two_before_extraction(self):
         self.real_composition = cli.extract_indexed_pack
