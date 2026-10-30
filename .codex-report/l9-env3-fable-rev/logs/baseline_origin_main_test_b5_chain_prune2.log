@@ -1,0 +1,396 @@
+...F...E.EEE.E............E..EE...EE........
+======================================================================
+ERROR: test_every_non_member_stage_but_the_post_capture_and_the_in_shell_screen_is_budgeted (tests.test_b5_chain_prune2.BudgetRenderTests.test_every_non_member_stage_but_the_post_capture_and_the_in_shell_screen_is_budgeted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 627, in test_every_non_member_stage_but_the_post_capture_and_the_in_shell_screen_is_budgeted
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_a_failed_bundle_is_never_re_measured_and_nothing_is_flagged (tests.test_b5_chain_prune2.CorpusRetryTests.test_a_failed_bundle_is_never_re_measured_and_nothing_is_flagged)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 867, in test_a_failed_bundle_is_never_re_measured_and_nothing_is_flagged
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_nine_pre_bundle_refusals_are_measured_by_one_retry_and_flagged (tests.test_b5_chain_prune2.CorpusRetryTests.test_nine_pre_bundle_refusals_are_measured_by_one_retry_and_flagged)
+Before: 9 of 18 left the bound underived (neg8.bound_not_derived, the whole window excluded).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 828, in test_nine_pre_bundle_refusals_are_measured_by_one_retry_and_flagged
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_the_retry_decision_counts_only_members_that_succeeded (tests.test_b5_chain_prune2.CorpusRetryTests.test_the_retry_decision_counts_only_members_that_succeeded)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 856, in test_the_retry_decision_counts_only_members_that_succeeded
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_collection_and_pre_slot_countdowns_are_zero_and_the_post_slot_keeps_twenty (tests.test_b5_chain_prune2.CountdownTests.test_collection_and_pre_slot_countdowns_are_zero_and_the_post_slot_keeps_twenty)
+Before: every collection stage passed the pack's --arm-countdown-s 20 and both slots 20.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 104, in test_collection_and_pre_slot_countdowns_are_zero_and_the_post_slot_keeps_twenty
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_a_writer_the_budget_kills_still_leaves_the_marker_in_the_chain_log (tests.test_b5_chain_prune2.FlagHelperTests.test_a_writer_the_budget_kills_still_leaves_the_marker_in_the_chain_log)
+Review F4: when the wall budget stops the writer, the chain prints the marker itself.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 784, in test_a_writer_the_budget_kills_still_leaves_the_marker_in_the_chain_log
+    completed = subprocess.run(["/bin/zsh", "-f", "-c", script], capture_output=True, text=True,
+                               timeout=60, check=False)
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_the_first_stage_that_cannot_finish_ends_collection_even_for_later_small_stages (tests.test_b5_chain_prune2.HorizonMidChainTests.test_the_first_stage_that_cannot_finish_ends_collection_even_for_later_small_stages)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 672, in test_the_first_stage_that_cannot_finish_ends_collection_even_for_later_small_stages
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_past_the_deadline_every_collection_is_skipped_and_the_post_capture_still_runs (tests.test_b5_chain_prune2.HorizonPassedTests.test_past_the_deadline_every_collection_is_skipped_and_the_post_capture_still_runs)
+Before: the chain launched every stage whatever the horizon (render_chain had no deadline).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 641, in test_past_the_deadline_every_collection_is_skipped_and_the_post_capture_still_runs
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_the_verdict_is_written_once_after_the_screen_and_before_the_first_collection (tests.test_b5_chain_prune2.VerdictChainTests.test_the_verdict_is_written_once_after_the_screen_and_before_the_first_collection)
+Before: no verdict step; every member refit the pre slot itself.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 150, in test_the_verdict_is_written_once_after_the_screen_and_before_the_first_collection
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+ERROR: test_a_verdict_that_is_not_verified_never_stops_the_chain (tests.test_b5_chain_prune2.VerdictFailureTests.test_a_verdict_that_is_not_verified_never_stops_the_chain)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 172, in test_a_verdict_that_is_not_verified_never_stops_the_chain
+    completed = self.run_chain()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 82, in run_chain
+    return subprocess.run(["/bin/zsh", "-f", self.plan.chain_path], env=environment, capture_output=True,
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                          text=True, timeout=300, check=False)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1040, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1877, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 1821, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/bin/zsh'
+
+======================================================================
+FAIL: test_an_expired_stage_loses_its_whole_process_tree_and_records_124 (tests.test_b5_chain_prune2.BudgetHelperTests.test_an_expired_stage_loses_its_whole_process_tree_and_records_124)
+Before: no budget; a hung reservation or derivation held the chain until the driver's deadline.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_b5_chain_prune2.py", line 510, in test_an_expired_stage_loses_its_whole_process_tree_and_records_124
+    self.assertIn("survivors none", completed.stderr)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'survivors none' not found in 'b5 chain budget: wall budget 1 s expired; SIGTERM to 2 process(es)\nb5 chain budget: stopped; survivors 4546\n'
+
+----------------------------------------------------------------------
+Ran 44 tests in 23.809s
+
+FAILED (failures=1, errors=10)

@@ -1,0 +1,9 @@
+short=0.005s long=2.0s 2g=0.04: origin/main=None; clamped == oracle: True; point=20.0500 lower=19.6000 upper=20.8500 ratio=0.0399
+   clamped-envelope gate reasons: []; analysis-side gate after restamp: {'eligible': False, 'reasons': []}; e1b3a0510 gate: {'eligible': True, 'reasons': []}
+   _classify_precheck_refusals sees reasons -> no refusal; analysis_engine.inputs: eligible False + no reasons -> window_evidence_precheck_missing
+short=0.03s long=1.0s 2g=0.04: origin/main=None; clamped == oracle: True; point=10.3000 lower=9.6000 upper=11.1000 ratio=0.0777
+   clamped-envelope gate reasons: []; analysis-side gate after restamp: {'eligible': False, 'reasons': []}; e1b3a0510 gate: {'eligible': True, 'reasons': []}
+   _classify_precheck_refusals sees reasons -> no refusal; analysis_engine.inputs: eligible False + no reasons -> window_evidence_precheck_missing
+short=0.001s long=8.0s 2g=0.04: origin/main=None; clamped == oracle: True; point=80.0100 lower=79.6000 upper=80.8100 ratio=0.0100
+   clamped-envelope gate reasons: []; analysis-side gate after restamp: {'eligible': False, 'reasons': []}; e1b3a0510 gate: {'eligible': True, 'reasons': []}
+   _classify_precheck_refusals sees reasons -> no refusal; analysis_engine.inputs: eligible False + no reasons -> window_evidence_precheck_missing

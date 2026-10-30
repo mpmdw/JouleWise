@@ -1,0 +1,4 @@
+0.6.2 structural: 300 random shapes, mismatches=0
+ItemWindow fields: ['item_id', 'item_index', 'status', 'window', 'start_metadata', 'end_metadata']
+0.5.2 structural: 300 random shapes, mismatches=0
+RESULT: PASS
