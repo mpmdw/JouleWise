@@ -9,7 +9,7 @@ Reconciler: Opus 5.5, JouleWise-data `claude/kb-revise-opus` at `0609bcc0caf941f
 `ecd46c1124000dbfbc51b475068661ceefb62a1f`, both `kb-cold/REPORT.md` in JouleWise-data, both
 ADMIT-WITH-CORRECTIONS. These are independent executing reviews by models that did not write the draft.
 The lead has adopted CHANGES.md option (a) for Fable 1: the disclosure, ε_flip and per-arm GPU frequency and
-residency remain; neither a new kernel nor a leverage model is adopted. Admission of this revision is still pending.
+residency remain; neither a new kernel nor a leverage model is adopted. **Admitted 2026-10-30 by the lead (magistrate activation 4e748ac1) at `559197821`**, after nine reader rounds. The last blind delta reviews (Sol 6, Opus 5) found no defect beyond those fixed in round 9. The lead re-ran Opus 5's `p8_major_cli.py` and `p8_grid.py` at `559197821`: every shape that printed a smaller bound now ends UNDETERMINED with its reason and no interval, and the worked output is bit-identical to round 8. It binds from this commit.
 
 It answers registration-gate finding 4 (Opus, `docs/process_traces/2026-10-24-magistrate-7209d1b0/REGGATE-OPUS.md`):
 before the test runs, say which quantity is reported and which outcome prints a caveat. "The registration" below
