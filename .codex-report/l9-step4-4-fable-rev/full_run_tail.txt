@@ -1,0 +1,10 @@
+# Item 6: whole tests/b5_analysis directory at a7e00c9f7 (review branch review/2026-10-30-l9-step4-4-fable-rev), unshallowed clone
+cwd /home/user/JouleWise; TMPDIR=/tmp/jwfab4tmp (outside the checkout, no float-like token)
+TMPDIR=/tmp/jwfab4tmp JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b5_analysis -t .
+exact tail:
+----------------------------------------------------------------------
+Ran 1029 tests in 3620.969s
+
+OK (skipped=13)
+EXIT=0
+FAIL/ERROR lines: 0
