@@ -151,6 +151,8 @@ Not touched: `joulewise/reduce.py`, the other ESTIMATOR_CODE_PATHS, `tests/b5_an
   downstream reader of `summary_for`.
 - O2: the clamp adds one anchor-context derivation and one envelope pass per dominated member.
   It runs inside the session only.
+- O4: `tests/test_harvest_v5_g2b_window.py:627` forbidden-token check is flaky: it scans bytes that contain
+  random-path-dependent sha256 values. This is outside the WRITE_SCOPE (not a new test) and was left as is.
 - O3: RC-CMP agreement should be rerun on the analysis-side values for block-5 at release
   (expected Δ ~1e-6 J, see A5).
 
@@ -270,4 +272,22 @@ Failures and their causes. None involves `whole_window`'s clamp; see BASELINE be
 - `test_v5_block4_x12b` (1), `test_v5_s1_desk_closeout` (2): `ValueError: backup command failed`.
 - `test_harvest_v5_g2b_window` (1): `b'314159' unexpectedly found` in a replay-locators file under TMPDIR.
 
-BASELINE: pending (origin/main worktree run of the same failing set in progress).
+BASELINE (origin/main `7ebb7db2a` worktree at `/tmp/lnine-env-three/base`, same env and TMPDIR): each failing
+module was rerun at origin/main and its sorted FAIL/ERROR test list compared with the branch's.
+```
+b5_analysis | Ran 1008 tests in 3708.896s | FAILED (errors=5, skipped=13) | same failing set
+tests.test_b5_chain | Ran 25 tests in 1.867s | FAILED (errors=21) | same failing set
+tests.test_b5_chain_prune2 | Ran 44 tests in 19.224s | FAILED (failures=1, errors=10) | same failing set
+tests.test_d117_floor_qwen25_1p5b_plan | Ran 22 tests in 17.014s | FAILED (errors=2) | same failing set
+tests.test_harvest_b5_sources | Ran 55 tests in 1.878s | FAILED (errors=3) | same failing set
+tests.test_harvest_b5_trigger_scope | Ran 28 tests in 186.488s | FAILED (errors=1) | same failing set
+tests.test_neg8_survivors | Ran 89 tests in 182.677s | FAILED (errors=4) | same failing set
+tests.test_repin | Ran 47 tests in 49.244s | FAILED (failures=1) | same failing set
+tests.test_v5_block4_x12b | Ran 11 tests in 14.712s | FAILED (errors=1) | same failing set
+tests.test_v5_s1_desk_closeout | Ran 7 tests in 3.431s | FAILED (errors=2) | same failing set
+tests.test_harvest_v5_g2b_window | Ran 28 tests in 17.214s | OK
+```
+`test_harvest_v5_g2b_window` is flaky, not a regression. Three reruns on the branch each gave `Ran 28 tests` / `OK`.
+The failing assertion looks for the token `b'314159'` anywhere in the bytes of a locator file. That file contains
+sha256 values that depend on the random temp-directory name, so one run matched by chance. This is
+OPEN ISSUE O4. Every other failure appears identically at origin/main.
