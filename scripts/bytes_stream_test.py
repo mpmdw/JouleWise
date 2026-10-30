@@ -958,7 +958,7 @@ def read_known_bytes(records, scan):
         call["gpu_state"] = h["gpu_state"]
         call["thermal"] = {"source":"hazards/monitor/thermal.jsonl","spans":h["thermal_spans"]}
     for beta in names:
-        if not scan_errors and scan.get("K") is not None and all(sizes.values()):
+        if scan.get("K") is not None and all(sizes.values()):
             output["boundaries"][beta] = reduce_boundary(output["calls"],sizes,beta)
             why = output["boundaries"][beta].get("reason", "")
             if "arithmetic unavailable" in why:
@@ -986,7 +986,7 @@ def read_known_bytes(records, scan):
                     ("delta","halfwidth","alpha","gamma_c","gamma_d","r","epsilon_flip",
                      "epsilon_flip_over_alpha","raw_stream_j_per_byte","arms")})
             output["boundaries"][beta] = value
-        elif invalid_dc_width:
+        elif scan_errors or invalid_dc_width:
             value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason),
                           "halfwidth":not_defined(reason),"upper_limit":not_defined(reason)})
         elif isinstance(value.get("halfwidth"),(int,float)) and (
