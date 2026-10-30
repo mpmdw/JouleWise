@@ -28,3 +28,8 @@ The Mac is at a desk now and runs the BY-EXT kit after it, so Sol runs in the cl
 - KB-V2 round 9, high: thread `01a18e14-5fdd-764c-8c44-46be46d80014`; brief `~/night-archive/seats-4e748ac1/kbv2-fix9/brief.md`.
 - BY-THERM-LINES fix round 5, xhigh: thread `01a18e14-605d-7371-8e3c-e1784bf8703a`; brief `~/night-archive/seats-4e748ac1/by-therm-fix5/brief.md`.
 - BY-EXT-2 fix round, high: thread `01a18e14-5fa4-72c1-bc48-89149aff5035`; brief `~/night-archive/seats-4e748ac1/byext2-fix/brief.md`.
+
+## BY-EXT-2 fix round (seat finished 11:4x)
+- Head `ee439ce19` on `desk/2026-10-29-byext-slots`: E1-E5 implemented; only the two scripts, their tests, the extension kit's README and plan tree, and the report changed; registered BYTES files and the original kit unchanged. Part A census unchanged (W 27,228,623,168 B; R 28,579,478,528 B). Seat ran 81 tests OK and `repin --check` PASS.
+- Lead re-execution: the Opus `checker_faults.py` at `ee439ce19` gives OK on every case (decode 60 s against a 50 s request and 1e12 s now fail; the missing midpoint and five-rows-only exports fail with the missing run ids; bool and string sizing fail). Log `~/night-archive/seats-4e748ac1/byext2-fix/lead/checker_faults_ee439ce.log`. The merge-guard repro is Linux-path bound; it was rerun by the seat, and the new manifest tests cover each case.
+- PR #608 had become unmergeable against main (no CI on the new head). It now targets `ci/2026-10-30-byext-base` = `4119e14bf`, the lane's own base, so CI runs the lane's tree.
