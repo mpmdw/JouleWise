@@ -1694,7 +1694,7 @@ class ProducerTrustTests(unittest.TestCase):
                      ('zero-stamp', [0, 100 * NS], [0, 80 * NS], True, 'evaluated'),
                      ('large-stamp', [0, 2**63], [0, 2**63], True, 'equals registered line'),
                      ('null-request', [20 * NS, 100 * NS], None, True, 'equals registered line'),
-                     ('null-both', None, None, True, 'equals registered line'),
+                     ('null-both', None, None, True, 'not defined ('),
                      ('null-member', None, [40 * NS, 80 * NS], True, 'not defined ('),
                      ('inverted-null-request', [100 * NS, 20 * NS], None, True, 'not defined (')]
             for name, member, request, present, expected in cases:
@@ -1847,3 +1847,18 @@ class ProducerTrustTests(unittest.TestCase):
                     self.assertEqual(record['changes'], [])
                     self.assertFalse(record['equals_registered_line'])
                     t.validate_record((out / 'thermal_line.json').read_text())
+
+    def test_null_request_fallback_still_checks_journal_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for present in (False, True):
+                archive = TrustArchive(Path(tmp) / str(present), 'request-end-p1', present, False)
+                archive.put(SPANS, {'spans': {'a': {'member': SPAN['member'], 'request': None}}})
+                # Re-seal a journal contradicting the registered hull code.
+                fixtures.thermal_journal(range(0, 126, 5), set() if present else {90}).dump(archive.journal)
+                archive.seal()
+                record, out = self.cli(archive, mode='request-end-p1')
+                self.assertEqual(record['changes'], [])
+                self.assertEqual(record['member_statuses'][0]['status'],
+                                 'not defined (journal does not reproduce the registered hull decision)' if present else 'equals registered line')
+                self.assertIn({'run_id': 'a', 'code': 'records.thermal_hull_replay_disagrees'}, record['notices'])
+                self.assertEqual((out / ACC).read_bytes(), (archive.a / ACC).read_bytes())

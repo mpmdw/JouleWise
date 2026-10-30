@@ -396,9 +396,17 @@ def validate_replay(member, request, readings, present, thresholds, reason, run)
     found = {code for code, *_ in h.thermal_member_flags([member[0], request[1]], readings, thresholds)}
     if CODE in found and not present and not reason:
         raise ValueError(f"request-end would add {CODE}: {run}")
-    hull = {code for code, *_ in h.thermal_member_flags(member, readings, thresholds)}
-    disagrees = (CODE in hull) != present and not reason
-    return CODE in found, ("journal does not reproduce the registered hull decision" if disagrees else reason), disagrees
+    reason, disagrees = validate_hull_replay(member, readings, present, thresholds, reason)
+    return CODE in found, reason, disagrees
+
+
+def validate_hull_replay(member, readings, present, thresholds, reason):
+    if reason:
+        return reason, False
+    replayed = (None if member is None else
+                CODE in {code for code, *_ in h.thermal_member_flags(member, readings, thresholds)})
+    disagrees = replayed is None or replayed != present
+    return ("journal does not reproduce the registered hull decision" if disagrees else None), disagrees
 
 
 def validate_sidecar(raw):
@@ -571,6 +579,10 @@ def transform(mode, archive, output, export=None):
                 member_span, request_span = span
                 if request_span is None:
                     notices.append({"run_id": run, "code": "request_span.absent_keep_hull"})
+                    reason, disagrees = validate_hull_replay(
+                        member_span, readings, CODE in before[run], thresholds, reason)
+                    if disagrees:
+                        notices.append({"run_id": run, "code": "records.thermal_hull_replay_disagrees"})
                 else:
                     found, reason, disagrees = validate_replay(
                         member_span, request_span, readings, CODE in before[run], thresholds, reason, run)
