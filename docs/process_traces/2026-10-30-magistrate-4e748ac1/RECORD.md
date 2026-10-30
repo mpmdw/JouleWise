@@ -33,3 +33,18 @@ The Mac is at a desk now and runs the BY-EXT kit after it, so Sol runs in the cl
 - Head `ee439ce19` on `desk/2026-10-29-byext-slots`: E1-E5 implemented; only the two scripts, their tests, the extension kit's README and plan tree, and the report changed; registered BYTES files and the original kit unchanged. Part A census unchanged (W 27,228,623,168 B; R 28,579,478,528 B). Seat ran 81 tests OK and `repin --check` PASS.
 - Lead re-execution: the Opus `checker_faults.py` at `ee439ce19` gives OK on every case (decode 60 s against a 50 s request and 1e12 s now fail; the missing midpoint and five-rows-only exports fail with the missing run ids; bool and string sizing fail). Log `~/night-archive/seats-4e748ac1/byext2-fix/lead/checker_faults_ee439ce.log`. The merge-guard repro is Linux-path bound; it was rerun by the seat, and the new manifest tests cover each case.
 - PR #608 had become unmergeable against main (no CI on the new head). It now targets `ci/2026-10-30-byext-base` = `4119e14bf`, the lane's own base, so CI runs the lane's tree.
+
+## Mac path scout (Sol high, Codex Cloud `01a18e1e-9a8e-734e-9429-f72ee2d9802c`; report `.codex-report/MAC-PATH-SCOUT.md` on `codex/2026-10-30-mac-path-scout` `c2b19b234`)
+Neither Mac run has an executable recipe today.
+- **KB-V2 stream test:** the probe, `scan` and `read` exist, but nothing runs the test unattended under one continuous capture, and no harvest step builds the reader's input from a capture (the rule's "Capture and harvest" paragraph; KB-V2 report). This is on the path to BYTES stage 1 (registration §1 and §19: after collection, before stage-1 unblinding).
+- **Extension kit:** `scripts/bytes_h_session.py` hard-codes the original kit; a kit selector alone fails at `registration.load_sizing` (no extension registration directory exists). It also needs extension-local registration, sizing and pin inputs, the extension roster in the identity mapping, and checker dispatch at the desk. The kit's own sizing does not exist yet, and S cannot be used for it.
+
+## Lead decisions
+- **KB capture lane launched:** KB-CAP-1 (Sol xhigh, design then build; brief `~/night-archive/seats-4e748ac1/kb-cap1/brief.md`; branch `codex/2026-10-30-kb-capture` from the KB-V2 branch). Preferred vehicle: one non-claim night window through the existing driver, with one new stage kind and a harvest producer that calls the pass-1 integrators unchanged, run end to end on production-shaped synthetic data.
+- **BYTES extension (Qwen3.8-27B-8bit) dropped under its registered rule**, "dropped first if time runs short" (`docs/registrations/bytes_extension_models_2026-10-27.md`; item 77 (0c)). Here is what remains before its last allowed t0 (2026-11-05 00:00 PDT):
+  - a runner lane;
+  - extension registration and sizing inputs;
+  - the kit run (quiet Mac, no agent alive);
+  - sizing, regeneration, a refuter gate and C4 pins;
+  - an s7-p1 smoke and session of about six hours.
+  The KB test needs the same quiet Mac before stage 1, and it is registered while the extension is not. The BY-EXT-2 code (manifest support and the kit, fixed and verified) stays on `desk/2026-10-29-byext-slots` for a later block. Ed is told in the s1-p2 verdict email and may overrule.
