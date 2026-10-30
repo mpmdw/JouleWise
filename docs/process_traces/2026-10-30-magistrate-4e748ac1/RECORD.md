@@ -113,3 +113,12 @@ Neither Mac run has an executable recipe today.
 - MAJOR (inherited): a string `session_id` such as `../../../escape` builds a withheld export path outside the output and overwrote a sibling file. It does not change which members count; the fix is a containment check.
 - MINOR (inherited): a sealed level of `10**1000` raises `OverflowError` in the production helper (exit 1, no record).
 - The disposition waits for the Opus delta.
+
+## BY-THERM-LINES Opus delta 4 (`claude/by-therm-lines-delta-opus-4` `e1b61a4d7`): REJECT
+- BLOCKER 1: the journal is not read the way the production parser reads it (consult §2 row 7). The production reader accepts four kinds of sealed line that the L1 writer never emits: a repeated key, NaN, a lone surrogate, a BOM. The lexer drops them as malformed. The tool then computes the request-end line on a different set of readings and restores a member (4 of 4 cases). Exposure on real L1 data is nil: on a fresh real harvest the tool's and production's readings agree, 103/103.
+- MAJOR 2: repeated roster `run_id`s are accepted, so one member is evaluated twice and duplicate rows are written.
+- MINOR 3: the replay-disagrees notice is emitted when no replay was possible. NITs 4-5.
+- Held: the lexer equals strict `json.loads` on 200,000 fuzzed documents (lone surrogates aside); every validator held; no wrong refusal on a new production-shaped harvest; pass identity, verify roots and export cases all held; both modules pass.
+- Lead disposition: fix round 6 (Sol high; brief `~/night-archive/seats-4e748ac1/by-therm-fix6/brief.md`), rulings A1-A5 (Opus 1-3, Sol 1-2); Opus 4-5 unchanged.
+  - Why a round and not a consult: the class appeared again, but each instance is a departure from the adopted consult's own rule (row 7 says the production parser's readings; X7/X8 say producer-possible identities), not a gap in the rule. Each fix is local and fully specified. A second consult would re-derive the same rule.
+  - After round 6, the lead re-executes Opus's `probe_journal_divergence.py` and `misc_probes.py` and Sol's two repros. Another blind round follows only if a probe still changes which members count.
