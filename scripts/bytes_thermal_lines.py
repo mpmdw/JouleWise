@@ -252,7 +252,7 @@ def unit_valid(unit):
 def validate_roster(raw):
     """Project roster identities and units; structural absence is a stop (X10)."""
     doc = document(raw)
-    members, reason = [], None
+    members, reason, seen = [], None, set()
     for node in doc.field("members").elements():
         if node.kind != "{":
             raise ValueError("roster members is not a list of objects")
@@ -260,6 +260,10 @@ def validate_roster(raw):
         if not isinstance(run, str):
             reason = reason or "roster member missing run_id"
             run = None
+        if run is not None:
+            if run in seen:
+                reason = reason or "roster repeated run_id"
+            seen.add(run)
         if not isinstance(kind, str):
             reason = reason or "roster member kind invalid"
             kind = "science"

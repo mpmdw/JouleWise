@@ -1952,3 +1952,20 @@ class RoundSixTests(unittest.TestCase):
             record = t.transform('request-end-p1', x.a, x.root / 'out')
             self.assertEqual(record['restored_members'], ['a'])
             self.assertIn({'code': 'records.monitor_line_malformed'}, record['notices'])
+
+    def test_duplicate_roster_identity_is_global_fault(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for mode in ('hull-p2', 'request-end-p1'):
+                for kind in ('science', 'reference'):
+                    x = TrustArchive(Path(tmp) / (mode + kind), mode, mode == 'request-end-p1', True)
+                    roster = json.loads(x.text(ROS))
+                    duplicate = dict(roster['members'][0], kind=kind)
+                    roster['members'].append(duplicate)
+                    roster['members'].append(dict(duplicate, run_id='b', kind='science'))
+                    x.put(ROS, roster)
+                    record = t.transform(mode, x.a, x.root / 'out')
+                    statuses = {m['run_id']: m['status'] for m in record['member_statuses']}
+                    for run in ('a', 'b'):
+                        self.assertEqual(statuses[run], 'not defined (roster repeated run_id)')
+                    self.assertEqual(record['changes'], [])
+                    self.assertEqual((x.root / 'out' / ACC).read_bytes(), (x.a / ACC).read_bytes())
