@@ -326,11 +326,17 @@ def validate_plan(read, archive, pack_id, mode):
     return "pass mismatch"
 
 
-def validate_hull(doc, run):
+def validate_hull(doc, run, notices):
     try:
         value = doc.field("members").field(run).field(FIELD)
         excluded, available = value.field("excluded").scalar(), value.field("journal_available").scalar()
-        if type(excluded) is bool and type(available) is bool and available:
+        if type(available) is not bool or (excluded is not None and type(excluded) is not bool):
+            raise ValueError("invalid hull assessment")
+        if not available:
+            notices.append({"run_id": run, "code": "thermal.unmeasured"})
+        if excluded is None:
+            notices.append({"run_id": run, "code": "member.span_unknown"})
+        if available and excluded is not None:
             return excluded, None
     except ValueError:
         pass
@@ -569,7 +575,7 @@ def transform(mode, archive, output, export=None):
         reason = global_fault or structural.get(run) or ("pass mismatch" if pass_mismatch else unavailable)
         candidate = set(before[run])
         if not reason and mode == "hull-p2":
-            excluded, reason = validate_hull(assessments, run)
+            excluded, reason = validate_hull(assessments, run, notices)
             if excluded:
                 candidate.add(CODE)
         elif not reason:
