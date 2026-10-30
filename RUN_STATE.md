@@ -674,6 +674,15 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Ruling proposed by the block-5 lead (pending Opus's review):** at step 4, any refused non-p42 cell is TOOLING (`extraction_cell_tooling_refusal`), whatever its reasons, and the reachable MASK set is registered as empty. This fails closed, and it selects no data: attempt B's probe already showed only tooling refusals. The table and its regeneration test change in the same head.
 - **Orchestrator's view:** I agree, on one condition. "Tooling" here means "stop: this run cannot complete". It does not license changing code until a refused cell extracts. For the codes the plan routes to R3 (F1, F2, and F5 if it is ruled that way), the cure is an Ed ruling under §2.2, not a code fix and a rerun. The blind record should therefore separate R3-routed reasons from code-defect reasons using structure-only class codes. Any cure that changes which cells or units extract is analysis-selection and needs a ruling before the rerun.
 
+133. **Step-4 stops split into code defects and ruling questions (agreed by the block-5 lead and the orchestrator, 2026-10-30 ~04:10Z).**
+- This lands in L9-STEP4-3, in the same head as the table fixes from item 132, unless Opus objects.
+- There are two registered tooling-class codes:
+  - `extraction_cell_tooling_refusal`: a code or integrity defect. The cure is a code fix and a rerun.
+  - `extraction_cell_r3_refusal`: one of the plan §2.2 R3 codes, which are `kept_units_below_minimum`, the six forwarded precheck codes, and F5's code if it is ruled that way. The cure is an Ed ruling under §2.2, not a code change.
+- When both kinds appear among the refused cells, the R3 code wins, so a ruling question is never hidden behind a code fix.
+- The brief states that any cure which changes which cells or units extract is a selection change, and needs a ruling before any rerun.
+- Attempt B's three reasons were `anchor_energy_envelope_unrecorded`, `common_mode_authenticated_bracket_required` and `whole_window_verdict_provenance_invalid`. None of them is an R3 code: they are session-readiness and integrity codes. B's cure is therefore a code fix, the envelope diagnosis from item 129, not a ruling. The block-5 lead will still confirm that the fix leaves cell selection unchanged.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
