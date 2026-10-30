@@ -1268,6 +1268,13 @@ def _clamp_inverted_operative_envelopes(
                     return summary
                 reproduced += 1
                 continue
+            # L9-ENV-6 (final-pass F1): reduce omits a pointer only when its
+            # mint function refuses, so a mirror that mints this pointer
+            # unclamped disagrees with reduce; fail closed.
+            if _corner_composed_anchor_shift_envelope(
+                contributions, *bounds
+            ) is not None:
+                return summary
             envelope = _clamped_corner_composed_anchor_shift_envelope(
                 contributions, *bounds
             )
