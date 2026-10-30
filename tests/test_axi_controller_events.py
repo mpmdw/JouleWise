@@ -29,6 +29,7 @@ from scripts.run_campaign import (
     load_analysis_manifest,
     run_axi_spec_campaign,
 )
+from tests.custody_isolation import isolate_custody_parent
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -162,6 +163,10 @@ class FakeAxiRegistry:
 
 
 class AxiControllerEventTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Campaigns publish active-campaign entries; never under the real ~/night-custody.
+        isolate_custody_parent(self)
+
     def run_axi(self, config_name: str, *, cancelled: bool = False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
