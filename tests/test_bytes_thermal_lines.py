@@ -1739,6 +1739,18 @@ class ProducerTrustTests(unittest.TestCase):
                 record, out = self.cli(archive, export=export)
                 self.assertEqual(record['member_statuses'][0]['status'], 'not defined (changed member absent from export)')
                 self.assertEqual((out / 'export/s.session.json').read_bytes(), raw)
+            archive = TrustArchive(Path(tmp) / 'unreadable', 'hull-p2', False, True)
+            export = archive.root / 'export'
+            export.mkdir()
+            (export / 's.runs.csv').write_text('run_id,exclusion_codes\nr,\n')
+            sidecar = export / 's.session.json'
+            sidecar.write_text('{}')
+            sidecar.chmod(0)
+            try:
+                record, _ = self.cli(archive, export=export)
+                self.assertEqual(record['member_statuses'][0]['status'], 'not defined (changed member absent from export)')
+            finally:
+                sidecar.chmod(0o644)
         for raw in ('run_id,exclusion_codes\na,b"c\n', 'run_id,exclusion_codes\na,"b"x\n'):
             self.assertIsNotNone(t.validate_export(raw)[1])
 
