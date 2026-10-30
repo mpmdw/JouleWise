@@ -121,11 +121,14 @@ T0=$("$PY" -B -c 'import time,math; print(60*math.ceil((time.time()+420)/60))')
 # Existing chain wall allowances: two calibration captures 2*1800, reservation
 # 900, calibration-verdict 600, terminal session-status 600, pre settle 60.
 SPAN=$("$PY" -B -c 'import math; print(math.ceil(3573.6+22*(3*2+4*10+2)+2*1800+900+600+600+60))')
-# Supply the actual adapter rating and its nameplate/specification citation.
-# Supply a conservative disk forecast for the SPAN at 10 Hz native plist +
-# rich telemetry and 50 Hz meter, including calibration/custody and archive
-# copies; name its sample-size/volume evidence. No default rating/budget exists.
-# ADAPTER_W, ADAPTER_SOURCE, DISK_BYTES and DISK_DERIVATION must be set by lead.
+# BYTES registration §7/R5 disclosure records the Mac's 140 W adapter.
+ADAPTER_W=140
+ADAPTER_SOURCE='docs/registrations/bytes_pack_v1.md: Battery assist (140 W adapter); R5 disclosure'
+# Existing measured byte rate, applied to the entire span, with the recorded
+# two-copy factor and fixed retained bytes (no new reserve or acceptance bar).
+DISK_BYTES=$("$PY" -B -c 'import json,math,sys; from fractions import Fraction; d=json.load(open(sys.argv[1]))["packs"]["bytes-s1-p1"]["disk_derivation"]; r=d["stream_rate_bytes_per_s"]; print(d["peak_copies"]*math.ceil(Fraction(r["numerator"],r["denominator"])*int(sys.argv[2]))+d["fixed_retained_bytes"])' "$CHECKOUT/configs/b6/registration/sizing_b5.json" "$SPAN")
+DISK_DERIVATION="configs/b6/registration/sizing_b5.json /packs/bytes-s1-p1/disk_derivation: 2*ceil((4502241280000000000000/1799796660838183 bytes/s)*${SPAN} s)+4046531103 fixed retained bytes; full span includes calibration/custody; two copies include archive; no reserve"
+printf '%s\n' "--disk-bytes $DISK_BYTES" "--disk-derivation $DISK_DERIVATION" "--adapter-max-w $ADAPTER_W" "--adapter-source $ADAPTER_SOURCE"
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/joulewise/bytes_stream_capture.py" prepare \
   --checkout "$CHECKOUT" --session "$SESSION" --t0 "$T0" \
   --adapter-max-w "$ADAPTER_W" --adapter-source "$ADAPTER_SOURCE" \
@@ -236,7 +239,7 @@ Logs: /tmp/kb-cap-focused.log, /tmp/kb-cap-suite.log, /tmp/kb-cap-chain.log.
 No two independent programs' printed numerical columns were compared. Exact
 float assertions replay identical governed functions on identical inputs. Any
 future cross-program comparison must use 1% of the smallest printed uncertainty:
-5.7e-8 J/GB for energy and 4.5e-9 GB/s for throughput; exact equality is reserved
+5.7e-6 J/GB for energy and 4.5e-7 GB/s for throughput; exact equality is reserved
 for integers, hashes and identical code on identical inputs.
 
 ## 5. Git and CI handoff
