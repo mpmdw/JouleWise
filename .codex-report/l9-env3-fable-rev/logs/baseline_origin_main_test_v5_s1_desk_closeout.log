@@ -1,0 +1,36 @@
+.....EE
+======================================================================
+ERROR: test_two_verified_copies_closeout_off_identity_and_observed_restore (tests.test_v5_s1_desk_closeout.DeskCloseoutTests.test_two_verified_copies_closeout_off_identity_and_observed_restore)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_s1_desk_closeout.py", line 106, in test_two_verified_copies_closeout_off_identity_and_observed_restore
+    result = self.close()
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_s1_desk_closeout.py", line 103, in close
+    return desk.closeout(self.plan_path)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/v5_s1_desk_closeout.py", line 190, in closeout
+    copies = backup_sources(sources, destinations[role], Path(plan.measurement_root) / "scripts/backup_runs.sh")
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/v5_s1_desk_closeout.py", line 50, in backup_sources
+    raise ValueError("backup command failed")
+ValueError: backup command failed
+
+======================================================================
+ERROR: test_unavailable_off_witness_leaves_backup_destinations_retryable (tests.test_v5_s1_desk_closeout.DeskCloseoutTests.test_unavailable_off_witness_leaves_backup_destinations_retryable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_s1_desk_closeout.py", line 170, in test_unavailable_off_witness_leaves_backup_destinations_retryable
+    self.assertEqual(self.close()["status"], "COMPLETE")
+                     ~~~~~~~~~~^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_s1_desk_closeout.py", line 103, in close
+    return desk.closeout(self.plan_path)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/v5_s1_desk_closeout.py", line 190, in closeout
+    copies = backup_sources(sources, destinations[role], Path(plan.measurement_root) / "scripts/backup_runs.sh")
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/v5_s1_desk_closeout.py", line 50, in backup_sources
+    raise ValueError("backup command failed")
+ValueError: backup command failed
+
+----------------------------------------------------------------------
+Ran 7 tests in 3.300s
+
+FAILED (errors=2)

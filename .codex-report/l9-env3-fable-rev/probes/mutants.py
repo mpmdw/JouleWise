@@ -59,7 +59,10 @@ for name in names:
         rc, tail, dt = run(["python3.13", str(S/"probes/r2_r4_fixture_probe.py"), str(TREE), str(work)], d/"K3_r2r4_probe.log", TREE)
         res["K3_r2r4_probe"] = {"rc": rc, "tail": tail, "time": dt}
         shutil.rmtree(work, ignore_errors=True)
-        killed = not (res["K1_seat_tests"]["tail"] == "OK" and all(v["tail"] == "RESULT: PASS" for k, v in res.items() if k != "K1_seat_tests"))
+        # (fixed after the run: the first version compared the K1 tail to "OK" exactly, so "OK (skipped=1)"
+        # printed every mutant as KILLED; the per-check tails in the logs are authoritative and the
+        # report's table recomputes killed = K1 not OK or any probe not "RESULT: PASS".)
+        killed = not (res["K1_seat_tests"]["tail"].startswith("OK") and all(v["tail"] == "RESULT: PASS" for k, v in res.items() if k != "K1_seat_tests"))
         res["killed"] = killed
         results[name] = res
         print(name, "KILLED" if killed else "SURVIVED", json.dumps(res), flush=True)

@@ -1,0 +1,254 @@
+......usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--calibration-ledger CALIBRATION_LEDGER]
+                              [--head-pin HEAD_PIN] [--dry-run]
+                              [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES] [--max-blocks N]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--whole-window-verdict-output VERDICT_JSON]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--bracket-binding BRACKET_BINDING]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --consumption-semantics-id, --window-membership-binding, and --salvage-closure, --calibration-custody-store, and --bracket-binding, and --whole-window-verdict-output are whole-window-verdict options
+.....usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--calibration-ledger CALIBRATION_LEDGER]
+                              [--head-pin HEAD_PIN] [--dry-run]
+                              [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES] [--max-blocks N]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--whole-window-verdict-output VERDICT_JSON]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--bracket-binding BRACKET_BINDING]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --calibration-custody-store requires minted consumption semantics
+..usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--calibration-ledger CALIBRATION_LEDGER]
+                              [--head-pin HEAD_PIN] [--dry-run]
+                              [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES] [--max-blocks N]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--whole-window-verdict-output VERDICT_JSON]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--bracket-binding BRACKET_BINDING]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --consumption-semantics-id, --window-membership-binding, and --salvage-closure, --calibration-custody-store, and --bracket-binding, and --whole-window-verdict-output are whole-window-verdict options
+.WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmpm73vvqi6/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+..........warning: preserved 27 torn campaign-log bytes at /tmp/lnine-fable-rev/tmp/tmpc506zgf4/campaign_log.jsonl.torn-20261030T080943113346Z-3b23836bf203
+.....s...warning: FAILED to preserve 12 torn campaign-log bytes to /tmp/lnine-fable-rev/tmp/tmpggb4j7s8/campaign_log.jsonl.torn-20261030T080943259955Z-8f5927bdb239 (PermissionError('injected sidecar failure')); append refused, log untouched
+..WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmpwyw78ey1/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+Campaign policy: test-no-host-probes sha256=b159744932e60d0856534ed74125394e8a5911200e18132b4507594ba7aabcb2
+Dry run: no commands will be invoked and no campaign log will be written.
+dry_run one: would run: /usr/bin/python3.13 -m joulewise run /tmp/lnine-fable-rev/tmp/tmpwyw78ey1/configs/one.json --runs-dir '/tmp/lnine-fable-rev/tmp/tmpwyw78ey1/unrelated spaced runs unittest' --post-window-sampling-dwell-s 1.0
+Summary:
+  dry_run: 1
+Campaign policy: test-no-host-probes sha256=b159744932e60d0856534ed74125394e8a5911200e18132b4507594ba7aabcb2
+dry_run draft-off-000 attempt=0: /usr/bin/python3.13 -m joulewise run tests/fixtures/axi_ap_spec/draft_spec_off.json --runs-dir '/tmp/lnine-fable-rev/tmp/tmpwyw78ey1/unrelated spaced runs unittest/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0' --post-window-sampling-dwell-s 1.0
+dry_run draft-on-000 attempt=0: /usr/bin/python3.13 -m joulewise run tests/fixtures/axi_ap_spec/draft_spec_on.json --runs-dir '/tmp/lnine-fable-rev/tmp/tmpwyw78ey1/unrelated spaced runs unittest/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0' --post-window-sampling-dwell-s 1.0
+dry_run draft-on-001 attempt=0: /usr/bin/python3.13 -m joulewise run tests/fixtures/axi_ap_spec/draft_spec_on.json --runs-dir '/tmp/lnine-fable-rev/tmp/tmpwyw78ey1/unrelated spaced runs unittest/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0' --post-window-sampling-dwell-s 1.0
+dry_run draft-off-001 attempt=0: /usr/bin/python3.13 -m joulewise run tests/fixtures/axi_ap_spec/draft_spec_off.json --runs-dir '/tmp/lnine-fable-rev/tmp/tmpwyw78ey1/unrelated spaced runs unittest/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0' --post-window-sampling-dwell-s 1.0
+.WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmp2n3cs2it/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+.Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmpgvx0c6nm/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+.WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmp0if_eo3q/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+.WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmpj3kr0t02/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+........usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--calibration-ledger CALIBRATION_LEDGER]
+                              [--head-pin HEAD_PIN] [--dry-run]
+                              [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES] [--max-blocks N]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--whole-window-verdict-output VERDICT_JSON]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--bracket-binding BRACKET_BINDING]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: salvage-dangler semantics require --window-membership-binding and --salvage-closure
+usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--calibration-ledger CALIBRATION_LEDGER]
+                              [--head-pin HEAD_PIN] [--dry-run]
+                              [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES] [--max-blocks N]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--whole-window-verdict-output VERDICT_JSON]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--bracket-binding BRACKET_BINDING]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --waivers is forbidden under salvage-dangler semantics
+...................................................NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+...................NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+.NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_ambiguous_reference
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+.NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: adapter_observations_missing
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+  condition: whole_window_campaign_membership_unresolved
+....NEG-8 WHOLE-WINDOW VERDICT: flagged
+  decision: passed
+...........warning: preserved 7 torn campaign-log bytes at /tmp/lnine-fable-rev/tmp/tmpuisusvlx/campaign_log.jsonl.torn-20261030T081143634063Z-e867134bb1b6
+...bundle: /tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-off-000 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+bundle: /tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-on-000 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+bundle: /tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-on-001 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+bundle: /tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-off-001 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /tmp/lnine-fable-rev/tmp/tmpc3ot7fvc/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+................................................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmpx_avfsco/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+error: environment preflight failed: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+.............bundle: /tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-off-000 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+bundle: /tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-on-000 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+bundle: /tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-on-001 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+bundle: /tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+ok draft-off-001 attempt=0: bundle=/tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /tmp/lnine-fable-rev/tmp/tmp4jv6u9md/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+...............................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+Config files to execute:
+  /tmp/lnine-fable-rev/tmp/tmp1kguw4gc/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+ENVIRONMENT PREFLIGHT FAILED: display_power_state='any_awake' (fail)
+override binding: snapshot_sha256=5b63e0cbf4d66ec48f8079ce252379be0cf8695c79ecd857bab10f430f64228a findings_sha256=5f82754478db0b19396360a005dcdc309d3e7d994261b0c31ddab68833771ccf
+......................
+----------------------------------------------------------------------
+Ran 267 tests in 331.563s
+
+OK (skipped=1)

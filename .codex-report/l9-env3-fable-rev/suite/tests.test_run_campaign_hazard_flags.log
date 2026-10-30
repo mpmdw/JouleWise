@@ -1,0 +1,7 @@
+...................................warning: cleared stale campaign lock /tmp/lnine-fable-rev/tmp/tmpu6cs2x37/runs_claim/campaign.lock (pid=16027 nonce=abababababababababababababababababababababababababababababababab created_at=2026-10-05T00:00:00Z start_time="Mon Oct 5 00:00:00 2026")
+s....warning: cleared stale campaign lock /tmp/lnine-fable-rev/tmp/tmp4qvt_f2l/runs_claim/campaign.lock (pid=16140 nonce=abababababababababababababababababababababababababababababababab created_at=2026-10-05T00:00:00Z start_time="Mon Oct 5 00:00:00 2026")
+..ss..
+----------------------------------------------------------------------
+Ran 46 tests in 19.952s
+
+OK (skipped=3)

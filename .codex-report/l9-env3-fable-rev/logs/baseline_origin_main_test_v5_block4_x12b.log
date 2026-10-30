@@ -1,0 +1,47 @@
+EE.Enabling network time once; polling RAW anchor for at most 30 s.
+Drift-corrected anchor movement: 500000000.010 ns (must exceed 5000000 ns).
+Finishing with network time OFF.
+........
+======================================================================
+ERROR: test_full_stage_cap_and_author_allowance_still_start (tests.test_v5_block4_x12b.LatestChainStartTests.test_full_stage_cap_and_author_allowance_still_start)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_block4_x12b.py", line 439, in test_full_stage_cap_and_author_allowance_still_start
+    result = writer.render_qualification_chain('s1', template, sizing.sizing, pack, 1000., out)
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/write_v5_qualification_plan.py", line 390, in render_qualification_chain
+    require(g2b_body(readiness._repo_for_pack(root)) in text, "reviewed_g2b_chain_required")
+                     ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/joulewise/arm_readiness.py", line 4578, in _repo_for_pack
+    repository, _prefix, _relative = _repository_and_pack_relative(pack_root)
+                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/joulewise/arm_readiness.py", line 3066, in _repository_and_pack_relative
+    repo_raw = _run_git(root, "rev-parse", "--show-toplevel").rstrip(b"\n")
+               ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/joulewise/arm_readiness.py", line 3058, in _run_git
+    raise ArmReadinessError(
+        "readiness_pack_not_committed", f"Git proof failed: {detail}"
+    )
+joulewise.arm_readiness.ArmReadinessError: Git proof failed: fatal: not a git repository (or any of the parent directories): .git
+
+======================================================================
+ERROR: test_entire_real_author_roster_to_journal_assembler_and_g1 (tests.test_v5_block4_x12b.NativeAuthorJournalTests.test_entire_real_author_roster_to_journal_assembler_and_g1)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_block4_x12b.py", line 260, in test_entire_real_author_roster_to_journal_assembler_and_g1
+    closeout()
+    ~~~~~~~~^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/tests/test_v5_block4_x12b.py", line 419, in closeout
+    desk.closeout(plan_path, now=lambda: plan.t0_epoch_s + plan.window_max_s + 1000,
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  clear=lambda *_args, **_kwargs: True)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/v5_s1_desk_closeout.py", line 190, in closeout
+    copies = backup_sources(sources, destinations[role], Path(plan.measurement_root) / "scripts/backup_runs.sh")
+  File "/tmp/claude-0/-home-user-JouleWise/062c87de-57a7-5c5d-b04a-3f214fe4d797/scratchpad/main-tree/scripts/v5_s1_desk_closeout.py", line 50, in backup_sources
+    raise ValueError("backup command failed")
+ValueError: backup command failed
+
+----------------------------------------------------------------------
+Ran 11 tests in 11.823s
+
+FAILED (errors=2)

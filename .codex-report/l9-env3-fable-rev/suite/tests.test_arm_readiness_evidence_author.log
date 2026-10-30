@@ -1,0 +1,33 @@
+./home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+./home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+../home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+./home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+../home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+./home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+........../home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/home/user/JouleWise/joulewise/arm_readiness_evidence.py:1608: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+......
+----------------------------------------------------------------------
+Ran 24 tests in 93.208s
+
+OK

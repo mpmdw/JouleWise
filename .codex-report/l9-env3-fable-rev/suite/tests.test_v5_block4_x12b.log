@@ -1,0 +1,26 @@
+.E.Enabling network time once; polling RAW anchor for at most 30 s.
+Drift-corrected anchor movement: 500000000.010 ns (must exceed 5000000 ns).
+Finishing with network time OFF.
+........
+======================================================================
+ERROR: test_entire_real_author_roster_to_journal_assembler_and_g1 (tests.test_v5_block4_x12b.NativeAuthorJournalTests.test_entire_real_author_roster_to_journal_assembler_and_g1)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/JouleWise/tests/test_v5_block4_x12b.py", line 260, in test_entire_real_author_roster_to_journal_assembler_and_g1
+    closeout()
+    ~~~~~~~~^^
+  File "/home/user/JouleWise/tests/test_v5_block4_x12b.py", line 419, in closeout
+    desk.closeout(plan_path, now=lambda: plan.t0_epoch_s + plan.window_max_s + 1000,
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  clear=lambda *_args, **_kwargs: True)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/JouleWise/scripts/v5_s1_desk_closeout.py", line 190, in closeout
+    copies = backup_sources(sources, destinations[role], Path(plan.measurement_root) / "scripts/backup_runs.sh")
+  File "/home/user/JouleWise/scripts/v5_s1_desk_closeout.py", line 50, in backup_sources
+    raise ValueError("backup command failed")
+ValueError: backup command failed
+
+----------------------------------------------------------------------
+Ran 11 tests in 26.422s
+
+FAILED (errors=1)

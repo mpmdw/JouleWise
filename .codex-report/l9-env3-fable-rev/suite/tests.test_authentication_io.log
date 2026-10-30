@@ -1,0 +1,6 @@
+.........KILLED 3 renderer AST mutations: wrapper deletion, widened annotation, unregistered renderer
+.............
+----------------------------------------------------------------------
+Ran 22 tests in 1.900s
+
+OK

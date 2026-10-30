@@ -1,0 +1,7 @@
+.........custody_locator_unreachable reason=timeout locator=/tmp/lnine-fable-rev/tmp/tmpoaos6lxb budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/tmp/lnine-fable-rev/tmp/tmpoaos6lxb budget_s=0.05
+...................
+----------------------------------------------------------------------
+Ran 28 tests in 175.242s
+
+OK

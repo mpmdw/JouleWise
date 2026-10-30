@@ -62,7 +62,10 @@ for epoch in (0.0, 1_700_000_000.123456, 1_784_491_122.85):
                     for start_off in (0.4, 0.4+1/3.0, 1.0):
                         s = epoch + start_off
                         short = Window(s, s+D); long = Window(s+1.2, s+1.9)
-                        for wins in ([short],[short,long],[long,short],[long]):
+                        # long windows at offsets incommensurate with the 0.05 s sample width, so the clamped
+                        # zero-length window's breakpoints cannot coincide with the long window's own
+                        long2 = Window(s+0.9137, s+1.4421); long3 = Window(s-0.3719, s-0.0123)
+                        for wins in ([short],[short,long],[long,short],[long],[short,long2],[long3,short],[long3,short,long2]):
                             check(f"{cname}/{mk.__name__}/e{epoch}/b{bb},{fb},{sp}/f{f}/o{start_off}/{len(wins)}w", [(curve, wins)], bb, fb, sp)
                         # two contributions, second from another curve with its own short window
                         other = mk(rows_rand(epoch-1.0, 80, 0.05, 77))
