@@ -801,6 +801,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **RC-CMP-11:** Opus ACCEPT (`c38b105d2`), Fable ACCEPT (`0322e4748`). Main was merged into the lane at `4fc643363`. **PR #604** is open, and joulewise-28 will merge it once CI is green.
 - **Trimming agent scope** is confirmed. It excludes `tests/b5_analysis/**` (including `fixtures_s5.py` and G6), every pinned and sealed file, and the coordination files.
 
+144. **Clamp decision for block 5: the analysis-only clamp (L9-ENV-3). The in-place `reduce.py` fix is parked for the next block boundary (reported by joulewise-28, 2026-10-30, about 06:05Z; Ed deferred to joulewise-28's recommendation in that session).**
+- **Block 5 uses L9-ENV-3**: the analysis-only clamp in `whole_window`, at `7ae587b89`. Two-family reviews follow once its report lands.
+- **Why not the in-place `reduce.py` fix:**
+  - Block 5's sealed registration (`registration_block5.md`, about lines 956 and 5661) names `calibration_acceptance_d079_v2_n24_25g83_r2` by sha, and the sealed inventory pins `reduce.py` at `7b9c0d28`.
+  - Changing `reduce.py` would therefore make block 5's own registered acceptance stale. That is `protocol_or_estimator_byte_change`, an R3 stop on every bracket.
+  - Reissuing the acceptance would also mean amending block 5's sealed registration and its identity chain.
+- **Queued follow-up for the next block boundary (block 6 / BYTES registration):**
+  - Coordinate with the collection lead.
+  - Land L9-ENV-2's 16-line `reduce.py` clamp (`e1b3a0510`) together with a science-neutral acceptance reissue that rotates only the `reduce.py` estimator pin.
+  - Use the new acceptance for the next registration.
+  - Once block 5 is released, delete the `whole_window` mirror (L9-ENV-3's ~440 lines).
+- **L9-ENV-2** (`lane/2026-10-30-l9-env-clamp`) is parked for that follow-up. It is not to be merged now.
+- **Orchestrator notes:**
+  - The ~440-line mirror duplicates estimator logic in analysis code. Its safety rests on the vendored oracle comparison (item 143), so the reviews should treat that test as the central check.
+  - The independent recompute needs the same clamp, or a registered comparator difference class, before release (items 140 and 142).
+  - Block-6 registration has to carry the acceptance reissue as an explicit dependency, so it is not rediscovered at sealing time.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
