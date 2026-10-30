@@ -48,7 +48,7 @@ from joulewise.idle_admission import (
     extract_adapter_observation,
 )
 from joulewise.bundle import sanitize_id_component
-from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
 from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
@@ -67,8 +67,22 @@ from joulewise.campaign_provenance import (
     load_authenticated_campaign_catalog,
     load_authenticated_campaign_manifest,
 )
+# Read-only use of reduce's private envelope helpers by the analysis-side
+# clamp below; reduce.py itself stays byte-identical (L9-ENV-3).
 from joulewise.reduce import (
+    ANCHOR_SHIFT_METHOD,
+    AXI_REDUCER_VERSION as _AXI_CURRENT_REDUCER_VERSION,
+    REDUCER_VERSION as _CURRENT_REDUCER_VERSION,
+    _anchor_envelope_gate_reasons,
+    _anchor_shift_envelope,
+    _corner_composed_anchor_shift_envelope,
+    _derive_anchor_context,
+    _json_pointer_token,
     _rederive_summary_for_authenticated_fiducial_bound,
+    _shift_curve,
+    _shift_energy_j,
+    _ReduceError,
+    _union_windows,
     _verify_instrument_calibration,
 )
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy, TelemetryBackend
@@ -917,6 +931,427 @@ def _complete_envelope_record(value: object) -> dict[str, Any] | None:
     }
 
 
+_ANCHOR_ENVELOPE_UNRECORDED = "anchor_energy_envelope_unrecorded"
+# Envelope pointers re-derived per member group; everything else in a summary's
+# envelope map is the gross family (gross, batch group, idle, request, token).
+_CLAMP_GROUP_PREFIXES = (
+    ("phase", "/phase_energy_j/"),
+    ("item", "/suite_item_energy_j/"),
+    ("block", "/suite_block_energy_j/"),
+    ("level", "/suite_level_energy_j/"),
+)
+
+
+def _clamped_corner_composed_anchor_shift_envelope(
+    contributions: list[tuple[list[TracePoint], list[Window]]],
+    bundle_bound_s: float | None,
+    fiducial_bound_s: float | None,
+    wall_minus_monotonic_span_s: float = 0.0,
+) -> dict[str, float | str] | None:
+    """Analysis-only corner envelope with inverted corner windows clamped.
+
+    Ed's 2026-10-30 ruling (lane L9-ENV-3): a window shorter than
+    ``2 * edge_bound_s`` inverts at the (+edge, -edge) corner.  The admissible
+    set then contains an empty interval, so with nonnegative power its minimum
+    contribution is 0 J; the window becomes zero-length at its shifted
+    midpoint (inside the original window) instead of dropping the envelope.
+
+    Whenever reduce's mint function defines an envelope it is returned as is,
+    so non-inverting inputs are reduce's bytes by construction.  Otherwise this
+    is reduce's ``_corner_composed_anchor_shift_envelope`` with only the
+    inversion branch changed; every other ``None`` guard is kept verbatim.
+    Only the consumption session's re-derivation calls it: collection mints
+    and the mint precheck keep reduce's function unchanged.
+    """
+
+    minted = _corner_composed_anchor_shift_envelope(
+        contributions,
+        bundle_bound_s,
+        fiducial_bound_s,
+        wall_minus_monotonic_span_s,
+    )
+    if minted is not None:
+        return minted
+    if (
+        bundle_bound_s is None
+        or fiducial_bound_s is None
+        or not math.isfinite(bundle_bound_s)
+        or not math.isfinite(fiducial_bound_s)
+        or bundle_bound_s < 0.0
+        or fiducial_bound_s < 0.0
+        or not math.isfinite(wall_minus_monotonic_span_s)
+        or wall_minus_monotonic_span_s < 0.0
+        or not contributions
+        or any(
+            not curve
+            or not windows
+            or any(point.power_w < 0.0 for point in curve)
+            for curve, windows in contributions
+        )
+    ):
+        return None
+
+    origin_s = contributions[0][0][0].t
+    contributions = [
+        (
+            [
+                TracePoint(
+                    t=point.t - origin_s,
+                    power_w=point.power_w,
+                    support_start_s=(
+                        point.support_start_s - origin_s
+                        if point.support_start_s is not None
+                        else None
+                    ),
+                    support_end_s=(
+                        point.support_end_s - origin_s
+                        if point.support_end_s is not None
+                        else None
+                    ),
+                )
+                for point in curve
+            ],
+            [
+                Window(
+                    start_s=window.start_s - origin_s,
+                    end_s=window.end_s - origin_s,
+                )
+                for window in windows
+            ],
+        )
+        for curve, windows in contributions
+    ]
+
+    point_j = _shift_energy_j(contributions, 0.0)
+    common_only = _anchor_shift_envelope(contributions, bundle_bound_s)
+    edge_bound_s = fiducial_bound_s + wall_minus_monotonic_span_s
+    corner_envelopes: list[dict[str, float | str]] = []
+    for eps_on_s in (-edge_bound_s, edge_bound_s):
+        for eps_off_s in (-edge_bound_s, edge_bound_s):
+            corner_contributions: list[tuple[list[TracePoint], list[Window]]] = []
+            for curve, windows in contributions:
+                shifted_windows = [
+                    Window(
+                        start_s=window.start_s + eps_on_s,
+                        end_s=window.end_s + eps_off_s,
+                    )
+                    for window in windows
+                ]
+                # The one ruled change: clamp instead of ``return None``.
+                shifted_windows = [
+                    Window(
+                        start_s=(window.start_s + window.end_s) / 2.0,
+                        end_s=(window.start_s + window.end_s) / 2.0,
+                    )
+                    if window.end_s < window.start_s
+                    else window
+                    for window in shifted_windows
+                ]
+                corner_contributions.append((curve, shifted_windows))
+            corner = _anchor_shift_envelope(corner_contributions, bundle_bound_s)
+            if corner is None:
+                return None
+            corner_envelopes.append(corner)
+
+    if common_only is None or not corner_envelopes:
+        return None
+    lower_j = min(float(envelope["lower_j"]) for envelope in corner_envelopes)
+    upper_j = max(float(envelope["upper_j"]) for envelope in corner_envelopes)
+    if not (
+        math.isfinite(point_j)
+        and math.isfinite(lower_j)
+        and math.isfinite(upper_j)
+        and lower_j <= point_j <= upper_j
+    ):
+        return None
+    independent_edge_bound_j = max(
+        0.0,
+        float(common_only["lower_j"]) - lower_j,
+        upper_j - float(common_only["upper_j"]),
+    )
+    return {
+        "method": ANCHOR_SHIFT_METHOD,
+        "anchor_bound_s": bundle_bound_s + edge_bound_s,
+        "point_j": point_j,
+        "lower_j": lower_j,
+        "upper_j": upper_j,
+        "max_abs_delta_j": max(point_j - lower_j, upper_j - point_j),
+        "wall_minus_monotonic_independent_edge_span_s": (
+            wall_minus_monotonic_span_s
+        ),
+        "independent_edge_shift_bound_j": independent_edge_bound_j,
+    }
+
+
+def _group_envelope_contributions(
+    reader: BundleReader,
+    reducer_version: str,
+    anchor_curve: list[TracePoint] | None,
+) -> list[tuple[str, list[tuple[list[TracePoint], list[Window]]]]]:
+    """Pointer -> contributions for the member groups, in reduce's mint order.
+
+    Mirrors the current-wire window sets of ``reduce._reduce`` (0.5.2) and
+    ``reduce._reduce_v060`` (0.6.2) using only reader accessors and reduce's
+    own helpers.  The caller proves the mirror against every envelope the
+    unchanged reducer recorded before trusting it for a missing one.
+    """
+
+    raw_curve = reader.summed_curve()
+    curve = anchor_curve if anchor_curve is not None else raw_curve
+    rows: list[tuple[str, list[tuple[list[TracePoint], list[Window]]]]] = []
+    if reducer_version == _AXI_CURRENT_REDUCER_VERSION:
+        anchor_shift_s = (
+            anchor_curve[0].t - raw_curve[0].t
+            if anchor_curve is not None and raw_curve
+            else 0.0
+        )
+        group_windows: dict[tuple[str, str], list[Window]] = {}
+        for (source, _request_id, phase, _ordinal), phase_window in (
+            reader.request_phase_windows().items()
+        ):
+            group_windows.setdefault((source, phase), []).append(phase_window)
+        group_unions = {
+            key: _union_windows(windows) for key, windows in group_windows.items()
+        }
+        for phase in sorted({phase for _source, phase in group_unions}):
+            rows.append(
+                (
+                    "/phase_energy_j/" + _json_pointer_token(phase),
+                    [
+                        (
+                            _shift_curve(
+                                reader.source_curve(source), anchor_shift_s
+                            ),
+                            windows,
+                        )
+                        for (source, candidate), windows in sorted(
+                            group_unions.items()
+                        )
+                        if candidate == phase
+                    ],
+                )
+            )
+        return rows
+    for phase, intervals in sorted((reader.phase_windows() or {}).items()):
+        rows.append(
+            ("/phase_energy_j/" + _json_pointer_token(phase), [(curve, intervals)])
+        )
+    for item in reader.item_windows():
+        rows.append(
+            (
+                "/suite_item_energy_j/"
+                + _json_pointer_token(f"{item.item_index}:{item.item_id}"),
+                [(curve, [item.window])],
+            )
+        )
+    for block_id, intervals in sorted((reader.block_windows() or {}).items()):
+        rows.append(
+            (
+                "/suite_block_energy_j/" + _json_pointer_token(block_id),
+                [(curve, intervals)],
+            )
+        )
+    levels = {
+        f"{block_id}/{level_id}": intervals
+        for (block_id, level_id), intervals in reader.level_windows().items()
+    }
+    for level_key, intervals in sorted(levels.items()):
+        rows.append(
+            (
+                "/suite_level_energy_j/" + _json_pointer_token(level_key),
+                [(curve, intervals)],
+            )
+        )
+    return rows
+
+
+def _restamp_clamped_gate(gate: dict[str, Any], reasons: list[str]) -> bool:
+    """Replace the missing-envelope stamp by the clamped envelope's reasons.
+
+    ``anchor_energy_envelope_unrecorded`` has exactly one producer, the
+    envelope gate for this pointer, so removing it and merging the clamped
+    envelope's reasons is what reduce's gate would have stamped.  The gate
+    must already be ineligible (reduce's merge made it so) and stays so, which
+    is stricter than reduce when the clamped envelope itself passes.
+    """
+
+    existing = gate.get("reasons")
+    if (
+        not isinstance(existing, list)
+        or _ANCHOR_ENVELOPE_UNRECORDED not in existing
+        or gate.get("eligible") is not False
+    ):
+        return False
+    merged = set(existing)
+    merged.discard(_ANCHOR_ENVELOPE_UNRECORDED)
+    merged.update(reasons)
+    gate["reasons"] = sorted(merged)
+    windows = gate.get("windows")
+    if isinstance(windows, list):
+        for inner in windows:
+            if isinstance(inner, dict) and not _restamp_clamped_gate(inner, reasons):
+                return False
+    return True
+
+
+def _clamp_inverted_operative_envelopes(
+    path: Path,
+    summary: Mapping[str, Any],
+    *,
+    authenticated_fiducial_bound_s: float,
+    instrument_calibration_physics_cache: dict[str, float] | None = None,
+) -> Mapping[str, Any]:
+    """Add the clamped envelope for every member pointer that inverted.
+
+    ``summary`` is the unchanged reducer's in-memory re-derivation at the
+    operative bound.  Every pointer it recorded is kept as is; a group pointer
+    it omitted gains the analysis-side clamped envelope and its precheck
+    reason moves from ``anchor_energy_envelope_unrecorded`` to the clamped
+    envelope's own gate reasons.  Gross-family pointers are never clamped
+    here (NEEDS_RULING in .codex-report/L9-ENV-3.md).  Any doubt, including a
+    reconstruction that does not reproduce a recorded envelope exactly,
+    returns ``summary`` unchanged, i.e. reduce's fail-closed behaviour.
+    """
+
+    reducer_version = _summary_reducer_version(summary)
+    envelopes = summary.get("energy_anchor_shift_envelopes")
+    if (
+        summary.get("status") != "succeeded"
+        or reducer_version
+        not in {_CURRENT_REDUCER_VERSION, _AXI_CURRENT_REDUCER_VERSION}
+        or (envelopes is not None and not isinstance(envelopes, Mapping))
+    ):
+        return summary
+    envelopes = dict(envelopes or {})
+    try:
+        reader = BundleReader(Path(path))
+        if reader.config().hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+            return summary
+        anchor_ctx = _derive_anchor_context(
+            reader,
+            reader.metadata(),
+            strict_calibration=True,
+            reducer_version=reducer_version,
+            authenticated_fiducial_bound_override_s=float(
+                authenticated_fiducial_bound_s
+            ),
+            instrument_calibration_physics_cache=(
+                instrument_calibration_physics_cache
+            ),
+        )
+        if not anchor_ctx.telemetry_is_powermetrics or anchor_ctx.unresolved:
+            return summary
+        rows = _group_envelope_contributions(
+            reader, reducer_version, anchor_ctx.curve
+        )
+        bounds = (
+            anchor_ctx.bundle_bound_s,
+            anchor_ctx.fiducial_bound_s or 0.0,
+            anchor_ctx.edge_span_s,
+        )
+        clamped: dict[str, dict[str, float | str]] = {}
+        for pointer, contributions in rows:
+            recorded = envelopes.get(pointer)
+            if recorded is not None:
+                if _corner_composed_anchor_shift_envelope(
+                    contributions, *bounds
+                ) != recorded:
+                    return summary
+                continue
+            envelope = _clamped_corner_composed_anchor_shift_envelope(
+                contributions, *bounds
+            )
+            if envelope is not None:
+                clamped[pointer] = envelope
+    except (
+        _ReduceError,
+        BundleReadError,
+        OSError,
+        KeyError,
+        TypeError,
+        ValueError,
+        OverflowError,
+    ):
+        return summary
+    if not clamped:
+        return summary
+    group_pointers = {pointer for pointer, _contributions in rows}
+    group_prefixes = tuple(prefix for _key, prefix in _CLAMP_GROUP_PREFIXES)
+    if any(
+        pointer.startswith(group_prefixes) and pointer not in group_pointers
+        for pointer in envelopes
+    ):
+        # A recorded member envelope the reconstruction does not know.
+        return summary
+    operative: dict[str, Any] = json.loads(json.dumps(summary))
+    recorded = operative.get("energy_anchor_shift_envelopes") or {}
+    # Reduce's mint order: the gross family first, then the member groups.
+    ordered = {
+        pointer: value
+        for pointer, value in recorded.items()
+        if pointer not in group_pointers
+    }
+    for pointer, _contributions in rows:
+        if pointer in recorded:
+            ordered[pointer] = recorded[pointer]
+        elif pointer in clamped:
+            ordered[pointer] = clamped[pointer]
+    operative["energy_anchor_shift_envelopes"] = ordered
+    if (
+        anchor_ctx.detail == "post_window_trace_tail_shorter_than_anchor_bound"
+    ):
+        # Reduce stamps no envelope gate reasons on this resolved refusal.
+        return operative
+    prechecks = operative.get("window_evidence_precheck")
+    joint_bound_j = (operative.get("energy_bound_terms_j") or {}).get(
+        "E_interpolation_joint_edge_bound_j"
+    )
+    for pointer, envelope in clamped.items():
+        group_key, prefix = next(
+            (key, prefix)
+            for key, prefix in _CLAMP_GROUP_PREFIXES
+            if pointer.startswith(prefix)
+        )
+        group = prechecks.get(group_key) if isinstance(prechecks, dict) else None
+        if not isinstance(group, dict):
+            continue
+        for member, gate in group.items():
+            if (
+                isinstance(gate, dict)
+                and prefix + _json_pointer_token(str(member)) == pointer
+                and not _restamp_clamped_gate(
+                    gate, _anchor_envelope_gate_reasons(envelope, joint_bound_j)
+                )
+            ):
+                return summary
+    return operative
+
+
+def _rederive_operative_summary(
+    path: Path,
+    *,
+    authenticated_fiducial_bound_s: float,
+    _instrument_calibration_physics_cache: dict[str, float] | None = None,
+) -> Mapping[str, Any]:
+    """The consumption session's analysis-side operative re-derivation.
+
+    Reduce's in-memory re-derivation (unchanged mint code) followed by the
+    analysis-only inverted-corner clamp.  Nothing is persisted.
+    """
+
+    summary = _rederive_summary_for_authenticated_fiducial_bound(
+        path,
+        authenticated_fiducial_bound_s=authenticated_fiducial_bound_s,
+        _instrument_calibration_physics_cache=_instrument_calibration_physics_cache,
+    )
+    return _clamp_inverted_operative_envelopes(
+        path,
+        summary,
+        authenticated_fiducial_bound_s=authenticated_fiducial_bound_s,
+        instrument_calibration_physics_cache=_instrument_calibration_physics_cache,
+    )
+
+
 class AuthenticatedConsumptionSession:
     """One collection-scoped authenticated max-bracket consumption session.
 
@@ -1391,7 +1826,7 @@ class AuthenticatedConsumptionSession:
             if dominated:
                 try:
                     operative_summary = (
-                        _rederive_summary_for_authenticated_fiducial_bound(
+                        _rederive_operative_summary(
                             path,
                             authenticated_fiducial_bound_s=operative_bound,
                             _instrument_calibration_physics_cache=physics_cache_for(
