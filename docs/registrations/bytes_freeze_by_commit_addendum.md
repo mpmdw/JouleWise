@@ -210,3 +210,23 @@ agree with it in every row.
 
 Every smoke fingerprint in that file, pass 1 included, records OS build 25G83. `s1-p2`, the last pass-2 session, is
 appended after it runs. `bytes/collection-n4` can now be cut at `2649fad54`, the single n4 code state.
+
+Appended 2026-10-30 by the Mac collection lead (magistrate activation 4e748ac1), after the `r2-bytes-s1-p2` desk, with
+the loop DONE and no `collection.active`. Only git objects and loop metadata were read.
+
+**BYTES collection is complete.** All twelve sub-packs have a counting session (`/Users/edr/night-b6/loop-bytes/attempts.jsonl`,
+14 lines), and the loop state is DONE. Branch `records/bytes-pass2-heads` now points at `1aca17e27`.
+`git diff --name-only 2649fad54 1aca17e27` lists only `configs/calibration/calibration_ledger_head.json`, so all of pass 2
+ran the code of `2649fad54`.
+
+| Commit | Tree | What it is |
+| --- | --- | --- |
+| `f1a55bb40d0e725db383c23194fb245b05b340fa` | `feac5c0576a6f3701a3b6d7d9dab022c178406f9` | pin-only, seq 530 (`r2-bytes-s2-p2-calibration`) |
+| `1aca17e27479946c093bbe20c8cc2faa483a6396` | `61f97badd65df7ae4a96d87fc2a3d93560782aba` | pin-only, seq 540 (`r2-bytes-s1-p2-calibration`); the final head of the measurement line |
+
+| Session | Measurement HEAD | OS build |
+| --- | --- | --- |
+| `r2-bytes-s1-p2` | `f1a55bb40` | 25G83 |
+
+The `measurement_head` of `/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/night_plan.json` is `f1a55bb40`, and its smoke
+fingerprint's `code_commit` and `os_build` agree.
