@@ -1,4 +1,4 @@
-STATUS: BLOCKED verification in progress (final b5_analysis + 118-module run at d8050fca6 not yet complete; this line is replaced when it finishes)
+STATUS: DONE
 
 # L9-ENV-5: L9-ENV-3-OPUS-REV fixes under the lead's rulings (opt-in analysis clamp)
 
@@ -42,7 +42,7 @@ data. I fetched the full history (`git fetch --unshallow origin`). Evidence is i
   covers this, with counterfactuals: e1b3a0510 and L9-ENV-4 both define an envelope for that input.
   Oracle equality on the ruled cases is unchanged; every sweep in the seat module still passes.
 - **O-F6.** Noted (see OPEN ISSUES).
-- **Mutation testing.** 38 mutants were run against both seat modules (table below). 34 are killed
+- **Mutation testing.** 39 mutants were run against both seat modules (table below). 35 are killed
   and 4 survive, each argued equivalent.
 - **Verification.** The whole `tests/b5_analysis` directory is OK. I also ran 118 modules: every
   `tests/**/test_*.py` outside `tests/b5_analysis` that mentions `whole_window` or an edited call-site
@@ -127,10 +127,14 @@ N04_member_sessions_drop_flag | KILLED | Ran 43 | FAILED (failures=1)
 N05_truthy_flag | KILLED | Ran 43 | FAILED (failures=1) | test_default_is_off
 N06_drop_OF3_reproduced_guard | KILLED | Ran 43 | FAILED (failures=3)
 N07_drop_OF5_input_inversion_guard | KILLED | Ran 43 | FAILED (failures=3)
-MUTATION_RERUN_PLACEHOLDER
+N08_dry_run_flag_off | KILLED | Ran 43 | FAILED (failures=2) | test_dry_run_step_results_session_opts_in,test_every_analysis_consumer_passes_true
+N09_floor_extraction_flag_dropped | KILLED | Ran 43 | FAILED (failures=1, errors=1) | test_every_analysis_consumer_passes_true,test_floor_extraction_with_kept_units_opts_in
+N10_inputs_site3_flag_dropped(rt) | KILLED | Ran 43 | FAILED (failures=1) | test_every_analysis_consumer_passes_true
+N11_issuer_flag_dropped | KILLED | Ran 43 | FAILED (failures=1) | test_every_analysis_consumer_passes_true
+N12_floor_mint_estimator_gate_inverted | KILLED | Ran 43 | FAILED (failures=1) | test_every_analysis_consumer_passes_true
 ```
 
-The table has 38 rows: 34 KILLED and 4 SURVIVED. All four survivors are argued equivalent above.
+The table has 39 rows: 35 KILLED and 4 SURVIVED. All four survivors are argued equivalent above.
 FABLE MF2 (map key appended last) no longer applies because its branch was removed. I did not
 mutate `scripts/run_campaign.py`, even in a temporary worktree, because it is outside the write
 scope. `test_run_campaign_never_passes_the_flag` covers it statically.
@@ -245,11 +249,147 @@ mentions `whole_window`, `floor_extraction`, `analysis_engine`, `dry_run`, `pape
 `module | Ran line | last line`.
 
 ```
-FINAL_TAILS_PLACEHOLDER
+b5_analysis | Ran 1008 tests in 3892.212s | OK (skipped=13)
+tests.hazards.test_refusal_allowlist | Ran 23 tests in 28.109s | OK (skipped=1)
+tests.test_acc_25g83_rev6 | Ran 27 tests in 145.268s | OK
+tests.test_analysis_claims | Ran 65 tests in 5.526s | OK
+tests.test_analysis_engine | Ran 13 tests in 0.283s | OK
+tests.test_analysis_engine_evidence_roots | Ran 3 tests in 64.995s | OK
+tests.test_analysis_engine_v2_binding | Ran 9 tests in 103.905s | OK
+tests.test_analysis_finalizer | Ran 18 tests in 65.170s | OK
+tests.test_analysis_inputs | Ran 28 tests in 83.031s | OK (skipped=1)
+tests.test_analysis_integration | Ran 116 tests in 191.267s | OK
+tests.test_analysis_manifest | Ran 27 tests in 8.819s | OK
+tests.test_analysis_manifest_v3 | Ran 19 tests in 2.081s | OK
+tests.test_analysis_multiplicity | Ran 25 tests in 2.289s | OK
+tests.test_analysis_ratio | Ran 2 tests in 0.001s | OK
+tests.test_analysis_ratio_integration | Ran 11 tests in 0.044s | OK
+tests.test_arm_readiness_dry_run | Ran 12 tests in 71.993s | OK
+tests.test_arm_readiness_evidence_author | Ran 24 tests in 110.542s | OK
+tests.test_arm_readiness_evidence_t0 | Ran 81 tests in 300.438s | OK (skipped=6)
+tests.test_arm_readiness_integration | Ran 13 tests in 83.026s | OK
+tests.test_arm_readiness_lifecycle | Ran 70 tests in 72.471s | OK (skipped=1)
+tests.test_arm_readiness_schemas | Ran 51 tests in 1.459s | OK
+tests.test_authentication_io | Ran 22 tests in 2.520s | OK
+tests.test_axi_analysis_manifest | Ran 23 tests in 0.365s | OK
+tests.test_axi_controller_events | Ran 7 tests in 1.021s | OK
+tests.test_axi_mock_spec | Ran 11 tests in 11.317s | OK
+tests.test_axi_output_identity | Ran 13 tests in 0.094s | OK
+tests.test_b5_chain | Ran 25 tests in 3.268s | FAILED (errors=21)
+tests.test_b5_chain_prune2 | Ran 44 tests in 19.987s | FAILED (failures=1, errors=10)
+tests.test_battery_float_consumers | Ran 18 tests in 36.212s | OK
+tests.test_battery_float_sweep | Ran 5 tests in 5.574s | OK
+tests.test_bracket_binding_cli | Ran 19 tests in 47.592s | OK
+tests.test_bundle_read | Ran 82 tests in 11.077s | OK
+tests.test_calibration_custody_store | Ran 7 tests in 0.266s | OK
+tests.test_calibration_ledger | Ran 95 tests in 13.295s | OK (skipped=1)
+tests.test_calibration_ledger_custody | Ran 62 tests in 97.385s | OK
+tests.test_capture_pipeline_era | Ran 10 tests in 2.446s | OK
+tests.test_check_window_provenance | Ran 44 tests in 94.034s | OK
+tests.test_claim_side_bound | Ran 26 tests in 0.062s | OK
+tests.test_claims_index_lint | Ran 30 tests in 10.101s | OK
+tests.test_collector_analysis_manifest_id | Ran 16 tests in 95.082s | OK
+tests.test_controller_hazard_flags | Ran 58 tests in 317.979s | OK
+tests.test_corpus_strict_validation | Ran 3 tests in 1.003s | OK (skipped=1)
+tests.test_custody_mode_inventory | Ran 7 tests in 131.243s | OK
+tests.test_d078_reason_registry | Ran 14 tests in 0.193s | OK
+tests.test_d117_contrast_v5_pack | Ran 48 tests in 36.477s | OK
+tests.test_d117_decode_contrast_plan | Ran 25 tests in 70.159s | OK (skipped=1)
+tests.test_d117_floor_qwen25_1p5b_plan | Ran 22 tests in 27.225s | OK
+tests.test_d117_floor_qwen25_7b_plan | Ran 20 tests in 37.726s | OK
+tests.test_d117_gamma_d139a2_families | Ran 14 tests in 3.353s | OK
+tests.test_d165_dominance_closeout | Ran 59 tests in 24.785s | OK
+tests.test_decisive_reference_resolution | Ran 1 test in 0.101s | OK
+tests.test_dependence_sensitivity | Ran 29 tests in 19.701s | OK
+tests.test_detection_floor | Ran 131 tests in 6.326s | OK
+tests.test_dominance_closeout | Ran 3 tests in 3.297s | OK
+tests.test_emit_floor_mint_pinset | Ran 9 tests in 7.198s | OK
+tests.test_finalize_analysis_manifest | Ran 13 tests in 72.558s | OK
+tests.test_floor_extraction | Ran 145 tests in 23.972s | OK (skipped=2)
+tests.test_floor_mint_estimator | Ran 38 tests in 32.661s | OK
+tests.test_harvest_b5_p2harv | Ran 48 tests in 105.914s | OK (skipped=4)
+tests.test_harvest_b5_p3harv | Ran 48 tests in 61.136s | OK
+tests.test_harvest_b5_rehearsal_compare | Ran 1 test in 0.000s | OK (skipped=1)
+tests.test_harvest_b5_sources | Ran 55 tests in 2.715s | OK
+tests.test_harvest_b5_trigger_scope | Ran 28 tests in 209.644s | OK
+tests.test_harvest_b5_window | Ran 208 tests in 581.679s | OK (skipped=26)
+tests.test_harvest_v5_g2b_window | Ran 28 tests in 16.377s | OK
+tests.test_hazard_neg8_mint_verdicts | Ran 14 tests in 6.533s | OK
+tests.test_hazard_whole_window_verdict | Ran 20 tests in 38.936s | OK
+tests.test_identity_pins | Ran 42 tests in 8.828s | OK
+tests.test_issue_calibration_acceptance_generation | Ran 156 tests in 312.401s | OK (skipped=18)
+tests.test_launch_window | Ran 39 tests in 477.883s | OK
+tests.test_magistrate_watchdog | Ran 155 tests in 2.143s | FAILED (errors=3)
+tests.test_magistrate_watchdog_cli | Ran 7 tests in 13.758s | OK
+tests.test_magistrate_watchdog_span | Ran 24 tests in 0.207s | OK
+tests.test_mint_analysis_admission | Ran 8 tests in 6.346s | OK
+tests.test_mint_floor_artifact | Ran 42 tests in 12.526s | OK
+tests.test_mint_floor_artifact_generalized | Ran 84 tests in 155.237s | OK (skipped=2)
+tests.test_mint_floor_artifact_generalized_d165 | Ran 2 tests in 4.820s | OK
+tests.test_mint_floor_v2_config_set | Ran 9 tests in 14.744s | OK
+tests.test_neg8_corpus_cap | Ran 19 tests in 124.748s | OK
+tests.test_neg8_survivors | Ran 89 tests in 203.557s | FAILED (errors=4)
+tests.test_night_gate | Ran 112 tests in 2.273s | OK (skipped=1)
+tests.test_paper_comparison_placements | Ran 21 tests in 21.678s | OK
+tests.test_paper_custody | Ran 33 tests in 59.018s | OK
+tests.test_paper_rendering | Ran 6 tests in 3.357s | OK
+tests.test_paper_renumber_refs | Ran 3 tests in 0.351s | OK
+tests.test_paper_reported_energy | Ran 30 tests in 4.818s | OK
+tests.test_paper_terms_lint | Ran 16 tests in 3.317s | OK
+tests.test_pipeline_smoke_tail | Ran 4 tests in 9.293s | OK (skipped=1)
+tests.test_powermetrics_fiducial | Ran 76 tests in 158.149s | OK
+tests.test_quick_suite | Ran 15 tests in 0.181s | OK
+tests.test_r4_acceptance_oracle | Ran 10 tests in 4.532s | OK
+tests.test_reason_code_partition | Ran 3 tests in 16.302s | OK
+tests.test_reduce | Ran 132 tests in 518.177s | OK
+tests.test_render_results_fills_live | Ran 4 tests in 1.891s | OK
+tests.test_repin | Ran 47 tests in 16.631s | OK
+tests.test_results_fill_adapter | Ran 6 tests in 0.215s | OK
+tests.test_revision6_seal | Ran 3 tests in 0.772s | OK
+tests.test_run_campaign | Ran 267 tests in 310.530s | OK (skipped=1)
+tests.test_run_campaign_hazard_flags | Ran 46 tests in 23.353s | OK (skipped=3)
+tests.test_run_campaign_max_blocks | Ran 22 tests in 7.874s | OK
+tests.test_run_d165_closeout_from_custody | Ran 35 tests in 270.656s | OK
+tests.test_single_count_discipline_census | Ran 6 tests in 35.100s | OK
+tests.test_single_count_discipline_matrix | Ran 12 tests in 17.372s | OK
+tests.test_supersession_cross_consumer | Ran 15 tests in 0.101s | OK
+tests.test_v5_block4_replay | Ran 14 tests in 14.613s | FAILED (errors=1, skipped=6)
+tests.test_v5_block4_x12b | Ran 11 tests in 13.717s | FAILED (errors=1)
+tests.test_v5_block4_x2 | Ran 15 tests in 24.208s | OK
+tests.test_v5_s1_desk_closeout | Ran 7 tests in 3.723s | FAILED (errors=2)
+tests.test_v5_s1_qualification | Ran 23 tests in 12.993s | OK
+tests.test_whole_window | Ran 26 tests in 0.927s | OK
+tests.test_whole_window_analysis_clamp_flag | Ran 11 tests in 86.220s | OK
+tests.test_whole_window_inverted_corner_clamp | Ran 32 tests in 132.795s | OK
+tests.test_whole_window_parallel_strict | Ran 8 tests in 1.331s | OK
+tests.test_whole_window_selection | Ran 57 tests in 201.860s | OK
+tests.test_window_duration_margins | Ran 42 tests in 23.839s | OK
+tests.test_window_lineage | Ran 52 tests in 102.376s | OK (skipped=1)
+tests.twins.test_engine_twin_comparison | Ran 14 tests in 0.580s | OK
+tests.twins.test_harvest_twin | Ran 16 tests in 0.002s | OK
+tests.twins.test_harvest_twin_comparison | Ran 7 tests in 8.936s | OK
 ```
 
 Baseline: the failing modules at origin/main `4c26b2e2c`, same container and environment:
 
 ```
-BASELINE_TAILS_PLACEHOLDER
+tests.test_b5_chain | Ran 25 tests in 5.522s | FAILED (errors=21)
+tests.test_b5_chain_prune2 | Ran 44 tests in 21.198s | FAILED (failures=1, errors=10)
+tests.test_magistrate_watchdog | Ran 155 tests in 5.027s | FAILED (errors=3)
+tests.test_neg8_survivors | Ran 89 tests in 226.166s | FAILED (errors=4)
+tests.test_v5_block4_replay | Ran 14 tests in 21.655s | FAILED (errors=1, skipped=6)
+tests.test_v5_block4_x12b | Ran 11 tests in 23.715s | FAILED (errors=1)
+tests.test_v5_s1_desk_closeout | Ran 7 tests in 6.425s | FAILED (errors=2)
 ```
+
+All 7 failing modules fail identically on origin/main: same counts and the same exception lines per
+module. The only difference is the survivor PID in `test_b5_chain_prune2`'s sandbox process-tree
+message. The causes are `FileNotFoundError: '/bin/zsh'` (`test_b5_chain` 21, `test_b5_chain_prune2` 10
+plus the process-tree failure, `test_magistrate_watchdog` 3, `test_neg8_survivors` 4,
+`test_v5_block4_replay` 1) and `ValueError: backup command failed` (`test_v5_block4_x12b` 1,
+`test_v5_s1_desk_closeout` 2). The other 111 modules are OK, including `tests.test_whole_window_inverted_corner_clamp`
+(32 tests) and `tests.test_whole_window_analysis_clamp_flag` (11 tests).
+
+Run 1, at `9641561fb` (before DECISIONS 2 and 3), also failed `tests.test_analysis_integration`,
+`tests.test_authentication_io` and `tests.test_floor_mint_estimator`. All three pass at `d8050fca6`.
+Log: `l9-env5/run1_module_tails_9641561fb.txt`.
