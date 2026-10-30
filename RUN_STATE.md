@@ -623,6 +623,13 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   3. Then attempt C, end to end, at the fixed head.
 - RC-CMP-10 continues in parallel.
 
+128. **Full-size synthetic comparator acceptance PASSES at RC-CMP-10's fix head (reported by joulewise-28, 2026-10-30 03:35Z).**
+- Comparator lane `ba5587669` (RC-CMP-10 milestone 2, before its final probes and report). L9 custody from the full JoinedHarness run at `0d2ff6404`; recompute at `ba5587669` exit 0.
+- Comparator with `--window-index` set to the chain fixture's synthetic index (sha `908577ff…`, equal to the record's `window_index_sha256`): **exit 0, 0 failures in every family**. Rows: `run_phase_energy_j` 786, `routing_id` 798, `outcome_word` 188, `reported_cell_j` 144, `floor_j` 149, `contrast_j` 122, `count` 133, `kept_units` 26, `p42_status` 6. `step11_unmapped` 0, `structure_flags` 0.
+- At `f9f86869e` the same comparison was exit 2, with 9 failing rows and 7 unmapped leaves (FS1-FS4); all are now closed.
+- **Release runbook:** the comparator now binds the window index (FS4). Without `--window-index` it reads the repository's `configs/analysis/b5/analysed_windows.json` and refuses `window_index_digest_differs` unless that equals L9's record. That is correct for the real release; synthetic runs must pass `--window-index`.
+- joulewise-28 reruns at RC-CMP-10's final head when it lands.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
