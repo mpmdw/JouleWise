@@ -1,0 +1,37 @@
+b tooling only                     exit1=extraction_cell_tooling_refusal    exit0=ok
+b mixed mask+tooling               exit1=extraction_cell_r3_refusal         exit0=ok
+b unlisted                         exit1=extraction_cell_tooling_refusal    exit0=ok
+b empty-string reason              exit1=extraction_cell_tooling_refusal    exit0=ok
+b mask, c tooling                  exit1=extraction_cell_r3_refusal         exit0=ok
+b mask dup                         exit1=extraction_cell_r3_refusal         exit0=ok
+b empty, floor None                exit1=extraction_report_malformed        exit0=ok
+b empty, floor 0.0                 exit1=extraction_report_malformed        exit0=ok
+b empty, floor False               exit1=extraction_report_malformed        exit0=ok
+b empty, no floor key              exit1=extraction_report_malformed        exit0=ok
+b mask, floor present              exit1=extraction_cell_r3_refusal         exit0=ok
+b reasons None                     exit1=extraction_report_malformed        exit0=ok
+b reasons tuple                    exit1=extraction_report_malformed        exit0=ok
+b reasons str                      exit1=extraction_report_malformed        exit0=ok
+b reasons dict                     exit1=extraction_report_malformed        exit0=ok
+b reasons [int]                    exit1=extraction_report_malformed        exit0=ok
+b reasons [str-subclass mask]      exit1=extraction_report_malformed        exit0=ok
+b reasons [None]                   exit1=extraction_report_malformed        exit0=ok
+b no reasons key                   exit1=extraction_report_malformed        exit0=ok
+a p42 tooling only                 exit1=p42_floor_cells_only               exit0=ok
+a p42 malformed                    exit1=extraction_report_malformed        exit0=ok
+a p42 tooling + b tooling          exit1=extraction_cell_tooling_refusal    exit0=ok
+a p42 tooling + b mask             exit1=extraction_cell_r3_refusal         exit0=ok
+a p42 mask + b tooling             exit1=extraction_cell_tooling_refusal    exit0=ok
+b non-R3 mask only                 exit1=extraction_cell_tooling_refusal    exit0=ok
+b all 8 R3                         exit1=extraction_cell_r3_refusal         exit0=ok
+b R3 upper-case                    exit1=extraction_cell_tooling_refusal    exit0=ok
+b R3 + ''                          exit1=extraction_cell_r3_refusal         exit0=ok
+b empty + c R3                     exit1=extraction_report_malformed        exit0=ok
+a p42 R3 only                      exit1=p42_floor_cells_only               exit0=ok
+a p42 empty only                   exit1=p42_floor_cells_only               exit0=ok
+a p42 R3 + b empty                 exit1=extraction_report_malformed        exit0=ok
+b mask + reason w/ whitespace      exit1=extraction_cell_r3_refusal         exit0=ok
+c extractable w/ tooling + b mask    extraction_cell_r3_refusal
+exit-1 codes seen: ['extraction_cell_r3_refusal', 'extraction_cell_tooling_refusal', 'extraction_report_malformed', 'p42_floor_cells_only']
+any in outcome_class: []
+outcome_class: ['dominance_ratio_zero_denominator']

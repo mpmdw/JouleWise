@@ -1,0 +1,13 @@
+baseline: OK
+M1_empty_reasons_not_malformed: FAILED (failures=4)
+M2_r3_needs_all_reasons: FAILED (failures=6)
+M3_tooling_wins: FAILED (failures=6)
+M4_r3_read_on_p42: FAILED (failures=1)
+M5_r3_returns_old_outcome: FAILED (failures=16)
+M6_p42_counted_as_target: FAILED (failures=12)
+M7_r3_set_empty: FAILED (failures=17)
+M8_first_target_only: FAILED (failures=1)
+M9_r3_drops_a_code: FAILED (failures=4)
+M10_r3_gains_wepm: FAILED (failures=3)
+M11_r3_code_registered_as_outcome: FAILED (failures=1)
+M12_r3_ok_in_driver: FAILED (failures=2)
