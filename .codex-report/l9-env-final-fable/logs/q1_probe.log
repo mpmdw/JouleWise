@@ -1,0 +1,64 @@
+phase durations: {'decode': 0.2376, 'generation_setup': 0.0, 'prefill': 0.1329, 'tokenize': 0.0004} minted bound 0.02142716616057592 span 8.106231689453125e-06
+== non-inverting bound=0.06442: round-trip lossless=True; new is old=False; new == old=False
+   changed leaf paths: 20
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/anchor_bound_s <absent> -> 0.12098922402954101
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/independent_edge_shift_bound_j <absent> -> 2.6308636070306393
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/lower_j <absent> -> 0.0
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/max_abs_delta_j <absent> -> 2.631855125804672
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/method <absent> -> common_trace_shift_plus_independent_edge_corners_v3
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/point_j <absent> -> 0.00011075197219848633
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/upper_j <absent> -> 2.6319658777768704
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/wall_minus_monotonic_independent_edge_span_s <absent> -> 8.106231689453125e-06
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/anchor_bound_s <absent> -> 0.12098922402954101
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/independent_edge_shift_bound_j <absent> -> 2.62146070399023
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/lower_j <absent> -> 0.0
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/max_abs_delta_j <absent> -> 2.6307919973414036
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/method <absent> -> common_trace_shift_plus_independent_edge_corners_v3
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/point_j <absent> -> 0.0010422991161346436
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/upper_j <absent> -> 2.631834296457538
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/wall_minus_monotonic_independent_edge_span_s <absent> -> 8.106231689453125e-06
+      /window_evidence_precheck/phase/generation_setup/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/generation_setup/windows[0]/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/tokenize/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/tokenize/windows[0]/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+   energy figures changed (must be 0): 0
+== inverting bound=0.06842: round-trip lossless=True; new is old=False; new == old=False
+   changed leaf paths: 30
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/anchor_bound_s <absent> -> 0.12498922402954102
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/independent_edge_shift_bound_j <absent> -> 2.7439255190306393
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/lower_j <absent> -> 0.0
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/max_abs_delta_j <absent> -> 2.744917037804672
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/method <absent> -> common_trace_shift_plus_independent_edge_corners_v3
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/point_j <absent> -> 0.00011075197219848633
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/upper_j <absent> -> 2.7450277897768705
+      /energy_anchor_shift_envelopes//phase_energy_j/generation_setup/wall_minus_monotonic_independent_edge_span_s <absent> -> 8.106231689453125e-06
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/anchor_bound_s <absent> -> 0.12498922402954102
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/independent_edge_shift_bound_j <absent> -> 2.613139318475761
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/lower_j <absent> -> 0.0
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/max_abs_delta_j <absent> -> 3.101538143556633
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/method <absent> -> common_trace_shift_plus_independent_edge_corners_v3
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/point_j <absent> -> 2.9164673801465035
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/upper_j <absent> -> 6.0180055237031365
+      /energy_anchor_shift_envelopes//phase_energy_j/prefill/wall_minus_monotonic_independent_edge_span_s <absent> -> 8.106231689453125e-06
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/anchor_bound_s <absent> -> 0.12498922402954102
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/independent_edge_shift_bound_j <absent> -> 2.7345226159902305
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/lower_j <absent> -> 0.0
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/max_abs_delta_j <absent> -> 2.743853909341404
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/method <absent> -> common_trace_shift_plus_independent_edge_corners_v3
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/point_j <absent> -> 0.0010422991161346436
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/upper_j <absent> -> 2.7448962084575386
+      /energy_anchor_shift_envelopes//phase_energy_j/tokenize/wall_minus_monotonic_independent_edge_span_s <absent> -> 8.106231689453125e-06
+      /window_evidence_precheck/phase/generation_setup/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/generation_setup/windows[0]/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/prefill/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/prefill/windows[0]/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/tokenize/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+      /window_evidence_precheck/phase/tokenize/windows[0]/reasons[0] anchor_energy_envelope_unrecorded -> anchor_energy_envelope_exceeds_quarter_metric
+   energy figures changed (must be 0): 0
+   prefill clamped envelope: {'point_j': 2.9164673801465035, 'lower_j': 0.0, 'upper_j': 6.0180055237031365, 'anchor_bound_s': 0.12498922402954102}
+   reduce phase_energy_j[prefill] = 2.9164673801465035 minted point_j = 2.9164673801465035
+   prefill gate: False ['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing', 'insufficient_in_window_samples'] [['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing', 'insufficient_in_window_samples']]
+   old prefill gate: ['anchor_energy_envelope_unrecorded', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing', 'insufficient_in_window_samples']
+   global refusals old/new: {'environment_admission_missing', 'anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window'} {'environment_admission_missing', 'anchor_energy_envelope_exceeds_quarter_metric', 'clock_bound_exceeds_quarter_window'}
+   key order old: ['/gross_energy_j', '/idle_subtracted_energy_j', '/energy_request_j', '/energy_token_j', '/energy_output_token_j', '/phase_energy_j/decode', '/suite_item_energy_j/0:mock_item_001', '/suite_block_energy_j/block_a', '/suite_level_energy_j/block_a~1level_1']
+   key order new: ['/gross_energy_j', '/idle_subtracted_energy_j', '/energy_request_j', '/energy_token_j', '/energy_output_token_j', '/phase_energy_j/decode', '/phase_energy_j/generation_setup', '/phase_energy_j/prefill', '/phase_energy_j/tokenize', '/suite_item_energy_j/0:mock_item_001', '/suite_block_energy_j/block_a', '/suite_level_energy_j/block_a~1level_1']

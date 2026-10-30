@@ -1,0 +1,3 @@
+reduce omitted prefill: True
+clamp added prefill envelope: True lower_j = 0.00811183377243804 (unclamped: lower_j > 0)
+prefill gate reasons: ['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_unrecorded', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing', 'insufficient_in_window_samples']

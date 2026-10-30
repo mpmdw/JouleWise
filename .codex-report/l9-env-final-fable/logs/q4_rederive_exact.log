@@ -1,0 +1,26 @@
+== A single short window (0.30 s, 2e = 0.40)
+   reduce : None
+   clamp  : {'point_j': 0.7499997615814209, 'lower_j': 0.0, 'upper_j': 1.79999942779541}
+   exact  : point=0.7499997615814209 min=0.0 max=1.79999942779541; random interior within [min,max]: True
+   clamp == exact extrema (1e-9): True
+== B two intervals (1.0 s and 0.10 s), e = 0.12
+   reduce : None
+   clamp  : {'point_j': 2.799999713897705, 'lower_j': 1.8399997138977042, 'upper_j': 3.899999380111695}
+   exact  : point=2.799999713897705 min=1.8399997138977042 max=3.8999993801116952; random interior within [min,max]: True
+   clamp == exact extrema (1e-9): True
+== C non-inverting control (1.0 s, 2e = 0.40)
+   reduce : {'point_j': 2.499999761581421, 'lower_j': 1.4499996185302737, 'upper_j': 3.55000057220459}
+   clamp  : {'point_j': 2.499999761581421, 'lower_j': 1.4499996185302737, 'upper_j': 3.55000057220459}
+   exact  : point=2.499999761581421 min=1.4499996185302737 max=3.55000057220459; random interior within [min,max]: True
+   reduce defined -> clamp returned reduce's object: False
+== D zero-length input window
+   reduce : None
+   clamp  : {'point_j': 0.0, 'lower_j': 0.0, 'upper_j': 1.0000000476837156}
+   exact  : point=0.0 min=0.0 max=1.0000000476837156; random interior within [min,max]: True
+   clamp == exact extrema (1e-9): True
+== E window exactly 2e long (boundary)
+   reduce : {'point_j': 0.9999997615814209, 'lower_j': 1.9073486345888568e-07, 'upper_j': 1.9999999523162848}
+   clamp  : {'point_j': 0.9999997615814209, 'lower_j': 1.9073486345888568e-07, 'upper_j': 1.9999999523162848}
+   exact  : point=0.9999997615814209 min=1.9073486345888568e-07 max=1.9999999523162848; random interior within [min,max]: True
+   reduce defined -> clamp returned reduce's object: False
+MISMATCH
