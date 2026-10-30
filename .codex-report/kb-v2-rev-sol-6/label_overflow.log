@@ -1,0 +1,4 @@
+rc 0
+calls 8 input retained True
+rails UNDETERMINED not defined (idle variance not defined (records[0].harvest.idle.pre.rails: rails idle arithmetic unavailable: (34, 'Numerical result out of range')))
+reasons ["idle variance not defined (records[0].harvest.idle.pre.rails: rails idle arithmetic unavailable: (34, 'Numerical result out of range'))"]

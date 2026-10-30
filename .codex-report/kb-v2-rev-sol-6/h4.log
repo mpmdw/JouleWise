@@ -1,0 +1,3 @@
+H4 checks 1248 failures 0
+example C3 lost rails printed: 0.06671643154340534 J/GB; not defined (measured rails boundary missing (measurement_boundary_label.rails))
+{'gamma_c': 0.028000195821126284, 'alpha': 0.0013999906666666668, 'gamma_d': 0.09471662736453161, 'delta': 0.06671643154340534, 'r': 'not defined (two complete arm calls missing)', 'halfwidth': 'not defined (two complete arm calls missing)', 'class': 'UNDETERMINED'}

@@ -1,0 +1,3 @@
+Scan maximum binary64 discrepancy GB/s 2.8793189825782005e-13
+Scan 1e6 times discrepancy GB/s 2.8793189825782006e-07 <= bar 4.5e-07 = 1% of 4.5e-05
+Energy governed noise floor 1e6 times float noise 2.5e-10 J/GB < bar 5.7e-6 = 1% of .00057 J/GB; registration section 5
