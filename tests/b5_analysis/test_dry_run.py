@@ -14,6 +14,8 @@ from joulewise.b5_analysis.windows import AnalysisRefusal
 from joulewise.b5_analysis.steps import step_record
 
 MARKER = '12.3457331'
+# L9-STEP4-3: a tooling-detail sentinel no hex digest can contain.
+SENTINEL = 'Q7331Z'
 
 
 class JoinedRunTests(unittest.TestCase):
@@ -149,8 +151,11 @@ class DriverPrimitiveTests(unittest.TestCase):
             if ':' in code:self.assertIn(code.split(':',1)[0],tooling)
         self.assertIn('ledger_copies_disagree_below_T',tooling)
         self.assertLessEqual(closeout.TOOLING_REFUSAL_CODES,set(tooling))
-        # Step 6 owns its closeout outcomes; step 4 adds the plan's floor-cell outcome (L9-STEP4-1).
-        self.assertEqual(closeout.OUTCOME_CLASS_CODES|{'floor_cell_not_extractable'},set(outcome))
+        # Step 6 owns its closeout outcomes; step 4 has none (L9-STEP4-3: plan section 3.1
+        # registers only the p42 exit, so floor_cell_not_extractable is no longer registered).
+        self.assertEqual(closeout.OUTCOME_CLASS_CODES,set(outcome))
+        self.assertNotIn('floor_cell_not_extractable',set(tooling)|set(outcome))
+        self.assertLessEqual({'extraction_cell_r3_refusal','extraction_cell_tooling_refusal'},set(tooling))
         remaining=owner.D165_CLOSEOUT_REFUSAL_CODES-closeout.TOOLING_REFUSAL_CODES-closeout.OUTCOME_CLASS_CODES
         self.assertEqual(len(remaining),10)
         self.assertFalse(remaining&(set(tooling)|set(outcome)))
@@ -291,6 +296,8 @@ class DriverDouble(d.StepRunner):
     fail_bundle=False
     p42=False
     target_refusal=False
+    # Synthetic extractor reasons: a tooling code by default (L9-STEP4-3 step-4 rule).
+    target_reasons=('marker_self_digest_mismatch',)
     bad_projection=False
     release_change=None
     source_case=None
@@ -330,9 +337,9 @@ class DriverDouble(d.StepRunner):
             # Reader outputs and logs carry only structure (T19).
             if step not in ('0','3'):
                 print(MARKER);print(MARKER,file=__import__('sys').stderr)
-            if self.exception_at==step:raise RuntimeError(MARKER)
+            if self.exception_at==step:raise RuntimeError(MARKER+' '+SENTINEL)
             if self.refusal and self.refusal[0]==step:
-                print('error: '+self.refusal[1]+': '+MARKER,file=__import__('sys').stderr);return 2
+                print('error: '+self.refusal[1]+': '+MARKER+' '+SENTINEL,file=__import__('sys').stderr);return 2
             if name=='prepare_initial':
                 self._initial(s);return 0
             if name=='prepare_kept':
@@ -385,8 +392,11 @@ class DriverDouble(d.StepRunner):
                     **{key:stored[key] for key in d.REFIT_DEPENDENT_SUMMARY_KEYS if key in stored}})
             elif step=='4':
                 value.update(schema_version='joulewise.detection_floor_extraction.v1',kept_units_binding=binding,
-                    spec_membership_refusals=[],cells=[{'cell_id':window+'-target','extractable':not self.target_refusal},
-                                                     {'cell_id':window+'-p42','extractable':not self.p42}])
+                    spec_membership_refusals=[],cells=[
+                        {'cell_id':window+'-target','extractable':not self.target_refusal,
+                         **({'refusal_reasons':list(self.target_reasons),'floor':None} if self.target_refusal else {})},
+                        {'cell_id':window+'-p42','extractable':not self.p42,
+                         **({'refusal_reasons':['marker_self_digest_mismatch'],'floor':None} if self.p42 else {})}])
                 write(option('--out'),value)
                 if self.p42 or self.target_refusal or getattr(self,'empty_exit',False):return 1
             elif step=='5' and '--out-dir' in argv:
@@ -453,7 +463,8 @@ class DriverAcceptanceTests(unittest.TestCase):
 
     def setUp(self):
         for key,value in {'calls':[],'refusal':None,'outcome':False,'exception_at':None,'change_at':None,
-                'fail_bundle':False,'p42':False,'target_refusal':False,'bad_projection':False,'release_change':None}.items():
+                'fail_bundle':False,'p42':False,'target_refusal':False,'target_reasons':('marker_self_digest_mismatch',),
+                'bad_projection':False,'release_change':None}.items():
             setattr(DriverDouble,key,value)
 
     def execute(self,*,mode='blind-dry-run',custody=None,runner=DriverDouble,git=None):
@@ -505,13 +516,18 @@ class DriverAcceptanceTests(unittest.TestCase):
             self.assertIsNone(d._FLOAT_TOKEN.search(text),text)
 
     def test_T4_exception_and_tooling_detail_never_escape(self):
+        import re
+        def assertNoDetail(result):
+            text=result.path.read_text()+result.stdout+result.stderr
+            # Q7331Z cannot occur in hex; 7331 can occur inside a sha256 (T3), so strip digests first.
+            self.assertNotIn(SENTINEL,text);self.assertNotIn('7331',re.sub(r'[0-9a-f]{64}','',text))
         DriverDouble.exception_at='9';result=self.execute()
-        self.assertEqual(result.code,2);self.assertNotIn('7331',result.path.read_text()+result.stdout+result.stderr)
+        self.assertEqual(result.code,2);assertNoDetail(result)
         self.assertEqual(next(r for r in result.record['steps'] if r['step']=='9')['refusal'],'unclassified refusal at step 9')
         DriverDouble.exception_at=None;DriverDouble.refusal=('5','window_index_required')
         result=self.execute();row=next(r for r in result.record['steps'] if r['step']=='5')
         self.assertEqual(row['refusal'],'window_index_required')
-        self.assertNotIn('7331',result.path.read_text()+result.stdout+result.stderr)
+        assertNoDetail(result)
 
     def test_T5_unlisted_step9_refusal_stops_and_is_unclassified(self):
         DriverDouble.refusal=('9','unlisted_7331');result=self.execute()
@@ -536,13 +552,14 @@ class DriverAcceptanceTests(unittest.TestCase):
         DriverDouble.p42=True;result=self.execute();self.assertEqual(result.code,0,result.stderr)
         self.assertTrue(any(step=='5' for step,_,_ in DriverDouble.calls))
         self.assertEqual([r['registered_exit'] for r in result.record['steps'] if r['step']=='4'],['p42_floor_cells_only']*2)
-        DriverDouble.calls=[];DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,3)
+        # L9-STEP4-3: a refused target is a stop (run exit 2), never an outcome (exit 3 before).
+        DriverDouble.calls=[];DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,2)
         self.assertFalse(any(step=='5' for step,_,_ in DriverDouble.calls))
 
     def test_T8b_step4_exit_names_its_class(self):
-        DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,3,result.stderr)
+        DriverDouble.target_refusal=True;result=self.execute();self.assertEqual(result.code,2,result.stderr)
         rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
-        self.assertEqual(rows,[('outcome_class','outcome-class refusal at step 4')])
+        self.assertEqual(rows,[('tooling_refusal','extraction_cell_tooling_refusal')])
         self.assertFalse(any(step=='5' for step,_,_ in DriverDouble.calls))
         self.assertTrue(all(r['status']=='not_run' for r in result.record['steps'] if r['step'] in ('5','8','6','9','9b','10','11')))
         for name in ('p42','target_refusal'):setattr(DriverDouble,name,False)
@@ -552,6 +569,26 @@ class DriverAcceptanceTests(unittest.TestCase):
         self.assertEqual(result.code,2,result.stderr)
         rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
         self.assertEqual(rows,[('tooling_refusal','extraction_exit_without_refused_cell')])
+
+    def test_T8c_step4_refused_target_cell_is_a_stop_named_by_its_reason_class(self):
+        # At origin/main (0a9ff42) every row was ('outcome_class','outcome-class refusal at step 4'), run exit 3;
+        # at 8222d0e47 the mask-only cases (cell_stale, kept_units_below_minimum, cadence_...) still were.
+        for reasons,code in ((('marker_self_digest_mismatch',),'extraction_cell_tooling_refusal'),
+                             (('insufficient_idle_samples','marker_self_digest_mismatch'),'extraction_cell_tooling_refusal'),
+                             (('syn_unlisted_reason',),'extraction_cell_tooling_refusal'),
+                             (('cell_stale',),'extraction_cell_tooling_refusal'),
+                             (('kept_units_below_minimum',),'extraction_cell_r3_refusal'),
+                             (('marker_self_digest_mismatch','cadence_ratio_below_threshold'),'extraction_cell_r3_refusal')):
+            with self.subTest(reasons=reasons):
+                DriverDouble.calls=[];DriverDouble.target_refusal=True;DriverDouble.target_reasons=reasons
+                result=self.execute();self.assertEqual(result.code,2,result.stderr)
+                rows=[(r['status'],r['refusal']) for r in result.record['steps'] if r['step']=='4']
+                self.assertEqual(rows,[('tooling_refusal',code)])
+                self.assertFalse(result.record['completed_without_tooling_refusal'])
+                self.assertFalse(any(step=='5' for step,_,_ in DriverDouble.calls))
+                # R3: the record and streams name the class, never the extractor's reasons.
+                for text in (result.path.read_text(),result.stdout,result.stderr):
+                    for reason in reasons:self.assertNotIn(reason,text)
 
     def test_T9_strict_validation_stops_and_never_visits_removed_bundle(self):
         result=self.execute();self.assertEqual(result.code,0,result.stderr)
