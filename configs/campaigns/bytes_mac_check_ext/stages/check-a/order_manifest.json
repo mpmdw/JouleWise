@@ -1,0 +1,61 @@
+{
+  "executed_order": [
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "bytes-qwen38-27b-8bit-abs-r01.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r01.json",
+      "config_sha256": "1003f4867d37b40fc48c0442fa95753190a5f233ea85401c5194cfcfe993e33e",
+      "index": 1,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r01",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "bytes-qwen38-27b-8bit-abs-r02.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r02.json",
+      "config_sha256": "b0604735136e4c2fe8220a4bd296aabe4e4dc52cd5597ec7c145909e42599ba6",
+      "index": 2,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r02",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "bytes-qwen38-27b-8bit-abs-r03.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r03.json",
+      "config_sha256": "bc8bd5cd65abb155222146280af275f4077ee78a4a56a6b21397a7af595eef8c",
+      "index": 3,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r03",
+      "workload": "bytes_synthetic_2048_decode_512"
+    }
+  ],
+  "manifest_id": "bytes-mac-check-ext-check-a",
+  "planned_n_bundles": 3,
+  "schema_version": "joulewise.order_manifest.v1"
+}

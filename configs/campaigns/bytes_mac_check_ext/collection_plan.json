@@ -1,0 +1,57 @@
+{
+  "authority": "BYTES R2/R8.6; block-6 design \u00a714; threshold note \u00a74 test 7",
+  "check_runs_per_model": 5,
+  "long_regimes": [],
+  "members": [
+    {
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r01.json",
+      "end": "middle",
+      "model_id": "qwen38-27b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r01",
+      "stage_id": "bytes-mac-check-ext-check-a"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r02.json",
+      "end": "middle",
+      "model_id": "qwen38-27b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r02",
+      "stage_id": "bytes-mac-check-ext-check-a"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r03.json",
+      "end": "middle",
+      "model_id": "qwen38-27b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r03",
+      "stage_id": "bytes-mac-check-ext-check-a"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/bytes-qwen38-27b-8bit-abs-r04.json",
+      "end": "middle",
+      "model_id": "qwen38-27b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r04",
+      "stage_id": "bytes-mac-check-ext-check-b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/bytes-qwen38-27b-8bit-abs-r05.json",
+      "end": "middle",
+      "model_id": "qwen38-27b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r05",
+      "stage_id": "bytes-mac-check-ext-check-b"
+    }
+  ],
+  "non_claim": true,
+  "plan_id": "bytes-mac-check-ext",
+  "schema_version": "joulewise.bytes_mac_check.v1",
+  "soak_runs_per_model": 0,
+  "test7_pairs_per_end": 0
+}
