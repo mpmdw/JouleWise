@@ -767,6 +767,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Coverage still holds against the minted envelopes, because the clamped lower bound (0 J or more) is at or below the minted lower bound, and the (−edge, +edge) corner only lengthens the window, so the upper bound is at or above the minted upper bound.
   - The independent recompute must either implement the same clamp or have its disagreement registered. The seat's release-comparison report covers this.
 
+141. **L9-STEP4-3 DONE; delta reviews launched (reported by joulewise-28, 2026-10-30 05:22-05:25Z).**
+- **Implementation:** branch `lane/2026-10-30-l9-step4-reasons`, code `b898fbbc2`, report `901956944`, with origin/main merged at `ed577960d`. It implements the step-4 stop-class ruling from items 132, 133 and 138.
+  - Every refused non-p42 cell gets one of two codes: `extraction_cell_r3_refusal`, used if any §2.2 R3 code is present (R3 wins), or `extraction_cell_tooling_refusal` otherwise.
+  - A refused cell with no reasons is classed as malformed.
+  - The verification tails are still pending in the seat's report.
+- **Laptop test run:** 05:25Z, whole-directory `tests/b5_analysis` discovery running at `901956944`.
+- **Delta reviews:** launched at 05:25Z, both firing at 05:32Z with MCP cleared.
+  - Opus (`trig_014C63w5qEffHJK6HC6FmMVe`) re-runs its probe and mutants.
+  - Fable (`trig_01Rna9qSVtNGDXMRQZ4F1x4A`) checks the R3 list against plan §2.2 and §3.1.
+- **Still in flight:** RC-CMP-11 reviews (fired 05:14Z), L9-ENV-2 clamp (05:20Z), PR #603 CI.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
