@@ -1107,6 +1107,16 @@ MANIFEST += [
  ('tests/test_single_count_discipline_matrix.py', 'versioned.visit', 'key-token',
   "('Constant', (('value', 'single_count_discipline'),))", 1)]
 
+
+# Reviewed reader inventory: the block-5 recompute comparator declares the attribution-floor
+# diagnostic and single-count discipline words as uncovered (it reads and compares nothing there).
+MANIFEST += [
+ ('scripts/compare_b5_recompute.py', '<grep>', 'grep', '(F + r"floor/(resolutions/\\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)",', 1),
+ ('scripts/compare_b5_recompute.py', '<grep>', 'grep', 'UNCOVERED + "attribution-floor diagnostic label and flag, and the single-count discipline\'s words"),', 1),
+ ('scripts/compare_b5_recompute.py', 'COVERAGE', 'text-token', '(\'Constant\', ((\'value\', "attribution-floor diagnostic label and flag, and the single-count discipline\'s words"),))', 1),
+ ('scripts/compare_b5_recompute.py', 'COVERAGE', 'text-token', "('Constant', (('value', 'floor/(resolutions/\\\\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)'),))", 1),
+]
+
 class SingleCountCensusTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
