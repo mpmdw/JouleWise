@@ -6,6 +6,7 @@ import argparse
 import bisect
 import json
 import math
+import os
 from pathlib import Path
 import sys
 
@@ -139,23 +140,81 @@ def harvest(archive):
     relocatable and reads no live ledger or files outside this archive.
     """
     from joulewise.b6 import calibration
-    archive = Path(archive)
-    session = read(archive/'SESSION.json')
+    archive = Path(archive).resolve()
+    diagnostics = []
+
+    def safe(path):
+        try:
+            allowed = path.resolve().is_relative_to(archive)
+        except (OSError, RuntimeError):
+            allowed = False
+        if not allowed:
+            message = f'outside archive symlink not read: {path.relative_to(archive)}'
+            if message not in diagnostics:
+                diagnostics.append(message)
+        return allowed
+
+    # Inspect links without following directory links, before any parser opens
+    # nested inputs (including the governed calibration/native readers).
+    files = []
+    for directory, dirs, names in os.walk(archive, followlinks=False):
+        for name in dirs + names:
+            path = Path(directory)/name
+            if safe(path) and path.is_file():
+                files.append(path)
+
+    def archive_files(directory, pattern):
+        if not safe(directory):
+            return []
+        return sorted(p for p in directory.glob(pattern) if safe(p) and p.is_file())
+
+    def object_json(path):
+        try:
+            if not safe(path):
+                return None
+            value = read(path)
+            json.dumps(value, allow_nan=False)  # reject non-finite malformed JSON fields
+            if not isinstance(value, dict):
+                raise ValueError('JSON object required')
+            return value
+        except (OSError, ValueError, TypeError) as exc:
+            diagnostics.append(f'{path.relative_to(archive)} unavailable: {exc}')
+            return None
+
+    session = object_json(archive/'SESSION.json') or {}
     claim = archive/'runs_bytes_stream_test'
     capture = claim/'capture'
-    diagnostics = []
-    scan = read(capture/'SCAN.json') if (capture/'SCAN.json').is_file() else {
-        'status': 'knee not found', 'K': None, 'reason': 'scan not completed; see STAGE.json'}
-    reg = session['calibration_registration']
-    own = [calibration.read_own_capture(claim/'instrument_validation'/s) for s in ('pre','post')]
-    cal = calibration.evaluate(*own, reg, [], [archive.name], False)
+    scan = object_json(capture/'SCAN.json')
+    if scan is None:
+        scan = {'status': None, 'K': None, 'reason': 'scan unavailable; see provenance.diagnostics'}
+    reg = session.get('calibration_registration')
+    own = []
+    for slot in ('pre','post'):
+        directory = claim/'instrument_validation'/slot
+        calibration_safe = safe(directory) and all(safe(directory/relative) for relative in
+            ('instrument_evidence.json', 'raw/powermetrics.plist', 'events.jsonl'))
+        own.append(calibration.read_own_capture(directory) if calibration_safe
+                   else calibration.Capture(None, 'outside archive'))
+        if own[-1].status != 'valid':
+            diagnostics.append(f'calibration {slot} unavailable: {own[-1].status} (capture or raw plist)')
+    cal = (calibration.evaluate(*own, reg, [], [archive.name], False) if reg else
+           {'operative_bound_s': None, 'excluding': ['calibration registration unavailable']})
     bound = None if cal['operative_bound_s'] is None else float(cal['operative_bound_s'])
+    stop = object_json(capture/'capture_stop.json') or {}
+    device = stop.get('device_metadata') or {}
+    if not isinstance(device, dict):
+        diagnostics.append('capture_stop.json device_metadata unavailable: object required')
+        device = {}
+    stack = dict(telemetry_backend=device.get('telemetry'),
+                 measurement_boundary_label={'rails': device.get('rail_manifest')})
     try:
+        if not safe(capture/'raw/powermetrics.plist') or not safe(capture/'capture_stop.json'):
+            raise ValueError('native capture contains outside archive link')
         native, stack, gpu = native_trace(capture)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        native, stack, gpu = {'rails': [], 'gpu': []}, {}, []
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        native, gpu = {'rails': [], 'gpu': []}, []
         diagnostics.append('native capture unavailable: ' + str(exc))
-    streams = sorted((archive/'custody/hazards/meter').glob('stream-*.jsonl'))
+    streams = archive_files(archive/'custody/hazards/meter', 'stream-*.jsonl')
     meter = None
     if len(streams) == 1:
         try:
@@ -170,18 +229,39 @@ def harvest(archive):
         diagnostics.append('one continuous meter stream required; found ' + str(len(streams)))
     thermal_path = archive/'custody/hazards/monitor/thermal.jsonl'
     thermal = []
-    if thermal_path.is_file():
+    thermal_invalid = False
+    if safe(thermal_path) and thermal_path.is_file():
         for line in thermal_path.read_text().splitlines():
             try:
-                thermal.append(json.loads(line))
+                row = json.loads(line)
+                json.dumps(row, allow_nan=False)
+                if not isinstance(row, dict):
+                    raise ValueError('thermal journal line must be an object')
+                finished = row.get('finished') or {}
+                if not isinstance(finished, dict):
+                    raise ValueError('thermal finished must be an object')
+                stamp = finished.get('monotonic_raw_ns', -1)
+                if not isinstance(stamp, (int, float)) or not math.isfinite(stamp):
+                    raise ValueError('thermal RAW stamp must be finite')
+                thermal.append(row)
             except ValueError:
+                thermal_invalid = True
                 diagnostics.append('thermal journal malformed line retained in archive')
     records = []
-    for path in sorted((capture/'calls').glob('*.json')):
-        receipt = read(path)
-        spans = dict(stream=(receipt['start_ns'],receipt['end_ns']),
-            pre=(receipt['idle_pre_start_ns'],receipt['idle_pre_end_ns']),
-            post=(receipt['idle_post_start_ns'],receipt['idle_post_end_ns']))
+    for path in archive_files(capture/'calls', '*.json'):
+        receipt = object_json(path)
+        try:
+            spans = {name: (receipt[start], receipt[end]) for name, start, end in (
+                ('stream', 'start_ns', 'end_ns'), ('pre', 'idle_pre_start_ns', 'idle_pre_end_ns'),
+                ('post', 'idle_post_start_ns', 'idle_post_end_ns'))}
+            if any(not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                           and math.isfinite(v) for v in span) or span[1] <= span[0]
+                   for span in spans.values()):
+                raise ValueError('finite increasing receipt spans required')
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            diagnostics.append(f'{path.name}: receipt spans unavailable: {exc}')
+            records.append(dict(receipt=None, harvest=None))
+            continue
         try:
             h = meter_fields(meter, spans)
         except (ValueError, TypeError, KeyError, OverflowError) as exc:
@@ -199,22 +279,32 @@ def harvest(archive):
                     if r['start_ns'] < spans[name][1] and r['end_ns'] > spans[name][0]] if covered else []
         h.update(anchor_shift_j=None if any(v is None for v in envelopes) else max(envelopes),
                  operative_timing_bound_s=bound, capture_stack=stack,
-                 adapter_max_w=session['adapter_max_w'], adapter_source=session['adapter_source'],
+                 adapter_max_w=session.get('adapter_max_w'), adapter_source=session.get('adapter_source'),
                  battery_source='KM003C poll SMC B0AC/B0AV; km003c_parse.Stream.battery_watts')
         if gpu:
             h['gpu_state'] = [row for row in gpu if row['start_ns'] < spans['stream'][1]
                               and row['end_ns'] > spans['stream'][0]]
-        if thermal:
+        if thermal_invalid:
+            h['thermal_spans'] = None
+        elif thermal:
             h['thermal_spans'] = [row for row in thermal
                 if spans['stream'][0] <= (row.get('finished') or {}).get('monotonic_raw_ns',-1) <= spans['stream'][1]]
         records.append(dict(receipt=receipt,harvest=h))
-    stage = read(capture/'STAGE.json') if (capture/'STAGE.json').is_file() else {}
+    stage = object_json(capture/'STAGE.json') or {}
+    stage_diagnostic = {key: stage.get(key) for key in ('status','error','allocation_stop')}
+    diagnostics.append('STAGE.json: ' + json.dumps(stage_diagnostic, sort_keys=True))
     if all(k in stage for k in ('measured_session_start_ns','measured_session_end_ns')):
-        elapsed = (stage['measured_session_end_ns']-stage['measured_session_start_ns'])/1e9
-        for record in records:
-            record['harvest']['hour_as_run_s'] = elapsed
-    sources = {str(p.relative_to(archive)): sha(p) for p in archive.rglob('*')
-               if p.is_file() and p.name not in ('INPUT.json','HARVEST.json','READ.json')}
+        try:
+            elapsed = (stage['measured_session_end_ns']-stage['measured_session_start_ns'])/1e9
+            if not math.isfinite(elapsed) or elapsed < 0:
+                raise ValueError('invalid measured session span')
+            for record in records:
+                if record['harvest'] is not None:
+                    record['harvest']['hour_as_run_s'] = elapsed
+        except (TypeError, ValueError, OverflowError) as exc:
+            diagnostics.append('STAGE.json: measured session span unavailable: ' + str(exc))
+    sources = {str(p.relative_to(archive)): sha(p) for p in files
+               if p.name not in ('INPUT.json','HARVEST.json','READ.json')}
     return dict(scan=scan, records=records, non_claim=True,
                 provenance=dict(sources=sources, calibration=cal, diagnostics=diagnostics,
                                 meter_stream_count=len(streams)))
@@ -225,9 +315,16 @@ def main(argv=None):
     p.add_argument('--archive', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     a = p.parse_args(argv)
+    if a.out.exists() or a.out.is_symlink():
+        print(f'output already exists; preserved: {a.out}', file=sys.stderr)
+        return 2
     result = harvest(a.archive)
-    write(a.out, result)
-    print(json.dumps({'records': len(result['records']), 'scan': result['scan']['status'],
+    try:
+        write(a.out, result)
+    except FileExistsError:
+        print(f'output already exists; preserved: {a.out}', file=sys.stderr)
+        return 2
+    print(json.dumps({'records': len(result['records']), 'scan': result['scan'].get('status'),
                       'diagnostics': result['provenance']['diagnostics']}))
     return 0
 

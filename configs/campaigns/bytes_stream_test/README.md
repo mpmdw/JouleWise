@@ -37,7 +37,7 @@ SPAN=$("$PY" -B -c 'import math; print(math.ceil(3573.6+22*(3*2+4*10+2)+2*1800+9
 # 140 W Anker, 28 V × 4.99 A negotiated. The lead must record the actual
 # nameplate or t0 power-path negotiation record in --adapter-source.
 ADAPTER_W=140
-ADAPTER_SOURCE='REPLACE with the Anker nameplate or t0 power-path negotiation record; docs/phase_2/window_c_operator_checklist.md:32 records 140 W, 28 V × 4.99 A'
+: "${ADAPTER_SOURCE:?Set ADAPTER_SOURCE to the Anker nameplate or t0 power-path negotiation record}"
 # Existing measured byte rate, applied to the entire span, with the recorded
 # two-copy factor and fixed retained bytes (no new reserve or acceptance bar).
 DISK_BYTES=$("$PY" -B -c 'import json,math,sys; from fractions import Fraction; d=json.load(open(sys.argv[1]))["packs"]["bytes-s1-p1"]["disk_derivation"]; r=d["stream_rate_bytes_per_s"]; print(d["peak_copies"]*math.ceil(Fraction(r["numerator"],r["denominator"])*int(sys.argv[2]))+d["fixed_retained_bytes"])' "$CHECKOUT/configs/b6/registration/sizing_b5.json" "$SPAN")

@@ -154,6 +154,164 @@ class HarvestTests(unittest.TestCase):
                 result=bt.read_known_bytes(out['records'],out['scan'])
                 self.assertEqual(result['boundaries']['dc']['class'],'UNDETERMINED')
 
+class ArchiveCliTests(unittest.TestCase):
+    """Malformed and missing archive inputs through the production CLI."""
+    def setUp(self):
+        import sys
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)/'archive'
+        self.capture = self.root/'runs_bytes_stream_test/capture'
+        reg = read(h.ROOT/'configs/b6/registration/acceptance.json')
+        write(self.root/'SESSION.json', dict(calibration_registration=reg,
+              adapter_max_w=140, adapter_source='synthetic nameplate'))
+        write(self.capture/'SCAN.json', dict(status='knee not found', K=None))
+        write(self.capture/'STAGE.json', dict(status='incomplete', error='synthetic failure',
+              allocation_stop={'bytes': 2**31, 'reason': 'synthetic allocation stop'}))
+        write(self.capture/'capture_stop.json', dict(device_metadata={
+              'telemetry': 'powermetrics', 'rail_manifest': ['cpu_power','gpu_power','ane_power']}))
+        self.receipt = dict(start_ns=10**9, end_ns=2*10**9,
+            idle_pre_start_ns=0, idle_pre_end_ns=10**9,
+            idle_post_start_ns=2*10**9, idle_post_end_ns=3*10**9)
+        write(self.capture/'calls/01-S.json', self.receipt)
+        self.python = sys.executable
+
+    def cli(self):
+        import subprocess
+        out = Path(self.tmp.name)/'INPUT.json'
+        argv = [self.python, '-I', '-B', str(h.ROOT/'scripts/bytes_stream_harvest.py'),
+                '--archive', str(self.root), '--out', str(out)]
+        if getattr(self, 'audit_outside', None):
+            hook = ('import sys,runpy; from pathlib import Path\n'
+                    f'outside = Path({str(self.audit_outside)!r})\n'
+                    'def audit(event,args):\n'
+                    '    if event == "open" and isinstance(args[0], (str, bytes)):\n'
+                    '        assert not Path(args[0]).resolve().is_relative_to(outside), args[0]\n'
+                    'sys.addaudithook(audit)\n'
+                    'sys.argv = sys.argv[1:]\n'
+                    'runpy.run_path(sys.argv[0], run_name="__main__")\n')
+            argv[3:3] = ['-c', hook]
+        result = subprocess.run(argv, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        data = read(out)
+        reader = subprocess.run([self.python, '-I', '-B', str(h.ROOT/'scripts/bytes_stream_test.py'),
+            'read', str(out)], text=True, capture_output=True)
+        self.assertEqual(reader.returncode, 0, reader.stderr)
+        self.assertNotIn('Traceback', reader.stderr)
+        self.assertEqual(json.loads(result.stdout)['diagnostics'], data['provenance']['diagnostics'])
+        return data
+
+    def test_truncated_receipt(self):
+        (self.capture/'calls/01-S.json').write_text('{')
+        data = self.cli()
+        self.assertIsNone(data['records'][0]['receipt'])
+        self.assertIsNone(data['records'][0]['harvest'])
+        self.assertIn('01-S.json', str(data['provenance']['diagnostics']))
+
+    def test_malformed_receipt_fields(self):
+        (self.capture/'calls/01-S.json').write_text('{"start_ns": []}')
+        self.assertIsNone(self.cli()['records'][0]['receipt'])
+
+    def test_truncated_scan(self):
+        (self.capture/'SCAN.json').write_text('{')
+        self.assertIsNone(self.cli()['scan']['status'])
+
+    def test_malformed_scan_fields(self):
+        (self.capture/'SCAN.json').write_text('{"K": NaN}')
+        self.assertIsNone(self.cli()['scan']['status'])
+
+    def test_missing_scan_status(self):
+        (self.capture/'SCAN.json').write_text('{}')
+        self.assertEqual(self.cli()['scan'], {})
+
+    def test_nonobject_scan(self):
+        (self.capture/'SCAN.json').write_text('1')
+        self.assertIsNone(self.cli()['scan']['status'])
+
+    def test_truncated_stage(self):
+        (self.capture/'STAGE.json').write_text('{')
+        self.assertIn('STAGE.json', str(self.cli()['provenance']['diagnostics']))
+
+    def test_malformed_stage_fields(self):
+        (self.capture/'STAGE.json').write_text('{"measured_session_start_ns": [], "measured_session_end_ns": 1}')
+        self.assertIn('span unavailable', str(self.cli()['provenance']['diagnostics']))
+
+    def test_nonobject_thermal(self):
+        path = self.root/'custody/hazards/monitor/thermal.jsonl'
+        path.parent.mkdir(parents=True)
+        path.write_text('1\n')
+        data = self.cli()
+        self.assertIn('thermal journal malformed', str(data['provenance']['diagnostics']))
+        self.assertIsNone(data['records'][0]['harvest']['thermal_spans'])
+
+    def test_outside_symlinks_never_read(self):
+        outside = Path(self.tmp.name)/'outside'
+        outside.mkdir()
+        (outside/'secret.json').write_text('{"outside_secret": true}')
+        for path in (self.capture/'calls/02-C1.json', self.capture/'SCAN.json',
+                     self.root/'custody/hazards/meter/stream-001.jsonl'):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.unlink(missing_ok=True)
+            path.symlink_to(outside/'secret.json')
+        (self.root/'linked-directory').symlink_to(outside, target_is_directory=True)
+        raw = self.root/'aliased-raw'
+        raw.mkdir()
+        (raw/'powermetrics.plist').symlink_to(outside/'secret.json')
+        (self.capture/'raw').symlink_to(raw, target_is_directory=True)
+        calibration = self.root/'runs_bytes_stream_test/instrument_validation/pre'
+        calibration.mkdir(parents=True)
+        (calibration/'raw').symlink_to(raw, target_is_directory=True)
+        self.audit_outside = outside
+        data = self.cli()
+        self.assertIn('outside archive symlink not read', str(data['provenance']['diagnostics']))
+        self.assertNotIn('calls/02-C1.json', str(data['provenance']['sources']))
+        self.assertNotIn('outside_secret', json.dumps(data))
+        self.assertEqual(data['provenance']['meter_stream_count'], 0)
+
+    def test_stage_specific_diagnostics(self):
+        diagnostics = str(self.cli()['provenance']['diagnostics'])
+        for text in ('incomplete', 'synthetic failure', 'allocation_stop'):
+            self.assertIn(text, diagnostics)
+
+    def test_native_failure_keeps_capture_stack(self):
+        stack = self.cli()['records'][0]['harvest']['capture_stack']
+        self.assertEqual(stack['telemetry_backend'], 'powermetrics')
+        self.assertEqual(stack['measurement_boundary_label']['rails'], ['cpu_power','gpu_power','ane_power'])
+
+    def test_absent_calibration_capture_diagnostic(self):
+        self.assertIn('calibration pre unavailable: absent', str(self.cli()['provenance']['diagnostics']))
+
+    def test_absent_calibration_plist_diagnostic(self):
+        directory = self.root/'runs_bytes_stream_test/instrument_validation/pre'
+        write(directory/'instrument_evidence.json', {'b_fiducial_s': '.01'})
+        self.assertIn('calibration pre unavailable: refit_failed', str(self.cli()['provenance']['diagnostics']))
+
+    def test_readme_archive_copy_refuses_existing_target(self):
+        import os
+        import subprocess
+        readme = (h.ROOT/'configs/campaigns/bytes_stream_test/README.md').read_text()
+        start = readme.index('mkdir -p "${ARCHIVE%/*}"')
+        snippet = readme[start:readme.index('PYTHONDONTWRITEBYTECODE=', start)]
+        marker = self.root/'preserved'
+        marker.write_text('preserve')
+        result = subprocess.run(['/bin/sh', '-c', snippet], text=True, capture_output=True,
+            env={**os.environ, 'ARCHIVE': str(self.root), 'SESSION': str(self.root/'missing-source')})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Archive target already exists', result.stderr)
+        self.assertEqual(marker.read_text(), 'preserve')
+
+    def test_existing_out_one_line_and_unchanged(self):
+        import subprocess
+        out = Path(self.tmp.name)/'INPUT.json'
+        out.write_text('preserve these bytes')
+        result = subprocess.run([self.python, '-I', '-B', str(h.ROOT/'scripts/bytes_stream_harvest.py'),
+            '--archive', str(self.root), '--out', str(out)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(len(result.stderr.splitlines()), 1)
+        self.assertIn('already exists', result.stderr)
+        self.assertEqual(out.read_text(), 'preserve these bytes')
+
 
 if __name__ == '__main__':
     unittest.main()

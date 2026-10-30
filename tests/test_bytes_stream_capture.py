@@ -206,23 +206,40 @@ class CaptureTests(unittest.TestCase):
             self.assertEqual(len(chain.stage_plan(cap.read(kit/'plan_tree.json'))),4)
 
     def test_path_cli_bootstrap_without_editable_install(self):
-        result = subprocess.run([sys.executable, '-I', '-B', str(cap.ROOT/'joulewise/bytes_stream_capture.py'),
-                                 '--help'], capture_output=True, text=True, cwd='/tmp')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('prepare', result.stdout)
+        with tempfile.TemporaryDirectory() as tmp:
+            session = Path(tmp)/'never-created'
+            result = subprocess.run([sys.executable, '-I', '-B', str(cap.ROOT/'joulewise/bytes_stream_capture.py'),
+                'prepare', '--checkout', str(cap.ROOT), '--session', str(session), '--t0', '0',
+                '--adapter-max-w', '140', '--adapter-source', 'synthetic nameplate',
+                '--disk-bytes', '1', '--disk-derivation', 'synthetic',
+                '--programmed-span-s', '1', '--span-derivation', 'synthetic'],
+                capture_output=True, text=True, cwd='/tmp')
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertNotIn('ModuleNotFoundError', result.stderr)
+            self.assertTrue('checkout must be clean' in result.stderr or
+                            'installer minimum lead' in result.stderr, result.stderr)
+            self.assertFalse(session.exists())
 
     def test_start_exception_never_stops_unstarted_capture(self):
-        # Invoke the real CLI main with only the physical seams injected.
+        # Real stage CLI; only physical adapter/array/clock seams are injected.
         with tempfile.TemporaryDirectory() as tmp:
-            clock = Clock()
-            adapter = Capture(clock, [])
-            adapter.start_sampling = lambda *a: (_ for _ in ()).throw(RuntimeError('start failed'))
-            run = cap.run_stage
-            with patch.object(cap, 'run_stage', side_effect=lambda archive, device: run(
-                    archive, device=device, clock=clock, adapter=adapter, mx=Array(clock))):
-                self.assertEqual(cap.main(['stage', '--archive', str(Path(tmp)/'capture'),
-                                           '--device', 'synthetic']), 2)
-            self.assertEqual(adapter.stops, 0)
+            script = (f'import sys; sys.path.insert(0, {str(cap.ROOT)!r})\n'
+                'from tests.test_bytes_stream_capture import Clock, Capture, Array\n'
+                'from joulewise import bytes_stream_capture as cap\n'
+                'clock = Clock(); adapter = Capture(clock, [])\n'
+                'def fail(*args): raise RuntimeError("start failed")\n'
+                'adapter.start_sampling = fail\n'
+                'run = cap.run_stage\n'
+                'cap.run_stage = lambda archive, device: run(archive, device=device, '
+                'clock=clock, adapter=adapter, mx=Array(clock))\n'
+                'rc = cap.main()\n'
+                'assert adapter.stops == 0, adapter.stops\n'
+                'raise SystemExit(rc)\n')
+            result = subprocess.run([sys.executable, '-I', '-B', '-c', script,
+                'stage', '--archive', str(Path(tmp)/'capture'), '--device', 'synthetic'],
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
             stage = cap.read(Path(tmp)/'capture/STAGE.json')
             self.assertIn('start failed', stage['error'])
             self.assertNotIn('capture_stop_error', stage)
