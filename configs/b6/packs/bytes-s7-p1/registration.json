@@ -14,13 +14,8 @@
       1
     ],
     "pending_slots": [
-      "/models/qwen38-27b-8bit/config_model_type",
-      "/models/qwen38-27b-8bit/download",
-      "/models/qwen38-27b-8bit/group_size",
-      "/models/qwen38-27b-8bit/hf_repo",
       "/models/qwen38-27b-8bit/manifest",
       "/models/qwen38-27b-8bit/resolvability",
-      "/models/qwen38-27b-8bit/revision",
       "/packs/bytes-s7-p1/clock_hold_ppm",
       "/packs/bytes-s7-p1/disk",
       "/packs/bytes-s7-p1/est_minutes/source",

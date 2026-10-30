@@ -1,0 +1,4 @@
+Fetching 19 files:   0%|          | 0/19 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 19 files:   5%|▌         | 1/19 [00:00<00:10,  1.78it/s]Fetching 19 files:  11%|█         | 2/19 [00:00<00:05,  3.25it/s]Fetching 19 files:  32%|███▏      | 6/19 [00:00<00:01, 10.85it/s]Fetching 19 files:  32%|███▏      | 6/19 [00:20<00:01, 10.85it/s]Fetching 19 files:  37%|███▋      | 7/19 [06:24<16:34, 82.90s/it]Fetching 19 files: 100%|██████████| 19/19 [06:24<00:00, 20.24s/it]
+DONE /Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit
+rc=0

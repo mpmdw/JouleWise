@@ -4,29 +4,30 @@
   "models": {
     "qwen38-27b-8bit": {
       "config_model_type": {
-        "note": "config.json model_type (text_config merged). scripts/bytes_manifest.py FAMILIES must contain it, or the headers step refuses and a separately authorized manifest change is needed.",
-        "receipt": null,
-        "status": "MAC-PENDING",
-        "value": "MAC-PENDING"
+        "note": "Top-level model_type qwen3_5; text_config model_type qwen3_5_text (the value bytes_manifest.py reads). Not in scripts/bytes_manifest.py FAMILIES: headers step refused (receipts/headers.log), so a manifest change is needed (seat BY-EXT-2).",
+        "receipt": "configs/campaigns/bytes_v1/extension/receipts/qwen38-27b-8bit-config.json",
+        "status": "filled",
+        "value": "qwen3_5_text"
       },
       "download": {
         "destination": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
-        "free_disk_after_bytes": "MAC-PENDING",
-        "free_disk_before_bytes": "MAC-PENDING",
-        "receipt": null,
-        "size_bytes": "MAC-PENDING",
-        "status": "MAC-PENDING"
+        "free_disk_after_bytes": 181258084352,
+        "free_disk_before_bytes": null,
+        "note": "Downloaded 2026-10-28 by magistrate activation 39206674 (rc 0; its record item 3: 215 GB free before, not recorded in bytes, so before is null). size_bytes = HfApi files_metadata sum at the pinned revision; all 19 local files match the Hub sizes byte for byte. free_disk_after_bytes observed 2026-10-29 17:17 PDT (df -k x 1024), after the download.",
+        "receipt": "configs/campaigns/bytes_v1/extension/receipts/hf-size.txt; configs/campaigns/bytes_v1/extension/receipts/size-match.txt; configs/campaigns/bytes_v1/extension/receipts/df-now.txt; configs/campaigns/bytes_v1/extension/receipts/qwen38-download-20261028.log",
+        "size_bytes": 29531521322,
+        "status": "filled"
       },
       "group_size": {
-        "note": "64 is the mlx-lm convert default and is what the configs carry; verify quantization.group_size and bits=8 in the downloaded config.json (as for Qwen3-8B-8bit). If it differs, fill the observed value and regenerate.",
-        "receipt": null,
-        "status": "MAC-PENDING",
+        "note": "quantization: group_size 64, bits 8, mode affine.",
+        "receipt": "configs/campaigns/bytes_v1/extension/receipts/qwen38-27b-8bit-config.json",
+        "status": "filled",
         "value": 64
       },
       "hf_repo": {
         "note": "Search (2026-10-27) finds the official mlx-community/Qwen3.8-27B-8bit; RUN_STATE item 66 does not name the organisation. Confirm against ~/night-archive/seats-f18a/models-removed.txt, which holds the revision of the copy deleted on 2026-10-25.",
-        "receipt": null,
-        "status": "MAC-PENDING",
+        "receipt": "configs/campaigns/bytes_v1/extension/receipts/models-removed-qwen38.txt",
+        "status": "filled",
         "value": "mlx-community/Qwen3.8-27B-8bit"
       },
       "manifest": {
@@ -49,7 +50,7 @@
         "status": "MAC-PENDING",
         "verdict": "MAC-PENDING"
       },
-      "revision": "MAC-PENDING"
+      "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9"
     }
   },
   "packs": {
