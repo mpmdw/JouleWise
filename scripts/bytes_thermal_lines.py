@@ -376,7 +376,11 @@ def validate_journal(journal, expected, sources):
         raw = h.read_bytes(journal)
         actual = journal if journal.is_file() else Path(str(journal) + ".zst")
         sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
-        readings, malformed = h.read_monitor_journal(journal, "thermal")
+        try:
+            readings, malformed = h.read_monitor_journal(journal, "thermal")
+        except RecursionError:
+            # An unreadable sealed stream cannot reproduce a registered exclusion.
+            readings, malformed = [], 1
         reason = ("journal provenance unavailable" if expected is None else
                   "journal differs from the harvest's" if hashlib.sha256(raw).hexdigest() != expected else None)
         return readings, malformed, reason
@@ -607,8 +611,12 @@ def transform(mode, archive, output, export=None):
             except ValueError:
                 locator = None
             if locator:
+                try:
+                    store = (export / locator).resolve()
+                except (OSError, ValueError):
+                    locator = None
+            if locator:
                 store_rel = Path("withheld") / (session + ".withheld.csv")
-                store = (export / locator).resolve()
                 if output.is_relative_to(store) or store.is_relative_to(output):
                     raise ValueError("output overlaps source withheld store")
                 inputs.append((store, store_rel, True))
@@ -841,26 +849,68 @@ def manifest_entries(value):
     return expected
 
 
+class RetainedNotice(dict):
+    def __init__(self, code, raw):
+        super().__init__(code=code)
+        self.raw = raw
+
+
+class ControlRecord(dict):
+    """Only verify's consumed fields are decoded; all other bytes stay opaque."""
+    def __init__(self, raw, **fields):
+        super().__init__(fields)
+        self.raw = raw
+
+
 def validate_record(raw):
-    document(raw)
-    record = json.loads(raw)
-    if (not isinstance(record, dict) or not isinstance(record.get("notices"), list)
-            or any(not isinstance(n, dict) or not isinstance(n.get("code"), str)
-                   for n in record["notices"])
-            or not isinstance(record.get("source_sha256"), dict)
-            or any(not isinstance(k, str) or not Path(k).is_absolute()
-                   or ".." in Path(k).parts or Path(k).parent == Path("/")
-                   or not isinstance(v, str) or re.fullmatch(r"[0-9a-f]{64}", v) is None
-                   for k, v in record["source_sha256"].items())
-            or not isinstance(record.get("view_manifest_sha256"), str)
-            or re.fullmatch(r"[0-9a-f]{64}", record["view_manifest_sha256"]) is None):
-        raise ValueError("invalid thermal line record")
-    return record
+    doc = document(raw)
+    notices = []
+    for node in doc.field("notices").elements():
+        code = node.field("code").scalar()
+        if not isinstance(code, str):
+            raise ValueError("invalid notice code")
+        notices.append(RetainedNotice(code, node.text()))
+    sources = {}
+    for source, node in doc.field("source_sha256").fields():
+        digest = node.scalar()
+        if (not Path(source).is_absolute() or ".." in Path(source).parts
+                or Path(source).parent == Path("/") or not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None):
+            raise ValueError("invalid recorded source")
+        sources[source] = digest
+    binding = doc.field("view_manifest_sha256").scalar()
+    if not isinstance(binding, str) or re.fullmatch(r"[0-9a-f]{64}", binding) is None:
+        raise ValueError("invalid manifest binding")
+    return ControlRecord(raw, notices=notices, source_sha256=sources, view_manifest_sha256=binding)
+
+
+def render_record(record):
+    if not isinstance(record, ControlRecord):
+        return json.dumps(record, indent=2)
+    edits, additions = [], []
+    for key in ("notices", "source_differing_paths", "records.thermal_view_changed", "view_differing_paths"):
+        value = record[key]
+        encoded = ("[" + ", ".join(n.raw if isinstance(n, RetainedNotice) else json.dumps(n) for n in value) + "]"
+                   if key == "notices" else json.dumps(value))
+        try:
+            a, z = field_span(record.raw, (key,))
+            edits.append((a, z, encoded))
+        except ValueError:
+            additions.append(json.dumps(key) + ": " + encoded)
+    if additions:
+        # A valid record already contains required fields, so a comma is needed.
+        close = tokens_of(record.raw)[-1].start(1)
+        edits.append((close, close, ", " + ", ".join(additions)))
+    return replace(record.raw, edits)
 
 
 def validate_manifest(raw):
-    document(raw)
-    return manifest_entries(json.loads(raw))
+    doc = document(raw)
+    rows = []
+    for node in doc.field("files").elements():
+        rows.append({key: value.scalar() for key, value in node.fields()
+                     if key in {"path", "size", "sha256", "mtime_ns", "inode"}})
+    return manifest_entries({"files": rows})
 
 
 def verify(output):
@@ -915,9 +965,9 @@ def verify(output):
                                   "reason": "; ".join(reasons) if reasons else "payload differs from manifest"})
     record["view_differing_paths"] = sorted(set(different))
     if any(output.is_relative_to(root) for root in source_roots) or record_path.is_dir():
-        print(json.dumps(record, indent=2))
+        print(render_record(record))
     else:
-        write_copy(record_path, json.dumps(record, indent=2) + "\n", output)
+        write_copy(record_path, render_record(record) + "\n", output)
     return record["view_differing_paths"] + [
         "source changed since transform: " + path for path in record["source_differing_paths"]]
 
