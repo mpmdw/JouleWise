@@ -7,6 +7,8 @@ import csv
 import hashlib
 import io
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -21,7 +23,9 @@ from joulewise import bytes_analysis as ba
 def add_campaign_pass_identity(manifest):
     # The analysis-only synthetic campaign predates archived pass identities.
     for session in manifest['sessions']:
-        path = Path(session['archive']) / 'sources/repo/plan_tree.json'
+        archive = Path(session['archive'])
+        pack_id = json.loads((archive / 'derived/roster.json').read_bytes())['pack_id']
+        path = archive / 'sources/repo/configs/campaigns' / pack_id / 'plan_tree.json'
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({'bytes_pass': session['pass_id']}))
 
@@ -220,7 +224,10 @@ class ThermalLinesTests(unittest.TestCase):
         (source / 'derived/b6-acceptance.json').write_text(
             '{"energy":' + sentinel + ',"excluding":[],"session_id":"opaque"}')
         (source / 'derived/roster.json').write_text(json.dumps(
-            {'members': [{'run_id': 'science', 'kind': 'science', 'units': []}]}))
+            {'pack_id': 'thermal-fixture', 'members': [{'run_id': 'science', 'kind': 'science', 'units': []}]}))
+        tree = source / 'sources/repo/configs/campaigns/thermal-fixture/plan_tree.json'
+        tree.parent.mkdir(parents=True)
+        tree.write_text('{"bytes_pass":2}')
         (source / 'withheld/member-assessments.json').write_text(
             '{"members":{"science":{"energy":' + sentinel + ',"' + t.FIELD +
             '":{"excluded":true,"journal_available":true}}}}')
@@ -346,6 +353,7 @@ class ReviewerRealChainTests(unittest.TestCase):
 
         NS = 10**9
         RESULTS = []
+        native_archives = set()
 
 
         def check(name, ok, detail=""):
@@ -382,6 +390,7 @@ class ReviewerRealChainTests(unittest.TestCase):
                 plan = json.loads(win.plan_path.read_text())
                 result, _ = accept_archive(win.archive, plan, JW / "configs/b6/registration",
                                            plan_path=win.plan_path, replace_existing=True)
+                native_archives.add(win.archive)
                 return win, result
 
 
@@ -403,6 +412,12 @@ class ReviewerRealChainTests(unittest.TestCase):
                     code = 0
                 except SystemExit as exc:
                     code = exc.code
+            if code == 0 and archive in native_archives:
+                record = json.loads(buf.getvalue())
+                check("native harvest: no untrusted member", not any(
+                    m['status'].startswith('not defined') for m in record['member_statuses']))
+                check("native harvest: no replay disagreement", not any(
+                    n['code'] == 'records.thermal_hull_replay_disagrees' for n in record['notices']))
             return code, buf.getvalue(), err.getvalue()
 
 
@@ -511,7 +526,9 @@ class ReviewerRealChainTests(unittest.TestCase):
 
             for index, (one, two) in enumerate(((wi1, wi2), (we1, we2), (wm1, wm2))):
                 dest = root / ("variant-hull-" + str(index))
-                t.transform("hull-p2", two.archive, dest)
+                hull_record = t.transform("hull-p2", two.archive, dest)
+                check("native variant hull: no untrusted member", not any(
+                    m["status"].startswith("not defined") for m in hull_record["member_statuses"]))
                 check("variant hull equals pass-1 primary", member_codes(dest) == member_codes(one.archive))
 
             # --- hand edits on a real archive copy (labelled: not harvest-produced) --
@@ -864,7 +881,7 @@ class RecordedFaultTests(unittest.TestCase):
         self.archive = self.root / 'archive'
         self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': [
             {'scope': 'member', 'run_id': 'a', 'code': t.CODE}]})
-        self.put('sources/repo/plan_tree.json', {'bytes_pass': 1})
+        self.put('sources/repo/configs/campaigns/thermal-fixture/plan_tree.json', {'bytes_pass': 1})
         self.put('derived/roster.json', {'members': [
             {'run_id': r, 'kind': 'science', 'units': []} for r in ('a', 'b')]})
         self.put('withheld/spans.json', {'spans': {
@@ -877,6 +894,8 @@ class RecordedFaultTests(unittest.TestCase):
             'journal': {'sha256': hashlib.sha256(self.journal.read_bytes()).hexdigest()}}}}})
 
     def put(self, name, data):
+        if name == 'derived/roster.json':
+            data = dict(data, pack_id='thermal-fixture')
         path = self.archive / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data))
@@ -891,97 +910,6 @@ class RecordedFaultTests(unittest.TestCase):
             self.assertIsNone(t.main(args))
         self.assertTrue((out / 'thermal_line.json').is_file())
         return json.loads(capture.getvalue()), out
-
-    def test_generated_evidence_cross_product_cli(self):
-        import subprocess
-        import sys
-        faults = ('absent', 'unparsable', 'missing-field', 'wrong-type',
-                  'journal-mismatch', 'seal-unavailable', 'wrong-pass',
-                  'missing-plan', 'missing-pass')
-        faults = tuple(value for fault in faults for value in (fault, 'trusted'))
-        cells = 0
-        for mode in t.LABELS:
-            for present in (False, True):
-                for agrees in (False, True):
-                    for fault in faults:
-                        with self.subTest(mode=mode, present=present, agrees=agrees, fault=fault):
-                            self.put('sources/repo/plan_tree.json', {'bytes_pass': 2 if mode == 'hull-p2' else 1})
-                            self.put('derived/roster.json', {'members': [{'run_id': 'a', 'kind': 'science', 'units': []}]})
-                            original = [{'scope': 'member', 'run_id': 'a', 'code': t.CODE}] if present else []
-                            self.put('derived/b6-acceptance.json', {'session_id': 's', 'excluding': original})
-                            candidate = present if agrees else not present
-                            self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: {
-                                'excluded': candidate, 'journal_available': True}}}})
-                            self.put('withheld/spans.json', {'spans': {'a': {
-                                'member': [20 * fixtures.NS, 100 * fixtures.NS],
-                                'request': [40 * fixtures.NS, 80 * fixtures.NS]}}})
-                            fixtures.thermal_journal(range(0, 126, 5), {60 if candidate else 90}).dump(self.journal)
-                            self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {
-                                'journal': {'sha256': hashlib.sha256(self.journal.read_bytes()).hexdigest()}}}}})
-                            evidence = self.archive / ('withheld/member-assessments.json' if mode == 'hull-p2' else 'withheld/spans.json')
-                            if fault == 'absent':
-                                evidence.unlink()
-                            elif fault == 'unparsable':
-                                evidence.write_text('{bad')
-                            elif fault in ('missing-field', 'wrong-type'):
-                                if mode == 'hull-p2':
-                                    value = {'journal_available': True}
-                                    if fault == 'wrong-type':
-                                        value['excluded'] = int(candidate)
-                                    self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: value}}})
-                                else:
-                                    self.put('withheld/spans.json', {'spans': {'a': {'request': [40 * fixtures.NS, 80 * fixtures.NS]}}}
-                                             if fault == 'missing-field' else {'spans': []})
-                            elif fault in ('journal-mismatch', 'seal-unavailable'):
-                                if mode == 'request-end-p1':
-                                    if fault == 'journal-mismatch':
-                                        self.put('derived/window_flags.json', {'hazards': {'thermal': {'continuous': {'journal': {'sha256': '0' * 64}}}}})
-                                    else:
-                                        (self.archive / 'derived/window_flags.json').unlink()
-                                else:
-                                    # Hull trusts the sealed harvest assessment, not a journal replay.
-                                    self.put('withheld/member-assessments.json', {'members': {'a': {t.FIELD: {
-                                        'excluded': candidate, 'journal_available': False}}}})
-                            elif fault == 'wrong-pass':
-                                self.put('sources/repo/plan_tree.json', {'bytes_pass': 1 if mode == 'hull-p2' else 2})
-                            elif fault == 'missing-plan':
-                                (self.archive / 'sources/repo/plan_tree.json').unlink()
-                            elif fault == 'missing-pass':
-                                self.put('sources/repo/plan_tree.json', {})
-                            out = self.root / ('cell-' + str(cells))
-                            cells += 1
-                            result = subprocess.run([sys.executable, t.__file__, mode, str(self.archive), str(out)], capture_output=True, text=True)
-                            if fault == 'trusted' and mode == 'request-end-p1' and candidate and not present:
-                                self.assertEqual(result.returncode, 2)
-                                self.assertFalse(out.exists())
-                                continue
-                            self.assertEqual(result.returncode, 0, result.stderr)
-                            record = json.loads(result.stdout)
-                            mutable = present if mode == 'request-end-p1' else not present
-                            undefined = fault != 'trusted' and mutable
-                            changed = fault == 'trusted' and mutable and not agrees
-                            status = record['member_statuses'][0]['status']
-                            self.assertEqual(status.startswith('not defined ('), undefined)
-                            if undefined:
-                                if fault in ('wrong-pass', 'missing-plan', 'missing-pass'):
-                                    reason = 'pass mismatch'
-                                elif mode == 'hull-p2':
-                                    reason = 'hull assessment unavailable'
-                                else:
-                                    reason = {'journal-mismatch': "journal differs from the harvest's",
-                                              'seal-unavailable': 'journal provenance unavailable',
-                                              'wrong-type': 'invalid span',
-                                              'missing-field': 'member span unavailable'}.get(fault, 'archived thermal journal unavailable')
-                                self.assertEqual(status, 'not defined (' + reason + ')')
-                            if not undefined:
-                                self.assertEqual(status, 'evaluated' if changed else 'equals registered line')
-                            self.assertEqual(record['equals_registered_line'], not undefined and not changed)
-                            codes = json.loads((out / 'derived/b6-acceptance.json').read_bytes())['excluding']
-                            expected_codes = {t.CODE} if (candidate if changed else present) else set()
-                            self.assertEqual({row['code'] for row in codes}, expected_codes)
-                            self.assertEqual(record['dropped_members'],
-                                             [{'run_id': 'a', 'codes': [t.CODE]}] if expected_codes else [])
-        self.assertEqual(cells, 144)
 
     def test_w4_faults_cli(self):
         import subprocess
@@ -1085,14 +1013,14 @@ class RecordedFaultTests(unittest.TestCase):
             self.assertEqual((out / 'derived/b6-acceptance.json').read_bytes(), original)
 
     def test_pass_mismatch_is_recorded(self):
-        self.put('sources/repo/plan_tree.json', {'bytes_pass': 2})
+        self.put('sources/repo/configs/campaigns/thermal-fixture/plan_tree.json', {'bytes_pass': 2})
         record, _ = self.run_line('pass')
         self.assertIn('not defined (pass mismatch)', [r['status'] for r in record['member_statuses']])
 
     def test_fault_direction_and_pass_mismatch_for_both_lines(self):
         for mode in t.LABELS:
             with self.subTest(mode=mode):
-                self.put('sources/repo/plan_tree.json', {'bytes_pass': 2 if mode == 'hull-p2' else 1})
+                self.put('sources/repo/configs/campaigns/thermal-fixture/plan_tree.json', {'bytes_pass': 2 if mode == 'hull-p2' else 1})
                 self.journal.unlink(missing_ok=True)
                 record = t.transform(mode, self.archive, self.root / (mode + '-unavailable'))
                 statuses = [m['status'] for m in record['member_statuses']]
@@ -1101,7 +1029,7 @@ class RecordedFaultTests(unittest.TestCase):
                 self.assertEqual(statuses, expected if mode == 'hull-p2' else expected[::-1])
                 self.assertFalse(record['equals_registered_line'])
                 self.assertEqual(record['changes'], [])
-                self.put('sources/repo/plan_tree.json', {'bytes_pass': 1 if mode == 'hull-p2' else 2})
+                self.put('sources/repo/configs/campaigns/thermal-fixture/plan_tree.json', {'bytes_pass': 1 if mode == 'hull-p2' else 2})
                 record = t.transform(mode, self.archive, self.root / (mode + '-wrong-pass'))
                 self.assertEqual([m['status'] for m in record['member_statuses']],
                                  (['equals registered line', 'not defined (pass mismatch)'] if mode == 'hull-p2'
@@ -1114,7 +1042,7 @@ class RecordedFaultTests(unittest.TestCase):
                 {'excluded': None, 'journal_available': True},
                 {'excluded': False, 'journal_available': False})):
             with self.subTest(value=value):
-                self.put('sources/repo/plan_tree.json', {'bytes_pass': 2})
+                self.put('sources/repo/configs/campaigns/thermal-fixture/plan_tree.json', {'bytes_pass': 2})
                 self.put('withheld/member-assessments.json', {'members': {
                     r: {t.FIELD: value} for r in ('a', 'b')}})
                 record = t.transform('hull-p2', self.archive, self.root / ('hull-fault-' + str(index)))
@@ -1317,7 +1245,7 @@ class RecordedFaultTests(unittest.TestCase):
         self.assertEqual((first / 'view_manifest.json').read_bytes(), (second / 'view_manifest.json').read_bytes())
         self.assertEqual(json.dumps(a['changes']).encode(), json.dumps(b['changes']).encode())
         before = {str(p.relative_to(first)): p.read_bytes() for p in first.rglob('*') if p.is_file()}
-        self.put('sources/repo/plan_tree.json', {'bytes_pass': 2})
+        self.put('sources/repo/configs/campaigns/thermal-fixture/plan_tree.json', {'bytes_pass': 2})
         with self.assertRaisesRegex(ValueError, 'new directory'):
             t.transform('request-end-p1', self.archive, first)
         # Linked source payload can change, but the certified export/control files cannot.
@@ -1429,3 +1357,468 @@ class RecordedFaultTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# Ported from JouleWise-data 0858773e by-therm-consult/trust_matrix.py.
+# X6: all fixtures identify their pack at the producer archive location.
+NS = 10**9
+SCRIPT = Path(t.__file__)
+SPAN = {"member": [20 * NS, 100 * NS], "request": [40 * NS, 80 * NS]}
+ACC, ROS, PLAN = "derived/b6-acceptance.json", "derived/roster.json", "sources/repo/configs/campaigns/thermal-fixture/plan_tree.json"
+HULL, SPANS, SEAL = "withheld/member-assessments.json", "withheld/spans.json", "derived/window_flags.json"
+
+
+class TrustArchive:
+    """One science member `a` and one reference `r`; the trusted archive for (mode, present, candidate)."""
+
+    def __init__(self, root, mode, present, candidate):
+        self.root, self.a, self.mode = Path(root), Path(root) / "archive", mode
+        self.put(ACC, {"session_id": "s", "excluding":
+                 [{"scope": "member", "run_id": "a", "code": t.CODE}] if present else []})
+        self.put(ROS, {"pack_id": "thermal-fixture", "members": [{"run_id": "a", "kind": "science", "units": [{"cell_id": "c", "stratum": "quad", "unit_id": "u"}]},
+                                   {"run_id": "r", "kind": "reference", "units": []}]})
+        self.put(PLAN, {"bytes_pass": 2 if mode == "hull-p2" else 1})
+        self.put(HULL, {"members": {"a": {t.FIELD: {"excluded": candidate, "journal_available": True}}}})
+        self.put(SPANS, {"spans": {"a": dict(SPAN)}})
+        self.journal = self.a / "sources/night-custody/hazards/monitor/thermal.jsonl"
+        self.journal.parent.mkdir(parents=True, exist_ok=True)
+        # The registered hull decision (present) must be reproducible from the journal on [20, 100]:
+        # present -> a nonzero read in the hull; the request-end candidate decides whether it lies in [20, 80].
+        nonzero = set()
+        if mode == "request-end-p1":
+            if present:
+                nonzero = {60} if candidate else {90}
+            elif candidate:
+                nonzero = {60}  # the ruled would-add stop: code absent, request-end window finds a nonzero read
+        else:
+            nonzero = {60 if candidate else 90}
+        fixtures.thermal_journal(range(0, 126, 5), nonzero).dump(self.journal)
+        self.seal()
+
+    def put(self, name, data=None, raw=None):
+        path = self.a / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_dir():
+            path.rmdir()
+        path.write_bytes(raw if raw is not None else json.dumps(data).encode())
+
+    def text(self, name):
+        return (self.a / name).read_text()
+
+    def seal(self, value=None):
+        digest = hashlib.sha256(self.journal.read_bytes()).hexdigest() if value is None else value
+        self.put(SEAL, {"hazards": {"thermal": {"continuous": {"journal": {"sha256": digest}}}}})
+
+    def journal_rows(self):
+        return [json.loads(line) for line in self.journal.read_text().splitlines()]
+
+    def write_journal(self, rows, extra=""):
+        self.journal.write_text("".join(json.dumps(row) + "\n" for row in rows) + extra)
+        self.seal()
+
+
+# Document-level fault trust_kinds, applied to any JSON source the tool consumes.
+def trust_document_faults(name):
+    def trailing(x, c):
+        x.put(name, raw=(x.text(name) + " ]]garbage").encode())
+
+    def truncated(x, c):
+        x.put(name, raw=x.text(name)[:-1].encode())
+
+    def sibling(x, c):
+        x.put(name, raw=(x.text(name)[:-1] + ', "zz": @@}').encode())
+
+    def duplicate(x, c):
+        raw = x.text(name)
+        x.put(name, raw=(raw[:-1] + ", " + raw[1:]).encode())  # every top-level key repeated
+
+    def bad_number(x, c):
+        x.put(name, raw=(x.text(name)[:-1] + ', "zz": 01}').encode())
+
+    def not_utf8(x, c):
+        x.put(name, raw=(x.text(name)[:-1] + ', "zz": "').encode() + b'\xff"}')
+
+    def absent(x, c):
+        (x.a / name).unlink()
+
+    def directory(x, c):
+        (x.a / name).unlink()
+        (x.a / name).mkdir()
+
+    def prefix(x, c):
+        x.put(name, raw=b"{bad")
+
+    return {"absent": absent, "directory": directory, "not-utf8": not_utf8, "unparsable-prefix": prefix,
+            "trailing-garbage": trailing, "truncated-final-brace": truncated, "junk-sibling": sibling,
+            "duplicate-key": duplicate, "leading-zero-number": bad_number}
+
+
+def trust_kinds():
+    """kind -> (mode or None, class, mutator). class in trusted/member/global/stop."""
+    ks = {"trusted": (None, "trusted", lambda x, c: None)}
+
+    def add(prefix, only, cls, faults):
+        for fault, mut in faults.items():
+            ks[prefix + "." + fault] = (only, cls, mut)
+
+    # Documents: whole-text faults on each consumed JSON source.
+    add("hull", "hull-p2", "member", trust_document_faults(HULL))
+    add("spans", "request-end-p1", "member", trust_document_faults(SPANS))
+    add("seal", "request-end-p1", "member", trust_document_faults(SEAL))
+    add("plan", None, "member", trust_document_faults(PLAN))
+    # Acceptance and roster: a document fault leaves no member list -> stop (ruled stop proposed);
+    # typed faults inside them are W4 global faults.
+    add("acceptance", None, "stop", {k: v for k, v in trust_document_faults(ACC).items()})
+    add("roster", None, "stop", {k: v for k, v in trust_document_faults(ROS).items()})
+    # Typed fields.
+    def hull_rec(x, c, **kw):
+        rec = {"excluded": c, "journal_available": True}
+        rec.update(kw)
+        x.put(HULL, {"members": {"a": {t.FIELD: rec}}})
+    add("hull", "hull-p2", "member", {
+        "members-list": lambda x, c: x.put(HULL, {"members": [{"a": {}}]}),
+        "member-missing": lambda x, c: x.put(HULL, {"members": {"zz": {}}}),
+        "field-missing": lambda x, c: x.put(HULL, {"members": {"a": {}}}),
+        "excluded-int": lambda x, c: hull_rec(x, int(c)), "excluded-str": lambda x, c: hull_rec(x, str(c)),
+        "excluded-null": lambda x, c: hull_rec(x, None), "excluded-missing": lambda x, c: x.put(HULL, {"members": {"a": {t.FIELD: {"journal_available": True}}}}),
+        "ja-false": lambda x, c: hull_rec(x, c, journal_available=False), "ja-int": lambda x, c: hull_rec(x, c, journal_available=1),
+        "ja-missing": lambda x, c: x.put(HULL, {"members": {"a": {t.FIELD: {"excluded": c}}}})})
+
+    def sp(x, member, request):
+        x.put(SPANS, {"spans": {"a": {"member": member, "request": request}}})
+    M, R = SPAN["member"], SPAN["request"]
+    add("spans", "request-end-p1", "member", {
+        "spans-list": lambda x, c: x.put(SPANS, {"spans": []}), "member-missing": lambda x, c: x.put(SPANS, {"spans": {}}),
+        "record-list": lambda x, c: x.put(SPANS, {"spans": {"a": [M, R]}}),
+        "request-field-missing": lambda x, c: x.put(SPANS, {"spans": {"a": {"member": M}}}),
+        "member-field-missing": lambda x, c: x.put(SPANS, {"spans": {"a": {"request": R}}}),
+        "member-null-request-present": lambda x, c: sp(x, None, R),
+        "request-len3": lambda x, c: sp(x, M, R + [1]), "stamp-float": lambda x, c: sp(x, [20.0 * NS, M[1]], R),
+        "stamp-bool": lambda x, c: sp(x, M, [True, R[1]]), "stamp-str": lambda x, c: sp(x, M, [R[0], str(R[1])]),
+        "stamp-negative": lambda x, c: sp(x, [-1, M[1]], R),
+        # producer invariants (member_spans): member[0] <= request[0] <= request[1] <= member[1]
+        "request-inverted": lambda x, c: sp(x, M, [R[1], R[0]]),
+        "request-end-after-member-end": lambda x, c: sp(x, M, [R[0], 120 * NS]),
+        "request-start-before-member-start": lambda x, c: sp(x, M, [10 * NS, R[1]]),
+        "member-inverted": lambda x, c: sp(x, [M[1], M[0]], R)})
+    add("seal", "request-end-p1", "member", {
+        "field-missing": lambda x, c: x.put(SEAL, {"hazards": {"thermal": {"continuous": {"journal": {}}}}}),
+        "journal-null": lambda x, c: x.put(SEAL, {"hazards": {"thermal": {"continuous": {"journal": None}}}}),
+        "sha-int": lambda x, c: x.seal(5), "sha-empty": lambda x, c: x.seal(""), "sha-differs": lambda x, c: x.seal("0" * 64),
+        "sha-uppercase": lambda x, c: x.seal(hashlib.sha256(x.journal.read_bytes()).hexdigest().upper())})
+
+    def rows_without_level(x, c):
+        rows = x.journal_rows()
+        for row in rows:
+            row["values"].pop("level", None)
+        x.write_journal(rows)
+
+    def rows_wrong_level(x, c):
+        rows = x.journal_rows()
+        for row in rows:
+            row["values"]["level"] = {}
+        x.write_journal(rows)
+
+    def rows_all_errors(x, c):
+        rows = x.journal_rows()
+        for row in rows:
+            row["error"] = {"type": "read_failed"}
+        x.write_journal(rows)
+
+    def rows_all_zero(x, c):
+        rows = x.journal_rows()
+        for row in rows:
+            row["values"]["level"] = 0
+        x.write_journal(rows)  # sealed, usable, and contradicts a registered exclusion
+
+    add("journal", "request-end-p1", "member", {
+        "absent": lambda x, c: x.journal.unlink(), "directory": lambda x, c: (x.journal.unlink(), x.journal.mkdir()),
+        "appended-after-seal": lambda x, c: x.journal.write_bytes(x.journal.read_bytes() + b"\n"),
+        "sealed-not-json": lambda x, c: (x.journal.write_text("{bad\n"), x.seal()),
+        "sealed-empty": lambda x, c: (x.journal.write_text(""), x.seal()),
+        "sealed-missing-level": rows_without_level, "sealed-wrong-level": rows_wrong_level,
+        "sealed-all-errors": rows_all_errors, "sealed-all-zero": rows_all_zero})
+    want = lambda x: 2 if x.mode == "hull-p2" else 1
+    add("plan", None, "member", {
+        "no-bytes_pass": lambda x, c: x.put(PLAN, {"blinding_group": "bytes"}), "wrong": lambda x, c: x.put(PLAN, {"bytes_pass": 3 - want(x)}),
+        "null": lambda x, c: x.put(PLAN, {"bytes_pass": None}), "str": lambda x, c: x.put(PLAN, {"bytes_pass": str(want(x))}),
+        "bool": lambda x, c: x.put(PLAN, {"bytes_pass": True}), "float": lambda x, c: x.put(PLAN, raw=('{"bytes_pass": %d.0}' % want(x)).encode()),
+        "second-tree-wrong": lambda x, c: x.put("sources/repo/alternate/thermal-fixture/plan_tree.json", {"bytes_pass": 3 - want(x)}),
+        "decoy-only-with-pack_id": lambda x, c: ((x.a / PLAN).unlink(), x.put("sources/repo/decoy/plan_tree.json", {"bytes_pass": want(x)}),
+                                                 x.put(ROS, {"pack_id": "bytes-s5-p2", "members": json.loads(x.text(ROS))["members"]})),
+        "pack_id-names-wrong-tree": lambda x, c: (x.put("sources/repo/configs/campaigns/bytes-s5-p2/plan_tree.json", {"bytes_pass": 3 - want(x)}),
+                                                  x.put(ROS, {"pack_id": "bytes-s5-p2", "members": json.loads(x.text(ROS))["members"]}))})
+    ks["plan.pack_id-names-right-tree"] = (None, "trusted", lambda x, c: (
+        (x.a / PLAN).unlink(), x.put("sources/repo/other/plan_tree.json", {"bytes_pass": 3 - want(x)}),
+        x.put("sources/repo/configs/campaigns/bytes-s5-p2/plan_tree.json", {"bytes_pass": want(x)}),
+        x.put(ROS, {"pack_id": "bytes-s5-p2", "members": json.loads(x.text(ROS))["members"]})))
+    # W4-style structural faults inside acceptance and roster: global.
+    def acc(x, rows):
+        x.put(ACC, {"session_id": "s", "excluding": rows})
+    code_row = {"scope": "member", "run_id": "a", "code": t.CODE}
+    add("acceptance", None, "global", {
+        "excluding-null": lambda x, c: acc(x, None), "excluding-object": lambda x, c: acc(x, {"a": 1}),
+        "row-not-object": lambda x, c: acc(x, [code_row, "x"]), "row-run_id-missing": lambda x, c: acc(x, [{"scope": "member", "code": t.CODE}]),
+        "row-run_id-list": lambda x, c: acc(x, [{"scope": "member", "run_id": ["a"], "code": t.CODE}]),
+        "row-ghost-run": lambda x, c: acc(x, json.loads(x.text(ACC))["excluding"] + [{"scope": "member", "run_id": "ghost", "code": t.CODE}])})
+
+    def ros(x, members):
+        x.put(ROS, {"pack_id": "thermal-fixture", "members": members})
+    add("roster", None, "global", {
+        "run_id-missing": lambda x, c: ros(x, [{"kind": "science", "units": []}, {"run_id": "r", "kind": "reference", "units": []}]),
+        "run_id-int": lambda x, c: ros(x, [{"run_id": 5, "kind": "science", "units": []}, {"run_id": "r", "kind": "reference", "units": []}]),
+        "units-null": lambda x, c: ros(x, [{"run_id": "a", "kind": "science", "units": None}, {"run_id": "r", "kind": "reference", "units": []}]),
+        "unit-missing-cell_id": lambda x, c: ros(x, [{"run_id": "a", "kind": "science", "units": [{"stratum": "quad", "unit_id": "u"}]}, {"run_id": "r", "kind": "reference", "units": []}])})
+    add("roster", None, "stop", {
+        "members-missing": lambda x, c: x.put(ROS, {}), "members-dict": lambda x, c: x.put(ROS, {"members": {"a": {}}}),
+        "member-not-object": lambda x, c: ros(x, ["a", "r"])})
+    add("acceptance", None, "global", {"excluding-missing": lambda x, c: x.put(ACC, {"session_id": "s"})})
+    return ks
+
+
+def trust_run_cell(mode, present, agrees, kind, cls, mut, n, base):
+    candidate = present if agrees else not present
+    x = TrustArchive(base / f"c{n}", mode, present, candidate)
+    mut(x, candidate)
+    out = x.root / "out"
+    p = subprocess.run([sys.executable, str(SCRIPT), mode, str(x.a), str(out)], capture_output=True, text=True)
+    tail = ((p.stdout + p.stderr).strip().splitlines() or [""])[-1][:110]
+    mutable = present if mode == "request-end-p1" else not present
+    if cls == "stop" or (cls == "trusted" and mode == "request-end-p1" and candidate and not present):
+        return p.returncode == 2 and not out.exists(), f"exit={p.returncode} {tail}"
+    if p.returncode != 0:
+        return False, f"exit={p.returncode} {tail}"
+    r = json.loads(p.stdout)
+    st = {m["run_id"]: m["status"] for m in r["member_statuses"] if m["run_id"] is not None}
+    rows = json.loads((out / "derived/b6-acceptance.json").read_bytes()).get("excluding")
+    codes = {row["code"] for row in (rows if isinstance(rows, list) else []) if isinstance(row, dict) and "code" in row}
+    a_status = next((m["status"] for m in r["member_statuses"] if m["run_id"] in ("a", 5, None)), "")
+    if cls == "trusted":
+        changed = mutable and not agrees
+        exp = ("evaluated" if changed else "equals registered line", {t.CODE} if (candidate if changed else present) else set(), not changed)
+    elif cls == "member":
+        exp = ("not defined (" if mutable else "equals registered line", {t.CODE} if present else set(), not mutable)
+    else:
+        # A global fault keeps the acceptance byte for byte (its rows may be the fault itself).
+        exp = ("not defined (", None, False)
+        codes = None if (out / ACC).read_bytes() == (x.a / ACC).read_bytes() else "changed"
+    ok = (a_status.startswith(exp[0]) and codes == exp[1] and r["equals_registered_line"] == exp[2]
+          and st.get("r") == "equals registered line")
+    shown = "acceptance-unchanged" if codes is None else codes if isinstance(codes, str) else sorted(codes)
+    return ok, f"a={a_status!r} codes={shown} eq={r['equals_registered_line']}"
+
+
+
+class ProducerTrustTests(unittest.TestCase):
+    def test_generated_684_cells_real_cli(self):
+        cells = 0
+        with tempfile.TemporaryDirectory() as tmp:
+            for kind, (only, cls, mutate) in trust_kinds().items():
+                for mode in ("hull-p2", "request-end-p1"):
+                    if only and only != mode:
+                        continue
+                    for present in (False, True):
+                        for agrees in (False, True):
+                            cells += 1
+                            with self.subTest(kind=kind, mode=mode, present=present, agrees=agrees):
+                                ok, detail = trust_run_cell(mode, present, agrees, kind, cls, mutate, cells, Path(tmp))
+                                self.assertTrue(ok, detail)
+        self.assertEqual(cells, 684)
+
+    def cli(self, archive, name='out', mode='hull-p2', export=None):
+        out = archive.root / name
+        args = [sys.executable, t.__file__, mode, str(archive.a), str(out)]
+        if export:
+            args.extend(['--export', str(export)])
+        result = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout), out
+
+    def test_lexer_break_cases_cli_and_blinding(self):
+        # Every malformed value lies in an unconsumed sibling of intact evidence.
+        bad = ['01', '.5', '1.', '+1', 'NaN', 'Infinity', '0x10',
+               '"control\x00"', '"control\n"', r'"\x20"', r'"\u12xz"', r'"\ud800"',
+               r'"\udc00"', r'"\ud800x"', r'"\ud800\u0000"']
+        texts = ['{"members":{"a":{"' + t.FIELD + '":{"excluded":true,"journal_available":true}}},"unused":' + value + '}'
+                 for value in bad]
+        valid = '{"members":{"a":{"' + t.FIELD + '":{"excluded":true,"journal_available":true}}}}'
+        texts += ['\ufeff' + valid, valid + '{}', valid + '\u00a0',
+                  valid[:-1] + ',"unused":{"a":{"x":1,"x":2}}}',
+                  valid[:-1] + r',"unused":{"a":1,"\u0061":2}}']
+        with tempfile.TemporaryDirectory() as tmp:
+            for index, raw in enumerate(texts):
+                with self.subTest(raw=repr(raw)):
+                    archive = TrustArchive(Path(tmp) / str(index), 'hull-p2', False, True)
+                    archive.put(HULL, raw=raw.encode())
+                    record, out = self.cli(archive)
+                    self.assertEqual(record['changes'], [])
+                    self.assertEqual(record['member_statuses'][0]['status'], 'not defined (hull assessment unavailable)')
+                    self.assertFalse(record['equals_registered_line'])
+                    self.assertEqual((out / ACC).read_bytes(), (archive.a / ACC).read_bytes())
+            # The same lexical rule protects acceptance, roster, plan, spans, seal,
+            # sidecar and both controls through their validators (matrix + below).
+            for raw in texts:
+                for validate in (t.document, t.validate_record, t.validate_manifest):
+                    with self.assertRaises(ValueError):
+                        validate(raw)
+                self.assertIsNotNone(t.validate_sidecar(raw)[1])
+            # A valid million-deep unused value must also survive navigation past it.
+            archive = TrustArchive(Path(tmp) / 'deep', 'hull-p2', False, True)
+            archive.put(HULL, raw=('{"unused":' + '[' * 10**6 + '0' + ']' * 10**6 + ',' + valid[1:]).encode())
+            record, _ = self.cli(archive)
+            self.assertEqual(record['member_statuses'][0]['status'], 'evaluated')
+            self.assertEqual(record['changes'][0]['action'], 'added')
+            # Decode neither retained measurement values nor unknown non-key strings.
+            archive = TrustArchive(Path(tmp) / 'splice', 'request-end-p1', True, False)
+            row = r'{"scope":"window","code":"w","rail_mw":6666.750,"opaque":"\ud83d\ude00"}'
+            archive.put(ACC, raw=('{"session_id":"s","energy_j":7777.123456789e3,"excluding":[' + row +
+                ',{"scope":"member","run_id":"a","code":"' + t.CODE + '"}]}').encode())
+            real_loads = json.loads
+            def guarded(raw, *args, **kwargs):
+                raw = raw.decode() if isinstance(raw, bytes) else raw
+                self.assertNotIn('6666.750', raw)
+                self.assertNotIn('7777.123456789e3', raw)
+                self.assertNotIn('ud83d', raw)
+                return real_loads(raw, *args, **kwargs)
+            with patch.object(t.json, 'loads', side_effect=guarded):
+                record = t.transform('request-end-p1', archive.a, archive.root / 'spliced')
+            raw = (archive.root / 'spliced' / ACC).read_text()
+            self.assertIn(row, raw)
+            self.assertIn('7777.123456789e3', raw)
+            self.assertEqual(record['changes'][0]['action'], 'removed')
+
+    def test_span_invariant_edges_real_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cases = [('equal', [20 * NS, 100 * NS], [20 * NS, 100 * NS], True, 'equals registered line'),
+                     ('zero-request', [20 * NS, 100 * NS], [40 * NS, 40 * NS], True, 'evaluated'),
+                     ('zero-stamp', [0, 100 * NS], [0, 80 * NS], True, 'evaluated'),
+                     ('large-stamp', [0, 2**63], [0, 2**63], True, 'equals registered line'),
+                     ('null-request', [20 * NS, 100 * NS], None, True, 'equals registered line'),
+                     ('null-both', None, None, True, 'equals registered line'),
+                     ('null-member', None, [40 * NS, 80 * NS], True, 'not defined ('),
+                     ('inverted-null-request', [100 * NS, 20 * NS], None, True, 'not defined (')]
+            for name, member, request, present, expected in cases:
+                with self.subTest(name=name):
+                    archive = TrustArchive(Path(tmp) / name, 'request-end-p1', present, False)
+                    archive.put(SPANS, {'spans': {'a': {'member': member, 'request': request}}})
+                    record, _ = self.cli(archive, mode='request-end-p1')
+                    self.assertTrue(record['member_statuses'][0]['status'].startswith(expected), record)
+                    self.assertEqual(bool(record['changes']), expected == 'evaluated')
+
+    def test_pack_identity_edges_real_cli(self):
+        cases = ('missing', 'int', 'slash', 'backslash', 'dotdot', 'two-pack-trees', 'fallback-only', 'decoy-only', 'other-pack')
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in cases:
+                with self.subTest(name=name):
+                    archive = TrustArchive(Path(tmp) / name, 'hull-p2', False, True)
+                    roster = json.loads(archive.text(ROS))
+                    if name == 'missing':
+                        roster.pop('pack_id')
+                    elif name in ('int', 'slash', 'backslash', 'dotdot'):
+                        roster['pack_id'] = {'int': 1, 'slash': 'a/b', 'backslash': 'a\\b', 'dotdot': 'a..b'}[name]
+                    elif name == 'two-pack-trees':
+                        archive.put('sources/repo/elsewhere/thermal-fixture/plan_tree.json', {'bytes_pass': 2})
+                    elif name in ('fallback-only', 'decoy-only'):
+                        (archive.a / PLAN).unlink()
+                        archive.put('sources/pack/plan_tree.json' if name == 'fallback-only' else 'sources/repo/decoy/plan_tree.json', {'bytes_pass': 2})
+                    else:
+                        archive.put('sources/repo/other/plan_tree.json', {'bytes_pass': 1})
+                    archive.put(ROS, roster)
+                    record, _ = self.cli(archive)
+                    self.assertEqual(record['member_statuses'][0]['status'],
+                                     'evaluated' if name == 'other-pack' else 'not defined (pass mismatch)')
+
+    def test_sidecar_never_stops_and_csv_grammar(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for index, raw in enumerate((b'\xff', b'{}{}', b'{"blinding":{"withheld":{"path":1}}}', b'{"blinding":{"withheld":{"path":"\\u0000"}}}', b'{}')):
+                archive = TrustArchive(Path(tmp) / str(index), 'hull-p2', False, True)
+                export = archive.root / 'export'
+                export.mkdir()
+                (export / 's.runs.csv').write_text('run_id,exclusion_codes\nr,\n')
+                (export / 's.session.json').write_bytes(raw)
+                record, out = self.cli(archive, export=export)
+                self.assertEqual(record['member_statuses'][0]['status'], 'not defined (changed member absent from export)')
+                self.assertEqual((out / 'export/s.session.json').read_bytes(), raw)
+        for raw in ('run_id,exclusion_codes\na,b"c\n', 'run_id,exclusion_codes\na,"b"x\n'):
+            self.assertIsNotNone(t.validate_export(raw)[1])
+
+    def test_verify_roots_and_directory_record_cli(self):
+        import os
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = TrustArchive(Path(tmp), 'hull-p2', False, True)
+            _, out = self.cli(archive)
+            # Relative links and more than one recorded archive root are structural.
+            for path in out.rglob('*'):
+                if path.is_symlink():
+                    target = path.resolve()
+                    path.unlink()
+                    path.symlink_to(os.path.relpath(target, path.parent))
+            other = archive.root / 'other'
+            (other / 'payload').mkdir(parents=True)
+            (other / 'payload/one').write_text('opaque')
+            (out / 'payload').mkdir()
+            (out / 'payload/one').symlink_to(other / 'payload/one')
+            self.assertIn(archive.a.resolve(), t.linked_roots(out))
+            self.assertIn(other.resolve(), t.linked_roots(out))
+            inside = archive.a / 'view'
+            shutil.copytree(out, inside, symlinks=True)
+            # Make copied relative links point to the same archived targets.
+            for path in inside.rglob('*'):
+                if path.is_symlink():
+                    relative = path.relative_to(inside)
+                    target = (out / relative).resolve()
+                    path.unlink()
+                    path.symlink_to(os.path.relpath(target, path.parent))
+            (archive.a / 'renamed').write_text('opaque')
+            path = inside / HULL
+            path.unlink()
+            path.symlink_to(archive.a / 'renamed')
+            record = inside / 'thermal_line.json'
+            record.chmod(0o644)
+            record.write_text('{"source_sha256": []}')
+            before = {str(p): p.read_bytes() for p in archive.a.rglob('*') if p.is_file()}
+            result = subprocess.run([sys.executable, t.__file__, 'verify', str(inside)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('"records.thermal_view_changed": true', result.stdout)
+            self.assertEqual(before, {str(p): p.read_bytes() for p in archive.a.rglob('*') if p.is_file()})
+            record = out / 'thermal_line.json'
+            record.unlink()
+            record.mkdir()
+            result = subprocess.run([sys.executable, t.__file__, 'verify', str(out)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('"records.thermal_view_changed": true', result.stdout)
+            self.assertTrue(record.is_dir())
+
+    def test_verify_control_values_stay_opaque(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = TrustArchive(Path(tmp), 'hull-p2', False, True)
+            _, out = self.cli(archive)
+            path = out / 'thermal_line.json'
+            path.chmod(0o644)
+            raw = path.read_text()
+            retained = '"opaque_energy":7777.123456789e3'
+            path.write_text(raw[:-2] + ',\n' + retained + '\n}\n')
+            real_loads = json.loads
+            def guarded(raw, *args, **kwargs):
+                value = raw.decode() if isinstance(raw, bytes) else raw
+                self.assertNotIn('7777.123456789e3', value)
+                return real_loads(raw, *args, **kwargs)
+            with patch.object(t.json, 'loads', side_effect=guarded):
+                self.assertEqual(t.verify(out), [])
+            self.assertIn(retained, path.read_text())
+            # Verify's own control documents receive the same lexical validation.
+            data = json.loads(path.read_text())
+            for name in ('thermal_line.json', 'view_manifest.json'):
+                control = out / name
+                original = control.read_bytes()
+                control.chmod(0o644)
+                control.write_bytes(original + b'{}')
+                if name == 'view_manifest.json':
+                    data['view_manifest_sha256'] = hashlib.sha256(control.read_bytes()).hexdigest()
+                    path.chmod(0o644)
+                    path.write_text(json.dumps(data))
+                different = t.verify(out)
+                self.assertIn(name, different)
+                control.chmod(0o644)
+                control.write_bytes(original)
