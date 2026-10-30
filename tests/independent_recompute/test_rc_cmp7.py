@@ -134,7 +134,7 @@ class StepTwoUniverseTests(GateCase):
         route = next(r for r in out["comparisons"] if r["key"] == "run/alpha/run-a")
         self.assertEqual((route["l9"], route["recompute"], route["reason"]), (None, None, "missing_or_null"))
         # Counterfactual: a universe taken from the outputs (no kept-units runs) compares the run nowhere.
-        with mock.patch.object(cmp, "step_2_universe", lambda custody: ({}, {p: {"exclusions_sha256": "e" * 64}
+        with mock.patch.object(cmp, "step_2_universe", lambda custody: ({}, {p: {"exclusions_sha256": "e" * 64, "pack": p}
                                                                               for p in cmp.PACKS})):
             code, _, out = self.code()
         self.assertEqual(code, 0)
@@ -231,7 +231,8 @@ class StepTwoUniverseTests(GateCase):
         self.assertEqual(code, 1)
         row = next(r for r in out["comparisons"] if r["key"] == "disclosure/window_lines/alpha/corpus_counts")
         self.assertEqual((row["l9"], row["verdict"]), (None, "DISAGREE"))
-        self.assertEqual(copy.deepcopy(self.fails(out)), {"routing_id": 1, "count": 1})
+        # RC-CMP-9: the registry-driven table expects the line too (expected/disclosure/window_lines/alpha/corpus_counts).
+        self.assertEqual(copy.deepcopy(self.fails(out)), {"routing_id": 2, "count": 1})
 
 
 # F2: the compared categorical lines (each prints a claim word the recompute re-derives) and every section
@@ -243,15 +244,21 @@ EXEMPT_BLOCK_WORDS = ("superseded_history", "attempt_count", "attempt_history", 
                       "sensitivity_boundary")
 
 
-def find(case, word):
-    """(section list, index) of the first line with this word in the case's disclosure record."""
+def find(case, word, keep=lambda row: True):
+    """(section list, index) of the first line with this word in the case's disclosure record (and, given keep,
+    the first such line keep accepts)."""
     record = case.files[DISCLOSURE]
     for lines in [record[s] for s in ("cells", "floors", "contrasts", "block_lines", "fixed_sentences")] + list(
             record["window_lines"].values()):
         for index, row in enumerate(lines):
-            if row["line"] == word:
+            if row["line"] == word and keep(row):
                 return lines, index
     raise KeyError(word)
+
+
+def p42_line(row):
+    """RC-CMP-9: the producer-complete base prints computed sensitivity_reported lines before the refused p42 ones."""
+    return row["line"] != "sensitivity_reported" or row["record"]["status"] == "refused"
 
 
 class LineWordTests(GateCase):
@@ -322,7 +329,7 @@ class LineWordTests(GateCase):
         for label, (word, edit) in cases.items():
             with self.subTest(label):
                 self.setUp()
-                lines, index = find(self, word)
+                lines, index = find(self, word, p42_line)
                 edit(lines[index])
                 code, err, out = self.exit_code(CODED)
                 if label == "p42 status computed":
@@ -340,7 +347,7 @@ class LineWordTests(GateCase):
                            ("sensitivity_reported", lambda row: row["record"].update(status="computed"))):
             with self.subTest(word):
                 self.setUp()
-                lines, index = find(self, word)
+                lines, index = find(self, word, p42_line)
                 edit(lines[index])
                 self.assertEqual(self.outcome(), 2)
                 # RC-CMP-8 F3's required-key gate is switched off too: it refuses a computed record without values.
@@ -378,21 +385,24 @@ class RegisteredLabelTests(GateCase):
     DECODE = test_comparator.DECODE
 
     def with_loo(self, block_id):
-        """One leave-one-out row on both sides: L9's verdict and fill copy (by block id), the recompute's (b03)."""
+        """Block 3's leave-one-out row on both sides: L9's verdict and fill copy (by block id), the recompute's (b03).
+
+        RC-CMP-9: the producer-complete base prints a row for every kept block (status complete); this case
+        rewrites block 3's row in place, with its omitted block id printed as block_id."""
         verdict = next(r for r in self.files[f"outputs/{SHA}-claim-verdicts.json"]["contrasts"] if r["contrast_id"] == self.DECODE)
-        row = {"omitted_block_id": block_id, "estimate": -1.0, "raw_p": 0.9, "adjusted_p": 1.0, "outcome": "not_resolvable",
-               "floor_status": "not_above_floor", "metrology_aware_ci95": {"lower": -13.0, "upper": 11.0},
-               "decision_interval": {"lower": -16.0, "upper": 14.0}, "n_blocks": 8, "df": 7, "influence_triggers": []}
-        # RC-CMP-8: the engine's word for a leave-one-out block with rows is complete (analysis_engine _contrast_row).
-        verdict["loo"] = {"status": "complete", "rows": [row]}
         fill = next(r for r in self.files[f"outputs/{SHA}-results-fill-input.json"]["gamma"]["contrasts"]
                     if r["contrast_id"] == self.DECODE)
-        fill["loo"] = copy.deepcopy(verdict["loo"])
-        self.ours["contrasts"][self.DECODE]["loo"] = [{
-            "block_number": 3, "dbar_j": -1.0, "p": 0.9, "holm_p": 1.0, "holm_reject": False, "outcome": "not_resolvable",
-            "metrology_interval_j": [-13.0, 11.0], "decision_interval_j": [-16.0, 14.0], "n": 8, "above_floor": False}]
-        lines, index = find(self, "loo_counts")
-        lines[index]["count"] = 1
+        for contrast in (verdict, fill):
+            row = next(r for r in contrast["loo"]["rows"] if r["omitted_block_id"] == "d117-decode-contrast-b03")
+            row.update({"omitted_block_id": block_id, "estimate": -1.0, "raw_p": 0.9, "adjusted_p": 1.0,
+                        "outcome": "not_resolvable", "floor_status": "not_above_floor",
+                        "metrology_aware_ci95": {"lower": -13.0, "upper": 11.0},
+                        "decision_interval": {"lower": -16.0, "upper": 14.0}, "n_blocks": 8, "df": 7,
+                        "influence_triggers": []})
+        own = next(r for r in self.ours["contrasts"][self.DECODE]["loo"] if r["block_number"] == 3)
+        own.update({"block_number": 3, "dbar_j": -1.0, "p": 0.9, "holm_p": 1.0, "holm_reject": False,
+                    "outcome": "not_resolvable", "metrology_interval_j": [-13.0, 11.0],
+                    "decision_interval_j": [-16.0, 14.0], "n": 8, "above_floor": False})
 
     def test_registered_block_id_binds(self):
         self.with_loo("d117-decode-contrast-b03")
@@ -406,10 +416,12 @@ class RegisteredLabelTests(GateCase):
                 self.setUp()
                 self.with_loo(block_id)
                 self.assertNotEqual(self.exit_code(CODED)[0], 0)
-                # Counterfactual: 1134bbf58's parse (a trailing bNN) routes every one of them to b03.
+                # Counterfactual: 1134bbf58's parse (a trailing bNN) routes every one of them to b03 (and 1134bbf58
+                # had no expected-check table, which now expects block 3's registered id).
                 def parse(registry, cid, bid):
                     return "b%02d" % int(bid.rsplit("b", 1)[1]) if isinstance(bid, str) else None
-                with mock.patch.object(cmp, "loo_key", parse):
+                with mock.patch.object(cmp, "loo_key", parse), \
+                        mock.patch.object(cmp, "compare_expected", test_comparator.no_table):
                     self.assertEqual(self.exit_code(CODED)[0], 0)
 
     def test_ratio_label_takes_the_registered_numerator_field(self):

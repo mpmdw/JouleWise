@@ -72,29 +72,22 @@ class NumbersDeniedByDefaultTests(Case):
 def v3_floor(case):
     """A v3 claim floor (arm gates A, B and their resolutions) in the verdict and its fill copy.
 
-    BETA's decode cell gets its own gate (120 J) so the two arms differ.
+    BETA's decode cell gets its own gate (120 J) so the two arms differ. RC-CMP-9: the base verdict already
+    carries the producer's whole v3 floor (artifact.py _FLOOR_KEYS, _V3_FLOOR_KEYS, two gates and two
+    resolutions with every key), so the arm-B values move in place, and every producer copy of the 8B decode
+    cell's gate moves with them (the sensitivity record's primary and sensitivity rows, its disclosure copy and
+    block lines, and the recompute's sensitivity line).
     """
     for cell in case.files[AGGREGATE]["cells"]:
         if cell["cell_id"] == "d117-qwen3-8b-decode-floor-v5":
             cell.update(floor_cmp_j=120.0, floor_gate_j=120.0)
     case.ours["floor_cells"]["Qwen3-8B-4bit/decode"].update(floor_cmp_j=120.0, floor_gate_j=120.0)
     case.ours["contrasts"][DECODE]["floor_gate_j"] = 120.0
-    # RC-CMP-8: with the registered rule words a v3 floor always prints (artifact.py v3 checks; the manifest's
-    # floor_selector claim_floor_rule and transport_rule_id).
-    floor = {"active_floor_j": 120.0, "floor_abs_j": 43.0, "floor_cmp_j": 120.0,
-             "claim_floor_rule": "cross_stack_armwise_max.v1", "aggregation": "max_never_sum",
-             "arm_gates": [{"arm_id": "A", "condition_family_id": "sw-decode-a-qwen3-1p7b", "status": "exact",
-                            "floor_gate_j": 103.5},
-                           {"arm_id": "B", "condition_family_id": "sw-decode-b-qwen3-8b", "status": "exact",
-                            "floor_gate_j": 120.0}],
-             "resolutions": [{"status": "exact", "source_cell_ids": ["d117-qwen3-1p7b-decode-floor-v5"],
-                              "transport_rule_id": "exact_stack_only.v1",
-                              "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5},
-                             {"status": "exact", "source_cell_ids": ["d117-qwen3-8b-decode-floor-v5"],
-                              "transport_rule_id": "exact_stack_only.v1",
-                              "floor_abs_j": 43.0, "floor_cmp_j": 120.0, "floor_gate_j": 120.0}]}
     verdict = next(row for row in case.files[VERDICTS]["contrasts"] if row["contrast_id"] == DECODE)
-    verdict["floor"] = floor
+    floor = verdict["floor"]
+    floor.update(active_floor_j=120.0, floor_cmp_j=120.0)
+    floor["arm_gates"][1]["floor_gate_j"] = 120.0
+    floor["resolutions"][1].update(floor_cmp_j=120.0, floor_gate_j=120.0)
     fill = next(row for row in case.files[FILL]["gamma"]["contrasts"] if row["contrast_id"] == DECODE)
     fill["floor"] = copy.deepcopy(floor)
     # The producer-shaped disclosure prints the active floor on the decision_floor line, and the
@@ -105,6 +98,17 @@ def v3_floor(case):
     for line in case.files[DISCLOSURE]["floors"]:
         if line["line"] == "floor_composition" and line["cell_id"] == "d117-df-cmp-abba-ph-decode-qwen3-8b":
             line["minted_j"] = 120.0
+    record = case.files["outputs/" + "1" * 64 + ".json"]
+    rows = [record, case.files[DISCLOSURE]["sensitivity"]]
+    blocks = [line["record"] for line in case.files[DISCLOSURE]["block_lines"]
+              if line["line"] in ("sensitivity_floor", "sensitivity_contrast")]
+    for row in [r for copy_ in rows for r in copy_["floor_cells"] + copy_["contrasts"]] + blocks:
+        if row.get("cell_id") == "d117-qwen3-8b-decode-floor-v5" or row.get("contrast_id") == DECODE:
+            for side in ("primary", "sensitivity"):
+                row[side].update(floor_cmp_j=120.0, floor_gate_j=120.0)
+    line = case.ours["disclosures"]["sensitivity_bound"]
+    line["floor_cells"]["Qwen3-8B-4bit/decode"].update(floor_cmp_j=120.0, floor_gate_j=120.0)
+    line["contrasts"][DECODE]["floor_gate_j"] = 120.0
     return verdict["floor"], fill["floor"]
 
 
@@ -141,7 +145,9 @@ class IndependentBindingTests(Case):
         self.files[FILL]["gamma"]["contrasts"][0]["floor"] = {"arm_gates": [
             {"condition_family_id": "d117-qwen3-1p7b-decode", "floor_gate_j": 103.5}]}
         result = self.shipped()
-        self.assertIn(("fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "no_row"), self.unbound(result))
+        # RC-CMP-9 F2: the arm rows are built from ARMS whatever the verdict prints, so the fill-only gate meets
+        # the row whose L9 value (the verdict's gate) is absent: value_differs (no_row before RC-CMP-9).
+        self.assertIn(("fill:gamma/contrasts/*/floor/arm_gates/*/floor_gate_j", "value_differs"), self.unbound(result))
         self.assertEqual(self.exit_code(CODED)[0], 2)
 
     def test_a_wrong_condition_id_alone_disagrees(self):
@@ -158,7 +164,8 @@ class IndependentBindingTests(Case):
         for floor in (verdict, fill):
             floor["resolutions"][1] = copy.deepcopy(floor["resolutions"][0])
         result = self.shipped()
-        self.assertEqual(self.fails(result), {"floor_gate_j": 2, "routing_id": 1})
+        # RC-CMP-9 A4: the copied resolution also prints arm A's registered transport group (a second routing row).
+        self.assertEqual(self.fails(result), {"floor_gate_j": 2, "routing_id": 2})
         self.assertIn(("fill:gamma/contrasts/*/floor/resolutions/*/floor_gate_j", "row_disagrees"), self.unbound(result))
         self.assertEqual(self.exit_code(CODED)[0], 2)
 
@@ -175,7 +182,8 @@ class IndependentBindingTests(Case):
         extra = "ctr-d117-decode-extra"
         self.files[VERDICTS]["contrasts"].append({"contrast_id": extra, "floor": {"floor_abs_j": 43.0}})
         self.files[FILL]["gamma"]["contrasts"].append({"contrast_id": extra, "floor": {"floor_abs_j": 43.0}})
-        with self.assertRaisesRegex(cmp.Refusal, "routing_id_unregistered:contrast"):
+        # RC-CMP-9: the expected-check walk reads the fill first, whose gate refuses the same id.
+        with self.assertRaisesRegex(cmp.Refusal, r"routing_id_unregistered:(contrast|fill:gamma/contrasts/\*/contrast_id)$"):
             self.shipped()
 
     def test_identity_fields_that_route_are_compared(self):
@@ -284,11 +292,15 @@ class OneKeySpaceTests(Case):
         self.assertEqual(len(keys), len(set(keys)))
 
     def ratio_line(self, n):
+        # RC-CMP-9: the first ratio's line is replaced in place (the producer prints every registered ratio's line).
         row = self.files[RATIO_TABLE]["ratios"][0]
-        self.files[DISCLOSURE]["block_lines"] = [{
+        lines = self.files[DISCLOSURE]["block_lines"]
+        index = next(i for i, line in enumerate(lines) if line["line"] == "dominance_ratio"
+                     and line["cell_id"] == row["cell_id"] and line["component"] == "absolute")
+        lines[index] = {
             "line": "dominance_ratio", "cell_id": row["cell_id"], "component": "absolute",
             "text": "alpha decode: R 1.0395 (synthetic)", "ratio": row["ratio"],
-            "numerator_j": row["numerator_j"], "denominator_j": row["denominator_j"], "n": n, "status": "complete"}]
+            "numerator_j": row["numerator_j"], "denominator_j": row["denominator_j"], "n": n, "status": "complete"}
 
     def test_ratio_rows_have_their_own_key_space_opus_n2(self):
         # The ratio's n is 7 on both sides, its floor cell's n 9.

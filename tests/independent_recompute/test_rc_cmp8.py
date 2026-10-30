@@ -48,6 +48,11 @@ def contrast_rows(case, cid=DECODE):
             for rows in (case.files[VERDICTS]["contrasts"], case.files[FILL]["gamma"]["contrasts"])]
 
 
+def loo_b03(contrast):
+    """Block 3's leave-one-out row of a verdict or fill contrast (RC-CMP-9: the base prints one per kept block)."""
+    return next(r for r in contrast["loo"]["rows"] if r["omitted_block_id"] == "d117-decode-contrast-b03")
+
+
 class Round(GateCase):
     def outcome(self):
         try:
@@ -146,36 +151,41 @@ class DefinitionAndStatusWordTests(Round):
         self.assertEqual(self.outcome(), 2)
         with mock.patch.object(cmp, "COVERAGE", OLD_RULES + cmp.COVERAGE):
             self.assertEqual(self.outcome(), 0)
-        for word in ("complete", "not_required"):
+        # RC-CMP-9: the producer-complete base keeps nine blocks, so the engine's word is complete.
+        for word in ("not_run", "not_required"):
             with self.subTest(word):
                 self.setUp()
                 for row in contrast_rows(self):
                     row["loo"]["status"] = word
                 code, _, out = self.exit_code(CODED)
                 self.assertNotEqual(code, 0)
-                self.assertEqual(self.row(out, f"{DECODE}/loo_status")["recompute"], "not_run")
+                self.assertEqual(self.row(out, f"{DECODE}/loo_status")["recompute"], "complete")
 
     def test_loo_status_word_rule(self):
-        self.assertEqual(cmp.loo_status([], tuple(range(10))), "not_run")
-        self.assertEqual(cmp.loo_status([{}], tuple(range(10))), "complete")
+        # RC-CMP-9 A2: the word follows the kept n (one row per kept block), never the rows either side printed.
+        self.assertEqual(cmp.loo_status(0, tuple(range(10))), "not_run")
+        self.assertEqual(cmp.loo_status(1, tuple(range(10))), "complete")
+        self.assertEqual(cmp.loo_status(9, tuple(range(10))), "complete")
         # More registered blocks than the engine's limit leave the word undetermined (refuse, never pass).
-        self.assertIsNone(cmp.loo_status([{}], tuple(range(11))))
+        self.assertIsNone(cmp.loo_status(9, tuple(range(11))))
         self.assertIsNone(cmp.loo_status(None, tuple(range(10))))
+        self.assertIsNone(cmp.loo_status(True, tuple(range(10))))
 
     def with_loo(self, triggers, estimate=-1.0):
-        """One leave-one-out row on both sides (as test_rc_cmp7.RegisteredLabelTests.with_loo)."""
+        """Block 3's leave-one-out row on both sides (as test_rc_cmp7.RegisteredLabelTests.with_loo). RC-CMP-9: the
+        producer-complete base prints a row for every kept block; block 3's is rewritten in place."""
         row = {"omitted_block_id": "d117-decode-contrast-b03", "estimate": estimate, "raw_p": 0.9, "adjusted_p": 1.0,
                "outcome": "not_resolvable", "floor_status": "not_above_floor",
                "metrology_aware_ci95": {"lower": -13.0, "upper": 11.0}, "decision_interval": {"lower": -16.0, "upper": 14.0},
                "n_blocks": 8, "df": 7, "influence_triggers": triggers}
         for contrast in contrast_rows(self):
-            contrast["loo"] = {"status": "complete", "rows": [copy.deepcopy(row)]}
-        self.ours["contrasts"][DECODE]["loo"] = [{
+            rows = contrast["loo"]["rows"]
+            rows[next(i for i, r in enumerate(rows) if r["omitted_block_id"] == row["omitted_block_id"])] = copy.deepcopy(row)
+        own = self.ours["contrasts"][DECODE]["loo"]
+        own[next(i for i, r in enumerate(own) if r["block_number"] == 3)] = {
             "block_number": 3, "dbar_j": estimate, "p": 0.9, "holm_p": 1.0, "holm_reject": False,
             "outcome": "not_resolvable", "metrology_interval_j": [-13.0, 11.0], "decision_interval_j": [-16.0, 14.0],
-            "n": 8, "above_floor": False}]
-        lines, index = find(self, "loo_counts")
-        lines[index]["count"] = 1
+            "n": 8, "above_floor": False}
 
     def test_influence_triggers_compared(self):
         self.with_loo([])
@@ -191,12 +201,12 @@ class DefinitionAndStatusWordTests(Round):
                 self.setUp()
                 self.with_loo(["estimate_sign"], estimate=1.0)
                 for contrast in contrast_rows(self):
-                    contrast["loo"]["rows"][0]["influence_triggers"] = list(triggers)
+                    loo_b03(contrast)["influence_triggers"] = list(triggers)
                 self.assertNotEqual(self.outcome(), 0)
         # Counterfactual: c372211bf's vocabulary exemption and no row.
         self.setUp()
         self.with_loo(["estimate_sign"], estimate=1.0)
-        contrast_rows(self)[1]["loo"]["rows"][0]["influence_triggers"] = []
+        loo_b03(contrast_rows(self)[1])["influence_triggers"] = []
         self.assertEqual(self.outcome(), 2)
         with mock.patch.object(cmp, "COVERAGE", OLD_RULES + cmp.COVERAGE):
             self.assertEqual(self.outcome(), 0)
@@ -209,13 +219,14 @@ class DefinitionAndStatusWordTests(Round):
         self.assertIsNone(cmp.loo_triggers(full, dict(row, holm_reject=None)))
 
     def with_assist_contrast(self, status="computed", n=9):
-        lines = self.files[DISCLOSURE]["contrasts"]
-        lines.append(item("battery_assist_contrast", True, DECODE + ": without assisted quads", contrast_id=DECODE,
-                          status=status, n=n, mean_j=-1.25, s_d=16.0, se=5.25, t_star=2.306, lower_j=-13.5,
-                          upper_j=11.0, assist_quads=0, assist_members={}))
-        self.ours["disclosures"]["battery_assist"] = {DECODE: {
+        # RC-CMP-9: the producer-complete base prints DECODE's line; it is replaced in place.
+        lines, index = find(self, "battery_assist_contrast")
+        lines[index] = item("battery_assist_contrast", True, DECODE + ": without assisted quads", contrast_id=DECODE,
+                            status=status, n=n, mean_j=-1.25, s_d=16.0, se=5.25, t_star=2.306, lower_j=-13.5,
+                            upper_j=11.0, assist_quads=0, assist_members={})
+        self.ours["disclosures"]["battery_assist"][DECODE] = {
             "n": 9, "dbar_j": -1.25, "s_d_j": 16.0, "se_j": 5.25, "t_star": 2.306, "metrology_interval_j": [-13.5, 11.0],
-            "status": "computed", "assist_quads": 0, "assist_members_by_stratum": {}}}
+            "status": "computed", "assist_quads": 0, "assist_members_by_stratum": {}}
 
     def test_battery_assist_contrast_status_fails(self):
         self.with_assist_contrast()
@@ -225,8 +236,10 @@ class DefinitionAndStatusWordTests(Round):
                 self.setUp()
                 self.with_assist_contrast(word)
                 self.assertNotEqual(self.outcome(), 0)
+                # c372211bf: the old rules and no status row (RC-CMP-8 report: "old rules + no row").
                 with mock.patch.object(cmp, "COVERAGE", OLD_RULES + cmp.COVERAGE), \
-                        mock.patch.object(cmp, "paired_status", lambda n: word):
+                        mock.patch.object(cmp.Comparison, "exact", rows_off(cmp.Comparison.exact,
+                                                                            "/battery_assist_contrast/status")):
                     self.assertEqual(self.outcome(), 0)
         self.assertEqual([cmp.paired_status(n) for n in (0, 1, 2, 9, None, 2.0)],
                          ["not_computable", "one_quad", "computed", "computed", None, None])
@@ -297,7 +310,9 @@ class RegisteredDefinitionTests(Round):
         failing = {r["key"] for r in out["comparisons"] if r["verdict"] != "AGREE"}
         self.assertEqual(failing, {"disclosure/beta/neg8_allowance/source",
                                    "disclosure/Qwen3-8B-4bit/decode/absolute/floor_composition/source",
-                                   "disclosure/Qwen3-8B-4bit/decode/comparative/floor_composition/source"})
+                                   "disclosure/Qwen3-8B-4bit/decode/comparative/floor_composition/source",
+                                   "disclosure/Qwen3-8B-4bit/prefill/absolute/floor_composition/source",
+                                   "disclosure/Qwen3-8B-4bit/prefill/comparative/floor_composition/source"})
 
 
 class RequiredKeyTests(Round):
@@ -316,8 +331,10 @@ class RequiredKeyTests(Round):
                 section = "window_lines" if word == "below_screen_bound" else "block_lines"
                 self.refused(f"required_key_absent:disclosure:{section}/{word}/{key}")
                 if label != "K7":
-                    # Counterfactual: without the required-key gate the word survives only in text (exit 0).
-                    with mock.patch.object(cmp, "require", lambda value, keys, where: None):
+                    # Counterfactual: without the required-key gate (and RC-CMP-9's expected-check table, which
+                    # c372211bf did not have either) the word survives only in text (exit 0).
+                    with mock.patch.object(cmp, "require", lambda value, keys, where: None), \
+                            mock.patch.object(cmp, "compare_expected", test_comparator.no_table):
                         self.assertEqual(self.outcome(), 0)
 
     def test_opus_k9_and_fable_f2d_f2e_a_dropped_window_claim_line_disagrees(self):
@@ -336,7 +353,9 @@ class RequiredKeyTests(Round):
         lines[index].update(decision="failed", line="adapter_continuity", label="adapter_continuity")
         code, _, out = self.exit_code(CODED)
         self.assertEqual(code, 1)
-        self.assertEqual(self.fails(out), {"outcome_word": 1, "routing_id": 1})
+        # RC-CMP-9: the table also expects alpha's neg8_screen line and one adapter_continuity line (now two), and
+        # both relabelled-into items are outside it (four more routing rows).
+        self.assertEqual(self.fails(out), {"outcome_word": 1, "routing_id": 5})
 
     def test_fill_claim_keys_are_required(self):
         cases = {"claim_evaluation/claim_ready_for_l2_l3": lambda row: row["claim_evaluation"].pop("claim_ready_for_l2_l3"),
@@ -351,7 +370,8 @@ class RequiredKeyTests(Round):
                 where = path.rsplit("/", 1)
                 self.refused("required_key_absent:fill:gamma/contrasts/*" + ("/" + where[0] if len(where) == 2 else "")
                              + "/" + where[-1])
-                with mock.patch.object(cmp, "require", lambda value, keys, where: None):
+                with mock.patch.object(cmp, "require", lambda value, keys, where: None), \
+                        mock.patch.object(cmp, "compare_expected", test_comparator.no_table):
                     self.assertEqual(self.outcome(), 0)
         self.setUp()
         self.files[FILL]["campaigns"]["beta"].pop("claim_usable")
@@ -361,7 +381,7 @@ class RequiredKeyTests(Round):
         self.files[DISCLOSURE]["sensitivity"]["windows"]["gamma"].pop("widened")
         self.refused("required_key_absent:disclosure:sensitivity/windows/gamma/widened")
         self.setUp()
-        self.files[DISCLOSURE]["sensitivity"]["reported_cells"][0].pop("code")
+        next(r for r in self.files[DISCLOSURE]["sensitivity"]["reported_cells"] if r["status"] == "refused").pop("code")
         self.refused("required_key_absent:disclosure:sensitivity/reported_cells/code")
 
     def test_producer_lines_with_conditional_keys_absent_pass_the_gate(self):
@@ -402,62 +422,43 @@ def with_sensitivity(case, widened=True):
     cell (its projection cell and the disclosure's reported_cell, battery_assist_cell and attribution_floor lines),
     both decode aggregate floor cells and the decode contrast, in the record, the disclosure's copy and the
     block-line copies; the recompute's primary and sensitivity values beside them. Unwidened, B_max sits below
-    every window's b_op, so b_sens equals b_op and the sensitivity values equal the primary ones."""
+    every window's b_op, so b_sens equals b_op and the sensitivity values equal the primary ones.
+
+    RC-CMP-9: the base fixture is producer-complete (every registered reported cell, floor cell and contrast has its
+    sensitivity row, line and recompute value), so this sets the widened values of those three items in place and,
+    unwidened, every sensitivity value to its primary value."""
     files, ours = case.files, case.ours
     primary, after = reported_values(widened)
-    files[PROJECTION]["cells"] = [{
-        "cell_id": REPORTED, "mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0,
-        "interval": {"h_j": 2.0, "B_j": 1.0, "s_r": 1.5, "s_b": 1.25, "variance": 0.5, "n_r": 9, "n_b": 9, "df": 8,
-                     "kind_averages_j": dict.fromkeys(cmp.KIND_ORDER, 0.25)},
-        "attribution_floor": {"value_j": 3.0, "minimum_j": 1.0, "attained_by": "E_clock_anchor_shift_bound_j"},
-        "per_token": {"j_per_token": 0.1}, "n_bundles": 18, "kept_units": [{"stratum": "repeat", "unit_id": "u1"}]}]
-    ours["reported_cells"] = {FAMILY: {
-        "status": "computed", "mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0, "n_r": 9, "n_b": 9, "n_bundles": 18,
-        "interval": {"h_j": 2.0, "B_j": 1.0, "s_r": 1.5, "s_b": 1.25, "variance": 0.5, "df": 8, "kind_averages_j": [0.25] * 3},
-        "attribution_floor": {"value_j": 3.0, "minimum_j": 1.0}, "per_token": {"j_per_token": 0.1},
-        "kept_units": {"repeat": ["u1"]}}}
-    cell = {"status": "computed", "mean_j": 50.0, "h_j": 2.0, "B_j": 1.0, "lower_j": 47.0, "upper_j": 53.0}
-    files[DISCLOSURE]["cells"] = [
-        item("reported_cell", True, f"alpha {REPORTED}: 50 J", pack="alpha", cell_id=REPORTED, **cell),
-        item("battery_assist_cell", True, f"alpha {REPORTED}: no assisted member", pack="alpha", cell_id=REPORTED,
-             primary=dict(cell), without=dict(cell), n_r=9, n_b=9, assist_members={}, removed_unit_ids=[]),
-        item("attribution_floor", True, "attribution floor 3 J", pack="alpha", cell_id=REPORTED, value_j=3.0,
-             attained_by="E_clock_anchor_shift_bound_j", minimum_j=1.0)]
-    ours["disclosures"]["battery_assist"] = {FAMILY: {"mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0, "n_r": 9,
-                                                      "n_b": 9, "interval": {"h_j": 2.0, "B_j": 1.0},
-                                                      "assist_members_by_stratum": {}}}
     floor_before = {"floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
     floor_after = dict(floor_before, floor_abs_j=45.0, floor_cmp_j=105.0, floor_gate_j=105.0) if widened else dict(floor_before)
-    contrast_before = dict(floor_before, D_j=2.75, outcome="not_resolvable")
     contrast_after = dict(floor_after, D_j=3.0 if widened else 2.75, outcome="not_resolvable")
-    rows = {
-        "reported_cells": [{"pack": "alpha", "cell_id": REPORTED, "status": "computed", "primary": primary,
-                            "sensitivity": after, "mean_and_half_width_equal_primary": True,
-                            "equals_primary": after == primary, "not_below_primary": True}],
-        "floor_cells": [{"pack": pack, "cell_id": cid, "primary": dict(floor_before, allowance_j=1.0),
-                         "sensitivity": dict(floor_after, allowance_j=1.0), "equals_primary": not widened,
-                         "not_below_primary": True} for pack, cid in FLOOR_CELLS.items()],
-        "contrasts": [{"contrast_id": DECODE, "floor_cell_ids": list(FLOOR_CELLS.values()), "primary": contrast_before,
-                       "sensitivity": contrast_after, "bound_independent_values_equal_primary": True,
-                       "outcome_equals_primary": True, "not_below_primary": True}]}
     bound = 0.0625 if widened else 0.0375
-    for record in (files[SENSITIVITY], files[DISCLOSURE]["sensitivity"]):
-        record["reported_cells"] = [r for r in record["reported_cells"] if r["status"] == "refused"] + copy.deepcopy(
-            rows["reported_cells"])
-        record["floor_cells"], record["contrasts"] = copy.deepcopy(rows["floor_cells"]), copy.deepcopy(rows["contrasts"])
-        record["b_max"]["value_s"] = 0.0625 if widened else 0.03
-        for window in record["windows"].values():
-            window.update(b_sens_s=bound, widened=widened)
-    block = files[DISCLOSURE]["block_lines"]
-    block[:] = [row for row in block if row["line"] not in ("sensitivity_floor", "sensitivity_contrast")]
-    for row in block:
-        if row["line"] == "sensitivity_bmax":
-            row["value_s"] = 0.0625 if widened else 0.03
-        if row["line"] == "sensitivity_window":
-            row.update(b_sens_s=bound, widened=widened)
-    block += [item("sensitivity_reported", True, "sensitivity: alpha", record=copy.deepcopy(rows["reported_cells"][0]))]
-    block += [item("sensitivity_floor", True, "sensitivity: floor", record=copy.deepcopy(row)) for row in rows["floor_cells"]]
-    block += [item("sensitivity_contrast", True, "sensitivity: contrast", record=copy.deepcopy(rows["contrasts"][0]))]
+    record = files[SENSITIVITY]
+    record["b_max"]["value_s"] = 0.0625 if widened else 0.03
+    for window in record["windows"].values():
+        window.update(b_sens_s=bound, widened=widened)
+    for row in record["reported_cells"]:
+        if row["status"] == "computed":
+            row["sensitivity"] = dict(after if row["cell_id"] == REPORTED else row["primary"])
+            row["equals_primary"] = row["sensitivity"] == row["primary"]
+    for row in record["floor_cells"]:
+        decode = row["cell_id"] in FLOOR_CELLS.values()
+        row["sensitivity"] = dict(floor_after, allowance_j=1.0) if decode else dict(row["primary"])
+        row["equals_primary"] = row["sensitivity"] == row["primary"]
+    for row in record["contrasts"]:
+        row["sensitivity"] = dict(contrast_after) if row["contrast_id"] == DECODE else (
+            dict(row["sensitivity"]) if widened else dict(row["primary"]))
+    files[DISCLOSURE]["sensitivity"] = copy.deepcopy(record)
+    rows = {(line, row.get("contrast_id") or row["cell_id"]): row for line, section in
+            (("sensitivity_reported", "reported_cells"), ("sensitivity_floor", "floor_cells"),
+             ("sensitivity_contrast", "contrasts")) for row in record[section]}
+    for line in files[DISCLOSURE]["block_lines"]:
+        if line["line"] in ("sensitivity_reported", "sensitivity_floor", "sensitivity_contrast"):
+            line["record"] = copy.deepcopy(rows[(line["line"], line["record"].get("contrast_id") or line["record"]["cell_id"])])
+        if line["line"] == "sensitivity_bmax":
+            line["value_s"] = 0.0625 if widened else 0.03
+        if line["line"] == "sensitivity_window":
+            line.update(b_sens_s=bound, widened=widened)
     files[f"brackets/{SHA}-block.json"]["value_s"] = 0.0625 if widened else 0.03
     for pack in ("alpha", "beta", "gamma"):
         files[f"brackets/{SHA}-{pack}.json"]["b_sens"] = bound
@@ -465,18 +466,19 @@ def with_sensitivity(case, widened=True):
     line["B_max_s"] = 0.0625 if widened else 0.03
     for window in line["windows"].values():
         window["b_sens_s"] = bound
-    line["reported_cells"] = {FAMILY: {"status": "computed", "mean_j": after["mean_j"], "lower_j": after["lower_j"],
-                                       "upper_j": after["upper_j"], "interval": {"h_j": after["h_j"], "B_j": after["B_j"]},
-                                       "attribution_floor": {"value_j": after["attribution_floor_j"]}}}
-    line["floor_cells"] = {MODEL_CELLS[pack]: dict(floor_after) for pack in FLOOR_CELLS}
-    line["floors"] = {MODEL_CELLS[pack] + "/absolute": {"allowance_j": 1.0} for pack in FLOOR_CELLS}
-    line["contrasts"] = {DECODE: {"floor_gate_j": contrast_after["floor_gate_j"], "D_j": contrast_after["D_j"],
-                                  "outcome": "not_resolvable", "outcome_equals_primary": True}}
+    line["reported_cells"][FAMILY] = {"status": "computed", "mean_j": after["mean_j"], "lower_j": after["lower_j"],
+                                      "upper_j": after["upper_j"], "interval": {"h_j": after["h_j"], "B_j": after["B_j"]},
+                                      "attribution_floor": {"value_j": after["attribution_floor_j"]}}
+    for pack in FLOOR_CELLS:
+        line["floor_cells"][MODEL_CELLS[pack]] = dict(floor_after)
+    line["contrasts"][DECODE].update(floor_gate_j=contrast_after["floor_gate_j"], D_j=contrast_after["D_j"])
+    if not widened:
+        line["contrasts"][test_comparator.PREFILL]["D_j"] = 2.75
 
 
 # Each relation word of the fixture: (record section, row index, word).
-RELATION_WORDS = (("reported_cells", -1, "equals_primary"), ("reported_cells", -1, "not_below_primary"),
-                  ("reported_cells", -1, "mean_and_half_width_equal_primary"),
+RELATION_WORDS = (("reported_cells", 0, "equals_primary"), ("reported_cells", 0, "not_below_primary"),
+                  ("reported_cells", 0, "mean_and_half_width_equal_primary"),
                   ("floor_cells", 0, "equals_primary"), ("floor_cells", 1, "not_below_primary"),
                   ("contrasts", 0, "not_below_primary"), ("contrasts", 0, "outcome_equals_primary"),
                   ("contrasts", 0, "bound_independent_values_equal_primary"))
@@ -496,7 +498,7 @@ class SensitivityFixtureTests(Round):
         if "block" in copies:
             name = BLOCK_LINES[section]
             lines = [r for r in self.files[DISCLOSURE]["block_lines"] if r["line"] == name]
-            targets.append(lines[index if section != "reported_cells" else -1]["record"])
+            targets.append(lines[index]["record"])
         for target in targets:
             target[word] = not target[word]
 
@@ -542,7 +544,7 @@ class SensitivityFixtureTests(Round):
             with self.subTest(counterfactual=word):
                 self.setUp()
                 with_sensitivity(self)
-                self.flip(section, -1 if section == "reported_cells" else 0, word)
+                self.flip(section, 0, word)
                 with mock.patch.object(cmp, "COVERAGE", OLD_RULES + cmp.COVERAGE), \
                         mock.patch.object(cmp.Comparison, "exact", rows_off(
                             cmp.Comparison.exact, "/mean_and_half_width_equal_primary",

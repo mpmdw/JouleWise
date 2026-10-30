@@ -71,8 +71,9 @@ class GateCase(Case):
 
     def without_gate(self):
         """The 7fede8c7 composition: no gate (G2, G3), leaves() taking an identity field at any depth, and
-        the identity rule at any depth (G5)."""
+        the identity rule at any depth (G5); and (RC-CMP-9) no expected-check table, which 7fede8c7 did not have."""
         return _patches(
+            mock.patch.object(cmp, "compare_expected", test_comparator.no_table),
             mock.patch.object(cmp, "gate", lambda *args, **kwargs: None),
             mock.patch.object(cmp, "owns", lambda label, key, star: key in cmp.IDENTITY_FIELDS),
             mock.patch.object(cmp, "COVERAGE", cmp.COVERAGE + ((OLD_IDENTITY, cmp.IDENTITY),)))

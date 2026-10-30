@@ -182,12 +182,7 @@ class CatchAllTests(Case):
         self.assertEqual(self.shipped()["coverage"]["unmapped"], ["fill:campaigns/alpha/path"])
 
     def test_numeric_leaves_uncovered_by_name_are_listed(self):
-        # RC-CMP-8 F3: the line carries its producer's unconditional keys (magnitude_per_token writes all five).
-        self.files[DISCLOSURE]["contrasts"].append({"line": "magnitude_per_token", "contrast_id": PREFILL,
-                                                    "value_j": -0.0006, "denominator": 2048,
-                                                    "metrology": {"lower": -0.006, "upper": 0.005},
-                                                    "decision": {"lower": -0.008, "upper": 0.007}})
-        self.ours["descriptive"][PREFILL] = {}
+        # RC-CMP-9: the producer-complete base prints PREFILL's magnitude_per_token line (denominator 2048).
         result = self.shipped()
         self.assertIn("disclosure:contrasts/magnitude_per_token/denominator", result["coverage"]["uncovered_numeric"])
         self.assertTrue(result["coverage"]["leaves"]["disclosure:contrasts/magnitude_per_token/denominator"]
@@ -410,6 +405,10 @@ class ExactTests(Case):
             row["multiplicity"]["rejected"] = True
         self.ours["contrasts"][DECODE]["holm_reject"] = 1
         self.ours["contrasts"][PREFILL]["holm_reject"] = 1.0
+        # RC-CMP-9: the producer-complete fixture's leave-one-out rows replay the same rejection (no trigger).
+        for cid, word in ((DECODE, 1), (PREFILL, 1.0)):
+            for row in self.ours["contrasts"][cid]["loo"]:
+                row["holm_reject"] = word
         self.assertEqual(self.fails(self.shipped()).get("outcome_word"), 2)
         # Counterfactual: == equality agrees.
         with mock.patch.object(cmp, "same", lambda a, b: a == b):

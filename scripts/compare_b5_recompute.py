@@ -176,6 +176,8 @@ def bar_for(spec, reference):
 class Comparison:
     def __init__(self, bars):
         self.bars, self.rows, self.scope, self.seen, self.excluded = bars, [], [], set(), []
+        # RC-CMP-9: the concrete paths of the items the expected-check table claimed, per L9 document.
+        self.claimed = {}
 
     def add(self, row):
         if (row["family"], row["key"]) in self.seen:
@@ -450,7 +452,12 @@ class Registry:
                                           "window_class": selector["window_class"]},
                               estimator=contrast["point_estimator"],
                               floor_rules={"claim_floor_rule": selector["claim_floor_rule"],
-                                           "transport_rule_id": selector["transport_rule_id"]})
+                                           "transport_rule_id": selector["transport_rule_id"]},
+                              # RC-CMP-9 A4: each arm's registered transport group, by its condition family.
+                              transport_groups=tuple([
+                                  next(group["transport_group_id"]
+                                       for group in contrast["floor_dependency"]["transport"]["transport_groups"]
+                                       if group["condition_family_id"] == condition) for condition in (a, b)]))
                 blocks = contrast["block_ids"]
                 if not all(isinstance(bid, str) for bid in blocks) or len(set(blocks)) != len(blocks):
                     raise ValueError(blocks)
@@ -461,7 +468,13 @@ class Registry:
                                   ("prefill", declaration["prefill_p2048_floor_dependency"]["cell_ids"])):
                 for index, cid in enumerate((a, b)):
                     self.register("floor", cid, pack=ARMS[index], model=MODELS[ARMS[index]], phase=phase)
-        except (KeyError, TypeError, ValueError, IndexError, AttributeError):
+            # RC-CMP-9 A3: each contrast's registered floor source cells, in arm order [A, B] (the declaration's
+            # cells of the contrast's phase; the gamma plan tree binds the declaration by digest).
+            for entry in self.tables["contrast"].values():
+                entry["floor_cells"] = tuple([next(cid for cid, floor in self.tables["floor"].items()
+                                                   if floor["phase"] == entry["phase"] and floor["pack"] == pack)
+                                              for pack in ARMS.values()])
+        except (KeyError, TypeError, ValueError, IndexError, AttributeError, StopIteration):
             raise Refusal("routing_registry_invalid") from None
 
     def read(self, root, name, pins):
@@ -568,6 +581,662 @@ def load_registry(root=CAMPAIGNS, pins=None):
     if root not in _REGISTRY:
         _REGISTRY[root] = Registry(root)
     return _REGISTRY[root]
+
+
+# RC-CMP-9: the sources an expected check may come from. This list is closed: no other source, in particular no
+# L9 output and no recompute output, may create an entry of the expected-check table, now or later.
+REGISTERED_SOURCES = (
+    "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json",
+    "configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json",
+    "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json",
+    "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json",
+    "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json",
+    "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
+    # Bound by digest from the gamma plan tree (consumer declaration); the registry has read it since RC-CMP-6.
+    "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json",
+    # The window index: named, not read (absent from this branch); no entry is taken from it.
+    "configs/analysis/b5/analysed_windows.json",
+    "the registered packs (PACKS)",
+    "the sealed registration and analysis-plan constants the producers apply, copied below as literals")
+
+# F1 (RC-CMP-9): the producers' exact key sets, copied as literals. tests/independent_recompute/test_rc_cmp9.py
+# pins each to its source on origin/main: analysis_engine/artifact.py (_CONTRAST_KEYS, _METRIC_KEYS,
+# _CONDITION_KEYS, _CONTRAST_SAMPLING_KEYS, _ESTIMATOR_KEYS, _DETERMINISTIC_KEYS, _FLOOR_KEYS, _V3_FLOOR_KEYS,
+# _ARM_GATE_KEYS, _FLOOR_RESOLUTION_KEYS, _MULTIPLICITY_EVIDENCE_KEYS, _LOO_KEYS, _LOO_ROW_KEYS, _EVALUATION_KEYS).
+ENGINE_KEYS = {
+    "contrast": ("contrast_id", "plan_id", "family_instance_id", "claim_role", "metric", "conditions",
+                 "hypothesized_direction", "equivalence", "mde", "bundle_blocks", "sampling", "estimator",
+                 "deterministic_bounds", "floor", "multiplicity", "randomization_check", "loo", "sensitivity_status",
+                 "claim_evaluation"),
+    "metric": ("name", "metric_tag", "window_class", "unit", "ratio_estimand"),
+    "conditions": ("condition_a_id", "condition_b_id", "cell_a_id", "cell_b_id", "difference_orientation"),
+    "sampling": ("confirmatory_status", "planned_n", "observed_complete_n"),
+    # Block 5 always passes its kept quads (build_results_fill_input: kept_quads), so the kept sampling keys print.
+    "kept_sampling": ("kept_n", "removed_block_ids"),
+    "estimator": ("name", "n", "df", "estimate", "s_d", "SE_repeat", "SE_metrology", "SE_total", "t_critical_95",
+                  "repeat_point_CI95", "metrology_aware_CI95", "variance_contributions", "excluded_stochastic_terms",
+                  "raw_p"),
+    "deterministic": ("terms", "total", "decision_interval"),
+    "floor": ("status", "floor_row_ids", "floor_abs_j", "floor_cmp_j", "active_floor_j", "transport_verdict",
+              "resolutions"),
+    # A v3 contrast requires the complete armwise floor (artifact.py: v3 contrast requires ...); the sealed
+    # manifest is analysis_manifest_v3 with a floor_selector claim_floor_rule, so these keys always print.
+    "v3_floor": ("claim_floor_rule", "aggregation", "arm_gates"),
+    "arm_gate": ("arm_id", "condition_family_id", "status", "floor_gate_j"),
+    "resolution": ("status", "source_cell_ids", "transport_group_id", "transport_rule_id", "floor_abs_j",
+                   "floor_cmp_j", "floor_gate_j", "reason_codes"),
+    "multiplicity": ("raw_p", "adjusted_p", "rejected"),
+    "loo": ("status", "rows"),
+    "loo_row": ("omitted_block_id", "n_blocks", "df", "estimate", "metrology_aware_ci95", "decision_interval",
+                "floor_status", "raw_p", "adjusted_p", "outcome", "influence_triggers"),
+    "evaluation": ("outcome", "direction", "reason_codes", "claim_ready_for_l2_l3", "claim_level_ceiling")}
+# results_fill_adapter.adapt_claim_verdicts (the 14 base keys of each contrast row and the 10 extended ones; the
+# output's gamma and characterization objects) and scripts/build_results_fill_input.py (each campaign's keys).
+FILL_SHAPE = {
+    "top": ("schema_version", "campaigns", "gamma", "characterization"),
+    "gamma": ("claim_verdicts_id", "claim_verdicts_sha256", "evidence_class", "limitations", "contrasts",
+              "finalized_manifest", "floor_artifact", "exclusions_sha256"),
+    "floor_artifact": ("artifact_id", "file_sha256"),
+    "characterization": ("funded", "run", "verdict"),
+    "campaign": ("plan_id", "attempt", "claim_usable", "exclusions_sha256", "harvest_record_sha256"),
+    "contrast": ("contrast_id", "metric", "conditions", "limitations", "floor_source_cell_ids", "estimate", "interval",
+                 "decision_interval", "deterministic_widening_total", "j_per_token", "n", "floor", "multiplicity",
+                 "claim_evaluation", "plan_id", "claim_role", "hypothesized_direction", "equivalence", "sampling", "loo",
+                 "df", "t_critical_95", "kept_block_ids", "removed_block_ids")}
+# b5_analysis/disclosures.py produce_disclosures (the record's sections and each window's identity),
+# _cell_values (a computed cell's values), and the lines each producer prints unconditionally.
+DISCLOSURE_SHAPE = {
+    "top": ("schema_version", "windows", "cells", "floors", "contrasts", "window_lines", "block_lines", "sensitivity",
+            "fixed_sentences"),
+    "window": ("plan_id", "attempt", "harvest_pin", "record_shape"),
+    "cell_values": ("status", "mean_j", "h_j", "B_j", "lower_j", "upper_j")}
+# The window lines _structure_lines, _monitor_lines, _reference_lines, _ruling_lines and _machine_lines print for
+# every registered window, whatever the window's data (each conditional line is left out: arm_hazards,
+# arm_unmeasured, battery_phase, battery_discharged, reference_lost, reference_spare, lost_midpoint,
+# corpus_physics_drop, catalog_path, battery_temperature*, temperature_disagreement, stored_condition,
+# stored_member_reason, machine_absent, machine_member, machine_summary; flag_count follows the flag catalog,
+# which is not a registered source).
+WINDOW_LINES = ("monitor_cost", "monitor_sentence", "physics_counts", "anchor_counts", "anchor_bound", "host_cpu",
+                "battery_counts", "neg8_screen", "reference_counts", "corpus_counts", "bound_formula", "neg8_allowance",
+                "erratum3_triggers", "below_screen_bound", "stored_status", "adapter_continuity",
+                "stored_verdict_boundary", "deciding_membership", "reference_parity", "ledger_binding",
+                "machine_boundary")
+# _ruling_lines prints one tripwire line per registered tripwire key.
+TRIPWIRES = ("excluded_reference_in_screen", "kept_member_outside_verdict_membership")
+# The fixed sentences produce_disclosures prints whatever the data (conditionality, FIXED_SENTENCES, config_binding);
+# floor_drift_ownership and gross_energy print when the record has floor lines and contrast observations.
+FIXED_SENTENCE_WORDS = ("conditionality", "single_window", "floor_transfer_assumption", "floor_transfer_limit", "order",
+                        "p42", "separate_windows", "dominance", "d177", "fixed_prompt", "config_binding")
+# b5_analysis/sensitivity.py sensitivity_pass (the record's sections; bracket.BMax; each window's row) and its value
+# sets: _reported_values, _compose_floor and _contrast_values.
+SENSITIVITY_SHAPE = {
+    "top": ("schema_version", "label", "b_max", "windows", "reported_cells", "floor_cells", "contrasts"),
+    "b_max": ("value_s", "attained_by_sequence", "T"),
+    "reported_values": ("mean_j", "h_j", "B_j", "lower_j", "upper_j", "attribution_floor_j"),
+    "floor_values": ("floor_abs_j", "floor_cmp_j", "floor_gate_j", "allowance_j"),
+    "contrast_values": ("floor_abs_j", "floor_cmp_j", "floor_gate_j", "D_j", "outcome")}
+# dominance_closeout.validate (D-165): exactly eight independent ratios (each aggregate floor cell, absolute and
+# comparative) and four comparative common-mode ratios (each aggregate floor cell).
+CLOSEOUT_RATIOS = {"independent": ("absolute", "comparative"), "common_mode": ("comparative",)}
+INTERVAL = (("lower",), ("upper",))
+REPORTED_VALUE_KEYS = SENSITIVITY_SHAPE["reported_values"]
+
+
+def nested(prefix, keys):
+    return tuple((prefix, key) for key in keys)
+
+
+def check_doc(label):
+    """An L9 document label -> (how it is read, its pattern)."""
+    if label.startswith(("projection:", "extraction:", "bracket:", "kept_units:")):
+        kind, pack = label.split(":")
+        return {"projection": (r"outputs/[0-9a-f]{64}-projection-%s\.json", "one"),
+                "extraction": (r"mint/[0-9a-f]{64}-extraction-%s\.json", "one"),
+                "bracket": (r"brackets/[0-9a-f]{64}-%s\.json", "one"),
+                "kept_units": (KEPT_UNITS, "one")}[kind][0] % pack, "one"
+    return {"fill": (STEP11_SOURCES[0][1], "one"), "disclosure": (STEP11_SOURCES[1][1], "one"),
+            "verdicts": (r"outputs/[0-9a-f]{64}-claim-verdicts\.json", "one"),
+            "aggregate": (r"mint/[0-9a-f]{64}-aggregate-floor\.json", "one"),
+            "closeout": (r"finalized/outputs/closeout\.json", "one"),
+            "ratios": (r"finalized/outputs/closeout\.ratio-table\.json", "one"),
+            "block_bracket": (r"brackets/[0-9a-f]{64}-block\.json", "one"),
+            "sensitivity": (r"outputs/[0-9a-f]{64}\.json", "sensitivity")}[label]
+
+
+def expected_checks(registry):
+    """RC-CMP-9 (the design rule): the one expected-check table, a function of the registered sources only.
+
+    Each entry names a check (its kind and its registered key), the item it expects on L9's side (one locator per
+    L9 copy: document, path, required nested key paths) and on the recompute's side (path, required key paths), and,
+    for a conditional producer item, the registered condition that makes it expected. A path step is a key, a list
+    position, or {field: value} for the one list item carrying those identity fields; "any" lists alternatives
+    (a reported cell is either computed or refused). run() checks every entry before any family compares.
+    """
+    table = []
+
+    def add(kind, check, l9, recompute, condition=None):
+        table.append({"kind": kind, "check": check, "l9": tuple(l9), "recompute": tuple(recompute),
+                      "condition": condition})
+
+    contrasts = registry.tables["contrast"]
+    floors = registry.tables["floor"]
+    # The fill and the disclosure: each document and its sections.
+    add("fill_document", "fill",
+        [("fill", (), tuple((k,) for k in FILL_SHAPE["top"]) + nested("gamma", FILL_SHAPE["gamma"])
+          + nested("characterization", FILL_SHAPE["characterization"])
+          + tuple(("gamma", "floor_artifact", k) for k in FILL_SHAPE["floor_artifact"]))],
+        [(("contrasts",), ()), (("inputs",), ())])
+    for pack in ("alpha", "beta"):
+        add("fill_campaign", f"fill/campaigns/{pack}", [("fill", ("campaigns", pack), tuple((k,) for k in FILL_SHAPE["campaign"]))],
+            [(("inputs", PACKS[pack]), (("claim_usable",), ("exclusions_sha256",)))])
+    add("verdicts_document", "verdicts", [("verdicts", (), (("contrasts",),))], [(("contrasts",), ())])
+    for pack, PACK in PACKS.items():
+        add("kept_units_record", f"kept_units/{pack}",
+            [("kept_units:" + pack, (), (("pack",), ("exclusions_sha256",), ("cells",)))],
+            [(("inputs", PACK), (("exclusions_sha256",),))])
+    add("disclosure_document", "disclosure",
+        [("disclosure", (), tuple((k,) for k in DISCLOSURE_SHAPE["top"]))], [(("disclosures",), ())])
+    for pack, PACK in PACKS.items():
+        add("disclosure_window", f"disclosure/windows/{pack}",
+            [("disclosure", ("windows", pack), tuple((k,) for k in DISCLOSURE_SHAPE["window"])),
+             ("disclosure", ("window_lines", pack), ())], [(("windows", PACK), ())])
+        for word in WINDOW_LINES:
+            line = {"below_screen_bound": (("b_op_s",), ("below",)), "neg8_screen": (("decision",),),
+                    "neg8_allowance": (("source",),) + tuple(("values_j", NEG8_TERM + term) for term in NEG8_TERMS),
+                    "reference_counts": nested("counts", ("start", "midpoint", "end")) + (("planned",),),
+                    "corpus_counts": (("collected",), ("in_window",), ("deciding",), ("desk_cap",), ("drop_counts",))}
+            own = {"below_screen_bound": (("windows", PACK), (("b_op_s",),)),
+                   "neg8_screen": (("windows", PACK, "neg8"), (("screen_decision",),)),
+                   "neg8_allowance": (("windows", PACK, "neg8"), (("source",),) + tuple((k,) for k in NEG8_OWN)),
+                   "reference_counts": (("windows", PACK, "neg8"), (("n_start",), ("n_mid",), ("n_end",))),
+                   "corpus_counts": (("windows", PACK, "neg8"), (("corpus_n",),))}
+            keys = line.get(word, tuple((k,) for k in LINE_KEYS["window_lines"][word]))
+            add("window_line", f"disclosure/window_lines/{pack}/{word}",
+                [("disclosure", ("window_lines", pack, {"line": word}), keys)],
+                [own.get(word, (("windows", PACK), ()))])
+        for tripwire in TRIPWIRES:
+            add("window_line", f"disclosure/window_lines/{pack}/tripwire/{tripwire}",
+                [("disclosure", ("window_lines", pack, {"line": "tripwire", "tripwire": tripwire}), (("result",),))],
+                [(("windows", PACK), ())])
+        add("block_line", f"disclosure/block_lines/attempt_count/{pack}",
+            [("disclosure", ("block_lines", {"line": "attempt_count", "pack": pack, "superseded": False}),
+              (("count",), ("causes",)))], [(("windows", PACK), ())])
+    for word in FIXED_SENTENCE_WORDS:
+        add("fixed_sentence", f"disclosure/fixed_sentences/{word}",
+            [("disclosure", ("fixed_sentences", {"line": word}), (("text",),))], [(("disclosures",), ())])
+    for word in ("floor_drift_ownership", "gross_energy"):
+        add("fixed_sentence", f"disclosure/fixed_sentences/{word}",
+            [("disclosure", ("fixed_sentences", {"line": word}), (("text",),))], [(("disclosures",), ())])
+    add("block_line", "disclosure/block_lines/harvest_once",
+        [("disclosure", ("block_lines", {"line": "harvest_once"}), (("no_analysed_window_harvested_twice",),))],
+        [(("disclosures",), ())])
+    add("block_line", "disclosure/block_lines/sensitivity_boundary",
+        [("disclosure", ("block_lines", {"line": "sensitivity_boundary"}), (("text",),))],
+        [(("disclosures", "sensitivity_bound"), ())])
+    # The sensitivity record (one), its disclosure copy and its block lines.
+    bound = ("disclosures", "sensitivity_bound")
+    record_keys = tuple((k,) for k in SENSITIVITY_SHAPE["top"]) + nested("b_max", SENSITIVITY_SHAPE["b_max"])
+    add("sensitivity_record", "sensitivity",
+        [("sensitivity", (), record_keys), ("disclosure", ("sensitivity",), record_keys)], [(bound, ())])
+    bmax = tuple((k,) for k in SENSITIVITY_SHAPE["b_max"])
+    add("sensitivity_bmax", "sensitivity/b_max",
+        [("sensitivity", ("b_max",), bmax), ("disclosure", ("sensitivity", "b_max"), bmax),
+         ("disclosure", ("block_lines", {"line": "sensitivity_bmax"}), bmax)],
+        [(bound, (("B_max_s",), ("T",), ("attaining_sequence",)))])
+    for pack, PACK in PACKS.items():
+        window = tuple((k,) for k in SENSITIVITY_KEYS["windows"])
+        add("sensitivity_window", f"sensitivity/windows/{pack}",
+            [("sensitivity", ("windows", pack), window), ("disclosure", ("sensitivity", "windows", pack), window),
+             ("disclosure", ("block_lines", {"line": "sensitivity_window", "pack": pack}), window)],
+            [(("windows", PACK), (("b_op_s",),)), (bound + ("windows", PACK), (("b_sens_s",),))])
+    for cid, entry in registry.tables["reported"].items():
+        pack, family = entry["pack"], entry["family"]
+        computed = (("pack",), ("cell_id",), ("status",), ("mean_and_half_width_equal_primary",), ("equals_primary",),
+                    ("not_below_primary",)) + nested("primary", SENSITIVITY_SHAPE["reported_values"]) \
+            + nested("sensitivity", SENSITIVITY_SHAPE["reported_values"])
+        refused = (("pack",), ("cell_id",), ("status",), ("code",))
+        keys = refused if entry["p42"] else computed
+        match = {"cell_id": cid}
+        rows = [(doc, path + (match,), keys) for doc, path in
+                (("sensitivity", ("reported_cells",)), ("disclosure", ("sensitivity", "reported_cells")))]
+        rows.append(("disclosure", ("block_lines", {"line": "sensitivity_reported", ("record", "cell_id"): cid}),
+                     tuple(("record",) + k for k in keys)))
+        if entry["p42"]:
+            # The registered p42 exit (step 4 p42_floor_cells_only): refused in every copy; the recompute's p42 status.
+            add("sensitivity_reported", f"sensitivity/reported_cells/{pack}/{cid}", rows,
+                [(("p42", family), (("status",),))])
+            add("projection_cell", f"projection/{pack}/{cid}",
+                [("projection:" + pack, ("refused_cells", match), (("code",),))], [(("p42", family), (("status",),))])
+            continue
+        # A non-p42 reported cell is computed or refused (below the registered minimum) on each side; the rows
+        # and lines of a computed cell are expected when either side says computed.
+        add("projection_cell", f"projection/{pack}/{cid}",
+            [("any", (("projection:" + pack, ("cells", match), PROJECTION_KEYS),
+                      ("projection:" + pack, ("refused_cells", match), (("code",),))))],
+            [(("reported_cells", family), (("status",),))])
+        condition = ("reported_computed", pack, cid, family)
+        add("sensitivity_reported", f"sensitivity/reported_cells/{pack}/{cid}", rows,
+            [(bound + ("reported_cells", family), (("status",),))], condition)
+        # Refused on both sides (below the registered minimum): the record keeps the refusal and its code.
+        add("sensitivity_reported", f"sensitivity/reported_cells/{pack}/{cid}/refused",
+            [(doc, path[:-1] + (match,), refused) for doc, path, _ in rows[:2]]
+            + [(rows[2][0], rows[2][1], tuple(("record",) + k for k in refused))],
+            [(("reported_cells", family), (("status",),))], ("not", condition))
+        cell = {"pack": pack, "cell_id": cid}
+        own = (("reported_cells", family), (("mean_j",), ("lower_j",), ("upper_j",), ("interval", "h_j"),
+                                            ("interval", "B_j"), ("n_r",), ("n_b",)))
+        for word, keys, recompute in (
+                ("reported_cell", tuple((k,) for k in DISCLOSURE_SHAPE["cell_values"]), own),
+                ("battery_assist_cell", (("n_r",), ("n_b",), ("assist_members",), ("removed_unit_ids",), ("without",),
+                                         ("without", "status")) + nested("primary", DISCLOSURE_SHAPE["cell_values"]),
+                 (("disclosures", "battery_assist", family), (("n_r",), ("n_b",)))),
+                ("attribution_floor", (("value_j",), ("attained_by",), ("minimum_j",)),
+                 (("reported_cells", family, "attribution_floor"), (("value_j",), ("minimum_j",)))),
+                ("kept_units", (("n_r",), ("n_b",)), (("reported_cells", family), (("n_r",), ("n_b",))))):
+            add("cell_line", f"disclosure/cells/{word}/{pack}/{cid}",
+                [("disclosure", ("cells", dict(cell, line=word)), keys)], [recompute], condition)
+        model, phase = entry["model"], entry["phase"]
+        add("cell_line", f"disclosure/cells/cross_window/{pack}/{cid}",
+            [("disclosure", ("cells", dict(cell, line="cross_window")),
+              (("G_j",), ("h_G_j",), ("F_j",), ("h_F_j",), ("delta_j",), ("agree",)))],
+            [(("disclosures", "cross_window", f"{model}/{phase}"), (("G_j",), ("h_G_j",), ("F_j",), ("h_F_j",),
+                                                                    ("delta_j",), ("agree",)))],
+            ("cross_window", pack, cid, family, phase))
+    for cid, entry in floors.items():
+        pack, key = entry["pack"], cell_key(entry)
+        keys = (("pack",), ("cell_id",), ("equals_primary",), ("not_below_primary",)) \
+            + nested("primary", SENSITIVITY_SHAPE["floor_values"]) + nested("sensitivity", SENSITIVITY_SHAPE["floor_values"])
+        match = {"cell_id": cid}
+        add("sensitivity_floor", f"sensitivity/floor_cells/{cid}",
+            [("sensitivity", ("floor_cells", match), keys), ("disclosure", ("sensitivity", "floor_cells", match), keys),
+             ("disclosure", ("block_lines", {"line": "sensitivity_floor", ("record", "cell_id"): cid}),
+              tuple(("record",) + k for k in keys))],
+            [(bound + ("floor_cells", key), (("floor_abs_j",), ("floor_cmp_j",), ("floor_gate_j",)))])
+        add("aggregate_cell", f"aggregate/{cid}",
+            [("aggregate", ("cells", match), (("floor_abs_j",), ("floor_cmp_j",), ("floor_gate_j",)))],
+            [(("floor_cells", key), (("floor_abs_j",), ("floor_cmp_j",), ("floor_gate_j",)))])
+        for group, components in CLOSEOUT_RATIOS.items():
+            for component in components:
+                common = group == "common_mode"
+                field = "common_mode_corner_widened_unguarded_floor_j" if common else "corner_widened_unguarded_floor_j"
+                name = f"{key}/{component}" + ("/common_mode" if common else "")
+                own = ("dominance", "common_mode", key) if common else ("dominance", "ratios", f"{key}/{component}")
+                add("ratio", f"ratio/{name}",
+                    [("ratios", ("ratios", {"cell_id": cid, "component": component, "numerator_field": field}),
+                      (("n",), ("status",))),
+                     ("disclosure", ("block_lines", {"line": "dominance_ratio", "cell_id": cid, "component": component,
+                                                     "@ratio": "R_cm" if common else "R"}), (("n",), ("status",)))],
+                    [(own, (("n",),))])
+    add("dominance_branch", "closeout/branch",
+        [("closeout", (), (("branch",), ("dominance_sentence_licensed",))),
+         ("disclosure", ("block_lines", {"line": "dominance_branch"}), (("branch",), ("dominance_sentence_licensed",)))],
+        [(("dominance",), (("branch",),))])
+    # The floor windows' extraction cells, their floor lines, and each window's p42 exit.
+    for cid, entry in registry.tables["extraction"].items():
+        pack, match = entry["pack"], {"cell_id": cid}
+        own = (("p42", entry["family"]), (("status",),)) if entry["p42"] else (("floors", floor_key(entry)), ())
+        add("extraction_cell", f"extraction/{pack}/{cid}",
+            [("extraction:" + pack, ("cells", match), (("kind",), ("extractable",)))], [own])
+        add("floor_line", f"disclosure/floors/kept_units/{pack}/{cid}",
+            [("disclosure", ("floors", {"line": "kept_units", "pack": pack, "cell_id": cid}), (("n_r",), ("n_b",)))],
+            [own])
+        if entry["p42"]:
+            continue
+        condition = ("floor_computed", pack, cid, floor_key(entry))
+        add("extraction_floor", f"extraction/{pack}/{cid}/floor",
+            [("extraction:" + pack, ("cells", match), (("operative_floor_j",), ("n_admitted",))
+              + nested("floor", tuple(FLOOR_FIELDS) + ("corner_widened_guarded_floor_j", "drift_widened_unguarded_floor_j", "n")))],
+            [(("floors", floor_key(entry)), tuple((k,) for k in FLOOR_FIELDS.values()) + (("n",),))], condition)
+        add("floor_line", f"disclosure/floors/floor_composition/{pack}/{cid}",
+            [("disclosure", ("floors", {"line": "floor_composition", "pack": pack, "cell_id": cid}),
+              tuple((k,) for k in LINE_KEYS["floors"]["floor_composition"]))],
+            [(("floors", floor_key(entry)), (("guarded_floor_j",), ("allowance_j",), ("drift_widened_guarded_floor_j",))),
+             (("windows", PACKS[pack], "neg8"), (("source",),))], condition)
+    for pack in PACKS:
+        add("bracket", f"brackets/{pack}",
+            [("bracket:" + pack, (), (("b_sens",), ("evaluation", "acceptance", "allowance", "operative_b_fiducial_binary64_s")))],
+            [(("windows", PACKS[pack]), (("b_op_s",),)), (bound + ("windows", PACKS[pack]), (("b_sens_s",),))])
+    add("bracket", "brackets/block", [("block_bracket", (), (("value_s",), ("T",), ("attained_by_sequence",)))],
+        [(bound, (("B_max_s",), ("T",), ("attaining_sequence",)))])
+    # The contrasts: the verdict row, its fill copy, their floors, leave-one-out rows and disclosure lines.
+    for cid, entry in contrasts.items():
+        match = {"contrast_id": cid}
+        verdict = (tuple((k,) for k in ENGINE_KEYS["contrast"]) + nested("metric", ENGINE_KEYS["metric"])
+                   + nested("conditions", ENGINE_KEYS["conditions"])
+                   + nested("sampling", ENGINE_KEYS["sampling"] + ENGINE_KEYS["kept_sampling"])
+                   + nested("estimator", ENGINE_KEYS["estimator"])
+                   + tuple(("estimator", "metrology_aware_CI95") + side for side in INTERVAL)
+                   + nested("deterministic_bounds", ENGINE_KEYS["deterministic"])
+                   + tuple(("deterministic_bounds", "decision_interval") + side for side in INTERVAL)
+                   + nested("floor", ENGINE_KEYS["floor"] + ENGINE_KEYS["v3_floor"])
+                   + nested("multiplicity", ENGINE_KEYS["multiplicity"]) + nested("loo", ENGINE_KEYS["loo"])
+                   + nested("claim_evaluation", ENGINE_KEYS["evaluation"])
+                   + (("bundle_blocks", "planned_block_ids"), ("bundle_blocks", "blocks")))
+        fill = (tuple((k,) for k in FILL_SHAPE["contrast"]) + nested("metric", ENGINE_KEYS["metric"])
+                + nested("conditions", ENGINE_KEYS["conditions"])
+                + nested("sampling", ENGINE_KEYS["sampling"] + ENGINE_KEYS["kept_sampling"])
+                + tuple(("interval",) + side for side in INTERVAL)
+                + tuple(("decision_interval",) + side for side in INTERVAL)
+                + nested("floor", ENGINE_KEYS["floor"] + ENGINE_KEYS["v3_floor"])
+                + nested("multiplicity", ENGINE_KEYS["multiplicity"]) + nested("loo", ENGINE_KEYS["loo"])
+                + nested("claim_evaluation", ENGINE_KEYS["evaluation"]))
+        own = (("contrasts", cid), tuple((k,) for k in ("n", "dbar_j", "s_d_j", "se_j", "t_star", "metrology_interval_j",
+                                                        "D_j", "decision_interval_j", "floor_gate_j", "p", "holm_p",
+                                                        "holm_reject", "outcome", "ceiling", "loo", "kept_quads")))
+        add("contrast", f"contrast/{cid}", [("verdicts", ("contrasts", match), verdict),
+                                            ("fill", ("gamma", "contrasts", match), fill)], [own])
+        for index, pack in ARMS.items():
+            arm = f"{MODELS[pack]}/{entry['phase']}"
+            for name, keys in (("arm_gates", ENGINE_KEYS["arm_gate"]), ("resolutions", ENGINE_KEYS["resolution"])):
+                path = ("contrasts", match, "floor", name, index)
+                add("contrast_floor_" + name[:-1], f"contrast/{cid}/{name}/{index}",
+                    [("verdicts", path, tuple((k,) for k in keys)),
+                     ("fill", ("gamma",) + path, tuple((k,) for k in keys))],
+                    [(("floor_cells", arm), (("floor_gate_j",),) if name == "arm_gates"
+                      else (("floor_abs_j",), ("floor_cmp_j",), ("floor_gate_j",)))])
+        for block in registry.blocks[cid]:
+            path = ("contrasts", match, "loo", "rows", {"omitted_block_id": block})
+            keys = tuple((k,) for k in ENGINE_KEYS["loo_row"]) + tuple(("metrology_aware_ci95",) + s for s in INTERVAL) \
+                + tuple(("decision_interval",) + s for s in INTERVAL)
+            add("loo_row", f"contrast/{cid}/loo/{block}",
+                [("verdicts", path, keys), ("fill", ("gamma",) + path, keys)],
+                [(("contrasts", cid, "loo", {"block_number": registry.blocks[cid].index(block) + 1}),
+                  (("dbar_j",), ("p",), ("holm_p",), ("outcome",), ("n",), ("above_floor",), ("holm_reject",)))],
+                ("loo_block_kept", cid, block))
+        line = {"line": None, "contrast_id": cid}
+        own_descriptive = (("descriptive", cid), (("per_token_difference_j",), ("per_token_metrology_interval_j",),
+                                                  ("per_token_decision_interval_j",)))
+        for word, keys, recompute, condition in (
+                ("primary_contrast", nested("estimator", ENGINE_KEYS["estimator"])
+                 + tuple(("estimator", "metrology_aware_CI95") + s for s in INTERVAL)
+                 + tuple(("decision_interval",) + s for s in INTERVAL), own, None),
+                ("battery_assist_contrast", (("status",), ("n",), ("assist_quads",), ("assist_members",)),
+                 (("disclosures", "battery_assist", cid), (("n",), ("assist_quads",))), None),
+                ("magnitude_ratio", (), (("descriptive", cid), ()), None),
+                ("magnitude_ratio", (("log_mean",), ("log_sd",), ("ratio",), ("lower",), ("upper",)),
+                 (("descriptive", cid), (("ratio",), ("ratio_interval",))), ("ratio_computable", cid)),
+                ("magnitude_per_token", (("value_j",), ("denominator",)) + tuple(("metrology",) + s for s in INTERVAL)
+                 + tuple(("decision",) + s for s in INTERVAL), own_descriptive, None),
+                ("contrast_interval", (("n",), ("rounded_t",), ("exact_t",)), (("contrasts", cid), (("n",), ("t_star",))),
+                 None),
+                ("decision_floor", (("floor_j",), ("estimate_j",)) + tuple(("decision_interval",) + s for s in INTERVAL),
+                 (("contrasts", cid), (("floor_gate_j",), ("dbar_j",), ("decision_interval_j",))), None),
+                ("loo_counts", (("count",), ("exclusive_block_numbers",)), (("contrasts", cid), (("loo",),)), None),
+                ("loo_magnitude", (("rows",),), (("contrasts", cid), (("loo",),)), None),
+                ("kept_units", (("n_r",), ("n_b",)), (("contrasts", cid), (("n",),)), None)):
+            selector = dict(line, line=word) if word != "kept_units" else {"line": word, "pack": "gamma", "cell_id": cid}
+            check = f"disclosure/contrasts/{word}/{cid}" + ("/estimates" if condition else "")
+            add("contrast_line", check, [("disclosure", ("contrasts", selector), keys)], [recompute], condition)
+        keys = (("contrast_id",), ("floor_cell_ids",), ("bound_independent_values_equal_primary",),
+                ("outcome_equals_primary",), ("not_below_primary",)) \
+            + nested("primary", SENSITIVITY_SHAPE["contrast_values"]) + nested("sensitivity", SENSITIVITY_SHAPE["contrast_values"])
+        add("sensitivity_contrast", f"sensitivity/contrasts/{cid}",
+            [("sensitivity", ("contrasts", match), keys), ("disclosure", ("sensitivity", "contrasts", match), keys),
+             ("disclosure", ("block_lines", {"line": "sensitivity_contrast", ("record", "contrast_id"): cid}),
+              tuple(("record",) + k for k in keys))],
+            [(bound + ("contrasts", cid), (("floor_gate_j",), ("D_j",), ("outcome",)))])
+    return table
+
+
+# The seven registered NEG-8 bound terms of the neg8_allowance line and the recompute's names for them.
+NEG8_TERM = "bracket.claim_families.gross_energy."
+NEG8_TERMS = ("bound_envelope_j", "bound_prediction_j", "start.mean_j", "midpoint.mean_j", "end.mean_j",
+              "trajectory_excursion_max_j", "drift_allowance_j")
+NEG8_OWN = ("bound_envelope_j", "bound_prediction_j", "start_mean_j", "midpoint_j", "end_mean_j", "spread_j", "allowance_j")
+# The projection cell keys each compared reported-cell value is read from (paper-reported-energy kernel rows).
+PROJECTION_KEYS = (("mean_j",), ("lower_j",), ("upper_j",), ("interval", "h_j"), ("interval", "B_j"), ("interval", "s_r"),
+                   ("interval", "s_b"), ("interval", "variance"), ("interval", "n_r"), ("interval", "n_b"),
+                   ("interval", "df"), ("interval", "kind_averages_j"), ("attribution_floor", "value_j"),
+                   ("attribution_floor", "minimum_j"), ("attribution_floor", "attained_by"), ("per_token", "j_per_token"),
+                   ("n_bundles",), ("kept_units",))
+# The kinds whose entries are documents or sections: they require their keys but claim no item (an item is claimed
+# only by its own entry, so a leaf is in the table only under its own row, line or cell).
+CONTAINERS = ("fill_document", "verdicts_document", "disclosure_document", "disclosure_window", "sensitivity_record",
+              "kept_units_record", "bracket")
+# Every item of these lists must be claimed by an entry (an output item outside the table can only DISAGREE;
+# it never creates a check): (document, path with * for each list item or window, the line words concerned).
+CELL_WORDS = ("reported_cell", "battery_assist_cell", "attribution_floor", "kept_units", "cross_window")
+CONTRAST_WORDS = ("primary_contrast", "battery_assist_contrast", "magnitude_ratio", "magnitude_per_token",
+                  "contrast_interval", "decision_floor", "loo_counts", "loo_magnitude", "kept_units")
+BLOCK_WORDS = ("sensitivity_bmax", "sensitivity_window", "sensitivity_reported", "sensitivity_floor",
+               "sensitivity_contrast", "sensitivity_boundary", "dominance_ratio", "dominance_branch", "harvest_once")
+CLOSED = (("fill", ("gamma", "contrasts"), None), ("verdicts", ("contrasts",), None),
+          ("fill", ("gamma", "contrasts", "*", "loo", "rows"), None), ("verdicts", ("contrasts", "*", "loo", "rows"), None),
+          ("fill", ("gamma", "contrasts", "*", "floor", "arm_gates"), None),
+          ("fill", ("gamma", "contrasts", "*", "floor", "resolutions"), None),
+          ("verdicts", ("contrasts", "*", "floor", "arm_gates"), None),
+          ("verdicts", ("contrasts", "*", "floor", "resolutions"), None),
+          ("disclosure", ("cells",), CELL_WORDS), ("disclosure", ("floors",), ("floor_composition", "kept_units")),
+          ("disclosure", ("contrasts",), CONTRAST_WORDS),
+          ("disclosure", ("window_lines", "*"), WINDOW_LINES + ("tripwire",)),
+          ("disclosure", ("block_lines",), BLOCK_WORDS), ("disclosure", ("fixed_sentences",), None),
+          ("disclosure", ("sensitivity", "reported_cells"), None), ("disclosure", ("sensitivity", "floor_cells"), None),
+          ("disclosure", ("sensitivity", "contrasts"), None), ("sensitivity", ("reported_cells",), None),
+          ("sensitivity", ("floor_cells",), None), ("sensitivity", ("contrasts",), None),
+          ("projection:alpha", ("cells",), None), ("projection:alpha", ("refused_cells",), None),
+          ("projection:beta", ("cells",), None), ("projection:beta", ("refused_cells",), None),
+          ("extraction:alpha", ("cells",), None), ("extraction:beta", ("cells",), None),
+          ("aggregate", ("cells",), None), ("ratios", ("ratios",), None))
+DUPLICATE = object()
+# The compared lines the table does not list (NEEDS_RULING RC-CMP-9 2): the whole-machine member and summary lines
+# print only when the window has a meter record, per member of that record (pairs over L9's disclosure, the
+# harvest meter record and the recompute, RC-CMP-3 X3); the battery-temperature sentence only for a flagged stage.
+TABLE_CONDITIONAL_LINES = r"disclosure:window_lines/[a-z]+/(machine_member|machine_summary|battery_temperature_sentence)/"
+RATIO_TEXT = r"\S+ \S+: (R|R_cm) "
+
+
+def listed(value):
+    return value if isinstance(value, list) else []
+
+
+def matches(item, selector):
+    """A list item carrying every identity field of the selector (equal type and value)."""
+    if not isinstance(item, dict):
+        return False
+    for field, value in selector.items():
+        if field == "@ratio":
+            # A dominance ratio line names its ratio (R or R_cm) only in its text (disclosures._closeout_lines).
+            found = re.match(RATIO_TEXT, str(item.get("text", "")))
+            if not found or found[1] != value:
+                return False
+        else:
+            found = get(item, *field, default=MISSING) if isinstance(field, tuple) else item.get(field, MISSING)
+            if type(found) is not type(value) or found != value:
+                return False
+    return True
+
+
+def resolve(node, path):
+    """(the item at path, its concrete path); MISSING when a step is absent, DUPLICATE when a selector matches twice."""
+    at = ()
+    for step in path:
+        if isinstance(step, dict):
+            hits = [i for i, item in enumerate(listed(node)) if matches(item, step)]
+            if len(hits) != 1:
+                return (DUPLICATE if hits else MISSING), at
+            step = hits[0]
+        elif isinstance(step, int):
+            if not isinstance(node, list) or not 0 <= step < len(node):
+                return MISSING, at
+        elif not isinstance(node, dict) or step not in node:
+            return MISSING, at
+        node, at = node[step], at + (step,)
+    return node, at
+
+
+def absent_keys(item, keys):
+    return [key for key in keys if resolve(item, key)[0] in (MISSING, DUPLICATE)]
+
+
+def describe(step):
+    return ",".join(f"{'.'.join(k) if isinstance(k, tuple) else k}={v}" for k, v in step.items()) \
+        if isinstance(step, dict) else str(step)
+
+
+class Documents:
+    """L9's documents an expected check reads, each read once per run through the custody (and its gate)."""
+    def __init__(self, custody):
+        self.custody, self.read = custody, {}
+
+    def __getitem__(self, label):
+        if label not in self.read:
+            pattern, how = check_doc(label)
+            self.read[label] = (labelled(self.custody, pattern, "sensitivity") if how == "sensitivity"
+                                else self.custody.one(pattern))
+        return self.read[label]
+
+
+def phase_n(docs, ours, registry, phase):
+    """The kept n of the contrast of a phase, on either side (the verdict's estimator n, the recompute's n)."""
+    values = []
+    for cid, entry in registry.tables["contrast"].items():
+        if entry["phase"] == phase:
+            row = next((r for r in listed(get(docs["verdicts"], "contrasts")) if isinstance(r, dict)
+                        and r.get("contrast_id") == cid), {})
+            values += [get(row, "estimator", "n"), get(ours, "contrasts", cid, "n")]
+    return [v for v in values if finite(v)]
+
+
+def condition_holds(condition, docs, ours, registry):
+    """A conditional entry's registered condition: the status or kept word that makes the producer print the item,
+    read on either side (F5), so a word on one side requires the item on both."""
+    kind = condition[0]
+    if kind == "not":
+        return not condition_holds(condition[1], docs, ours, registry)
+    if kind == "reported_computed":
+        _, pack, cid, family = condition
+        own = get(ours, "reported_cells", family)
+        return (any(isinstance(cell, dict) and cell.get("cell_id") == cid
+                    for cell in listed(get(docs["projection:" + pack], "cells")))
+                or isinstance(own, dict) and own.get("status", "computed") == "computed")
+    if kind == "cross_window":
+        _, pack, cid, family, phase = condition
+        return (condition_holds(("reported_computed", pack, cid, family), docs, ours, registry)
+                and any(n >= 2 for n in phase_n(docs, ours, registry, phase)))
+    if kind == "floor_computed":
+        _, pack, cid, key = condition
+        cell = next((c for c in listed(get(docs["extraction:" + pack], "cells"))
+                     if isinstance(c, dict) and c.get("cell_id") == cid), {})
+        own = get(ours, "floors", key)
+        return (get(cell, "floor", "guarded_floor_j") is not None
+                or isinstance(own, dict) and own.get("status", "computed") == "computed")
+    if kind == "loo_block_kept":
+        # The engine's leave-one-out rows (analysis_engine _loo_family): one per kept block of a complete contrast;
+        # the recompute computes them from three kept quads (finish_contrast). Expected when either side keeps the
+        # block and either side's kept n is at least LOO_MIN.
+        _, cid, block = condition
+        row = next((r for r in listed(get(docs["verdicts"], "contrasts")) if isinstance(r, dict)
+                    and r.get("contrast_id") == cid), {})
+        ns = [n for n in (get(row, "estimator", "n"), get(ours, "contrasts", cid, "n")) if finite(n)]
+        position = registry.blocks[cid].index(block) + 1
+        kept = (any(isinstance(b, dict) and b.get("block_id") == block and b.get("included") is True
+                    for b in listed(get(row, "bundle_blocks", "blocks")))
+                or block in listed(get(ours, "contrasts", cid, "kept_quads"))
+                or any(isinstance(r, dict) and same(r.get("block_number"), position)
+                       for r in listed(get(ours, "contrasts", cid, "loo"))))
+        return kept and any(n >= LOO_MIN for n in ns)
+    if kind == "ratio_computable":
+        line = next((r for r in listed(get(docs["disclosure"], "contrasts")) if isinstance(r, dict)
+                     and r.get("line") == "magnitude_ratio" and r.get("contrast_id") == condition[1]), {})
+        return "ratio" in line or finite(get(ours, "descriptive", condition[1], "ratio"))
+    raise ValueError(kind)
+
+
+# The recompute's leave-one-out minimum (independent_recompute_b5.finish_contrast: rows from three kept quads).
+LOO_MIN = 3
+
+
+def expected_items(custody, ours, table, claimed):
+    """RC-CMP-9: each expected check's state on both sides, before any comparison.
+
+    Returns (expected, l9, own, missing): the checks whose condition holds; those whose every L9 copy resolves
+    with its required keys; those whose every recompute item does; and, per check, what is missing (names only).
+    Each item an entry resolves on L9's side is claimed (claimed[document] gets its concrete path). Every item of
+    a closed list that no entry claimed becomes an unexpected/ check present on L9's side only (it can confirm a
+    check, never create one).
+    """
+    registry = custody.registry
+    docs = Documents(custody)
+    expected, l9, own, missing = {}, {}, {}, {}
+    for entry in table:
+        if entry["condition"] is not None and not condition_holds(entry["condition"], docs, ours, registry):
+            continue
+        absent = []
+        for locator in entry["l9"]:
+            choices = locator[1] if locator[0] == "any" else (locator,)
+            found = []
+            for label, path, keys in choices:
+                item, at = resolve(docs[label], path)
+                if item is DUPLICATE:
+                    absent.append(f"l9:{label}:duplicated:" + "/".join(map(describe, path)))
+                elif item is not MISSING:
+                    found.append((label, at, absent_keys(item, keys)))
+            if len(found) != 1:
+                absent.append(f"l9:{choices[0][0]}:" + ("absent:" if not found else "both:")
+                              + "/".join(map(describe, choices[0][1])))
+            for label, at, keys in found:
+                if entry["kind"] not in CONTAINERS:
+                    claimed.setdefault(label, set()).add(at)
+                absent += [f"l9:{label}:key:" + "/".join(map(str, at + key)) for key in keys]
+        for path, keys in entry["recompute"]:
+            item, at = resolve(ours, path)
+            if item is MISSING or item is DUPLICATE:
+                absent.append("recompute:absent:" + "/".join(map(describe, path)))
+            else:
+                absent += ["recompute:key:" + "/".join(map(str, at + key)) for key in absent_keys(item, keys)]
+        expected[entry["check"]] = entry
+        if not any(m.startswith("l9:") for m in absent):
+            l9[entry["check"]] = entry
+        if not any(m.startswith("recompute:") for m in absent):
+            own[entry["check"]] = entry
+        missing[entry["check"]] = absent
+    for label, path, words in CLOSED:
+        for at, item in closed_items(docs[label], path):
+            if (words is None or isinstance(item, dict) and item.get("line") in words) and at not in claimed.get(label, set()):
+                check = f"unexpected/{label}:" + "/".join(map(str, at))
+                l9[check], missing[check] = None, ["l9:item_not_in_table"]
+    return expected, l9, own, missing
+
+
+def compare_expected(c, custody, ours):
+    """RC-CMP-9 (the design rule): every expected check finds its item on L9's side and on the recompute's.
+
+    One routing_id row per check (expected/<check>): present on L9's side when the table expects it and every L9
+    copy resolves with its required keys, on the recompute's when every recompute item does; anything missing is
+    DISAGREE (never skipped) and the row lists what is missing (names only). An unexpected/ item (an L9 item no
+    entry claimed) is on neither side: DISAGREE.
+    """
+    table = expected_checks(custody.registry)
+    expected, l9, own, missing = expected_items(custody, ours, table, c.claimed)
+    for check, _, _, _ in c.pairs("expected/", expected, l9, own):
+        if missing.get(check):
+            c.rows[-1]["missing"] = missing[check]
+    return table
+
+
+def closed_items(node, path, at=()):
+    """(concrete path, item) of every item of the lists at path (* expands every list item or object member)."""
+    if not path:
+        yield from (((at + (index,)), item) for index, item in enumerate(listed(node)))
+        return
+    step, rest = path[0], path[1:]
+    if step == "*":
+        members = enumerate(node) if isinstance(node, list) else node.items() if isinstance(node, dict) else ()
+        for key, item in members:
+            yield from closed_items(item, rest, at + (key,))
+    elif isinstance(node, dict) and step in node:
+        yield from closed_items(node[step], rest, at + (step,))
+
+
+def table_structure(table):
+    """The table's structure for the restricted output: its families, each check's name and condition (no value)."""
+    families = {}
+    for entry in table:
+        families[entry["kind"]] = families.get(entry["kind"], 0) + 1
+    return {"registered_sources": list(REGISTERED_SOURCES), "families": families,
+            "checks": [{"kind": e["kind"], "check": e["check"], "l9": sorted({loc[0] if loc[0] != "any" else loc[1][0][0]
+                                                                            for loc in e["l9"]}),
+                        "condition": None if e["condition"] is None else str(e["condition"][0])} for e in table]}
 
 
 # G2: each identity field and the objects that own it, taken from the producers (paths with * per list
@@ -702,6 +1371,12 @@ SENSITIVITY_KEYS = {
     "contrasts": ("contrast_id", "floor_cell_ids", "primary", "sensitivity", "bound_independent_values_equal_primary",
                   "outcome_equals_primary", "not_below_primary"),
     "windows": ("plan_id", "b_op_s", "b_sens_s", "widened")}
+# F5 (RC-CMP-9): the conditional keys and the status word that makes the producer print them: a complete dominance
+# ratio carries its ratio, numerator and denominator (disclosures._closeout_lines); a computed assist contrast its
+# estimates, a one-quad one its mean (disclosures._paired_values).
+STATUS_KEYS = {("block_lines", "dominance_ratio"): ("status", {"complete": ("ratio", "numerator_j", "denominator_j")}),
+               ("contrasts", "battery_assist_contrast"): ("status", {
+                   "computed": ("mean_j", "s_d", "se", "t_star", "lower_j", "upper_j"), "one_quad": ("mean_j",)})}
 SENSITIVITY_LINES = {"sensitivity_reported": "reported_cells", "sensitivity_floor": "floor_cells",
                      "sensitivity_contrast": "contrasts"}
 # The fill's claim words (results_fill_adapter.adapt_claim_verdicts copies them from the claim verdicts, which
@@ -777,6 +1452,11 @@ def gate_lines(record):
                 # A keyed word's line always carries one of its values: a bare sentence is not one of them.
                 raise Refusal(f"line_keys_absent:disclosure:{section}/{word}")
             require(line, REQUIRED_KEYS.get((section, word), ()), f"disclosure:{section}/{word}")
+            # F5 (RC-CMP-9): a conditional key is required when the status word that makes its producer print it is.
+            status = STATUS_KEYS.get((section, word))
+            if status is not None:
+                require(line, status[1].get(line.get(status[0]), ()) if isinstance(line.get(status[0]), str) else (),
+                        f"disclosure:{section}/{word}/{line.get(status[0])}")
             if word in SENSITIVITY_LINES:
                 sensitivity_row(line["record"], SENSITIVITY_LINES[word], f"disclosure:{section}/{word}/record")
     gate_sensitivity(record)
@@ -890,6 +1570,8 @@ def compare_runs(c, custody, ours):
         # requires the recompute's re-derivation of that file to agree (exclusions_rederivation == agrees).
         c.exact("routing_id", f"run/{pack}/kept_units/exclusions_sha256", get(records.get(pack), "exclusions_sha256"),
                 get(ours, "inputs", PACKS[pack], "exclusions_sha256"))
+        # A4 (RC-CMP-9): the record's own window, against the registered window its file name carries.
+        c.exact("routing_id", f"run/{pack}/kept_units/pack", get(records.get(pack), "pack"), pack)
     c.excluded.extend(reference_members(members, registry))
     selected = selected_runs(members, lambda key: registry.role(*key) not in REFERENCE_FAMILIES)
     for (pack, rid), name, _, _ in c.pairs("run/", rereduced_names(custody), universe, selected):
@@ -917,10 +1599,13 @@ def step_2_universe(custody):
         record = custody.one(KEPT_UNITS % pack)
         records[pack] = record
         cells = get(record, "cells", default={})
-        for cell in (cells.values() if isinstance(cells, dict) else ()):
+        for name, cell in (cells.items() if isinstance(cells, dict) else ()):
             strata = get(cell, "kept", default={})
             for units in (strata.values() if isinstance(strata, dict) else ()):
                 for unit in units if isinstance(units, list) else ():
+                    # A4 (RC-CMP-9): a kept unit names the cell that keeps it (kept_units.KeptUnits.to_record).
+                    if not isinstance(unit, dict) or unit.get("cell_id") != name:
+                        raise Refusal("kept_units_identity_mismatch:" + pack)
                     for rid in get(unit, "run_ids", default=[]) or []:
                         if not isinstance(rid, str) or custody.registry.role(pack, rid) not in (None, "science"):
                             raise Refusal("kept_units_member_not_science:" + pack)
@@ -1134,30 +1819,51 @@ def compare_arms(c, ours, cid, floor, registry):
     if contrast is None:
         return
     cells, phase = ours.get("floor_cells"), contrast["phase"]
-    if "arm_gates" in floor:
-        for index, gate, pack in c.pairs(f"contrast/{cid}/arm/", positions(floor["arm_gates"]), ARMS):
-            gate = gate if isinstance(gate, dict) else {}
-            c.exact("routing_id", f"contrast/{cid}/arm/{index}/arm_id", gate.get("arm_id"),
-                    {"alpha": "A", "beta": "B"}.get(pack))
-            c.exact("routing_id", f"contrast/{cid}/arm/{index}/condition_family_id", gate.get("condition_family_id"),
-                    contrast["conditions"][index] if pack else None)
-            c.numeric("floor_gate_j", f"{cid}/arm/{index}/floor_gate_j", gate.get("floor_gate_j"),
-                      get(cells, f"{MODELS.get(pack)}/{phase}", "floor_gate_j"))
-    if "resolutions" in floor:
-        for index, resolution, pack in c.pairs(f"contrast/{cid}/resolution/", positions(floor["resolutions"]), ARMS):
-            resolution = resolution if isinstance(resolution, dict) else {}
-            cell = f"{MODELS.get(pack)}/{phase}"
-            for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
-                c.numeric("floor_gate_j", f"{cid}/resolution/{index}/{field}", resolution.get(field), get(cells, cell, field))
-            # RC-CMP-8: the transfer rule each resolution applies, as the floor_selector registers it.
-            c.exact("routing_id", f"contrast/{cid}/resolution/{index}/transport_rule_id", resolution.get("transport_rule_id"),
-                    contrast.get("floor_rules", {}).get("transport_rule_id") if pack else None)
-            sources = positions(resolution.get("source_cell_ids"))
-            for number, source, own in c.pairs(f"contrast/{cid}/resolution/{index}/source/", sources, {0: cell}):
-                # The printed source id, looked up literally (G3): an unregistered id is no cell.
-                entry = registry.entry(source, "floor")
-                c.exact("routing_id", f"contrast/{cid}/resolution/{index}/source_cell_ids/{number}",
-                        cell_key(entry) if entry else None, own, raw=source)
+    # F2 (RC-CMP-9): both row sets are built from ARMS whatever the floor prints (a v3 contrast always carries
+    # exactly two gates and its resolutions; artifact.py v3 floor), so a floor without them is DISAGREE.
+    for index, gate, pack in c.pairs(f"contrast/{cid}/arm/", positions(floor.get("arm_gates")), ARMS):
+        gate = gate if isinstance(gate, dict) else {}
+        c.exact("routing_id", f"contrast/{cid}/arm/{index}/arm_id", gate.get("arm_id"),
+                {"alpha": "A", "beta": "B"}.get(pack))
+        c.exact("routing_id", f"contrast/{cid}/arm/{index}/condition_family_id", gate.get("condition_family_id"),
+                contrast["conditions"][index] if pack else None)
+        c.numeric("floor_gate_j", f"{cid}/arm/{index}/floor_gate_j", gate.get("floor_gate_j"),
+                  get(cells, f"{MODELS.get(pack)}/{phase}", "floor_gate_j"))
+    for index, resolution, pack in c.pairs(f"contrast/{cid}/resolution/", positions(floor.get("resolutions")), ARMS):
+        resolution = resolution if isinstance(resolution, dict) else {}
+        cell = f"{MODELS.get(pack)}/{phase}"
+        for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
+            c.numeric("floor_gate_j", f"{cid}/resolution/{index}/{field}", resolution.get(field), get(cells, cell, field))
+        # RC-CMP-8: the transfer rule each resolution applies, as the floor_selector registers it.
+        c.exact("routing_id", f"contrast/{cid}/resolution/{index}/transport_rule_id", resolution.get("transport_rule_id"),
+                contrast.get("floor_rules", {}).get("transport_rule_id") if pack else None)
+        # RC-CMP-9 A4: the arm's transport group, as the manifest registers it for the arm's condition family.
+        c.exact("routing_id", f"contrast/{cid}/resolution/{index}/transport_group_id",
+                resolution.get("transport_group_id"), contrast["transport_groups"][index] if pack else None)
+        sources = positions(resolution.get("source_cell_ids"))
+        for number, source, own in c.pairs(f"contrast/{cid}/resolution/{index}/source/", sources, {0: cell}):
+            # The printed source id, looked up literally (G3): an unregistered id is no cell.
+            entry = registry.entry(source, "floor")
+            c.exact("routing_id", f"contrast/{cid}/resolution/{index}/source_cell_ids/{number}",
+                    cell_key(entry) if entry else None, own, raw=source)
+
+
+def registered_floor_keys(contrast, registry):
+    """A contrast's registered floor cells [A, B] -> {position: the recompute's cell key}."""
+    return {index: cell_key(registry.tables["floor"][cid]) for index, cid in enumerate((contrast or {}).get("floor_cells", ()))}
+
+
+def printed_block_ids(blocks):
+    """The block ids a verdict's bundle_blocks prints (sorted), or None when it prints no block list."""
+    return sorted(map(str, (b.get("block_id") if isinstance(b, dict) else b for b in blocks))) if isinstance(blocks, list) else None
+
+
+def compare_floor_ids(c, scope, printed, contrast, registry):
+    """A3 (RC-CMP-9): a contrast's printed floor cell ids (floor_row_ids, the fill's floor_source_cell_ids, the
+    sensitivity record's floor_cell_ids), by position against the registered source cells [A, B]."""
+    for index, cell, mine in c.pairs(scope + "_position/", positions(printed), registered_floor_keys(contrast, registry)):
+        entry = registry.entry(cell, "floor")
+        c.exact("routing_id", f"{scope}/{index}", cell_key(entry) if entry else None, mine, raw=cell)
 
 
 def compare_contrasts(c, custody, ours):
@@ -1213,7 +1919,22 @@ def compare_contrasts(c, custody, ours):
         c.exact("outcome_word", f"{cid}/confirmatory_status", get(row, "sampling", "confirmatory_status"),
                 entry.get("confirmatory"))
         c.exact("outcome_word", f"{cid}/loo_status", get(row, "loo", "status"),
-                loo_status(mine.get("loo"), registry.blocks.get(cid)) if mine else None)
+                loo_status(mine.get("n"), registry.blocks.get(cid)) if mine else None)
+        # A2 (RC-CMP-9): each side's leave-one-out rows number its kept n (one row per kept block) when the
+        # recompute's rule computes them (LOO_MIN kept quads); a row dropped from both sides is DISAGREE here too.
+        n = mine.get("n")
+        if finite(n) and n >= LOO_MIN:
+            c.numeric("count", f"{cid}/loo/l9_rows", len(listed(get(row, "loo", "rows"))) if row else None, n)
+            c.numeric("count", f"{cid}/loo/recompute_rows", est.get("n"),
+                      len(mine["loo"]) if isinstance(mine.get("loo"), list) else None)
+        # A3: the floor source cells, against the contrast's registered cells; A4: the bundle's block ids.
+        compare_floor_ids(c, f"contrast/{cid}/floor_row_ids", get(row, "floor", "floor_row_ids"),
+                          registry.entry(cid, "contrast"), registry)
+        blocks = get(row, "bundle_blocks", default={}) or {}
+        c.exact("routing_id", f"contrast/{cid}/planned_block_ids", blocks.get("planned_block_ids"),
+                list(registry.blocks[cid]) if cid in registry.blocks else None)
+        c.exact("routing_id", f"contrast/{cid}/bundle_block_ids", printed_block_ids(blocks.get("blocks")),
+                sorted(registry.blocks[cid]) if cid in registry.blocks else None)
         # RC-CMP-8: the remaining registered words that assert a direction or relation (which condition is A and
         # B, the orientation of the difference, the quantity, the estimator, how the floor combines and transfers).
         definition = entry.get("definition") or {}
@@ -1266,14 +1987,17 @@ READY_CEILINGS = ("L2", "L3", "L4")
 LOO_REQUIRED_MAX = 10
 
 
-def loo_status(rows, blocks):
-    """F2: L9's leave-one-out status word from the recompute's rows. The engine prints not_required only above
-    LOO_REQUIRED_MAX complete observations; the registration plans len(block_ids) blocks and forbids replacements,
-    so with at most LOO_REQUIRED_MAX registered blocks the word is complete when rows exist, else not_run.
-    More registered blocks than that leave the word undetermined here (None: DISAGREE)."""
-    if not isinstance(rows, list) or blocks is None or len(blocks) > LOO_REQUIRED_MAX:
+def loo_status(n, blocks):
+    """F2: L9's leave-one-out status word. The engine prints not_required only above LOO_REQUIRED_MAX complete
+    observations; the registration plans len(block_ids) blocks and forbids replacements, so with at most
+    LOO_REQUIRED_MAX registered blocks the engine computes a row for each kept block of a complete contrast
+    (analysis_engine _loo_family; block 5's kept quads make every contrast complete): the word is complete
+    when the kept n is at least one, else not_run. A2 (RC-CMP-9): the word follows the kept n (the recompute's,
+    compared with L9's by the n row), never how many rows either side printed. More registered blocks than
+    LOO_REQUIRED_MAX, or no kept n, leave the word undetermined here (None: DISAGREE)."""
+    if not finite(n) or isinstance(n, bool) or blocks is None or len(blocks) > LOO_REQUIRED_MAX:
         return None
-    return "complete" if rows else "not_run"
+    return "complete" if n >= 1 else "not_run"
 
 
 def sign(value):
@@ -1373,10 +2097,10 @@ def compare_reported(c, custody, ours):
             c.numeric("count", key + "/n_bundles", cell.get("n_bundles"), mine.get("n_bundles"))
             c.exact("kept_units", key + "/kept_units", unit_list(cell.get("kept_units")), our_units(mine.get("kept_units")))
             c.numeric("count", key + "/interval/df", ivl.get("df"), ours_ivl.get("df"))
-        # The registered p42 exit, when L9's projection lists its refused p42 cells.
+        # The registered p42 exit: L9's projection lists its refused p42 cells. F4 (RC-CMP-9): the row is built for
+        # every floor window; a projection without its refused p42 cells is DISAGREE (None).
         refused = refused_p42(get(projection, "refused_cells", default=[]), registry, where)
-        if refused is not None:
-            c.exact("p42_status", pack + "/projection/p42", refused, get(ours, "p42", p42_family(registry, pack), "status"))
+        c.exact("p42_status", pack + "/projection/p42", refused, get(ours, "p42", p42_family(registry, pack), "status"))
 
 
 def refused_p42(cells, registry, where):
@@ -1447,6 +2171,11 @@ def compare_sensitivity(c, custody, ours):
                 relation(before, after, FLOOR_KEYS + ("allowance_j",), lambda a, b: a == b))
         c.exact("outcome_word", f"sensitivity/{key}/not_below_primary", cell.get("not_below_primary"),
                 relation(before, after, FLOOR_KEYS, lambda a, b: b >= a))
+        # F1 (RC-CMP-9): the record's own primary values, read directly (not only through the disclosure's copy).
+        for field in FLOOR_KEYS:
+            c.numeric("floor_gate_j", f"sensitivity/primary/{key}/{field}", get(cell, "primary", field), before.get(field))
+        c.numeric("floor_j", f"sensitivity/primary/{key}/allowance_j", get(cell, "primary", "allowance_j"),
+                  before.get("allowance_j"))
     rows = keyed(record.get("contrasts", []),
                  lambda row: registry.registered(row.get("contrast_id"), ("contrast",), "sensitivity_contrast"),
                  "sensitivity_contrast")
@@ -1471,6 +2200,12 @@ def compare_sensitivity(c, custody, ours):
         after.update(floor_gate_j=mine.get("floor_gate_j"), D_j=mine.get("D_j"))
         c.exact("outcome_word", f"sensitivity/{cid}/not_below_primary", row.get("not_below_primary"),
                 relation(before, after, FLOOR_KEYS + ("D_j",), lambda a, b: b >= a))
+        # F1 (RC-CMP-9): the record's own primary values; A3: its floor cell ids against the registered cells.
+        for field in FLOOR_KEYS:
+            c.numeric("floor_gate_j", f"sensitivity/primary/{cid}/{field}", get(row, "primary", field), before.get(field))
+        c.numeric("contrast_j", f"sensitivity/primary/{cid}/D_j", get(row, "primary", "D_j"), before.get("D_j"))
+        c.exact("outcome_word", f"sensitivity/primary/{cid}/outcome", get(row, "primary", "outcome"), primary.get("outcome"))
+        compare_floor_ids(c, f"sensitivity/{cid}/floor_cell_ids", row.get("floor_cell_ids"), entry, registry)
     reported = sensitivity_reported(record.get("reported_cells", []), registry)
     for (pack, cid), cell, _ in c.pairs("sensitivity/reported_cells/", reported, our_sensitivity_reported(line, ours, registry)):
         cell = cell or {}
@@ -1489,6 +2224,10 @@ def compare_sensitivity(c, custody, ours):
         c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"),
                 "computed" if mine.get("status") == "computed" else mine.get("status"))
         before, after = reported_values(get(ours, "reported_cells", cid, default={}) or {}), reported_values(mine)
+        # F1 (RC-CMP-9): the record's own primary values, read directly.
+        for field in REPORTED_VALUE_KEYS:
+            c.numeric("reported_cell_j", f"sensitivity/primary/{pack}/{cid}/{field}", get(cell, "primary", field),
+                      before.get(field))
         c.exact("outcome_word", f"sensitivity/{pack}/{cid}/equals_primary", cell.get("equals_primary"),
                 relation(before, after, tuple(before), lambda a, b: a == b))
         c.exact("outcome_word", f"sensitivity/{pack}/{cid}/not_below_primary", cell.get("not_below_primary"),
@@ -1983,6 +2722,10 @@ COVERAGE = (
     (F + r"floor/resolutions/\*/(?P<field>floor_abs_j|floor_cmp_j|floor_gate_j)", "floor_gate_j",
      "{cid}/resolution/{resolution}/{field}"),
     (F + r"floor/resolutions/\*/source_cell_ids/\*", "routing_id", "contrast/{cid}/resolution/{resolution}/source_cell_ids/{source}"),
+    # A3, A4 (RC-CMP-9): the contrast's floor cells and each arm's transport group, against the registered ones.
+    (F + r"floor_source_cell_ids/\*", "routing_id", "contrast/{cid}/floor_row_ids/{floor_source}"),
+    (F + r"floor/floor_row_ids/\*", "routing_id", "contrast/{cid}/floor_row_ids/{floor_row}"),
+    (F + r"floor/resolutions/\*/transport_group_id", "routing_id", "contrast/{cid}/resolution/{resolution}/transport_group_id"),
     (F + r"floor/arm_gates/\*/floor_gate_j", "floor_gate_j", "{cid}/arm/{arm}/floor_gate_j"),
     (F + r"floor/arm_gates/\*/(?P<field>arm_id|condition_family_id)", "routing_id", "contrast/{cid}/arm/{arm}/{field}"),
     (F + r"floor/(resolutions/\*/)?point_floor_diagnostics/(unguarded_floor_j|guard_factor|guarded_floor_j)", FLOOR_DIAGNOSTICS),
@@ -2166,6 +2909,7 @@ COVERAGE = (
     (SC + r"primary/floor_gate_j", "floor_gate_j", "{cid}/active_floor_j"),
     (SC + r"primary/D_j", "contrast_j", "{cid}/D_j"),
     (SC + r"primary/outcome", "outcome_word", "{cid}/outcome"),
+    (SC + r"floor_cell_ids/\*", "routing_id", "sensitivity/{cid}/floor_cell_ids/{floor_cell}"),
     (D + r"block_lines/(attempt_count/count|attempt_history/(attempt|collected|planned|flags_by_family/[A-Za-z0-9_.]+|"
      r"triggers/(doubling_count|systematic_sequences/\*))|g10/(codes/[A-Za-z0-9_.]+|redraw_cycles)|"
      r"reharvest_account/(survivors_before|survivors_after))", STRUCTURE_NUMBER),
@@ -2179,13 +2923,13 @@ COVERAGE = (
     (r"fill:campaigns/(?P<pack>alpha|beta)/claim_usable", "outcome_word", "campaigns/{pack}/claim_usable"),
     (r"fill:(campaigns/(alpha|beta)/(plan_id|exclusions_sha256|harvest_record_sha256)|"
      r"gamma/(claim_verdicts_id|claim_verdicts_sha256|exclusions_sha256|finalized_manifest/(manifest_id|file_sha256)|"
-     r"floor_artifact/(artifact_id|file_sha256)|contrasts/\*/(contrast_id|plan_id|floor_source_cell_ids/\*|"
-     r"floor/floor_row_ids/\*|floor/resolutions/\*/(source_cell_ids/\*|transport_group_id)|loo/rows/\*/omitted_block_id)))", IDENTITY),
+     r"floor_artifact/(artifact_id|file_sha256)|contrasts/\*/(contrast_id|plan_id|"
+     r"floor/resolutions/\*/source_cell_ids/\*|loo/rows/\*/omitted_block_id)))", IDENTITY),
     (r"disclosure:(windows/[a-z]+/(plan_id|harvest_pin|record_shape)|"
      r"(cells|floors|contrasts)/[a-z_]+/(pack|cell_id|contrast_id|unit_id|stage_ids/\*)|"
      r"window_lines/[a-z]+/[a-z_]+/(pack|run_id|model|stage_id|harvest_pin|central_band/plan_id)|"
-     r"block_lines/[a-z_]+/(pack|plan_id|cell_id|component|record/(pack|cell_id|contrast_id|floor_cell_ids/\*))|"
-     r"sensitivity/((reported_cells|floor_cells)/\*/(pack|cell_id)|contrasts/\*/(contrast_id|floor_cell_ids/\*)|"
+     r"block_lines/[a-z_]+/(pack|plan_id|cell_id|component|record/(pack|cell_id|contrast_id))|"
+     r"sensitivity/((reported_cells|floor_cells)/\*/(pack|cell_id)|contrasts/\*/contrast_id|"
      r"windows/[a-z]+/plan_id))", IDENTITY),
 )
 
@@ -2194,24 +2938,25 @@ def numeric(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def leaves(value, label, path="", star="", context=None):
+def leaves(value, label, path="", star="", context=None, at=()):
     """(path, value, context): context maps each identity field to (value, path of that field), read
     only from the object that owns it (G2; star is the path with * for each list item), and
     "@<list>" to the position in each enclosing list. Other scalars never enter the context, so a
-    nested object cannot re-route its parent's leaves."""
+    nested object cannot re-route its parent's leaves. "@@at" is the leaf's concrete path (keys and
+    list positions), which the expected-check table's claims are written in (RC-CMP-9)."""
     context = context or {}
     if isinstance(value, dict) and value:
         context = {**context, **{key: (item, join(path, key)) for key, item in value.items()
                                  if owns(label, key, star) and not isinstance(item, (dict, list))}}
         for key, item in value.items():
-            yield from leaves(item, label, join(path, key), join(star, key), context)
+            yield from leaves(item, label, join(path, key), join(star, key), context, at + (key,))
     elif isinstance(value, list) and value:
         name = "@" + path.rsplit("/", 1)[-1]
         for index, item in enumerate(value):
             yield from leaves(item, label, path + "/" + step(item), star + "/*" if star else "*",
-                              {**context, name: (index, None)})
+                              {**context, name: (index, None)}, at + (index,))
     else:
-        yield path, value, context
+        yield path, value, {**context, "@@at": at}
 
 
 # The fields a key may be built from (S2): a container's identity (its contrast, cell, pack,
@@ -2221,7 +2966,8 @@ def leaves(value, label, path="", star="", context=None):
 # routing_id row instead. A cell or contrast id routes only through its registered entry (G3).
 IDENTITY_FIELDS = ("contrast_id", "cell_id", "pack", "run_id", "model", "component", "text", "omitted_block_id",
                    "block_number")
-POSITIONS = {"arm": "@arm_gates", "resolution": "@resolutions", "source": "@source_cell_ids", "trigger": "@influence_triggers"}
+POSITIONS = {"arm": "@arm_gates", "resolution": "@resolutions", "source": "@source_cell_ids", "trigger": "@influence_triggers",
+             "floor_row": "@floor_row_ids", "floor_source": "@floor_source_cell_ids", "floor_cell": "@floor_cell_ids"}
 
 
 def binding(context, groups, registry):
@@ -2326,12 +3072,19 @@ def coverage(custody, comparison, rules=None):
                     key, routes = key_for(rule[2], context, match.groupdict(), custody.registry)
                     row = rows.get((family, key)) if key is not None else None
                     printed = row.get("l9_raw", row.get("l9")) if row else None
+                    claimed = comparison.claimed.get(label, set())
+                    at = context.get("@@at", ())
+                    if re.match(TABLE_CONDITIONAL_LINES, path):
+                        claimed = {()}
                     reason = ("key_unresolved" if key is None else "no_row" if row is None else
                               "value_differs" if not same(printed, value) else
                               "row_disagrees" if row["verdict"] != "AGREE" else
                               "route_disagrees" if any(get(rows.get(("routing_id", item)), "verdict") != "AGREE"
                                                        for item in row.get("items", [])) else
-                              "duplicate_binding" if (path, family, str(key)) in bound else None)
+                              "duplicate_binding" if (path, family, str(key)) in bound else
+                              # RC-CMP-9: a compared leaf binds an expected check only inside an item the
+                              # registry-driven table claimed (its own row, line or cell).
+                              "not_in_table" if not any(at[:depth] in claimed for depth in range(len(at) + 1)) else None)
                     bound.add((path, family, str(key)))
                     if reason:
                         # Mapped, but not a copy of an agreeing compared row: not coverage.
@@ -2362,6 +3115,8 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
     except (OSError, ValueError):
         raise Refusal("recompute_output_unreadable") from None
     c = Comparison(bars)
+    # RC-CMP-9: the registry-driven walk first: every expected check must find its item on both sides.
+    table = compare_expected(c, custody, ours)
     compare_runs(c, custody, ours)
     compare_brackets(c, custody, ours)
     compare_floors(c, custody, ours)
@@ -2379,6 +3134,8 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
             "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
             "routing_registry_sha256": custody.registry.digests,
             "structure_flags": flags, "counts": c.counts(),
+            # RC-CMP-9 A1: the expected-check table's structure (families, checks, conditions; no value).
+            "expected_checks": table_structure(table),
             # G7: each member kept out of a family's key universe, with the family it is compared in.
             "excluded_members": c.excluded,
             "coverage": cover, "comparisons": c.rows}

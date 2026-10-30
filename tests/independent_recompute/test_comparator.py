@@ -39,13 +39,40 @@ def extraction_cell_id(model, kind):
     return f"d117-df-ph-decode-{model}-absolute" if kind == "absolute" else f"d117-df-cmp-abba-ph-decode-{model}"
 
 
+# The registered block ids of each contrast (analysis_manifest_v3 contrasts[*].block_ids): the fixture keeps blocks
+# 2-10 and leaves block 1 out, so each contrast's kept n is 9.
+BLOCKS = {DECODE: tuple(f"d117-decode-contrast-b{i:02d}" for i in range(1, 11)),
+          PREFILL: tuple(f"d117-prefill-p2048-contrast-b{i:02d}" for i in range(1, 11))}
+KEPT = {cid: blocks[1:] for cid, blocks in BLOCKS.items()}
+# Each arm's registered transport group (the manifest's floor_dependency.transport.transport_groups).
+TRANSPORT_GROUPS = {DECODE: ("tg-d117-qwen3-1p7b-decode-v5", "tg-d117-qwen3-8b-decode-v5"),
+                    PREFILL: ("tg-d117-qwen3-1p7b-prefill-p2048-v5", "tg-d117-qwen3-8b-prefill-p2048-v5")}
+PACK_MODELS = {"alpha": ("qwen3-1p7b", "Qwen3-1.7B-4bit"), "beta": ("qwen3-8b", "Qwen3-8B-4bit")}
+
+
+def loo_row(cid, block, p):
+    """One engine leave-one-out row (analysis_engine _LOO_ROW_KEYS): the block left out moves nothing."""
+    return {"omitted_block_id": block, "n_blocks": 8, "df": 7, "estimate": -1.25,
+            "metrology_aware_ci95": {"lower": -14.0, "upper": 11.5}, "decision_interval": {"lower": -16.75, "upper": 14.25},
+            "floor_status": "not_above_floor", "raw_p": p, "adjusted_p": 1.0, "outcome": "not_resolvable",
+            "influence_triggers": []}
+
+
+def recompute_loo_row(cid, block, p):
+    """The recompute's row for the same block (finish_contrast: block_number is the block's registered position)."""
+    return {"block_number": BLOCKS[cid].index(block) + 1, "dbar_j": -1.25, "p": p, "holm_p": 1.0, "holm_reject": False,
+            "outcome": "not_resolvable", "metrology_interval_j": [-14.0, 11.5], "decision_interval_j": [-16.75, 14.25],
+            "n": 8, "above_floor": False}
+
+
 def verdict_row(cid, p):
     """A claim-verdict contrast in the producer's key set (analysis_engine _CONTRAST_KEYS, v3 floor)."""
     a, b = CONDITIONS[cid]
     phase = "decode" if cid == DECODE else "prefill"
-    resolutions = [{"status": "exact", "source_cell_ids": [cell], "transport_group_id": f"tg-{arm}-{phase}",
+    resolutions = [{"status": "exact", "source_cell_ids": [cell], "transport_group_id": group,
                     "transport_rule_id": "exact_stack_only.v1", "floor_abs_j": 43.0, "floor_cmp_j": 103.5,
-                    "floor_gate_j": 103.5, "reason_codes": []} for arm, cell in zip("ab", FLOOR_CELLS[cid])]
+                    "floor_gate_j": 103.5, "reason_codes": []} for group, cell in zip(TRANSPORT_GROUPS[cid], FLOOR_CELLS[cid])]
+    blocks = BLOCKS[cid]
     return {"contrast_id": cid, "plan_id": "plan-gamma", "family_instance_id": "fam-gamma-primary", "claim_role": "primary",
             "metric": {"name": f"phase_energy_j.{phase}", "metric_tag": "phase_decode_energy" if cid == DECODE
                        else "phase_prefill_p2048_energy", "window_class": "phase",
@@ -53,13 +80,14 @@ def verdict_row(cid, p):
             "conditions": {"condition_a_id": a, "condition_b_id": b, "cell_a_id": "cell-" + a, "cell_b_id": "cell-" + b,
                            "difference_orientation": "condition_b_minus_condition_a"},
             "hypothesized_direction": "positive", "equivalence": None, "mde": None,
-            "bundle_blocks": {"planned_block_ids": ["b01", "b02"], "included_bundle_ids": ["q02-a1", "q02-b1"],
-                              "blocks": [{"block_id": "b02", "bundle_a_id": "q02-a1", "bundle_b_id": "q02-b1",
-                                          "included": True, "reason_codes": []},
-                                         {"block_id": "b01", "bundle_a_id": "q01-a1", "bundle_b_id": "q01-b1",
-                                          "included": False, "reason_codes": ["block_excluded"]}]},
-            "sampling": {"confirmatory_status": "confirmatory", "planned_n": 10, "observed_complete_n": 10,
-                         "kept_n": 9, "removed_block_ids": ["b01"]},
+            "bundle_blocks": {"planned_block_ids": list(blocks),
+                              "included_bundle_ids": [f"q{i:02d}-{arm}" for i in range(2, 11) for arm in ("a1", "b1")],
+                              "blocks": [{"block_id": bid, "bundle_a_id": f"q{i + 1:02d}-a1", "bundle_b_id": f"q{i + 1:02d}-b1",
+                                          "included": bid in KEPT[cid],
+                                          "reason_codes": [] if bid in KEPT[cid] else ["block_excluded"]}
+                                         for i, bid in enumerate(blocks)]},
+            "sampling": {"confirmatory_status": "confirmatory", "planned_n": 10, "observed_complete_n": 9,
+                         "kept_n": 9, "removed_block_ids": [blocks[0]]},
             "estimator": {"name": "abba_block_arm_mean_difference_t_v1", "n": 9, "df": 8, "estimate": -1.25, "s_d": 16.0,
                           "SE_repeat": 5.0, "SE_metrology": 1.5, "SE_total": 5.25, "t_critical_95": 2.306,
                           "repeat_point_CI95": {"lower": -12.75, "upper": 10.25},
@@ -77,7 +105,9 @@ def verdict_row(cid, p):
             "multiplicity": {"raw_p": p, "adjusted_p": 1.0, "rejected": False},
             "randomization_check": {"status": "not_run", "reason": "fixture", "n_blocks": 9, "exact_two_sided_p": None,
                                     "rejects": None},
-            "loo": {"status": "not_run", "rows": []}, "sensitivity_status": "not_run",
+            # RC-CMP-9: block 5's kept quads make the contrast complete, so the engine prints a row per kept block.
+            "loo": {"status": "complete", "rows": [loo_row(cid, block, p) for block in KEPT[cid]]},
+            "sensitivity_status": "not_run",
             "claim_evaluation": {"outcome": "not_resolvable", "direction": None, "reason_codes": ["floor_not_cleared"],
                                  "claim_ready_for_l2_l3": False, "claim_level_ceiling": "L1"}}
 
@@ -144,15 +174,125 @@ def neg8_recompute():
             "allowance_j": 1.25, "n_start": 2, "n_mid": 1, "n_end": 3, "corpus_n": 12}
 
 
+def structure_lines(pack):
+    """RC-CMP-9: the window lines the producer prints for every registered window whatever its data, beyond the
+    NEG-8 and screen lines (disclosures._monitor_lines, _reference_lines, _structure_lines, _ruling_lines,
+    _machine_lines); none of their values is compared."""
+    return [item("monitor_cost", False, f"{pack}: monitor cost", cpu_s=1.5, reader_cpu_s=None, probes_inside_target_phases=0),
+            item("monitor_sentence", False, "The hazard monitor ran on efficiency cores."),
+            item("physics_counts", False, f"{pack}: physics-in-span counts: ", counts={}),
+            item("anchor_counts", False, f"{pack}: members with anchor status bounded: 9", count=9),
+            item("anchor_bound", True, f"{pack}: largest effective anchor bound", value_s=0.001),
+            item("host_cpu", False, f"{pack}: host's total busy CPU during requests: not recorded", value_s=None),
+            item("battery_counts", False, f"{pack}: battery observations", counts={"battery.assist": 0}),
+            item("bound_formula", False, f"{pack}: bound formula", formula="max(envelope, prediction)"),
+            item("erratum3_triggers", False, f"{pack}: sealed rule", values={"doubling_count": 0, "systematic_sequences": []}),
+            item("adapter_continuity", False, f"{pack}: adapter-continuity decision: stable", decision="stable"),
+            item("stored_verdict_boundary", False, "The stored verdict's status and NEG-8 bracket decided nothing."),
+            item("tripwire", False, f"{pack}: tripwire excluded_reference_in_screen: passed",
+                 tripwire="excluded_reference_in_screen", result="passed"),
+            item("tripwire", False, f"{pack}: tripwire kept_member_outside_verdict_membership: passed",
+                 tripwire="kept_member_outside_verdict_membership", result="passed"),
+            item("deciding_membership", False, f"{pack}: deciding screen", writer_excluded_by_family={},
+                 writer_excluded_all_removed=True, deciding_references=7, deciding_spares=0, writer_excluded_count=0),
+            item("reference_parity", False, f"{pack}: reference parity: passed", result="passed", harvest_pin="a1b2c3d" + pack),
+            item("ledger_binding", False, f"{pack}: SHA256SUMS digest", sha256sums_sha256="5" * 64,
+                 ledger_copy_sha256="6" * 64, terminal_sequence=424, prefix_result="passed"),
+            item("machine_absent", False, "whole-machine meter: absent"),
+            item("machine_boundary", False, "whole-machine DC input plus the battery term")]
+
+
+# The reported cells of each floor window (extraction_spec reported_energy_cells): each phase's id and the
+# recompute's cell id (the condition family of its extraction cells); p42 is the registered refused exit.
+def reported_cells(pack):
+    short = PACK_MODELS[pack][0]
+    return {phase: (f"d117-reported-mean-ph-{phase}-{short}", f"df-ph-{phase}-{short}")
+            for phase in ("decode", "prefill-p2048", "prefill-p42")}
+
+
+def extraction_cells(pack):
+    """Each floor window's registered extraction cells, in the fixture's order (decode, p42 absolute first)."""
+    short = PACK_MODELS[pack][0]
+    return [(f"d117-df-ph-decode-{short}-absolute", "decode", "absolute"),
+            (f"d117-df-cmp-abba-ph-decode-{short}", "decode", "comparative"),
+            (f"d117-df-ph-prefill-p42-{short}-absolute", "p42", "absolute"),
+            (f"d117-df-ph-prefill-p2048-{short}-absolute", "prefill", "absolute"),
+            (f"d117-df-cmp-abba-ph-prefill-p2048-{short}", "prefill", "comparative"),
+            (f"d117-df-cmp-abba-ph-prefill-p42-{short}", "p42", "comparative")]
+
+
+REPORTED_PROJECTION = {"mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0,
+                       "interval": {"h_j": 2.0, "B_j": 1.0, "s_r": 1.5, "s_b": 1.25, "variance": 0.5, "n_r": 9, "n_b": 9,
+                                    "df": 8, "kind_averages_j": dict.fromkeys(cmp.KIND_ORDER, 0.25)},
+                       "attribution_floor": {"value_j": 3.0, "minimum_j": 1.0, "attained_by": "E_clock_anchor_shift_bound_j"},
+                       "per_token": {"j_per_token": 0.1}, "n_bundles": 18, "kept_units": [{"stratum": "repeat", "unit_id": "u1"}]}
+REPORTED_RECOMPUTE = {"status": "computed", "mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0, "n_r": 9, "n_b": 9,
+                      "n_bundles": 18, "interval": {"h_j": 2.0, "B_j": 1.0, "s_r": 1.5, "s_b": 1.25, "variance": 0.5, "df": 8,
+                                                    "kind_averages_j": [0.25] * 3},
+                      "attribution_floor": {"value_j": 3.0, "minimum_j": 1.0}, "per_token": {"j_per_token": 0.1},
+                      "kept_units": {"repeat": ["u1"]}}
+CELL_VALUES = {"status": "computed", "mean_j": 50.0, "h_j": 2.0, "B_j": 1.0, "lower_j": 47.0, "upper_j": 53.0}
+REPORTED_VALUES = {"mean_j": 50.0, "h_j": 2.0, "B_j": 1.0, "lower_j": 47.0, "upper_j": 53.0, "attribution_floor_j": 3.0}
+CROSS_WINDOW = {"G_j": 50.5, "h_G_j": 3.0, "F_j": 50.0, "h_F_j": 2.0, "delta_j": 0.5, "agree": True}
+FLOOR_VALUES = {"floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
+CONTRAST_VALUES = dict(FLOOR_VALUES, D_j=2.75, outcome="not_resolvable")
+AGGREGATE_CELLS = [f"d117-{model}-{phase}-floor-v5" for model in ("qwen3-1p7b", "qwen3-8b") for phase in ("decode", "prefill-p2048")]
+
+
+def aggregate_key(cid):
+    model = "Qwen3-1.7B-4bit" if "-qwen3-1p7b-" in cid else "Qwen3-8B-4bit"
+    return model + ("/decode" if "-decode-" in cid else "/prefill")
+
+
+def sensitivity_rows():
+    """sensitivity.build: every registered reported cell (p42 refused), every aggregate floor cell, every contrast;
+    the base's sensitivity values equal its primary values."""
+    reported = []
+    for pack in ("alpha", "beta"):
+        for phase, (cid, _) in reported_cells(pack).items():
+            if phase == "prefill-p42":
+                reported.append({"pack": pack, "cell_id": cid, "status": "refused", "code": "p42_expected_unresolvable"})
+            else:
+                reported.append({"pack": pack, "cell_id": cid, "status": "computed", "primary": dict(REPORTED_VALUES),
+                                 "sensitivity": dict(REPORTED_VALUES), "mean_and_half_width_equal_primary": True,
+                                 "equals_primary": True, "not_below_primary": True})
+    floors = [{"pack": "alpha" if "-qwen3-1p7b-" in cid else "beta", "cell_id": cid,
+               "primary": dict(FLOOR_VALUES, allowance_j=1.0), "sensitivity": dict(FLOOR_VALUES, allowance_j=1.0),
+               "equals_primary": True, "not_below_primary": True} for cid in AGGREGATE_CELLS]
+    contrasts = [{"contrast_id": cid, "floor_cell_ids": list(FLOOR_CELLS[cid]), "primary": dict(CONTRAST_VALUES),
+                  "sensitivity": dict(CONTRAST_VALUES, D_j=3.0), "bound_independent_values_equal_primary": True,
+                  "outcome_equals_primary": True, "not_below_primary": True} for cid in (DECODE, PREFILL)]
+    return reported, floors, contrasts
+
+
+def ratio_rows():
+    """D-165's ratio table: each aggregate floor cell's absolute and comparative ratio and its common-mode ratio."""
+    rows = []
+    for cid in AGGREGATE_CELLS:
+        for component, field in (("absolute", "corner_widened_unguarded_floor_j"),
+                                 ("comparative", "corner_widened_unguarded_floor_j"),
+                                 ("comparative", "common_mode_corner_widened_unguarded_floor_j")):
+            rows.append({"cell_id": cid, "component": component, "numerator_field": field, "numerator_j": 39.5,
+                         "denominator_j": 38.0, "n": 9, "ratio": 39.5 / 38.0, "status": "complete"})
+    return rows
+
+
 def l9_files():
-    """L9 restricted outputs in the producers' shapes (RC-CMP-6 G4), with the registered ids."""
+    """L9 restricted outputs in the producers' shapes (RC-CMP-6 G4), with the registered ids.
+
+    RC-CMP-9: producer-complete over the registry: every registered reported cell (p42 refused), extraction cell,
+    aggregate floor cell, ratio, contrast and kept block (leave-one-out row), and every line the producer prints
+    unconditionally, so the registry-driven expected-check table finds each of its items on both sides.
+    """
     files = {"rereduced/alpha/run-a.rereduced.json": {"phase_energy_j": {"prefill": 2.5, "decode": 97.25},
                                                        "gross_energy_j": 120.0}}
     for pack in ("alpha", "beta"):
-        model = "qwen3-1p7b" if pack == "alpha" else "qwen3-8b"
         cells = []
-        for kind in ("absolute", "comparative"):
-            cells.append({"cell_id": extraction_cell_id(model, kind), "kind": kind, "extractable": True,
+        for cid, phase, kind in extraction_cells(pack):
+            if phase == "p42":
+                cells.append({"cell_id": cid, "kind": kind, "extractable": False})
+                continue
+            cells.append({"cell_id": cid, "kind": kind, "extractable": True,
                           "operative_floor_j": 43.0, "n_admitted": 9,
                           "floor": {"corner_widened_unguarded_floor_j": 39.5, "unguarded_floor_j": 39.5,
                                     "guarded_floor_j": 42.0, "drift_widened_guarded_floor_j": 43.0,
@@ -160,7 +300,6 @@ def l9_files():
                                     "sample_stddev_j": 15.5, "whole_window_drift_allowance_j": 1.0,
                                     "guard_factor": 1.0, "corner_widened_guarded_floor_j": 39.5,
                                     "drift_widened_unguarded_floor_j": 40.5, "n": 9}})
-        cells.append({"cell_id": f"d117-df-ph-prefill-p42-{model}-absolute", "kind": "absolute", "extractable": False})
         files[f"mint/{SHA}-extraction-{pack}.json"] = {"cells": cells}
         files[f"brackets/{SHA}-{pack}.json"] = {"b_sens": 0.0625, "evaluation": {"acceptance": {"allowance": {
             "operative_b_fiducial_binary64_s": 0.0375}}}}
@@ -173,10 +312,7 @@ def l9_files():
         {"cell_id": f"d117-{model}-{phase}-floor-v5", "floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
         for model in ("qwen3-1p7b", "qwen3-8b") for phase in ("decode", "prefill-p2048")]}
     files["finalized/outputs/closeout.json"] = {"branch": "B", "dominance_sentence_licensed": False}
-    files["finalized/outputs/closeout.ratio-table.json"] = {"ratios": [
-        {"cell_id": "d117-qwen3-1p7b-decode-floor-v5", "component": "absolute", "numerator_field":
-         "corner_widened_unguarded_floor_j", "numerator_j": 39.5, "denominator_j": 38.0, "n": 9, "ratio": 39.5 / 38.0,
-         "status": "complete"}]}
+    files["finalized/outputs/closeout.ratio-table.json"] = {"ratios": ratio_rows()}
     rows = [verdict_row(DECODE, 0.84), verdict_row(PREFILL, 0.68)]
     files[f"outputs/{SHA}-claim-verdicts.json"] = {"contrasts": rows}
     windows = {p: {"plan_id": "plan-" + p, "attempt": 1, "harvest_pin": "a1b2c3d" + p, "record_shape": "second_seal"}
@@ -190,100 +326,165 @@ def l9_files():
                   "finalized_manifest": {"manifest_id": "am-synthetic", "file_sha256": "a" * 64},
                   "floor_artifact": {"artifact_id": "floor-synthetic", "file_sha256": "b" * 64}, "exclusions_sha256": "e" * 64},
         "characterization": {"funded": False, "run": False, "verdict": None}}
+    cells_lines, kept_cells = [], []
     for pack in ("alpha", "beta"):
-        files[f"outputs/{SHA}-projection-{pack}.json"] = {"cells": [], "refused_cells": []}
+        computed, refused = [], []
+        for phase, (cid, _) in reported_cells(pack).items():
+            if phase == "prefill-p42":
+                refused.append({"cell_id": cid, "code": "p42_expected_unresolvable"})
+                continue
+            computed.append(dict(copy.deepcopy(REPORTED_PROJECTION), cell_id=cid))
+            cells_lines += [
+                item("reported_cell", True, f"{pack} {cid}: 50 J", pack=pack, cell_id=cid, **CELL_VALUES),
+                item("battery_assist_cell", True, f"{pack} {cid}: no assisted member", pack=pack, cell_id=cid,
+                     primary=dict(CELL_VALUES), without=dict(CELL_VALUES), n_r=9, n_b=9, assist_members={},
+                     removed_unit_ids=[]),
+                item("attribution_floor", True, "attribution floor 3 J", pack=pack, cell_id=cid, value_j=3.0,
+                     attained_by="E_clock_anchor_shift_bound_j", minimum_j=1.0),
+                item("cross_window", True, "GAMMA's and the floor window's estimates agree", pack=pack, cell_id=cid,
+                     **CROSS_WINDOW)]
+            kept_cells.append(item("kept_units", False, f"{pack} {cid}: kept units", pack=pack, cell_id=cid, n_r=9, n_b=9))
+        files[f"outputs/{SHA}-projection-{pack}.json"] = {"cells": computed, "refused_cells": refused}
+    reported, floor_rows, contrast_rows = sensitivity_rows()
     sensitivity = {
         "schema_version": "joulewise.b5_bracket_sensitivity.v1",
         "label": "sensitivity", "b_max": {"value_s": 0.0625, "T": 424, "attained_by_sequence": 396},
         "windows": {p: {"plan_id": "plan-" + p, "b_op_s": 0.0375, "b_sens_s": 0.0625, "widened": True}
                     for p in ("alpha", "beta", "gamma")},
-        "floor_cells": [], "contrasts": [],
         # The registered p42 exit: L9's sensitivity record lists each p42 cell as refused (RC-CMP-5 S3 union).
-        "reported_cells": [{"pack": pack, "cell_id": f"d117-reported-mean-ph-prefill-p42-{model}", "status": "refused",
-                            "code": "p42_expected_unresolvable"} for pack, model in (("alpha", "qwen3-1p7b"), ("beta", "qwen3-8b"))]}
+        "reported_cells": reported, "floor_cells": floor_rows, "contrasts": contrast_rows}
     files["outputs/" + "1" * 64 + ".json"] = sensitivity
-    floors = [item("floor_composition", True, f"{pack} {extraction_cell_id(model, kind)}: guarded operative floor",
-                   pack=pack, cell_id=extraction_cell_id(model, kind), guarded_j=42.0, allowance_j=1.0,
+    floors = [item("floor_composition", True, f"{pack} {cid}: guarded operative floor",
+                   pack=pack, cell_id=cid, guarded_j=42.0, allowance_j=1.0,
                    source="survivor_rescreen", drift_widened_j=43.0, minted_j=43.0 if kind == "absolute" else 103.5)
-              for pack, model in (("alpha", "qwen3-1p7b"), ("beta", "qwen3-8b")) for kind in ("absolute", "comparative")]
+              for pack in ("alpha", "beta") for cid, phase, kind in extraction_cells(pack) if phase != "p42"]
     floors.append(item("kept_units", False, "alpha kept units", pack="alpha", cell_id=ALPHA_CELLS["absolute"], n_r=9, n_b=9))
+    floors += [item("kept_units", False, f"{pack} {cid}: kept units", pack=pack, cell_id=cid, n_r=9, n_b=9)
+               for pack in ("alpha", "beta") for cid, _, _ in extraction_cells(pack) if cid != ALPHA_CELLS["absolute"]]
     contrasts = []
     for row in rows:
         cid, est = row["contrast_id"], row["estimator"]
+        denominator = 512 if cid == DECODE else 2048
         contrasts += [item("primary_contrast", True, cid + ": primary", contrast_id=cid, estimator=copy.deepcopy(est),
                            decision_interval=copy.deepcopy(row["deterministic_bounds"]["decision_interval"])),
+                      item("battery_assist_contrast", True, cid + ": without assisted quads", contrast_id=cid,
+                           status="computed", n=9, mean_j=-1.25, s_d=16.0, se=5.25, t_star=2.306, lower_j=-13.5,
+                           upper_j=11.0, assist_quads=0, assist_members={}),
+                      item("magnitude_ratio", True, cid + ": ratio", contrast_id=cid, log_mean=-0.01, log_sd=0.2,
+                           ratio=0.99, lower=0.875, upper=1.125),
+                      item("magnitude_per_token", True, cid + ": per token", contrast_id=cid, value_j=-0.002,
+                           denominator=denominator, metrology={"lower": -0.025, "upper": 0.02},
+                           decision={"lower": -0.03, "upper": 0.025}),
                       item("contrast_interval", True, cid + ": rounded t*", contrast_id=cid, n=9, rounded_t=2.306,
                            exact_t=2.306004135033371),
                       item("decision_floor", True, cid + ": decision interval near end", contrast_id=cid,
                            decision_interval=copy.deepcopy(row["deterministic_bounds"]["decision_interval"]),
-                           floor_j=103.5, estimate_j=-1.25)]
-    contrasts += [item("magnitude_ratio", True, DECODE + ": ratio", contrast_id=DECODE, log_mean=-0.01, log_sd=0.2,
-                       ratio=0.99, lower=0.875, upper=1.125),
-                  item("magnitude_per_token", True, DECODE + ": per token", contrast_id=DECODE, value_j=-0.002,
-                       denominator=512, metrology={"lower": -0.025, "upper": 0.02}, decision={"lower": -0.03, "upper": 0.025})]
-    contrasts += [item("loo_counts", False, cid + ": leave-one-out rows 0", contrast_id=cid, count=0,
-                       exclusive_block_numbers=[]) for cid in (DECODE, PREFILL)]
-    # L9 prints a loo_magnitude line for every contrast; no leave-one-out row here raises the trigger.
-    contrasts += [item("loo_magnitude", True, cid + ": no leave-one-out row raised the magnitude trigger", contrast_id=cid,
-                       rows=[]) for cid in (DECODE, PREFILL)]
+                           floor_j=103.5, estimate_j=-1.25),
+                      item("loo_counts", False, cid + ": leave-one-out rows 9", contrast_id=cid, count=9,
+                           exclusive_block_numbers=[]),
+                      # L9 prints a loo_magnitude line for every contrast; no leave-one-out row here raises the trigger.
+                      item("loo_magnitude", True, cid + ": no leave-one-out row raised the magnitude trigger",
+                           contrast_id=cid, rows=[])]
+    contrasts += [item("kept_units", False, f"gamma {cid}: kept quads 9", pack="gamma", cell_id=cid, n_r=0, n_b=9)
+                  for cid in (DECODE, PREFILL)]
     block_lines = [item("sensitivity_bmax", True, "sensitivity: B_max", **sensitivity["b_max"])]
     block_lines += [item("sensitivity_window", True, "sensitivity: " + p, pack=p, **sensitivity["windows"][p])
                     for p in ("alpha", "beta", "gamma")]
-    block_lines += [item("sensitivity_reported", True, "sensitivity: refused", record=copy.deepcopy(row))
+    block_lines += [item("sensitivity_reported", True, "sensitivity: " + row["cell_id"], record=copy.deepcopy(row))
                     for row in sensitivity["reported_cells"]]
+    block_lines += [item("sensitivity_floor", True, "sensitivity: floor", record=copy.deepcopy(row))
+                    for row in sensitivity["floor_cells"]]
+    block_lines += [item("sensitivity_contrast", True, "sensitivity: contrast", record=copy.deepcopy(row))
+                    for row in sensitivity["contrasts"]]
     block_lines += [item("sensitivity_boundary", True, "Sensitivity values are never composed into a primary number."),
                     item("harvest_once", False, "no analysed window was harvested twice", no_analysed_window_harvested_twice=True)]
-    ratio = files["finalized/outputs/closeout.ratio-table.json"]["ratios"][0]
-    block_lines += [item("dominance_ratio", True, f"{ratio['cell_id']} absolute: R 1.0395; point diagnostic; no interval",
-                         cell_id=ratio["cell_id"], component="absolute", n=9, status="complete", ratio=ratio["ratio"],
-                         numerator_j=39.5, denominator_j=38.0),
-                    item("dominance_branch", True, "D-165 branch B", branch="B", dominance_sentence_licensed=False)]
+    block_lines += [item("attempt_count", False, f"{p}: attempts of this pack: 1 (causes none)", pack=p, superseded=False,
+                         count=1, causes=["none"]) for p in ("alpha", "beta", "gamma")]
+    for ratio in files["finalized/outputs/closeout.ratio-table.json"]["ratios"]:
+        label = "R_cm" if ratio["numerator_field"].startswith("common_mode") else "R"
+        block_lines.append(item("dominance_ratio", True,
+                                f"{ratio['cell_id']} {ratio['component']}: {label} 1.0395; point diagnostic; no interval",
+                                cell_id=ratio["cell_id"], component=ratio["component"], n=9, status="complete",
+                                ratio=ratio["ratio"], numerator_j=39.5, denominator_j=38.0))
+    block_lines.append(item("dominance_branch", True, "D-165 branch B", branch="B", dominance_sentence_licensed=False))
     window_lines = {p: [item("stored_status", False, p + ": stored verdict status: passed", status="passed"),
                         item("flag_count", False, p + ": flag x: 0", count=0, family="PHYSICS_IN_SPAN", code="x",
                              blinding="OPEN"),
                         item("below_screen_bound", True, p + ": operative bound below 36.46 ms: no", b_op_s=0.0375,
-                             below=False)] + neg8_lines(p)
+                             below=False)] + neg8_lines(p) + structure_lines(p)
                     for p in ("alpha", "beta", "gamma")}
+    fixed = [item(word, False, "fixed sentence " + word) for word in cmp.FIXED_SENTENCE_WORDS if word != "order"]
+    fixed += [item("floor_drift_ownership", False, "Each contrast's floor carries the floor window's drift allowance."),
+              item("gross_energy", False, "Phase energy is gross.")]
     files[f"disclosures/{SHA}.json"] = {
-        "schema_version": "joulewise.b5_disclosures.v1", "windows": windows, "cells": [], "floors": floors,
-        "contrasts": contrasts, "window_lines": window_lines, "block_lines": block_lines,
+        "schema_version": "joulewise.b5_disclosures.v1", "windows": windows, "cells": cells_lines + kept_cells,
+        "floors": floors, "contrasts": contrasts, "window_lines": window_lines, "block_lines": block_lines,
         "sensitivity": copy.deepcopy(sensitivity),
-        "fixed_sentences": [item("order", False, "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order.")]}
+        "fixed_sentences": [item("order", False, "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order.")] + fixed}
     return files
 
 
 def recompute_output():
-    floors, ratios = {}, {}
+    floors, ratios, common = {}, {}, {}
     for model in ("Qwen3-1.7B-4bit", "Qwen3-8B-4bit"):
-        for kind in ("absolute", "comparative"):
-            floors[f"{model}/decode/{kind}"] = {
-                "corner_widened_unguarded_floor_j": 39.5, "operative_unguarded_floor_j": 39.5, "guarded_floor_j": 42.0,
-                "drift_widened_guarded_floor_j": 43.0, "prediction_j": 38.0, "max_abs_deviation_j": 29.5, "s_j": 15.5,
-                "allowance_j": 1.0, "guard": 1.0, "n": 9}
-    ratios["Qwen3-1.7B-4bit/decode/absolute"] = {"R": 39.5 / 38.0, "numerator_j": 39.5, "denominator_j": 38.0, "n": 9}
+        for phase in ("decode", "prefill"):
+            for kind in ("absolute", "comparative"):
+                floors[f"{model}/{phase}/{kind}"] = {
+                    "corner_widened_unguarded_floor_j": 39.5, "operative_unguarded_floor_j": 39.5, "guarded_floor_j": 42.0,
+                    "drift_widened_guarded_floor_j": 43.0, "prediction_j": 38.0, "max_abs_deviation_j": 29.5, "s_j": 15.5,
+                    "allowance_j": 1.0, "guard": 1.0, "n": 9}
+                ratios[f"{model}/{phase}/{kind}"] = {"R": 39.5 / 38.0, "numerator_j": 39.5, "denominator_j": 38.0, "n": 9}
+            common[f"{model}/{phase}"] = {"R_cm": 39.5 / 38.0, "numerator_j": 39.5, "denominator_j": 38.0, "n": 9}
     contrast = {"n": 9, "dbar_j": -1.25, "s_d_j": 16.0, "se_j": 5.25, "t_star": 2.306,
                 "metrology_interval_j": [-13.5, 11.0], "D_j": 2.75, "decision_interval_j": [-16.25, 13.75],
                 "floor_gate_j": 103.5, "holm_p": 1.0, "holm_reject": False, "outcome": "not_resolvable",
-                "direction": "negative", "ceiling": "L1", "loo": [], "kept_quads": ["b02"]}
+                "direction": "negative", "ceiling": "L1"}
+    families = [family for pack in ("alpha", "beta") for phase, (_, family) in reported_cells(pack).items()
+                if phase != "prefill-p42"]
+    assist = {family: {"mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0, "n_r": 9, "n_b": 9, "interval": {"h_j": 2.0, "B_j": 1.0},
+                       "assist_members_by_stratum": {}} for family in families}
+    assist.update({cid: {"n": 9, "dbar_j": -1.25, "s_d_j": 16.0, "se_j": 5.25, "t_star": 2.306,
+                         "metrology_interval_j": [-13.5, 11.0], "status": "computed", "assist_quads": 0,
+                         "assist_members_by_stratum": {}} for cid in (DECODE, PREFILL)})
+    descriptive = {"ratio": 0.99, "ratio_interval": [0.875, 1.125], "per_token_difference_j": -0.002,
+                   "per_token_metrology_interval_j": [-0.025, 0.02], "per_token_decision_interval_j": [-0.03, 0.025]}
     return {"program_sha256": "f" * 64,
             "members": {"ALPHA": {"run-a": {"E_j": {"prefill": 2.5, "decode": 97.25, "request": 120.0}, "selected": True},
                                   "corpus-r1": {"E_j": {"prefill": 1.0, "decode": 1.0, "request": 1.0}, "selected": False}}},
             "inputs": {p: {"exclusions_sha256": "e" * 64, "claim_usable": True} for p in ("ALPHA", "BETA", "GAMMA")},
             "windows": {p: {"b_op_s": 0.0375, "neg8": neg8_recompute()} for p in ("ALPHA", "BETA", "GAMMA")},
-            "disclosures": {"sensitivity_bound": {"B_max_s": 0.0625, "T": 424, "attaining_sequence": 396,
-                                                  "windows": {p: {"b_sens_s": 0.0625} for p in ("ALPHA", "BETA", "GAMMA")}}},
+            "disclosures": {"sensitivity_bound": {
+                "B_max_s": 0.0625, "T": 424, "attaining_sequence": 396,
+                "windows": {p: {"b_sens_s": 0.0625} for p in ("ALPHA", "BETA", "GAMMA")},
+                "reported_cells": {family: {"status": "computed", "mean_j": 50.0, "lower_j": 47.0, "upper_j": 53.0,
+                                            "interval": {"h_j": 2.0, "B_j": 1.0}, "attribution_floor": {"value_j": 3.0}}
+                                   for family in families},
+                "floor_cells": {aggregate_key(cid): dict(FLOOR_VALUES) for cid in AGGREGATE_CELLS},
+                "floors": {aggregate_key(cid) + "/absolute": {"allowance_j": 1.0} for cid in AGGREGATE_CELLS},
+                "contrasts": {cid: {"floor_gate_j": 103.5, "D_j": 3.0, "outcome": "not_resolvable",
+                                    "outcome_equals_primary": True} for cid in (DECODE, PREFILL)}},
+                "battery_assist": assist,
+                "cross_window": {f"{model}/{phase}": dict(CROSS_WINDOW) for _, model in PACK_MODELS.values()
+                                 for phase in ("decode", "prefill")}},
             "p42": {"df-ph-prefill-p42-qwen3-1p7b": {"status": "expected_unresolvable"},
                     "df-ph-prefill-p42-qwen3-8b": {"status": "expected_unresolvable"}},
             "floors": floors,
             "floor_cells": {model + "/" + phase: {"floor_abs_j": 43.0, "floor_cmp_j": 103.5, "floor_gate_j": 103.5}
                             for model in ("Qwen3-1.7B-4bit", "Qwen3-8B-4bit") for phase in ("decode", "prefill")},
-            "dominance": {"branch": "B", "ratios": ratios, "common_mode": {}},
-            "contrasts": {DECODE: {**contrast, "p": 0.84}, PREFILL: {**contrast, "p": 0.68}},
-            "reported_cells": {},
-            "descriptive": {DECODE: {"ratio": 0.99, "ratio_interval": [0.875, 1.125], "per_token_difference_j": -0.002,
-                                     "per_token_metrology_interval_j": [-0.025, 0.02],
-                                     "per_token_decision_interval_j": [-0.03, 0.025]}},
+            "dominance": {"branch": "B", "ratios": ratios, "common_mode": common},
+            "contrasts": {cid: {**contrast, "p": p, "kept_quads": list(KEPT[cid]),
+                                "loo": [recompute_loo_row(cid, block, p) for block in KEPT[cid]]}
+                          for cid, p in ((DECODE, 0.84), (PREFILL, 0.68))},
+            "reported_cells": {family: copy.deepcopy(REPORTED_RECOMPUTE) for family in families},
+            "descriptive": {cid: dict(descriptive) for cid in (DECODE, PREFILL)},
             "exclusions_rederivation": {p: {"status": "agrees"} for p in ("ALPHA", "BETA", "GAMMA")}}
+
+
+def no_table(c, custody, ours):
+    """The comparator before RC-CMP-9, for counterfactuals: no expected-check table, so no check of what the
+    outputs omit and every step-11 leaf counts as inside the table."""
+    c.claimed.update({"fill": {()}, "disclosure": {()}})
+    return []
 
 
 # Key-bound rules (RC-CMP-3 X1): each mapped leaf names the comparison row it copies. The fixture is
@@ -351,8 +552,8 @@ class ComparatorTests(unittest.TestCase):
         with check():
             self.assertEqual(self.fails(self.run_compare()), {})
 
-    def numeric_fault(self, family, edit):
-        self.planted(family, edit, lambda: mock.patch.object(cmp, "bar_for", return_value=float("inf")))
+    def numeric_fault(self, family, edit, rows=1):
+        self.planted(family, edit, lambda: mock.patch.object(cmp, "bar_for", return_value=float("inf")), rows)
 
     def test_planted_run_phase_energy(self):
         self.numeric_fault("run_phase_energy_j", lambda t: t.ours["members"]["ALPHA"]["run-a"]["E_j"].update(decode=97.25 + 2e-4))
@@ -369,7 +570,8 @@ class ComparatorTests(unittest.TestCase):
         self.numeric_fault("dominance_ratio", lambda t: t.ours["dominance"]["ratios"]["Qwen3-1.7B-4bit/decode/absolute"].update(R=39.5 / 38.0 * (1 + 2e-6)))
 
     def test_planted_contrast(self):
-        self.numeric_fault("contrast_j", lambda t: t.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6)))
+        # RC-CMP-9: the sensitivity record's own primary D (read directly) sees the moved D too.
+        self.numeric_fault("contrast_j", lambda t: t.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6)), rows=2)
 
     def test_planted_contrast_p(self):
         self.numeric_fault("contrast_p", lambda t: t.ours["contrasts"][PREFILL].update(p=0.68 + 2e-6))
@@ -415,7 +617,10 @@ class ComparatorTests(unittest.TestCase):
         self.planted(family, edit, lambda: mock.patch.object(cmp.Comparison, "exact", lenient), rows)
 
     def test_planted_outcome_word(self):
-        self.exact_fault("outcome_word", lambda t: t.ours["contrasts"][DECODE].update(outcome="unresolved"))
+        # RC-CMP-9: the producer-complete fixture derives nine leave-one-out trigger lists from the full outcome, so
+        # the planted outcome word is the recompute's sensitivity outcome (one row).
+        self.exact_fault("outcome_word", lambda t: t.ours["disclosures"]["sensitivity_bound"]["contrasts"][DECODE].update(
+            outcome="unresolved"))
 
     def test_planted_dominance_branch(self):
         # The branch and, since RC-CMP-7 F2, the licensed word that follows it (licensed iff branch A).
@@ -423,9 +628,10 @@ class ComparatorTests(unittest.TestCase):
 
     def test_planted_p42_status(self):
         # The extraction report and the sensitivity record's refused p42 cell both see the moved status.
-        # Since RC-CMP-7 F2 the sensitivity line's printed status and code words are compared too (outcome_word).
+        # Since RC-CMP-7 F2 the sensitivity line's printed status and code words are compared too (outcome_word);
+        # since RC-CMP-9 F4 the projection's refused p42 cell too (the base fixture lists it).
         self.ours["p42"]["df-ph-prefill-p42-qwen3-8b"].update(status="computed")
-        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 2, "outcome_word": 2})
+        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 3, "outcome_word": 2})
         original = cmp.Comparison.exact
 
         def lenient(c, fam, key, l9, ours, **raw):
@@ -453,8 +659,10 @@ class ComparatorTests(unittest.TestCase):
                 else:
                     del self.ours["floors"]["Qwen3-8B-4bit/decode/comparative"]["guarded_floor_j"]
                 result = self.run_compare()
-                self.assertEqual(self.fails(result), {"floor_j": 1})
-                row = next(r for r in result["comparisons"] if r["verdict"] == "DISAGREE")
+                # RC-CMP-9: the expected-check table requires the recompute's floor terms of a computed cell (its
+                # extraction floor and floor-composition line): the missing key DISAGREEs there too.
+                self.assertEqual(self.fails(result), {"floor_j": 1} if side == "l9" else {"floor_j": 1, "routing_id": 2})
+                row = next(r for r in result["comparisons"] if r["verdict"] == "DISAGREE" and r["family"] == "floor_j")
                 self.assertEqual(row["reason"], "missing_or_null")
                 # Counterfactual: skipping a missing value (recording it as agreement) hides it.
                 original = cmp.Comparison.numeric
@@ -464,7 +672,8 @@ class ComparatorTests(unittest.TestCase):
                         c.rows.append({"family": family, "key": key, "verdict": "AGREE"})
                         return
                     return original(c, family, key, l9, ours)
-                with mock.patch.object(cmp.Comparison, "numeric", skipping):
+                with mock.patch.object(cmp.Comparison, "numeric", skipping), \
+                        mock.patch.object(cmp, "compare_expected", no_table):
                     self.assertEqual(self.fails(self.run_compare()), {})
 
     def test_unmapped_step11_fill_refuses(self):
