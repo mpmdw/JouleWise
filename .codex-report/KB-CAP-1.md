@@ -256,3 +256,116 @@ state on that final head. The prior implementation-head observation had build,
 fences, changes, quick, installed-wheel and both crash-matrix shards successful;
 calibration-exits-exclusive and all twelve ordinary shards were still running;
 gate-ledger was skipped. This is not an all-green claim.
+
+## Round 2
+
+Authority: magistrate activation 4e748ac1, 2026-10-30, rulings Y1–Y5.
+Continued `codex/2026-10-30-kb-capture` at `7978d95e9`. Fetched and merged
+KB-v2 first: remote head `aa101880c` (the round-9 reader fix) was already an
+ancestor, so Git reported “Already up to date.” No merge commit was needed.
+The cloud-environment runtime skill was used for readiness/network inspection.
+No hardware, MLX, measurement data, live ledger, blinding key or notice was used.
+
+Decisions I made:
+
+- Use the existing self-consistent synthetic fiducial generator with the current
+  protocol. The fake pre/post calibration tools copy its raw plist, events and
+  instrument evidence to the rendered output paths. Harvest calls the real
+  `b6.calibration.read_own_capture` and `calibration.evaluate`; neither they nor
+  the anchor-envelope function or reader is mocked or modified. Reservation,
+  ledger-verdict/status and the other hardware seams remain synthetic.
+- Keep a second full driver-chain test with absent authenticated fiducials;
+  require reasoned UNDETERMINED rails/GPU/rest and an absent operative bound.
+- Independently integrate the first call's native raw plist support and selected
+  raw meter samples. Recompute meter edge maxima and battery edge charges from
+  decoded raw streams, including independent residual/tau arithmetic. Add a
+  synthetic 300 ms battery-assist interval at the end edge so its charge is
+  nonzero. These synthetic inputs change no data-selection or acceptance rule.
+- Use the recorded 140 W Mac adapter rating in
+  `docs/registrations/bytes_pack_v1.md:176` (Battery assist/R5 disclosure).
+  The README and exact lead commands cite this source.
+- Derive disk bytes from `configs/b6/registration/sizing_b5.json`,
+  `/packs/bytes-s1-p1/disk_derivation`: rate
+  `4502241280000000000000/1799796660838183` bytes/s, recorded two-copy factor,
+  and `4046531103` fixed retained bytes. For the rule-derived 10390 s span:
+  `2*ceil(rate*10390)+4046531103 = 56028277617` bytes. The full span includes
+  calibration/custody, and two copies include the archive. Print the exact
+  `--disk-derivation` alongside `--disk-bytes`; add no new reserve.
+- Correct the round-1 agreement bars to **5.7e-6 J/GB** and **4.5e-7 GB/s**,
+  1% of 0.00057 J/GB and 0.000045 GB/s. The independent energy assertions use
+  `5.7e-6 * payload_GB` joules, stated beside the assertions. The power check
+  uses this joule bar divided by call duration. Exact equality is used for the
+  integer missing-sample count only in this independent check.
+
+No NEEDS_RULING: no choice changes which real data count or a printed number.
+The reader, production estimator/calibration code, safety switches and
+PROVISIONAL/non-claim status are preserved. The initial ambiguous push was
+remote-rejected; automatic review rejected a retry because it lacked an explicit
+refspec. A verified checkout and explicit feature-branch refspec resolved that
+safely; no unintended remote branch changed.
+
+Executed evidence (Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`,
+`PYTHONDONTWRITEBYTECODE=1`, `-B`):
+
+- `python3.13 -B -m unittest tests.test_bytes_stream_test`, alone in the
+  background and awaited: **49 tests, 894.616 s, OK**, including 1140 generated
+  real-CLI leaf faults. Log: `/tmp/kb-r2-reader.log`.
+- `python3.13 -B -m unittest tests.test_bytes_stream_capture tests.test_bytes_stream_harvest`:
+  **12 tests, 64.267 s, OK**. Log: `/tmp/kb-r2-new-pass.log`.
+  Earlier runs exposed and fixed two fixture/check errors: B5 harness attempt
+  names differed from production's pre/post names, and the independent check
+  initially treated whole-second XML plist dates as precise interval endpoints.
+  The final check uses the recorded first endpoint and raw integer elapsed_ns.
+- Refusal/numeric-source registries: **28 tests, 28.359 s, OK (skipped=1)**.
+  Generator `--check` and `git diff --check` pass. No production code changed;
+  the complete reader module, both new modules and registries are the targeted
+  verification for this test/documentation round; no new full-suite claim.
+- Standalone whole chain retained at `/tmp/kb-r2-final-archive`, followed by the
+  real harvest, scan and read CLIs, all exit 0. Outputs:
+  `/tmp/kb-r2-INPUT.json`, `/tmp/kb-r2-SCAN.json`, `/tmp/kb-r2-READ.json`;
+  log `/tmp/kb-r2-standalone.log`. Eight records, knee found, diagnostics empty.
+
+Computed pre/post bounds are both `0.02161027162932592` s; the operative bound
+is `0.03242827162932592` s. First-call anchor shift is
+`0.21931140436936403` J. The real evaluator retains its synthetic
+outside-acceptance-range flags for pre/post and unsized-stop disclosure;
+`excluding` is empty. No bound is supplied by a mock or missing prerequisite.
+
+The reader's complete printed contrast/share strings are:
+
+```text
+rails RESOLVED: 7.000 ± 0.014 J/GB
+gpu RESOLVED: 7.000 ± 0.014 J/GB
+dc RESOLVED: 14.08 ± 0.10 J/GB
+rest RESOLVED: 7.077 ± 0.094 J/GB
+share: 0.4973 ± 0.0046
+claim_lines: {}
+```
+
+All four classes are RESOLVED from computed bounds. In the second full-chain
+missing-fiducial test, DC is RESOLVED; rails/GPU/rest remain UNDETERMINED with
+`records[0].harvest.anchor_shift_j missing or invalid (anchor shift bound missing)`.
+Its complete claim lines are:
+
+```text
+Known-bytes check: rails memory-traffic attribution is undetermined (records[0].harvest.anchor_shift_j missing or invalid (anchor shift bound missing)).
+Known-bytes check: rest memory-traffic attribution is undetermined (records[0].harvest.anchor_shift_j missing or invalid (anchor shift bound missing)).
+```
+
+Independent first-call arithmetic passes at
+`5.7e-6 J/GB * 4883.377815552 GB = 0.0278352535486464 J`:
+rails `41118.841893636556` J, meter `82186.9261043605` J,
+meter edges `[164.47323999999998, 82.88824]` W,
+battery edges `[0.0, 0.9003743820000001]` J. The W comparison uses
+`0.0278352535486464 / T_call` W. Producer rails/meter values are
+`41118.84189363655` J and `82186.92610436048` J; both edge arrays agree
+within their dimensional bars. The missing-stream-sample count is exactly 2.
+
+Git steps: prerequisite merge was a no-op; sourced lead inputs/agreement bars
+committed and pushed as `929746200`; passing authenticated synthetic and
+independent arithmetic tests as `c454c446f`; this section is the final report
+commit. All pushes use the explicit authorized feature-branch refspec. PR #613
+remains draft. CI is read again after the final report push and every job state
+is listed separately in the final response. The API hostname is blocked on this
+seat; the public GitHub checks page supplies that final-head observation.
+Pending or skipped jobs are not an all-green result.
