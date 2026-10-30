@@ -120,10 +120,14 @@ T0=$("$PY" -B -c 'import time,math; print(60*math.ceil((time.time()+420)/60))')
 # (three 2 s calls, four 10 s preparations including the pilot, pilot ~2 s).
 # Existing chain wall allowances: two calibration captures 2*1800, reservation
 # 900, calibration-verdict 600, terminal session-status 600, pre settle 60.
-SPAN=$("$PY" -B -c 'import math; print(math.ceil(3573.6+22*(3*2+4*10+2)+2*1800+900+600+600+60))')
-# BYTES registration §7/R5 disclosure records the Mac's 140 W adapter.
+# Four budgeted stages each add chain.BUDGET_GRACE_S=30; post capture is
+# unbudgeted (its retained 1800 s allowance has no SIGKILL grace).
+SPAN=$("$PY" -B -c 'import math; print(math.ceil(3573.6+22*(3*2+4*10+2)+2*1800+900+600+600+4*30+60))')
+# Supply record: docs/phase_2/window_c_operator_checklist.md:32,
+# 140 W Anker, 28 V × 4.99 A negotiated. The lead must record the actual
+# nameplate or t0 power-path negotiation record in --adapter-source.
 ADAPTER_W=140
-ADAPTER_SOURCE='docs/registrations/bytes_pack_v1.md: Battery assist (140 W adapter); R5 disclosure'
+ADAPTER_SOURCE='REPLACE with the Anker nameplate or t0 power-path negotiation record; docs/phase_2/window_c_operator_checklist.md:32 records 140 W, 28 V × 4.99 A'
 # Existing measured byte rate, applied to the entire span, with the recorded
 # two-copy factor and fixed retained bytes (no new reserve or acceptance bar).
 DISK_BYTES=$("$PY" -B -c 'import json,math,sys; from fractions import Fraction; d=json.load(open(sys.argv[1]))["packs"]["bytes-s1-p1"]["disk_derivation"]; r=d["stream_rate_bytes_per_s"]; print(d["peak_copies"]*math.ceil(Fraction(r["numerator"],r["denominator"])*int(sys.argv[2]))+d["fixed_retained_bytes"])' "$CHECKOUT/configs/b6/registration/sizing_b5.json" "$SPAN")
@@ -134,7 +138,7 @@ PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/joulewise/bytes_stream_capture.py"
   --adapter-max-w "$ADAPTER_W" --adapter-source "$ADAPTER_SOURCE" \
   --disk-bytes "$DISK_BYTES" --disk-derivation "$DISK_DERIVATION" \
   --programmed-span-s "$SPAN" \
-  --span-derivation 'rule §§1/2:3573.6+22*(3*2+4*10+2); existing chain:2*1800+900+600+600+60; ceil'
+  --span-derivation 'rule §§1/2:3573.6+22*(3*2+4*10+2); existing chain:2*1800+900+600+600+4*30+60; ceil'
 ```
 
 The prepare tool prints the exact head, plan hash, t0, maximum duration and
@@ -152,7 +156,11 @@ lead, preserve the attempt and prepare a fresh session/t0 before installing.
 test -f "$SESSION/custody/night/result.json"
 # Copy the whole session once; preserve raw bytes and all unsuccessful stages.
 mkdir -p "${ARCHIVE%/*}"
-test ! -e "$ARCHIVE" && cp -a "$SESSION" "$ARCHIVE"
+if test -e "$ARCHIVE" || test -L "$ARCHIVE"; then
+  printf 'Archive target already exists: %s\n' "$ARCHIVE" >&2
+  exit 1
+fi
+cp -a "$SESSION" "$ARCHIVE" || exit 1
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/scripts/bytes_stream_harvest.py" --archive "$ARCHIVE" --out "$OUT"
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/scripts/bytes_stream_test.py" scan "$ARCHIVE/runs_bytes_stream_test/capture/SCAN_RECEIPTS.json"
 PYTHONDONTWRITEBYTECODE=1 "$PY" -B "$CHECKOUT/scripts/bytes_stream_test.py" read "$OUT"
@@ -282,7 +290,9 @@ Decisions I made:
   synthetic 300 ms battery-assist interval at the end edge so its charge is
   nonzero. These synthetic inputs change no data-selection or acceptance rule.
 - Use the recorded 140 W Mac adapter rating in
-  `docs/registrations/bytes_pack_v1.md:176` (Battery assist/R5 disclosure).
+  `docs/phase_2/window_c_operator_checklist.md:32` (140 W Anker,
+  28 V × 4.99 A negotiated); the lead records the nameplate or t0 negotiation
+  in `--adapter-source`.
   The README and exact lead commands cite this source.
 - Derive disk bytes from `configs/b6/registration/sizing_b5.json`,
   `/packs/bytes-s1-p1/disk_derivation`: rate

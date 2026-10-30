@@ -197,11 +197,35 @@ class CaptureTests(unittest.TestCase):
                     adapter_max_w=140,adapter_source='synthetic 140 W adapter',disk_bytes=10**9,
                     disk_derivation='synthetic frame envelope × planned records',
                     programmed_span_s=10390,span_derivation='ceil(3573.6+22*48+2*1800+900+600+600+60)')
+            self.assertEqual(value['hazard_window']['thresholds']['clock']['t_stream_max_s'], cap.CAPTURE_PLANNED_S)
+            self.assertEqual(value['hazard_window']['T_stream_max_s'], cap.CAPTURE_PLANNED_S)
             self.assertEqual(value['hazard_window']['member_count'],8)
             self.assertIn('runs_bytes_stream_test/calibration_ledger.jsonl',
                           value['hazard_window']['bindings']['ledger_path'])
             self.assertFalse((root/'runs/calibration_observation_ledger.jsonl').exists())
             self.assertEqual(len(chain.stage_plan(cap.read(kit/'plan_tree.json'))),4)
+
+    def test_path_cli_bootstrap_without_editable_install(self):
+        result = subprocess.run([sys.executable, '-I', '-B', str(cap.ROOT/'joulewise/bytes_stream_capture.py'),
+                                 '--help'], capture_output=True, text=True, cwd='/tmp')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('prepare', result.stdout)
+
+    def test_start_exception_never_stops_unstarted_capture(self):
+        # Invoke the real CLI main with only the physical seams injected.
+        with tempfile.TemporaryDirectory() as tmp:
+            clock = Clock()
+            adapter = Capture(clock, [])
+            adapter.start_sampling = lambda *a: (_ for _ in ()).throw(RuntimeError('start failed'))
+            run = cap.run_stage
+            with patch.object(cap, 'run_stage', side_effect=lambda archive, device: run(
+                    archive, device=device, clock=clock, adapter=adapter, mx=Array(clock))):
+                self.assertEqual(cap.main(['stage', '--archive', str(Path(tmp)/'capture'),
+                                           '--device', 'synthetic']), 2)
+            self.assertEqual(adapter.stops, 0)
+            stage = cap.read(Path(tmp)/'capture/STAGE.json')
+            self.assertIn('start failed', stage['error'])
+            self.assertNotIn('capture_stop_error', stage)
 
     def test_allocation_stop_and_capture_teardown_are_reasoned(self):
         with tempfile.TemporaryDirectory(prefix='kb-alloc-') as tmp:

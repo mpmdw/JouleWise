@@ -19,6 +19,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 KIT = Path('configs/campaigns/bytes_stream_test')
 ORDER = ('S', 'C1', 'C3', 'C2', 'C2', 'C3', 'C1', 'S')
 # Reading rule §1: 22 powers, three ~2 s timing calls per size.
@@ -27,6 +29,11 @@ SCAN_CALL_S = 2
 # Reading rule §1 planned call lengths; §2 own idle and three settle gaps.
 CALL_S = {'S': 500, 'C1': 250, 'C3': 250, 'C2': 250}
 IDLE_S, SETTLE_S = 57.6, 3
+# Rule §§1/2, same terms as the lifecycle span: palindrome 3573.6 s
+# (calls + 16 idles + 24 settles + eight 10 s preparations), plus 22 sizes
+# with three 2 s calls, four 10 s preparations and a 2 s pilot allowance.
+CAPTURE_PLANNED_S = (sum(CALL_S[a] + 2*IDLE_S + 3*SETTLE_S + 10 for a in ORDER)
+                     + len(SCAN_EXPONENTS)*(3*SCAN_CALL_S + 4*10 + SCAN_CALL_S))
 
 
 def write(path, value):
@@ -93,13 +100,13 @@ def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None)
     result = {'non_claim': True, 'status': 'started', 'device': device}
     write(archive/'capture_config.json', config.to_dict())
     start = clock.stamp()
-    started = True
+    started = False
     try:
         admission = adapter.start_sampling(config, context)
+        started = True
         result['capture_start'] = {'ok': admission.ok, 'message': admission.message}
         if not admission.ok:
             raise ValueError('continuous capture could not start: ' + str(admission.message))
-        started = True
         start = clock.stamp()
         for exponent in SCAN_EXPONENTS:
             size = 2 ** exponent
@@ -229,7 +236,7 @@ def prepare(checkout, session, *, t0, adapter_max_w, adapter_source, disk_bytes,
     (custody/'chain.zsh').write_bytes(raw)
     (custody/'chain.zsh.sha256').write_bytes(chain.sidecar_bytes(raw, 'chain.zsh'))
     thresholds = default_thresholds()
-    thresholds['clock']['t_stream_max_s'] = CALL_S['S']
+    thresholds['clock']['t_stream_max_s'] = CAPTURE_PLANNED_S
     thresholds['disk']['planned_bytes'] = disk_bytes
     # Existing arm's stage cap plus explicit planned span, rounded to minutes as b5.
     maximum = 60 * math.ceil((programmed_span_s + bp.T0_STAGE_CAP_S)/60)
@@ -238,7 +245,7 @@ def prepare(checkout, session, *, t0, adapter_max_w, adapter_source, disk_bytes,
                   plan_tree_sha256=sha(pack/'plan_tree.json'), pack_plan_id='bytes-stream-test',
                   window_id='bytes-stream-test', evidence_root_id='bytes-stream-test'),
         bracket_session_id=sid, bindings=bindings, runs_roots={k:str(v) for k,v in roots.items()},
-        T_stream_max_s=CALL_S['S'], planned_bytes=disk_bytes, member_count=8, thresholds=thresholds,
+        T_stream_max_s=CAPTURE_PLANNED_S, planned_bytes=disk_bytes, member_count=8, thresholds=thresholds,
         g10=False, programmed_span_s=programmed_span_s, t0_stage_cap_s=bp.T0_STAGE_CAP_S,
         settle_s=chain.SETTLE_S, window_env=dict(path=str(custody/'window.env'),sha256=sha(custody/'window.env')),
         registration=None, chain_deviations=list(chain.DEVIATIONS), disk_volumes=[str(v) for v in roots.values()],
