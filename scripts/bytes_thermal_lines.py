@@ -786,7 +786,9 @@ def linked_roots(output):
             target = path.resolve(strict=True)
         except OSError:
             continue
-        if target.parts[-len(relative):] == relative:
+        # Strip the view-relative depth even if a damaged link renamed its tail.
+        # Such damage must not erase inside-source protection during recovery.
+        if len(target.parents) >= len(relative):
             roots.append(target.parents[len(relative) - 1])
     return roots
 
