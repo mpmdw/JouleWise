@@ -15,7 +15,12 @@ L9-STEP4-4 (lead ruling, plan-literal reading of section 2.2 bullet 3; Fable
 F1 of L9-STEP4-3-FABLE-REV): every member-level code that bullet names
 literally and that can reach a step-4 extractor cell is R3 too. The two it
 names that never reach a cell (claim-gate codes) are pinned out below.
+
+L9-STEP4-5 (L9-STEP4-4 Opus and Fable delta reviews): the claim-gate proof
+scans every joulewise module and the extractor CLI, each emission pin is an
+exact statement match, and the ruling string names the -4 amendment.
 """
+import ast
 import hashlib
 import json
 import re
@@ -49,7 +54,11 @@ RULING = {
            'insufficient_members_after_exclusion', 'kept_units_below_minimum',
            'window_evidence_precheck_missing'],
     'step4_rule': {
-        'ruling': 'L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind',
+        'ruling': ('L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind; amended by the '
+                   'L9-STEP4-4 lead ruling (2026-10-30): the member-level codes plan section 2.2 bullet 3 '
+                   'names that reach a step-4 cell (window_evidence_precheck_missing, '
+                   'campaign_cooldown_evidence_missing, idle_window_suspect) are r3. A tooling-origin cause '
+                   'of one of these codes also routes to R3 (an Ed ruling), which is stop-side.'),
         'refused_cells_only_p42': 'p42_floor_cells_only',
         'refused_non_p42_cell_without_reasons': 'extraction_report_malformed',
         'any_r3_reason_on_a_refused_non_p42_cell': 'extraction_cell_r3_refusal',
@@ -97,6 +106,30 @@ PLAN_NAMED = {'window_evidence_precheck_missing', 'campaign_cooldown_evidence_mi
 CLAIM_GATE_ONLY = ('paired_block_incomplete', 'fixed_n_plan_incomplete')
 # Every member-rule code the window-evidence precheck forwards onto kept units (Fable F2, L9-STEP4-4 F1).
 FORWARDED_PRECHECK = {code for code, pin in R3_PINS.items() if pin[2] is MEMBER_RULE}
+# The claim-gate modules, the only ones allowed to name CLAIM_GATE_ONLY outside a kept-unit stop.
+CLAIM_GATE_MODULES = ('joulewise/analysis_engine/__init__.py', 'joulewise/analysis_engine/claims.py')
+# Scanned beside every joulewise module: the step-4 extractor entry point.
+EXTRACTOR_CLI = 'scripts/extract_detection_floors.py'
+
+
+def emission_statements(module, emission):
+    """The statements of `module` that are exactly `emission` (one statement, compared as AST)."""
+    pinned = ast.parse(emission).body
+    assert len(pinned) == 1, emission
+    wanted = ast.dump(pinned[0])
+    return [node for node in ast.walk(ast.parse((ROOT / module).read_text()))
+            if isinstance(node, ast.stmt) and ast.dump(node) == wanted]
+
+
+def claim_gate_literals(module):
+    """Yield (line, code, is_stop_argument) for each CLAIM_GATE_ONLY literal in `module`."""
+    tree = ast.parse((ROOT / module).read_text())
+    stop_args = {id(call.args[2]) for call in ast.walk(tree)
+                 if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                 and call.func.attr == 'stop_if_member_code_on_kept_unit' and len(call.args) >= 3}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and node.value in CLAIM_GATE_ONLY:
+            yield node.lineno, node.value, id(node) in stop_args
 
 
 class Step4ReasonTableTests(unittest.TestCase):
@@ -170,8 +203,12 @@ class Step4ReasonTableTests(unittest.TestCase):
         section = plan[plan.index('### 2.2 Members and units'):plan.index('### 2.3 ')]
         for code, (module, emission, sentence) in R3_PINS.items():
             with self.subTest(code=code):
-                self.assertIn(code, emission)
-                self.assertIn(emission, (ROOT / module).read_text())
+                # L9-STEP4-5 (Fable F2): the pin is one whole statement of the module, matched as
+                # AST, whose string literals include the code exactly (a sibling code's site fails).
+                self.assertTrue(emission_statements(module, emission), emission)
+                literals = {node.value for node in ast.walk(ast.parse(emission))
+                            if isinstance(node, ast.Constant) and type(node.value) is str}
+                self.assertEqual(literals, {code})
                 self.assertIn(sentence, section)
 
     def test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes(self):
@@ -186,26 +223,29 @@ class Step4ReasonTableTests(unittest.TestCase):
 
     def test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell(self):
         # The precheck forwards only reducer vocabulary (anything else becomes
-        # window_evidence_precheck_missing), and in the eleven extractor modules these
-        # literals occur only as the code argument of a kept-unit stop, which raises
-        # member_code_on_kept_unit (exit 2) instead of entering a cell's reasons.
-        import ast
+        # window_evidence_precheck_missing; test_step4_member_codes runs that filter), and
+        # outside the claim-gate modules these literals occur only as the code argument of a
+        # kept-unit stop, which raises member_code_on_kept_unit (exit 2) instead of entering a
+        # cell's reasons. L9-STEP4-5 (Opus F1): every joulewise module and the extractor CLI
+        # are scanned, not only the generator's eleven.
         from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
         self.assertFalse(set(CLAIM_GATE_ONLY) & REDUCER_REASON_CODES)
         self.assertFalse(set(CLAIM_GATE_ONLY) & set(self.table['mask']))
+        modules = sorted(str(path.relative_to(ROOT)) for path in (ROOT / 'joulewise').rglob('*.py'))
+        self.assertLessEqual(set(self.table['modules']), set(modules))
+        for module in CLAIM_GATE_MODULES:
+            with self.subTest(allowlisted=module):
+                self.assertIn(module, modules)
+                self.assertTrue(list(claim_gate_literals(module)))
         seen = {code: 0 for code in CLAIM_GATE_ONLY}
-        for module in self.table['modules']:
-            tree = ast.parse((ROOT / module).read_text())
-            stop_args = {id(call.args[2]) for call in ast.walk(tree)
-                         if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                         and call.func.attr == 'stop_if_member_code_on_kept_unit' and len(call.args) >= 3}
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Constant) and node.value in seen:
-                    seen[node.value] += 1
-                    with self.subTest(module=module, code=node.value, line=node.lineno):
-                        self.assertIn(id(node), stop_args)
+        for module in [m for m in modules if m not in CLAIM_GATE_MODULES] + [EXTRACTOR_CLI]:
+            for line, code, is_stop in claim_gate_literals(module):
+                seen[code] += 1
+                with self.subTest(module=module, code=code, line=line):
+                    self.assertTrue(is_stop)
+        # Non-vacuous (Opus F1, Fable F3): the walk saw the kept-unit stop sites.
+        self.assertGreaterEqual(seen['paired_block_incomplete'], 1)
         self.assertEqual(seen['fixed_n_plan_incomplete'], 0)
-
 
 if __name__ == '__main__':
     unittest.main()

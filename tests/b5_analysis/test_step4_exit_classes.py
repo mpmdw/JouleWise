@@ -29,6 +29,8 @@ R3_CODES = ('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_belo
             'clock_bound_exceeds_quarter_window', 'idle_window_suspect',
             'insufficient_in_window_samples', 'insufficient_members_after_exclusion',
             'instrument_calibration_stale', 'kept_units_below_minimum', 'window_evidence_precheck_missing')
+# The plan section 2.2 bullet 3 member codes the L9-STEP4-4 ruling moved to R3.
+PLAN_NAMED = ('window_evidence_precheck_missing', 'campaign_cooldown_evidence_missing', 'idle_window_suspect')
 
 
 def cell(cell_id, refused, reasons=(MASK,)):
@@ -198,8 +200,7 @@ class Step4ReasonClassTests(unittest.TestCase):
     def test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not(self):
         # L9-STEP4-4 counterfactual: each of these three gave extraction_cell_tooling_refusal
         # at 901956944; the claim-gate codes never reach a cell and stay out of R3.
-        for code in ('window_evidence_precheck_missing', 'campaign_cooldown_evidence_missing',
-                     'idle_window_suspect'):
+        for code in PLAN_NAMED:
             with self.subTest(code=code):
                 self.assertClass(report(('syn-target',), {'syn-target': (code,)}),
                                  'extraction_cell_r3_refusal', 'tooling_refusal')
@@ -238,7 +239,9 @@ class Step4ReasonClassTests(unittest.TestCase):
                 self.assertClass(bad, 'extraction_report_malformed', 'tooling_refusal')
 
     def test_R2_p42_cell_reasons_are_irrelevant_to_the_registered_exit(self):
-        for reasons in ((TOOLING,), (UNLISTED,), (MASK, TOOLING), (R3,), (R3, TOOLING), ()):
+        # L9-STEP4-5 (Opus F5): the plan-named R3 codes on p42 cells change nothing either.
+        for reasons in ((TOOLING,), (UNLISTED,), (MASK, TOOLING), (R3,), (R3, TOOLING), (),
+                        *((code,) for code in PLAN_NAMED), PLAN_NAMED + (TOOLING,)):
             with self.subTest(reasons=reasons):
                 rep = report(P42, {P42[0]: reasons, P42[1]: reasons})
                 self.assertClass(rep, 'p42_floor_cells_only', 'ok')
