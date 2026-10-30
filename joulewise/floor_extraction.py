@@ -3178,6 +3178,7 @@ def extract_cells(
         ),
         calibration_ledger_snapshot=calibration_ledger_snapshot,
         archive_context=archive_context,
+        analysis_clamp=True,
     )
     whole_window_refusals = ("kept_units_required",) if kept_required else _whole_window_extraction_refusals(
         runs_root,

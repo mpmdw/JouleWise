@@ -1078,7 +1078,7 @@ def _step_results(s):
         session=AuthenticatedConsumptionSession(window.claim_runs_root,ids,mode='read_replay',
             evaluation_basis_sha256=row['evaluation_basis']['sha256'],
             consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-            calibration_ledger_snapshot=archive_snapshot(context),archive_context=context)
+            calibration_ledger_snapshot=archive_snapshot(context),archive_context=context,analysis_clamp=True)
         validation=validate_whole_window_verdict_row(row,window.claim_runs_root,ids,
             consumption_session=session,archive_context=context)
         if not validation.admitted:

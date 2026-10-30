@@ -11,10 +11,13 @@ reduce.py must rebuild exactly the e1b3a0510 file bytes.
 from __future__ import annotations
 
 import ast
+import contextlib
+import dataclasses
 import hashlib
 import importlib.util
 import json
 import math
+import random
 import subprocess
 import sys
 import tempfile
@@ -152,6 +155,28 @@ def seat_base_whole_window():
     return _SEAT_BASE
 
 
+_SHADOW_WHOLE_WINDOW: dict[str, object] = {}
+# L9-ENV-4's head, for L9-ENV-5 counterfactuals (O-F3, O-F5).
+ENV4_COMMIT = "0a799146c"
+# The ruling's base; origin/main's whole_window.py is byte-identical to it
+# (checked at 4c26b2e2c), so this is "origin/main behaviour" for O-F1.
+ORIGIN_MAIN_COMMIT = "7ebb7db2a"
+
+
+def whole_window_at(commit: str):
+    """``joulewise/whole_window.py`` at ``commit``, as a separate module."""
+
+    if commit not in _SHADOW_WHOLE_WINDOW:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), "show", f"{commit}:joulewise/whole_window.py"],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise unittest.SkipTest(f"{commit} not in this clone")
+        _SHADOW_WHOLE_WINDOW[commit] = _load_shadow(f"tests._whole_window_{commit}", result.stdout)
+    return _SHADOW_WHOLE_WINDOW[commit]
+
+
 def _gate_for(summary: dict, pointer: str) -> dict:
     for group_key, prefix in whole_window._CLAMP_GROUP_PREFIXES:
         if pointer.startswith(prefix):
@@ -187,6 +212,11 @@ def expected_from_oracle(old: dict, oracle: dict) -> tuple[dict, list[str]]:
     """
 
     old_env = old.get("energy_anchor_shift_envelopes") or {}
+    group_prefixes = tuple(prefix for _key, prefix in whole_window._CLAMP_GROUP_PREFIXES)
+    if not any(pointer.startswith(group_prefixes) for pointer in old_env):
+        # L9-ENV-5 (O-F3): no recorded member envelope proves the mirror, so
+        # the analysis path clamps nothing (the oracle still would).
+        return old, []
     oracle_env = oracle.get("energy_anchor_shift_envelopes") or {}
     joint_j = (oracle.get("energy_bound_terms_j") or {}).get("E_interpolation_joint_edge_bound_j")
     excluded = [
@@ -337,6 +367,123 @@ class AnalysisClampFunctionTests(unittest.TestCase):
         self.assertGreater(inverted, 200)
         self.assertGreater(defined, 300)
 
+    def test_reviewer_mini_sweep_with_mixed_sign_trace(self) -> None:
+        """Reviewer K1 (mutant M02 / L9-ENV-4 M04): one -1 W sample in an
+        otherwise positive trace must refuse exactly as the oracle does."""
+
+        rng = random.Random(7)
+        refused_mixed = 0
+        for epoch_s in (0.0, 1793232000.123456):
+            for interval in (True, False):
+                dt_s = 0.05
+                curve = [
+                    TracePoint(t=epoch_s + i * dt_s + (dt_s / 2 if interval else 0.0),
+                               power_w=rng.uniform(1, 9),
+                               support_start_s=(epoch_s + i * dt_s) if interval else None,
+                               support_end_s=(epoch_s + (i + 1) * dt_s) if interval else None)
+                    for i in range(300)
+                ]
+                mixed = list(curve)
+                mixed[10] = dataclasses.replace(mixed[10], power_w=-1.0)
+                for edge_s in (0.03, 0.0656):
+                    for length_s in (0.0, 0.01, 2 * edge_s - 1e-9, 2 * edge_s, 2 * edge_s + 1e-9, 0.5, 3.0):
+                        start_s = epoch_s + 5.0
+                        shapes = (
+                            ("single", [(curve, [Window(start_s, start_s + length_s)])]),
+                            ("short+long", [(curve, [Window(start_s, start_s + length_s),
+                                                     Window(start_s + 1, start_s + 3)])]),
+                            ("two-source", [(curve, [Window(start_s, start_s + length_s)]),
+                                            (curve, [Window(start_s + 4, start_s + 4.2)])]),
+                            ("mixed-sign", [(mixed, [Window(start_s, start_s + length_s)])]),
+                            ("near-end", [(curve, [Window(epoch_s + 14.99, epoch_s + 14.99 + length_s)])]),
+                        )
+                        for shape, contributions in shapes:
+                            for span_s in (0.0, 0.0012):
+                                analysis = _clamped_corner_composed_anchor_shift_envelope(
+                                    contributions, 0.0005, edge_s, span_s)
+                                oracle = oracle_module()._corner_composed_anchor_shift_envelope(
+                                    contributions, 0.0005, edge_s, span_s)
+                                self.assertEqual(
+                                    json.dumps(analysis), json.dumps(oracle),
+                                    (epoch_s, interval, edge_s, length_s, shape, span_s))
+                                if shape == "mixed-sign":
+                                    self.assertIsNone(analysis)
+                                    refused_mixed += 1
+        self.assertEqual(refused_mixed, 2 * 2 * 2 * 7 * 2)
+        # Without the -1 W sample the same short window clamps (the guard,
+        # not some other check, refuses the mixed-sign trace).
+        start_s = 5.0
+        positive = [TracePoint(t=i * 0.05 + 0.025, power_w=5.0, support_start_s=i * 0.05,
+                               support_end_s=(i + 1) * 0.05) for i in range(300)]
+        negative = list(positive)
+        negative[10] = dataclasses.replace(negative[10], power_w=-1.0)
+        window = [Window(start_s, start_s + 0.01)]
+        self.assertIsNotNone(_clamped_corner_composed_anchor_shift_envelope([(positive, window)], 0.0005, 0.03, 0.0))
+        self.assertIsNone(_clamped_corner_composed_anchor_shift_envelope([(negative, window)], 0.0005, 0.03, 0.0))
+
+    @staticmethod
+    def _ulp_case(seed: int):
+        """Random clamped shape (found by search) where the clamp position
+        changes the result in the last bits through the breakpoint set."""
+
+        rng = random.Random(seed)
+        interval = rng.random() < 0.5
+        dt_s = rng.choice([0.05, 0.1, 0.0731])
+        curve = [
+            TracePoint(t=i * dt_s + (dt_s / 2 if interval else 0.0), power_w=round(rng.uniform(0, 12), 3),
+                       support_start_s=i * dt_s if interval else None,
+                       support_end_s=(i + 1) * dt_s if interval else None)
+            for i in range(40)
+        ]
+        edge_s = round(rng.uniform(0.02, 0.2), 4)
+        windows = []
+        for _ in range(rng.randint(2, 3)):
+            start_s = round(rng.uniform(0.5, 40 * dt_s - 1.0), 4)
+            length_s = round(rng.choice([rng.uniform(0, 2 * edge_s), rng.uniform(0, 1.0)]), 4)
+            windows.append(Window(start_s, start_s + length_s))
+        return [(curve, windows)], rng.choice([0.0, 0.0005, 0.01]), edge_s, 0.0
+
+    def test_clamp_position_is_the_midpoint_to_the_last_bit(self) -> None:
+        """L9-ENV-4 survivors M01/M02 (clamp to the shifted start or end).
+
+        In exact arithmetic any point of the inverted corner window gives the
+        same envelope (a zero-length window contributes 0 J and adds no kink);
+        in floating point the extra breakpoints differ, and on these searched
+        cases only the midpoint reproduces e1b3a0510 bit for bit.
+        """
+
+        for seed in (1618, 1760, 2352, 2353):
+            with self.subTest(seed=seed):
+                args = self._ulp_case(seed)
+                analysis = _clamped_corner_composed_anchor_shift_envelope(*args)
+                self.assertIsNone(reduce_module._corner_composed_anchor_shift_envelope(*args))
+                self.assertIsNotNone(analysis)
+                self.assertEqual(json.dumps(analysis),
+                                 json.dumps(oracle_module()._corner_composed_anchor_shift_envelope(*args)))
+
+    def test_input_window_inverted_at_zero_shift_is_refused(self) -> None:
+        """L9-ENV-5 O-F5: outside the ruling, so None as at origin/main."""
+
+        curve = interval_curve([(-1.0, 10.0, 10.0)])
+        cases = (
+            [(curve, [Window(5.1, 5.0)])],
+            [(curve, [Window(0.5, 0.6), Window(0.81, 0.8)])],
+            [(curve, [Window(0.5, 0.6)]), (curve, [Window(2.0, 2.0 - 1e-9)])],
+        )
+        env4 = whole_window_at(ENV4_COMMIT)
+        for contributions in cases:
+            with self.subTest(windows=[[(w.start_s, w.end_s) for w in ws] for _c, ws in contributions]):
+                self.assertIsNone(_clamped_corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+                self.assertIsNone(reduce_module._corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+                # Counterfactual: e1b3a0510 and L9-ENV-4 define an envelope.
+                self.assertIsNotNone(
+                    oracle_module()._corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+                self.assertIsNotNone(
+                    env4._clamped_corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+        # A zero-length input window is not inverted and still clamps.
+        self.assertIsNotNone(_clamped_corner_composed_anchor_shift_envelope(
+            [(curve, [Window(5.0, 5.0)])], 0.0, 0.1, 0.0))
+
     def test_other_none_guards_are_unchanged(self) -> None:
         curve = interval_curve([(-1.0, 2.0, 10.0)])
         cases = [
@@ -380,6 +527,66 @@ def _phase_durations(summary: dict) -> dict[str, float]:
         phase: record["windows"][0]["window_duration_s"]
         for phase, record in summary["window_evidence_precheck"]["phase"].items()
     }
+
+
+def run_session(test: unittest.TestCase, root: Path, *, bundle: Path, minted: dict, minted_bound: float,
+                operative_bound: float, rederive, analysis_clamp: bool | None = None,
+                module=whole_window):
+    """Prepare a one-member max-bracket session whose re-derivation runs on ``bundle``.
+
+    ``analysis_clamp=None`` constructs the session without the keyword (the
+    default; also how ``module`` = origin/main's whole_window.py is built).
+    The re-derivation the session must reach is replaced by ``rederive`` on
+    the real bundle; without the flag, reaching the clamp fails the test.
+    """
+
+    from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+    from tests.test_whole_window_selection import MaxBracketConsumptionTests
+
+    member = root / "member"
+    member.mkdir(parents=True, exist_ok=True)
+    (member / "summary_metrics.json").write_text(json.dumps(minted) + "\n", encoding="utf-8")
+    (member / "metadata.json").write_text(json.dumps({
+        "instrument_calibration": {"verified_effective_b_fiducial_s": minted_bound},
+        "uncertainty_evidence": {"clock_anchor": {"method": CLOCK_METHOD_V3}},
+    }) + "\n", encoding="utf-8")
+
+    def on_real_bundle(_path, **kwargs):
+        return rederive(bundle, **kwargs)
+
+    def unexpected(*_args, **_kwargs):
+        raise AssertionError("the session reached the wrong re-derivation")
+
+    reached = (
+        "_rederive_operative_summary" if analysis_clamp
+        else "_rederive_summary_for_authenticated_fiducial_bound"
+    )
+    # The clamp must stay unreached by a default session (origin/main has no
+    # such function; ``create`` lets the guard stand there too).
+    guard = (contextlib.nullcontext() if analysis_clamp else
+             patch.object(module, "_rederive_operative_summary", side_effect=unexpected, create=True))
+    # A shadow module (origin/main's file) sees the same synthetic calibration
+    # defaults that _install_synthetic_calibration_defaults put on whole_window.
+    defaults = contextlib.ExitStack()
+    if module is not whole_window:
+        for name in ("load_calibration_acceptance_bound", "load_calibration_ledger_snapshot"):
+            defaults.enter_context(patch.object(module, name, getattr(whole_window, name)))
+    with (
+        defaults,
+        guard,
+        patch.object(module, "calibration_bracket_for_bundles",
+                     return_value=(MaxBracketConsumptionTests._bracket(operative_bound), ())),
+        patch.object(module, "_current_strict_summary", return_value=True),
+        patch.object(module, "_verify_instrument_calibration", return_value=(minted_bound, None)),
+        patch.object(module, "_classify_precheck_refusals", return_value=(set(), {})),
+        patch.object(module, reached, side_effect=on_real_bundle) as call,
+    ):
+        session = module.AuthenticatedConsumptionSession(
+            root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}))
+        session._prepare(bundle_paths={"member": member},
+                         policy=SimpleNamespace(calibration_bracketing=object()))
+    test.assertEqual(call.call_args.kwargs["authenticated_fiducial_bound_s"], operative_bound)
+    return session
 
 
 class PermanentWideningCaseTests(unittest.TestCase):
@@ -426,38 +633,10 @@ class PermanentWideningCaseTests(unittest.TestCase):
                          whole_window._classify_precheck_refusals(new)[0])
         return old, new, oracle
 
-    def _session(self, name: str, minted: dict, operative_bound: float, rederive):
-        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
-        from tests.test_whole_window_selection import MaxBracketConsumptionTests
-
-        root = self.root / name
-        member = root / "member"
-        member.mkdir(parents=True, exist_ok=True)
-        (member / "summary_metrics.json").write_text(json.dumps(minted) + "\n", encoding="utf-8")
-        (member / "metadata.json").write_text(json.dumps({
-            "instrument_calibration": {"verified_effective_b_fiducial_s": self.minted_bound},
-            "uncertainty_evidence": {"clock_anchor": {"method": CLOCK_METHOD_V3}},
-        }) + "\n", encoding="utf-8")
-        session = AuthenticatedConsumptionSession(root, {"member"})
-        bundle = self.bundle
-
-        def on_real_bundle(_path, **kwargs):
-            return rederive(bundle, **kwargs)
-
-        with (
-            patch("joulewise.whole_window.calibration_bracket_for_bundles",
-                  return_value=(MaxBracketConsumptionTests._bracket(operative_bound), ())),
-            patch("joulewise.whole_window._current_strict_summary", return_value=True),
-            patch("joulewise.whole_window._verify_instrument_calibration",
-                  return_value=(self.minted_bound, None)),
-            patch("joulewise.whole_window._classify_precheck_refusals", return_value=(set(), {})),
-            patch("joulewise.whole_window._rederive_operative_summary",
-                  side_effect=on_real_bundle) as call,
-        ):
-            session._prepare(bundle_paths={"member": member},
-                             policy=SimpleNamespace(calibration_bracketing=object()))
-        self.assertEqual(call.call_args.kwargs["authenticated_fiducial_bound_s"], operative_bound)
-        return session
+    def _session(self, name: str, minted: dict, operative_bound: float, rederive, **kwargs):
+        return run_session(self, self.root / name, bundle=self.bundle, minted=minted,
+                           minted_bound=self.minted_bound, operative_bound=operative_bound,
+                           rederive=rederive, **kwargs)
 
     def test_short_prefill_under_dominating_bound(self) -> None:
         just_under, _over = self._bounds()
@@ -490,7 +669,8 @@ class PermanentWideningCaseTests(unittest.TestCase):
             - set(new["window_evidence_precheck"]["phase"]["prefill"]["reasons"]),
             {UNRECORDED})
 
-        session = self._session("new", self.minted, just_under, _rederive_operative_summary)
+        session = self._session("new", self.minted, just_under, _rederive_operative_summary,
+                                analysis_clamp=True)
         self.assertTrue(session.ready, session.refusal_reasons)
         operative = session.provenance_for("member")["operative_envelopes"][PREFILL]
         self.assertEqual(operative["lower_j"], 0.0)
@@ -502,12 +682,12 @@ class PermanentWideningCaseTests(unittest.TestCase):
         self.assertEqual(new["energy_anchor_shift_envelopes"][PREFILL],
                          old["energy_anchor_shift_envelopes"][PREFILL])
         self.assertEqual(new, oracle)
-        for name, rederive in (
-            ("over-old", reduce_module._rederive_summary_for_authenticated_fiducial_bound),
-            ("over-new", _rederive_operative_summary),
+        for name, rederive, flag in (
+            ("over-old", reduce_module._rederive_summary_for_authenticated_fiducial_bound, None),
+            ("over-new", _rederive_operative_summary, True),
         ):
             with self.subTest(case=name):
-                session = self._session(name, self.minted, just_over, rederive)
+                session = self._session(name, self.minted, just_over, rederive, analysis_clamp=flag)
                 self.assertTrue(session.ready, session.refusal_reasons)
 
     def test_bounds_sweep_equals_oracle(self) -> None:
@@ -523,25 +703,29 @@ class PermanentWideningCaseTests(unittest.TestCase):
                 self.assertEqual(excluded, [])
                 self.assertEqual(json.dumps(new), json.dumps(expected))
 
-    def test_key_position_when_reduce_recorded_no_envelope_map(self) -> None:
-        """L9-ENV-4 F2: the map is inserted at its SummaryMetrics position."""
+    def test_no_reproduced_member_envelope_is_not_clamped(self) -> None:
+        """L9-ENV-5 O-F3: with no recorded member envelope reproduced, no clamp.
+
+        At 3x the critical bound every member inverts and reduce records no
+        envelope map, so nothing proves the mirror on this bundle.
+        """
 
         just_under, just_over = self._bounds()
         bound_s = (just_under + just_over) / 2.0 * 3.0
+        kwargs = dict(authenticated_fiducial_bound_s=bound_s,
+                      instrument_calibration_physics_cache=self._cache)
         old, new, oracle = self._rederive(bound_s)
         self.assertNotIn("energy_anchor_shift_envelopes", old)
-        self.assertEqual(list(new["energy_anchor_shift_envelopes"]), ["/phase_energy_j/decode"])
-        self.assertEqual(list(new), list(oracle))
-        self.assertEqual(json.dumps(new), json.dumps(oracle))
-        keys = list(new)
-        self.assertEqual(keys[keys.index("energy_anchor_shift_envelopes") + 1], "window_evidence_precheck")
-        # Counterfactual at 3e4d359c2: dict-equal, key appended last.
-        base = seat_base_whole_window()._clamp_inverted_operative_envelopes(
-            self.bundle, old, authenticated_fiducial_bound_s=bound_s,
-            instrument_calibration_physics_cache=self._cache)
-        self.assertEqual(base, oracle)
-        self.assertEqual(list(base)[-1], "energy_anchor_shift_envelopes")
-        self.assertNotEqual(json.dumps(base), json.dumps(oracle))
+        self.assertEqual(json.dumps(new), json.dumps(old))
+        self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, old, **kwargs), old)
+        self.assertIn("/phase_energy_j/decode", oracle["energy_anchor_shift_envelopes"])
+        # Counterfactual at L9-ENV-4: decode was clamped from an unproven mirror.
+        env4 = whole_window_at(ENV4_COMMIT)._clamp_inverted_operative_envelopes(self.bundle, old, **kwargs)
+        self.assertEqual(list(env4["energy_anchor_shift_envelopes"]), ["/phase_energy_j/decode"])
+        # An empty recorded map is the same case.
+        empty = json.loads(json.dumps(old))
+        empty["energy_anchor_shift_envelopes"] = {}
+        self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, empty, **kwargs), empty)
 
     def _with_long_prefill(self, module, bound_s: float):
         """Mirror whose prefill row is the reviewer's [short, long] phase.
@@ -635,7 +819,7 @@ class PermanentWideningCaseTests(unittest.TestCase):
                 summary = json.loads(json.dumps(new))
                 summary["energy_anchor_shift_envelopes"].pop(pointer)
                 session = self._session("missing" + pointer.replace("/", "_"), self.minted, just_under,
-                                        lambda _path, **_kwargs: summary)
+                                        lambda _path, **_kwargs: summary, analysis_clamp=True)
                 self.assertFalse(session.ready)
                 self.assertEqual(session.refusal_reasons, ('anchor_energy_envelope_unrecorded',))
 
@@ -677,6 +861,72 @@ class PermanentWideningCaseTests(unittest.TestCase):
         # Positive control: the same summary unmodified does clamp prefill.
         self.assertIn(PREFILL, _clamp_inverted_operative_envelopes(
             self.bundle, old, **kwargs)["energy_anchor_shift_envelopes"])
+
+
+    def test_tail_refusal_context_adds_envelopes_without_restamping(self) -> None:
+        """Reviewer K4 / mutant M12: reduce stamps no envelope gate reasons on
+        ``post_window_trace_tail_shorter_than_anchor_bound``, so neither may the clamp."""
+
+        just_under, _over = self._bounds()
+        kwargs = dict(authenticated_fiducial_bound_s=just_under,
+                      instrument_calibration_physics_cache=self._cache)
+        old, new, _oracle = self._rederive(just_under)
+        real = whole_window._derive_anchor_context
+
+        def tail(*args, **kw):
+            return dataclasses.replace(
+                real(*args, **kw), detail="post_window_trace_tail_shorter_than_anchor_bound")
+
+        with patch.object(whole_window, "_derive_anchor_context", side_effect=tail):
+            out = _clamp_inverted_operative_envelopes(self.bundle, old, **kwargs)
+        self.assertIsNot(out, old)
+        self.assertEqual(out["energy_anchor_shift_envelopes"], new["energy_anchor_shift_envelopes"])
+        self.assertIn(PREFILL, out["energy_anchor_shift_envelopes"])
+        self.assertEqual(out["window_evidence_precheck"], old["window_evidence_precheck"])
+        self.assertNotEqual(new["window_evidence_precheck"], old["window_evidence_precheck"])
+
+    def test_unknown_recorded_member_pointer_fails_closed(self) -> None:
+        """Reviewer K4 / mutant M14: an unknown recorded /phase_energy_j/* pointer."""
+
+        for bound_s in (self.minted_bound * 1.5, *self._bounds()):
+            with self.subTest(bound=bound_s):
+                kwargs = dict(authenticated_fiducial_bound_s=bound_s,
+                              instrument_calibration_physics_cache=self._cache)
+                old, _new, _oracle = self._rederive(bound_s)
+                tampered = json.loads(json.dumps(old))
+                envelopes = tampered["energy_anchor_shift_envelopes"]
+                envelopes["/phase_energy_j/zz_unknown"] = dict(envelopes["/gross_energy_j"])
+                self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, tampered, **kwargs), tampered)
+
+
+class RestampGateTests(unittest.TestCase):
+    """Reviewer K2 (mutants M06/M11): ``_restamp_clamped_gate`` invariants."""
+
+    def test_restamp_replaces_only_the_unrecorded_stamp(self) -> None:
+        gate = {"eligible": False, "reasons": [UNRECORDED, "negative_power_sample"],
+                "windows": [{"eligible": False, "reasons": [UNRECORDED, "negative_power_sample"]}]}
+        self.assertTrue(whole_window._restamp_clamped_gate(gate, [EXCEEDS]))
+        expected = [EXCEEDS, "negative_power_sample"]
+        self.assertEqual(gate, {"eligible": False, "reasons": expected,
+                                "windows": [{"eligible": False, "reasons": expected}]})
+
+    def test_restamp_refuses_gate_without_the_stamp(self) -> None:
+        gate = {"eligible": False, "reasons": ["clock_bound_exceeds_quarter_window"]}
+        self.assertFalse(whole_window._restamp_clamped_gate(gate, [EXCEEDS]))
+        self.assertEqual(gate, {"eligible": False, "reasons": ["clock_bound_exceeds_quarter_window"]})
+
+    def test_restamp_refuses_an_eligible_gate(self) -> None:
+        gate = {"eligible": True, "reasons": [UNRECORDED]}
+        self.assertFalse(whole_window._restamp_clamped_gate(gate, [EXCEEDS]))
+        self.assertEqual(gate, {"eligible": True, "reasons": [UNRECORDED]})
+
+    def test_restamp_never_loosens_eligibility(self) -> None:
+        gate = {"eligible": False, "reasons": [UNRECORDED]}
+        whole_window._restamp_clamped_gate(gate, [])
+        self.assertIs(gate["eligible"], False)
+        gate = {"eligible": False, "reasons": [UNRECORDED]}
+        self.assertTrue(whole_window._restamp_clamped_gate(gate, [EXCEEDS]))
+        self.assertEqual(gate, {"eligible": False, "reasons": [EXCEEDS]})
 
 
 class AxiV062ClampTests(unittest.TestCase):
@@ -788,6 +1038,51 @@ class AxiV062ClampTests(unittest.TestCase):
         self.assertEqual(rows, expected)
         self.assertNotEqual(shifted("src-a"), reduce_module._shift_curve(raw, shift_s))
 
+    def test_fake_reader_differential_against_reduce_v060_grouping(self) -> None:
+        """Reviewer K3 (mutants M09/M11/M17): two sources, three requests each,
+        a negative-offset tokenize phase, and a nonzero anchor shift; the rows
+        are rebuilt independently from ``reduce._reduce_v060``'s grouping."""
+
+        rng = random.Random(3)
+        raw = {
+            source: [TracePoint(t=100.0 + i * 0.05, power_w=rng.uniform(1, 9),
+                                support_start_s=100.0 + i * 0.05, support_end_s=100.05 + i * 0.05)
+                     for i in range(400)]
+            for source in ("meter-b", "meter-a")
+        }
+        request_windows = {}
+        for source in ("meter-a", "meter-b"):
+            for request_id in ("r2", "r1", "r3"):
+                for phase, (offset_s, duration_s) in {
+                    "prefill": (0.0, 0.1), "decode": (0.12, 1.0), "tokenize": (-0.01, 0.0005),
+                }.items():
+                    base_s = 105.0 + int(request_id[1]) * 0.6 + (0.3 if source == "meter-b" else 0.0)
+                    request_windows[(source, request_id, phase, 0)] = Window(
+                        base_s + offset_s, base_s + offset_s + duration_s)
+        reader = SimpleNamespace(
+            summed_curve=lambda: raw["meter-a"],
+            source_curve=lambda source: raw[source],
+            request_phase_windows=lambda: dict(request_windows),
+        )
+        shift_s = 0.0123
+        anchor = reduce_module._shift_curve(reader.summed_curve(), shift_s)
+        rows = whole_window._group_envelope_contributions(
+            reader, reduce_module.AXI_REDUCER_VERSION, anchor)
+        grouped: dict[str, dict[str, list[Window]]] = {}
+        for (source, _request, phase, _ordinal), window in request_windows.items():
+            grouped.setdefault(phase, {}).setdefault(source, []).append(window)
+        expected = [
+            ("/phase_energy_j/" + phase, [
+                (reduce_module._shift_curve(raw[source], shift_s),
+                 reduce_module._union_windows(grouped[phase][source]))
+                for source in sorted(grouped[phase])
+            ])
+            for phase in sorted(grouped)
+        ]
+        self.assertEqual(rows, expected)
+        # The shift is applied in the anchor's direction (M09/M11 flip it).
+        self.assertEqual(rows[0][1][0][0][0].t, raw["meter-a"][0].t + shift_s)
+
     def test_short_prefill_clamps_and_bounds_sweep_equals_oracle(self) -> None:
         critical_s = self._critical()
         clamped_at = []
@@ -808,7 +1103,12 @@ class AxiV062ClampTests(unittest.TestCase):
                 if PREFILL in added:
                     clamped_at.append(bound_s)
                     self.assertEqual(new["energy_anchor_shift_envelopes"][PREFILL]["lower_j"], 0.0)
-        self.assertEqual(clamped_at, [critical_s + 0.002, critical_s * 1.5, critical_s * 3.0])
+                if bound_s == critical_s * 3.0:
+                    # L9-ENV-5 O-F3: decode inverts too, nothing is recorded,
+                    # so the 0.6.2 mirror is unproven and nothing is clamped.
+                    self.assertEqual(json.dumps(new), json.dumps(old))
+                    self.assertIn(PREFILL, oracle["energy_anchor_shift_envelopes"])
+        self.assertEqual(clamped_at, [critical_s + 0.002, critical_s * 1.5])
 
 
 class FreezeProofTests(unittest.TestCase):

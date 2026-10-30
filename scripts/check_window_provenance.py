@@ -1052,6 +1052,7 @@ def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) 
             mode="read_replay",
             consumption_semantics_id=str(semantics_id),
             calibration_ledger_snapshot=snapshot,
+            analysis_clamp=True,
         )
         session._prepare(
             bundle_paths={bundle_id: runs_root / bundle_id for bundle_id in window_ids},

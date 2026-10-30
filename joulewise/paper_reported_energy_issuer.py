@@ -145,7 +145,8 @@ def project_pack(spec, kept_units: KeptUnits, *, context: ArchiveContext | None,
                for unit in units for run in unit.run_ids}
         session = AuthenticatedConsumptionSession(Path(runs_root), ids, mode='issuing',
             evaluation_basis_sha256=evaluation_basis_sha256,
-            consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID, archive_context=context)
+            consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID, archive_context=context,
+            analysis_clamp=True)
         allowance_result = whole_window_drift_allowances(Path(runs_root), ids, consumption_session=session,
             evaluation_basis_sha256=evaluation_basis_sha256,
             consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,

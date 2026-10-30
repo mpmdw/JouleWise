@@ -960,8 +960,9 @@ def _clamped_corner_composed_anchor_shift_envelope(
     so non-inverting inputs are reduce's bytes by construction.  Otherwise this
     is reduce's ``_corner_composed_anchor_shift_envelope`` with only the
     inversion branch changed; every other ``None`` guard is kept verbatim.
-    Only the consumption session's re-derivation calls it: collection mints
-    and the mint precheck keep reduce's function unchanged.
+    Only the re-derivation of a consumption session constructed with
+    ``analysis_clamp=True`` calls it (L9-ENV-5): collection mints, the mint
+    precheck and default sessions keep reduce's function unchanged.
     """
 
     minted = _corner_composed_anchor_shift_envelope(
@@ -986,6 +987,9 @@ def _clamped_corner_composed_anchor_shift_envelope(
             not curve
             or not windows
             or any(point.power_w < 0.0 for point in curve)
+            # L9-ENV-5 (O-F5): an input window already inverted at zero
+            # shift is outside the ruling, which clamps corners only.
+            or any(window.end_s < window.start_s for window in windows)
             for curve, windows in contributions
         )
     ):
@@ -1213,8 +1217,8 @@ def _clamp_inverted_operative_envelopes(
     the clamp never makes a member eligible.  Gross-family pointers are never
     clamped here (NEEDS_RULING in .codex-report/L9-ENV-3.md).  Any doubt,
     including a reconstruction that does not reproduce a recorded envelope
-    exactly, returns ``summary`` unchanged, i.e. reduce's fail-closed
-    behaviour.
+    exactly or a bundle where no recorded member envelope was reproduced at
+    all, returns ``summary`` unchanged, i.e. reduce's fail-closed behaviour.
     """
 
     reducer_version = _summary_reducer_version(summary)
@@ -1254,6 +1258,7 @@ def _clamp_inverted_operative_envelopes(
             anchor_ctx.edge_span_s,
         )
         clamped: dict[str, dict[str, float | str]] = {}
+        reproduced = 0
         for pointer, contributions in rows:
             recorded = envelopes.get(pointer)
             if recorded is not None:
@@ -1261,6 +1266,7 @@ def _clamp_inverted_operative_envelopes(
                     contributions, *bounds
                 ) != recorded:
                     return summary
+                reproduced += 1
                 continue
             envelope = _clamped_corner_composed_anchor_shift_envelope(
                 contributions, *bounds
@@ -1276,6 +1282,10 @@ def _clamp_inverted_operative_envelopes(
         ValueError,
         OverflowError,
     ):
+        return summary
+    if not reproduced:
+        # L9-ENV-5 (O-F3): with no recorded member envelope reproduced the
+        # mirror is unproven for this bundle, so nothing is clamped.
         return summary
     joint_bound_j = (summary.get("energy_bound_terms_j") or {}).get(
         "E_interpolation_joint_edge_bound_j"
@@ -1318,25 +1328,9 @@ def _clamp_inverted_operative_envelopes(
             ordered[pointer] = recorded[pointer]
         elif pointer in clamped:
             ordered[pointer] = clamped[pointer]
-    if "energy_anchor_shift_envelopes" in operative:
-        operative["energy_anchor_shift_envelopes"] = ordered
-    else:
-        # SummaryMetrics omits an unset map; insert the key at its field
-        # position so the JSON bytes equal a mint that recorded it (L9-ENV-4 F2).
-        # Local import: the lane's write scope is these clamp functions only.
-        from dataclasses import fields
-
-        from joulewise.schemas import SummaryMetrics
-
-        names = [item.name for item in fields(SummaryMetrics)]
-        later = set(names[names.index("energy_anchor_shift_envelopes") + 1:])
-        rebuilt: dict[str, Any] = {}
-        for key, value in operative.items():
-            if key in later and "energy_anchor_shift_envelopes" not in rebuilt:
-                rebuilt["energy_anchor_shift_envelopes"] = ordered
-            rebuilt[key] = value
-        rebuilt.setdefault("energy_anchor_shift_envelopes", ordered)
-        operative = rebuilt
+    # A reproduced recorded envelope (O-F3) means reduce recorded the map, so
+    # the key already sits at its SummaryMetrics position (L9-ENV-4 F2).
+    operative["energy_anchor_shift_envelopes"] = ordered
     if (
         anchor_ctx.detail == "post_window_trace_tail_shorter_than_anchor_bound"
     ):
@@ -1371,7 +1365,9 @@ def _rederive_operative_summary(
     """The consumption session's analysis-side operative re-derivation.
 
     Reduce's in-memory re-derivation (unchanged mint code) followed by the
-    analysis-only inverted-corner clamp.  Nothing is persisted.
+    analysis-only inverted-corner clamp.  Used only by sessions constructed
+    with ``analysis_clamp=True``; the default session calls reduce's
+    re-derivation directly, exactly as at origin/main.
     """
 
     summary = _rederive_summary_for_authenticated_fiducial_bound(
@@ -1411,6 +1407,7 @@ class AuthenticatedConsumptionSession:
         calibration_bracket_binding: Mapping[str, Any] | None = None,
         _allow_unissued_calibration_fixture: bool = False,
         archive_context: ArchiveContext | None = None,
+        analysis_clamp: bool = False,
     ) -> None:
         if consumption_semantics_id not in {
             MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -1424,6 +1421,9 @@ class AuthenticatedConsumptionSession:
         if archive_context is not None and consumption_semantics_id != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
             raise ValueError("archive context requires maximum-bracket consumption semantics")
         self.mode = mode
+        # L9-ENV-5 (O-F1): the inverted-corner clamp is opt-in for analysis
+        # consumers; the default is origin/main's unclamped re-derivation.
+        self.analysis_clamp = analysis_clamp is True
         self._archive_context = archive_context
         self.sensitivity_bound_s = archive_context.sensitivity_bound_s if archive_context is not None else None
         self._archive_context_changed = False
@@ -1745,6 +1745,7 @@ class AuthenticatedConsumptionSession:
                 calibration_bracket_binding=self.calibration_bracket_binding,
                 _allow_unissued_calibration_fixture=self._allow_unissued_calibration_fixture,
                 archive_context=replace(self.archive_context, removed_bundle_ids=frozenset()),
+                analysis_clamp=self.analysis_clamp,
             )
             try:
                 member._prepare(bundle_paths={bundle_id: path}, policy=policy)
@@ -1849,6 +1850,11 @@ class AuthenticatedConsumptionSession:
             str,
             dict[tuple[str, ...], tuple[str, ...]],
         ] = {}
+        rederive = (
+            _rederive_operative_summary
+            if self.analysis_clamp
+            else _rederive_summary_for_authenticated_fiducial_bound
+        )
         for (
             bundle_id,
             path,
@@ -1861,7 +1867,7 @@ class AuthenticatedConsumptionSession:
             if dominated:
                 try:
                     operative_summary = (
-                        _rederive_operative_summary(
+                        rederive(
                             path,
                             authenticated_fiducial_bound_s=operative_bound,
                             _instrument_calibration_physics_cache=physics_cache_for(

@@ -114,7 +114,7 @@ def _normalized_for_one_unit(setup,archive,view,context,cid,strict_validator):
     ids={run for units in kept.cell.kept.values() for unit in units for run in unit.run_ids}
     session=issuer.AuthenticatedConsumptionSession(view.window.claim_runs_root,ids,mode="issuing",
         evaluation_basis_sha256=setup["row"]["evaluation_basis"]["sha256"],
-        consumption_semantics_id=issuer.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,archive_context=context)
+        consumption_semantics_id=issuer.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,archive_context=context,analysis_clamp=True)
     allowance=issuer.whole_window_drift_allowances(view.window.claim_runs_root,ids,consumption_session=session,
         evaluation_basis_sha256=setup["row"]["evaluation_basis"]["sha256"],
         consumption_semantics_id=issuer.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,

@@ -2027,7 +2027,8 @@ def bind_floor_artifact_evidence(
             raise AnalysisInputError("floor_artifact_invalid: removed floor member")
         basis = next(iter(bases)) if len(bases) == 1 else None
         session = AuthenticatedConsumptionSession(root, member_ids, mode=mode,
-            evaluation_basis_sha256=basis, calibration_ledger_snapshot=archive_snapshot(context), archive_context=context)
+            evaluation_basis_sha256=basis, calibration_ledger_snapshot=archive_snapshot(context), archive_context=context,
+            analysis_clamp=True)
         reasons = whole_window_refusal_reasons(root, member_ids, consumption_session=session,
                                              **({"evaluation_basis_sha256": basis} if basis is not None else {}))
         if reasons:
@@ -2131,6 +2132,7 @@ def bind_floor_artifact_evidence(
                             if str(root.resolve()) in (archive_contexts or {}) else calibration_ledger_snapshot),
                         archive_context=(archive_contexts or {}).get(str(root.resolve())),
                         mode=mode,
+                        analysis_clamp=True,
                     )
                     reasons = whole_window_refusal_reasons(
                         root,
@@ -3801,6 +3803,7 @@ def load_analysis_inputs(
         effective_bundle_ids,
         mode=mode,
         **session_kwargs,
+        analysis_clamp=True,
     )
     whole_window_reasons = whole_window_refusal_reasons(
         runs_root,
