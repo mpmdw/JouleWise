@@ -2640,7 +2640,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         observed_modes: list[str] = []
 
         class FakeConsumptionSession:
-            def __init__(self, runs_root, bundle_ids, *, mode):
+            def __init__(self, runs_root, bundle_ids, *, mode, analysis_clamp):
                 observed_modes.append(mode)
                 self.runs_root = Path(runs_root)
                 self.bundle_ids = frozenset(bundle_ids)

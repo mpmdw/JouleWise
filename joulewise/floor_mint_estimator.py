@@ -487,8 +487,7 @@ def _authenticated_common_mode_session(
         calibration_ledger_snapshot=calibration_ledger_snapshot,
         calibration_bracket_binding=calibration_bracket_binding,
         **({"archive_context": producer_entry.archive_context} if producer_entry is not None else {}),
-        **({"analysis_clamp": True}
-           if "analysis_clamp" in inspect.signature(AuthenticatedConsumptionSession).parameters else {}),
+        analysis_clamp=True,
     )
     reasons = whole_window_refusal_reasons(
         Path(runs_root),
