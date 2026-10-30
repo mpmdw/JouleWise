@@ -69,3 +69,30 @@ Neither Mac run has an executable recipe today.
 - Y4: adapter 140 W from `bytes_pack_v1.md:176`. Disk `2*ceil(rate*10390)+4046531103 = 56,028,277,617` B from `sizing_b5.json` `/packs/bytes-s1-p1/disk_derivation`.
 - Y5: `tests.test_bytes_stream_test` 49 OK (894.6 s); new modules 12 OK; registries 28 OK.
 - Cold executing passes launched, blind to each other: Opus 5.5 `session_01JActAcJs7nY7T1hiBnqf4T` (JouleWise-data `claude/kb-cap-cold-opus`) and Fable 5.1 `session_01JActAaXwrUjxrXHGpzBuet` (`claude/kb-cap-cold-fable`). Briefs are in `~/night-archive/seats-4e748ac1/kb-cap-cold/`.
+
+## s1-p2 desk (about 13:20): BYTES collection complete
+- **r2-bytes-s1-p2 counts:** COLLECTED, acceptance ACCEPT, counting, no session-excluding reason, no structural defect. 125/125 planned runs succeeded (absolute 10+10, quads 40+40, NEG-8 18, references 3+1+3); `excluding` is empty (no member exclusions). NEG-8: corpus clean n 12, survivors start 3/3, mid 1/1, end 3/3, screen passed. Cells: `bytes-qwen3-4b-decode` and `bytes-qwen3-1p7b-decode` both 10/10 quads and 10/10 repeats. Member-hull line: 0 of 100 excluded, 0 undetermined. No unreviewed code, no model mismatch. Minutes: chain 324, harvest 92, desk 100.
+- All twelve sub-packs have a counting session; loop state DONE (round 2). `com.joulewise.b6loop` and its wake label stay loaded and idle.
+- Measurement line: pin-only `1aca17e27` (seq 540) after the desk; `records/bytes-pass2-heads` fast-forwarded `da20a8324` → `1aca17e27`; `2649fad54..1aca17e27` changes only the ledger head file. BYTES addendum §5 appended on this records branch.
+- Verdict email: Gmail `1a18e7d872dd7507` (thread `1a174cad9022cac9`). It also tells Ed the extension was dropped and how to overrule it. No pending notices, so no acknowledgement was written.
+
+## KB-V2 round 9 (seat stalled at 45 min on the client side, but finished: `559197821`) and the rule admitted
+- L1-L4 implemented: 127 tests OK; worked output bit-identical; both leaf walks give 62,046 cases with 0 crashes.
+- Lead re-execution at `559197821`: the fixture was rebuilt with opus-4's `e2e_nonneg.py` through `run_with_clock.py`, then Opus 5's `p8_major_cli.py` and `p8_grid.py` were run. Every inconsistent-receipt and inconsistent-scan shape, plus `knee found` with failed arm checks or with a reason, now ends UNDETERMINED with its reason and no interval. The baseline is unchanged (rails 0.06672 ± 0.00057 … share 0.3458 ± 0.0075). Logs are in `~/night-archive/seats-4e748ac1/kbv2-fix9/lead/`.
+- **Rule admitted** (pointer item 150 (1b): no MAJOR left). Status paragraph updated on `codex/2026-10-28-kb-v2` at `a3226e87f`.
+
+## BY-THERM-LINES round 5 (stalled client-side, finished: report `3ee2b83f3`, code `5a91ce575`)
+- X1-X12 implemented. Tests: `tests.test_bytes_thermal_lines` 45 OK (1132 s; within 1.5x of round 4); p2-thermal-window plus harvest 198 OK with 177-file byte identity. Matrices: consult 684/684 (baseline 237 failures), Opus 324/324, Sol 80/80 and 360/360. Real chain 44/44, with zero untrusted members and zero replay disagreements. Census: s2 and s5, both passes, source rows equal output rows. Pinned hashes unchanged.
+- Blind delta round launched: Opus 5.5 `session_01JActAbTbhJD2mA3d5qztYq` (JouleWise-data `claude/by-therm-lines-delta-opus-4`) and Sol high (Codex Cloud; `codex/2026-10-30-by-therm-lines-rev-sol-5`). Briefs are in `~/night-archive/seats-4e748ac1/by-therm-delta5/`.
+
+## KB-CAP-1 Opus cold pass (`claude/kb-cap-cold-opus` `e7acfcd2f`): ACCEPT_WITH_FIXES
+- The number path is correct. An independent recompute with no joulewise imports agrees on calls 0, 3 and 7 for every field (largest energy difference 2.9e-11 J against bars of 5.95e-4 to 2.78e-2 J). `meter_fields` matches pass-1 `meter_decode` in all 8 worlds wherever pass-1 accepts the call. The 7 s offset is not added twice. No refusal yields a smaller bound.
+- MINORs:
+  1. A truncated receipt or SCAN/STAGE JSON crashes harvest. A SIGTERM mid-write makes this reachable.
+  2. A non-object thermal-journal line crashes harvest.
+  3. Harvest follows symlinks out of the archive (hash only).
+  4. STAGE.json's specific failure reason is not carried into the diagnostics.
+  5. A native-capture failure drops `capture_stack`.
+  6. The 140 W adapter citation is wrong (it is §6 Battery assist, not §7/R5) and is not a nameplate.
+- NITs: SIGKILL grace is missing from the span (worst case about 150 s against 50 s of slack); a dead `started` flag; an incomplete battery tail nulls both edges; the archive copy step runs on even when the target exists.
+- Disposition waits for the Fable pass, so both reports go into one fix round.
