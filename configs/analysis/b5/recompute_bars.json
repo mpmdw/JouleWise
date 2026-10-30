@@ -1,0 +1,88 @@
+{
+ "schema": "joulewise.b5_comparator_bars.v1",
+ "bar_set": "b5_release_recompute_coded_7e322b76",
+ "source": "Block 5's release bar set (RUN_STATE item 83 ruling 1: the recompute's coded bars of commit 7e322b767 bind block 5's release; item 84: the meter line follows the registered parser definition). Equal to tests/independent_recompute/bar_sets/recompute_coded_7e322b76.json family by family, plus the whole-machine meter families meter_j, meter_w, machine_j, rho and window_edge_s under the same rule. Fixed before any real block-5 value is seen; not widened. Block 6's S-13 set stays in tests/independent_recompute/bar_sets/s13_block6.json.",
+ "rule": "bar = max(absolute, relative * |L9 value|, half a unit of printed_decimals when given)",
+ "families": {
+  "run_phase_energy_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative)"
+  },
+  "floor_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative)"
+  },
+  "floor_gate_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative)"
+  },
+  "dominance_ratio": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "dimensionless ratio of joules: 1e-6 relative, 1e-6 absolute near zero (same rule as joules, commit 7e322b767)"
+  },
+  "reported_cell_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative)"
+  },
+  "contrast_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative)"
+  },
+  "contrast_p": {
+   "relative": 0.0,
+   "absolute": 1e-06,
+   "derivation": "p values: 1e-6 absolute, no relative part (commit 7e322b767)"
+  },
+  "descriptive_ratio": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "dimensionless ratio of joules: 1e-6 relative, 1e-6 absolute near zero (same rule as joules, commit 7e322b767)"
+  },
+  "per_token_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative); joules per token"
+  },
+  "b_op_s": {
+   "relative": 1e-06,
+   "absolute": 0.0,
+   "derivation": "seconds: 1e-6 relative only, as coded in commit 7e322b767 (b_op is a positive duration, never near zero)"
+  },
+  "count": {
+   "relative": 0.0,
+   "absolute": 0.0,
+   "derivation": "counts and integer-ns window edges: exact (commit 7e322b767: counts and windows exact; one 50 Hz sample moves meter energy by more than the joule bar)"
+  },
+  "meter_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative); gross meter energy and meter delta over a member's request span"
+  },
+  "meter_w": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded watts: 1e-6 relative, 1e-6 W absolute near zero (commit 7e322b767: 'unrounded J or W 1e-6 relative'); meter baseline power"
+  },
+  "machine_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06,
+   "derivation": "unrounded joules: 1e-6 relative to the L9 value, 1e-6 J absolute near zero (recompute agreement policy, commit 7e322b767, audit F12); exceeds 1e6 x binary64 noise (2.2e-10 relative); dE_machine, dE_rail and the battery term of the whole-machine line"
+  },
+  "rho": {
+   "relative": 0.0,
+   "absolute": 1e-06,
+   "derivation": "rho = dE_rail / dE_machine: 1e-6 absolute, no relative part (commit 7e322b767: 1% of its four-decimal printed resolution, 1e-4)"
+  },
+  "window_edge_s": {
+   "relative": 0.0,
+   "absolute": 1e-06,
+   "derivation": "a legacy wall-placed meter window edge, in seconds: 1e-6 s absolute on the edge difference (commit 7e322b767: 'legacy wall placement instead compares the edge difference in seconds at the agreement policy's 1e-6 absolute near zero'); controller-stamp edges compare exactly as counts"
+  }
+ }
+}

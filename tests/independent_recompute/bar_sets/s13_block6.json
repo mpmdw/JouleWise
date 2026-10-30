@@ -1,0 +1,64 @@
+{
+ "schema": "joulewise.b5_comparator_bars.v1",
+ "bar_set": "s13_block6",
+ "source": "docs/registrations/block6_replication_DRAFT.md S-13 and section 12.3 item 4: 1 mJ per run phase energy; every printed quantity, compared unrounded, within half a unit of its last printed digit. Block 5's printed precision is not fixed (no block-5 results template; step 11 records results_rendering_not_run_no_block5_template). printed_decimals below are PLACEHOLDERS taken from the renderings in L9's own step-11 disclosure text on the full-size synthetic window (2026-10-28): J 5 decimals, se 6, R and the descriptive ratio 4, b_op and b_sens 6 (seconds), J per token 6, t* 3. p values and counts are not rendered there; p uses 4 and counts are integers. They must be replaced by the ruled precision. Not adopted for block 5: see NEEDS_RULING.",
+ "rule": "bar = max(absolute, relative * |L9 value|, half a unit of printed_decimals when given)",
+ "families": {
+  "run_phase_energy_j": {
+   "absolute": 0.001
+  },
+  "floor_j": {
+   "printed_decimals": 5,
+   "placeholder": true
+  },
+  "floor_gate_j": {
+   "printed_decimals": 5,
+   "placeholder": true
+  },
+  "dominance_ratio": {
+   "printed_decimals": 4,
+   "placeholder": true
+  },
+  "reported_cell_j": {
+   "printed_decimals": 5,
+   "placeholder": true
+  },
+  "contrast_j": {
+   "printed_decimals": 5,
+   "placeholder": true,
+   "keys": [
+    {
+     "match": ".*/(se|se_j)$",
+     "printed_decimals": 6,
+     "placeholder": true
+    }
+   ]
+  },
+  "contrast_p": {
+   "printed_decimals": 4,
+   "placeholder": true,
+   "keys": [
+    {
+     "match": ".*/(t_critical|t_star)$",
+     "printed_decimals": 3,
+     "placeholder": true
+    }
+   ]
+  },
+  "descriptive_ratio": {
+   "printed_decimals": 4,
+   "placeholder": true
+  },
+  "per_token_j": {
+   "printed_decimals": 6,
+   "placeholder": true
+  },
+  "b_op_s": {
+   "printed_decimals": 6,
+   "placeholder": true
+  },
+  "count": {
+   "printed_decimals": 0
+  }
+ }
+}

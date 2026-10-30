@@ -1,0 +1,52 @@
+{
+ "schema": "joulewise.b5_comparator_bars.v1",
+ "bar_set": "recompute_coded_7e322b76",
+ "source": "scripts/independent_recompute_b5.py header and commit 7e322b767 (audit F4, F12): unrounded J or W 1e-6 relative with 1e-6 absolute near zero; rho 1e-6 absolute; counts exact; b_op seconds relative only. Not adopted for any release: see NEEDS_RULING in .codex-report/RC-CMP-1.md.",
+ "rule": "bar = max(absolute, relative * |L9 value|, half a unit of printed_decimals when given)",
+ "families": {
+  "run_phase_energy_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "floor_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "floor_gate_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "dominance_ratio": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "reported_cell_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "contrast_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "contrast_p": {
+   "relative": 0.0,
+   "absolute": 1e-06
+  },
+  "descriptive_ratio": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "per_token_j": {
+   "relative": 1e-06,
+   "absolute": 1e-06
+  },
+  "b_op_s": {
+   "relative": 1e-06,
+   "absolute": 0.0
+  },
+  "count": {
+   "relative": 0.0,
+   "absolute": 0.0
+  }
+ }
+}

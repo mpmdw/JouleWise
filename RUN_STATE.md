@@ -579,6 +579,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (1b) KB-V2 round 8: read `.codex-report/KB-V2.md` "Round 8" on `codex/2026-10-28-kb-v2`, or `codex-cloud-run.mjs --attach 01a18a27-268d-7647-849e-13a0245e702c --out ~/night-archive/seats-<id>/kbv2-fix8`. Then blind delta reviews (Sol plus Opus; `~/night-archive/seats-1cc172c8/kbv2-delta6/` briefs are the template), then admit the rule or rule.
 (1c) BY-THERM-LINES: read both round-4 delta reviews. Both ACCEPT (or fixes only representational): the tool is admitted; the real pass-1 and pass-2 archives go through it before the pass-2 analysis. A finding in W1's class again goes to a consult, not a round 5.
 (1d) BYTES extension: read BY-EXT-2 (`.codex-report/BY-EXT-2.md` on `desk/2026-10-29-byext-slots`, or `--attach 01a18a2d-a745-71ce-822e-8de853f79026`). Then one blind executing review of its manifest change, then open a draft PR for CI. Mac steps 4-6 (headers, `kv`, the kit run) come after s1-p2's desk, with the loop held and no agent alive during the kit run; then steps 7-9 per BY-EXT-1 section 4. The extension is dropped first if time runs short (last t0 2026-11-05 00:00 PDT).
+(1e) Freeze by commit for block 6 and BYTES (added 2026-10-30 by interactive session 015ASG1T at the block-5 lead's request, corrected the same day; see item 146 for Ed's ruling): block 6 has finished collecting and BYTES is collecting. Neither registration file is edited. Instead, seat FBC-B6 (`lane/2026-10-30-fbc-b6-bytes`) writes the clerical addenda `docs/registrations/block6_freeze_by_commit_addendum.md` and `docs/registrations/bytes_freeze_by_commit_addendum.md`. They record collection commits, tree hashes, commit-scoped acceptance and environment facts (`docs/process/freeze_by_commit.md` F1, F4 and F6, on PR #606 until it merges). The block-5 lead pushes the `b6/` and `bytes/` tags. **Your part:** if you hold per-night commit records for block 6 or BYTES that are not in the repo (per-session collection commits, frozen-checkout heads, environment facts), append them to the matching addendum on that lane, or commit them under `docs/process_traces/` and name them in the addendum. Do this only between sessions, with the loop held or idle. Nothing here touches a number, an archive or a sealed file.
 
 124. **First end-to-end synthetic run with both L9 fixes; full-size comparator acceptance: every number agrees, four comparator-side over-refusals (reported by joulewise-28, 2026-10-30 02:13Z).**
 - Full-size synthetic L9 dry run at `0d2ff6404` (the code on main after PR #601), on the laptop through the JoinedHarness with durable custody: code 0, `completed_without_tooling_refusal` true, every step ok (0, 1, 2, 3, 3b, 4 alpha and beta, 5, 8, 6, 9, 9b, 10 alpha and beta, 11), 16,713 s.
@@ -800,6 +801,71 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - **L9-STEP4-4** (`trig_019CpPG9yiLtYEW7Rd5rtKZU`) fired on the same lane. It merges main first, so it picks up the G6 fixture fix from item 142.
 - **RC-CMP-11:** Opus ACCEPT (`c38b105d2`), Fable ACCEPT (`0322e4748`). Main was merged into the lane at `4fc643363`. **PR #604** is open, and joulewise-28 will merge it once CI is green.
 - **Trimming agent scope** is confirmed. It excludes `tests/b5_analysis/**` (including `fixtures_s5.py` and G6), every pinned and sealed file, and the coordination files.
+
+144. **Clamp decision for block 5: the analysis-only clamp (L9-ENV-3). The in-place `reduce.py` fix is parked for the next block boundary (reported by joulewise-28, 2026-10-30, about 06:05Z; Ed deferred to joulewise-28's recommendation in that session).**
+- **Block 5 uses L9-ENV-3**: the analysis-only clamp in `whole_window`, at `7ae587b89`. Two-family reviews follow once its report lands.
+- **Why not the in-place `reduce.py` fix:**
+  - Block 5's sealed registration (`registration_block5.md`, about lines 956 and 5661) names `calibration_acceptance_d079_v2_n24_25g83_r2` by sha, and the sealed inventory pins `reduce.py` at `7b9c0d28`.
+  - Changing `reduce.py` would therefore make block 5's own registered acceptance stale. That is `protocol_or_estimator_byte_change`, an R3 stop on every bracket.
+  - Reissuing the acceptance would also mean amending block 5's sealed registration and its identity chain.
+- **Queued follow-up for the next block boundary (block 6 / BYTES registration):**
+  - Coordinate with the collection lead.
+  - Land L9-ENV-2's 16-line `reduce.py` clamp (`e1b3a0510`) together with a science-neutral acceptance reissue that rotates only the `reduce.py` estimator pin.
+  - Use the new acceptance for the next registration.
+  - Once block 5 is released, delete the `whole_window` mirror (L9-ENV-3's ~440 lines).
+- **L9-ENV-2** (`lane/2026-10-30-l9-env-clamp`) is parked for that follow-up. It is not to be merged now.
+- **Orchestrator notes:**
+  - The ~440-line mirror duplicates estimator logic in analysis code. Its safety rests on the vendored oracle comparison (item 143), so the reviews should treat that test as the central check.
+  - The independent recompute needs the same clamp, or a registered comparator difference class, before release (items 140 and 142).
+  - Block-6 registration has to carry the acceptance reissue as an explicit dependency, so it is not rediscovered at sealing time.
+
+145. **Queued follow-up for the block boundary: one D-138 acceptance reissue that rotates the `reduce.py` estimator pin once (agreed by the block-5 lead and the orchestrator, 2026-10-30, about 06:10Z; refines item 144).**
+- **When:** at the next block boundary (block 6 / BYTES registration), coordinated with the collection lead.
+- **Scope:** a single D-138 transaction carrying both staged `reduce.py` changes:
+  - A178 (GATE-R2-COVERAGE-ULP-01): the one-ULP endpoint fix to `_anchor_coverage_ok`, staged since 2026-09-10 and already marked to ride a D-079 acceptance reissue.
+  - The L9-ENV-2 inverted-corner clamp: `e1b3a0510`, parked on `lane/2026-10-30-l9-env-clamp`.
+- **Testing:** both changes touch the anchor-envelope area, so the reissue's delta refuter tests them together, as clamp × coverage endpoint. That includes a window whose corner inverts and whose endpoint lies within one ULP.
+- **Acceptance:** the reissue is science-neutral, and the new acceptance is used for the next registration.
+- **After block 5 is released:** the same follow-up deletes the L9-ENV-3 `whole_window` mirror (about 440 lines).
+
+146. **Ed adopted "freeze blocks by commit, not on main" (reported by joulewise-28, 2026-10-30, about 06:20Z).**
+- The plan is `docs/process/freeze_by_commit.md`, on PR #606 (light tier, docs only). joulewise-28 will merge it once CI is green.
+- **Phase 0, now (additive only):** the annotated tag `b5/collection` is pushed at `c27485347` (H_claim, the head named in `sealed_inventory.json`). The orchestrator verified it on origin: the tag object is `dbf91f4ba` and it peels to `c27485347`. The tag `b5/analysis` is added at the merged commit that official attempt C runs on.
+- **Phase 1, immediately after the block-5 release:**
+  - Freeze tests check the tag's tree instead of main's bytes.
+  - The step-5 identity check becomes "HEAD is the registered analysis commit or a ruled descendant".
+  - Calibration acceptance becomes commit-scoped, landing with the D-138 reissue together with A178 and L9-ENV-2 (item 145).
+  - Line-number test pins are retired.
+- **Phase 2:** prune according to TRIM_REPORT.
+- **Queue:** both phases are registered as the kernel task `FREEZE-BY-COMMIT-01` (rank 346).
+- **Block 6 / BYTES ownership.** *Corrected 2026-10-30.* The first version of this item said BYTES was still in draft. That was wrong: it had confused the draft known-bytes reading rule with the BYTES registration itself. In fact **BYTES is collecting, and block 6 has finished collecting.**
+  - **Ed's ruling** (relayed verbatim by joulewise-28, 2026-10-30): "bytes is already collecting and block six is finished collecting - i think we can safely make the book keeping changes to block six, yeah it's technically against freezing but nothing we're doing touches any numbers, literally all clerical stuff on the repo".
+  - **Plan:** seat FBC-B6 (`trig_01CvoYc8x2cHXwe4fUgHMMWf`, `lane/2026-10-30-fbc-b6-bytes`) writes a clerical addendum next to each registration:
+    - `docs/registrations/block6_freeze_by_commit_addendum.md`;
+    - `docs/registrations/bytes_freeze_by_commit_addendum.md`.
+  - Each addendum records the collection commit(s), the tree hashes, the commit-scoped acceptance and the environment facts, with citations.
+  - The registered files are not edited, so their digests hold.
+  - joulewise-28 pushes the `b6/` and `bytes/` tags from the seat's list.
+  - The Mac collection lead appends any per-night commit records that are not already in the repo (step (1e) of the item-123 next-activation pointer).
+
+147. **PR #604 merged: the block-5 independent recompute and comparator, RC-CMP-1 to RC-CMP-11. PR #607, the CI docs-only fix, is open (reported by joulewise-28 on 2026-10-30; the orchestrator verified the merge and reviewed #607).**
+- **PR #604** is merged at merge commit `6d7aa6e2c`, under Ed's merge authorization in joulewise-28's session. The orchestrator verified on origin that it is an ancestor of main.
+  - After the reviewed head `f6a54deed`, the PR picked up two more commits: main merged in (`4fc643363`), and the reviewed reader-census manifest rows for the comparator (`ea17de53d`), which CI shard 4 had flagged as missing.
+  - CI is all green.
+- **PR #607** (`lane/2026-10-30-ci-docs-only`, head `4a1f3f89f`) changes `.github/workflows/ci.yml` and adds `scripts/ci_docs_only.sh` and `tests/test_ci_docs_only.py`. Gated jobs now always run, so the required `test (3.13, N)` contexts always report. Their real steps run only when `changes.outputs.code` is true, and code defaults to true.
+- **How the workflow commit was pushed:** the laptop's GitHub token lacks the workflow scope, so cloud seat CI-DOCS-1 (`trig_019Tz7KskMHBJVUmpYaGWojQ`) pushed it. joulewise-28 reports it as byte-identical to the file validated locally. **This is flagged for Ed:** an agent route was used to change a CI workflow file that the laptop's token is scoped not to touch. The change still goes through the PR and CI, and merges only under Ed's merge authorization. Ed may want to confirm that he is content for workflow edits to travel by cloud seat.
+- **Orchestrator review of #607** (read-only, executing nothing): **sound, and strictly tighter than before.**
+  - The classifier runs from the BASE commit (`git show $before:scripts/ci_docs_only.sh | bash`), so a PR cannot rewrite its own gate. While main lacks the script, the result is always code=true.
+  - It accepts only Markdown under `docs/` or at the root. Each path is also grepped in `joulewise`, `scripts`, `tests`, `configs`, `.github` and `pyproject.toml` at both ends of the range. Any hit, or any grep error, runs the full suite. `RUN_STATE.md` and `TASK_QUEUE.md` are named in `scripts/gen_state.py`, so they always run the full suite.
+  - A two-dot base..head diff on a stale branch shows main's newer files as changed, which also runs the full suite.
+  - If the `changes` job fails, the dependent jobs skip and the required contexts stay pending. They never pass.
+  - **Residual gap, pre-existing and not a regression:** a doc read by a directory glob, rather than by its literal path (for example a test that scans `docs/**`), is not caught by the grep. The old rule skipped every test for all docs-only ranges, so the new rule is strictly tighter.
+
+148. **Ed approved the route by which #607's workflow file was pushed; the glob gap is closed on #607 (reported by joulewise-28, 2026-10-30).**
+- **Ed's words**, relayed verbatim by joulewise-28 and given in that session: "of course you have my blessing, from this workflow thing to anything else that serves the goal of fast clean science".
+- **Recorded scope:** this approves the item 147 flag. The workflow commit for #607 may travel by cloud seat, and #607 merges on green as usual.
+- **Standing rules unchanged:** the safety constraints in CLAUDE.md and the blinding rules remain in force. A relayed blessing does not widen any session's permission settings.
+- **Glob gap fixed** on #607 at `01ad9e3c1`: paths under `docs/registrations`, `docs/contracts`, `docs/process_traces`, `null` and `site` now route to the full suite, with tests.
 
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
