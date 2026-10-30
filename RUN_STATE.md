@@ -848,6 +848,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - joulewise-28 pushes the `b6/` and `bytes/` tags from the seat's list.
   - The Mac collection lead appends any per-night commit records that are not already in the repo (step (1e) of the item-123 next-activation pointer).
 
+147. **PR #604 merged: the block-5 independent recompute and comparator, RC-CMP-1 to RC-CMP-11. PR #607, the CI docs-only fix, is open (reported by joulewise-28 on 2026-10-30; the orchestrator verified the merge and reviewed #607).**
+- **PR #604** is merged at merge commit `6d7aa6e2c`, under Ed's merge authorization in joulewise-28's session. The orchestrator verified on origin that it is an ancestor of main.
+  - After the reviewed head `f6a54deed`, the PR picked up two more commits: main merged in (`4fc643363`), and the reviewed reader-census manifest rows for the comparator (`ea17de53d`), which CI shard 4 had flagged as missing.
+  - CI is all green.
+- **PR #607** (`lane/2026-10-30-ci-docs-only`, head `4a1f3f89f`) changes `.github/workflows/ci.yml` and adds `scripts/ci_docs_only.sh` and `tests/test_ci_docs_only.py`. Gated jobs now always run, so the required `test (3.13, N)` contexts always report. Their real steps run only when `changes.outputs.code` is true, and code defaults to true.
+- **How the workflow commit was pushed:** the laptop's GitHub token lacks the workflow scope, so cloud seat CI-DOCS-1 (`trig_019Tz7KskMHBJVUmpYaGWojQ`) pushed it. joulewise-28 reports it as byte-identical to the file validated locally. **This is flagged for Ed:** an agent route was used to change a CI workflow file that the laptop's token is scoped not to touch. The change still goes through the PR and CI, and merges only under Ed's merge authorization. Ed may want to confirm that he is content for workflow edits to travel by cloud seat.
+- **Orchestrator review of #607** (read-only, executing nothing): **sound, and strictly tighter than before.**
+  - The classifier runs from the BASE commit (`git show $before:scripts/ci_docs_only.sh | bash`), so a PR cannot rewrite its own gate. While main lacks the script, the result is always code=true.
+  - It accepts only Markdown under `docs/` or at the root. Each path is also grepped in `joulewise`, `scripts`, `tests`, `configs`, `.github` and `pyproject.toml` at both ends of the range. Any hit, or any grep error, runs the full suite. `RUN_STATE.md` and `TASK_QUEUE.md` are named in `scripts/gen_state.py`, so they always run the full suite.
+  - A two-dot base..head diff on a stale branch shows main's newer files as changed, which also runs the full suite.
+  - If the `changes` job fails, the dependent jobs skip and the required contexts stay pending. They never pass.
+  - **Residual gap, pre-existing and not a regression:** a doc read by a directory glob, rather than by its literal path (for example a test that scans `docs/**`), is not caught by the grep. The old rule skipped every test for all docs-only ranges, so the new rule is strictly tighter.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
